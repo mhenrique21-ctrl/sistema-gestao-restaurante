@@ -177,6 +177,7 @@ function sefazSync(emp) {
       apiRes.on('end', () => {
         try {
           const xml = Buffer.concat(chunks).toString('utf-8');
+          console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} — resposta (primeiros 800 chars):`, xml.substring(0, 800));
 
           // Extract docZip elements
           const docZipRe = /<docZip[^>]*NSU="(\d+)"[^>]*>([\s\S]*?)<\/docZip>/g;
