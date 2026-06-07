@@ -4,8 +4,18 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 3000;
-const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DB_FILE = path.join(__dirname, 'dados.json');
+
+// Lê chave do env ou do arquivo .env
+function getApiKey() {
+  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
+  try {
+    const envFile = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+    const match = envFile.match(/ANTHROPIC_API_KEY=(.+)/);
+    return match ? match[1].trim() : '';
+  } catch(e) { return ''; }
+}
+const API_KEY = getApiKey();
 
 function loadDB() {
   try {
