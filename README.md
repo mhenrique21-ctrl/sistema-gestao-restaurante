@@ -2,6 +2,15 @@
 
 Sistema web de gestão para restaurante, com controle de lançamentos financeiros, compras, fichas técnicas, funcionários, eventos, faltas e adiantamentos.
 
+## Funcionalidades
+
+- Lançamentos financeiros (receitas e despesas)
+- Controle de compras
+- Fichas técnicas de produtos
+- Gestão de funcionários (faltas e adiantamentos)
+- Agenda de eventos
+- Categorias personalizáveis
+
 ## Tecnologias
 
 - **Frontend:** HTML/CSS/JS puro (mobile-first)
