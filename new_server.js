@@ -69,11 +69,11 @@ const server = http.createServer((req, res) => {
 
   // Proxy IA - cupom scan
   if (req.method === 'POST' && req.url === '/api/scan') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
     req.on('end', () => {
       try {
-        const payload = JSON.parse(body);
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         const data = JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: payload.max_tokens || 2000,
@@ -126,6 +126,8 @@ const server = http.createServer((req, res) => {
   res.writeHead(404);
   res.end('Not found: ' + req.url);
 });
+
+server.timeout = 120000; // 2 min para chamadas IA com imagem grande
 
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
