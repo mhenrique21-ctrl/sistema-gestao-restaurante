@@ -1,8 +1,10 @@
-const http = require('http');
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
+import http from 'http';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DIST = path.join(__dirname, 'dist');
@@ -94,17 +96,10 @@ const server = http.createServer((req, res) => {
   }
 
   // Static files from dist/
-  let urlPath = req.url.split('?')[0];
-
-  // Service worker and manifest from dist root
-  if (urlPath === '/sw.js' || urlPath === '/manifest.json') {
-    return serveFile(path.join(DIST, urlPath), res);
-  }
-
-  // Try exact file first
+  const urlPath = req.url.split('?')[0];
   const filePath = path.join(DIST, urlPath);
+
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    // Cache assets aggressively, HTML never
     if (urlPath.includes('/assets/')) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else {
@@ -113,7 +108,7 @@ const server = http.createServer((req, res) => {
     return serveFile(filePath, res);
   }
 
-  // SPA fallback: serve index.html for all non-file routes
+  // SPA fallback
   const indexPath = path.join(DIST, 'index.html');
   if (fs.existsSync(indexPath)) {
     res.setHeader('Cache-Control', 'no-cache');
@@ -126,5 +121,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Servidor: http://localhost:${PORT}`);
-  console.log(`API Key: ${API_KEY ? '✅ configurada' : '❌ AUSENTE'}`);
+  console.log(`API Key: ${API_KEY ? '✅ configurada' : '❌ AUSENTE (IA desabilitada)'}`);
 });
