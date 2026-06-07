@@ -159,7 +159,7 @@ export default function App() {
       <div style={{padding:"14px 14px 0"}}>
         {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
         {tab==="vendas"     && <Vendas db={db} setDb={setDb}/>}
-        {tab==="compras"    && <Compras db={db} setDb={setDb}/>}
+        {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
         {tab==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
         {tab==="rh"         && <RH db={db} setDb={setDb} empresa={empresa}/>}
@@ -346,7 +346,7 @@ function parseNFe(xmlString) {
 }
 
 // ===================== COMPRAS (multi-produto + IA + financeiro) =====================
-function Compras({db,setDb}){
+function Compras({db,setDb,empresa}){
   const [subTab,setSubTab]=useState("novo");
 
   // ---- Carrinho (entrada manual multi-produto) ----
@@ -551,6 +551,70 @@ function Compras({db,setDb}){
     alert(`✅ NF-e importada! ${nfeResult.itens.length} produto(s) registrado(s).`);
   };
 
+  // ---- SEFAZ Sync ----
+  const [sefazConfig,setSefazConfig]=useState<Record<string,boolean>>({});
+  const [sefazList,setSefazList]=useState<any[]>([]);
+  const [sefazLoading,setSefazLoading]=useState(false);
+  const [sefazError,setSefazError]=useState("");
+  const [sefazLastSync,setSefazLastSync]=useState(()=>localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
+  const [sefazFormaPag,setSefazFormaPag]=useState("boleto");
+  const [sefazVenc,setSefazVenc]=useState(today());
+
+  useEffect(()=>{
+    fetch("/api/nfe-config").then(r=>r.json()).then(cfg=>setSefazConfig(cfg)).catch(()=>{});
+  },[]);
+
+  useEffect(()=>{
+    setSefazLastSync(localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
+  },[empresa]);
+
+  const sincronizarSEFAZ=async()=>{
+    setSefazLoading(true);setSefazError("");setSefazList([]);
+    try{
+      const res=await fetch("/api/nfe-sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})});
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.error||"Erro ao sincronizar");
+      setSefazList(data.nfes||[]);
+      const ts=new Date().toLocaleString("pt-BR");
+      setSefazLastSync(ts);
+      localStorage.setItem(`sefaz_last_sync_${empresa}`,ts);
+      if(!(data.nfes||[]).length)setSefazError("Nenhuma NF-e nova encontrada no SEFAZ.");
+    }catch(e:any){setSefazError(e.message||"Erro de conexão");}
+    setSefazLoading(false);
+  };
+
+  const importarNFeSefaz=(nfe:any,all=false)=>{
+    const forn=nfe.fornecedor;
+    setDb(d=>{
+      let fornecedores=[...(d.fornecedores||[])];
+      if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
+        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
+      const novasCompras=(nfe.itens||[]).map(item=>({
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
+        unidade:item.unidade,quantidade:item.quantidade,
+        valor:item.valorTotal,valorUnitario:item.valorUnitario,
+        data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",
+      }));
+      let mps=[...(d.materiasPrimas||[])];
+      novasCompras.forEach(c=>{
+        const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
+        if(ex){if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;}
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor});
+      });
+      const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
+      const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
+      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra"};
+      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
+    });
+    if(!all)setSefazList(l=>l.filter(n=>n.nsu!==nfe.nsu));
+  };
+
+  const importarTodasNFeSefaz=()=>{
+    sefazList.forEach(nfe=>importarNFeSefaz(nfe,true));
+    setSefazList([]);
+    alert(`✅ ${sefazList.length} NF-e(s) importadas!`);
+  };
+
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
       {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"]].map(([k,l])=>(
@@ -745,12 +809,69 @@ function Compras({db,setDb}){
       </div>}
     </div>}
 
-    {/* ===== NF-e XML ===== */}
+    {/* ===== NF-e XML + SEFAZ ===== */}
     {subTab==="nfe"&&<div>
-      <div className="section-title">Importar NF-e (XML)</div>
+
+      {/* -- SEFAZ automático -- */}
+      <div className="card" style={{marginBottom:14,border:"1px solid #2a3260"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div>
+            <div className="section-title" style={{marginBottom:2}}>🔄 Sincronizar via SEFAZ</div>
+            <div style={{fontSize:11,color:sefazConfig[empresa]?"#4ade80":"#ff5c7a"}}>
+              Certificado: {sefazConfig[empresa]?"✅ Configurado":"❌ Não configurado"}
+            </div>
+          </div>
+          {sefazLastSync&&<div className="muted" style={{fontSize:10,textAlign:"right"}}>Última sync:<br/>{sefazLastSync}</div>}
+        </div>
+        {!sefazConfig[empresa]&&(
+          <div style={{background:"#2a1520",borderRadius:8,padding:"10px",fontSize:12,color:"#ff9aa8",marginBottom:8}}>
+            Configure o certificado no servidor: faça upload do arquivo <strong>{empresa.toLowerCase()}.pfx</strong> para <code>/var/www/app-gestao/certs/</code> e adicione <code>CNPJ_{empresa}</code>, <code>CERT_{empresa}_PASS</code> e <code>UF_{empresa}=16</code> ao .env.
+          </div>
+        )}
+        <button className="btn" onClick={sincronizarSEFAZ} disabled={sefazLoading||!sefazConfig[empresa]}
+          style={{background:sefazLoading||!sefazConfig[empresa]?"#252840":"linear-gradient(135deg,#7c8fff,#5b6fff)",color:"#fff",padding:"13px",width:"100%",fontSize:15,fontWeight:700}}>
+          {sefazLoading?"⏳ Consultando SEFAZ...":"🔄 Buscar NF-es no SEFAZ"}
+        </button>
+        {sefazError&&<div style={{background:"#2a1520",borderRadius:8,padding:"10px",fontSize:12,color:"#ff5c7a",marginTop:8}}>{sefazError}</div>}
+      </div>
+
+      {/* -- Resultado da sync -- */}
+      {sefazList.length>0&&<div className="card" style={{marginBottom:14}}>
+        <div className="section-title">📥 {sefazList.length} NF-e(s) encontrada(s)</div>
+        <div className="section-title" style={{marginBottom:8,color:"#888"}}>Forma de Pagamento (todas)</div>
+        <div className="row" style={{marginBottom:8}}>
+          <select value={sefazFormaPag} onChange={e=>setSefazFormaPag(e.target.value)} className="inp">
+            {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
+          </select>
+          <input type="date" value={sefazVenc} onChange={e=>setSefazVenc(e.target.value)} className="inp"/>
+        </div>
+        {sefazList.map((nfe,i)=>(
+          <div key={nfe.nsu||i} style={{padding:"10px",background:"#161922",borderRadius:12,border:"1px solid #1e2235",marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{nfe.fornecedor?.nome||"Fornecedor"}</span>
+              <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(nfe.totalCompra)}</span>
+            </div>
+            <div className="muted" style={{fontSize:12,marginBottom:6}}>
+              {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
+              {fmtDate(nfe.data)} · {(nfe.itens||[]).length} produto(s)
+            </div>
+            <button className="btn" onClick={()=>importarNFeSefaz(nfe)}
+              style={{background:"#7c8fff",color:"#fff",padding:"8px 16px",fontSize:13,width:"100%"}}>
+              📥 Importar esta NF-e
+            </button>
+          </div>
+        ))}
+        {sefazList.length>1&&<button className="btn" onClick={importarTodasNFeSefaz}
+          style={{background:"linear-gradient(135deg,#4ade80,#22c55e)",color:"#051208",padding:"13px",width:"100%",fontSize:15,fontWeight:700,marginTop:4}}>
+          ✅ Importar Todas ({sefazList.length} NF-es)
+        </button>}
+      </div>}
+
+      <hr className="divider" style={{marginBottom:14}}/>
+      <div className="section-title">📄 Importar XML manualmente</div>
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>
-          Selecione o arquivo XML da Nota Fiscal Eletrônica. Os produtos, fornecedor e valores serão extraídos automaticamente.
+          Ou selecione o arquivo XML da NF-e diretamente do seu dispositivo.
         </div>
         <div className="camera-zone" onClick={()=>nfeRef.current&&(nfeRef.current as HTMLInputElement).click()} style={{marginBottom:10}}>
           <div style={{fontSize:36,marginBottom:8}}>📄</div>
