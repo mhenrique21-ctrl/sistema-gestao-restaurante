@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
       try {
         const payload = JSON.parse(body);
         const data = JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 1500,
           messages: payload.messages
         });
