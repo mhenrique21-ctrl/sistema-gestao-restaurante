@@ -964,6 +964,46 @@ function calc(d){
 function initials(n){ return n.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase(); }
 const avatarColors=[['#EAE7FC','#3029A0'],['#E4F4EC','#155C3A'],['#E5F0FB','#144A8A'],['#FFF3DC','#7A4C00'],['#FDECEA','#922C20']];
 
+// ── DADOS CALCULADOS DOS LANÇAMENTOS ─────────────────
+function buildDados(emp, mes){
+  const mesStr=String(mes+1).padStart(2,'0');
+  const anoStr=String(ANO);
+  const ll=lancamentos.filter(l=>{
+    if(parseInt(l.emp)!==emp) return false;
+    const d=l.data||'';
+    const parts=d.includes('-')?[d.split('-')[0],d.split('-')[1]]:['',d.split('/')[1]];
+    return parts[1]===mesStr && (parts[0]===anoStr||!parts[0]);
+  });
+  const d={...emptyMes};
+  ll.forEach(l=>{
+    const cat=(l.cat||'').toLowerCase(); const val=Number(l.valor)||0;
+    if(l.tipo==='entrada'){
+      if(cat.includes('delivery')) d.del+=val;
+      else if(cat.includes('event')) d.ev+=val;
+      else d.rec+=val;
+    } else {
+      if(cat.includes('imposto')||cat.includes('taxa')) d.imp+=val;
+      else if(cat.includes('cmv')||cat.includes('compra')) d.cmv+=val;
+      else if(cat.includes('folha')||cat.includes('salário')||cat.includes('salario')) d.folha+=val;
+      else if(cat.includes('aluguel')) d.alug+=val;
+      else if(cat.includes('energia')||cat.includes('água')||cat.includes('agua')||cat.includes('gás')||cat.includes('luz')) d.en+=val;
+      else if(cat.includes('marketing')||cat.includes('publicidade')) d.mkt+=val;
+      else if(cat.includes('manutenção')||cat.includes('manutencao')) d.man+=val;
+      else d.out+=val;
+    }
+  });
+  // Compras do mês entram no CMV
+  compras.filter(c=>{
+    if(parseInt(c.emp)!==emp) return false;
+    const cd=c.data||'';
+    const p=cd.includes('-')?[cd.split('-')[0],cd.split('-')[1]]:[(cd.split('/')[2]||''),cd.split('/')[1]];
+    return p[1]===mesStr&&(p[0]===anoStr||!p[0]);
+  }).forEach(c=>d.cmv+=Number(c.total)||0);
+  // Folha do mês
+  if(mes===curMes) funcionarios.filter(f=>parseInt(f.emp)===emp).forEach(f=>d.folha+=Number(f.sal)||0);
+  return d;
+}
+
 // ── NAV ───────────────────────────────────────────────
 const pageTitles = {dashboard:'Dashboard',dre:'DRE — Demonstrativo de Resultados',fluxo:'Fluxo de Caixa',lancamentos:'Lançamentos',compras:'Gestão de Compras',cupom:'Cupom Fiscal com IA',cmv:'CMV & Fichas Técnicas',rh:'RH & Folha de Pagamento',agenda:'Agenda',comparativo:'Comparativo — Duas Empresas'};
 
@@ -1005,8 +1045,8 @@ function renderAll(){
 
 // ── DASHBOARD ─────────────────────────────────────────
 function renderDashboard(){
-  const d=dadosBase[curEmp][curMes]; const c=calc(d);
-  const dp=curMes>0?calc(dadosBase[curEmp][curMes-1]):null;
+  const d=buildDados(curEmp,curMes); const c=calc(d);
+  const dp=curMes>0?calc(buildDados(curEmp,curMes-1)):null;
   function delt(a,b){ if(!b) return ''; const p=((a-b)/b*100).toFixed(1); return `<div class="kpi-delta ${p>=0?'delta-up':'delta-dn'}">${p>=0?'↑':'↓'} ${Math.abs(p)}% vs mês ant.</div>`; }
   document.getElementById('dashKPIs').innerHTML=`
     <div class="kpi"><div class="kpi-label">Receita bruta</div><div class="kpi-value" style="color:var(--green)">${fmt(c.bruta)}</div>${delt(c.bruta,dp?.bruta)}</div>
@@ -1041,7 +1081,7 @@ function renderDashboard(){
 
 // ── DRE ───────────────────────────────────────────────
 function renderDRE(){
-  const d=dadosBase[curEmp][curMes]; const c=calc(d);
+  const d=buildDados(curEmp,curMes); const c=calc(d);
   function row(label,val,color,indent){
     return `<div class="dre-row ${indent?'dre-indent':''}"><span>${label}</span><span style="font-family:var(--mono);color:${color||'var(--text)'}">${fmt(val)}</span></div>`;
   }
@@ -1212,7 +1252,10 @@ async function scanCupom(){
     const base64=ev.target.result.split(',')[1];
     try{
       const resp=await fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:cupomFile.type,data:base64}},{type:'text',text:'Analise este cupom fiscal. Categorize cada item em: Carnes, Bebidas, Laticínios, Hortifruti, Limpeza, Embalagens, Grãos, Temperos ou Outros. Responda APENAS em JSON sem markdown: {"valido":true,"fornecedor":"","cnpj":"","data":"DD/MM/AAAA","total":0.00,"itens":[{"nome":"","qtd":"1un","unitario":0.00,"total":0.00,"categoria":"Carnes"}]} Se não for cupom: {"valido":false,"mensagem":""}'}]}]})});
+      if(!resp.ok){ const err=await resp.text(); throw new Error('Servidor: '+resp.status+' — '+err.slice(0,120)); }
       const data=await resp.json();
+      if(data.error) throw new Error('API: '+JSON.stringify(data.error));
+      if(!data.content) throw new Error('Resposta inesperada: '+JSON.stringify(data).slice(0,120));
       const raw=data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
       const parsed=JSON.parse(raw);
       document.getElementById('cupomStatus').style.display='none';
@@ -1242,7 +1285,7 @@ async function scanCupom(){
       document.getElementById('cupomResult').style.display='block';
     }catch(e){
       document.getElementById('cupomStatus').style.display='block';
-      document.getElementById('cupomStatus').innerHTML=`<div class="ai-thinking" style="background:var(--red-light);color:var(--red-text)"><i class="ti ti-wifi-off"></i> Erro ao processar. Tente novamente.</div>`;
+      document.getElementById('cupomStatus').innerHTML=`<div class="ai-thinking" style="background:var(--red-light);color:var(--red-text)"><i class="ti ti-wifi-off"></i> ${e.message||'Erro ao processar. Tente novamente.'}</div>`;
       btn.innerHTML='<i class="ti ti-sparkles"></i> Extrair dados com IA'; btn.disabled=false;
     }
   };
@@ -1678,7 +1721,7 @@ function renderAgenda(){
 
 // ── COMPARATIVO ───────────────────────────────────────
 function renderComparativo(){
-  const d1=dadosBase[1][curMes], d2=dadosBase[2][curMes];
+  const d1=buildDados(1,curMes), d2=buildDados(2,curMes);
   const c1=calc(d1), c2=calc(d2);
   const rows=[
     ['Receita bruta',c1.bruta,c2.bruta,1,false],
@@ -1716,7 +1759,7 @@ function renderComparativo(){
 }
 
 function exportDRE(){
-  const d=dadosBase[curEmp][curMes]; const c=calc(d);
+  const d=buildDados(curEmp,curMes); const c=calc(d);
   let csv='DRE — '+mesesNome[curMes]+' '+ANO+'\n\n';
   csv+=`Receita Bruta,${c.bruta}\nImpostos,${-d.imp}\nReceita Líquida,${c.liq}\nCMV,${-d.cmv}\nLucro Bruto,${c.lucBruto}\nDespesas,${-c.desp}\nLucro Líquido,${c.lucLiq}\nMargem,${c.margem}%\n`;
   const blob=new Blob([csv],{type:'text/csv'});
@@ -1828,7 +1871,7 @@ function gerarPDF(tipo){
 
   // ── DRE ──
   function buildDRE(empIdx){
-    const d=dadosBase[empIdx][mesIdx]; const c=calc(d);
+    const d=buildDados(empIdx,mesIdx); const c=calc(d);
     const nome=empIdx===1?'Confraria Café':'Cantina Seama';
     return`
     <div class="section">
@@ -1991,7 +2034,7 @@ function gerarPDF(tipo){
 
   // ── COMP ──
   function buildComp(){
-    const d1=dadosBase[1][mesIdx],d2=dadosBase[2][mesIdx];
+    const d1=buildDados(1,mesIdx),d2=buildDados(2,mesIdx);
     const c1=calc(d1),c2=calc(d2);
     const rows=[
       ['Receita bruta',c1.bruta,c2.bruta,1],
