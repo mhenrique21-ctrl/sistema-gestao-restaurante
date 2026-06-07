@@ -17,18 +17,36 @@ const fmtMoney  = (v) => (parseFloat(v)||0).toLocaleString("pt-BR",{style:"curre
 const fmtPct    = (v) => `${(parseFloat(v)||0).toFixed(1)}%`;
 const today     = () => new Date().toISOString().split("T")[0];
 const uid       = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
-const parseMoney= (s) => parseFloat(String(s).replace(/[^\d,]/g,"").replace(",","."))||0;
+const parseMoney= (s) => {
+  const str=String(s).trim();
+  // handles "1.234,56" (pt-BR) or "1234.56" (en) or "1234,56"
+  const clean=str.replace(/[^\d,.]/g,"");
+  if(!clean)return 0;
+  const lastComma=clean.lastIndexOf(","), lastDot=clean.lastIndexOf(".");
+  let normalized;
+  if(lastComma>lastDot){normalized=clean.replace(/\./g,"").replace(",",".");}
+  else{normalized=clean.replace(/,/g,"");}
+  return parseFloat(normalized)||0;
+};
 const currentMonth = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; };
 const fmtDate   = (d) => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR");}catch{return d;} };
 const monthLabel= (m) => { if(!m)return""; const [y,mo]=m.split("-"); return `${["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(mo)-1]}/${y}`; };
 
-function formatMoneyInput(raw) {
-  const digits=raw.replace(/\D/g,""); if(!digits)return"";
-  return (parseInt(digits,10)/100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
-}
 function MoneyInput({value,onChange,placeholder,className,style}) {
-  return <input type="text" inputMode="numeric" value={value}
-    onChange={e=>onChange(formatMoneyInput(e.target.value))}
+  // natural decimal input: user types "15,90" and sees "15,90" — no auto-shift
+  const handle=(e)=>{
+    let v=e.target.value;
+    // allow digits, comma, dot; convert dot to comma; strip leading zeros except "0,"
+    v=v.replace(/[^0-9.,]/g,"").replace(".",",");
+    // keep at most one comma
+    const parts=v.split(",");
+    if(parts.length>2)v=parts[0]+","+parts.slice(1).join("");
+    // limit to 2 decimal places
+    if(parts.length===2&&parts[1].length>2)v=parts[0]+","+parts[1].slice(0,2);
+    onChange(v);
+  };
+  return <input type="text" inputMode="decimal" value={value}
+    onChange={handle}
     placeholder={placeholder||"0,00"} className={className} style={style}/>;
 }
 
@@ -284,6 +302,61 @@ function Vendas({db,setDb}){
   </div>;
 }
 
+// ===================== NF-e XML PARSER =====================
+function parseNFe(xmlString) {
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(xmlString,"application/xml");
+  if(doc.querySelector("parsererror"))throw new Error("XML inválido");
+  const g=(tag)=>{const el=doc.querySelector(tag);return el?el.textContent.trim():"";};
+  const ga=(parent,tag)=>{const el=parent.querySelector(tag);return el?el.textContent.trim():"";};
+
+  const emit=doc.querySelector("emit");
+  const fornecedor={
+    nome: emit?ga(emit,"xNome"):"",
+    cnpj: emit?ga(emit,"CNPJ"):"",
+    endereco: emit?(()=>{const e=emit.querySelector("enderEmit"); return e?[ga(e,"xLgr"),ga(e,"nro"),ga(e,"xBairro"),ga(e,"xMun"),ga(e,"UF")].filter(Boolean).join(", "):""})():"",
+  };
+
+  const CATEGORIAS_NFe:{[k:string]:string}={
+    carne:"proteína",frango:"proteína",peixe:"proteína",atum:"proteína",presunto:"proteína",salame:"proteína",bacon:"proteína",linguiça:"proteína",
+    farinha:"insumos",arroz:"insumos",feijão:"insumos",açúcar:"insumos",sal:"insumos",oleo:"insumos",óleo:"insumos",azeite:"insumos",molho:"insumos",
+    leite:"insumos",manteiga:"insumos",queijo:"insumos",creme:"insumos",iogurte:"insumos",café:"insumos",caldo:"insumos",tempero:"insumos",
+    saco:"descartáveis",sacola:"descartáveis",copo:"descartáveis",prato:"descartáveis",talher:"descartáveis",embalagem:"descartáveis",
+    bandeja:"descartáveis","papel alumínio":"descartáveis","filme pvc":"descartáveis",guardanapo:"descartáveis",canudo:"descartáveis",
+    detergente:"material de limpeza",desinfetante:"material de limpeza","água sanitária":"material de limpeza",
+    "sabão":"material de limpeza",sabonete:"material de limpeza",esponja:"material de limpeza",vassoura:"material de limpeza",
+    rodo:"material de limpeza",pano:"material de limpeza","álcool":"material de limpeza",luva:"material de limpeza",
+  };
+  const categorizarProduto=(nome:string):string=>{
+    const n=nome.toLowerCase();
+    for(const[k,v] of Object.entries(CATEGORIAS_NFe)){if(n.includes(k))return v;}
+    return "insumos";
+  };
+  const unidadeNFe=(uCom:string):string=>{
+    const u=uCom.toUpperCase();
+    if(u==="KG"||u==="G"||u==="GR"||u==="KGS")return "kg";
+    if(u==="L"||u==="LT"||u==="ML"||u==="LITRO")return "L";
+    return "un";
+  };
+
+  const dets=Array.from(doc.querySelectorAll("det"));
+  const itens=dets.map(det=>{
+    const prod=det.querySelector("prod");
+    if(!prod)return null;
+    const nome=ga(prod,"xProd");
+    const qtd=parseFloat(ga(prod,"qCom"))||1;
+    const vUnit=parseFloat(ga(prod,"vUnCom"))||0;
+    const vTotal=parseFloat(ga(prod,"vProd"))||0;
+    const uCom=ga(prod,"uCom")||"un";
+    return{nome,categoria:categorizarProduto(nome),unidade:unidadeNFe(uCom),quantidade:qtd,valorUnitario:vUnit,valorTotal:vTotal};
+  }).filter(Boolean);
+
+  const total=parseFloat(g("vNF"))||itens.reduce((s,i)=>s+i.valorTotal,0);
+  const dEmi=g("dEmi")||today();
+  const nNF=g("nNF")||"";
+  return{fornecedor,itens,totalCompra:total,data:dEmi,nNF};
+}
+
 // ===================== COMPRAS (multi-produto + IA + financeiro) =====================
 function Compras({db,setDb}){
   const [subTab,setSubTab]=useState("novo");
@@ -442,9 +515,57 @@ function Compras({db,setDb}){
 
   const del=(id)=>setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==id)}));
 
+  // ---- NF-e ----
+  const [nfeResult,setNfeResult]=useState(null);
+  const [nfeFormaPag,setNfeFormaPag]=useState("boleto");
+  const [nfeVenc,setNfeVenc]=useState(today());
+  const [nfeError,setNfeError]=useState("");
+  const nfeRef=useRef();
+
+  const handleNFe=(e)=>{
+    const file=e.target.files[0]; if(!file)return;
+    setNfeError("");setNfeResult(null);
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{setNfeResult(parseNFe(reader.result as string));}
+      catch(err){setNfeError("Erro ao ler XML: "+err.message);}
+    };
+    reader.readAsText(file,"utf-8");
+  };
+
+  const confirmarNFe=()=>{
+    if(!nfeResult)return;
+    const forn=nfeResult.fornecedor;
+    setDb(d=>{
+      let fornecedores=[...(d.fornecedores||[])];
+      if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
+        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
+      const novasCompras=(nfeResult.itens||[]).map(item=>({
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
+        unidade:item.unidade,quantidade:item.quantidade,
+        valor:item.valorTotal,valorUnitario:item.valorUnitario,
+        data:nfeResult.data||today(),origem:"nfe",
+        nNF:nfeResult.nNF||"",
+      }));
+      let mps=[...(d.materiasPrimas||[])];
+      novasCompras.forEach(c=>{
+        const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
+        if(ex){if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;}
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor});
+      });
+      const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
+      const desc=`NF-e ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
+      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra"};
+      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
+    });
+    setNfeResult(null);setNfeError("");
+    if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";
+    alert(`✅ NF-e importada! ${nfeResult.itens.length} produto(s) registrado(s).`);
+  };
+
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["novo","🧾 Nova Entrada"],["ia","🤖 Cupom IA"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"]].map(([k,l])=>(
+      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
           style={{background:subTab===k?"#7c8fff":"#161922",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px"}}>{l}</button>
       ))}
@@ -632,6 +753,59 @@ function Compras({db,setDb}){
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button className="btn" onClick={confirmarIA} style={{background:"#4ade80",color:"#051208",padding:"12px",flex:1,fontSize:14}}>✅ Confirmar</button>
           <button className="btn" onClick={()=>setIaResult(null)} style={{background:"#1e2235",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Descartar</button>
+        </div>
+      </div>}
+    </div>}
+
+    {/* ===== NF-e XML ===== */}
+    {subTab==="nfe"&&<div>
+      <div className="section-title">Importar NF-e (XML)</div>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>
+          Selecione o arquivo XML da Nota Fiscal Eletrônica. Os produtos, fornecedor e valores serão extraídos automaticamente.
+        </div>
+        <div className="camera-zone" onClick={()=>nfeRef.current&&(nfeRef.current as HTMLInputElement).click()} style={{marginBottom:10}}>
+          <div style={{fontSize:36,marginBottom:8}}>📄</div>
+          <div style={{fontWeight:600,marginBottom:4}}>Selecionar arquivo XML</div>
+          <div className="muted" style={{fontSize:12}}>NF-e formato SEFAZ (.xml)</div>
+          <input ref={nfeRef} type="file" accept=".xml,text/xml,application/xml" onChange={handleNFe} style={{display:"none"}}/>
+        </div>
+        {nfeError&&<div style={{background:"#2a1520",border:"1px solid #ff5c7a",borderRadius:10,padding:"10px",color:"#ff5c7a",fontSize:13,marginBottom:8}}>{nfeError}</div>}
+      </div>
+
+      {nfeResult&&<div className="card" style={{marginBottom:12}}>
+        <div className="section-title">Dados da NF-e</div>
+        <div style={{marginBottom:10,padding:"10px",background:"#1e2235",borderRadius:10}}>
+          <div style={{fontWeight:600}}>🏪 {nfeResult.fornecedor.nome||"Fornecedor não identificado"}</div>
+          {nfeResult.fornecedor.cnpj&&<div className="muted" style={{fontSize:12}}>CNPJ: {nfeResult.fornecedor.cnpj}</div>}
+          {nfeResult.fornecedor.endereco&&<div className="muted" style={{fontSize:12}}>{nfeResult.fornecedor.endereco}</div>}
+          {nfeResult.nNF&&<div style={{fontSize:12,color:"#7c8fff",marginTop:4}}>NF-e #{nfeResult.nNF} • {fmtDate(nfeResult.data)}</div>}
+        </div>
+        <div className="section-title" style={{marginTop:8,marginBottom:6}}>Produtos ({nfeResult.itens.length})</div>
+        {nfeResult.itens.map((item,i)=>(
+          <div key={i} style={{padding:"8px 0",borderBottom:"1px solid #1e2235"}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{item.nome}</span>
+              <span style={{color:"#60a5fa",fontWeight:700,whiteSpace:"nowrap"}}>{fmtMoney(item.valorTotal)}</span>
+            </div>
+            <div className="muted" style={{fontSize:12,marginTop:2}}>
+              {item.quantidade} {item.unidade} × {fmtMoney(item.valorUnitario)} •
+              <span className="tag" style={{background:"#1a2520",color:"#4ade80",marginLeft:6,fontSize:10}}>{item.categoria}</span>
+            </div>
+          </div>
+        ))}
+        <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",fontWeight:700,fontSize:15}}>
+          <span>Total NF-e</span><span style={{color:"#4ade80"}}>{fmtMoney(nfeResult.totalCompra)}</span>
+        </div>
+        <hr className="divider"/>
+        <div className="section-title" style={{marginTop:8}}>Forma de Pagamento</div>
+        <select value={nfeFormaPag} onChange={e=>setNfeFormaPag(e.target.value)} className="inp" style={{marginBottom:8}}>
+          {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
+        </select>
+        <input type="date" value={nfeVenc} onChange={e=>setNfeVenc(e.target.value)} className="inp" style={{marginBottom:12}}/>
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn" onClick={confirmarNFe} style={{background:"#4ade80",color:"#051208",padding:"12px",flex:1,fontSize:14,fontWeight:700}}>✅ Importar NF-e</button>
+          <button className="btn" onClick={()=>{setNfeResult(null);setNfeError("");if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";}} style={{background:"#1e2235",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Cancelar</button>
         </div>
       </div>}
     </div>}
