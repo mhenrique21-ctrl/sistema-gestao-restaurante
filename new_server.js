@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DIST = path.join(__dirname, 'dist');
+const LOGOS_DIR = path.join(__dirname, 'logos');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -96,8 +97,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Static files from dist/
+  // Logos (persiste entre builds)
   const urlPath = req.url.split('?')[0];
+  if (urlPath.startsWith('/logos/')) {
+    const logoFile = path.join(LOGOS_DIR, urlPath.replace('/logos/', ''));
+    if (fs.existsSync(logoFile)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return serveFile(logoFile, res);
+    }
+    res.writeHead(404); res.end('Logo not found'); return;
+  }
+
+  // Static files from dist/
   const filePath = path.join(DIST, urlPath);
 
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {

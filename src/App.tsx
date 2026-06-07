@@ -59,6 +59,27 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
 }
 function abrirRelatorio(html){const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();}}
 
+// ===================== LOGO =====================
+const LOGOS = {
+  CONFRARIA: "/logos/logo-confraria.png",
+  SEAMA:     "/logos/logo-seama.png",
+};
+function LogoEmpresa({empresa}) {
+  const [ok,setOk] = useState(true);
+  useEffect(()=>setOk(true),[empresa]);
+  if(ok) return (
+    <img src={LOGOS[empresa]} alt={empresa}
+      onError={()=>setOk(false)}
+      style={{height:44,maxWidth:160,objectFit:"contain",objectPosition:"left center"}}/>
+  );
+  return (
+    <div>
+      <div style={{fontSize:9,color:"#7c8fff",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>App Gestão</div>
+      <div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:800}}>{empresa}</div>
+    </div>
+  );
+}
+
 // ===================== MAIN APP =====================
 export default function App() {
   const [state,setState] = useState(()=>{
@@ -114,16 +135,13 @@ export default function App() {
       `}</style>
 
       {/* HEADER */}
-      <div style={{background:"#0d0f18",borderBottom:"1px solid #1e2235",position:"sticky",top:0,zIndex:90,padding:"12px 18px"}}>
+      <div style={{background:"#0d0f18",borderBottom:"1px solid #1e2235",position:"sticky",top:0,zIndex:90,padding:"10px 16px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontSize:10,color:"#7c8fff",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>App Gestão</div>
-            <div style={{fontSize:19,fontFamily:"'Syne',sans-serif",fontWeight:800}}>{empresa}</div>
-          </div>
+          <LogoEmpresa empresa={empresa}/>
           <div style={{display:"flex",gap:6}}>
             {["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
-                style={{background:empresa===e?"#7c8fff":"#161922",color:empresa===e?"#fff":"#666",fontSize:11}}>{e}</button>
+                style={{background:empresa===e?"#7c8fff":"#161922",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"#252840"}`}}>{e}</button>
             ))}
           </div>
         </div>
