@@ -559,6 +559,8 @@ function Compras({db,setDb,empresa}){
   const [sefazLastSync,setSefazLastSync]=useState(()=>localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
   const [sefazFormaPag,setSefazFormaPag]=useState("boleto");
   const [sefazVenc,setSefazVenc]=useState(today());
+  const [sefazDataIni,setSefazDataIni]=useState(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;});
+  const [sefazDataFim,setSefazDataFim]=useState(today());
 
   useEffect(()=>{
     fetch("/api/nfe-config").then(r=>r.json()).then(cfg=>setSefazConfig(cfg)).catch(()=>{});
@@ -574,11 +576,17 @@ function Compras({db,setDb,empresa}){
       const res=await fetch("/api/nfe-sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})});
       const data=await res.json();
       if(!res.ok)throw new Error(data.error||"Erro ao sincronizar");
-      setSefazList(data.nfes||[]);
+      const todas=data.nfes||[];
+      const filtradas=todas.filter((n:any)=>{
+        if(!n.data)return true;
+        const d=(n.data||"").substring(0,10);
+        return d>=sefazDataIni&&d<=sefazDataFim;
+      });
+      setSefazList(filtradas);
       const ts=new Date().toLocaleString("pt-BR");
       setSefazLastSync(ts);
       localStorage.setItem(`sefaz_last_sync_${empresa}`,ts);
-      if(!(data.nfes||[]).length)setSefazError("Nenhuma NF-e nova encontrada no SEFAZ.");
+      if(!filtradas.length)setSefazError(todas.length?`Nenhuma NF-e no período ${sefazDataIni} a ${sefazDataFim}.`:"Nenhuma NF-e nova encontrada no SEFAZ.");
     }catch(e:any){setSefazError(e.message||"Erro de conexão");}
     setSefazLoading(false);
   };
@@ -826,6 +834,18 @@ function Compras({db,setDb,empresa}){
         {!sefazConfig[empresa]&&(
           <div style={{background:"#2a1520",borderRadius:8,padding:"10px",fontSize:12,color:"#ff9aa8",marginBottom:8}}>
             Configure o certificado no servidor: faça upload do arquivo <strong>{empresa.toLowerCase()}.pfx</strong> para <code>/var/www/app-gestao/certs/</code> e adicione <code>CNPJ_{empresa}</code>, <code>CERT_{empresa}_PASS</code> e <code>UF_{empresa}=16</code> ao .env.
+          </div>
+        )}
+        {sefazConfig[empresa]&&(
+          <div className="row" style={{marginBottom:8,gap:8}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,color:"#888",marginBottom:3}}>De</div>
+              <input type="date" value={sefazDataIni} onChange={e=>setSefazDataIni(e.target.value)} className="inp" style={{width:"100%"}}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,color:"#888",marginBottom:3}}>Até</div>
+              <input type="date" value={sefazDataFim} onChange={e=>setSefazDataFim(e.target.value)} className="inp" style={{width:"100%"}}/>
+            </div>
           </div>
         )}
         <button className="btn" onClick={sincronizarSEFAZ} disabled={sefazLoading||!sefazConfig[empresa]}
