@@ -31,7 +31,7 @@ const server = http.createServer((req, res) => {
   // Serve app - always fresh
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/?'))) {
     try {
-      const file = fs.readFileSync(path.join(__dirname, 'app.html'));
+      const file = fs.readFileSync(path.join(__dirname, 'gestao_restaurante_mobile.html'));
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.writeHead(200);
       res.end(file);
@@ -75,8 +75,8 @@ const server = http.createServer((req, res) => {
       try {
         const payload = JSON.parse(body);
         const data = JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1500,
+          model: 'claude-sonnet-4-6',
+          max_tokens: payload.max_tokens || 2000,
           messages: payload.messages
         });
         const options = {
