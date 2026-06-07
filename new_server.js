@@ -177,13 +177,33 @@ function sefazSync(emp) {
       apiRes.on('end', () => {
         try {
           const xml = Buffer.concat(chunks).toString('utf-8');
-          console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} — resposta (primeiros 800 chars):`, xml.substring(0, 800));
 
-          // Extract docZip elements
+          // Parse SEFAZ status
+          const cStat   = getTag(xml, 'cStat');
+          const xMotivo = getTag(xml, 'xMotivo');
+          const nsuResp = parseInt(getTag(xml, 'ultNSU')) || 0;
+
+          console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} cStat=${cStat} xMotivo=${xMotivo} ultNSU=${nsuResp}`);
+
+          // Save NSU from response regardless of status so next request continues from here
+          if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(emp, nsuResp);
+
+          // Handle non-success statuses
+          if (cStat === '656') {
+            return reject(new Error(`SEFAZ limitou as consultas (cStat 656). ${xMotivo}. Tente novamente em 1 hora.`));
+          }
+          if (cStat === '137') {
+            return resolve({ nfes: [], total: 0, ultNSU: nsuResp, cStat, xMotivo });
+          }
+          if (cStat && cStat !== '138') {
+            return reject(new Error(`SEFAZ retornou cStat ${cStat}: ${xMotivo}`));
+          }
+
+          // Extract docZip elements (cStat 138)
           const docZipRe = /<docZip[^>]*NSU="(\d+)"[^>]*>([\s\S]*?)<\/docZip>/g;
           let match;
           const nfes = [];
-          let maxNSU = parseInt(ultNSU) || 0;
+          let maxNSU = nsuResp;
 
           while ((match = docZipRe.exec(xml)) !== null) {
             const nsu     = parseInt(match[1]);
@@ -192,7 +212,6 @@ function sefazSync(emp) {
             try {
               const compressed = Buffer.from(b64data, 'base64');
               const decompressed = zlib.gunzipSync(compressed).toString('utf-8');
-              // Only process actual NF-e documents (procNFe or NFe schema)
               if (decompressed.includes('<infNFe') || decompressed.includes('<NFe')) {
                 const parsed = parseNFeXml(decompressed);
                 if (parsed.itens.length > 0) nfes.push({ ...parsed, nsu });
@@ -200,8 +219,7 @@ function sefazSync(emp) {
             } catch { /* skip malformed docZip */ }
           }
 
-          // Save highest NSU for next sync
-          if (maxNSU > (parseInt(ultNSU) || 0)) saveNsu(emp, maxNSU);
+          if (maxNSU > nsuResp) saveNsu(emp, maxNSU);
 
           resolve({ nfes, total: nfes.length, ultNSU: maxNSU });
         } catch (e) {
