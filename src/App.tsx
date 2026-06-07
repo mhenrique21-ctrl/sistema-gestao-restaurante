@@ -61,16 +61,18 @@ function abrirRelatorio(html){const w=window.open("","_blank");if(w){w.document.
 
 // ===================== LOGO =====================
 const LOGOS = {
-  CONFRARIA: "/logos/logo-confraria.png",
-  SEAMA:     "/logos/logo-seama.png",
+  CONFRARIA: "/logos/logo-confraria.svg",
+  SEAMA:     "/logos/logo-seama.svg",
 };
 function LogoEmpresa({empresa}) {
   const [ok,setOk] = useState(true);
   useEffect(()=>setOk(true),[empresa]);
   if(ok) return (
-    <img src={LOGOS[empresa]} alt={empresa}
-      onError={()=>setOk(false)}
-      style={{height:44,maxWidth:160,objectFit:"contain",objectPosition:"left center"}}/>
+    <div style={{background:"#fff",borderRadius:10,padding:"4px 10px",display:"flex",alignItems:"center",height:48}}>
+      <img src={LOGOS[empresa]} alt={empresa}
+        onError={()=>setOk(false)}
+        style={{height:40,maxWidth:140,objectFit:"contain",objectPosition:"left center"}}/>
+    </div>
   );
   return (
     <div>
