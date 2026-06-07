@@ -103,7 +103,14 @@ export default function App() {
   });
   const [tab,setTab]       = useState("dashboard");
   const [empresa,setEmpresa] = useState("CONFRARIA");
+  const [theme,setTheme]   = useState<"dark"|"light">(()=>(localStorage.getItem("app_theme")||"dark") as "dark"|"light");
   const [syncStatus,setSyncStatus] = useState<"idle"|"sync"|"ok"|"erro">("idle");
+
+  const toggleTheme=()=>{
+    const t=theme==="dark"?"light":"dark";
+    setTheme(t);
+    localStorage.setItem("app_theme",t);
+  };
   const syncTimer = useRef<any>(null);
   const firstRender = useRef(true);
 
@@ -149,26 +156,28 @@ export default function App() {
   ];
 
   return (
-    <div className="app-root" style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#0a0c12",minHeight:"100vh",color:"#e8eaf0",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:84}}>
+    <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:84}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
+        :root{--bg:#0a0c12;--bg2:#0d0f18;--bg3:#13161f;--bg4:#161922;--border:#1e2235;--border2:#252840;--text:#e8eaf0;--text2:#5a6080;--text3:#424668;--acc:#7c8fff}
+        .light-mode{--bg:#f0f2fc;--bg2:#ffffff;--bg3:#ffffff;--bg4:#f5f7ff;--border:#dde1f8;--border2:#c8ccee;--text:#1a1d35;--text2:#6b7099;--text3:#9098c0;--acc:#5b6fff}
         *{box-sizing:border-box;margin:0;padding:0} input,select,textarea{font-family:inherit}
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#2a2d45;border-radius:4px}
         .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:10px;transition:all .15s}
         .btn:active{transform:scale(.95)}
-        .inp{background:#161922;border:1.5px solid #252840;border-radius:10px;color:#e8eaf0;padding:10px 14px;width:100%;font-size:14px;transition:border-color .15s}
-        .inp:focus{outline:none;border-color:#7c8fff} select.inp option{background:#161922}
-        .card{background:#13161f;border-radius:16px;padding:16px;border:1px solid #1e2235}
+        .inp{background:var(--bg4);border:1.5px solid var(--border2);border-radius:10px;color:var(--text);padding:10px 14px;width:100%;font-size:14px;transition:border-color .15s}
+        .inp:focus{outline:none;border-color:var(--acc)} select.inp option{background:var(--bg4)}
+        .card{background:var(--bg3);border-radius:16px;padding:16px;border:1px solid var(--border)}
         .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
         .pill{display:inline-flex;align-items:center;padding:6px 13px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
-        .section-title{font-size:11px;font-weight:700;color:#7c8fff;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px}
-        .list-item{background:#161922;border-radius:12px;padding:14px;border:1px solid #1e2235;margin-bottom:8px}
-        .muted{color:#5a6080;font-size:13px} .row{display:flex;gap:10px}
-        .camera-zone{border:2px dashed #252840;border-radius:14px;padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .2s}
-        .camera-zone:hover{border-color:#7c8fff}
+        .section-title{font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px}
+        .list-item{background:var(--bg4);border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:8px}
+        .muted{color:var(--text2);font-size:13px} .row{display:flex;gap:10px}
+        .camera-zone{border:2px dashed var(--border2);border-radius:14px;padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .2s}
+        .camera-zone:hover{border-color:var(--acc)}
         textarea.inp{min-height:110px;resize:vertical}
-        .divider{border:none;border-top:1px solid #1e2235;margin:10px 0}
-        .app-sidebar{display:none;position:fixed;left:0;top:0;bottom:0;width:220px;background:#0d0f18;border-right:1px solid #1e2235;flex-direction:column;z-index:100;overflow-y:auto}
+        .divider{border:none;border-top:1px solid var(--border);margin:10px 0}
+        .app-sidebar{display:none;position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);flex-direction:column;z-index:100;overflow-y:auto}
         @media(min-width:900px){
           .app-root{max-width:none!important;padding-left:220px;padding-bottom:0!important}
           .app-sidebar{display:flex!important}
@@ -187,33 +196,41 @@ export default function App() {
           <div style={{display:"flex",gap:5,marginTop:10}}>
             {["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
-                style={{background:empresa===e?"#7c8fff":"#161922",color:empresa===e?"#fff":"#666",fontSize:10,border:`1px solid ${empresa===e?"#7c8fff":"#252840"}`,flex:1,justifyContent:"center",padding:"5px 6px"}}>{e}</button>
+                style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:10,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`,flex:1,justifyContent:"center",padding:"5px 6px"}}>{e}</button>
             ))}
           </div>
         </div>
         <div style={{flex:1}}>
           {tabs.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)}
-              style={{background:tab===t.id?"#161922":"none",border:"none",borderLeft:tab===t.id?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:tab===t.id?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:tab===t.id?700:400,transition:"all .15s"}}>
+              style={{background:tab===t.id?"var(--bg4)":"none",border:"none",borderLeft:tab===t.id?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:tab===t.id?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:tab===t.id?700:400,transition:"all .15s"}}>
               <span style={{fontSize:17}}>{t.icon}</span>
               <span>{t.label}</span>
             </button>
           ))}
         </div>
-        <div style={{padding:"12px 16px",borderTop:"1px solid #1e2235",fontSize:11,color:syncStatus==="ok"?"#4ade80":syncStatus==="erro"?"#ff5c7a":syncStatus==="sync"?"#7c8fff":"#424668"}}>
-          {syncStatus==="sync"?"⟳ Salvando...":syncStatus==="ok"?"✓ Dados sincronizados":syncStatus==="erro"?"⚠ Erro ao salvar":"App Gestão v2.0"}
+        <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:11,color:syncStatus==="ok"?"#4ade80":syncStatus==="erro"?"#ff5c7a":syncStatus==="sync"?"#7c8fff":"var(--text3)"}}>
+            {syncStatus==="sync"?"⟳ Salvando...":syncStatus==="ok"?"✓ Sincronizado":syncStatus==="erro"?"⚠ Erro":"App Gestão v2.0"}
+          </span>
+          <button onClick={toggleTheme} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
+            {theme==="dark"?"☀️":"🌙"}
+          </button>
         </div>
       </div>
 
       {/* HEADER */}
-      <div className="app-header" style={{background:"#0d0f18",borderBottom:"1px solid #1e2235",position:"sticky",top:0,zIndex:90,padding:"10px 16px"}}>
+      <div className="app-header" style={{background:"var(--bg2)",borderBottom:"1px solid #1e2235",position:"sticky",top:0,zIndex:90,padding:"10px 16px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <LogoEmpresa empresa={empresa}/>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             {syncStatus==="sync"&&<span style={{fontSize:11,color:"#7c8fff"}}>⟳</span>}
+            <button onClick={toggleTheme} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
+              {theme==="dark"?"☀️":"🌙"}
+            </button>
             {["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
-                style={{background:empresa===e?"#7c8fff":"#161922",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"#252840"}`}}>{e}</button>
+                style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`}}>{e}</button>
             ))}
           </div>
         </div>
@@ -232,11 +249,11 @@ export default function App() {
       </div>
 
       {/* BOTTOM NAV (mobile only) */}
-      <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#0d0f18",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
+      <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-              color:tab===t.id?"#7c8fff":"#424668",padding:"4px 1px",transition:"color .15s"}}>
+              color:tab===t.id?"#7c8fff":"var(--text3)",padding:"4px 1px",transition:"color .15s"}}>
             <span style={{fontSize:17}}>{t.icon}</span>
             <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{t.label}</span>
           </button>
@@ -283,7 +300,7 @@ function Dashboard({db}) {
             <span style={{textTransform:"capitalize"}}>{label}</span>
             <span style={{fontWeight:600}}>{fmtMoney(v)}</span>
           </div>
-          <div style={{background:"#1e2235",borderRadius:4,height:5}}>
+          <div style={{background:"var(--border)",borderRadius:4,height:5}}>
             <div style={{background:"#7c8fff",borderRadius:4,height:5,width:`${(v/maxV)*100}%`,transition:"width .4s"}}/>
           </div>
         </div>
@@ -297,9 +314,9 @@ function Dashboard({db}) {
     </div>
   </div>;
 }
-function GaugeSVG({value,color}){const a=Math.min(value/60*180,180);return <svg width={82} height={52} viewBox="0 0 82 52"><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke="#1e2235" strokeWidth="9" strokeLinecap="round"/><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${a*0.576} 999`}/><text x="41" y="45" textAnchor="middle" fill={color} fontSize="11" fontWeight="800">{value.toFixed(0)}%</text></svg>;}
+function GaugeSVG({value,color}){const a=Math.min(value/60*180,180);return <svg width={82} height={52} viewBox="0 0 82 52"><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke="var(--border)" strokeWidth="9" strokeLinecap="round"/><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${a*0.576} 999`}/><text x="41" y="45" textAnchor="middle" fill={color} fontSize="11" fontWeight="800">{value.toFixed(0)}%</text></svg>;}
 function StatCard({label,value,color,icon}){return <div className="card" style={{textAlign:"center"}}><div style={{fontSize:22,marginBottom:4}}>{icon}</div><div style={{fontSize:15,fontWeight:700,color}}>{value}</div><div className="muted" style={{fontSize:11,marginTop:2}}>{label}</div></div>;}
-function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2235"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"#e8eaf0":positive?"#4ade80":"#ff5c7a"}}>{value}</span></div>;}
+function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2235"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"var(--text)":positive?"#4ade80":"#ff5c7a"}}>{value}</span></div>;}
 
 // ===================== VENDAS =====================
 function Vendas({db,setDb}){
@@ -330,7 +347,7 @@ function Vendas({db,setDb}){
         <span>Total</span><span style={{color:"#4ade80"}}>{fmtMoney(total)}</span>
       </div>
       <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Vendas"}</button>
-      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({data:today(),maquininha:"",dinheiro:"",ifood:"","99food":"",delivery:""}); }} style={{background:"#1e2235",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({data:today(),maquininha:"",dinheiro:"",ifood:"","99food":"",delivery:""}); }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>
     <div className="section-title">Histórico</div>
     {(db.vendas||[]).map(v=>(
@@ -345,7 +362,7 @@ function Vendas({db,setDb}){
           ))}
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button className="btn" onClick={()=>edit(v)} style={{background:"#1e2235",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
+          <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>del(v.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
       </div>
@@ -691,7 +708,7 @@ function Compras({db,setDb,empresa}){
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
       {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
-          style={{background:subTab===k?"#7c8fff":"#161922",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px"}}>{l}</button>
+          style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px"}}>{l}</button>
       ))}
     </div>
 
@@ -731,7 +748,7 @@ function Compras({db,setDb,empresa}){
             onChange={e=>{setItemAtual(i=>({...i,nomeProduto:e.target.value}));buscarMP(e.target.value);}}
             className="inp" style={{marginBottom:sugestoes.length?0:8}}/>
           {sugestoes.length>0&&(
-            <div style={{background:"#1e2235",border:"1px solid #252840",borderRadius:"0 0 10px 10px",position:"absolute",width:"100%",zIndex:10,top:"42px"}}>
+            <div style={{background:"var(--border)",border:"1px solid #252840",borderRadius:"0 0 10px 10px",position:"absolute",width:"100%",zIndex:10,top:"42px"}}>
               {sugestoes.map(mp=>(
                 <div key={mp.id} onClick={()=>selecionarMP(mp)}
                   style={{padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #252840",fontSize:13}}>
@@ -768,7 +785,7 @@ function Compras({db,setDb,empresa}){
           <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Valor Total do Item</label>
           <MoneyInput value={itemAtual.valorTotal} onChange={v=>setItemAtual(i=>({...i,valorTotal:v}))} className="inp"/>
         </div>
-        <button className="btn" onClick={addItem} style={{background:"#252840",color:"#e8eaf0",padding:"11px",width:"100%",fontSize:14}}>
+        <button className="btn" onClick={addItem} style={{background:"var(--border2)",color:"var(--text)",padding:"11px",width:"100%",fontSize:14}}>
           + Adicionar ao Carrinho
         </button>
       </div>
@@ -820,7 +837,7 @@ function Compras({db,setDb,empresa}){
         </button>
       </div>}
 
-      {carrinho.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:"#424668"}}>
+      {carrinho.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:"var(--text3)"}}>
         <div style={{fontSize:32,marginBottom:6}}>🧺</div>
         <div style={{fontSize:13}}>Carrinho vazio — adicione produtos acima</div>
       </div>}
@@ -838,15 +855,15 @@ function Compras({db,setDb,empresa}){
         <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{display:"none"}}/>
       </div>
       {imgPreview&&<button className="btn" onClick={()=>{setImgPreview(null);setImgBase64(null);}}
-        style={{background:"#1e2235",color:"#888",padding:"8px",width:"100%",fontSize:12,marginBottom:8}}>❌ Remover imagem</button>}
+        style={{background:"var(--border)",color:"#888",padding:"8px",width:"100%",fontSize:12,marginBottom:8}}>❌ Remover imagem</button>}
       {!imgBase64&&<textarea value={iaText} onChange={e=>setIaText(e.target.value)} placeholder="Ou cole o texto do cupom aqui..." className="inp" style={{marginBottom:8}}/>}
       <button className="btn" onClick={processarIA} disabled={iaLoading}
-        style={{background:iaLoading?"#252840":"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15,marginBottom:14}}>
+        style={{background:iaLoading?"var(--border2)":"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15,marginBottom:14}}>
         {iaLoading?"⏳ Processando com IA...":"🤖 Processar com IA"}
       </button>
       {iaResult&&<div className="card" style={{marginBottom:12}}>
         <div className="section-title">Resultado da Leitura</div>
-        {iaResult.fornecedor&&<div style={{marginBottom:10,padding:"10px",background:"#1e2235",borderRadius:10}}>
+        {iaResult.fornecedor&&<div style={{marginBottom:10,padding:"10px",background:"var(--border)",borderRadius:10}}>
           <div style={{fontWeight:600}}>🏪 {iaResult.fornecedor.nome}</div>
           {iaResult.fornecedor.endereco&&<div className="muted">{iaResult.fornecedor.endereco}</div>}
         </div>}
@@ -876,7 +893,7 @@ function Compras({db,setDb,empresa}){
         )}
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button className="btn" onClick={confirmarIA} style={{background:"#4ade80",color:"#051208",padding:"12px",flex:1,fontSize:14}}>✅ Confirmar</button>
-          <button className="btn" onClick={()=>setIaResult(null)} style={{background:"#1e2235",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Descartar</button>
+          <button className="btn" onClick={()=>setIaResult(null)} style={{background:"var(--border)",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Descartar</button>
         </div>
       </div>}
     </div>}
@@ -913,7 +930,7 @@ function Compras({db,setDb,empresa}){
           </div>
         )}
         <button className="btn" onClick={()=>sincronizarSEFAZ(false)} disabled={sefazLoading||!sefazConfig[empresa]}
-          style={{background:sefazLoading||!sefazConfig[empresa]?"#252840":"linear-gradient(135deg,#7c8fff,#5b6fff)",color:"#fff",padding:"13px",width:"100%",fontSize:15,fontWeight:700}}>
+          style={{background:sefazLoading||!sefazConfig[empresa]?"var(--border2)":"linear-gradient(135deg,#7c8fff,#5b6fff)",color:"#fff",padding:"13px",width:"100%",fontSize:15,fontWeight:700}}>
           {sefazLoading?"⏳ Consultando SEFAZ...":"🔄 Buscar NF-es no SEFAZ"}
         </button>
         {sefazConfig[empresa]&&!sefazLoading&&(
@@ -936,7 +953,7 @@ function Compras({db,setDb,empresa}){
           <input type="date" value={sefazVenc} onChange={e=>setSefazVenc(e.target.value)} className="inp"/>
         </div>
         {sefazList.map((nfe,i)=>(
-          <div key={nfe.nsu||i} style={{padding:"10px",background:"#161922",borderRadius:12,border:"1px solid #1e2235",marginBottom:8}}>
+          <div key={nfe.nsu||i} style={{padding:"10px",background:"var(--bg4)",borderRadius:12,border:"1px solid #1e2235",marginBottom:8}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
               <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{nfe.fornecedor?.nome||"Fornecedor"}</span>
               <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(nfe.totalCompra)}</span>
@@ -974,7 +991,7 @@ function Compras({db,setDb,empresa}){
 
       {nfeResult&&<div className="card" style={{marginBottom:12}}>
         <div className="section-title">Dados da NF-e</div>
-        <div style={{marginBottom:10,padding:"10px",background:"#1e2235",borderRadius:10}}>
+        <div style={{marginBottom:10,padding:"10px",background:"var(--border)",borderRadius:10}}>
           <div style={{fontWeight:600}}>🏪 {nfeResult.fornecedor.nome||"Fornecedor não identificado"}</div>
           {nfeResult.fornecedor.cnpj&&<div className="muted" style={{fontSize:12}}>CNPJ: {nfeResult.fornecedor.cnpj}</div>}
           {nfeResult.fornecedor.endereco&&<div className="muted" style={{fontSize:12}}>{nfeResult.fornecedor.endereco}</div>}
@@ -1004,7 +1021,7 @@ function Compras({db,setDb,empresa}){
         <input type="date" value={nfeVenc} onChange={e=>setNfeVenc(e.target.value)} className="inp" style={{marginBottom:12}}/>
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={confirmarNFe} style={{background:"#4ade80",color:"#051208",padding:"12px",flex:1,fontSize:14,fontWeight:700}}>✅ Importar NF-e</button>
-          <button className="btn" onClick={()=>{setNfeResult(null);setNfeError("");if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";}} style={{background:"#1e2235",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Cancelar</button>
+          <button className="btn" onClick={()=>{setNfeResult(null);setNfeError("");if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";}} style={{background:"var(--border)",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Cancelar</button>
         </div>
       </div>}
     </div>}
@@ -1020,7 +1037,7 @@ function Compras({db,setDb,empresa}){
           <div className="muted" style={{margin:"3px 0"}}>{c.fornecedor} • {fmtDate(c.data)}</div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             <span className="tag" style={{background:"#1a2520",color:"#4ade80"}}>{c.categoria}</span>
-            <span className="tag" style={{background:"#1e2235",color:"#888"}}>{c.unidade}</span>
+            <span className="tag" style={{background:"var(--border)",color:"#888"}}>{c.unidade}</span>
             {c.origem==="ia"&&<span className="tag" style={{background:"#1a1a30",color:"#a78bfa"}}>IA</span>}
           </div>
           <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12,marginTop:8}}>🗑️</button>
@@ -1073,7 +1090,7 @@ function Contas({db,setDb}){
     <div style={{display:"flex",gap:6,marginBottom:14}}>
       {[["lista","📋 Contas"],["novo","➕ Novo"],["config","⚙️ Categorias"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
-          style={{background:subTab===k?"#7c8fff":"#161922",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
+          style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
       ))}
     </div>
 
@@ -1081,7 +1098,7 @@ function Contas({db,setDb}){
       <div style={{display:"flex",gap:6,marginBottom:12}}>
         {[["todos","Todos"],["pendente","Pendente"],["pago","Pago"]].map(([k,l])=>(
           <button key={k} onClick={()=>setFiltro(k)} className="pill"
-            style={{background:filtro===k?"#252840":"transparent",color:filtro===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
+            style={{background:filtro===k?"var(--border2)":"transparent",color:filtro===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
         ))}
       </div>
       <div style={{display:"flex",gap:10,marginBottom:14}}>
@@ -1095,7 +1112,7 @@ function Contas({db,setDb}){
             <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a",whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(c.valor))}</span>
           </div>
           <div className="muted" style={{marginBottom:8}}>
-            {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"#1e2235",color:c.categoria==="Adiantamento"?"#fbbf24":"#888",marginRight:6}}>{c.categoria}</span>}
+            {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"var(--border)",color:c.categoria==="Adiantamento"?"#fbbf24":"#888",marginRight:6}}>{c.categoria}</span>}
             Vence: {fmtDate(c.vencimento)}
             {c.origem==="compra"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",marginLeft:6,fontSize:10}}>compra</span>}
           </div>
@@ -1103,7 +1120,7 @@ function Contas({db,setDb}){
             <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"6px 12px",fontSize:12}}>
               {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
             </button>
-            <button className="btn" onClick={()=>edit(c)} style={{background:"#1e2235",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
+            <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
           </div>
         </div>
@@ -1131,7 +1148,7 @@ function Contas({db,setDb}){
         </div>
         <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar"}</button>
         {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida"});}}
-          style={{background:"#1e2235",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+          style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
     </div>}
 
@@ -1191,7 +1208,7 @@ function FichaTecnica({db,setDb}){
   return <div>
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
       {[["lista","📋 Fichas"],["novo",editId?"✏️ Editando":"➕ Nova"],["mps","🥩 Matérias"]].map(([k,l])=>(
-        <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"#161922",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
+        <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
       ))}
     </div>
     {subTab==="lista"&&<div>
@@ -1200,10 +1217,10 @@ function FichaTecnica({db,setDb}){
         <div key={f.id} className="card" style={{marginBottom:12}}>
           <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>{f.nome}</div>
           <div style={{display:"flex",gap:10,marginBottom:10}}>
-            <div style={{flex:1,background:"#1e2235",borderRadius:10,padding:"10px",textAlign:"center"}}>
+            <div style={{flex:1,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
               <div style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(f.custoTotal)}</div><div className="muted" style={{fontSize:11}}>Custo</div>
             </div>
-            <div style={{flex:1,background:"#1e2235",borderRadius:10,padding:"10px",textAlign:"center"}}>
+            <div style={{flex:1,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
               <div style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(f.precoSugerido)}</div><div className="muted" style={{fontSize:11}}>Preço Sugerido</div>
             </div>
           </div>
@@ -1213,7 +1230,7 @@ function FichaTecnica({db,setDb}){
             </div>
           ))}
           <div style={{display:"flex",gap:8,marginTop:10}}>
-            <button className="btn" onClick={()=>edit(f)} style={{background:"#1e2235",color:"#888",padding:"6px 14px",fontSize:12}}>✏️</button>
+            <button className="btn" onClick={()=>edit(f)} style={{background:"var(--border)",color:"#888",padding:"6px 14px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>del(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
         </div>
@@ -1236,7 +1253,7 @@ function FichaTecnica({db,setDb}){
             {["kg","un","L"].map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
-        <button className="btn" onClick={addIns} style={{background:"#1e2235",color:"#e8eaf0",padding:"10px",width:"100%"}}>+ Adicionar</button>
+        <button className="btn" onClick={addIns} style={{background:"var(--border)",color:"var(--text)",padding:"10px",width:"100%"}}>+ Adicionar</button>
       </div>
       {form.insumos.length>0&&<div className="card" style={{marginBottom:10}}>
         {form.insumos.map(i=>(
@@ -1250,7 +1267,7 @@ function FichaTecnica({db,setDb}){
         <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:"1px solid #1e2235"}}><span style={{fontWeight:700}}>Preço Sugerido (30%)</span><span style={{color:"#4ade80",fontWeight:700,fontSize:15}}>{fmtMoney(precoSugerido)}</span></div>
       </div>}
       <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Ficha"}</button>
-      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({nome:"",insumos:[]});}} style={{background:"#1e2235",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({nome:"",insumos:[]});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>}
     {subTab==="mps"&&<div>
       <div className="section-title">Matérias-Primas</div>
@@ -1400,7 +1417,7 @@ function RH({db,setDb,empresa}){
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
       {[["lista","👥 Lista"],["cadastro","➕ Cadastro"],["faltas","📅 Faltas"],["adiantamentos","💸 Adiant."],["encargos","💼 Encargos"],["consumacoes","🍺 Consum."]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
-          style={{background:subTab===k?"#7c8fff":"#161922",color:subTab===k?"#fff":"#777",fontSize:10,padding:"6px 10px"}}>{l}</button>
+          style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:10,padding:"6px 10px"}}>{l}</button>
       ))}
     </div>
 
@@ -1424,7 +1441,7 @@ function RH({db,setDb,empresa}){
             </div>
           </div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
-            <span className="tag" style={{background:"#1e2235",color:"#888"}}>Sal: {fmtMoney(f.salario)}</span>
+            <span className="tag" style={{background:"var(--border)",color:"#888"}}>Sal: {fmtMoney(f.salario)}</span>
             {totFalt>0&&<span className="tag" style={{background:"#2a1520",color:"#ff5c7a"}}>-{fmtMoney(totFalt)} falta</span>}
             {totAdt>0&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24"}}>-{fmtMoney(totAdt)} adt</span>}
             {totEnc>0&&<span className="tag" style={{background:"#2a1520",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} encargos</span>}
@@ -1432,7 +1449,7 @@ function RH({db,setDb,empresa}){
           </div>
           <div style={{display:"flex",gap:8}}>
             <button className="btn" onClick={()=>gerarHolerite(f)} style={{background:"#7c8fff",color:"#fff",padding:"7px 14px",fontSize:12}}>📄 Holerite</button>
-            <button className="btn" onClick={()=>editFunc(f)} style={{background:"#1e2235",color:"#888",padding:"7px 12px",fontSize:12}}>✏️</button>
+            <button className="btn" onClick={()=>editFunc(f)} style={{background:"var(--border)",color:"#888",padding:"7px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>delFunc(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️</button>
           </div>
         </div>;
@@ -1449,7 +1466,7 @@ function RH({db,setDb,empresa}){
         <input placeholder="CPF" value={fForm.cpf} onChange={e=>setFForm(f=>({...f,cpf:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <input placeholder="Contato / WhatsApp" value={fForm.contato} onChange={e=>setFForm(f=>({...f,contato:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <button className="btn" onClick={saveFunc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{fEdit?"✏️ Atualizar":"💾 Cadastrar"}</button>
-        {fEdit&&<button className="btn" onClick={()=>{setFEdit(null);setFForm({nome:"",funcao:"",salario:"",cpf:"",contato:""}); }} style={{background:"#1e2235",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+        {fEdit&&<button className="btn" onClick={()=>{setFEdit(null);setFForm({nome:"",funcao:"",salario:"",cpf:"",contato:""}); }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
     </div>}
 
@@ -1519,7 +1536,7 @@ function RH({db,setDb,empresa}){
         <MoneyInput value={encForm.valor} onChange={v=>setEncForm(f=>({...f,valor:v}))} placeholder="Valor único" className="inp"/>
         <input placeholder="Descrição (opcional)" value={encForm.descricao} onChange={e=>setEncForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <button className="btn" onClick={saveEnc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
-        {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",descricao:""}); }} style={{background:"#1e2235",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+        {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",descricao:""}); }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
       {(db.encargos||[]).map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#ff5c7a",fontWeight:700}}>-{fmtMoney(parseMoney(e.valor))}</span></div>
@@ -1527,7 +1544,7 @@ function RH({db,setDb,empresa}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
           <span className="tag" style={{background:"#2a1520",color:"#ff9aa8",display:"inline-block"}}>VT + FGTS + INSS</span>
           <div style={{display:"flex",gap:8}}>
-            <button className="btn" onClick={()=>editEnc(e)} style={{background:"#1e2235",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
+            <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>{if(confirm("Excluir este encargo?"))delEnc(e.id);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
           </div>
         </div>
@@ -1687,13 +1704,13 @@ function Relatorios({db,empresa,state}){
   ];
   return <div>
     <div className="section-title">Gerar Relatórios PDF</div>
-    <div style={{background:"#13161f",borderRadius:12,padding:"12px",marginBottom:14,border:"1px solid #1e2235"}}>
+    <div style={{background:"var(--bg3)",borderRadius:12,padding:"12px",marginBottom:14,border:"1px solid #1e2235"}}>
       <div className="muted" style={{fontSize:12,textAlign:"center"}}>📄 Abre em nova aba — imprima ou salve como PDF</div>
     </div>
     {rels.map(r=>(
       <button key={r.label} className="btn" onClick={r.fn}
-        style={{display:"flex",alignItems:"center",gap:14,background:"#13161f",border:"1px solid #1e2235",
-          color:"#e8eaf0",padding:"16px",width:"100%",marginBottom:10,borderRadius:14,textAlign:"left"}}>
+        style={{display:"flex",alignItems:"center",gap:14,background:"var(--bg3)",border:"1px solid #1e2235",
+          color:"var(--text)",padding:"16px",width:"100%",marginBottom:10,borderRadius:14,textAlign:"left"}}>
         <div style={{width:44,height:44,borderRadius:12,background:`${r.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{r.icon}</div>
         <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:r.color}}>{r.label}</div><div className="muted" style={{fontSize:12}}>{r.desc}</div></div>
         <span style={{color:"#333",fontSize:20}}>›</span>
@@ -1724,9 +1741,9 @@ function Comparativo({state}){
         <div className="muted" style={{fontSize:11,textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>{label}</div>
         <div style={{display:"flex",gap:8}}>
           {[{name:"CONFRARIA",val:a,wins:aW},{name:"SEAMA",val:b,wins:!aW||(a===b)}].map(({name,val,wins})=>(
-            <div key={name} style={{flex:1,background:wins?"#141e14":"#161922",borderRadius:10,padding:"10px",border:`1px solid ${wins?"#2a3a2a":"#1e2235"}`}}>
+            <div key={name} style={{flex:1,background:wins?"#141e14":"var(--bg4)",borderRadius:10,padding:"10px",border:`1px solid ${wins?"#2a3a2a":"var(--border)"}`}}>
               <div style={{fontSize:10,color:wins?"#4ade80":"#555",fontWeight:700,marginBottom:2}}>{wins&&"★ "}{name}</div>
-              <div style={{fontWeight:700,color:wins?"#4ade80":"#e8eaf0",fontSize:14}}>{fmt(val)}</div>
+              <div style={{fontWeight:700,color:wins?"#4ade80":"var(--text)",fontSize:14}}>{fmt(val)}</div>
             </div>
           ))}
         </div>
@@ -1735,4 +1752,4 @@ function Comparativo({state}){
   </div>;
 }
 
-function EmptyState({msg}){return <div style={{textAlign:"center",padding:"32px 16px",color:"#424668"}}><div style={{fontSize:32,marginBottom:6}}>📭</div><div style={{fontSize:13}}>{msg}</div></div>;}
+function EmptyState({msg}){return <div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}><div style={{fontSize:32,marginBottom:6}}>📭</div><div style={{fontSize:13}}>{msg}</div></div>;}
