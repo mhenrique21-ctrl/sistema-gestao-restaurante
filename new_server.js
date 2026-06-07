@@ -12,6 +12,8 @@ const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DIST = path.join(__dirname, 'dist');
 const LOGOS_DIR = path.join(__dirname, 'logos');
 const CERTS_DIR = path.join(__dirname, 'certs');
+const DADOS_DIR = path.join(__dirname, 'dados');
+fs.mkdirSync(DADOS_DIR, { recursive: true });
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -326,6 +328,46 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // Dados da empresa — GET
+  if (req.method === 'GET' && urlPath.startsWith('/api/dados/')) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('null'); return; }
+    const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+    try {
+      const data = fs.readFileSync(file, 'utf-8');
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end(data);
+    } catch {
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end('null');
+    }
+    return;
+  }
+
+  // Dados da empresa — POST (salvar)
+  if (req.method === 'POST' && urlPath.startsWith('/api/dados/')) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        JSON.parse(body);
+        fs.writeFileSync(file, body);
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end('{"ok":true}');
+      } catch (e) {
+        res.writeHead(400);
         res.end(JSON.stringify({ error: e.message }));
       }
     });

@@ -103,8 +103,36 @@ export default function App() {
   });
   const [tab,setTab]       = useState("dashboard");
   const [empresa,setEmpresa] = useState("CONFRARIA");
+  const [syncStatus,setSyncStatus] = useState<"idle"|"sync"|"ok"|"erro">("idle");
+  const syncTimer = useRef<any>(null);
+  const firstRender = useRef(true);
 
-  useEffect(()=>{saveData(state);},[state]);
+  // On mount: load both companies from server
+  useEffect(()=>{
+    Promise.all(["CONFRARIA","SEAMA"].map(emp=>
+      fetch(`/api/dados/${emp}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
+    )).then(results=>{
+      const updates:any={};
+      results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
+      if(Object.keys(updates).length>0)setState(prev=>({...prev,...updates}));
+    });
+  },[]);
+
+  // On state change: save to localStorage + debounced save to server
+  useEffect(()=>{
+    saveData(state);
+    if(firstRender.current){firstRender.current=false;return;}
+    clearTimeout(syncTimer.current);
+    setSyncStatus("sync");
+    syncTimer.current=setTimeout(async()=>{
+      try{
+        await Promise.all(["CONFRARIA","SEAMA"].map(emp=>
+          fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
+        ));
+        setSyncStatus("ok");
+      }catch{setSyncStatus("erro");}
+    },1500);
+  },[state]);
 
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
@@ -121,7 +149,7 @@ export default function App() {
   ];
 
   return (
-    <div style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#0a0c12",minHeight:"100vh",color:"#e8eaf0",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:84}}>
+    <div className="app-root" style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#0a0c12",minHeight:"100vh",color:"#e8eaf0",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:84}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
         *{box-sizing:border-box;margin:0;padding:0} input,select,textarea{font-family:inherit}
@@ -140,13 +168,49 @@ export default function App() {
         .camera-zone:hover{border-color:#7c8fff}
         textarea.inp{min-height:110px;resize:vertical}
         .divider{border:none;border-top:1px solid #1e2235;margin:10px 0}
+        .app-sidebar{display:none;position:fixed;left:0;top:0;bottom:0;width:220px;background:#0d0f18;border-right:1px solid #1e2235;flex-direction:column;z-index:100;overflow-y:auto}
+        @media(min-width:900px){
+          .app-root{max-width:none!important;padding-left:220px;padding-bottom:0!important}
+          .app-sidebar{display:flex!important}
+          .bottom-nav-bar{display:none!important}
+          .app-header{padding:14px 32px!important}
+          .app-content{padding:24px 32px 24px!important}
+          .card{padding:20px!important}
+          .inp{font-size:15px!important}
+        }
       `}</style>
 
+      {/* DESKTOP SIDEBAR */}
+      <div className="app-sidebar">
+        <div style={{padding:"16px 16px 12px"}}>
+          <LogoEmpresa empresa={empresa}/>
+          <div style={{display:"flex",gap:5,marginTop:10}}>
+            {["CONFRARIA","SEAMA"].map(e=>(
+              <button key={e} onClick={()=>setEmpresa(e)} className="pill"
+                style={{background:empresa===e?"#7c8fff":"#161922",color:empresa===e?"#fff":"#666",fontSize:10,border:`1px solid ${empresa===e?"#7c8fff":"#252840"}`,flex:1,justifyContent:"center",padding:"5px 6px"}}>{e}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{flex:1}}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              style={{background:tab===t.id?"#161922":"none",border:"none",borderLeft:tab===t.id?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:tab===t.id?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:tab===t.id?700:400,transition:"all .15s"}}>
+              <span style={{fontSize:17}}>{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{padding:"12px 16px",borderTop:"1px solid #1e2235",fontSize:11,color:syncStatus==="ok"?"#4ade80":syncStatus==="erro"?"#ff5c7a":syncStatus==="sync"?"#7c8fff":"#424668"}}>
+          {syncStatus==="sync"?"⟳ Salvando...":syncStatus==="ok"?"✓ Dados sincronizados":syncStatus==="erro"?"⚠ Erro ao salvar":"App Gestão v2.0"}
+        </div>
+      </div>
+
       {/* HEADER */}
-      <div style={{background:"#0d0f18",borderBottom:"1px solid #1e2235",position:"sticky",top:0,zIndex:90,padding:"10px 16px"}}>
+      <div className="app-header" style={{background:"#0d0f18",borderBottom:"1px solid #1e2235",position:"sticky",top:0,zIndex:90,padding:"10px 16px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <LogoEmpresa empresa={empresa}/>
-          <div style={{display:"flex",gap:6}}>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {syncStatus==="sync"&&<span style={{fontSize:11,color:"#7c8fff"}}>⟳</span>}
             {["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
                 style={{background:empresa===e?"#7c8fff":"#161922",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"#252840"}`}}>{e}</button>
@@ -156,7 +220,7 @@ export default function App() {
       </div>
 
       {/* CONTENT */}
-      <div style={{padding:"14px 14px 0"}}>
+      <div className="app-content" style={{padding:"14px 14px 0"}}>
         {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
         {tab==="vendas"     && <Vendas db={db} setDb={setDb}/>}
         {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa}/>}
@@ -167,8 +231,8 @@ export default function App() {
         {tab==="comparativo"&& <Comparativo state={state}/>}
       </div>
 
-      {/* BOTTOM NAV */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#0d0f18",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
+      {/* BOTTOM NAV (mobile only) */}
+      <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#0d0f18",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
