@@ -132,10 +132,14 @@ function buildSoapEnvelope(cnpj, uf, ultNSU) {
 
 function sefazSync(emp) {
   return new Promise((resolve, reject) => {
-    const pfxPath = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
-    if (!fs.existsSync(pfxPath)) return reject(new Error(`Certificado não encontrado: ${emp.toLowerCase()}.pfx`));
+    const pfxPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
+    const keyPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}_key.pem`);
+    const certPath = path.join(CERTS_DIR, `${emp.toLowerCase()}_cert.pem`);
 
-    const pfx        = fs.readFileSync(pfxPath);
+    const hasPem = fs.existsSync(keyPath) && fs.existsSync(certPath);
+    const hasPfx = fs.existsSync(pfxPath);
+    if (!hasPem && !hasPfx) return reject(new Error(`Certificado não encontrado para ${emp}`));
+
     const passphrase = process.env[`CERT_${emp}_PASS`] || '';
     const cnpj       = (process.env[`CNPJ_${emp}`] || '').replace(/\D/g, '');
     const uf         = process.env[`UF_${emp}`] || '35';
@@ -148,6 +152,11 @@ function sefazSync(emp) {
     const soapBody = buildSoapEnvelope(cnpj, uf, ultNSU);
     const bodyBuf  = Buffer.from(soapBody, 'utf-8');
 
+    // Prefer PEM files (no passphrase needed); fall back to PFX
+    const tlsOpts = hasPem
+      ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
+      : { pfx: fs.readFileSync(pfxPath), passphrase };
+
     const options = {
       hostname: 'www1.nfe.fazenda.gov.br',
       path: '/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
@@ -157,8 +166,7 @@ function sefazSync(emp) {
         'Content-Length': bodyBuf.length,
         'SOAPAction': '',
       },
-      pfx,
-      passphrase,
+      ...tlsOpts,
       rejectUnauthorized: true,
       timeout: 30000,
     };
