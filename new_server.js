@@ -75,7 +75,7 @@ const server = http.createServer((req, res) => {
       try {
         const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         const data = JSON.stringify({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: payload.max_tokens || 2000,
           messages: payload.messages
         });
