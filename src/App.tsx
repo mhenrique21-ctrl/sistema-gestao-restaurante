@@ -559,7 +559,7 @@ function Compras({db,setDb,empresa}){
   const [sefazLastSync,setSefazLastSync]=useState(()=>localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
   const [sefazFormaPag,setSefazFormaPag]=useState("boleto");
   const [sefazVenc,setSefazVenc]=useState(today());
-  const [sefazDataIni,setSefazDataIni]=useState(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;});
+  const [sefazDataIni,setSefazDataIni]=useState(()=>`${new Date().getFullYear()}-01-01`);
   const [sefazDataFim,setSefazDataFim]=useState(today());
 
   useEffect(()=>{
@@ -570,10 +570,10 @@ function Compras({db,setDb,empresa}){
     setSefazLastSync(localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
   },[empresa]);
 
-  const sincronizarSEFAZ=async()=>{
+  const sincronizarSEFAZ=async(resetNsu=false)=>{
     setSefazLoading(true);setSefazError("");setSefazList([]);
     try{
-      const res=await fetch("/api/nfe-sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})});
+      const res=await fetch("/api/nfe-sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,resetNsu})});
       const data=await res.json();
       if(!res.ok)throw new Error(data.error||"Erro ao sincronizar");
       const todas=data.nfes||[];
@@ -848,10 +848,16 @@ function Compras({db,setDb,empresa}){
             </div>
           </div>
         )}
-        <button className="btn" onClick={sincronizarSEFAZ} disabled={sefazLoading||!sefazConfig[empresa]}
+        <button className="btn" onClick={()=>sincronizarSEFAZ(false)} disabled={sefazLoading||!sefazConfig[empresa]}
           style={{background:sefazLoading||!sefazConfig[empresa]?"#252840":"linear-gradient(135deg,#7c8fff,#5b6fff)",color:"#fff",padding:"13px",width:"100%",fontSize:15,fontWeight:700}}>
           {sefazLoading?"⏳ Consultando SEFAZ...":"🔄 Buscar NF-es no SEFAZ"}
         </button>
+        {sefazConfig[empresa]&&!sefazLoading&&(
+          <button onClick={()=>sincronizarSEFAZ(true)} disabled={sefazLoading}
+            style={{background:"none",border:"none",color:"#7c8fff",fontSize:12,cursor:"pointer",marginTop:6,width:"100%",textAlign:"center",padding:"4px"}}>
+            ↺ Buscar desde o início (zerar histórico)
+          </button>
+        )}
         {sefazError&&<div style={{background:"#2a1520",borderRadius:8,padding:"10px",fontSize:12,color:"#ff5c7a",marginTop:8}}>{sefazError}</div>}
       </div>
 

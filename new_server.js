@@ -293,12 +293,13 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', async () => {
       try {
-        const { empresa } = JSON.parse(body);
+        const { empresa, resetNsu } = JSON.parse(body);
         if (!['CONFRARIA', 'SEAMA'].includes(empresa)) {
           res.writeHead(400);
           res.end(JSON.stringify({ error: 'Empresa inválida' }));
           return;
         }
+        if (resetNsu) saveNsu(empresa, 0);
         const result = await sefazSync(empresa);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
