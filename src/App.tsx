@@ -7,7 +7,7 @@ const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d)
 
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
-  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[],
+  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
 });
 const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
@@ -77,21 +77,8 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
 }
 function abrirRelatorio(html){const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();}}
 
-// ===================== LOGO =====================
-const LOGOS = {
-  CONFRARIA: "/logos/logo-confraria.svg",
-  SEAMA:     "/logos/logo-seama.svg",
-};
+// ===================== HEADER EMPRESA =====================
 function LogoEmpresa({empresa}) {
-  const [ok,setOk] = useState(true);
-  useEffect(()=>setOk(true),[empresa]);
-  if(ok) return (
-    <div style={{background:"#fff",borderRadius:10,padding:"4px 10px",display:"flex",alignItems:"center",height:48}}>
-      <img src={LOGOS[empresa]} alt={empresa}
-        onError={()=>setOk(false)}
-        style={{height:40,maxWidth:140,objectFit:"contain",objectPosition:"left center"}}/>
-    </div>
-  );
   return (
     <div>
       <div style={{fontSize:9,color:"#7c8fff",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>App Gestão</div>
@@ -109,6 +96,7 @@ export default function App() {
     ["CONFRARIA","SEAMA"].forEach(e=>{
       if(!m[e])m[e]=mkDb();
       if(!m[e].consumacoes)m[e].consumacoes=[];
+      if(!m[e].encargos)m[e].encargos=[];
       if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
     });
     return m;
@@ -1081,6 +1069,8 @@ function RH({db,setDb,empresa}){
   const [faltaForm,setFaltaForm]=useState({funcionarioId:"",data:today(),dias:"",motivo:""});
   const [adtForm,setAdtForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [consForm,setConsForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
+  const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
+  const [encEdit,setEncEdit]=useState(null);
   const funcs=db.funcionarios||[];
 
   const saveFunc=()=>{
@@ -1107,12 +1097,13 @@ function RH({db,setDb,empresa}){
   const saveAdt=()=>{
     if(!adtForm.funcionarioId||!adtForm.valor)return alert("Selecione funcionário e valor.");
     const fn=funcs.find(f=>f.id===adtForm.funcionarioId);
-    const adt={id:uid(),...adtForm,valor:parseMoney(adtForm.valor),mes:adtForm.data.slice(0,7)};
+    const contaId=uid();
+    const adt={id:uid(),...adtForm,valor:parseMoney(adtForm.valor),mes:adtForm.data.slice(0,7),contaId};
     setDb(d=>({...d,
       adiantamentos:[adt,...(d.adiantamentos||[])],
       // lançar em contas a PAGAR com categoria "Adiantamento"
       contas:[{
-        id:uid(),
+        id:contaId,
         descricao:`Adiantamento – ${fn?.nome}`,
         categoria:"Adiantamento",
         valor:parseMoney(adtForm.valor),
@@ -1123,6 +1114,13 @@ function RH({db,setDb,empresa}){
       },...(d.contas||[])]}));
     setAdtForm({funcionarioId:"",data:today(),valor:"",descricao:""});
   };
+  const delAdt=(a)=>setDb(d=>({...d,
+    adiantamentos:(d.adiantamentos||[]).filter(x=>x.id!==a.id),
+    // remove a conta vinculada (por contaId; fallback p/ registros antigos)
+    contas:(d.contas||[]).filter(c=>a.contaId
+      ? c.id!==a.contaId
+      : !(c.origem==="adiantamento_rh" && parseMoney(c.valor)===parseMoney(a.valor) && c.vencimento===a.data)),
+  }));
 
   const saveCons=()=>{
     if(!consForm.funcionarioId||!consForm.valor)return alert("Selecione funcionário e valor.");
@@ -1131,15 +1129,27 @@ function RH({db,setDb,empresa}){
     setConsForm({funcionarioId:"",data:today(),valor:"",descricao:""});
   };
 
+  const saveEnc=()=>{
+    if(!encForm.funcionarioId||!encForm.valor)return alert("Selecione funcionário e valor.");
+    const enc={id:encEdit||uid(),...encForm,valor:parseMoney(encForm.valor),mes:encForm.data.slice(0,7)};
+    if(encEdit){setDb(d=>({...d,encargos:(d.encargos||[]).map(x=>x.id===encEdit?enc:x)}));setEncEdit(null);}
+    else{setDb(d=>({...d,encargos:[enc,...(d.encargos||[])]}));}
+    setEncForm({funcionarioId:"",data:today(),valor:"",descricao:""});
+  };
+  const editEnc=(e)=>{setEncEdit(e.id);setEncForm({funcionarioId:e.funcionarioId,data:e.data,valor:String(parseMoney(e.valor).toFixed(2)).replace(".",","),descricao:e.descricao||""});};
+  const delEnc=(id)=>setDb(d=>({...d,encargos:(d.encargos||[]).filter(e=>e.id!==id)}));
+
   const gerarHolerite=(func)=>{
     const mes=relMes;
     const faltas =(db.faltas||[]).filter(f=>f.funcionarioId===func.id&&f.mes===mes);
     const adts   =(db.adiantamentos||[]).filter(a=>a.funcionarioId===func.id&&a.mes===mes);
     const cons   =(db.consumacoes||[]).filter(c=>c.funcionarioId===func.id&&c.mes===mes);
+    const encs   =(db.encargos||[]).filter(e=>e.funcionarioId===func.id&&e.mes===mes);
     const totFalt=faltas.reduce((s,f)=>s+f.desconto,0);
     const totAdt =adts.reduce((s,a)=>s+parseMoney(a.valor),0);
     const totCons=cons.reduce((s,c)=>s+parseMoney(c.valor),0);
-    const aRec   =Math.max(func.salario-totFalt-totAdt-totCons,0);
+    const totEnc =encs.reduce((s,e)=>s+parseMoney(e.valor),0);
+    const aRec   =Math.max(func.salario-totFalt-totAdt-totCons-totEnc,0);
     const html=gerarRelatorioHTML(`Holerite – ${func.nome}`,empresa,`
       <div class="summary-grid">
         <div class="summary-card"><div class="val">${fmtMoney(func.salario)}</div><div class="lbl">Salário Bruto</div></div>
@@ -1161,11 +1171,15 @@ function RH({db,setDb,empresa}){
       ${cons.length?`<div class="section"><h2>Consumações</h2><table><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr>
         ${cons.map(c=>`<tr><td>${fmtDate(c.data)}</td><td>${c.descricao||"—"}</td><td class="yellow">-${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
         <tr class="total-row"><td colspan="2">Total</td><td>-${fmtMoney(totCons)}</td></tr></table></div>`:""}
+      ${encs.length?`<div class="section"><h2>Encargos (VT + FGTS + INSS)</h2><table><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr>
+        ${encs.map(e=>`<tr><td>${fmtDate(e.data)}</td><td>${e.descricao||"—"}</td><td class="red">-${fmtMoney(parseMoney(e.valor))}</td></tr>`).join("")}
+        <tr class="total-row"><td colspan="2">Total</td><td>-${fmtMoney(totEnc)}</td></tr></table></div>`:""}
       <div class="section"><h2>Fechamento</h2><table>
         <tr><td>Salário Bruto</td><td><strong>${fmtMoney(func.salario)}</strong></td></tr>
         <tr><td>(-) Faltas</td><td class="red">-${fmtMoney(totFalt)}</td></tr>
         <tr><td>(-) Adiantamentos</td><td class="yellow">-${fmtMoney(totAdt)}</td></tr>
         <tr><td>(-) Consumações</td><td class="yellow">-${fmtMoney(totCons)}</td></tr>
+        <tr><td>(-) Encargos (VT+FGTS+INSS)</td><td class="red">-${fmtMoney(totEnc)}</td></tr>
         <tr class="total-row"><td><strong>A Receber</strong></td><td><strong class="green">${fmtMoney(aRec)}</strong></td></tr>
       </table></div>`);
     abrirRelatorio(html);
@@ -1173,7 +1187,7 @@ function RH({db,setDb,empresa}){
 
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["lista","👥 Lista"],["cadastro","➕ Cadastro"],["faltas","📅 Faltas"],["adiantamentos","💸 Adiant."],["consumacoes","🍺 Consum."]].map(([k,l])=>(
+      {[["lista","👥 Lista"],["cadastro","➕ Cadastro"],["faltas","📅 Faltas"],["adiantamentos","💸 Adiant."],["encargos","💼 Encargos"],["consumacoes","🍺 Consum."]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
           style={{background:subTab===k?"#7c8fff":"#161922",color:subTab===k?"#fff":"#777",fontSize:10,padding:"6px 10px"}}>{l}</button>
       ))}
@@ -1188,7 +1202,8 @@ function RH({db,setDb,empresa}){
         const totFalt=(db.faltas||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+x.desconto,0);
         const totAdt =(db.adiantamentos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
         const totCons=(db.consumacoes||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
-        const aRec=Math.max(f.salario-totFalt-totAdt-totCons,0);
+        const totEnc =(db.encargos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
+        const aRec=Math.max(f.salario-totFalt-totAdt-totCons-totEnc,0);
         return <div key={f.id} className="list-item">
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
             <div><div style={{fontWeight:700,fontSize:15}}>{f.nome}</div><div className="muted">{f.funcao}</div></div>
@@ -1201,6 +1216,7 @@ function RH({db,setDb,empresa}){
             <span className="tag" style={{background:"#1e2235",color:"#888"}}>Sal: {fmtMoney(f.salario)}</span>
             {totFalt>0&&<span className="tag" style={{background:"#2a1520",color:"#ff5c7a"}}>-{fmtMoney(totFalt)} falta</span>}
             {totAdt>0&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24"}}>-{fmtMoney(totAdt)} adt</span>}
+            {totEnc>0&&<span className="tag" style={{background:"#2a1520",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} encargos</span>}
             {totCons>0&&<span className="tag" style={{background:"#1a2030",color:"#60a5fa"}}>-{fmtMoney(totCons)} cons</span>}
           </div>
           <div style={{display:"flex",gap:8}}>
@@ -1268,9 +1284,44 @@ function RH({db,setDb,empresa}){
       {(db.adiantamentos||[]).map(a=>{const fn=funcs.find(f=>f.id===a.funcionarioId);return <div key={a.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#fbbf24",fontWeight:700}}>{fmtMoney(parseMoney(a.valor))}</span></div>
         <div className="muted">{fmtDate(a.data)}</div>{a.descricao&&<div className="muted">{a.descricao}</div>}
-        <span className="tag" style={{background:"#2a2010",color:"#fbbf24",marginTop:6,display:"inline-block"}}>→ Financeiro: Adiantamento</span>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+          <span className="tag" style={{background:"#2a2010",color:"#fbbf24",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
+          <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+        </div>
       </div>;})}
       {!(db.adiantamentos||[]).length&&<EmptyState msg="Nenhum adiantamento registrado"/>}
+    </div>}
+
+    {subTab==="encargos"&&<div>
+      <div className="card" style={{marginBottom:14}}>
+        <div className="section-title">{encEdit?"Editar Encargos":"Registrar Encargos"}</div>
+        <div style={{background:"#1a2030",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #252860"}}>
+          <div style={{fontSize:12,color:"#7c8fff",fontWeight:700,marginBottom:2}}>ℹ️ Encargos do funcionário</div>
+          <div className="muted" style={{fontSize:12}}>Vale Transporte + FGTS + INSS em valor único. Descontado no holerite (não lança no Financeiro).</div>
+        </div>
+        <select value={encForm.funcionarioId} onChange={e=>setEncForm(f=>({...f,funcionarioId:e.target.value}))} className="inp" style={{marginBottom:8}}>
+          <option value="">Selecionar funcionário</option>
+          {funcs.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+        </select>
+        <input type="date" value={encForm.data} onChange={e=>setEncForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Encargos (VT + FGTS + INSS)</label>
+        <MoneyInput value={encForm.valor} onChange={v=>setEncForm(f=>({...f,valor:v}))} placeholder="Valor único" className="inp"/>
+        <input placeholder="Descrição (opcional)" value={encForm.descricao} onChange={e=>setEncForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
+        <button className="btn" onClick={saveEnc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
+        {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",descricao:""}); }} style={{background:"#1e2235",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+      </div>
+      {(db.encargos||[]).map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#ff5c7a",fontWeight:700}}>-{fmtMoney(parseMoney(e.valor))}</span></div>
+        <div className="muted">{fmtDate(e.data)}</div>{e.descricao&&<div className="muted">{e.descricao}</div>}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+          <span className="tag" style={{background:"#2a1520",color:"#ff9aa8",display:"inline-block"}}>VT + FGTS + INSS</span>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn" onClick={()=>editEnc(e)} style={{background:"#1e2235",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
+            <button className="btn" onClick={()=>{if(confirm("Excluir este encargo?"))delEnc(e.id);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+          </div>
+        </div>
+      </div>;})}
+      {!(db.encargos||[]).length&&<EmptyState msg="Nenhum encargo registrado"/>}
     </div>}
 
     {subTab==="consumacoes"&&<div>
