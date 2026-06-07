@@ -3,3 +3,6 @@ dist/
 dados.json
 *.local
 .env
+certs/
+*.pfx
+*.p12
