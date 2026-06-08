@@ -700,9 +700,16 @@ function Compras({db,setDb,empresa}){
   const [sefazVenc,setSefazVenc]=useState(today());
   const [sefazDataIni,setSefazDataIni]=useState(()=>`${new Date().getFullYear()}-01-01`);
   const [sefazDataFim,setSefazDataFim]=useState(today());
+  const [sefazNSU,setSefazNSU]=useState<number|null>(null);
+  const [sefaz656At,setSefaz656At]=useState<number|null>(()=>{const v=localStorage.getItem("sefaz_656_at");return v?parseInt(v):null;});
+  const [nowTs,setNowTs]=useState(Date.now());
+  useEffect(()=>{const t=setInterval(()=>setNowTs(Date.now()),10000);return()=>clearInterval(t);},[]);
+  const waitMs=sefaz656At?(sefaz656At+3600000-nowTs):0;
+  const waitOk=waitMs<=0;
 
   useEffect(()=>{
     fetch("/api/nfe-config").then(r=>r.json()).then(cfg=>setSefazConfig(cfg)).catch(()=>{});
+    fetch("/api/nsu-status").then(r=>r.json()).then(d=>setSefazNSU(d.nsu??null)).catch(()=>{});
   },[]);
 
   useEffect(()=>{
@@ -714,7 +721,14 @@ function Compras({db,setDb,empresa}){
     try{
       const res=await fetch("/api/nfe-sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,resetNsu})});
       const data=await res.json();
-      if(!res.ok)throw new Error(data.error||"Erro ao sincronizar");
+      if(!res.ok){
+        if((data.error||"").includes("656")){
+          const now=Date.now();setSefaz656At(now);localStorage.setItem("sefaz_656_at",String(now));
+        }
+        throw new Error(data.error||"Erro ao sincronizar");
+      }
+      setSefaz656At(null);localStorage.removeItem("sefaz_656_at");
+      if(data.ultNSU!=null)setSefazNSU(data.ultNSU);
       const todas=data.nfes||[];
       const filtradas=todas.filter((n:any)=>{
         if(!n.data)return true;
@@ -725,7 +739,7 @@ function Compras({db,setDb,empresa}){
       const ts=new Date().toLocaleString("pt-BR");
       setSefazLastSync(ts);
       localStorage.setItem(`sefaz_last_sync_${empresa}`,ts);
-      if(!filtradas.length)setSefazError(todas.length?`Nenhuma NF-e no período ${sefazDataIni} a ${sefazDataFim}.`:"Nenhuma NF-e nova encontrada no SEFAZ.");
+      if(!filtradas.length)setSefazError(todas.length?`Nenhuma NF-e no período ${sefazDataIni} a ${sefazDataFim}.`:`Nenhuma NF-e encontrada (NSU ${data.ultNSU??0}).`);
     }catch(e:any){setSefazError(e.message||"Erro de conexão");}
     setSefazLoading(false);
   };
@@ -987,8 +1001,13 @@ function Compras({db,setDb,empresa}){
             </div>
           </div>
         )}
-        <button className="btn" onClick={()=>sincronizarSEFAZ(false)} disabled={sefazLoading||!sefazConfig[empresa]}
-          style={{background:sefazLoading||!sefazConfig[empresa]?"var(--border2)":"linear-gradient(135deg,#7c8fff,#5b6fff)",color:"#fff",padding:"13px",width:"100%",fontSize:15,fontWeight:700}}>
+        {sefazNSU!==null&&<div style={{fontSize:11,color:"#888",marginBottom:6}}>NSU atual: <span style={{color:"#7c8fff",fontWeight:700}}>{sefazNSU}</span></div>}
+        {!waitOk&&<div style={{background:"#1a1a00",border:"1px solid #554400",borderRadius:8,padding:"10px",marginBottom:8,fontSize:12,color:"#fbbf24"}}>
+          ⏱️ Aguardando limite SEFAZ — pode tentar novamente às <strong>{new Date((sefaz656At||0)+3600000).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</strong>
+          <span style={{color:"#888",marginLeft:8}}>({Math.ceil(waitMs/60000)} min restantes)</span>
+        </div>}
+        <button className="btn" onClick={()=>sincronizarSEFAZ(false)} disabled={sefazLoading||!sefazConfig[empresa]||!waitOk}
+          style={{background:sefazLoading||!sefazConfig[empresa]||!waitOk?"var(--border2)":"linear-gradient(135deg,#7c8fff,#5b6fff)",color:"#fff",padding:"13px",width:"100%",fontSize:15,fontWeight:700}}>
           {sefazLoading?"⏳ Consultando SEFAZ...":"🔄 Buscar NF-es no SEFAZ"}
         </button>
         {sefazConfig[empresa]&&!sefazLoading&&(

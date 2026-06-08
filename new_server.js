@@ -307,6 +307,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // NSU status (debug)
+  if (req.method === 'GET' && urlPath === '/api/nsu-status') {
+    const m = getNsuMap();
+    const emp = (req.url.split('?empresa=')[1]||'').split('&')[0].toUpperCase()||'CONFRARIA';
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ nsu: m[emp]??0, all: m }));
+    return;
+  }
+
   // NF-e sync via SEFAZ
   if (req.method === 'POST' && urlPath === '/api/nfe-sync') {
     let body = '';
