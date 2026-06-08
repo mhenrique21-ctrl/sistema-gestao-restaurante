@@ -320,34 +320,84 @@ function IRow({label,value,positive,neutral}){return <div style={{display:"flex"
 
 // ===================== VENDAS =====================
 function Vendas({db,setDb}){
-  const [form,setForm]=useState({data:today(),maquininha:"",dinheiro:"",ifood:"","99food":"",delivery:""});
+  const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:"",nfoodTaxa:"","99food":"",delivery:""});
+  const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
-  const modais=["maquininha","dinheiro","ifood","99food","delivery"];
-  const total=modais.reduce((s,m)=>s+parseMoney(form[m]||0),0);
+  const ifoodBruto=parseMoney(form.ifood||0);
+  const nfoodBruto=parseMoney(form["99food"]||0);
+  const ifoodTaxaPct=parseFloat(form.ifoodTaxa)||0;
+  const nfoodTaxaPct=parseFloat(form.nfoodTaxa)||0;
+  const ifoodLiq=ifoodBruto*(1-ifoodTaxaPct/100);
+  const nfoodLiq=nfoodBruto*(1-nfoodTaxaPct/100);
+  const outros=["maquininha","dinheiro","delivery"].reduce((s,m)=>s+parseMoney(form[m]||0),0);
+  const total=outros+ifoodLiq+nfoodLiq;
   const save=()=>{
-    const reg={id:editId||uid(),data:form.data,total,...Object.fromEntries(modais.map(m=>[m,parseMoney(form[m]||0)]))};
+    const reg={id:editId||uid(),data:form.data,total,
+      maquininha:parseMoney(form.maquininha||0),
+      dinheiro:parseMoney(form.dinheiro||0),
+      ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
+      "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
+      delivery:parseMoney(form.delivery||0)};
     if(editId){setDb(d=>({...d,vendas:d.vendas.map(v=>v.id===editId?reg:v)}));setEditId(null);}
     else{setDb(d=>({...d,vendas:[reg,...d.vendas]}));}
-    setForm({data:today(),maquininha:"",dinheiro:"",ifood:"","99food":"",delivery:""});
+    setForm(emptyForm());
   };
-  const edit=(v)=>{setEditId(v.id);setForm({data:v.data,...Object.fromEntries(modais.map(m=>[m,v[m]?String(v[m].toFixed(2)).replace(".",","):""]))}); };
+  const edit=(v)=>{setEditId(v.id);setForm({data:v.data,
+    maquininha:v.maquininha?String(v.maquininha.toFixed(2)).replace(".",","):"",
+    dinheiro:v.dinheiro?String(v.dinheiro.toFixed(2)).replace(".",","):"",
+    ifood:v.ifood?String(v.ifood.toFixed(2)).replace(".",","):"",
+    ifoodTaxa:v.ifoodTaxa?String(v.ifoodTaxa):"",
+    "99food":v["99food"]?String(v["99food"].toFixed(2)).replace(".",","):"",
+    nfoodTaxa:v.nfoodTaxa?String(v.nfoodTaxa):"",
+    delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","): "",
+  });};
   const del=(id)=>setDb(d=>({...d,vendas:d.vendas.filter(v=>v.id!==id)}));
   return <div>
     <div className="section-title">Lançar Vendas do Dia</div>
     <div className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
-      {modais.map(m=>(
+      {["maquininha","dinheiro"].map(m=>(
         <div key={m} style={{marginBottom:8}}>
           <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block",textTransform:"capitalize"}}>{m}</label>
           <MoneyInput value={form[m]} onChange={v=>setForm(f=>({...f,[m]:v}))} className="inp"/>
         </div>
       ))}
+      <div style={{marginBottom:8}}>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>iFood (bruto)</label>
+        <div style={{display:"flex",gap:6}}>
+          <MoneyInput value={form.ifood} onChange={v=>setForm(f=>({...f,ifood:v}))} className="inp" style={{flex:1}}/>
+          <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
+            <input type="number" value={form.ifoodTaxa} onChange={e=>setForm(f=>({...f,ifoodTaxa:e.target.value}))}
+              placeholder="Taxa%" min="0" max="100" step="0.1"
+              className="inp" style={{width:70,textAlign:"center"}}/>
+            <span style={{fontSize:11,color:"#888"}}>%</span>
+          </div>
+        </div>
+        {ifoodTaxaPct>0&&ifoodBruto>0&&<div style={{fontSize:11,color:"#4ade80",marginTop:3}}>Líquido: {fmtMoney(ifoodLiq)} (desc. {fmtMoney(ifoodBruto-ifoodLiq)})</div>}
+      </div>
+      <div style={{marginBottom:8}}>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>99Food (bruto)</label>
+        <div style={{display:"flex",gap:6}}>
+          <MoneyInput value={form["99food"]} onChange={v=>setForm(f=>({...f,"99food":v}))} className="inp" style={{flex:1}}/>
+          <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
+            <input type="number" value={form.nfoodTaxa} onChange={e=>setForm(f=>({...f,nfoodTaxa:e.target.value}))}
+              placeholder="Taxa%" min="0" max="100" step="0.1"
+              className="inp" style={{width:70,textAlign:"center"}}/>
+            <span style={{fontSize:11,color:"#888"}}>%</span>
+          </div>
+        </div>
+        {nfoodTaxaPct>0&&nfoodBruto>0&&<div style={{fontSize:11,color:"#4ade80",marginTop:3}}>Líquido: {fmtMoney(nfoodLiq)} (desc. {fmtMoney(nfoodBruto-nfoodLiq)})</div>}
+      </div>
+      <div style={{marginBottom:8}}>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>Delivery</label>
+        <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
+      </div>
       <hr className="divider"/>
       <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 10px",fontWeight:700,fontSize:16}}>
-        <span>Total</span><span style={{color:"#4ade80"}}>{fmtMoney(total)}</span>
+        <span>Total líquido</span><span style={{color:"#4ade80"}}>{fmtMoney(total)}</span>
       </div>
       <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Vendas"}</button>
-      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({data:today(),maquininha:"",dinheiro:"",ifood:"","99food":"",delivery:""}); }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(emptyForm());}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>
     <div className="section-title">Histórico</div>
     {(db.vendas||[]).map(v=>(
@@ -357,9 +407,15 @@ function Vendas({db,setDb}){
           <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(v.total)}</span>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-          {modais.filter(m=>v[m]>0).map(m=>(
-            <span key={m} className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>{m}: {fmtMoney(v[m])}</span>
-          ))}
+          {v.maquininha>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
+          {v.dinheiro>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
+          {v.ifood>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>
+            iFood: {fmtMoney(v.ifood)}{v.ifoodTaxa>0?` (-${v.ifoodTaxa}%→${fmtMoney(v.ifoodLiq??v.ifood)})`:""}
+          </span>}
+          {v["99food"]>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>
+            99food: {fmtMoney(v["99food"])}{v.nfoodTaxa>0?` (-${v.nfoodTaxa}%→${fmtMoney(v.nfoodLiq??v["99food"])})`:""}
+          </span>}
+          {v.delivery>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>delivery: {fmtMoney(v.delivery)}</span>}
         </div>
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
@@ -1000,7 +1056,7 @@ function Compras({db,setDb,empresa}){
 
     {subTab==="forn"&&<div>
       <div className="section-title">Fornecedores</div>
-      {(db.fornecedores||[]).map(f=>(
+      {[...(db.fornecedores||[])].sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0).map(f=>(
         <div key={f.id} className="list-item">
           <div style={{fontWeight:600}}>{f.nome}</div>
           {f.endereco&&<div className="muted" style={{marginTop:3}}>{f.endereco}</div>}
@@ -1051,7 +1107,7 @@ function Compras({db,setDb,empresa}){
       </div>
 
       {cats.map(cat=>{
-        const items=(db.materiasPrimas||[]).filter(m=>m.categoria===cat);
+        const items=[...(db.materiasPrimas||[])].filter(m=>m.categoria===cat).sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0);
         if(!items.length)return null;
         return <div key={cat} style={{marginBottom:14}}>
           <div className="section-title">{cat} ({items.length})</div>
@@ -1089,7 +1145,14 @@ function Contas({db,setDb}){
   };
   const edit=(c)=>{setEditId(c.id);setForm({...c,valor:String((parseMoney(c.valor)||c.valor).toFixed?parseMoney(c.valor).toFixed(2):c.valor).replace(".",",")});setSubTab("novo");};
   const del=(id)=>setDb(d=>({...d,contas:d.contas.filter(c=>c.id!==id)}));
-  const toggle=(id)=>setDb(d=>({...d,contas:d.contas.map(c=>c.id===id?{...c,status:c.status==="pago"?"pendente":"pago"}:c)}));
+  const toggle=(id)=>setDb(d=>{
+    const conta=d.contas.find(c=>c.id===id);
+    const novoStatus=conta?.status==="pago"?"pendente":"pago";
+    const contas=d.contas.map(c=>c.id===id?{...c,status:novoStatus}:c);
+    if(novoStatus==="pago"&&conta?.origem==="adiantamento_rh")
+      return{...d,contas,adiantamentos:(d.adiantamentos||[]).filter(a=>a.contaId!==id)};
+    return{...d,contas};
+  });
 
   const contas=(db.contas||[]).filter(c=>filtro==="todos"?true:c.status===filtro);
   const totPago=contas.filter(c=>c.status==="pago").reduce((s,c)=>s+parseMoney(c.valor),0);
@@ -1312,7 +1375,7 @@ function RH({db,setDb,empresa}){
   const [consForm,setConsForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   const [encEdit,setEncEdit]=useState(null);
-  const funcs=db.funcionarios||[];
+  const funcs=[...(db.funcionarios||[])].sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0);
 
   const saveFunc=()=>{
     if(!fForm.nome||!fForm.salario)return alert("Preencha nome e salário.");
@@ -1404,7 +1467,7 @@ function RH({db,setDb,empresa}){
     const totBonif  =encs.reduce((s,e)=>s+(e.bonificacao||0),0);
     const totComis  =encs.reduce((s,e)=>s+(e.comissao||0),0);
     const totSalFam =encs.reduce((s,e)=>s+(e.salarioFamilia||0),0);
-    const aRec      =Math.max(func.salario+totBonif+totComis+totSalFam-totFalt-totAdt-totCons-totEnc,0);
+    const aRec      =Math.max(func.salario+totBonif+totComis+totSalFam-totAdt-totCons-totEnc,0);
     const html=gerarRelatorioHTML(`Holerite – ${func.nome}`,empresa,`
       <div class="summary-grid">
         <div class="summary-card"><div class="val">${fmtMoney(func.salario)}</div><div class="lbl">Salário Bruto</div></div>
@@ -1432,7 +1495,7 @@ function RH({db,setDb,empresa}){
         <tr class="total-row"><td colspan="2">Total</td><td>-${fmtMoney(totEnc)}</td></tr></table></div>`:""}
       <div class="section"><h2>Fechamento</h2><table>
         <tr><td>Salário Bruto</td><td><strong>${fmtMoney(func.salario)}</strong></td></tr>
-        <tr><td>(-) Faltas</td><td class="red">-${fmtMoney(totFalt)}</td></tr>
+        <tr><td>Faltas (informativo)</td><td class="red">${fmtMoney(totFalt)}</td></tr>
         <tr><td>(-) Adiantamentos</td><td class="yellow">-${fmtMoney(totAdt)}</td></tr>
         <tr><td>(-) Consumações</td><td class="yellow">-${fmtMoney(totCons)}</td></tr>
         ${totBonif>0?`<tr><td>(+) Bonificação</td><td class="green">+${fmtMoney(totBonif)}</td></tr>`:""}
@@ -1466,7 +1529,7 @@ function RH({db,setDb,empresa}){
         const totBonif=encsF.reduce((s,x)=>s+(x.bonificacao||0),0);
         const totComis=encsF.reduce((s,x)=>s+(x.comissao||0),0);
         const totSalFam=encsF.reduce((s,x)=>s+(x.salarioFamilia||0),0);
-        const aRec=Math.max(f.salario+totBonif+totComis+totSalFam-totFalt-totAdt-totCons-totEnc,0);
+        const aRec=Math.max(f.salario+totBonif+totComis+totSalFam-totAdt-totCons-totEnc,0);
         return <div key={f.id} className="list-item">
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
             <div><div style={{fontWeight:700,fontSize:15}}>{f.nome}</div><div className="muted">{f.funcao}</div></div>
@@ -1627,12 +1690,18 @@ function RH({db,setDb,empresa}){
 
 // ===================== RELATÓRIOS =====================
 function Relatorios({db,empresa,state}){
+  const [relDe,setRelDe]=useState(today().slice(0,7));
+  const [relAte,setRelAte]=useState(today().slice(0,7));
+  const inPer=(dt)=>!dt||(dt.slice(0,7)>=relDe&&dt.slice(0,7)<=relAte);
   const gDRE=()=>{
-    const v=(db.vendas||[]).reduce((s,x)=>s+(x.total||0),0);
-    const c=(db.compras||[]).reduce((s,x)=>s+parseMoney(x.valor||0),0);
+    const vendas=(db.vendas||[]).filter(x=>inPer(x.data));
+    const compras=(db.compras||[]).filter(x=>inPer(x.data));
+    const contasPer=(db.contas||[]).filter(x=>inPer(x.vencimento));
+    const v=vendas.reduce((s,x)=>s+(x.total||0),0);
+    const c=compras.reduce((s,x)=>s+parseMoney(x.valor||0),0);
     const cmv=v>0?(c/v)*100:0;
-    const pg=(db.contas||[]).filter(x=>x.status==="pago"&&x.tipo==="saida").reduce((s,x)=>s+parseMoney(x.valor),0);
-    const pend=(db.contas||[]).filter(x=>x.status==="pendente").reduce((s,x)=>s+parseMoney(x.valor),0);
+    const pg=contasPer.filter(x=>x.status==="pago"&&x.tipo==="saida").reduce((s,x)=>s+parseMoney(x.valor),0);
+    const pend=contasPer.filter(x=>x.status==="pendente").reduce((s,x)=>s+parseMoney(x.valor),0);
     const folha=(db.funcionarios||[]).reduce((s,f)=>s+f.salario,0);
     const modais=["maquininha","dinheiro","ifood","99food","delivery"];
     const html=gerarRelatorioHTML("DRE – Demonstrativo de Resultado",empresa,`
@@ -1643,7 +1712,7 @@ function Relatorios({db,empresa,state}){
         <div class="summary-card"><div class="val" style="color:${cmv<=30?"#166534":cmv<=40?"#92400e":"#991b1b"}">${cmv.toFixed(1)}%</div><div class="lbl">% CMV</div></div>
       </div>
       <div class="section"><h2>Receitas por Modalidade</h2><table><tr><th>Modalidade</th><th>Valor</th><th>%</th></tr>
-        ${modais.map(m=>{const mv=(db.vendas||[]).reduce((s,d)=>s+(parseFloat(d[m])||0),0);return mv>0?`<tr><td style="text-transform:capitalize">${m}</td><td>${fmtMoney(mv)}</td><td>${v>0?((mv/v)*100).toFixed(1):0}%</td></tr>`:""}).join("")}
+        ${modais.map(m=>{const mv=vendas.reduce((s,d)=>s+(parseFloat(d[m])||0),0);return mv>0?`<tr><td style="text-transform:capitalize">${m}</td><td>${fmtMoney(mv)}</td><td>${v>0?((mv/v)*100).toFixed(1):0}%</td></tr>`:""}).join("")}
         <tr class="total-row"><td>Total</td><td>${fmtMoney(v)}</td><td>100%</td></tr></table></div>
       <div class="section"><h2>CMV</h2><table>
         <tr><td>Total Compras</td><td>${fmtMoney(c)}</td></tr>
@@ -1661,11 +1730,12 @@ function Relatorios({db,empresa,state}){
     abrirRelatorio(html);
   };
   const gCompras=()=>{
-    const total=(db.compras||[]).reduce((s,c)=>s+parseMoney(c.valor),0);
-    const byCat={};(db.compras||[]).forEach(c=>{byCat[c.categoria]=(byCat[c.categoria]||0)+parseMoney(c.valor);});
+    const compras=(db.compras||[]).filter(x=>inPer(x.data));
+    const total=compras.reduce((s,c)=>s+parseMoney(c.valor),0);
+    const byCat={};compras.forEach(c=>{byCat[c.categoria]=(byCat[c.categoria]||0)+parseMoney(c.valor);});
     abrirRelatorio(gerarRelatorioHTML("Relatório de Compras",empresa,`
       <div class="summary-grid">
-        <div class="summary-card"><div class="val">${(db.compras||[]).length}</div><div class="lbl">Registros</div></div>
+        <div class="summary-card"><div class="val">${compras.length}</div><div class="lbl">Registros</div></div>
         <div class="summary-card"><div class="val">${fmtMoney(total)}</div><div class="lbl">Valor Total</div></div>
         <div class="summary-card"><div class="val">${(db.fornecedores||[]).length}</div><div class="lbl">Fornecedores</div></div>
         <div class="summary-card"><div class="val">${(db.materiasPrimas||[]).length}</div><div class="lbl">Mat. Primas</div></div>
@@ -1674,31 +1744,35 @@ function Relatorios({db,empresa,state}){
         ${Object.entries(byCat).map(([k,v])=>`<tr><td style="text-transform:capitalize">${k}</td><td>${fmtMoney(v)}</td><td>${total>0?((v/total)*100).toFixed(1):0}%</td></tr>`).join("")}
         <tr class="total-row"><td>Total</td><td>${fmtMoney(total)}</td><td>100%</td></tr></table></div>
       <div class="section"><h2>Histórico</h2><table><tr><th>Data</th><th>Produto</th><th>Fornecedor</th><th>Cat.</th><th>Valor</th></tr>
-        ${(db.compras||[]).map(c=>`<tr><td>${fmtDate(c.data)}</td><td>${c.nomeProduto}</td><td>${c.fornecedor}</td><td>${c.categoria}</td><td>${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
+        ${compras.map(c=>`<tr><td>${fmtDate(c.data)}</td><td>${c.nomeProduto}</td><td>${c.fornecedor}</td><td>${c.categoria}</td><td>${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
       </table></div>`));
   };
   const gFinanceiro=()=>{
-    const adiantamentos=(db.contas||[]).filter(c=>c.categoria==="Adiantamento");
-    const pg=(db.contas||[]).filter(c=>c.status==="pago").reduce((s,c)=>s+parseMoney(c.valor),0);
-    const pend=(db.contas||[]).filter(c=>c.status==="pendente").reduce((s,c)=>s+parseMoney(c.valor),0);
+    const contasPer=(db.contas||[]).filter(c=>inPer(c.vencimento));
+    const adiantamentos=contasPer.filter(c=>c.categoria==="Adiantamento");
+    const pg=contasPer.filter(c=>c.status==="pago").reduce((s,c)=>s+parseMoney(c.valor),0);
+    const pend=contasPer.filter(c=>c.status==="pendente").reduce((s,c)=>s+parseMoney(c.valor),0);
     abrirRelatorio(gerarRelatorioHTML("Relatório Financeiro",empresa,`
       <div class="summary-grid">
-        <div class="summary-card"><div class="val">${(db.contas||[]).length}</div><div class="lbl">Total Contas</div></div>
+        <div class="summary-card"><div class="val">${contasPer.length}</div><div class="lbl">Total Contas</div></div>
         <div class="summary-card"><div class="val" style="color:#166534">${fmtMoney(pg)}</div><div class="lbl">Pagas</div></div>
         <div class="summary-card"><div class="val" style="color:#991b1b">${fmtMoney(pend)}</div><div class="lbl">Pendentes</div></div>
         <div class="summary-card"><div class="val" style="color:#92400e">${fmtMoney(adiantamentos.reduce((s,c)=>s+parseMoney(c.valor),0))}</div><div class="lbl">Adiantamentos</div></div>
       </div>
       <div class="section"><h2>Contas Pendentes</h2><table><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th></tr>
-        ${(db.contas||[]).filter(c=>c.status==="pendente").map(c=>`<tr><td>${c.descricao}</td><td>${c.categoria||"—"}</td><td>${fmtDate(c.vencimento)}</td><td class="red">${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
+        ${contasPer.filter(c=>c.status==="pendente").map(c=>`<tr><td>${c.descricao}</td><td>${c.categoria||"—"}</td><td>${fmtDate(c.vencimento)}</td><td class="red">${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
       </table></div>
       <div class="section"><h2>Contas Pagas</h2><table><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th></tr>
-        ${(db.contas||[]).filter(c=>c.status==="pago").map(c=>`<tr><td>${c.descricao}</td><td>${c.categoria||"—"}</td><td>${fmtDate(c.vencimento)}</td><td class="green">${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
+        ${contasPer.filter(c=>c.status==="pago").map(c=>`<tr><td>${c.descricao}</td><td>${c.categoria||"—"}</td><td>${fmtDate(c.vencimento)}</td><td class="green">${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
       </table></div>`));
   };
   const gRH=()=>{
+    const adts=(db.adiantamentos||[]).filter(x=>inPer(x.data));
+    const cons=(db.consumacoes||[]).filter(x=>inPer(x.data));
+    const faltas=(db.faltas||[]).filter(x=>inPer(x.data));
     const folha=(db.funcionarios||[]).reduce((s,f)=>s+f.salario,0);
-    const totAdt=(db.adiantamentos||[]).reduce((s,a)=>s+parseMoney(a.valor),0);
-    const totCons=(db.consumacoes||[]).reduce((s,c)=>s+parseMoney(c.valor),0);
+    const totAdt=adts.reduce((s,a)=>s+parseMoney(a.valor),0);
+    const totCons=cons.reduce((s,c)=>s+parseMoney(c.valor),0);
     abrirRelatorio(gerarRelatorioHTML("Relatório de RH",empresa,`
       <div class="summary-grid">
         <div class="summary-card"><div class="val">${(db.funcionarios||[]).length}</div><div class="lbl">Funcionários</div></div>
@@ -1707,30 +1781,31 @@ function Relatorios({db,empresa,state}){
         <div class="summary-card"><div class="val" style="color:#1e40af">${fmtMoney(totCons)}</div><div class="lbl">Consumações</div></div>
       </div>
       <div class="section"><h2>Funcionários</h2><table><tr><th>Nome</th><th>Função</th><th>CPF</th><th>Salário</th></tr>
-        ${(db.funcionarios||[]).map(f=>`<tr><td>${f.nome}</td><td>${f.funcao||"—"}</td><td>${f.cpf||"—"}</td><td>${fmtMoney(f.salario)}</td></tr>`).join("")}
+        ${[...(db.funcionarios||[])].sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0).map(f=>`<tr><td>${f.nome}</td><td>${f.funcao||"—"}</td><td>${f.cpf||"—"}</td><td>${fmtMoney(f.salario)}</td></tr>`).join("")}
         <tr class="total-row"><td colspan="3">Folha Total</td><td>${fmtMoney(folha)}</td></tr></table></div>
-      <div class="section"><h2>Adiantamentos → Categoria: Adiantamento no Financeiro</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th>Valor</th></tr>
-        ${(db.adiantamentos||[]).map(a=>{const fn=(db.funcionarios||[]).find(f=>f.id===a.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(a.data)}</td><td>${a.descricao||"—"}</td><td class="yellow">${fmtMoney(parseMoney(a.valor))}</td></tr>`;}).join("")}
+      <div class="section"><h2>Adiantamentos</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th>Valor</th></tr>
+        ${adts.map(a=>{const fn=(db.funcionarios||[]).find(f=>f.id===a.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(a.data)}</td><td>${a.descricao||"—"}</td><td class="yellow">${fmtMoney(parseMoney(a.valor))}</td></tr>`;}).join("")}
       </table></div>
       <div class="section"><h2>Faltas</h2><table><tr><th>Funcionário</th><th>Data</th><th>Dias</th><th>Motivo</th><th>Desconto</th></tr>
-        ${(db.faltas||[]).map(f=>{const fn=(db.funcionarios||[]).find(x=>x.id===f.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(f.data)}</td><td>${f.dias}</td><td>${f.motivo||"—"}</td><td class="red">-${fmtMoney(f.desconto)}</td></tr>`;}).join("")}
+        ${faltas.map(f=>{const fn=(db.funcionarios||[]).find(x=>x.id===f.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(f.data)}</td><td>${f.dias}</td><td>${f.motivo||"—"}</td><td class="red">-${fmtMoney(f.desconto)}</td></tr>`;}).join("")}
       </table></div>`));
   };
   const gVendas=()=>{
-    const total=(db.vendas||[]).reduce((s,v)=>s+(v.total||0),0);
+    const vendas=(db.vendas||[]).filter(x=>inPer(x.data));
+    const total=vendas.reduce((s,v)=>s+(v.total||0),0);
     const modais=["maquininha","dinheiro","ifood","99food","delivery"];
     abrirRelatorio(gerarRelatorioHTML("Relatório de Vendas",empresa,`
       <div class="summary-grid">
-        <div class="summary-card"><div class="val">${(db.vendas||[]).length}</div><div class="lbl">Dias</div></div>
+        <div class="summary-card"><div class="val">${vendas.length}</div><div class="lbl">Dias</div></div>
         <div class="summary-card"><div class="val" style="color:#166534">${fmtMoney(total)}</div><div class="lbl">Total</div></div>
-        <div class="summary-card"><div class="val">${(db.vendas||[]).length>0?fmtMoney(total/(db.vendas||[]).length):"R$0"}</div><div class="lbl">Média/Dia</div></div>
-        <div class="summary-card"><div class="val">${fmtMoney(Math.max(...(db.vendas||[]).map(v=>v.total||0),0))}</div><div class="lbl">Melhor Dia</div></div>
+        <div class="summary-card"><div class="val">${vendas.length>0?fmtMoney(total/vendas.length):"R$0"}</div><div class="lbl">Média/Dia</div></div>
+        <div class="summary-card"><div class="val">${fmtMoney(Math.max(...vendas.map(v=>v.total||0),0))}</div><div class="lbl">Melhor Dia</div></div>
       </div>
       <div class="section"><h2>Por Modalidade</h2><table><tr><th>Modalidade</th><th>Total</th><th>%</th></tr>
-        ${modais.map(m=>{const mv=(db.vendas||[]).reduce((s,d)=>s+(parseFloat(d[m])||0),0);return`<tr><td style="text-transform:capitalize">${m}</td><td>${fmtMoney(mv)}</td><td>${total>0?((mv/total)*100).toFixed(1):0}%</td></tr>`;}).join("")}
+        ${modais.map(m=>{const mv=vendas.reduce((s,d)=>s+(parseFloat(d[m])||0),0);return`<tr><td style="text-transform:capitalize">${m}</td><td>${fmtMoney(mv)}</td><td>${total>0?((mv/total)*100).toFixed(1):0}%</td></tr>`;}).join("")}
         <tr class="total-row"><td>Total</td><td>${fmtMoney(total)}</td><td>100%</td></tr></table></div>
       <div class="section"><h2>Histórico Diário</h2><table><tr><th>Data</th>${modais.map(m=>`<th style="text-transform:capitalize">${m}</th>`).join("")}<th>Total</th></tr>
-        ${(db.vendas||[]).map(v=>`<tr><td>${fmtDate(v.data)}</td>${modais.map(m=>`<td>${fmtMoney(v[m]||0)}</td>`).join("")}<td><strong>${fmtMoney(v.total||0)}</strong></td></tr>`).join("")}
+        ${vendas.map(v=>`<tr><td>${fmtDate(v.data)}</td>${modais.map(m=>`<td>${fmtMoney(v[m]||0)}</td>`).join("")}<td><strong>${fmtMoney(v.total||0)}</strong></td></tr>`).join("")}
       </table></div>`));
   };
   const gComp=()=>{
@@ -1756,6 +1831,19 @@ function Relatorios({db,empresa,state}){
   ];
   return <div>
     <div className="section-title">Gerar Relatórios PDF</div>
+    <div className="card" style={{marginBottom:14}}>
+      <div style={{fontSize:12,color:"#888",marginBottom:8,fontWeight:600}}>Período dos relatórios</div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:"#666",marginBottom:3}}>De</div>
+          <input type="month" value={relDe} onChange={e=>setRelDe(e.target.value)} className="inp"/>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:"#666",marginBottom:3}}>Até</div>
+          <input type="month" value={relAte} onChange={e=>setRelAte(e.target.value)} className="inp"/>
+        </div>
+      </div>
+    </div>
     <div style={{background:"var(--bg3)",borderRadius:12,padding:"12px",marginBottom:14,border:"1px solid #1e2235"}}>
       <div className="muted" style={{fontSize:12,textAlign:"center"}}>📄 Abre em nova aba — imprima ou salve como PDF</div>
     </div>
