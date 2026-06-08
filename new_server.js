@@ -187,14 +187,13 @@ function sefazSync(emp) {
 
           console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} cStat=${cStat} xMotivo=${xMotivo} ultNSU=${nsuResp}`);
 
-          // Save NSU from response regardless of status so next request continues from here
-          if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(emp, nsuResp);
-
-          // Handle non-success statuses
+          // On 656 (rate limit): do NOT advance NSU — keep current position so next retry fetches same range
           if (cStat === '656') {
             return reject(new Error(`SEFAZ limitou as consultas (cStat 656). ${xMotivo}. Tente novamente em 1 hora.`));
           }
+          // On 137 (no more docs): save NSU so next request continues from here
           if (cStat === '137') {
+            if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(emp, nsuResp);
             return resolve({ nfes: [], total: 0, ultNSU: nsuResp, cStat, xMotivo });
           }
           if (cStat && cStat !== '138') {
