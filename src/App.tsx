@@ -438,6 +438,8 @@ function Compras({db,setDb,empresa}){
   const [carrinho,setCarrinho]=useState([]);
   const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:""});
   const [sugestoes,setSugestoes]=useState([]);
+  const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:""});
+  const [prodEdit,setProdEdit]=useState<string|null>(null);
   const cats=["insumos","descartáveis","material de limpeza","proteína"];
   const unds=["kg","un","L"];
   const formasPag=["dinheiro","cartão débito","cartão crédito","pix","boleto","fiado"];
@@ -706,7 +708,7 @@ function Compras({db,setDb,empresa}){
 
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"]].map(([k,l])=>(
+      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
           style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px"}}>{l}</button>
       ))}
@@ -974,56 +976,6 @@ function Compras({db,setDb,empresa}){
         </button>}
       </div>}
 
-      <hr className="divider" style={{marginBottom:14}}/>
-      <div className="section-title">📄 Importar XML manualmente</div>
-      <div className="card" style={{marginBottom:12}}>
-        <div style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>
-          Ou selecione o arquivo XML da NF-e diretamente do seu dispositivo.
-        </div>
-        <div className="camera-zone" onClick={()=>nfeRef.current&&(nfeRef.current as HTMLInputElement).click()} style={{marginBottom:10}}>
-          <div style={{fontSize:36,marginBottom:8}}>📄</div>
-          <div style={{fontWeight:600,marginBottom:4}}>Selecionar arquivo XML</div>
-          <div className="muted" style={{fontSize:12}}>NF-e formato SEFAZ (.xml)</div>
-          <input ref={nfeRef} type="file" accept=".xml,text/xml,application/xml" onChange={handleNFe} style={{display:"none"}}/>
-        </div>
-        {nfeError&&<div style={{background:"#2a1520",border:"1px solid #ff5c7a",borderRadius:10,padding:"10px",color:"#ff5c7a",fontSize:13,marginBottom:8}}>{nfeError}</div>}
-      </div>
-
-      {nfeResult&&<div className="card" style={{marginBottom:12}}>
-        <div className="section-title">Dados da NF-e</div>
-        <div style={{marginBottom:10,padding:"10px",background:"var(--border)",borderRadius:10}}>
-          <div style={{fontWeight:600}}>🏪 {nfeResult.fornecedor.nome||"Fornecedor não identificado"}</div>
-          {nfeResult.fornecedor.cnpj&&<div className="muted" style={{fontSize:12}}>CNPJ: {nfeResult.fornecedor.cnpj}</div>}
-          {nfeResult.fornecedor.endereco&&<div className="muted" style={{fontSize:12}}>{nfeResult.fornecedor.endereco}</div>}
-          {nfeResult.nNF&&<div style={{fontSize:12,color:"#7c8fff",marginTop:4}}>NF-e #{nfeResult.nNF} • {fmtDate(nfeResult.data)}</div>}
-        </div>
-        <div className="section-title" style={{marginTop:8,marginBottom:6}}>Produtos ({nfeResult.itens.length})</div>
-        {nfeResult.itens.map((item,i)=>(
-          <div key={i} style={{padding:"8px 0",borderBottom:"1px solid #1e2235"}}>
-            <div style={{display:"flex",justifyContent:"space-between"}}>
-              <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{item.nome}</span>
-              <span style={{color:"#60a5fa",fontWeight:700,whiteSpace:"nowrap"}}>{fmtMoney(item.valorTotal)}</span>
-            </div>
-            <div className="muted" style={{fontSize:12,marginTop:2}}>
-              {item.quantidade} {item.unidade} × {fmtMoney(item.valorUnitario)} •
-              <span className="tag" style={{background:"#1a2520",color:"#4ade80",marginLeft:6,fontSize:10}}>{item.categoria}</span>
-            </div>
-          </div>
-        ))}
-        <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",fontWeight:700,fontSize:15}}>
-          <span>Total NF-e</span><span style={{color:"#4ade80"}}>{fmtMoney(nfeResult.totalCompra)}</span>
-        </div>
-        <hr className="divider"/>
-        <div className="section-title" style={{marginTop:8}}>Forma de Pagamento</div>
-        <select value={nfeFormaPag} onChange={e=>setNfeFormaPag(e.target.value)} className="inp" style={{marginBottom:8}}>
-          {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
-        </select>
-        <input type="date" value={nfeVenc} onChange={e=>setNfeVenc(e.target.value)} className="inp" style={{marginBottom:12}}/>
-        <div style={{display:"flex",gap:8}}>
-          <button className="btn" onClick={confirmarNFe} style={{background:"#4ade80",color:"#051208",padding:"12px",flex:1,fontSize:14,fontWeight:700}}>✅ Importar NF-e</button>
-          <button className="btn" onClick={()=>{setNfeResult(null);setNfeError("");if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";}} style={{background:"var(--border)",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Cancelar</button>
-        </div>
-      </div>}
     </div>}
 
     {subTab==="lista"&&<div>
@@ -1055,6 +1007,67 @@ function Compras({db,setDb,empresa}){
         </div>
       ))}
       {!(db.fornecedores||[]).length&&<EmptyState msg="Nenhum fornecedor cadastrado"/>}
+    </div>}
+
+    {subTab==="produtos"&&<div>
+      <div className="section-title">Cadastro de Produtos</div>
+      <div className="muted" style={{fontSize:12,marginBottom:12}}>Alimentado automaticamente via NF-e, Cupom IA e entradas manuais.</div>
+
+      <div className="card" style={{marginBottom:14}}>
+        <div className="section-title" style={{marginBottom:8}}>{prodEdit?"✏️ Editar produto":"➕ Novo produto"}</div>
+        <input placeholder="Nome do produto *" value={prodForm.nome} onChange={e=>setProdForm(p=>({...p,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <div className="row" style={{marginBottom:8}}>
+          <select value={prodForm.categoria} onChange={e=>setProdForm(p=>({...p,categoria:e.target.value}))} className="inp">
+            {cats.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={prodForm.unidade} onChange={e=>setProdForm(p=>({...p,unidade:e.target.value}))} className="inp" style={{maxWidth:80}}>
+            {unds.map(u=><option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+        <MoneyInput value={prodForm.valor} onChange={v=>setProdForm(p=>({...p,valor:v}))} placeholder="Valor unitário" className="inp" style={{marginBottom:8}}/>
+        <div className="row">
+          <button className="btn" onClick={()=>{
+            if(!prodForm.nome)return alert("Nome é obrigatório.");
+            const v=parseMoney(prodForm.valor);
+            setDb(d=>{
+              const mps=[...(d.materiasPrimas||[])];
+              if(prodEdit){
+                const idx=mps.findIndex(m=>m.id===prodEdit);
+                if(idx>=0)mps[idx]={...mps[idx],nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||mps[idx].ultimoValor};
+              }else{
+                const ex=mps.find(m=>m.nome.toLowerCase()===prodForm.nome.toLowerCase());
+                if(ex){ex.categoria=prodForm.categoria;ex.unidade=prodForm.unidade;if(v>0)ex.ultimoValor=v;}
+                else mps.push({id:uid(),nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||0});
+              }
+              return{...d,materiasPrimas:mps};
+            });
+            setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""});
+            setProdEdit(null);
+          }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
+            {prodEdit?"💾 Atualizar":"➕ Cadastrar"}
+          </button>
+          {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""});}} style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
+        </div>
+      </div>
+
+      {cats.map(cat=>{
+        const items=(db.materiasPrimas||[]).filter(m=>m.categoria===cat);
+        if(!items.length)return null;
+        return <div key={cat} style={{marginBottom:14}}>
+          <div className="section-title">{cat} ({items.length})</div>
+          {items.map(mp=>(
+            <div key={mp.id} className="list-item" style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:14}}>{mp.nome}</div>
+                <div className="muted" style={{fontSize:12}}>{mp.unidade} • {mp.ultimoValor>0?`Último: ${fmtMoney(mp.ultimoValor)}`:"Sem preço cadastrado"}</div>
+              </div>
+              <button onClick={()=>{setProdForm({nome:mp.nome,categoria:mp.categoria,unidade:mp.unidade,valor:String(mp.ultimoValor||"").replace(".",",")});setProdEdit(mp.id);}} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#7c8fff"}}>✏️</button>
+              <button onClick={()=>{if(confirm("Excluir produto?"))setDb(d=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter(m=>m.id!==mp.id)}));}} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#ff5c7a"}}>🗑️</button>
+            </div>
+          ))}
+        </div>;
+      })}
+      {!(db.materiasPrimas||[]).length&&<EmptyState msg="Nenhum produto cadastrado. Importe via NF-e, Cupom IA ou cadastre manualmente."/>}
     </div>}
   </div>;
 }
