@@ -1251,7 +1251,7 @@ function Contas({db,setDb}){
 // ===================== FICHA TÉCNICA =====================
 function FichaTecnica({db,setDb}){
   const [subTab,setSubTab]=useState("lista");
-  const [form,setForm]=useState({nome:"",insumos:[]});
+  const [form,setForm]=useState({nome:"",insumos:[],porcoes:"1",cmv:"30"});
   const [novoIns,setNovoIns]=useState({mp:"",quantidade:"",unidade:"kg"});
   const [editId,setEditId]=useState(null);
   const mps=db.materiasPrimas||[];
@@ -1264,20 +1264,27 @@ function FichaTecnica({db,setDb}){
   };
   const remIns=(id)=>setForm(f=>({...f,insumos:f.insumos.filter(i=>i.id!==id)}));
   const custoTotal=form.insumos.reduce((s,i)=>s+i.custo,0);
-  const precoSugerido=custoTotal/0.30;
+  const porcoes=Math.max(parseFloat(form.porcoes)||1,1);
+  const cmvPct=Math.max(Math.min(parseFloat(form.cmv)||30,100),1);
+  const custoPorcao=custoTotal/porcoes;
+  const precoPorcao=custoPorcao/(cmvPct/100);
   const save=()=>{
     if(!form.nome||!form.insumos.length)return alert("Adicione nome e ao menos um insumo.");
-    const ft={id:editId||uid(),nome:form.nome,insumos:form.insumos,custoTotal,precoSugerido};
+    const ft={id:editId||uid(),nome:form.nome,insumos:form.insumos,
+      porcoes,cmv:cmvPct,custoTotal,custoPorcao,precoPorcao,precoSugerido:precoPorcao};
     if(editId){setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.map(f=>f.id===editId?ft:f)}));setEditId(null);}
     else{setDb(d=>({...d,fichasTecnicas:[ft,...(d.fichasTecnicas||[])]}));}
-    setForm({nome:"",insumos:[]});
+    setForm({nome:"",insumos:[],porcoes:"1",cmv:"30"});
   };
-  const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos});setSubTab("novo");};
+  const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30)});setSubTab("novo");};
   const del=(id)=>setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.filter(f=>f.id!==id)}));
   const atualizar=()=>{
     setDb(d=>({...d,fichasTecnicas:(d.fichasTecnicas||[]).map(f=>{
       const ins=f.insumos.map(i=>{const mp=(d.materiasPrimas||[]).find(m=>m.id===i.mpId);const v=mp?.ultimoValor||i.valorUnd;return{...i,valorUnd:v,custo:v*i.quantidade};});
-      const ct=ins.reduce((s,i)=>s+i.custo,0);return{...f,insumos:ins,custoTotal:ct,precoSugerido:ct/0.30};
+      const ct=ins.reduce((s,i)=>s+i.custo,0);
+      const por=f.porcoes||1; const cmv=f.cmv||30;
+      const cp=ct/por; const pp=cp/(cmv/100);
+      return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
     })}));
     alert("✅ Fichas atualizadas!");
   };
@@ -1289,15 +1296,30 @@ function FichaTecnica({db,setDb}){
     </div>
     {subTab==="lista"&&<div>
       <button className="btn" onClick={atualizar} style={{background:"#1a2a1a",color:"#4ade80",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
-      {(db.fichasTecnicas||[]).map(f=>(
-        <div key={f.id} className="card" style={{marginBottom:12}}>
-          <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>{f.nome}</div>
-          <div style={{display:"flex",gap:10,marginBottom:10}}>
-            <div style={{flex:1,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-              <div style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(f.custoTotal)}</div><div className="muted" style={{fontSize:11}}>Custo</div>
+      {(db.fichasTecnicas||[]).map(f=>{
+        const por=f.porcoes||1; const cmv=f.cmv||30;
+        const cp=f.custoPorcao??(f.custoTotal/por);
+        const pp=f.precoPorcao??(cp/(cmv/100));
+        return <div key={f.id} className="card" style={{marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontWeight:700,fontSize:16}}>{f.nome}</div>
+            <div style={{display:"flex",gap:5}}>
+              {por>1&&<span className="tag" style={{background:"#1a2030",color:"#60a5fa"}}>{por} porções</span>}
+              <span className="tag" style={{background:"#1a2a1a",color:"#4ade80"}}>CMV {cmv}%</span>
             </div>
-            <div style={{flex:1,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-              <div style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(f.precoSugerido)}</div><div className="muted" style={{fontSize:11}}>Preço Sugerido</div>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:80,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
+              <div style={{color:"#60a5fa",fontWeight:700,fontSize:14}}>{fmtMoney(f.custoTotal)}</div>
+              <div className="muted" style={{fontSize:10}}>Custo total</div>
+            </div>
+            {por>1&&<div style={{flex:1,minWidth:80,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
+              <div style={{color:"#a78bfa",fontWeight:700,fontSize:14}}>{fmtMoney(cp)}</div>
+              <div className="muted" style={{fontSize:10}}>Custo/porção</div>
+            </div>}
+            <div style={{flex:1,minWidth:80,background:"#0f1e10",borderRadius:10,padding:"10px",textAlign:"center",border:"1px solid #1e3520"}}>
+              <div style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(pp)}</div>
+              <div className="muted" style={{fontSize:10}}>Preço/porção</div>
             </div>
           </div>
           {f.insumos.map(i=>(
@@ -1309,13 +1331,26 @@ function FichaTecnica({db,setDb}){
             <button className="btn" onClick={()=>edit(f)} style={{background:"var(--border)",color:"#888",padding:"6px 14px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>del(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
-        </div>
-      ))}
+        </div>;
+      })}
       {!(db.fichasTecnicas||[]).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
     </div>}
     {subTab==="novo"&&<div>
       <div className="card" style={{marginBottom:10}}>
-        <input placeholder="Nome do produto" value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} className="inp"/>
+        <input placeholder="Nome do produto" value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} className="inp" style={{marginBottom:10}}/>
+        <div className="row">
+          <div style={{flex:1}}>
+            <label style={{fontSize:11,color:"#666",marginBottom:3,display:"block"}}>Qtd. porções</label>
+            <input type="number" min="1" step="1" value={form.porcoes} onChange={e=>setForm(f=>({...f,porcoes:e.target.value}))} className="inp" style={{textAlign:"center"}}/>
+          </div>
+          <div style={{flex:1}}>
+            <label style={{fontSize:11,color:"#666",marginBottom:3,display:"block"}}>CMV alvo (%)</label>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <input type="number" min="1" max="100" step="0.5" value={form.cmv} onChange={e=>setForm(f=>({...f,cmv:e.target.value}))} className="inp" style={{textAlign:"center"}}/>
+              <span style={{fontSize:12,color:"#888"}}>%</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div className="card" style={{marginBottom:10}}>
         <div className="section-title">Adicionar Insumo</div>
@@ -1339,8 +1374,18 @@ function FichaTecnica({db,setDb}){
               <button className="btn" onClick={()=>remIns(i.id)} style={{background:"transparent",color:"#ff5c7a",fontSize:16,padding:"0 4px"}}>✕</button></div>
           </div>
         ))}
-        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}><span style={{fontWeight:700}}>Custo</span><span style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(custoTotal)}</span></div>
-        <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:"1px solid #1e2235"}}><span style={{fontWeight:700}}>Preço Sugerido (30%)</span><span style={{color:"#4ade80",fontWeight:700,fontSize:15}}>{fmtMoney(precoSugerido)}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
+          <span style={{fontWeight:700}}>Custo total</span>
+          <span style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(custoTotal)}</span>
+        </div>
+        {porcoes>1&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderTop:"1px solid #1e2235"}}>
+          <span className="muted" style={{fontSize:12}}>Custo/porção ({porcoes} porções)</span>
+          <span style={{color:"#a78bfa",fontWeight:600,fontSize:13}}>{fmtMoney(custoPorcao)}</span>
+        </div>}
+        <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:"1px solid #1e2235"}}>
+          <span style={{fontWeight:700}}>Preço/porção ({cmvPct}% CMV)</span>
+          <span style={{color:"#4ade80",fontWeight:700,fontSize:15}}>{fmtMoney(precoPorcao)}</span>
+        </div>
       </div>}
       <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Ficha"}</button>
       {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({nome:"",insumos:[]});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
