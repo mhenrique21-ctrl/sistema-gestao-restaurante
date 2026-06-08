@@ -1735,9 +1735,9 @@ function RH({db,setDb,empresa}){
 
 // ===================== RELATÓRIOS =====================
 function Relatorios({db,empresa,state}){
-  const [relDe,setRelDe]=useState(today().slice(0,7));
-  const [relAte,setRelAte]=useState(today().slice(0,7));
-  const inPer=(dt)=>!dt||(dt.slice(0,7)>=relDe&&dt.slice(0,7)<=relAte);
+  const [relDe,setRelDe]=useState(today().slice(0,8)+"01");
+  const [relAte,setRelAte]=useState(today());
+  const inPer=(dt)=>!dt||(dt>=relDe&&dt<=relAte);
   const gDRE=()=>{
     const vendas=(db.vendas||[]).filter(x=>inPer(x.data));
     const compras=(db.compras||[]).filter(x=>inPer(x.data));
@@ -1881,11 +1881,11 @@ function Relatorios({db,empresa,state}){
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <div style={{flex:1}}>
           <div style={{fontSize:11,color:"#666",marginBottom:3}}>De</div>
-          <input type="month" value={relDe} onChange={e=>setRelDe(e.target.value)} className="inp"/>
+          <input type="date" value={relDe} onChange={e=>setRelDe(e.target.value)} className="inp"/>
         </div>
         <div style={{flex:1}}>
           <div style={{fontSize:11,color:"#666",marginBottom:3}}>Até</div>
-          <input type="month" value={relAte} onChange={e=>setRelAte(e.target.value)} className="inp"/>
+          <input type="date" value={relAte} onChange={e=>setRelAte(e.target.value)} className="inp"/>
         </div>
       </div>
     </div>
