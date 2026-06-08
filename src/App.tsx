@@ -1310,7 +1310,7 @@ function RH({db,setDb,empresa}){
   const [faltaForm,setFaltaForm]=useState({funcionarioId:"",data:today(),dias:"",motivo:""});
   const [adtForm,setAdtForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [consForm,setConsForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
-  const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
+  const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   const [encEdit,setEncEdit]=useState(null);
   const funcs=db.funcionarios||[];
 
@@ -1371,13 +1371,24 @@ function RH({db,setDb,empresa}){
   };
 
   const saveEnc=()=>{
-    if(!encForm.funcionarioId||!encForm.valor)return alert("Selecione funcionário e valor.");
-    const enc={id:encEdit||uid(),...encForm,valor:parseMoney(encForm.valor),mes:encForm.data.slice(0,7)};
+    if(!encForm.funcionarioId)return alert("Selecione o funcionário.");
+    const enc={id:encEdit||uid(),...encForm,
+      valor:parseMoney(encForm.valor),
+      bonificacao:parseMoney(encForm.bonificacao),
+      comissao:parseMoney(encForm.comissao),
+      salarioFamilia:parseMoney(encForm.salarioFamilia),
+      mes:encForm.data.slice(0,7)};
     if(encEdit){setDb(d=>({...d,encargos:(d.encargos||[]).map(x=>x.id===encEdit?enc:x)}));setEncEdit(null);}
     else{setDb(d=>({...d,encargos:[enc,...(d.encargos||[])]}));}
-    setEncForm({funcionarioId:"",data:today(),valor:"",descricao:""});
+    setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   };
-  const editEnc=(e)=>{setEncEdit(e.id);setEncForm({funcionarioId:e.funcionarioId,data:e.data,valor:String(parseMoney(e.valor).toFixed(2)).replace(".",","),descricao:e.descricao||""});};
+  const editEnc=(e)=>{setEncEdit(e.id);setEncForm({
+    funcionarioId:e.funcionarioId,data:e.data,
+    valor:e.valor>0?String(e.valor.toFixed(2)).replace(".",","):"",
+    bonificacao:e.bonificacao>0?String(e.bonificacao.toFixed(2)).replace(".",","):"",
+    comissao:e.comissao>0?String(e.comissao.toFixed(2)).replace(".",","):"",
+    salarioFamilia:e.salarioFamilia>0?String(e.salarioFamilia.toFixed(2)).replace(".",","):"",
+    descricao:e.descricao||""});};
   const delEnc=(id)=>setDb(d=>({...d,encargos:(d.encargos||[]).filter(e=>e.id!==id)}));
 
   const gerarHolerite=(func)=>{
@@ -1386,17 +1397,21 @@ function RH({db,setDb,empresa}){
     const adts   =(db.adiantamentos||[]).filter(a=>a.funcionarioId===func.id&&a.mes===mes);
     const cons   =(db.consumacoes||[]).filter(c=>c.funcionarioId===func.id&&c.mes===mes);
     const encs   =(db.encargos||[]).filter(e=>e.funcionarioId===func.id&&e.mes===mes);
-    const totFalt=faltas.reduce((s,f)=>s+f.desconto,0);
-    const totAdt =adts.reduce((s,a)=>s+parseMoney(a.valor),0);
-    const totCons=cons.reduce((s,c)=>s+parseMoney(c.valor),0);
-    const totEnc =encs.reduce((s,e)=>s+parseMoney(e.valor),0);
-    const aRec   =Math.max(func.salario-totFalt-totAdt-totCons-totEnc,0);
+    const totFalt   =faltas.reduce((s,f)=>s+f.desconto,0);
+    const totAdt    =adts.reduce((s,a)=>s+parseMoney(a.valor),0);
+    const totCons   =cons.reduce((s,c)=>s+parseMoney(c.valor),0);
+    const totEnc    =encs.reduce((s,e)=>s+(e.valor||0),0);
+    const totBonif  =encs.reduce((s,e)=>s+(e.bonificacao||0),0);
+    const totComis  =encs.reduce((s,e)=>s+(e.comissao||0),0);
+    const totSalFam =encs.reduce((s,e)=>s+(e.salarioFamilia||0),0);
+    const aRec      =Math.max(func.salario+totBonif+totComis+totSalFam-totFalt-totAdt-totCons-totEnc,0);
     const html=gerarRelatorioHTML(`Holerite – ${func.nome}`,empresa,`
       <div class="summary-grid">
         <div class="summary-card"><div class="val">${fmtMoney(func.salario)}</div><div class="lbl">Salário Bruto</div></div>
         <div class="summary-card"><div class="val" style="color:#166534">${fmtMoney(aRec)}</div><div class="lbl">A Receber</div></div>
         <div class="summary-card"><div class="val" style="color:#991b1b">${fmtMoney(totFalt)}</div><div class="lbl">Desc. Faltas</div></div>
         <div class="summary-card"><div class="val" style="color:#92400e">${fmtMoney(totAdt+totCons)}</div><div class="lbl">Adiant.+Cons.</div></div>
+        ${totBonif+totComis+totSalFam>0?`<div class="summary-card"><div class="val" style="color:#166534">+${fmtMoney(totBonif+totComis+totSalFam)}</div><div class="lbl">Acréscimos</div></div>`:""}
       </div>
       <div class="section"><h2>Dados</h2><table>
         <tr><td>Nome</td><td>${func.nome}</td></tr><tr><td>Função</td><td>${func.funcao||"—"}</td></tr>
@@ -1420,7 +1435,10 @@ function RH({db,setDb,empresa}){
         <tr><td>(-) Faltas</td><td class="red">-${fmtMoney(totFalt)}</td></tr>
         <tr><td>(-) Adiantamentos</td><td class="yellow">-${fmtMoney(totAdt)}</td></tr>
         <tr><td>(-) Consumações</td><td class="yellow">-${fmtMoney(totCons)}</td></tr>
-        <tr><td>(-) Encargos (VT+FGTS+INSS)</td><td class="red">-${fmtMoney(totEnc)}</td></tr>
+        ${totBonif>0?`<tr><td>(+) Bonificação</td><td class="green">+${fmtMoney(totBonif)}</td></tr>`:""}
+        ${totComis>0?`<tr><td>(+) Comissão</td><td class="green">+${fmtMoney(totComis)}</td></tr>`:""}
+        ${totSalFam>0?`<tr><td>(+) Salário Família</td><td class="green">+${fmtMoney(totSalFam)}</td></tr>`:""}
+        ${totEnc>0?`<tr><td>(-) Encargos (VT+FGTS+INSS)</td><td class="red">-${fmtMoney(totEnc)}</td></tr>`:""}
         <tr class="total-row"><td><strong>A Receber</strong></td><td><strong class="green">${fmtMoney(aRec)}</strong></td></tr>
       </table></div>`);
     abrirRelatorio(html);
@@ -1443,8 +1461,12 @@ function RH({db,setDb,empresa}){
         const totFalt=(db.faltas||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+x.desconto,0);
         const totAdt =(db.adiantamentos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
         const totCons=(db.consumacoes||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
-        const totEnc =(db.encargos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
-        const aRec=Math.max(f.salario-totFalt-totAdt-totCons-totEnc,0);
+        const encsF  =(db.encargos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes);
+        const totEnc =encsF.reduce((s,x)=>s+(x.valor||0),0);
+        const totBonif=encsF.reduce((s,x)=>s+(x.bonificacao||0),0);
+        const totComis=encsF.reduce((s,x)=>s+(x.comissao||0),0);
+        const totSalFam=encsF.reduce((s,x)=>s+(x.salarioFamilia||0),0);
+        const aRec=Math.max(f.salario+totBonif+totComis+totSalFam-totFalt-totAdt-totCons-totEnc,0);
         return <div key={f.id} className="list-item">
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
             <div><div style={{fontWeight:700,fontSize:15}}>{f.nome}</div><div className="muted">{f.funcao}</div></div>
@@ -1457,6 +1479,9 @@ function RH({db,setDb,empresa}){
             <span className="tag" style={{background:"var(--border)",color:"#888"}}>Sal: {fmtMoney(f.salario)}</span>
             {totFalt>0&&<span className="tag" style={{background:"#2a1520",color:"#ff5c7a"}}>-{fmtMoney(totFalt)} falta</span>}
             {totAdt>0&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24"}}>-{fmtMoney(totAdt)} adt</span>}
+            {totBonif>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(totBonif)} bonif</span>}
+            {totComis>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(totComis)} comis</span>}
+            {totSalFam>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(totSalFam)} sal.fam</span>}
             {totEnc>0&&<span className="tag" style={{background:"#2a1520",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} encargos</span>}
             {totCons>0&&<span className="tag" style={{background:"#1a2030",color:"#60a5fa"}}>-{fmtMoney(totCons)} cons</span>}
           </div>
@@ -1544,22 +1569,36 @@ function RH({db,setDb,empresa}){
           <option value="">Selecionar funcionário</option>
           {funcs.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
-        <input type="date" value={encForm.data} onChange={e=>setEncForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Encargos (VT + FGTS + INSS)</label>
-        <MoneyInput value={encForm.valor} onChange={v=>setEncForm(f=>({...f,valor:v}))} placeholder="Valor único" className="inp"/>
-        <input placeholder="Descrição (opcional)" value={encForm.descricao} onChange={e=>setEncForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
-        <button className="btn" onClick={saveEnc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
-        {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",descricao:""}); }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+        <input type="date" value={encForm.data} onChange={e=>setEncForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
+        <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Deduções</div>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Encargos (VT + FGTS + INSS)</label>
+        <MoneyInput value={encForm.valor} onChange={v=>setEncForm(f=>({...f,valor:v}))} placeholder="0,00" className="inp" style={{marginBottom:10}}/>
+        <div style={{fontSize:11,color:"#4ade80",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Acréscimos</div>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Bonificação</label>
+        <MoneyInput value={encForm.bonificacao} onChange={v=>setEncForm(f=>({...f,bonificacao:v}))} placeholder="0,00" className="inp" style={{marginBottom:8}}/>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Comissão</label>
+        <MoneyInput value={encForm.comissao} onChange={v=>setEncForm(f=>({...f,comissao:v}))} placeholder="0,00" className="inp" style={{marginBottom:8}}/>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Salário Família</label>
+        <MoneyInput value={encForm.salarioFamilia} onChange={v=>setEncForm(f=>({...f,salarioFamilia:v}))} placeholder="0,00" className="inp" style={{marginBottom:8}}/>
+        <input placeholder="Descrição (opcional)" value={encForm.descricao} onChange={e=>setEncForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <button className="btn" onClick={saveEnc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:4,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
+        {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
       {(db.encargos||[]).map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#ff5c7a",fontWeight:700}}>-{fmtMoney(parseMoney(e.valor))}</span></div>
-        <div className="muted">{fmtDate(e.data)}</div>{e.descricao&&<div className="muted">{e.descricao}</div>}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
-          <span className="tag" style={{background:"#2a1520",color:"#ff9aa8",display:"inline-block"}}>VT + FGTS + INSS</span>
-          <div style={{display:"flex",gap:8}}>
-            <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-            <button className="btn" onClick={()=>{if(confirm("Excluir este encargo?"))delEnc(e.id);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
-          </div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{fontWeight:700,fontSize:15}}>{fn?.nome||"—"}</span>
+          <span style={{color:"#4ade80",fontWeight:700,fontSize:13}}>{fmtDate(e.data)}</span>
+        </div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+          {e.valor>0&&<span className="tag" style={{background:"#2a1520",color:"#ff9aa8"}}>-{fmtMoney(e.valor)} encargos</span>}
+          {e.bonificacao>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(e.bonificacao)} bonif.</span>}
+          {e.comissao>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(e.comissao)} comis.</span>}
+          {e.salarioFamilia>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(e.salarioFamilia)} sal.fam.</span>}
+        </div>
+        {e.descricao&&<div className="muted" style={{marginBottom:6}}>{e.descricao}</div>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
+          <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
       </div>;})}
       {!(db.encargos||[]).length&&<EmptyState msg="Nenhum encargo registrado"/>}
