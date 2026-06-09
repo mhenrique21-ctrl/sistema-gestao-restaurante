@@ -242,7 +242,7 @@ export default function App() {
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
-        {tab==="vendas"     && <Vendas db={db} setDb={setDb}/>}
+        {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
         {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
         {tab==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
@@ -362,7 +362,7 @@ function StatCard({label,value,color,icon}){return <div className="card" style={
 function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2235"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"var(--text)":positive?"#4ade80":"#ff5c7a"}}>{value}</span></div>;}
 
 // ===================== VENDAS =====================
-function Vendas({db,setDb}){
+function Vendas({db,setDb,state}){
   const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:"",nfoodTaxa:"","99food":"",delivery:""});
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
@@ -390,6 +390,18 @@ function Vendas({db,setDb}){
   const comprasDia=(db.compras||[]).filter(c=>c.data===form.data).reduce((s,c)=>s+parseMoney(c.valor),0);
   const budgetDia=vendasDia*(budgetCmv/100);
   const saldoDia=budgetDia-comprasDia;
+
+  // Budget combinado das duas empresas (mês atual)
+  const empresas=["CONFRARIA","SEAMA"];
+  const totalDual=(emp:string,key:"vendas"|"compras")=>{
+    const d=state?.[emp]||{};
+    if(key==="vendas") return (d.vendas||[]).filter((v:any)=>v.data?.startsWith(mes)).reduce((s:number,v:any)=>s+(v.total||0),0);
+    return (d.compras||[]).filter((c:any)=>c.data?.startsWith(mes)).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  };
+  const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas"),0);
+  const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras"),0);
+  const budgetTotal=vendasTotal*(budgetCmv/100);
+  const saldoTotal=budgetTotal-comprasTotal;
   const save=()=>{
     const reg={id:editId||uid(),data:form.data,total,
       maquininha:parseMoney(form.maquininha||0),
@@ -524,6 +536,50 @@ function Vendas({db,setDb}){
           </div>
           <div style={{height:6,background:"#1a1d2e",borderRadius:3,overflow:"hidden"}}>
             <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasMes/budgetMes)*100,100)}%`,background:comprasMes/budgetMes>1?"#ff5c7a":comprasMes/budgetMes>0.8?"#fbbf24":"#4ade80",transition:"width .3s"}}/>
+          </div>
+        </div>}
+      </div>
+
+      {/* CONFRARIA + SEAMA combinado */}
+      <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginTop:10,border:"1px solid #353860"}}>
+        <div style={{fontSize:11,color:"var(--acc)",fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>🏢 CONFRARIA + SEAMA — Mês atual</div>
+        {empresas.map(emp=>{
+          const vE=totalDual(emp,"vendas");
+          const cE=totalDual(emp,"compras");
+          const bE=vE*(budgetCmv/100);
+          const sE=bE-cE;
+          return <div key={emp} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1e2235"}}>
+            <span style={{fontSize:12,fontWeight:600,color:"#aaa",minWidth:90}}>{emp}</span>
+            <span style={{fontSize:12,color:"#4ade80"}}>{fmtMoney(vE)}</span>
+            <span style={{fontSize:12,color:"#60a5fa"}}>budget: {fmtMoney(bE)}</span>
+            <span style={{fontSize:12,fontWeight:700,color:sE>=0?"#86efac":"#ff5c7a"}}>{sE>=0?"✓":"-"} {fmtMoney(Math.abs(sE))}</span>
+          </div>;
+        })}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas totais</div>
+            <div style={{fontWeight:700,color:"#4ade80",fontSize:15}}>{fmtMoney(vendasTotal)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget total ({budgetCmv}%)</div>
+            <div style={{fontWeight:700,color:"#60a5fa",fontSize:15}}>{fmtMoney(budgetTotal)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras totais</div>
+            <div style={{fontWeight:700,color:"#fbbf24",fontSize:15}}>{fmtMoney(comprasTotal)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo consolidado</div>
+            <div style={{fontWeight:700,fontSize:15,color:saldoTotal>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoTotal))}{saldoTotal<0?" ⚠️":""}</div>
+          </div>
+        </div>
+        {vendasTotal>0&&<div style={{marginTop:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#888",marginBottom:4}}>
+            <span>Utilização consolidada</span>
+            <span style={{color:comprasTotal/budgetTotal>1?"#ff5c7a":comprasTotal/budgetTotal>0.8?"#fbbf24":"#4ade80"}}>{budgetTotal>0?((comprasTotal/budgetTotal)*100).toFixed(1):0}%</span>
+          </div>
+          <div style={{height:6,background:"#1a1d2e",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasTotal/budgetTotal)*100,100)}%`,background:comprasTotal/budgetTotal>1?"#ff5c7a":comprasTotal/budgetTotal>0.8?"#fbbf24":"#4ade80",transition:"width .3s"}}/>
           </div>
         </div>}
       </div>
