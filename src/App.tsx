@@ -9,7 +9,7 @@ const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
-  config:{snAliquota:6},
+  config:{snAliquota:6,budgetCmv:30},
 });
 const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
 
@@ -374,6 +374,22 @@ function Vendas({db,setDb}){
   const nfoodLiq=nfoodBruto*(1-nfoodTaxaPct/100);
   const outros=["maquininha","dinheiro","delivery"].reduce((s,m)=>s+parseMoney(form[m]||0),0);
   const total=outros+ifoodLiq+nfoodLiq;
+
+  const budgetCmv=parseFloat(db.config?.budgetCmv??30)||30;
+  const setBudgetCmv=(v)=>setDb(d=>({...d,config:{...(d.config||{}),budgetCmv:parseFloat(v)||30}}));
+
+  // Budget do mês atual
+  const mes=today().slice(0,7);
+  const vendasMes=(db.vendas||[]).filter(v=>v.data?.startsWith(mes)).reduce((s,v)=>s+v.total,0);
+  const comprasMes=(db.compras||[]).filter(c=>c.data?.startsWith(mes)).reduce((s,c)=>s+parseMoney(c.valor),0);
+  const budgetMes=vendasMes*(budgetCmv/100);
+  const saldoMes=budgetMes-comprasMes;
+
+  // Budget do dia selecionado no formulário
+  const vendasDia=(db.vendas||[]).filter(v=>v.data===form.data&&v.id!==editId).reduce((s,v)=>s+v.total,0)+total;
+  const comprasDia=(db.compras||[]).filter(c=>c.data===form.data).reduce((s,c)=>s+parseMoney(c.valor),0);
+  const budgetDia=vendasDia*(budgetCmv/100);
+  const saldoDia=budgetDia-comprasDia;
   const save=()=>{
     const reg={id:editId||uid(),data:form.data,total,
       maquininha:parseMoney(form.maquininha||0),
@@ -442,9 +458,83 @@ function Vendas({db,setDb}){
       <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Vendas"}</button>
       {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(emptyForm());}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>
+
+    {/* ---- BUDGET DE COMPRAS ---- */}
+    <div className="card" style={{marginBottom:14,border:"1px solid #252840"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <span style={{fontWeight:700,fontSize:13,color:"var(--acc)"}}>🛒 Budget de Compras</span>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:11,color:"#888"}}>CMV alvo:</span>
+          <input type="number" min="1" max="100" step="0.5" value={budgetCmv}
+            onChange={e=>setBudgetCmv(e.target.value)}
+            style={{width:58,textAlign:"center",background:"var(--bg4)",border:"1px solid #353860",borderRadius:6,color:"var(--text1)",padding:"4px 6px",fontSize:13}}/>
+          <span style={{fontSize:11,color:"#888"}}>%</span>
+        </div>
+      </div>
+
+      {/* Dia */}
+      <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>📅 {fmtDate(form.data)}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Venda do dia</div>
+            <div style={{fontWeight:700,color:"#4ade80"}}>{fmtMoney(vendasDia)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget ({budgetCmv}%)</div>
+            <div style={{fontWeight:700,color:"#60a5fa"}}>{fmtMoney(budgetDia)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras realizadas</div>
+            <div style={{fontWeight:700,color:"#fbbf24"}}>{fmtMoney(comprasDia)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo disponível</div>
+            <div style={{fontWeight:700,color:saldoDia>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoDia))}{saldoDia<0?" ⚠️":""}</div>
+          </div>
+        </div>
+        {saldoDia<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:8,textAlign:"center"}}>⚠️ Compras excedem o budget do dia em {fmtMoney(-saldoDia)}</div>}
+      </div>
+
+      {/* Mês */}
+      <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px"}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>📆 Acumulado do mês</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas do mês</div>
+            <div style={{fontWeight:700,color:"#4ade80"}}>{fmtMoney(vendasMes)}</div>
+          </div>
+          <div style={{fontWeight:700,textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget mensal</div>
+            <div style={{color:"#60a5fa"}}>{fmtMoney(budgetMes)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras no mês</div>
+            <div style={{fontWeight:700,color:"#fbbf24"}}>{fmtMoney(comprasMes)}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo do mês</div>
+            <div style={{fontWeight:700,color:saldoMes>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoMes))}{saldoMes<0?" ⚠️":""}</div>
+          </div>
+        </div>
+        {vendasMes>0&&<div style={{marginTop:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#888",marginBottom:4}}>
+            <span>Utilização do budget</span>
+            <span style={{color:comprasMes/budgetMes>1?"#ff5c7a":comprasMes/budgetMes>0.8?"#fbbf24":"#4ade80"}}>{budgetMes>0?((comprasMes/budgetMes)*100).toFixed(1):0}%</span>
+          </div>
+          <div style={{height:6,background:"#1a1d2e",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasMes/budgetMes)*100,100)}%`,background:comprasMes/budgetMes>1?"#ff5c7a":comprasMes/budgetMes>0.8?"#fbbf24":"#4ade80",transition:"width .3s"}}/>
+          </div>
+        </div>}
+      </div>
+    </div>
+
     <div className="section-title">Histórico</div>
-    {(db.vendas||[]).map(v=>(
-      <div key={v.id} className="list-item">
+    {(db.vendas||[]).map(v=>{
+      const bDia=v.total*(budgetCmv/100);
+      const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
+      const sDia=bDia-cDia;
+      return <div key={v.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <span style={{fontWeight:700}}>{fmtDate(v.data)}</span>
           <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(v.total)}</span>
@@ -460,12 +550,17 @@ function Vendas({db,setDb}){
           </span>}
           {v.delivery>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>delivery: {fmtMoney(v.delivery)}</span>}
         </div>
+        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+          <span className="tag" style={{background:"#1a2a10",color:"#4ade80"}}>budget {budgetCmv}%: {fmtMoney(bDia)}</span>
+          {cDia>0&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24"}}>comprado: {fmtMoney(cDia)}</span>}
+          <span className="tag" style={{background:sDia>=0?"#1a2a10":"#2a1020",color:sDia>=0?"#86efac":"#ff5c7a"}}>{sDia>=0?"saldo:":"excedido:"} {fmtMoney(Math.abs(sDia))}</span>
+        </div>
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>del(v.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
-      </div>
-    ))}
+      </div>;
+    })}
     {!(db.vendas||[]).length&&<EmptyState msg="Nenhum registro de venda"/>}
   </div>;
 }
