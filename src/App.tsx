@@ -1282,131 +1282,144 @@ function Compras({db,setDb,empresa}){
     {subTab==="lista"&&<div>
       <div className="section-title">Histórico de Compras</div>
       {(()=>{
-        const grupos:Record<string,any[]>={};
+        // Agrupar por fornecedor
+        const porForn:Record<string,any[]>={};
         (db.compras||[]).forEach(c=>{
-          const key=c.grupoId||c.id;
-          if(!grupos[key])grupos[key]=[];
-          grupos[key].push(c);
+          const k=(c.fornecedor||"—").trim().toLowerCase();
+          if(!porForn[k])porForn[k]=[];
+          porForn[k].push(c);
         });
-        const notasList=Object.entries(grupos).map(([key,itens])=>({
-          grupoId:key,
+        const fornLista=Object.entries(porForn).map(([,itens])=>({
+          nome:itens[0]?.fornecedor||"—",
           itens,
-          fornecedor:itens[0]?.fornecedor||"—",
-          data:itens[0]?.data||"",
-          origem:itens[0]?.origem||"manual",
-          nNF:itens[0]?.nNF||"",
           total:itens.reduce((s,c)=>s+parseMoney(c.valor),0),
-        })).sort((a,b)=>(a.data<b.data?1:-1));
-        return <>
-          {notasList.map(nota=>{
-            const open=verNota===nota.grupoId;
-            const itensAtivos=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId);
-            const totalAtivo=itensAtivos.reduce((s,c)=>s+parseMoney(c.valor),0);
-            const hChanged=open&&(notaForn!==nota.fornecedor||notaData!==nota.data);
-            return <div key={nota.grupoId} style={{marginBottom:8,border:"1px solid",borderColor:open?"#7c8fff33":"#1e2235",borderRadius:12,overflow:"hidden",background:"var(--bg2)"}}>
+          ultimaData:itens.map(c=>c.data||"").sort().reverse()[0]||"",
+        })).sort((a,b)=>a.ultimaData<b.ultimaData?1:-1);
 
-              {/* ---- cabeçalho da pasta ---- */}
+        return <>
+          {fornLista.map(pasta=>{
+            const open=verNota===pasta.nome.toLowerCase();
+            const itensVivos=(db.compras||[]).filter(c=>(c.fornecedor||"—").trim().toLowerCase()===pasta.nome.trim().toLowerCase());
+            const totalVivo=itensVivos.reduce((s,c)=>s+parseMoney(c.valor),0);
+            const fnameChanged=open&&notaForn.trim()!==pasta.nome.trim();
+
+            // Sub-grupos por nota (grupoId)
+            const subGrupos:Record<string,any[]>={};
+            itensVivos.forEach(c=>{const k=c.grupoId||c.id;if(!subGrupos[k])subGrupos[k]=[];subGrupos[k].push(c);});
+            const notas=Object.entries(subGrupos).map(([gid,its])=>({
+              grupoId:gid,itens:its,data:its[0]?.data||"",origem:its[0]?.origem||"manual",nNF:its[0]?.nNF||"",
+              subtotal:its.reduce((s,c)=>s+parseMoney(c.valor),0),
+            })).sort((a,b)=>a.data<b.data?1:-1);
+
+            return <div key={pasta.nome} style={{marginBottom:8,border:"1px solid",borderColor:open?"#7c8fff44":"#1e2235",borderRadius:12,overflow:"hidden",background:"var(--bg2)"}}>
+
+              {/* ---- cabeçalho da pasta (por fornecedor) ---- */}
               <div style={{display:"flex",alignItems:"center",padding:"12px 14px",cursor:"pointer",gap:10}}
-                onClick={()=>{
-                  if(open){setVerNota(null);setEditItemId(null);}
-                  else{setVerNota(nota.grupoId);setNotaForn(nota.fornecedor);setNotaData(nota.data);}
-                }}>
-                <span style={{fontSize:16,lineHeight:1}}>{open?"📂":"📁"}</span>
+                onClick={()=>{if(open){setVerNota(null);setEditItemId(null);}else{setVerNota(pasta.nome.toLowerCase());setNotaForn(pasta.nome);}}}>
+                <span style={{fontSize:18,lineHeight:1}}>{open?"📂":"📁"}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                    {nota.fornecedor}
-                    {nota.nNF&&<span className="muted" style={{fontWeight:400,marginLeft:6,fontSize:11}}>NF #{nota.nNF}</span>}
-                  </div>
-                  <div style={{fontSize:11,color:"#888",marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
-                    <span>{fmtDate(nota.data)}</span>
-                    <span>{nota.itens.length} {nota.itens.length===1?"item":"itens"}</span>
-                    {nota.origem==="ia"&&<span style={{color:"#a78bfa"}}>IA</span>}
-                    {nota.origem==="nfe"&&<span style={{color:"#60a5fa"}}>NF-e</span>}
-                    {nota.origem==="sefaz"&&<span style={{color:"#7c8fff"}}>SEFAZ</span>}
-                    {nota.origem==="manual"&&<span style={{color:"#4ade80"}}>Manual</span>}
+                  <div style={{fontWeight:700,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pasta.nome}</div>
+                  <div style={{fontSize:11,color:"#888",marginTop:2}}>
+                    {notas.length} {notas.length===1?"compra":"compras"} · {itensVivos.length} itens · última {fmtDate(pasta.ultimaData)}
                   </div>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontWeight:700,color:"#60a5fa",fontSize:14}}>{fmtMoney(open?totalAtivo:nota.total)}</div>
-                  <div style={{fontSize:12,color:"#666",marginTop:2}}>{open?"▲":"▼"}</div>
+                  <div style={{fontWeight:700,color:"#60a5fa",fontSize:14}}>{fmtMoney(open?totalVivo:pasta.total)}</div>
+                  <div style={{fontSize:12,color:"#555",marginTop:2}}>{open?"▲":"▼"}</div>
                 </div>
               </div>
 
-              {/* ---- conteúdo expandido ---- */}
               {open&&<div style={{borderTop:"1px solid #1e2235"}}>
-
-                {/* editar cabeçalho */}
-                <div style={{padding:"10px 14px",background:"var(--bg3)",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                {/* renomear fornecedor */}
+                <div style={{padding:"8px 14px",background:"var(--bg3)",display:"flex",gap:8,alignItems:"center"}}>
                   <input value={notaForn} onChange={e=>setNotaForn(e.target.value)}
-                    className="inp" style={{flex:1,minWidth:120,fontSize:12,padding:"6px 10px"}} placeholder="Fornecedor"/>
-                  <input type="date" value={notaData} onChange={e=>setNotaData(e.target.value)}
-                    className="inp" style={{width:140,fontSize:12,padding:"6px 10px"}}/>
-                  {hChanged&&<button className="btn" onClick={()=>{
-                    setDb(d=>({...d,compras:d.compras.map(c=>(c.grupoId||c.id)===nota.grupoId?{...c,fornecedor:notaForn,data:notaData}:c)}));
-                  }} style={{background:"#7c8fff",color:"#fff",padding:"6px 12px",fontSize:12}}>💾</button>}
+                    className="inp" style={{flex:1,fontSize:12,padding:"6px 10px"}} placeholder="Nome do fornecedor"/>
+                  {fnameChanged&&<button className="btn" onClick={()=>{
+                    setDb(d=>({...d,compras:d.compras.map(c=>(c.fornecedor||"").trim().toLowerCase()===pasta.nome.trim().toLowerCase()?{...c,fornecedor:notaForn.trim()}:c)}));
+                  }} style={{background:"#7c8fff",color:"#fff",padding:"6px 12px",fontSize:12,whiteSpace:"nowrap"}}>💾 Renomear</button>}
                 </div>
 
-                {/* cabeçalho da tabela */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 72px 60px 32px",gap:4,padding:"6px 14px",background:"var(--bg3)",borderTop:"1px solid #1a1d2e"}}>
-                  {["Produto","Qtd","Total",""].map(h=><span key={h} style={{fontSize:10,color:"#666",fontWeight:700,textTransform:"uppercase"}}>{h}</span>)}
-                </div>
+                {/* sub-notas */}
+                {notas.map(nota=>(
+                  <div key={nota.grupoId} style={{borderTop:"1px solid #1a1d2e"}}>
+                    {/* header da sub-nota */}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 14px",background:"var(--bg4)"}}>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span style={{fontSize:12,fontWeight:600,color:"#aaa"}}>{fmtDate(nota.data)}</span>
+                        {nota.nNF&&<span style={{fontSize:11,color:"#666"}}>NF #{nota.nNF}</span>}
+                        {nota.origem==="ia"&&<span className="tag" style={{background:"#1a1a30",color:"#a78bfa",fontSize:10}}>IA</span>}
+                        {nota.origem==="nfe"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>NF-e</span>}
+                        {nota.origem==="sefaz"&&<span className="tag" style={{background:"#1a2040",color:"#7c8fff",fontSize:10}}>SEFAZ</span>}
+                        {nota.origem==="manual"&&<span className="tag" style={{background:"#1a2520",color:"#4ade80",fontSize:10}}>Manual</span>}
+                      </div>
+                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#60a5fa"}}>{fmtMoney(nota.subtotal)}</span>
+                        <button onClick={()=>{
+                          if(!confirm("Excluir esta nota e seus itens?"))return;
+                          setDb(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
+                        }} style={{background:"none",border:"none",color:"#ff5c7a44",fontSize:14,cursor:"pointer",padding:"0 2px"}}
+                          title="Excluir nota">🗑️</button>
+                      </div>
+                    </div>
 
-                {/* itens */}
-                {itensAtivos.map(item=>(
-                  <div key={item.id} style={{borderTop:"1px solid #1a1d2e"}}>
-                    {editItemId===item.id?(
-                      <div style={{padding:"12px 14px",background:"var(--bg4)"}}>
-                        <input value={editItemForm.nomeProduto} onChange={e=>setEditItemForm((f:any)=>({...f,nomeProduto:e.target.value}))} className="inp" style={{marginBottom:6}}/>
-                        <div className="row" style={{marginBottom:6}}>
-                          <select value={editItemForm.categoria} onChange={e=>setEditItemForm((f:any)=>({...f,categoria:e.target.value}))} className="inp">
-                            {cats.map(c=><option key={c} value={c}>{c}</option>)}
-                          </select>
-                          <select value={editItemForm.unidade} onChange={e=>setEditItemForm((f:any)=>({...f,unidade:e.target.value}))} className="inp" style={{maxWidth:70}}>
-                            {unds.map(u=><option key={u} value={u}>{u}</option>)}
-                          </select>
-                        </div>
-                        <div className="row" style={{marginBottom:6}}>
-                          <input type="number" placeholder="Qtd" value={editItemForm.quantidade} onChange={e=>setEditItemForm((f:any)=>({...f,quantidade:e.target.value}))} className="inp"/>
-                          <MoneyInput placeholder="Vl. Unit." value={editItemForm.valorUnitario} onChange={(v:string)=>setEditItemForm((f:any)=>({...f,valorUnitario:v}))} className="inp"/>
-                          <MoneyInput placeholder="Total" value={editItemForm.valor} onChange={(v:string)=>setEditItemForm((f:any)=>({...f,valor:v}))} className="inp"/>
-                        </div>
-                        <div className="row">
-                          <button className="btn" onClick={()=>{
-                            setDb(d=>({...d,compras:d.compras.map(c=>c.id===editItemId?{...c,...editItemForm,valor:parseMoney(editItemForm.valor),valorUnitario:parseMoney(editItemForm.valorUnitario),quantidade:parseFloat(editItemForm.quantidade)||0}:c)}));
-                            setEditItemId(null);
-                          }} style={{background:"#7c8fff",color:"#fff",padding:"8px",flex:1,fontSize:13}}>💾 Salvar</button>
-                          <button className="btn" onClick={()=>setEditItemId(null)} style={{background:"var(--border)",color:"#888",padding:"8px",fontSize:13}}>Cancelar</button>
-                        </div>
+                    {/* cabeçalho colunas */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 68px 58px 30px",gap:4,padding:"4px 14px",background:"var(--bg3)"}}>
+                      {["Produto","Qtd","Total",""].map(h=><span key={h} style={{fontSize:9,color:"#555",fontWeight:700,textTransform:"uppercase"}}>{h}</span>)}
+                    </div>
+
+                    {/* itens da nota */}
+                    {nota.itens.map(item=>(
+                      <div key={item.id} style={{borderTop:"1px solid #111420"}}>
+                        {editItemId===item.id?(
+                          <div style={{padding:"10px 14px",background:"var(--bg4)"}}>
+                            <input value={editItemForm.nomeProduto} onChange={e=>setEditItemForm((f:any)=>({...f,nomeProduto:e.target.value}))} className="inp" style={{marginBottom:6}}/>
+                            <div className="row" style={{marginBottom:6}}>
+                              <select value={editItemForm.categoria} onChange={e=>setEditItemForm((f:any)=>({...f,categoria:e.target.value}))} className="inp">
+                                {cats.map(c=><option key={c} value={c}>{c}</option>)}
+                              </select>
+                              <select value={editItemForm.unidade} onChange={e=>setEditItemForm((f:any)=>({...f,unidade:e.target.value}))} className="inp" style={{maxWidth:70}}>
+                                {unds.map(u=><option key={u} value={u}>{u}</option>)}
+                              </select>
+                            </div>
+                            <div className="row" style={{marginBottom:6}}>
+                              <input type="number" placeholder="Qtd" value={editItemForm.quantidade} onChange={e=>setEditItemForm((f:any)=>({...f,quantidade:e.target.value}))} className="inp"/>
+                              <MoneyInput placeholder="Vl. Unit." value={editItemForm.valorUnitario} onChange={(v:string)=>setEditItemForm((f:any)=>({...f,valorUnitario:v}))} className="inp"/>
+                              <MoneyInput placeholder="Total" value={editItemForm.valor} onChange={(v:string)=>setEditItemForm((f:any)=>({...f,valor:v}))} className="inp"/>
+                            </div>
+                            <div className="row">
+                              <button className="btn" onClick={()=>{
+                                setDb(d=>({...d,compras:d.compras.map(c=>c.id===editItemId?{...c,...editItemForm,valor:parseMoney(editItemForm.valor),valorUnitario:parseMoney(editItemForm.valorUnitario),quantidade:parseFloat(editItemForm.quantidade)||0}:c)}));
+                                setEditItemId(null);
+                              }} style={{background:"#7c8fff",color:"#fff",padding:"8px",flex:1,fontSize:13}}>💾 Salvar</button>
+                              <button className="btn" onClick={()=>setEditItemId(null)} style={{background:"var(--border)",color:"#888",padding:"8px",fontSize:13}}>Cancelar</button>
+                            </div>
+                          </div>
+                        ):(
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 68px 58px 30px",gap:4,padding:"8px 14px",alignItems:"center",cursor:"pointer"}}
+                            onClick={()=>{setEditItemId(item.id);setEditItemForm({nomeProduto:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,quantidade:String(item.quantidade||""),valorUnitario:String((item.valorUnitario||0).toFixed(2)).replace(".",","),valor:String(parseMoney(item.valor).toFixed(2)).replace(".",",")});}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600}}>{item.nomeProduto}</div>
+                              <div style={{fontSize:10,color:"#555"}}>{item.categoria}{item.valorUnitario>0?` · ${fmtMoney(item.valorUnitario)}/${item.unidade}`:""}</div>
+                            </div>
+                            <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
+                            <span style={{fontSize:13,fontWeight:700,color:"#60a5fa",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
+                            <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==item.id)}));}}
+                              style={{background:"none",border:"none",color:"#ff5c7a66",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
+                          </div>
+                        )}
                       </div>
-                    ):(
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 72px 60px 32px",gap:4,padding:"9px 14px",alignItems:"center",cursor:"pointer"}}
-                        onClick={()=>{setEditItemId(item.id);setEditItemForm({nomeProduto:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,quantidade:String(item.quantidade||""),valorUnitario:String((item.valorUnitario||0).toFixed(2)).replace(".",","),valor:String(parseMoney(item.valor).toFixed(2)).replace(".",",")});}}>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:600}}>{item.nomeProduto}</div>
-                          <div style={{fontSize:10,color:"#666",marginTop:1}}>{item.categoria}{item.valorUnitario>0?` · ${fmtMoney(item.valorUnitario)}/${item.unidade}`:""}</div>
-                        </div>
-                        <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:"#60a5fa",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
-                        <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==item.id)}));}}
-                          style={{background:"none",border:"none",color:"#ff5c7a",fontSize:15,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
-                      </div>
-                    )}
+                    ))}
                   </div>
                 ))}
 
-                {/* total + excluir nota */}
+                {/* total da pasta */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderTop:"2px solid #252840",background:"var(--bg3)"}}>
-                  <span style={{fontSize:13,fontWeight:700}}>Total: <span style={{color:"#4ade80"}}>{fmtMoney(totalAtivo)}</span></span>
-                  <button className="btn" onClick={()=>{
-                    if(!confirm("Excluir esta nota e todos os seus itens?"))return;
-                    setDb(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
-                    setVerNota(null);
-                  }} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Excluir nota</button>
+                  <span style={{fontSize:13,fontWeight:700}}>Total <span style={{color:"#888",fontWeight:400}}>{pasta.nome}</span>: <span style={{color:"#4ade80"}}>{fmtMoney(totalVivo)}</span></span>
                 </div>
               </div>}
             </div>;
           })}
-          {!notasList.length&&<EmptyState msg="Nenhuma compra registrada"/>}
+          {!fornLista.length&&<EmptyState msg="Nenhuma compra registrada"/>}
         </>;
       })()}
     </div>}
