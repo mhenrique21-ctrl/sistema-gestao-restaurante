@@ -224,6 +224,26 @@ function sefazSync(emp) {
               if (decompressed.includes('<infNFe') || decompressed.includes('<NFe')) {
                 const parsed = parseNFeXml(decompressed);
                 if (parsed.itens.length > 0) nfes.push({ ...parsed, nsu });
+              } else if (decompressed.includes('<resNFe')) {
+                // Summary document — no item detail, create a single-line entry
+                const chNFe  = getTag(decompressed, 'chNFe') || '';
+                const xNome  = getTag(decompressed, 'xNome') || 'Fornecedor';
+                const cnpj   = getTag(decompressed, 'CNPJ')  || '';
+                const vNF    = parseFloat(getTag(decompressed, 'vNF')) || 0;
+                const rawDt  = getTag(decompressed, 'dhEmi') || getTag(decompressed, 'dEmi') || '';
+                const data   = rawDt.substring(0, 10);
+                let nNF = '';
+                if (chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
+                if (vNF > 0) {
+                  nfes.push({
+                    fornecedor: { nome: xNome, cnpj, endereco: '' },
+                    itens: [{ nome: `NF-e ${nNF||chNFe.slice(-9)} – ${xNome}`, categoria: 'insumos', unidade: 'un', quantidade: 1, valorUnitario: vNF, valorTotal: vNF }],
+                    totalCompra: vNF,
+                    data,
+                    nNF,
+                    nsu,
+                  });
+                }
               }
             } catch { /* skip malformed docZip */ }
           }
