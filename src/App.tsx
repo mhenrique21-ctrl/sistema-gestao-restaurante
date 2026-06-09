@@ -9,6 +9,7 @@ const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
+  config:{snAliquota:6},
 });
 const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
 
@@ -97,6 +98,7 @@ export default function App() {
       if(!m[e])m[e]=mkDb();
       if(!m[e].consumacoes)m[e].consumacoes=[];
       if(!m[e].encargos)m[e].encargos=[];
+      if(!m[e].config)m[e].config={snAliquota:6};
       if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
     });
     return m;
@@ -151,6 +153,7 @@ export default function App() {
     {id:"contas",label:"Financeiro",icon:"📋"},
     {id:"ficha",label:"Ficha",icon:"📝"},
     {id:"rh",label:"RH",icon:"👥"},
+    {id:"dre",label:"DRE",icon:"📈"},
     {id:"relatorios",label:"Relatórios",icon:"📄"},
     {id:"comparativo",label:"Versus",icon:"⚖️"},
   ];
@@ -244,6 +247,7 @@ export default function App() {
         {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
         {tab==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
         {tab==="rh"         && <RH db={db} setDb={setDb} empresa={empresa}/>}
+        {tab==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="relatorios" && <Relatorios db={db} empresa={empresa} state={state}/>}
         {tab==="comparativo"&& <Comparativo state={state}/>}
       </div>
@@ -306,12 +310,51 @@ function Dashboard({db}) {
         </div>
       ))}
     </div>
-    <div className="card">
+    <div className="card" style={{marginBottom:14}}>
       <div className="section-title">Resultado</div>
       <IRow label="Vendas - Compras"   value={fmtMoney(vendas-compras)}  positive={vendas>=compras}/>
       <IRow label="Despesas Pendentes" value={fmtMoney(pendentes)}       positive={false}/>
       <IRow label="Funcionários"       value={`${(db.funcionarios||[]).length}`} neutral/>
     </div>
+    {(()=>{
+      const sn=(db.config?.snAliquota||6)/100;
+      const imposto=vendas*sn;
+      const despFixas=pagas;
+      const mcVal=vendas-compras-imposto;
+      const mcPct=vendas>0?(mcVal/vendas)*100:0;
+      const pe=mcPct>0?(despFixas)/(mcPct/100):0;
+      const colMC=mcVal>=0?"#4ade80":"#ff5c7a";
+      return <>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+          <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
+            <div style={{fontSize:13,fontWeight:700,color:colMC}}>{mcPct.toFixed(1)}%</div>
+            <div className="muted" style={{fontSize:10,marginTop:2}}>Margem Contrib.</div>
+          </div>
+          <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fbbf24"}}>{fmtMoney(pe)}</div>
+            <div className="muted" style={{fontSize:10,marginTop:2}}>Ponto Equilíbrio</div>
+          </div>
+          <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
+            <div style={{fontSize:13,fontWeight:700,color:mcVal>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(mcVal)}</div>
+            <div className="muted" style={{fontSize:10,marginTop:2}}>Sobra p/ Fixas</div>
+          </div>
+        </div>
+        {vendas>0&&<div className="card">
+          <div className="section-title">Por R$ 100 vendidos</div>
+          {[
+            {label:"CMV",val:(compras/vendas)*100,color:"#ff5c7a"},
+            {label:`Simples Nacional (${db.config?.snAliquota||6}%)`,val:sn*100,color:"#f59e0b"},
+            {label:"Despesas Pagas",val:(pagas/vendas)*100,color:"#a78bfa"},
+            {label:"Margem",val:mcPct-(pagas/vendas)*100,color:mcPct-(pagas/vendas)*100>=0?"#4ade80":"#ff5c7a"},
+          ].map(({label,val,color})=>(
+            <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+              <span className="muted" style={{fontSize:12}}>{label}</span>
+              <span style={{fontWeight:700,color,fontSize:13}}>R$ {Math.abs(val).toFixed(2)}</span>
+            </div>
+          ))}
+        </div>}
+      </>;
+    })()}
   </div>;
 }
 function GaugeSVG({value,color}){const a=Math.min(value/60*180,180);return <svg width={82} height={52} viewBox="0 0 82 52"><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke="var(--border)" strokeWidth="9" strokeLinecap="round"/><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${a*0.576} 999`}/><text x="41" y="45" textAnchor="middle" fill={color} fontSize="11" fontWeight="800">{value.toFixed(0)}%</text></svg>;}
@@ -531,13 +574,14 @@ function Compras({db,setDb,empresa}){
     if(!fornecedor.trim())return alert("Informe o fornecedor.");
     setDb(d=>{
       // registrar cada item em compras
+      const grupoId=uid();
       const novasCompras=carrinho.map(item=>({
         id:uid(), fornecedor, nomeProduto:item.nomeProduto,
         categoria:item.categoria, unidade:item.unidade,
         quantidade:parseFloat(item.quantidade)||0,
         valorUnitario:parseMoney(item.valorUnit),
         valor:parseMoney(item.valorTotal),
-        data:dataCom, origem:"manual",
+        data:dataCom, origem:"manual", grupoId,
       }));
       // atualizar / cadastrar matérias-primas
       let mps=[...(d.materiasPrimas||[])];
@@ -562,6 +606,7 @@ function Compras({db,setDb,empresa}){
         status:statusFinanceiro,
         tipo:"saida",
         origem:"compra",
+        grupoId,
       };
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])]};
     });
@@ -620,11 +665,12 @@ function Compras({db,setDb,empresa}){
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||""});
+      const grupoId=uid();
       const novasCompras=(iaResult.itens||[]).map(item=>({
         id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
         unidade:item.unidade||"un",quantidade:item.quantidade||0,
         valor:item.valorTotal||0,valorUnitario:item.valorUnitario||0,
-        data:iaResult.data||today(),origem:"ia",
+        data:iaResult.data||today(),origem:"ia",grupoId,
       }));
       let mps=[...(d.materiasPrimas||[])];
       novasCompras.forEach(c=>{
@@ -633,7 +679,7 @@ function Compras({db,setDb,empresa}){
         else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor});
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
-      const contaFin={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra"};
+      const contaFin={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);
@@ -667,12 +713,13 @@ function Compras({db,setDb,empresa}){
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
+      const grupoId=uid();
       const novasCompras=(nfeResult.itens||[]).map(item=>({
         id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
         data:nfeResult.data||today(),origem:"nfe",
-        nNF:nfeResult.nNF||"",
+        nNF:nfeResult.nNF||"",grupoId,
       }));
       let mps=[...(d.materiasPrimas||[])];
       novasCompras.forEach(c=>{
@@ -682,7 +729,7 @@ function Compras({db,setDb,empresa}){
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
-      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra"};
+      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
     });
     setNfeResult(null);setNfeError("");
@@ -750,11 +797,12 @@ function Compras({db,setDb,empresa}){
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
+      const grupoId=uid();
       const novasCompras=(nfe.itens||[]).map(item=>({
         id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
-        data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",
+        data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,
       }));
       let mps=[...(d.materiasPrimas||[])];
       novasCompras.forEach(c=>{
@@ -764,7 +812,7 @@ function Compras({db,setDb,empresa}){
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
-      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra"};
+      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
     });
     if(!all)setSefazList(l=>l.filter(n=>n.nsu!==nfe.nsu));
@@ -1154,6 +1202,8 @@ function Contas({db,setDb}){
   const [editId,setEditId]=useState(null);
   const [novacat,setNovacat]=useState("");
   const [filtro,setFiltro]=useState("todos");
+  const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
+  const [verConta,setVerConta]=useState<any>(null);
 
   const save=()=>{
     if(!form.descricao||!form.valor)return alert("Preencha descrição e valor.");
@@ -1173,7 +1223,7 @@ function Contas({db,setDb}){
     return{...d,contas};
   });
 
-  const contas=(db.contas||[]).filter(c=>filtro==="todos"?true:c.status===filtro);
+  const contas=[...(db.contas||[])].filter(c=>filtro==="todos"?true:c.status===filtro).sort((a,b)=>{const d=((a.vencimento||"")<(b.vencimento||""))?-1:1;return sortDir==="asc"?d:-d;});
   const totPago=contas.filter(c=>c.status==="pago").reduce((s,c)=>s+parseMoney(c.valor),0);
   const totPend=contas.filter(c=>c.status==="pendente").reduce((s,c)=>s+parseMoney(c.valor),0);
 
@@ -1182,6 +1232,39 @@ function Contas({db,setDb}){
   (db.contas||[]).forEach(c=>{const k=c.categoria||"Outros";byCat[k]=(byCat[k]||{pago:0,pendente:0});byCat[k][c.status]=(byCat[k][c.status]||0)+parseMoney(c.valor);});
 
   return <div>
+    {verConta&&(()=>{
+      const itens=(db.compras||[]).filter(c=>c.grupoId===verConta.grupoId);
+      return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div className="card" style={{width:"100%",maxWidth:480,maxHeight:"80vh",overflowY:"auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <span style={{fontWeight:700,fontSize:14}}>{verConta.descricao}</span>
+            <button onClick={()=>setVerConta(null)} style={{background:"none",border:"none",color:"#888",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+          </div>
+          <div className="muted" style={{fontSize:12,marginBottom:12}}>
+            {fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}
+          </div>
+          {itens.length?<>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{borderBottom:"1px solid #252840"}}>
+                <th style={{textAlign:"left",padding:"4px 6px",color:"#888",fontWeight:600}}>Produto</th>
+                <th style={{textAlign:"right",padding:"4px 6px",color:"#888",fontWeight:600}}>Qtd</th>
+                <th style={{textAlign:"right",padding:"4px 6px",color:"#888",fontWeight:600}}>Unit.</th>
+                <th style={{textAlign:"right",padding:"4px 6px",color:"#888",fontWeight:600}}>Total</th>
+              </tr></thead>
+              <tbody>{itens.map(it=><tr key={it.id} style={{borderBottom:"1px solid #1a1d2e"}}>
+                <td style={{padding:"5px 6px"}}>{it.nomeProduto}<br/><span className="muted" style={{fontSize:10}}>{it.categoria}</span></td>
+                <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap"}}>{it.quantidade} {it.unidade}</td>
+                <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap"}}>{fmtMoney(it.valorUnitario||0)}</td>
+                <td style={{textAlign:"right",padding:"5px 6px",fontWeight:600,whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(it.valor))}</td>
+              </tr>)}</tbody>
+            </table>
+            <div style={{textAlign:"right",marginTop:10,fontWeight:700,fontSize:14}}>
+              Total: {fmtMoney(itens.reduce((s,it)=>s+parseMoney(it.valor),0))}
+            </div>
+          </>:<div className="muted" style={{textAlign:"center",padding:20}}>Itens não disponíveis (compra antiga)</div>}
+        </div>
+      </div>;
+    })()}
     <div style={{display:"flex",gap:6,marginBottom:14}}>
       {[["lista","📋 Contas"],["novo","➕ Novo"],["config","⚙️ Categorias"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
@@ -1190,11 +1273,15 @@ function Contas({db,setDb}){
     </div>
 
     {subTab==="lista"&&<div>
-      <div style={{display:"flex",gap:6,marginBottom:12}}>
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
         {[["todos","Todos"],["pendente","Pendente"],["pago","Pago"]].map(([k,l])=>(
           <button key={k} onClick={()=>setFiltro(k)} className="pill"
             style={{background:filtro===k?"var(--border2)":"transparent",color:filtro===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
         ))}
+        <button onClick={()=>setSortDir(s=>s==="asc"?"desc":"asc")} className="pill"
+          style={{background:"var(--border)",color:"#888",border:"1px solid #252840",fontSize:12,padding:"5px 12px",marginLeft:"auto"}}>
+          📅 {sortDir==="asc"?"↑ Mais antigo":"↓ Mais recente"}
+        </button>
       </div>
       <div style={{display:"flex",gap:10,marginBottom:14}}>
         <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#ff5c7a",fontWeight:700,fontSize:16}}>{fmtMoney(totPend)}</div><div className="muted" style={{fontSize:11}}>A Pagar</div></div>
@@ -1215,6 +1302,7 @@ function Contas({db,setDb}){
             <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"6px 12px",fontSize:12}}>
               {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
             </button>
+            {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
             <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
           </div>
@@ -1753,6 +1841,192 @@ function RH({db,setDb,empresa}){
 }
 
 // ===================== RELATÓRIOS =====================
+// ===================== DRE =====================
+function DREComp({db,setDb,empresa}){
+  const [de,setDe]=useState(today().slice(0,8)+"01");
+  const [ate,setAte]=useState(today());
+  const inPer=(dt)=>!dt||(dt>=de&&dt<=ate);
+  const sn=db.config?.snAliquota??6;
+  const setSn=(v)=>setDb(d=>({...d,config:{...(d.config||{}),snAliquota:parseFloat(v)||0}}));
+
+  const vendas=(db.vendas||[]).filter(v=>inPer(v.data));
+  const compras=(db.compras||[]).filter(c=>inPer(c.data));
+  const contasPagas=(db.contas||[]).filter(c=>inPer(c.vencimento)&&c.status==="pago"&&c.tipo==="saida"&&c.origem!=="adiantamento_rh");
+
+  // Vendas Brutas (gross incl. delivery fees)
+  const vendasBrutas=vendas.reduce((s,v)=>{
+    const ifFee=(v.ifood||0)-(v.ifoodLiq??v.ifood??0);
+    const nfFee=(v["99food"]||0)-(v.nfoodLiq??v["99food"]??0);
+    return s+(v.total||0)+ifFee+nfFee;
+  },0);
+  const despVendas=vendas.reduce((s,v)=>{
+    return s+((v.ifood||0)-(v.ifoodLiq??v.ifood??0))+((v["99food"]||0)-(v.nfoodLiq??v["99food"]??0));
+  },0);
+  const vendasLiq=vendasBrutas-despVendas;
+
+  // CMV by category
+  const cmvCats:{[k:string]:number}={};
+  const catLabel=(c)=>{const m={"proteína":"Alimentos (Proteínas)","insumos":"Alimentos (Insumos)","descartáveis":"Embalagens e Descartáveis","material de limpeza":"Material de Limpeza"};return m[c]||"Outros CMV";};
+  compras.forEach(c=>{const l=catLabel(c.categoria);cmvCats[l]=(cmvCats[l]||0)+parseMoney(c.valor);});
+  const totalCMV=Object.values(cmvCats).reduce((s,v)=>s+v,0);
+  const lucroBruto=vendasLiq-totalCMV;
+
+  // Despesas (by category)
+  const despCats:{[k:string]:number}={};
+  contasPagas.forEach(c=>{const k=c.categoria||"Outros";despCats[k]=(despCats[k]||0)+parseMoney(c.valor);});
+  const totalDesp=Object.values(despCats).reduce((s,v)=>s+v,0);
+  const resultadoOp=lucroBruto-totalDesp;
+
+  // Simples Nacional
+  const imposto=vendasBrutas*(sn/100);
+  const lucroLiq=resultadoOp-imposto;
+
+  // Ponto de Equilíbrio
+  const mc=vendasLiq-totalCMV;
+  const mcPct=vendasBrutas>0?(mc/vendasBrutas)*100:0;
+  const pe=mcPct>0?(totalDesp+imposto)/(mcPct/100):0;
+
+  const pct=(v)=>vendasBrutas>0?`${((v/vendasBrutas)*100).toFixed(1)}%`:"—";
+  const col=(v:number)=>v>=0?"#4ade80":"#ff5c7a";
+
+  const Row=({label,value,pctVal,color,bold=false,indent=false,border=true}:{label:string,value:number,pctVal?:number,color?:string,bold?:boolean,indent?:boolean,border?:boolean})=>(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:border?"1px solid var(--border)":"none",paddingLeft:indent?16:0}}>
+      <span style={{fontSize:indent?12:13,color:indent?"var(--text2)":"var(--text)",fontWeight:bold?700:400,flex:1}}>{label}</span>
+      <span style={{fontSize:12,color:"var(--text3)",marginRight:8,minWidth:42,textAlign:"right"}}>{pct(pctVal??value)}</span>
+      <span style={{fontWeight:bold?700:600,color:color??col(value),fontSize:bold?14:13,minWidth:90,textAlign:"right"}}>{fmtMoney(value)}</span>
+    </div>
+  );
+
+  const printDRE=()=>{
+    const rows=(obj:{[k:string]:number},prefix:string,colFn:(v:number)=>string)=>
+      Object.entries(obj).filter(([,v])=>v>0).map(([k,v])=>`<tr><td style="padding:6px 8px 6px 24px;color:#666;font-size:12px">${k}</td><td style="text-align:right;color:#999;font-size:11px">${vendasBrutas>0?((v/vendasBrutas)*100).toFixed(1)+"%" : ""}</td><td style="text-align:right;font-weight:600;color:${colFn(v)};white-space:nowrap;padding:6px 8px">${fmtMoney(v)}</td></tr>`).join("");
+    const tr=(l:string,v:number,bold=false,color=col(v),indent=false)=>
+      `<tr style="${bold?"font-weight:700;font-size:14px;background:#f8f9fe":""}"><td style="padding:${indent?"6px 8px 6px 24px":"8px"};color:${indent?"#666":"inherit"}">${l}</td><td style="text-align:right;color:#999;font-size:11px">${pct(v)}</td><td style="text-align:right;font-weight:${bold?700:600};color:${color};white-space:nowrap;padding:8px">${fmtMoney(v)}</td></tr>`;
+    abrirRelatorio(gerarRelatorioHTML(`DRE – ${de} a ${ate}`,empresa,`
+      <div class="summary-grid">
+        <div class="summary-card"><div class="val">${fmtMoney(vendasBrutas)}</div><div class="lbl">Vendas Brutas</div></div>
+        <div class="summary-card"><div class="val" style="color:${col(lucroBruto)}">${fmtMoney(lucroBruto)}</div><div class="lbl">Lucro Bruto</div></div>
+        <div class="summary-card"><div class="val" style="color:${col(lucroLiq)}">${fmtMoney(lucroLiq)}</div><div class="lbl">Lucro Líquido</div></div>
+        <div class="summary-card"><div class="val" style="color:${mcPct>=30?"#166534":"#991b1b"}">${mcPct.toFixed(1)}%</div><div class="lbl">Margem Contrib.</div></div>
+      </div>
+      <div class="section"><table style="border-collapse:collapse;width:100%">
+        <colgroup><col style="width:60%"><col style="width:15%"><col style="width:25%"></colgroup>
+        <thead><tr style="background:#f0f0f8"><th style="padding:8px;text-align:left">Descrição</th><th style="padding:8px;text-align:right">%</th><th style="padding:8px;text-align:right">Valor</th></tr></thead>
+        <tbody>
+          ${tr("Vendas Brutas",vendasBrutas,true,"#1e40af")}
+          ${despVendas>0?tr("(-) Despesas sobre Vendas",despVendas,false,"#991b1b",true):""}
+          ${tr("= Vendas Líquidas",vendasLiq,true)}
+          ${tr("(-) CMV Total",totalCMV,false,"#991b1b")}
+          ${rows(cmvCats,"",()=>"#dc2626")}
+          ${tr("= Lucro Bruto",lucroBruto,true,col(lucroBruto))}
+          ${tr("(-) Despesas",totalDesp,false,"#991b1b")}
+          ${rows(despCats,"",()=>"#dc2626")}
+          ${tr("= Resultado Operacional",resultadoOp,true,col(resultadoOp))}
+          ${tr(`(-) Simples Nacional (${sn}%)`,imposto,false,"#92400e",true)}
+          ${tr("= Lucro Líquido",lucroLiq,true,col(lucroLiq))}
+          <tr style="background:#f0f8f0"><td colspan="2" style="padding:8px;font-weight:700">Ponto de Equilíbrio</td><td style="text-align:right;font-weight:700;color:#1e40af;padding:8px">${fmtMoney(pe)}</td></tr>
+        </tbody>
+      </table></div>`));
+  };
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+      <div className="section-title" style={{marginBottom:0}}>DRE — Resultado do Exercício</div>
+      <button className="btn" onClick={printDRE} style={{background:"#7c8fff",color:"#fff",padding:"8px 14px",fontSize:12}}>🖨️ Imprimir</button>
+    </div>
+
+    {/* Período */}
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <div style={{flex:1}}><div style={{fontSize:11,color:"#666",marginBottom:3}}>De</div><input type="date" value={de} onChange={e=>setDe(e.target.value)} className="inp"/></div>
+        <div style={{flex:1}}><div style={{fontSize:11,color:"#666",marginBottom:3}}>Até</div><input type="date" value={ate} onChange={e=>setAte(e.target.value)} className="inp"/></div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:12,color:"#888",flex:1}}>Simples Nacional (%)</span>
+        <input type="number" value={sn} onChange={e=>setSn(e.target.value)} min="0" max="50" step="0.1"
+          className="inp" style={{width:80,textAlign:"center",fontSize:14,fontWeight:700}}/>
+        <span style={{fontSize:12,color:"#888"}}>%</span>
+      </div>
+    </div>
+
+    {/* Summary cards */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+      {[
+        {label:"Vendas Brutas",v:vendasBrutas,c:"#60a5fa"},
+        {label:"Lucro Bruto",v:lucroBruto,c:col(lucroBruto)},
+        {label:"Resultado Op.",v:resultadoOp,c:col(resultadoOp)},
+        {label:"Lucro Líquido",v:lucroLiq,c:col(lucroLiq)},
+      ].map(({label,v,c})=>(
+        <div key={label} className="card" style={{padding:"12px",textAlign:"center"}}>
+          <div style={{fontWeight:700,fontSize:15,color:c}}>{fmtMoney(v)}</div>
+          <div className="muted" style={{fontSize:11}}>{label}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* DRE Detalhado */}
+    <div className="card" style={{marginBottom:12}}>
+      <Row label="Receita Bruta" value={vendasBrutas} color="#60a5fa" bold/>
+      {despVendas>0&&<Row label="(-) Taxas iFood/99food" value={despVendas} color="#ff5c7a" indent/>}
+      <Row label="= Receita Líquida" value={vendasLiq} bold/>
+      <div style={{padding:"8px 0 4px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>CMV — Custo das Mercadorias</div>
+      {Object.entries(cmvCats).filter(([,v])=>v>0).map(([k,v])=>(
+        <Row key={k} label={k} value={v} color="#ff5c7a" indent/>
+      ))}
+      <Row label="Total CMV" value={totalCMV} color="#ff5c7a" bold/>
+      <Row label="= Lucro Bruto" value={lucroBruto} color={col(lucroBruto)} bold border={false}/>
+    </div>
+
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{padding:"0 0 8px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>Despesas</div>
+      {Object.entries(despCats).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
+        <Row key={k} label={k} value={v} color="#ff5c7a" indent/>
+      ))}
+      {!Object.keys(despCats).length&&<div className="muted" style={{fontSize:12,paddingBottom:8}}>Nenhuma conta paga no período.</div>}
+      <Row label="Total Despesas" value={totalDesp} color="#ff5c7a" bold/>
+      <Row label="= Resultado Operacional" value={resultadoOp} color={col(resultadoOp)} bold border={false}/>
+    </div>
+
+    <div className="card" style={{marginBottom:12}}>
+      <Row label={`Simples Nacional (${sn}%)`} value={imposto} color="#f59e0b" indent/>
+      <Row label="= Lucro Líquido" value={lucroLiq} color={col(lucroLiq)} bold border={false}/>
+    </div>
+
+    {/* Ponto de Equilíbrio */}
+    <div className="card" style={{background:"linear-gradient(135deg,#0f1a2e,#0a1220)",border:"1px solid #1e3a5f"}}>
+      <div className="section-title" style={{color:"#60a5fa"}}>Ponto de Equilíbrio</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontWeight:700,fontSize:14,color:"#fbbf24"}}>{fmtMoney(pe)}</div>
+          <div className="muted" style={{fontSize:10}}>PE (faturar)</div>
+        </div>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontWeight:700,fontSize:14,color:mcPct>=30?"#4ade80":"#ff5c7a"}}>{mcPct.toFixed(1)}%</div>
+          <div className="muted" style={{fontSize:10}}>Margem Contrib.</div>
+        </div>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontWeight:700,fontSize:14,color:col(mc)}}>{fmtMoney(mc)}</div>
+          <div className="muted" style={{fontSize:10}}>Sobra p/ Fixas</div>
+        </div>
+      </div>
+      {vendasBrutas>0&&<div>
+        <div style={{fontSize:11,fontWeight:700,color:"#60a5fa",marginBottom:8}}>Por R$100 vendidos</div>
+        {[
+          {label:"CMV",val:(totalCMV/vendasBrutas)*100,c:"#ff5c7a"},
+          {label:`Simples Nacional (${sn}%)`,val:sn,c:"#f59e0b"},
+          {label:"Despesas",val:(totalDesp/vendasBrutas)*100,c:"#a78bfa"},
+          {label:"Lucro Líquido",val:(lucroLiq/vendasBrutas)*100,c:col(lucroLiq)},
+        ].map(({label,val,c})=>(
+          <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1e3060"}}>
+            <span style={{fontSize:12,color:"#888"}}>{label}</span>
+            <span style={{fontWeight:700,color:c,fontSize:13}}>R${Math.abs(val).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>}
+    </div>
+  </div>;
+}
+
 function Relatorios({db,empresa,state}){
   const [relDe,setRelDe]=useState(today().slice(0,8)+"01");
   const [relAte,setRelAte]=useState(today());
