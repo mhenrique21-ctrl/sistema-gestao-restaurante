@@ -692,9 +692,12 @@ function parseNFe(xmlString) {
   }).filter(Boolean);
 
   const total=parseFloat(g("vNF"))||itens.reduce((s,i)=>s+i.valorTotal,0);
-  const dEmi=g("dEmi")||today();
-  const nNF=g("nNF")||"";
-  return{fornecedor,itens,totalCompra:total,data:dEmi,nNF};
+  // dEmi = v3, dhEmi = v4 (datetime, take first 10 chars)
+  const data=(g("dEmi")||g("dhEmi")||today()).substring(0,10);
+  // nNF: direct tag or extract from chNFe key (positions 25-34 of 44-digit key)
+  let nNF=g("nNF")||"";
+  if(!nNF){const ch=g("chNFe");if(ch&&ch.length===44)nNF=String(parseInt(ch.substring(25,34),10)||"");}
+  return{fornecedor,itens,totalCompra:total,data,nNF};
 }
 
 // ===================== COMPRAS (multi-produto + IA + financeiro) =====================
@@ -1341,7 +1344,7 @@ function Compras({db,setDb,empresa}){
                   <div style={{display:"flex",gap:6,alignItems:"baseline",flexWrap:"wrap"}}>
                     <span style={{fontWeight:700,fontSize:13}}>{nota.fornecedor}</span>
                     <span style={{fontSize:10,color:"#555",fontWeight:600}}>#{num}</span>
-                    {nota.nNF&&<span style={{fontSize:10,color:"#666"}}>NF {nota.nNF}</span>}
+                    {nota.nNF&&<span className="tag" style={{background:"#1a2040",color:"#93c5fd",fontSize:10,padding:"2px 6px"}}>NF {nota.nNF}</span>}
                   </div>
                   <div style={{fontSize:11,color:"#888",marginTop:2,display:"flex",gap:8}}>
                     <span>{fmtDate(nota.data)}</span>

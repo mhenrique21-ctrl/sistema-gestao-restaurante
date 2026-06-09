@@ -100,7 +100,15 @@ function parseNFeXml(xml) {
     return { nome, categoria: categorize(nome), unidade: normalizeUnit(uCom), quantidade: qtd, valorUnitario: vUnit, valorTotal: vTotal };
   }).filter(i => i.nome);
   const total = parseFloat(g('vNF')) || itens.reduce((s, i) => s + i.valorTotal, 0);
-  return { fornecedor, itens, totalCompra: total, data: g('dEmi') || '', nNF: g('nNF') || '' };
+  // nNF: direct tag first, fallback to chNFe positions 25-34
+  let nNF = g('nNF') || '';
+  if (!nNF) {
+    const chNFe = g('chNFe') || '';
+    if (chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
+  }
+  // date: dEmi (v3) or dhEmi (v4)
+  const data = (g('dEmi') || g('dhEmi') || '').substring(0, 10);
+  return { fornecedor, itens, totalCompra: total, data, nNF };
 }
 
 function buildSoapEnvelope(cnpj, uf, ultNSU) {
