@@ -157,7 +157,9 @@ function sefazSync(emp) {
     if (!cnpj) return reject(new Error(`CNPJ_${emp} não configurado no .env`));
 
     const nsuMap = getNsuMap();
-    const ultNSU = nsuMap[emp] || 0;
+    // Key by CNPJ so companies sharing the same CNPJ share the same NSU counter
+    const nsuKey = cnpj || emp;
+    const ultNSU = nsuMap[nsuKey] ?? nsuMap[emp] ?? 0;
 
     const soapBody = buildSoapEnvelope(cnpj, uf, ultNSU);
     const bodyBuf  = Buffer.from(soapBody, 'utf-8');
@@ -201,7 +203,7 @@ function sefazSync(emp) {
           }
           // On 137 (no more docs): save NSU so next request continues from here
           if (cStat === '137') {
-            if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(emp, nsuResp);
+            if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(nsuKey, nsuResp);
             return resolve({ nfes: [], total: 0, ultNSU: nsuResp, cStat, xMotivo });
           }
           if (cStat && cStat !== '138') {
@@ -248,7 +250,7 @@ function sefazSync(emp) {
             } catch { /* skip malformed docZip */ }
           }
 
-          if (maxNSU > nsuResp) saveNsu(emp, maxNSU);
+          if (maxNSU > nsuResp) saveNsu(nsuKey, maxNSU);
 
           resolve({ nfes, total: nfes.length, ultNSU: maxNSU });
         } catch (e) {
@@ -357,7 +359,10 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ error: 'Empresa inválida' }));
           return;
         }
-        if (resetNsu) saveNsu(empresa, 0);
+        if (resetNsu) {
+          const cnpjReset = (process.env[`CNPJ_${empresa}`] || '').replace(/\D/g, '');
+          saveNsu(cnpjReset || empresa, 0);
+        }
         const result = await sefazSync(empresa);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
