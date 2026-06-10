@@ -392,27 +392,35 @@ function Vendas({db,setDb,state}){
   const budgetDia=vendasDia*(budgetCmv/100);
   const saldoDia=budgetDia-comprasDia;
 
-  // Budget do dia de referência (editável) para o card de destaque
-  const vendasHoje=(db.vendas||[]).filter(v=>v.data===budgetRef).reduce((s,v)=>s+v.total,0);
-  const comprasHoje=(db.compras||[]).filter(c=>c.data===budgetRef).reduce((s,c)=>s+parseMoney(c.valor),0);
+  // Budget: vendas do dia de referência → budget de compras do DIA SEGUINTE
+  const diaRef=budgetRef;
+  const diaSeguinte=(()=>{const d=new Date(diaRef+"T12:00:00");d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);})();
+  const vendasHoje=(db.vendas||[]).filter(v=>v.data===diaRef).reduce((s,v)=>s+v.total,0);
+  const comprasHoje=(db.compras||[]).filter(c=>c.data===diaSeguinte).reduce((s,c)=>s+parseMoney(c.valor),0);
   const budgetHoje=vendasHoje*(budgetCmv/100);
   const disponivelHoje=budgetHoje-comprasHoje;
 
   // Budget combinado das duas empresas (mês atual)
   const empresas=["CONFRARIA","SEAMA"];
-  const totalDual=(emp:string,key:"vendas"|"compras",dia=false)=>{
+  const totalDual=(emp:string,key:"vendas"|"compras",tipo:"mes"|"vendas-dia"|"compras-dia"="mes")=>{
     const d=state?.[emp]||{};
-    const filtro=dia?(v:any)=>v.data===budgetRef:(v:any)=>v.data?.startsWith(mes);
+    if(tipo==="mes"){
+      if(key==="vendas") return (d.vendas||[]).filter((v:any)=>v.data?.startsWith(mes)).reduce((s:number,v:any)=>s+(v.total||0),0);
+      return (d.compras||[]).filter((c:any)=>c.data?.startsWith(mes)).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+    }
+    if(tipo==="vendas-dia") return (d.vendas||[]).filter((v:any)=>v.data===diaRef).reduce((s:number,v:any)=>s+(v.total||0),0);
+    return (d.compras||[]).filter((c:any)=>c.data===diaSeguinte).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  };
     if(key==="vendas") return (d.vendas||[]).filter(filtro).reduce((s:number,v:any)=>s+(v.total||0),0);
     return (d.compras||[]).filter(filtro).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   };
-  const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas"),0);
-  const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras"),0);
+  const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas","mes"),0);
+  const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras","mes"),0);
   const budgetTotal=vendasTotal*(budgetCmv/100);
   const saldoTotal=budgetTotal-comprasTotal;
-  // Dual diário (hoje)
-  const vendasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"vendas",true),0);
-  const comprasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"compras",true),0);
+  // Dual: vendas do diaRef → budget p/ diaSeguinte
+  const vendasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"vendas","vendas-dia"),0);
+  const comprasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"compras","compras-dia"),0);
   const budgetTotalHoje=vendasTotalHoje*(budgetCmv/100);
   const saldoTotalHoje=budgetTotalHoje-comprasTotalHoje;
   const save=()=>{
@@ -497,16 +505,21 @@ function Vendas({db,setDb,state}){
         </div>
       </div>
 
-      {/* Destaque: valor disponível para compras — CONFRARIA + SEAMA */}
+      {/* Destaque: budget do próximo dia baseado nas vendas do dia de referência */}
       <div style={{background:"linear-gradient(135deg,#0a1a30,#0d2040)",border:"2px solid #3b82f6",borderRadius:12,padding:"14px 16px",marginBottom:12,textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,marginBottom:4}}>
-          <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>💰 Budget disponível — CONFRARIA + SEAMA</span>
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
+          <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>💰 Vendas de</span>
           <input type="date" value={budgetRef} onChange={e=>setBudgetRef(e.target.value)}
             style={{background:"#0d2040",border:"1px solid #2a4070",borderRadius:6,color:"#60a5fa",fontSize:11,padding:"2px 6px",cursor:"pointer"}}/>
+          <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>→ Budget de compras de <strong style={{color:"#93c5fd"}}>{fmtDate(diaSeguinte)}</strong></span>
         </div>
-        <div style={{fontSize:30,fontWeight:800,color:saldoTotalHoje>=0?"#60a5fa":"#ff5c7a",lineHeight:1.1}}>{fmtMoney(Math.abs(saldoTotalHoje))}</div>
+        <div style={{fontSize:11,color:"#555",marginBottom:6}}>CONFRARIA + SEAMA</div>
+        <div style={{fontSize:32,fontWeight:800,color:saldoTotalHoje>=0?"#60a5fa":"#ff5c7a",lineHeight:1.1}}>{fmtMoney(Math.abs(saldoTotalHoje))}</div>
         {saldoTotalHoje<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-saldoTotalHoje)}</div>}
-        <div style={{fontSize:11,color:"#555",marginTop:6}}>{fmtMoney(vendasTotalHoje)} vendidos × {budgetCmv}% = {fmtMoney(budgetTotalHoje)} budget − {fmtMoney(comprasTotalHoje)} compras</div>
+        <div style={{fontSize:11,color:"#555",marginTop:6}}>
+          {fmtMoney(vendasTotalHoje)} vendidos × {budgetCmv}% = {fmtMoney(budgetTotalHoje)} budget
+          {comprasTotalHoje>0?` − ${fmtMoney(comprasTotalHoje)} já comprado`:""}
+        </div>
       </div>
 
       {/* Dual diário CONFRARIA+SEAMA */}
