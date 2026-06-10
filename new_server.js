@@ -13,7 +13,16 @@ const DIST = path.join(__dirname, 'dist');
 const LOGOS_DIR = path.join(__dirname, 'logos');
 const CERTS_DIR = path.join(__dirname, 'certs');
 const DADOS_DIR = path.join(__dirname, 'dados');
+const CACHE_FILE = path.join(CERTS_DIR, 'sefaz_cache.json');
 fs.mkdirSync(DADOS_DIR, { recursive: true });
+
+function loadCache() {
+  try { return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8')); } catch { return {}; }
+}
+function saveCache(data) {
+  fs.mkdirSync(CERTS_DIR, { recursive: true });
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(data));
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -372,6 +381,44 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  // NF-e cache — GET (retorna NF-es do auto-sync)
+  if (req.method === 'GET' && urlPath === '/api/nfe-cache') {
+    const emp = (req.url.split('?empresa=')[1]||'').split('&')[0].toUpperCase()||'CONFRARIA';
+    const cnpj = (process.env[`CNPJ_${emp}`]||'').replace(/\D/g,'');
+    const key = cnpj || emp;
+    const cache = loadCache();
+    const entry = cache[key] || { nfes:[], timestamp:null, ultNSU:0 };
+    res.setHeader('Content-Type','application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ nfes: entry.nfes||[], timestamp: entry.timestamp, ultNSU: entry.ultNSU||0 }));
+    return;
+  }
+
+  // NF-e cache — remover NF-es já importadas (por lista de NSUs)
+  if (req.method === 'POST' && urlPath === '/api/nfe-cache/remove') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { empresa, nsus } = JSON.parse(body);
+        const cnpj = (process.env[`CNPJ_${empresa}`]||'').replace(/\D/g,'');
+        const key = cnpj || empresa;
+        const cache = loadCache();
+        if (cache[key]) {
+          cache[key].nfes = (cache[key].nfes||[]).filter(n => !(nsus||[]).includes(n.nsu));
+          saveCache(cache);
+        }
+        res.setHeader('Content-Type','application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok:true }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // NF-e sync via SEFAZ
   if (req.method === 'POST' && urlPath === '/api/nfe-sync') {
     let body = '';
@@ -482,6 +529,46 @@ const server = http.createServer((req, res) => {
   res.end('App not built. Run: npm run build');
 });
 
+// ---- Auto-sync SEFAZ (background, every 65 minutes) ----
+
+async function autoSyncSEFAZ() {
+  const processed = new Set();
+  for (const emp of ['CONFRARIA', 'SEAMA']) {
+    const pfxPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
+    const keyPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}_key.pem`);
+    const hasCert  = (fs.existsSync(pfxPath) || fs.existsSync(keyPath)) && process.env[`CNPJ_${emp}`];
+    if (!hasCert) continue;
+    const cnpj = (process.env[`CNPJ_${emp}`]||'').replace(/\D/g,'');
+    const key  = cnpj || emp;
+    if (processed.has(key)) { console.log(`[AutoSync] ${emp}: mesmo CNPJ de empresa anterior, pulando.`); continue; }
+    processed.add(key);
+    console.log(`[AutoSync] Iniciando sync SEFAZ para ${emp} (CNPJ key: ${key})...`);
+    try {
+      const result = await sefazSync(emp);
+      const cache = loadCache();
+      const existing = cache[key]?.nfes || [];
+      const existingNsus = new Set(existing.map(n => n.nsu));
+      const novas = (result.nfes||[]).filter(n => !existingNsus.has(n.nsu));
+      const merged = [...novas, ...existing]
+        .sort((a,b) => (b.data||'').localeCompare(a.data||''))
+        .slice(0, 50);
+      cache[key] = { nfes: merged, timestamp: new Date().toISOString(), ultNSU: result.ultNSU, empresa: emp };
+      saveCache(cache);
+      if (novas.length > 0) {
+        console.log(`[AutoSync] ${emp}: ${novas.length} nova(s) NF-e(s) adicionada(s) ao cache. Total: ${merged.length}.`);
+      } else {
+        console.log(`[AutoSync] ${emp}: nenhuma NF-e nova (ultNSU=${result.ultNSU}).`);
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('656')) {
+        console.log(`[AutoSync] ${emp}: rate limit SEFAZ (656). Tentará novamente no próximo ciclo.`);
+      } else {
+        console.error(`[AutoSync] ${emp}: erro — ${e.message}`);
+      }
+    }
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`Servidor: http://localhost:${PORT}`);
   console.log(`API Key: ${API_KEY ? '✅ configurada' : '❌ AUSENTE (IA desabilitada)'}`);
@@ -490,4 +577,8 @@ server.listen(PORT, () => {
     const cnpj = process.env[`CNPJ_${emp}`];
     console.log(`NF-e ${emp}: ${fs.existsSync(pfx) && cnpj ? '✅ certificado OK' : '⚠️  sem certificado'}`);
   }
+  // Start auto-sync: first run 15s after startup, then every 65 minutes
+  setTimeout(() => autoSyncSEFAZ(), 15000);
+  setInterval(() => autoSyncSEFAZ(), 65 * 60 * 1000);
+  console.log('[AutoSync] Agendado: 15s após start, depois a cada 65 minutos.');
 });

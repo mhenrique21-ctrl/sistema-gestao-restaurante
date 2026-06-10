@@ -1011,8 +1011,24 @@ function Compras({db,setDb,empresa}){
 
   const [sefazNsuInput,setSefazNsuInput]=useState("");
   const [sefazShowNsuEdit,setSefazShowNsuEdit]=useState(false);
+  const [cacheTs,setCacheTs]=useState<string|null>(null);
+  const [cacheLoading,setCacheLoading]=useState(false);
 
   const fetchNSU=()=>fetch(`/api/nsu-status?empresa=${empresa}`).then(r=>r.json()).then(d=>{setSefazNSU(d.nsu??0);setSefazNsuInput(String(d.nsu??0));}).catch(()=>{});
+
+  const fetchCache=async()=>{
+    setCacheLoading(true);
+    try{
+      const r=await fetch(`/api/nfe-cache?empresa=${empresa}`);
+      const d=await r.json();
+      if((d.nfes||[]).length>0){
+        setSefazList(d.nfes);
+        if(d.ultNSU!=null){setSefazNSU(d.ultNSU);setSefazNsuInput(String(d.ultNSU));}
+      }
+      setCacheTs(d.timestamp?new Date(d.timestamp).toLocaleString("pt-BR"):null);
+    }catch{}
+    setCacheLoading(false);
+  };
 
   useEffect(()=>{
     fetch("/api/nfe-config").then(r=>r.json()).then(cfg=>setSefazConfig(cfg)).catch(()=>{});
@@ -1020,6 +1036,9 @@ function Compras({db,setDb,empresa}){
   },[]);
 
   useEffect(()=>{fetchNSU();},[empresa]);
+
+  // Auto-load cache when NF-e sub-tab opens
+  useEffect(()=>{if(subTab==="nfe")fetchCache();},[subTab,empresa]);
 
   const salvarNSUManual=async()=>{
     const val=parseInt(sefazNsuInput);
@@ -1065,6 +1084,11 @@ function Compras({db,setDb,empresa}){
     setSefazLoading(false);
   };
 
+  const removeFromCache=(nsus:number[])=>{
+    if(!nsus.length)return;
+    fetch("/api/nfe-cache/remove",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,nsus})}).catch(()=>{});
+  };
+
   const importarNFeSefaz=(nfe:any,all=false)=>{
     const forn=nfe.fornecedor;
     setDb(d=>{
@@ -1089,20 +1113,28 @@ function Compras({db,setDb,empresa}){
       const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
     });
-    if(!all)setSefazList(l=>l.filter(n=>n.nsu!==nfe.nsu));
+    if(!all){
+      setSefazList(l=>l.filter(n=>n.nsu!==nfe.nsu));
+      removeFromCache([nfe.nsu]);
+    }
   };
 
   const importarTodasNFeSefaz=()=>{
+    const nsus=sefazList.map(n=>n.nsu).filter(Boolean);
+    const count=sefazList.length;
     sefazList.forEach(nfe=>importarNFeSefaz(nfe,true));
     setSefazList([]);
-    alert(`✅ ${sefazList.length} NF-e(s) importadas!`);
+    removeFromCache(nsus);
+    alert(`✅ ${count} NF-e(s) importadas!`);
   };
 
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
       {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"]].map(([k,l])=>(
-        <button key={k} onClick={()=>setSubTab(k)} className="pill"
-          style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px"}}>{l}</button>
+        <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px",position:"relative"}}>
+          {l}
+          {k==="nfe"&&sefazList.length>0&&subTab!=="nfe"&&<span style={{position:"absolute",top:-4,right:-4,background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{sefazList.length}</span>}
+        </button>
       ))}
     </div>
 
@@ -1344,7 +1376,20 @@ function Compras({db,setDb,empresa}){
     {/* ===== NF-e XML + SEFAZ ===== */}
     {subTab==="nfe"&&<div>
 
-      {/* -- SEFAZ automático -- */}
+      {/* -- Banner auto-sync -- */}
+      {sefazConfig[empresa]&&<div style={{background:"linear-gradient(135deg,#0a1a10,#0d2010)",border:"1px solid #14532d",borderRadius:12,padding:"10px 14px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>⚡ Auto-sync ativo</div>
+          <div style={{fontSize:11,color:"#888",marginTop:1}}>Servidor consulta SEFAZ a cada 65 min automaticamente</div>
+          {cacheTs&&<div style={{fontSize:11,color:"#4ade80",marginTop:1}}>Última atualização: {cacheTs}</div>}
+        </div>
+        <button onClick={fetchCache} disabled={cacheLoading}
+          style={{background:"#0f3020",border:"1px solid #14532d",color:"#4ade80",borderRadius:8,padding:"6px 10px",fontSize:11,cursor:"pointer",flexShrink:0}}>
+          {cacheLoading?"⟳":"↺"} Recarregar
+        </button>
+      </div>}
+
+      {/* -- SEFAZ manual (avançado) -- */}
       <div className="card" style={{marginBottom:14,border:"1px solid #2a3260"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
           <div>
