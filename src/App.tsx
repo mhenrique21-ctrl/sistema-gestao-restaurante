@@ -411,9 +411,6 @@ function Vendas({db,setDb,state}){
     if(tipo==="vendas-dia") return (d.vendas||[]).filter((v:any)=>v.data===diaRef).reduce((s:number,v:any)=>s+(v.total||0),0);
     return (d.compras||[]).filter((c:any)=>c.data===diaSeguinte).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   };
-    if(key==="vendas") return (d.vendas||[]).filter(filtro).reduce((s:number,v:any)=>s+(v.total||0),0);
-    return (d.compras||[]).filter(filtro).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
-  };
   const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas","mes"),0);
   const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras","mes"),0);
   const budgetTotal=vendasTotal*(budgetCmv/100);
