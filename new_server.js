@@ -342,14 +342,34 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // NSU status (debug)
-  if (req.method === 'GET' && urlPath === '/api/nsu-status') {
-    const m = getNsuMap();
+  // NSU status / manual set
+  if (urlPath === '/api/nsu-status') {
     const emp = (req.url.split('?empresa=')[1]||'').split('&')[0].toUpperCase()||'CONFRARIA';
-    res.setHeader('Content-Type', 'application/json');
-    res.writeHead(200);
-    res.end(JSON.stringify({ nsu: m[emp]??0, all: m }));
-    return;
+    const cnpj = (process.env[`CNPJ_${emp}`]||'').replace(/\D/g,'');
+    const nsuKey = cnpj || emp;
+    if (req.method === 'GET') {
+      const m = getNsuMap();
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end(JSON.stringify({ nsu: m[nsuKey] ?? m[emp] ?? 0, nsuKey }));
+      return;
+    }
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const { nsu } = JSON.parse(body);
+          const val = parseInt(nsu);
+          if (isNaN(val) || val < 0) { res.writeHead(400); res.end(JSON.stringify({error:'NSU inválido'})); return; }
+          saveNsu(nsuKey, val);
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, nsu: val, nsuKey }));
+        } catch { res.writeHead(400); res.end(JSON.stringify({error:'JSON inválido'})); }
+      });
+      return;
+    }
   }
 
   // NF-e sync via SEFAZ
@@ -358,16 +378,16 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', async () => {
       try {
-        const { empresa, resetNsu } = JSON.parse(body);
+        const { empresa, resetNsu, customNsu } = JSON.parse(body);
         if (!['CONFRARIA', 'SEAMA'].includes(empresa)) {
           res.writeHead(400);
           res.end(JSON.stringify({ error: 'Empresa inválida' }));
           return;
         }
-        if (resetNsu) {
-          const cnpjReset = (process.env[`CNPJ_${empresa}`] || '').replace(/\D/g, '');
-          saveNsu(cnpjReset || empresa, 0);
-        }
+        const cnpjSync = (process.env[`CNPJ_${empresa}`] || '').replace(/\D/g, '');
+        const nsuKeySync = cnpjSync || empresa;
+        if (resetNsu) saveNsu(nsuKeySync, 0);
+        else if (customNsu !== undefined && !isNaN(parseInt(customNsu))) saveNsu(nsuKeySync, parseInt(customNsu));
         const result = await sefazSync(empresa);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);

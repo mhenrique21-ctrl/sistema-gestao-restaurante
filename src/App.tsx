@@ -940,10 +940,28 @@ function Compras({db,setDb,empresa}){
   const waitMs=sefaz656At?(sefaz656At+3600000-nowTs):0;
   const waitOk=waitMs<=0;
 
+  const [sefazNsuInput,setSefazNsuInput]=useState("");
+  const [sefazShowNsuEdit,setSefazShowNsuEdit]=useState(false);
+
+  const fetchNSU=()=>fetch(`/api/nsu-status?empresa=${empresa}`).then(r=>r.json()).then(d=>{setSefazNSU(d.nsu??0);setSefazNsuInput(String(d.nsu??0));}).catch(()=>{});
+
   useEffect(()=>{
     fetch("/api/nfe-config").then(r=>r.json()).then(cfg=>setSefazConfig(cfg)).catch(()=>{});
-    fetch("/api/nsu-status").then(r=>r.json()).then(d=>setSefazNSU(d.nsu??null)).catch(()=>{});
+    fetchNSU();
   },[]);
+
+  useEffect(()=>{fetchNSU();},[empresa]);
+
+  const salvarNSUManual=async()=>{
+    const val=parseInt(sefazNsuInput);
+    if(isNaN(val)||val<0){alert("NSU inválido");return;}
+    await fetch(`/api/nsu-status?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nsu:val})});
+    setSefazNSU(val);
+    setSefazShowNsuEdit(false);
+    setSefazError("");
+    localStorage.removeItem("sefaz_656_at");
+    setSefaz656At(null);
+  };
 
   useEffect(()=>{
     setSefazLastSync(localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
@@ -969,6 +987,7 @@ function Compras({db,setDb,empresa}){
         return d>=sefazDataIni&&d<=sefazDataFim;
       });
       setSefazList(filtradas);
+      if(data.ultNSU){setSefazNSU(data.ultNSU);setSefazNsuInput(String(data.ultNSU));}
       const ts=new Date().toLocaleString("pt-BR");
       setSefazLastSync(ts);
       localStorage.setItem(`sefaz_last_sync_${empresa}`,ts);
@@ -1251,7 +1270,17 @@ function Compras({db,setDb,empresa}){
             </div>
           </div>
         )}
-        {sefazNSU!==null&&<div style={{fontSize:11,color:"#888",marginBottom:6}}>NSU atual: <span style={{color:"#7c8fff",fontWeight:700}}>{sefazNSU}</span></div>}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+          <span style={{fontSize:11,color:"#888"}}>NSU atual: <span style={{color:sefazNSU===0?"#fbbf24":"#7c8fff",fontWeight:700}}>{sefazNSU??0}</span></span>
+          <button onClick={()=>setSefazShowNsuEdit(v=>!v)} style={{background:"none",border:"1px solid #2a3260",borderRadius:6,color:"#7c8fff",fontSize:10,padding:"2px 6px",cursor:"pointer"}}>✏️ Editar</button>
+        </div>
+        {sefazShowNsuEdit&&<div style={{background:"#0d1b2a",border:"1px solid #2a3260",borderRadius:8,padding:10,marginBottom:8}}>
+          <div style={{fontSize:11,color:"#fbbf24",marginBottom:6}}>⚠️ Se outra aplicação (PDV, ERP, contador) já consultou o SEFAZ com este CNPJ, o NSU pode estar desatualizado. Informe o NSU correto abaixo:</div>
+          <div style={{display:"flex",gap:6}}>
+            <input type="number" min="0" value={sefazNsuInput} onChange={e=>setSefazNsuInput(e.target.value)} className="inp" style={{flex:1}} placeholder="Ex: 500"/>
+            <button className="btn" onClick={salvarNSUManual} style={{background:"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13}}>Salvar</button>
+          </div>
+        </div>}
         {!waitOk&&<div style={{background:"#1a1a00",border:"1px solid #554400",borderRadius:8,padding:"10px",marginBottom:8,fontSize:12,color:"#fbbf24"}}>
           ⏱️ Aguardando limite SEFAZ — pode tentar novamente às <strong>{new Date((sefaz656At||0)+3600000).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</strong>
           <span style={{color:"#888",marginLeft:8}}>({Math.ceil(waitMs/60000)} min restantes)</span>
