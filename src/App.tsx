@@ -165,6 +165,7 @@ export default function App() {
     {id:"ficha",label:"Ficha",icon:"📝"},
     {id:"rh",label:"RH",icon:"👥"},
     {id:"dre",label:"DRE",icon:"📈"},
+    {id:"fluxo",label:"Fluxo",icon:"💵"},
     {id:"relatorios",label:"Relatórios",icon:"📄"},
     {id:"comparativo",label:"Versus",icon:"⚖️"},
   ];
@@ -259,6 +260,7 @@ export default function App() {
         {tab==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
         {tab==="rh"         && <RH db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
+        {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="relatorios" && <Relatorios db={db} empresa={empresa} state={state}/>}
         {tab==="comparativo"&& <Comparativo state={state}/>}
       </div>
@@ -783,6 +785,9 @@ function Compras({db,setDb,empresa}){
   const [novaCat,setNovaCat]=useState("");
   const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
   const [normEdit,setNormEdit]=useState<string|null>(null);
+  const [buscaProd,setBuscaProd]=useState("");
+  const [catColaps,setCatColaps]=useState<Set<string>>(new Set());
+  const [prodSubTab,setProdSubTab]=useState<"catalogo"|"substituicoes">("catalogo");
   const catsBase=["insumos","descartáveis","material de limpeza","proteína","bebidas"];
   const cats=[...catsBase,...(db.config?.categoriasExtra||[])];
   const unds=["kg","un","L","g","ml","pct"];
@@ -1607,81 +1612,139 @@ function Compras({db,setDb,empresa}){
     </div>}
 
     {subTab==="produtos"&&<div>
-      <div className="section-title">Cadastro de Produtos</div>
-      <div className="muted" style={{fontSize:12,marginBottom:12}}>Alimentado automaticamente via NF-e, Cupom IA e entradas manuais.</div>
-
-      <div className="card" style={{marginBottom:14}}>
-        <div className="section-title" style={{marginBottom:8}}>{prodEdit?"✏️ Editar produto":"➕ Novo produto"}</div>
-        <input placeholder="Nome do produto *" value={prodForm.nome} onChange={e=>setProdForm(p=>({...p,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <div className="row" style={{marginBottom:8}}>
-          <select value={prodForm.categoria} onChange={e=>setProdForm(p=>({...p,categoria:e.target.value}))} className="inp">
-            {cats.map(c=><option key={c} value={c}>{c}</option>)}
-          </select>
-          <select value={prodForm.unidade} onChange={e=>setProdForm(p=>({...p,unidade:e.target.value}))} className="inp" style={{maxWidth:80}}>
-            {unds.map(u=><option key={u} value={u}>{u}</option>)}
-          </select>
-        </div>
-        <MoneyInput value={prodForm.valor} onChange={v=>setProdForm(p=>({...p,valor:v}))} placeholder="Valor unitário" className="inp" style={{marginBottom:8}}/>
-        <div className="row">
-          <button className="btn" onClick={()=>{
-            if(!prodForm.nome)return alert("Nome é obrigatório.");
-            const v=parseMoney(prodForm.valor);
-            setDb(d=>{
-              const mps=[...(d.materiasPrimas||[])];
-              if(prodEdit){
-                const idx=mps.findIndex(m=>m.id===prodEdit);
-                if(idx>=0)mps[idx]={...mps[idx],nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||mps[idx].ultimoValor};
-              }else{
-                const ex=mps.find(m=>m.nome.toLowerCase()===prodForm.nome.toLowerCase());
-                if(ex){ex.categoria=prodForm.categoria;ex.unidade=prodForm.unidade;if(v>0)ex.ultimoValor=v;}
-                else mps.push({id:uid(),nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||0});
-              }
-              return{...d,materiasPrimas:mps};
-            });
-            setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""});
-            setProdEdit(null);
-          }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
-            {prodEdit?"💾 Atualizar":"➕ Cadastrar"}
-          </button>
-          {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""});}} style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
-        </div>
+      {/* Sub-tabs */}
+      <div style={{display:"flex",gap:5,marginBottom:14}}>
+        {[["catalogo","📦 Catálogo"],["substituicoes","🔄 Substituições"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setProdSubTab(k as any)} className="pill"
+            style={{background:prodSubTab===k?"#7c8fff":"var(--bg4)",color:prodSubTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
+        ))}
       </div>
 
-      {cats.map(cat=>{
-        const items=[...(db.materiasPrimas||[])].filter(m=>m.categoria===cat).sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0);
-        if(!items.length)return null;
-        return <div key={cat} style={{marginBottom:14}}>
-          <div className="section-title">{cat} ({items.length})</div>
-          {items.map(mp=>(
-            <div key={mp.id} className="list-item" style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:600,fontSize:14}}>{mp.nome}</div>
-                <div className="muted" style={{fontSize:12}}>{mp.unidade} • {mp.ultimoValor>0?`Último: ${fmtMoney(mp.ultimoValor)}`:"Sem preço cadastrado"}</div>
-              </div>
-              <button onClick={()=>{setProdForm({nome:mp.nome,categoria:mp.categoria,unidade:mp.unidade,valor:String(mp.ultimoValor||"").replace(".",",")});setProdEdit(mp.id);}} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#7c8fff"}}>✏️</button>
-              <button onClick={()=>{if(confirm("Excluir produto?"))setDb(d=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter(m=>m.id!==mp.id)}));}} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#ff5c7a"}}>🗑️</button>
-            </div>
-          ))}
-        </div>;
-      })}
-      {!(db.materiasPrimas||[]).length&&<EmptyState msg="Nenhum produto cadastrado. Importe via NF-e, Cupom IA ou cadastre manualmente."/>}
+      {/* ===== CATÁLOGO ===== */}
+      {prodSubTab==="catalogo"&&<div>
+        {/* Add/Edit form */}
+        <div className="card" style={{marginBottom:12,border:`1px solid ${prodEdit?"#7c8fff55":"var(--border)"}`}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{prodEdit?"✏️ Editar Produto":"➕ Novo Produto"}</div>
+          <input placeholder="Nome do produto *" value={prodForm.nome} onChange={e=>setProdForm(p=>({...p,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+          <div className="row" style={{marginBottom:8}}>
+            <select value={prodForm.categoria} onChange={e=>setProdForm(p=>({...p,categoria:e.target.value}))} className="inp">
+              {cats.map(c=><option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+            </select>
+            <select value={prodForm.unidade} onChange={e=>setProdForm(p=>({...p,unidade:e.target.value}))} className="inp" style={{maxWidth:80}}>
+              {unds.map(u=><option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <MoneyInput value={prodForm.valor} onChange={v=>setProdForm(p=>({...p,valor:v}))} placeholder="Valor unitário" className="inp" style={{marginBottom:8}}/>
+          {prodEdit&&(()=>{
+            const norma=(db.normalizacoes||[]).find((n:any)=>{
+              const nl=prodForm.nome.toLowerCase().trim();
+              const termos=[(n.nomePadrao||""),...(n.termos||[])].map((t:string)=>(t||"").toLowerCase().trim()).filter(Boolean);
+              return termos.some((t:string)=>(nl===t||nl.includes(t)||t.includes(nl)))&&n.nomePadrao!==prodForm.nome;
+            });
+            if(!norma)return null;
+            return <div style={{background:"#1a1230",border:"1px solid #4c1d95",borderRadius:8,padding:"8px 12px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:"#c4b5fd",flex:1}}>🔄 Substituição disponível: <strong>→ {norma.nomePadrao}</strong></span>
+              <button className="btn" onClick={()=>setProdForm(p=>({...p,nome:norma.nomePadrao}))}
+                style={{background:"#7c3aed",color:"#fff",padding:"5px 10px",fontSize:11,flexShrink:0}}>Aplicar</button>
+            </div>;
+          })()}
+          <div className="row">
+            <button className="btn" onClick={()=>{
+              if(!prodForm.nome)return alert("Nome é obrigatório.");
+              const v=parseMoney(prodForm.valor);
+              setDb(d=>{
+                const mps=[...(d.materiasPrimas||[])];
+                if(prodEdit){
+                  const idx=mps.findIndex(m=>m.id===prodEdit);
+                  if(idx>=0)mps[idx]={...mps[idx],nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||mps[idx].ultimoValor};
+                }else{
+                  const ex=mps.find(m=>m.nome.toLowerCase()===prodForm.nome.toLowerCase());
+                  if(ex){ex.categoria=prodForm.categoria;ex.unidade=prodForm.unidade;if(v>0)ex.ultimoValor=v;}
+                  else mps.push({id:uid(),nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||0});
+                }
+                return{...d,materiasPrimas:mps};
+              });
+              setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""});
+              setProdEdit(null);
+            }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
+              {prodEdit?"💾 Atualizar":"➕ Cadastrar"}
+            </button>
+            {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""}); }}
+              style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
+          </div>
+        </div>
 
-      {/* Substituições de nome (normalização) */}
-      <div style={{marginTop:18,paddingTop:14,borderTop:"1px solid #252840"}}>
-        <div className="section-title" style={{marginBottom:4}}>🔄 Substituições de Nome</div>
-        <div className="muted" style={{fontSize:12,marginBottom:12}}>
+        {/* Search bar */}
+        <div style={{position:"relative",marginBottom:12}}>
+          <input placeholder="🔍 Buscar produto..." value={buscaProd} onChange={e=>setBuscaProd(e.target.value)} className="inp" style={{paddingRight:buscaProd?36:14}}/>
+          {buscaProd&&<button onClick={()=>setBuscaProd("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+        </div>
+
+        {/* Categories (collapsible) */}
+        {cats.map(cat=>{
+          let items=[...(db.materiasPrimas||[])].filter(m=>m.categoria===cat);
+          if(buscaProd)items=items.filter(m=>m.nome.toLowerCase().includes(buscaProd.toLowerCase()));
+          if(!items.length)return null;
+          items.sort((a,b)=>a.nome?.localeCompare(b.nome,"pt-BR")??0);
+          const collapsed=catColaps.has(cat)&&!buscaProd;
+          const toggleCat=()=>setCatColaps(s=>{const n=new Set(s);if(n.has(cat))n.delete(cat);else n.add(cat);return n;});
+          const catIcons:Record<string,string>={insumos:"🧂","descartáveis":"🥤","material de limpeza":"🧹","proteína":"🥩",bebidas:"🍺"};
+          return <div key={cat} style={{marginBottom:8,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+            <div onClick={toggleCat} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",cursor:"pointer",background:"var(--bg3)",userSelect:"none" as const}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:16}}>{catIcons[cat]||"📦"}</span>
+                <span style={{fontSize:13,fontWeight:700,textTransform:"capitalize" as const}}>{cat}</span>
+                <span style={{fontSize:11,color:"#7c8fff",background:"#7c8fff18",borderRadius:20,padding:"1px 8px",fontWeight:700}}>{items.length}</span>
+              </div>
+              <span style={{color:"var(--text3)",fontSize:13,transition:"transform .2s",display:"inline-block",transform:collapsed?"rotate(-90deg)":"none"}}>▼</span>
+            </div>
+            {!collapsed&&<div>
+              {items.map(mp=>(
+                <div key={mp.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,background:"var(--bg2)"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:13,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mp.nome}</div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"var(--text3)",background:"var(--bg4)",borderRadius:6,padding:"1px 6px"}}>{mp.unidade}</span>
+                      {mp.ultimoValor>0
+                        ?<span style={{fontSize:11,color:"#4ade80",fontWeight:600}}>{fmtMoney(mp.ultimoValor)}</span>
+                        :<span style={{fontSize:11,color:"var(--text3)"}}>Sem preço</span>}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    <button onClick={()=>{
+                      setProdForm({nome:mp.nome,categoria:mp.categoria,unidade:mp.unidade,valor:String(mp.ultimoValor||"").replace(".",",")});
+                      setProdEdit(mp.id);
+                      window.scrollTo({top:0,behavior:"smooth"});
+                    }} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#7c8fff"}}>✏️</button>
+                    <button onClick={()=>{if(confirm(`Excluir "${mp.nome}"?`))setDb(d=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter(m=>m.id!==mp.id)}));}}
+                      style={{background:"var(--bg4)",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#ff5c7a"}}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>}
+          </div>;
+        })}
+        {!(db.materiasPrimas||[]).length&&<EmptyState msg="Nenhum produto cadastrado. Importe via NF-e, Cupom IA ou cadastre manualmente."/>}
+        {buscaProd&&cats.every(cat=>(db.materiasPrimas||[]).filter(m=>m.categoria===cat&&m.nome.toLowerCase().includes(buscaProd.toLowerCase())).length===0)&&(
+          <div className="muted" style={{textAlign:"center",padding:"20px",fontSize:13}}>Nenhum produto encontrado para "<strong>{buscaProd}</strong>"</div>
+        )}
+      </div>}
+
+      {/* ===== SUBSTITUIÇÕES ===== */}
+      {prodSubTab==="substituicoes"&&<div>
+        <div className="muted" style={{fontSize:12,marginBottom:12,lineHeight:1.5}}>
           Defina um <strong>nome padrão</strong> e as variações que devem ser substituídas ao dar entrada em compras.
-          Ex.: nome padrão "açúcar" → termos "açúcar cristal", "açúcar refinado", "açúcar union".
+          Ex.: nome padrão <em>"açúcar"</em> → termos "açúcar cristal, açúcar refinado, açúcar union".
         </div>
         <div className="card" style={{marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>{normEdit?"✏️ Editar substituição":"➕ Nova substituição"}</div>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{normEdit?"✏️ Editar Substituição":"➕ Nova Substituição"}</div>
           <input placeholder="Nome padrão (ex: açúcar)" value={normForm.nomePadrao}
             onChange={e=>setNormForm(f=>({...f,nomePadrao:e.target.value}))}
             className="inp" style={{marginBottom:8}}/>
           <textarea placeholder="Termos a substituir, separados por vírgula (ex: açúcar cristal, açúcar refinado union, acucar)"
             value={normForm.termos} onChange={e=>setNormForm(f=>({...f,termos:e.target.value}))}
-            className="inp" style={{height:70,resize:"vertical",marginBottom:8}}/>
-          <div className="muted" style={{fontSize:11,marginBottom:8}}>Qualquer nome de produto que CONTENHA um dos termos acima será substituído pelo nome padrão.</div>
+            className="inp" style={{height:70,resize:"vertical",marginBottom:6}}/>
+          <div className="muted" style={{fontSize:11,marginBottom:10}}>Qualquer produto que contenha um dos termos acima será renomeado ao importar (NF-e, Cupom IA, SEFAZ, manual).</div>
           <div className="row">
             <button className="btn" onClick={()=>{
               const np=normForm.nomePadrao.trim();
@@ -1701,20 +1764,20 @@ function Compras({db,setDb,empresa}){
             }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
               {normEdit?"💾 Atualizar":"➕ Salvar"}
             </button>
-            {normEdit&&<button className="btn" onClick={()=>{setNormEdit(null);setNormForm({nomePadrao:"",termos:""}); }}
+            {normEdit&&<button className="btn" onClick={()=>{setNormEdit(null);setNormForm({nomePadrao:"",termos:""});}}
               style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
           </div>
         </div>
         {(db.normalizacoes||[]).map((n:any)=>(
           <div key={n.id} className="list-item">
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#60a5fa"}}>→ {n.nomePadrao}</div>
-                <div className="muted" style={{fontSize:11,marginTop:3}}>
-                  {(n.termos||[]).length?n.termos.join(" • "):"(sem termos adicionais — substitui o nome igual)"}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#60a5fa",marginBottom:3}}>→ {n.nomePadrao}</div>
+                <div className="muted" style={{fontSize:11,lineHeight:1.5}}>
+                  {(n.termos||[]).length?(n.termos as string[]).join(" • "):"(sem termos — substitui o nome exato)"}
                 </div>
               </div>
-              <div style={{display:"flex",gap:4}}>
+              <div style={{display:"flex",gap:4,flexShrink:0}}>
                 <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
                   style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
                 <button onClick={()=>{if(confirm("Excluir substituição?"))setDb(d=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}
@@ -1723,8 +1786,8 @@ function Compras({db,setDb,empresa}){
             </div>
           </div>
         ))}
-        {!(db.normalizacoes||[]).length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"16px"}}>Nenhuma substituição cadastrada.</div>}
-      </div>
+        {!(db.normalizacoes||[]).length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"24px"}}>Nenhuma substituição cadastrada.</div>}
+      </div>}
     </div>}
   </div>;
 }
@@ -2579,6 +2642,150 @@ function DREComp({db,setDb,empresa}){
     </div>
   </div>;
 }
+
+// ===================== FLUXO DE CAIXA =====================
+function FluxoCaixa({db,setDb,empresa}){
+  const [mes,setMes]=useState(currentMonth());
+
+  const saldosIni=db.config?.saldosIniciais||{};
+  const saldoIniVal=saldosIni[mes]||0;
+  const [saldoIniStr,setSaldoIniStr]=useState(String(saldoIniVal||"").replace(".",","));
+
+  // Update input when mes or saldoIniVal changes
+  useEffect(()=>{setSaldoIniStr(String(saldosIni[mes]||"").replace(".",","));},[mes]);
+
+  const saveSaldo=()=>{
+    const v=parseMoney(saldoIniStr);
+    setDb(d=>({...d,config:{...(d.config||{}),saldosIniciais:{...(d.config?.saldosIniciais||{}),[mes]:v}}}));
+  };
+
+  const mesStart=mes+"-01";
+  const mesEnd=mes+"-31";
+  const inMes=(dt:string)=>dt>=mesStart&&dt<=mesEnd;
+
+  type Tx={id:string;data:string;descricao:string;tipo:"entrada"|"saida";valor:number;categoria:string;};
+
+  const vendasMes=(db.vendas||[]).filter((v:any)=>inMes(v.data||""));
+  const contasMes=(db.contas||[]).filter((c:any)=>c.status==="pago"&&inMes(c.vencimento||""));
+
+  const txs:Tx[]=[
+    ...vendasMes.map((v:any)=>({id:v.id,data:v.data,descricao:"Vendas do dia",tipo:"entrada" as const,valor:v.total||0,categoria:"Vendas"})),
+    ...contasMes.map((c:any)=>({id:c.id,data:c.vencimento,descricao:c.descricao||"—",tipo:(c.tipo==="entrada"?"entrada":"saida") as "entrada"|"saida",valor:parseMoney(c.valor),categoria:c.categoria||"—"})),
+  ].filter(t=>t.valor>0);
+
+  const byDate:Record<string,Tx[]>={};
+  txs.forEach(t=>{if(!byDate[t.data])byDate[t.data]=[];byDate[t.data].push(t);});
+  const dates=Object.keys(byDate).sort();
+
+  const totalEntradas=txs.filter(t=>t.tipo==="entrada").reduce((s,t)=>s+t.valor,0);
+  const totalSaidas=txs.filter(t=>t.tipo==="saida").reduce((s,t)=>s+t.valor,0);
+  const saldoFinal=saldoIniVal+totalEntradas-totalSaidas;
+
+  const print=()=>{
+    let runP=saldoIniVal;
+    const rows=dates.map(d=>{
+      const dTxs=byDate[d];
+      const dEnt=dTxs.filter(t=>t.tipo==="entrada").reduce((s,t)=>s+t.valor,0);
+      const dSai=dTxs.filter(t=>t.tipo==="saida").reduce((s,t)=>s+t.valor,0);
+      dTxs.forEach(t=>{runP+=t.tipo==="entrada"?t.valor:-t.valor;});
+      return `
+        <tr style="background:#f8f9fc"><td colspan="4" style="font-weight:700">${fmtDate(d)}</td></tr>
+        ${dTxs.map(t=>`<tr><td style="padding-left:20px">${t.descricao}</td><td>${t.categoria}</td><td style="color:${t.tipo==="entrada"?"#166534":"#991b1b"}">${t.tipo==="entrada"?"+":"-"}${fmtMoney(t.valor)}</td><td></td></tr>`).join("")}
+        <tr style="background:#f1f4f9"><td colspan="2" style="text-align:right;font-weight:700">Saldo acumulado</td><td></td><td style="font-weight:700;color:${runP>=0?"#166534":"#991b1b"}">${fmtMoney(runP)}</td></tr>`;
+    }).join("");
+    abrirRelatorio(gerarRelatorioHTML(`Fluxo de Caixa – ${monthLabel(mes)}`,empresa,`
+      <div class="summary-grid">
+        <div class="summary-card"><div class="lbl">Saldo Inicial</div><div class="val">${fmtMoney(saldoIniVal)}</div></div>
+        <div class="summary-card"><div class="lbl">Total Entradas</div><div class="val" style="color:#166534">+${fmtMoney(totalEntradas)}</div></div>
+        <div class="summary-card"><div class="lbl">Total Saídas</div><div class="val" style="color:#991b1b">-${fmtMoney(totalSaidas)}</div></div>
+        <div class="summary-card"><div class="lbl">Saldo Final</div><div class="val" style="color:${saldoFinal>=0?"#166534":"#991b1b"}">${fmtMoney(saldoFinal)}</div></div>
+      </div>
+      <div class="section"><h2>Movimentações</h2>
+        <table><thead><tr><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Saldo Acum.</th></tr></thead><tbody>${rows}</tbody>
+        <tfoot><tr class="total-row"><td colspan="3">SALDO FINAL</td><td>${fmtMoney(saldoFinal)}</td></tr></tfoot></table></div>`));
+  };
+
+  return <div>
+    <div className="section-title">💵 Fluxo de Caixa — {monthLabel(mes)}</div>
+
+    {/* Month + print */}
+    <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center"}}>
+      <input type="month" value={mes} onChange={e=>{setMes(e.target.value);setSaldoIniStr("");}} className="inp" style={{flex:1}}/>
+      <button className="btn" onClick={print}
+        style={{background:"#1a2040",border:"1px solid #3b82f6",color:"#60a5fa",padding:"10px 14px",fontSize:13,flexShrink:0}}>🖨️ Imprimir</button>
+    </div>
+
+    {/* Saldo inicial */}
+    <div className="card" style={{marginBottom:12,background:"linear-gradient(135deg,#0a1a30,#0d2040)",border:"1px solid #1e3a6f"}}>
+      <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Saldo Inicial do Mês</div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <MoneyInput value={saldoIniStr} onChange={v=>setSaldoIniStr(v)} placeholder="0,00" className="inp" style={{flex:1}}/>
+        <button className="btn" onClick={saveSaldo} style={{background:"#7c8fff",color:"#fff",padding:"10px 14px",fontSize:13,flexShrink:0}}>Salvar</button>
+      </div>
+      {saldoIniVal>0&&<div style={{marginTop:6,fontSize:12,color:"#7c8fff"}}>Saldo configurado: {fmtMoney(saldoIniVal)}</div>}
+    </div>
+
+    {/* Summary cards */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+      {[
+        {label:"Entradas",val:totalEntradas,c:"#4ade80",s:"+"},
+        {label:"Saídas",val:totalSaidas,c:"#ff5c7a",s:"-"},
+        {label:"Saldo Inicial",val:saldoIniVal,c:"#7c8fff",s:""},
+        {label:"Saldo Final",val:saldoFinal,c:saldoFinal>=0?"#4ade80":"#ff5c7a",s:""},
+      ].map(({label,val,c,s})=>(
+        <div key={label} style={{background:"var(--bg3)",borderRadius:12,padding:"12px",border:"1px solid var(--border)",textAlign:"center"}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:4}}>{label}</div>
+          <div style={{fontWeight:800,fontSize:17,color:c}}>{s}{fmtMoney(Math.abs(val))}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* Transactions grouped by date */}
+    {dates.length===0&&<EmptyState msg={`Nenhuma movimentação confirmada em ${monthLabel(mes)}`}/>}
+
+    {(()=>{
+      let running=saldoIniVal;
+      return dates.map(d=>{
+        const dTxs=byDate[d];
+        const dEnt=dTxs.filter(t=>t.tipo==="entrada").reduce((s,t)=>s+t.valor,0);
+        const dSai=dTxs.filter(t=>t.tipo==="saida").reduce((s,t)=>s+t.valor,0);
+        dTxs.forEach(t=>{running+=t.tipo==="entrada"?t.valor:-t.valor;});
+        const dayBal=running;
+        return <div key={d} style={{marginBottom:8,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+          <div style={{background:"var(--bg3)",padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontWeight:700,fontSize:13}}>{fmtDate(d)}</span>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              {dEnt>0&&<span style={{fontSize:12,color:"#4ade80",fontWeight:600}}>+{fmtMoney(dEnt)}</span>}
+              {dSai>0&&<span style={{fontSize:12,color:"#ff5c7a",fontWeight:600}}>−{fmtMoney(dSai)}</span>}
+            </div>
+          </div>
+          {dTxs.map(t=>(
+            <div key={t.id} style={{padding:"8px 14px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--bg2)"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{t.descricao}</div>
+                <div style={{fontSize:11,color:"var(--text3)"}}>{t.categoria}</div>
+              </div>
+              <span style={{fontWeight:700,fontSize:13,color:t.tipo==="entrada"?"#4ade80":"#ff5c7a",flexShrink:0,marginLeft:10}}>
+                {t.tipo==="entrada"?"+":"−"}{fmtMoney(t.valor)}
+              </span>
+            </div>
+          ))}
+          <div style={{padding:"6px 14px",background:"var(--bg4)",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8}}>
+            <span style={{fontSize:11,color:"var(--text3)"}}>Saldo acumulado:</span>
+            <span style={{fontWeight:700,fontSize:13,color:dayBal>=0?"#60a5fa":"#ff5c7a"}}>{fmtMoney(dayBal)}</span>
+          </div>
+        </div>;
+      });
+    })()}
+
+    {dates.length>0&&<div style={{background:saldoFinal>=0?"linear-gradient(135deg,#0a2010,#0f3020)":"linear-gradient(135deg,#2a0a0a,#3a1010)",border:`1px solid ${saldoFinal>=0?"#166534":"#991b1b"}`,borderRadius:12,padding:"16px",textAlign:"center",marginTop:4}}>
+      <div style={{fontSize:12,color:"#888",marginBottom:4}}>Saldo Final — {monthLabel(mes)}</div>
+      <div style={{fontSize:28,fontWeight:800,color:saldoFinal>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(saldoFinal)}</div>
+      <div style={{fontSize:11,color:"#888",marginTop:4}}>{fmtMoney(saldoIniVal)} inicial + {fmtMoney(totalEntradas)} entradas − {fmtMoney(totalSaidas)} saídas</div>
+    </div>}
+  </div>;
+}
+
 
 function Relatorios({db,empresa,state}){
   const [relDe,setRelDe]=useState(today().slice(0,8)+"01");
