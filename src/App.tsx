@@ -255,12 +255,12 @@ export default function App() {
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
         {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
-        {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa}/>}
+        {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
         {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
         {tab==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
         {tab==="rh"         && <RH db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
-        {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa}/>}
+        {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
         {tab==="relatorios" && <Relatorios db={db} empresa={empresa} state={state}/>}
         {tab==="comparativo"&& <Comparativo state={state}/>}
       </div>
@@ -760,7 +760,7 @@ function parseNFe(xmlString) {
 }
 
 // ===================== COMPRAS (multi-produto + IA + financeiro) =====================
-function Compras({db,setDb,empresa}){
+function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:string,state?:any,setState?:any}){
   const [subTab,setSubTab]=useState("novo");
 
   // ---- Carrinho (entrada manual multi-produto) ----
@@ -1609,6 +1609,19 @@ function Compras({db,setDb,empresa}){
                         <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(totalVivo)}</td></tr></tfoot></table>`));
                     }} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir</button>
                     <button className="btn" onClick={()=>{
+                      const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
+                      if(!confirm(`Transferir compra #${num} para ${outra}?`))return;
+                      if(setState)setState((prev:any)=>{
+                        const dest=prev[outra];
+                        const novoGrupoId=uid();
+                        const novosItens=itensVivos.map(it=>({...it,id:uid(),grupoId:novoGrupoId}));
+                        const contaOrig=(prev[empresa].contas||[]).find((c:any)=>c.grupoId===nota.grupoId);
+                        const novaConta=contaOrig?{...contaOrig,id:uid(),grupoId:novoGrupoId}:null;
+                        return{...prev,[outra]:{...dest,compras:[...novosItens,...(dest.compras||[])],contas:novaConta?[novaConta,...(dest.contas||[])]:dest.contas}};
+                      });
+                      alert(`✅ Compra transferida para ${outra}`);
+                    }} style={{background:"#1a1a30",color:"#a78bfa",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
+                    <button className="btn" onClick={()=>{
                       if(!confirm("Excluir esta nota e todos os seus itens?"))return;
                       setDb(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
                       setVerNota(null);
@@ -1839,52 +1852,89 @@ function Compras({db,setDb,empresa}){
 
 // ===================== CONTAS =====================
 function Contas({db,setDb}){
+  const fPagOpts=["dinheiro","pix","cartão débito","cartão crédito","boleto","transferência","outros"];
+  const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes"};
   const [subTab,setSubTab]=useState("lista");
-  const [form,setForm]=useState({descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida"});
-  const [editId,setEditId]=useState(null);
+  const [form,setForm]=useState<any>(emptyForm);
+  const [editId,setEditId]=useState<string|null>(null);
+  const [editGrupoRecorr,setEditGrupoRecorr]=useState<string|null>(null);
   const [novacat,setNovacat]=useState("");
   const [filtro,setFiltro]=useState("todos");
   const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
   const [verConta,setVerConta]=useState<any>(null);
+  const [verGrupo,setVerGrupo]=useState<string|null>(null);
+
+  const gerarVenc=(base:string,i:number,periodo:string)=>{
+    const d=new Date(base+"T12:00:00");
+    if(periodo==="dia")d.setDate(d.getDate()+i);
+    else if(periodo==="semana")d.setDate(d.getDate()+i*7);
+    else d.setMonth(d.getMonth()+i);
+    return d.toISOString().slice(0,10);
+  };
 
   const save=()=>{
     if(!form.descricao||!form.valor)return alert("Preencha descrição e valor.");
-    const c={id:editId||uid(),...form,valor:parseMoney(form.valor)};
-    if(editId){setDb(d=>({...d,contas:d.contas.map(x=>x.id===editId?c:x)}));setEditId(null);}
-    else{setDb(d=>({...d,contas:[c,...d.contas]}));}
-    setForm({descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida"});
+    const base={categoria:form.categoria,valor:parseMoney(form.valor),status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor};
+    const n=form.recorrente?Math.max(parseInt(form.parcelas)||1,1):1;
+    if(n>1){
+      const gRecorr=editGrupoRecorr||uid();
+      const novas=Array.from({length:n},(_:any,i:number)=>({
+        id:uid(),descricao:`${form.descricao} (${i+1}/${n})`,
+        vencimento:gerarVenc(form.vencimento,i,form.periodo),
+        grupoRecorr:gRecorr,parcela:i+1,totalParcelas:n,...base,
+      }));
+      if(editGrupoRecorr){setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[]).filter((c:any)=>c.grupoRecorr!==editGrupoRecorr)]}));}
+      else{setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[])]}));}
+      setEditGrupoRecorr(null);
+    }else{
+      const c={id:editId||uid(),descricao:form.descricao,vencimento:form.vencimento,...base};
+      if(editId){setDb((d:any)=>({...d,contas:(d.contas||[]).map((x:any)=>x.id===editId?c:x)}));setEditId(null);}
+      else{setDb((d:any)=>({...d,contas:[c,...(d.contas||[])]}));}
+    }
+    setForm(emptyForm);setSubTab("lista");
   };
-  const edit=(c)=>{setEditId(c.id);setForm({...c,valor:String((parseMoney(c.valor)||c.valor).toFixed?parseMoney(c.valor).toFixed(2):c.valor).replace(".",",")});setSubTab("novo");};
-  const del=(id)=>setDb(d=>({...d,contas:d.contas.filter(c=>c.id!==id)}));
-  const toggle=(id)=>setDb(d=>{
-    const conta=d.contas.find(c=>c.id===id);
+
+  const edit=(c:any)=>{
+    setEditId(c.id);setEditGrupoRecorr(null);
+    const descBase=c.grupoRecorr?c.descricao.replace(/ \(\d+\/\d+\)$/,""):c.descricao;
+    setForm({...emptyForm,...c,descricao:descBase,valor:String(parseMoney(c.valor)).replace(".",","),recorrente:false,parcelas:"1"});
+    setSubTab("novo");
+  };
+  const editGrupo=(gid:string,items:any[])=>{
+    const first=items[0];
+    const descBase=first.descricao.replace(/ \(\d+\/\d+\)$/,"");
+    setEditId(null);setEditGrupoRecorr(gid);
+    setForm({...emptyForm,...first,descricao:descBase,valor:String(parseMoney(first.valor)).replace(".",","),recorrente:true,parcelas:String(items.length),periodo:"mes"});
+    setSubTab("novo");
+  };
+  const del=(id:string)=>setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));
+  const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
+  const pagarGrupo=(gid:string)=>setDb((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.grupoRecorr===gid?{...c,status:"pago"}:c)}));
+  const toggle=(id:string)=>setDb((d:any)=>{
+    const conta=(d.contas||[]).find((c:any)=>c.id===id);
     const novoStatus=conta?.status==="pago"?"pendente":"pago";
-    const contas=d.contas.map(c=>c.id===id?{...c,status:novoStatus}:c);
-    if(novoStatus==="pago"&&conta?.origem==="adiantamento_rh")
-      return{...d,contas,adiantamentos:(d.adiantamentos||[]).filter(a=>a.contaId!==id)};
+    const contas=(d.contas||[]).map((c:any)=>c.id===id?{...c,status:novoStatus}:c);
+    if(novoStatus==="pago"&&conta?.origem==="adiantamento_rh")return{...d,contas,adiantamentos:(d.adiantamentos||[]).filter((a:any)=>a.contaId!==id)};
     return{...d,contas};
   });
 
-  const contas=[...(db.contas||[])].filter(c=>filtro==="todos"?true:c.status===filtro).sort((a,b)=>{const d=((a.vencimento||"")<(b.vencimento||""))?-1:1;return sortDir==="asc"?d:-d;});
-  const totPago=contas.filter(c=>c.status==="pago").reduce((s,c)=>s+parseMoney(c.valor),0);
-  const totPend=contas.filter(c=>c.status==="pendente").reduce((s,c)=>s+parseMoney(c.valor),0);
-
-  // por categoria
-  const byCat={};
-  (db.contas||[]).forEach(c=>{const k=c.categoria||"Outros";byCat[k]=(byCat[k]||{pago:0,pendente:0});byCat[k][c.status]=(byCat[k][c.status]||0)+parseMoney(c.valor);});
+  const contasFiltradas=[...(db.contas||[])].filter((c:any)=>filtro==="todos"?true:c.status===filtro).sort((a:any,b:any)=>{const x=((a.vencimento||"")<(b.vencimento||""))?-1:1;return sortDir==="asc"?x:-x;});
+  const totPago=contasFiltradas.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  const totPend=contasFiltradas.filter((c:any)=>c.status==="pendente").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  const grupos:Record<string,any[]>={};
+  contasFiltradas.filter((c:any)=>c.grupoRecorr).forEach((c:any)=>{if(!grupos[c.grupoRecorr])grupos[c.grupoRecorr]=[];grupos[c.grupoRecorr].push(c);});
+  const normais=contasFiltradas.filter((c:any)=>!c.grupoRecorr);
 
   return <div>
     {verConta&&(()=>{
-      const itens=(db.compras||[]).filter(c=>c.grupoId===verConta.grupoId);
+      const itens=(db.compras||[]).filter((c:any)=>c.grupoId===verConta.grupoId);
       return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <div className="card" style={{width:"100%",maxWidth:480,maxHeight:"80vh",overflowY:"auto"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <span style={{fontWeight:700,fontSize:14}}>{verConta.descricao}</span>
             <button onClick={()=>setVerConta(null)} style={{background:"none",border:"none",color:"#888",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
           </div>
-          <div className="muted" style={{fontSize:12,marginBottom:12}}>
-            {fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}
-          </div>
+          <div className="muted" style={{fontSize:12,marginBottom:12}}>{fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div>
           {itens.length?<>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead><tr style={{borderBottom:"1px solid #252840"}}>
@@ -1893,17 +1943,15 @@ function Contas({db,setDb}){
                 <th style={{textAlign:"right",padding:"4px 6px",color:"#888",fontWeight:600}}>Unit.</th>
                 <th style={{textAlign:"right",padding:"4px 6px",color:"#888",fontWeight:600}}>Total</th>
               </tr></thead>
-              <tbody>{itens.map(it=><tr key={it.id} style={{borderBottom:"1px solid #1a1d2e"}}>
+              <tbody>{itens.map((it:any)=><tr key={it.id} style={{borderBottom:"1px solid #1a1d2e"}}>
                 <td style={{padding:"5px 6px"}}>{it.nomeProduto}<br/><span className="muted" style={{fontSize:10}}>{it.categoria}</span></td>
                 <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap"}}>{it.quantidade} {it.unidade}</td>
                 <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap"}}>{fmtMoney(it.valorUnitario||0)}</td>
                 <td style={{textAlign:"right",padding:"5px 6px",fontWeight:600,whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(it.valor))}</td>
               </tr>)}</tbody>
             </table>
-            <div style={{textAlign:"right",marginTop:10,fontWeight:700,fontSize:14}}>
-              Total: {fmtMoney(itens.reduce((s,it)=>s+parseMoney(it.valor),0))}
-            </div>
-          </>:<div className="muted" style={{textAlign:"center",padding:20}}>Itens não disponíveis (compra antiga)</div>}
+            <div style={{textAlign:"right",marginTop:10,fontWeight:700,fontSize:14}}>Total: {fmtMoney(itens.reduce((s:number,it:any)=>s+parseMoney(it.valor),0))}</div>
+          </>:<div className="muted" style={{textAlign:"center",padding:20}}>Itens não disponíveis</div>}
         </div>
       </div>;
     })()}
@@ -1922,25 +1970,82 @@ function Contas({db,setDb}){
         ))}
         <button onClick={()=>setSortDir(s=>s==="asc"?"desc":"asc")} className="pill"
           style={{background:"var(--border)",color:"#888",border:"1px solid #252840",fontSize:12,padding:"5px 12px",marginLeft:"auto"}}>
-          📅 {sortDir==="asc"?"↑ Mais antigo":"↓ Mais recente"}
+          📅 {sortDir==="asc"?"↑":"↓"}
         </button>
       </div>
       <div style={{display:"flex",gap:10,marginBottom:14}}>
         <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#ff5c7a",fontWeight:700,fontSize:16}}>{fmtMoney(totPend)}</div><div className="muted" style={{fontSize:11}}>A Pagar</div></div>
         <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#4ade80",fontWeight:700,fontSize:16}}>{fmtMoney(totPago)}</div><div className="muted" style={{fontSize:11}}>Pago</div></div>
       </div>
-      {contas.map(c=>(
+
+      {/* Recurring groups */}
+      {Object.entries(grupos).map(([gid,items]:any)=>{
+        const sorted=[...items].sort((a:any,b:any)=>(a.vencimento||"").localeCompare(b.vencimento||""));
+        const expanded=verGrupo===gid;
+        const totalG=items.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+        const pagasG=items.filter((c:any)=>c.status==="pago").length;
+        const descBase=sorted[0].descricao.replace(/ \(\d+\/\d+\)$/,"");
+        const nextPend=sorted.find((c:any)=>c.status==="pendente");
+        return <div key={gid} style={{marginBottom:8,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+          <div onClick={()=>setVerGrupo((v:any)=>v===gid?null:gid)}
+            style={{padding:"12px 14px",cursor:"pointer",background:"var(--bg3)",display:"flex",gap:10,alignItems:"center"}}>
+            <span style={{fontSize:18,lineHeight:1}}>{expanded?"📂":"📁"}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
+                {descBase}
+                <span style={{fontSize:10,color:"#a78bfa",background:"#2d1a4f",borderRadius:20,padding:"1px 7px",fontWeight:700}}>🔄 {items.length}x</span>
+              </div>
+              <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                {sorted[0].categoria&&<span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{sorted[0].categoria}</span>}
+                {sorted[0].formaPag&&<span>{sorted[0].formaPag}</span>}
+                {sorted[0].fornecedor&&<span>• {sorted[0].fornecedor}</span>}
+                {nextPend&&<span style={{color:"#fbbf24"}}>• Próx: {fmtDate(nextPend.vencimento)}</span>}
+              </div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontWeight:700,fontSize:14,color:"#a78bfa"}}>{fmtMoney(totalG)}</div>
+              <div style={{fontSize:11,color:pagasG===items.length?"#4ade80":"#888"}}>{pagasG}/{items.length} pagas</div>
+            </div>
+          </div>
+          {expanded&&<div>
+            {sorted.map((c:any)=>(
+              <div key={c.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)",background:"var(--bg2)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                  <span style={{fontSize:13,fontWeight:600}}>{c.descricao}</span>
+                  <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a"}}>{fmtMoney(parseMoney(c.valor))}</span>
+                </div>
+                <div style={{fontSize:11,color:"#888",marginBottom:6}}>{fmtDate(c.vencimento)}</div>
+                <div style={{display:"flex",gap:5}}>
+                  <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
+                  <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"5px 10px",fontSize:11}}>✏️</button>
+                  <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>🗑️</button>
+                </div>
+              </div>
+            ))}
+            <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",background:"var(--bg3)",display:"flex",gap:6,flexWrap:"wrap" as const}}>
+              <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
+              <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"#7c8fff",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
+              <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
+            </div>
+          </div>}
+        </div>;
+      })}
+
+      {/* Normal contas */}
+      {normais.map((c:any)=>(
         <div key={c.id} className="list-item">
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
             <span style={{fontWeight:600,flex:1,marginRight:8}}>{c.descricao}</span>
             <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a",whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(c.valor))}</span>
           </div>
-          <div className="muted" style={{marginBottom:8}}>
-            {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"var(--border)",color:c.categoria==="Adiantamento"?"#fbbf24":"#888",marginRight:6}}>{c.categoria}</span>}
-            Vence: {fmtDate(c.vencimento)}
-            {c.origem==="compra"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",marginLeft:6,fontSize:10}}>compra</span>}
+          <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginBottom:6,fontSize:11,color:"#888",alignItems:"center"}}>
+            {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"var(--border)",color:c.categoria==="Adiantamento"?"#fbbf24":"#888"}}>{c.categoria}</span>}
+            <span>Vence: {fmtDate(c.vencimento)}</span>
+            {c.formaPag&&<span>· {c.formaPag}</span>}
+            {c.fornecedor&&<span>· {c.fornecedor}</span>}
+            {c.origem==="compra"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>compra</span>}
           </div>
-          <div style={{display:"flex",gap:8}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
             <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"6px 12px",fontSize:12}}>
               {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
             </button>
@@ -1950,29 +2055,71 @@ function Contas({db,setDb}){
           </div>
         </div>
       ))}
-      {!contas.length&&<EmptyState msg="Nenhuma conta encontrada"/>}
+      {!normais.length&&!Object.keys(grupos).length&&<EmptyState msg="Nenhuma conta encontrada"/>}
     </div>}
 
     {subTab==="novo"&&<div>
-      <div className="section-title">{editId?"Editar Conta":"Nova Conta"}</div>
+      <div className="section-title">{editId||editGrupoRecorr?"Editar Conta":"Nova Conta a Pagar / Receber"}</div>
       <div className="card">
-        <input placeholder="Descrição" value={form.descricao} onChange={e=>setForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <select value={form.categoria} onChange={e=>setForm(f=>({...f,categoria:e.target.value}))} className="inp" style={{marginBottom:8}}>
-          <option value="">Selecionar categoria</option>
-          {(db.categorias||[]).map(c=><option key={c} value={c}>{c}</option>)}
-        </select>
-        <MoneyInput value={form.valor} onChange={v=>setForm(f=>({...f,valor:v}))} placeholder="Valor (R$)" className="inp"/>
-        <input type="date" value={form.vencimento} onChange={e=>setForm(f=>({...f,vencimento:e.target.value}))} className="inp" style={{marginTop:8}}/>
-        <div className="row" style={{marginTop:8}}>
-          <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} className="inp">
-            <option value="pendente">Pendente</option><option value="pago">Pago</option>
+        <input placeholder="Descrição *" value={form.descricao} onChange={e=>setForm((f:any)=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <input placeholder="Fornecedor / Credor" value={form.fornecedor} onChange={e=>setForm((f:any)=>({...f,fornecedor:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <div className="row" style={{marginBottom:8}}>
+          <select value={form.categoria} onChange={e=>setForm((f:any)=>({...f,categoria:e.target.value}))} className="inp">
+            <option value="">Categoria</option>
+            {(db.categorias||[]).map((c:string)=><option key={c} value={c}>{c}</option>)}
           </select>
-          <select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))} className="inp">
+          <select value={form.tipo} onChange={e=>setForm((f:any)=>({...f,tipo:e.target.value}))} className="inp">
             <option value="saida">Saída</option><option value="entrada">Entrada</option>
           </select>
         </div>
-        <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar"}</button>
-        {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida"});}}
+        <div className="row" style={{marginBottom:8}}>
+          <MoneyInput value={form.valor} onChange={(v:string)=>setForm((f:any)=>({...f,valor:v}))} placeholder="Valor (R$)" className="inp"/>
+          <select value={form.formaPag} onChange={e=>setForm((f:any)=>({...f,formaPag:e.target.value}))} className="inp">
+            <option value="">Forma de pagamento</option>
+            {fPagOpts.map(p=><option key={p} value={p}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>)}
+          </select>
+        </div>
+        <div className="row" style={{marginBottom:8}}>
+          <div style={{flex:1}}>
+            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Vencimento (1ª parcela)</label>
+            <input type="date" value={form.vencimento} onChange={e=>setForm((f:any)=>({...f,vencimento:e.target.value}))} className="inp"/>
+          </div>
+          <div style={{flex:1}}>
+            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Status</label>
+            <select value={form.status} onChange={e=>setForm((f:any)=>({...f,status:e.target.value}))} className="inp">
+              <option value="pendente">Pendente</option><option value="pago">Pago</option>
+            </select>
+          </div>
+        </div>
+        <div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+          <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none" as const}}>
+            <input type="checkbox" checked={form.recorrente} onChange={e=>setForm((f:any)=>({...f,recorrente:e.target.checked}))} style={{width:16,height:16,cursor:"pointer"}}/>
+            <span style={{fontSize:13,fontWeight:600}}>🔄 Pagamento recorrente / parcelado</span>
+          </label>
+          {form.recorrente&&<div style={{marginTop:10}}>
+            <div className="row">
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Nº de parcelas</label>
+                <input type="number" min="2" max="60" value={form.parcelas} onChange={e=>setForm((f:any)=>({...f,parcelas:e.target.value}))} className="inp" style={{textAlign:"center"}}/>
+              </div>
+              <div style={{flex:2}}>
+                <label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Periodicidade</label>
+                <select value={form.periodo} onChange={e=>setForm((f:any)=>({...f,periodo:e.target.value}))} className="inp">
+                  <option value="dia">Diário</option>
+                  <option value="semana">Semanal</option>
+                  <option value="mes">Mensal</option>
+                </select>
+              </div>
+            </div>
+            {parseInt(form.parcelas)>1&&<div style={{marginTop:8,fontSize:11,color:"#7c8fff",background:"#0d1220",borderRadius:6,padding:"6px 10px"}}>
+              Vai gerar {form.parcelas}x de {fmtMoney(parseMoney(form.valor))} — Total: {fmtMoney(parseMoney(form.valor)*(parseInt(form.parcelas)||1))}
+            </div>}
+          </div>}
+        </div>
+        <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15}}>
+          {editId||editGrupoRecorr?"💾 Atualizar":"💾 Salvar"}
+        </button>
+        {(editId||editGrupoRecorr)&&<button className="btn" onClick={()=>{setEditId(null);setEditGrupoRecorr(null);setForm(emptyForm);setSubTab("lista");}}
           style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
     </div>}
@@ -1982,14 +2129,14 @@ function Contas({db,setDb}){
       <div className="card" style={{marginBottom:12}}>
         <div className="row">
           <input placeholder="Nova categoria" value={novacat} onChange={e=>setNovacat(e.target.value)} className="inp"/>
-          <button className="btn" onClick={()=>{if(!novacat)return;setDb(d=>({...d,categorias:[...(d.categorias||[]),novacat]}));setNovacat("");}}
+          <button className="btn" onClick={()=>{if(!novacat)return;setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),novacat]}));setNovacat("");}}
             style={{background:"#7c8fff",color:"#fff",padding:"10px 16px",whiteSpace:"nowrap"}}>+ Add</button>
         </div>
       </div>
-      {(db.categorias||[]).map(c=>(
+      {(db.categorias||[]).map((c:string)=>(
         <div key={c} className="list-item" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span>{c}</span>
-          <button className="btn" onClick={()=>setDb(d=>({...d,categorias:d.categorias.filter(x=>x!==c)}))}
+          <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:d.categorias.filter((x:string)=>x!==c)}))}
             style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
       ))}
@@ -2689,7 +2836,7 @@ function DREComp({db,setDb,empresa}){
 }
 
 // ===================== FLUXO DE CAIXA =====================
-function FluxoCaixa({db,setDb,empresa}){
+function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:string,state?:any,setState?:any}){
   const [mes,setMes]=useState(currentMonth());
 
   const saldosIni=db.config?.saldosIniciais||{};
@@ -2802,6 +2949,27 @@ function FluxoCaixa({db,setDb,empresa}){
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               {dEnt>0&&<span style={{fontSize:12,color:"#4ade80",fontWeight:600}}>+{fmtMoney(dEnt)}</span>}
               {dSai>0&&<span style={{fontSize:12,color:"#ff5c7a",fontWeight:600}}>−{fmtMoney(dSai)}</span>}
+              {setState&&<button onClick={(e)=>{
+                e.stopPropagation();
+                const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
+                if(!confirm(`Transferir ${dTxs.length} registro(s) de ${fmtDate(d)} para ${outra}?`))return;
+                setState((prev:any)=>{
+                  const dest=prev[outra];
+                  let newVendas=[...(dest.vendas||[])];
+                  let newContas=[...(dest.contas||[])];
+                  dTxs.forEach((t:any)=>{
+                    if(t.categoria==="Vendas"){
+                      const orig=(db.vendas||[]).find((v:any)=>v.id===t.id);
+                      if(orig)newVendas=[{...orig,id:uid()},...newVendas];
+                    }else{
+                      const orig=(db.contas||[]).find((c:any)=>c.id===t.id);
+                      if(orig)newContas=[{...orig,id:uid()},...newContas];
+                    }
+                  });
+                  return{...prev,[outra]:{...dest,vendas:newVendas,contas:newContas}};
+                });
+                alert(`✅ ${dTxs.length} registro(s) transferido(s) para ${outra}`);
+              }} style={{background:"none",border:"1px solid #4c1d95",color:"#a78bfa",borderRadius:6,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>📤 Mover</button>}
             </div>
           </div>
           {dTxs.map(t=>(
