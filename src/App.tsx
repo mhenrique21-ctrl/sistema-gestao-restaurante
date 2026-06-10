@@ -496,12 +496,12 @@ function Vendas({db,setDb,state}){
         </div>
       </div>
 
-      {/* Destaque: valor disponível para compras hoje */}
+      {/* Destaque: valor disponível para compras hoje — CONFRARIA + SEAMA */}
       <div style={{background:"linear-gradient(135deg,#0a1a30,#0d2040)",border:"2px solid #3b82f6",borderRadius:12,padding:"14px 16px",marginBottom:12,textAlign:"center"}}>
-        <div style={{fontSize:11,color:"#888",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>💰 Disponível para compras hoje ({fmtDate(today())})</div>
-        <div style={{fontSize:30,fontWeight:800,color:disponivelHoje>=0?"#60a5fa":"#ff5c7a",lineHeight:1.1}}>{fmtMoney(Math.abs(disponivelHoje))}</div>
-        {disponivelHoje<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-disponivelHoje)}</div>}
-        <div style={{fontSize:11,color:"#555",marginTop:6}}>{fmtMoney(vendasHoje)} vendidos × {budgetCmv}% CMV = {fmtMoney(budgetHoje)} budget − {fmtMoney(comprasHoje)} compras</div>
+        <div style={{fontSize:11,color:"#888",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>💰 Disponível para compras hoje ({fmtDate(today())}) — CONFRARIA + SEAMA</div>
+        <div style={{fontSize:30,fontWeight:800,color:saldoTotalHoje>=0?"#60a5fa":"#ff5c7a",lineHeight:1.1}}>{fmtMoney(Math.abs(saldoTotalHoje))}</div>
+        {saldoTotalHoje<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-saldoTotalHoje)}</div>}
+        <div style={{fontSize:11,color:"#555",marginTop:6}}>{fmtMoney(vendasTotalHoje)} vendidos × {budgetCmv}% = {fmtMoney(budgetTotalHoje)} budget − {fmtMoney(comprasTotalHoje)} compras</div>
       </div>
 
       {/* Dual diário CONFRARIA+SEAMA */}
