@@ -8,6 +8,7 @@ const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d)
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
+  normalizacoes:[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -18,6 +19,15 @@ const fmtMoney  = (v) => (parseFloat(v)||0).toLocaleString("pt-BR",{style:"curre
 const fmtPct    = (v) => `${(parseFloat(v)||0).toFixed(1)}%`;
 const today     = () => new Date().toISOString().split("T")[0];
 const uid       = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
+const normalizarNome=(nome:string,norms:any[])=>{
+  if(!nome||!norms?.length)return nome;
+  const nl=nome.toLowerCase().trim();
+  for(const n of norms){
+    const termos=[(n.nomePadrao||""),...(n.termos||[])].map(t=>(t||"").toLowerCase().trim()).filter(Boolean);
+    if(termos.some(t=>nl===t||nl.includes(t)||t.includes(nl)))return n.nomePadrao;
+  }
+  return nome;
+};
 const parseMoney= (s) => {
   const str=String(s).trim();
   // handles "1.234,56" (pt-BR) or "1234.56" (en) or "1234,56"
@@ -98,6 +108,7 @@ export default function App() {
       if(!m[e])m[e]=mkDb();
       if(!m[e].consumacoes)m[e].consumacoes=[];
       if(!m[e].encargos)m[e].encargos=[];
+      if(!m[e].normalizacoes)m[e].normalizacoes=[];
       if(!m[e].config)m[e].config={snAliquota:6};
       if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
     });
@@ -770,6 +781,8 @@ function Compras({db,setDb,empresa}){
   const [editFornForm,setEditFornForm]=useState({nome:"",cnpj:"",endereco:""});
   const [showCatMgmt,setShowCatMgmt]=useState(false);
   const [novaCat,setNovaCat]=useState("");
+  const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
+  const [normEdit,setNormEdit]=useState<string|null>(null);
   const catsBase=["insumos","descartáveis","material de limpeza","proteína","bebidas"];
   const cats=[...catsBase,...(db.config?.categoriasExtra||[])];
   const unds=["kg","un","L","g","ml","pct"];
@@ -813,7 +826,7 @@ function Compras({db,setDb,empresa}){
       // registrar cada item em compras
       const grupoId=uid();
       const novasCompras=carrinho.map(item=>({
-        id:uid(), fornecedor, nomeProduto:item.nomeProduto,
+        id:uid(), fornecedor, nomeProduto:normalizarNome(item.nomeProduto,d.normalizacoes),
         categoria:item.categoria, unidade:item.unidade,
         quantidade:parseFloat(item.quantidade)||0,
         valorUnitario:parseMoney(item.valorUnit),
@@ -904,7 +917,7 @@ function Compras({db,setDb,empresa}){
         fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||""});
       const grupoId=uid();
       const novasCompras=(iaResult.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
         unidade:item.unidade||"un",quantidade:item.quantidade||0,
         valor:item.valorTotal||0,valorUnitario:item.valorUnitario||0,
         data:iaResult.data||today(),origem:"ia",grupoId,
@@ -952,7 +965,7 @@ function Compras({db,setDb,empresa}){
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
       const grupoId=uid();
       const novasCompras=(nfeResult.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
         data:nfeResult.data||today(),origem:"nfe",
@@ -1055,7 +1068,7 @@ function Compras({db,setDb,empresa}){
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
       const grupoId=uid();
       const novasCompras=(nfe.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:item.nome,categoria:item.categoria,
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
         data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,
@@ -1652,6 +1665,66 @@ function Compras({db,setDb,empresa}){
         </div>;
       })}
       {!(db.materiasPrimas||[]).length&&<EmptyState msg="Nenhum produto cadastrado. Importe via NF-e, Cupom IA ou cadastre manualmente."/>}
+
+      {/* Substituições de nome (normalização) */}
+      <div style={{marginTop:18,paddingTop:14,borderTop:"1px solid #252840"}}>
+        <div className="section-title" style={{marginBottom:4}}>🔄 Substituições de Nome</div>
+        <div className="muted" style={{fontSize:12,marginBottom:12}}>
+          Defina um <strong>nome padrão</strong> e as variações que devem ser substituídas ao dar entrada em compras.
+          Ex.: nome padrão "açúcar" → termos "açúcar cristal", "açúcar refinado", "açúcar union".
+        </div>
+        <div className="card" style={{marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>{normEdit?"✏️ Editar substituição":"➕ Nova substituição"}</div>
+          <input placeholder="Nome padrão (ex: açúcar)" value={normForm.nomePadrao}
+            onChange={e=>setNormForm(f=>({...f,nomePadrao:e.target.value}))}
+            className="inp" style={{marginBottom:8}}/>
+          <textarea placeholder="Termos a substituir, separados por vírgula (ex: açúcar cristal, açúcar refinado union, acucar)"
+            value={normForm.termos} onChange={e=>setNormForm(f=>({...f,termos:e.target.value}))}
+            className="inp" style={{height:70,resize:"vertical",marginBottom:8}}/>
+          <div className="muted" style={{fontSize:11,marginBottom:8}}>Qualquer nome de produto que CONTENHA um dos termos acima será substituído pelo nome padrão.</div>
+          <div className="row">
+            <button className="btn" onClick={()=>{
+              const np=normForm.nomePadrao.trim();
+              if(!np)return alert("Informe o nome padrão.");
+              const termos=normForm.termos.split(",").map(t=>t.trim()).filter(Boolean);
+              setDb(d=>{
+                const norms=[...(d.normalizacoes||[])];
+                if(normEdit){
+                  const idx=norms.findIndex(n=>n.id===normEdit);
+                  if(idx>=0)norms[idx]={...norms[idx],nomePadrao:np,termos};
+                }else{
+                  norms.push({id:uid(),nomePadrao:np,termos});
+                }
+                return{...d,normalizacoes:norms};
+              });
+              setNormForm({nomePadrao:"",termos:""});setNormEdit(null);
+            }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
+              {normEdit?"💾 Atualizar":"➕ Salvar"}
+            </button>
+            {normEdit&&<button className="btn" onClick={()=>{setNormEdit(null);setNormForm({nomePadrao:"",termos:""}); }}
+              style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
+          </div>
+        </div>
+        {(db.normalizacoes||[]).map((n:any)=>(
+          <div key={n.id} className="list-item">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#60a5fa"}}>→ {n.nomePadrao}</div>
+                <div className="muted" style={{fontSize:11,marginTop:3}}>
+                  {(n.termos||[]).length?n.termos.join(" • "):"(sem termos adicionais — substitui o nome igual)"}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:4}}>
+                <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
+                  style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+                <button onClick={()=>{if(confirm("Excluir substituição?"))setDb(d=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}
+                  style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {!(db.normalizacoes||[]).length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"16px"}}>Nenhuma substituição cadastrada.</div>}
+      </div>
     </div>}
   </div>;
 }
