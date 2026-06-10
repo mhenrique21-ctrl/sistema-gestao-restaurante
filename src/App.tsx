@@ -391,17 +391,29 @@ function Vendas({db,setDb,state}){
   const budgetDia=vendasDia*(budgetCmv/100);
   const saldoDia=budgetDia-comprasDia;
 
+  // Budget de HOJE (data real) para destacar o valor disponível p/ compras
+  const vendasHoje=(db.vendas||[]).filter(v=>v.data===today()).reduce((s,v)=>s+v.total,0);
+  const comprasHoje=(db.compras||[]).filter(c=>c.data===today()).reduce((s,c)=>s+parseMoney(c.valor),0);
+  const budgetHoje=vendasHoje*(budgetCmv/100);
+  const disponivelHoje=budgetHoje-comprasHoje;
+
   // Budget combinado das duas empresas (mês atual)
   const empresas=["CONFRARIA","SEAMA"];
-  const totalDual=(emp:string,key:"vendas"|"compras")=>{
+  const totalDual=(emp:string,key:"vendas"|"compras",dia=false)=>{
     const d=state?.[emp]||{};
-    if(key==="vendas") return (d.vendas||[]).filter((v:any)=>v.data?.startsWith(mes)).reduce((s:number,v:any)=>s+(v.total||0),0);
-    return (d.compras||[]).filter((c:any)=>c.data?.startsWith(mes)).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+    const filtro=dia?(v:any)=>v.data===today():(v:any)=>v.data?.startsWith(mes);
+    if(key==="vendas") return (d.vendas||[]).filter(filtro).reduce((s:number,v:any)=>s+(v.total||0),0);
+    return (d.compras||[]).filter(filtro).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   };
   const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas"),0);
   const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras"),0);
   const budgetTotal=vendasTotal*(budgetCmv/100);
   const saldoTotal=budgetTotal-comprasTotal;
+  // Dual diário (hoje)
+  const vendasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"vendas",true),0);
+  const comprasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"compras",true),0);
+  const budgetTotalHoje=vendasTotalHoje*(budgetCmv/100);
+  const saldoTotalHoje=budgetTotalHoje-comprasTotalHoje;
   const save=()=>{
     const reg={id:editId||uid(),data:form.data,total,
       maquininha:parseMoney(form.maquininha||0),
@@ -483,6 +495,25 @@ function Vendas({db,setDb,state}){
           <span style={{fontSize:11,color:"#888"}}>%</span>
         </div>
       </div>
+
+      {/* Destaque: valor disponível para compras hoje */}
+      <div style={{background:"linear-gradient(135deg,#0a1a30,#0d2040)",border:"2px solid #3b82f6",borderRadius:12,padding:"14px 16px",marginBottom:12,textAlign:"center"}}>
+        <div style={{fontSize:11,color:"#888",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>💰 Disponível para compras hoje ({fmtDate(today())})</div>
+        <div style={{fontSize:30,fontWeight:800,color:disponivelHoje>=0?"#60a5fa":"#ff5c7a",lineHeight:1.1}}>{fmtMoney(Math.abs(disponivelHoje))}</div>
+        {disponivelHoje<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-disponivelHoje)}</div>}
+        <div style={{fontSize:11,color:"#555",marginTop:6}}>{fmtMoney(vendasHoje)} vendidos × {budgetCmv}% CMV = {fmtMoney(budgetHoje)} budget − {fmtMoney(comprasHoje)} compras</div>
+      </div>
+
+      {/* Dual diário CONFRARIA+SEAMA */}
+      {vendasTotalHoje>0&&<div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginBottom:10,border:"1px solid #353860"}}>
+        <div style={{fontSize:11,color:"var(--acc)",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>🏢 Consolidado hoje — CONFRARIA + SEAMA</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Vendas hoje</div><div style={{fontWeight:700,color:"#4ade80",fontSize:14}}>{fmtMoney(vendasTotalHoje)}</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Budget ({budgetCmv}%)</div><div style={{fontWeight:700,color:"#60a5fa",fontSize:14}}>{fmtMoney(budgetTotalHoje)}</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Compras hoje</div><div style={{fontWeight:700,color:"#fbbf24",fontSize:14}}>{fmtMoney(comprasTotalHoje)}</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Saldo consolidado</div><div style={{fontWeight:800,fontSize:16,color:saldoTotalHoje>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoTotalHoje))}{saldoTotalHoje<0?" ⚠️":""}</div></div>
+        </div>
+      </div>}
 
       {/* Dia */}
       <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
@@ -710,18 +741,23 @@ function Compras({db,setDb,empresa}){
   const [formaPag,setFormaPag]=useState("dinheiro");
   const [vencimento,setVencimento]=useState(today());
   const [carrinho,setCarrinho]=useState([]);
-  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:""});
+  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:""});
   const [sugestoes,setSugestoes]=useState([]);
   const [sugestoesForn,setSugestoesForn]=useState([]);
   const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:""});
   const [prodEdit,setProdEdit]=useState<string|null>(null);
-  const [verNota,setVerNota]=useState<string|null>(null); // grupoId expandido
+  const [verNota,setVerNota]=useState<string|null>(null);
   const [editItemId,setEditItemId]=useState<string|null>(null);
   const [editItemForm,setEditItemForm]=useState<any>(null);
   const [notaForn,setNotaForn]=useState("");
   const [notaData,setNotaData]=useState("");
-  const cats=["insumos","descartáveis","material de limpeza","proteína"];
-  const unds=["kg","un","L"];
+  const [editFornId,setEditFornId]=useState<string|null>(null);
+  const [editFornForm,setEditFornForm]=useState({nome:"",cnpj:"",endereco:""});
+  const [showCatMgmt,setShowCatMgmt]=useState(false);
+  const [novaCat,setNovaCat]=useState("");
+  const catsBase=["insumos","descartáveis","material de limpeza","proteína","bebidas"];
+  const cats=[...catsBase,...(db.config?.categoriasExtra||[])];
+  const unds=["kg","un","L","g","ml","pct"];
   const formasPag=["dinheiro","cartão débito","cartão crédito","pix","boleto","fiado"];
 
   const totalCarrinho=carrinho.reduce((s,i)=>s+parseMoney(i.valorTotal),0);
@@ -750,7 +786,7 @@ function Compras({db,setDb,empresa}){
   const addItem=()=>{
     if(!itemAtual.nomeProduto||!itemAtual.valorTotal)return alert("Preencha produto e valor total.");
     setCarrinho(c=>[...c,{...itemAtual,id:uid(),valorTotal:itemAtual.valorTotal,valorUnit:itemAtual.valorUnit}]);
-    setItemAtual({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:""});
+    setItemAtual({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:""});
     setSugestoes([]);
   };
   const remItem=(id)=>setCarrinho(c=>c.filter(i=>i.id!==id));
@@ -1104,24 +1140,35 @@ function Compras({db,setDb,empresa}){
           <select value={itemAtual.categoria} onChange={e=>setItemAtual(i=>({...i,categoria:e.target.value}))} className="inp">
             {cats.map(c=><option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
           </select>
-          <select value={itemAtual.unidade} onChange={e=>setItemAtual(i=>({...i,unidade:e.target.value}))} className="inp">
-            {unds.map(u=><option key={u} value={u}>{u==="kg"?"kg":u==="un"?"un":"L"}</option>)}
+          <select value={itemAtual.unidade} onChange={e=>setItemAtual(i=>({...i,unidade:e.target.value,qtdPorPacote:""}))} className="inp">
+            {unds.map(u=><option key={u} value={u}>{u==="kg"?"kg (quilograma)":u==="un"?"un (unidade)":u==="L"?"L (litro)":u==="g"?"g (grama)":u==="ml"?"ml (mililitro)":"pct (pacote)"}</option>)}
           </select>
         </div>
+        {itemAtual.unidade==="pct"&&<div style={{background:"#0d1220",border:"1px solid #2a3260",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
+          <label style={{fontSize:11,color:"#7c8fff",display:"block",marginBottom:3}}>Qtd por pacote (para calcular valor unitário)</label>
+          <input type="number" placeholder="Ex: 12 (unidades por caixa)" value={itemAtual.qtdPorPacote}
+            onChange={e=>setItemAtual(i=>({...i,qtdPorPacote:e.target.value}))}
+            className="inp" style={{marginBottom:0}}/>
+        </div>}
         <div className="row" style={{marginBottom:8}}>
           <div style={{flex:1}}>
-            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Quantidade</label>
+            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Quantidade{itemAtual.unidade==="pct"?" (pacotes)":""}</label>
             <input type="number" placeholder="0" value={itemAtual.quantidade}
               onChange={e=>{const qtd=e.target.value;const tot=calcTotal(itemAtual.valorUnit,qtd);setItemAtual(i=>({...i,quantidade:qtd,valorTotal:tot}));}}
               className="inp"/>
           </div>
           <div style={{flex:1}}>
-            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Valor Unitário</label>
+            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>{itemAtual.unidade==="pct"?"Valor por pacote":"Valor Unitário"}</label>
             <MoneyInput value={itemAtual.valorUnit}
               onChange={v=>{const tot=calcTotal(v,itemAtual.quantidade);setItemAtual(i=>({...i,valorUnit:v,valorTotal:tot}));}}
               className="inp"/>
           </div>
         </div>
+        {itemAtual.unidade==="pct"&&itemAtual.qtdPorPacote&&itemAtual.valorUnit&&(
+          <div style={{fontSize:11,color:"#888",marginBottom:6,textAlign:"right"}}>
+            Valor/unidade: {fmtMoney(parseMoney(itemAtual.valorUnit)/(parseFloat(itemAtual.qtdPorPacote)||1))}
+          </div>
+        )}
         <div style={{marginBottom:10}}>
           <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Valor Total do Item</label>
           <MoneyInput value={itemAtual.valorTotal} onChange={v=>setItemAtual(i=>({...i,valorTotal:v}))} className="inp"/>
@@ -1129,6 +1176,28 @@ function Compras({db,setDb,empresa}){
         <button className="btn" onClick={addItem} style={{background:"var(--border2)",color:"var(--text)",padding:"11px",width:"100%",fontSize:14}}>
           + Adicionar ao Carrinho
         </button>
+        <button onClick={()=>setShowCatMgmt(v=>!v)} style={{background:"none",border:"none",color:"#7c8fff",fontSize:11,cursor:"pointer",marginTop:6,padding:"2px 0"}}>
+          ⚙️ Gerenciar categorias personalizadas
+        </button>
+        {showCatMgmt&&<div style={{background:"#0d1220",border:"1px solid #2a3260",borderRadius:8,padding:10,marginTop:6}}>
+          <div style={{display:"flex",gap:6,marginBottom:6}}>
+            <input value={novaCat} onChange={e=>setNovaCat(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}/>
+            <button className="btn" onClick={()=>{
+              const n=novaCat.trim().toLowerCase();
+              if(!n||cats.includes(n))return;
+              setDb(d=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));
+              setNovaCat("");
+            }} style={{background:"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13}}>+</button>
+          </div>
+          {(db.config?.categoriasExtra||[]).map((c:string)=>(
+            <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #1e2235"}}>
+              <span style={{fontSize:12,color:"#aaa"}}>{c.charAt(0).toUpperCase()+c.slice(1)}</span>
+              <button onClick={()=>setDb(d=>({...d,config:{...(d.config||{}),categoriasExtra:(d.config?.categoriasExtra||[]).filter((x:string)=>x!==c)}}))}
+                style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:13}}>🗑️</button>
+            </div>
+          ))}
+          {!(db.config?.categoriasExtra||[]).length&&<span style={{fontSize:11,color:"#555"}}>Nenhuma categoria extra cadastrada.</span>}
+        </div>}
       </div>
 
       {/* carrinho */}
@@ -1480,8 +1549,30 @@ function Compras({db,setDb,empresa}){
       <div className="section-title">Fornecedores</div>
       {[...(db.fornecedores||[])].sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0).map(f=>(
         <div key={f.id} className="list-item">
-          <div style={{fontWeight:600}}>{f.nome}</div>
-          {f.endereco&&<div className="muted" style={{marginTop:3}}>{f.endereco}</div>}
+          {editFornId===f.id?(
+            <div>
+              <input value={editFornForm.nome} onChange={e=>setEditFornForm(x=>({...x,nome:e.target.value}))} className="inp" placeholder="Nome" style={{marginBottom:6}}/>
+              <input value={editFornForm.cnpj} onChange={e=>setEditFornForm(x=>({...x,cnpj:e.target.value}))} className="inp" placeholder="CNPJ" style={{marginBottom:6}}/>
+              <input value={editFornForm.endereco} onChange={e=>setEditFornForm(x=>({...x,endereco:e.target.value}))} className="inp" placeholder="Endereço" style={{marginBottom:8}}/>
+              <div style={{display:"flex",gap:6}}>
+                <button className="btn" onClick={()=>{
+                  setDb(d=>({...d,fornecedores:(d.fornecedores||[]).map(x=>x.id===f.id?{...x,...editFornForm}:x)}));
+                  setEditFornId(null);
+                }} style={{background:"#7c8fff",color:"#fff",flex:1,padding:"8px",fontSize:13}}>✓ Salvar</button>
+                <button className="btn" onClick={()=>setEditFornId(null)} style={{background:"var(--border2)",color:"var(--text)",flex:1,padding:"8px",fontSize:13}}>Cancelar</button>
+              </div>
+            </div>
+          ):(
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600}}>{f.nome}</div>
+                {f.cnpj&&<div className="muted" style={{fontSize:11,marginTop:2}}>CNPJ: {f.cnpj}</div>}
+                {f.endereco&&<div className="muted" style={{fontSize:11,marginTop:2}}>{f.endereco}</div>}
+              </div>
+              <button onClick={()=>{setEditFornId(f.id);setEditFornForm({nome:f.nome||"",cnpj:f.cnpj||"",endereco:f.endereco||""});}}
+                style={{background:"none",border:"none",color:"#7c8fff",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✏️</button>
+            </div>
+          )}
         </div>
       ))}
       {!(db.fornecedores||[]).length&&<EmptyState msg="Nenhum fornecedor cadastrado"/>}
@@ -2365,19 +2456,38 @@ function DREComp({db,setDb,empresa}){
         </div>
       </div>
       {vendasBrutas>0&&<div>
-        <div style={{fontSize:11,fontWeight:700,color:"#60a5fa",marginBottom:8}}>Por R$100 vendidos</div>
+        <div style={{fontSize:11,fontWeight:700,color:"#60a5fa",marginBottom:10}}>Para cada R$100,00 vendidos</div>
         {[
-          {label:"CMV",val:(totalCMV/vendasBrutas)*100,c:"#ff5c7a"},
-          {label:`Simples Nacional (${sn}%)`,val:sn,c:"#f59e0b"},
-          {label:"Despesas",val:(totalDesp/vendasBrutas)*100,c:"#a78bfa"},
-          {label:"Lucro Líquido",val:(lucroLiq/vendasBrutas)*100,c:col(lucroLiq)},
-        ].map(({label,val,c})=>(
-          <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1e3060"}}>
-            <span style={{fontSize:12,color:"#888"}}>{label}</span>
-            <span style={{fontWeight:700,color:c,fontSize:13}}>R${Math.abs(val).toFixed(2)}</span>
+          {label:"Taxas delivery (iFood/99food)",val:(despVendas/vendasBrutas)*100,c:"#f87171"},
+          {label:`Impostos Simples Nacional (${sn}%)`,val:sn,c:"#f59e0b"},
+          {label:"CMV — custo dos insumos",val:(totalCMV/vendasBrutas)*100,c:"#fb923c"},
+          {label:"Despesas fixas e variáveis",val:(totalDesp/vendasBrutas)*100,c:"#a78bfa"},
+          {label:"💰 Lucro líquido final",val:(lucroLiq/vendasBrutas)*100,c:lucroLiq>=0?"#4ade80":"#ff5c7a",bold:true},
+        ].map(({label,val,c,bold})=>(
+          <div key={label} style={{marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+              <span style={{fontSize:11,color:bold?"var(--text)":"#888",fontWeight:bold?700:400}}>{label}</span>
+              <span style={{fontWeight:bold?800:700,color:c,fontSize:bold?15:13}}>R${Math.abs(val).toFixed(2)}</span>
+            </div>
+            <div style={{height:5,background:"#1a1d2e",borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",borderRadius:3,width:`${Math.min(Math.abs(val),100)}%`,background:c,opacity:bold?1:0.7}}/>
+            </div>
           </div>
         ))}
+        <div style={{borderTop:"1px solid #1e3060",paddingTop:8,marginTop:4,textAlign:"center"}}>
+          <span style={{fontSize:10,color:"#555"}}>Restante não alocado: R${Math.max(100-(despVendas/vendasBrutas*100+sn+totalCMV/vendasBrutas*100+totalDesp/vendasBrutas*100+Math.max(lucroLiq/vendasBrutas*100,0)),0).toFixed(2)}</span>
+        </div>
       </div>}
+      <div style={{marginTop:12,padding:"10px",background:"#0a1a10",borderRadius:8,border:"1px solid #14532d",textAlign:"center"}}>
+        <div style={{fontSize:10,color:"#888",marginBottom:2}}>Margem de Contribuição (sobra para cobrir fixas)</div>
+        <div style={{fontSize:22,fontWeight:800,color:mcPct>=30?"#4ade80":"#f59e0b"}}>{mcPct.toFixed(1)}%</div>
+        <div style={{fontSize:11,color:"#888",marginTop:2}}>{fmtMoney(mc)} sobre {fmtMoney(vendasBrutas)}</div>
+        {pe>0&&<div style={{marginTop:8,padding:"6px",background:"#0d1a30",borderRadius:6}}>
+          <div style={{fontSize:10,color:"#888"}}>Ponto de equilíbrio (vendas viram lucro)</div>
+          <div style={{fontSize:16,fontWeight:700,color:"#fbbf24"}}>{fmtMoney(pe)}/mês</div>
+          <div style={{fontSize:10,color:"#555"}}>≈ {fmtMoney(pe/30)}/dia</div>
+        </div>}
+      </div>
     </div>
   </div>;
 }
