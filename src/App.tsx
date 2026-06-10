@@ -366,6 +366,7 @@ function Vendas({db,setDb,state}){
   const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:"",nfoodTaxa:"","99food":"",delivery:""});
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
+  const [budgetRef,setBudgetRef]=useState(today());
   const ifoodBruto=parseMoney(form.ifood||0);
   const nfoodBruto=parseMoney(form["99food"]||0);
   const ifoodTaxaPct=parseFloat(form.ifoodTaxa)||0;
@@ -391,9 +392,9 @@ function Vendas({db,setDb,state}){
   const budgetDia=vendasDia*(budgetCmv/100);
   const saldoDia=budgetDia-comprasDia;
 
-  // Budget de HOJE (data real) para destacar o valor disponível p/ compras
-  const vendasHoje=(db.vendas||[]).filter(v=>v.data===today()).reduce((s,v)=>s+v.total,0);
-  const comprasHoje=(db.compras||[]).filter(c=>c.data===today()).reduce((s,c)=>s+parseMoney(c.valor),0);
+  // Budget do dia de referência (editável) para o card de destaque
+  const vendasHoje=(db.vendas||[]).filter(v=>v.data===budgetRef).reduce((s,v)=>s+v.total,0);
+  const comprasHoje=(db.compras||[]).filter(c=>c.data===budgetRef).reduce((s,c)=>s+parseMoney(c.valor),0);
   const budgetHoje=vendasHoje*(budgetCmv/100);
   const disponivelHoje=budgetHoje-comprasHoje;
 
@@ -401,7 +402,7 @@ function Vendas({db,setDb,state}){
   const empresas=["CONFRARIA","SEAMA"];
   const totalDual=(emp:string,key:"vendas"|"compras",dia=false)=>{
     const d=state?.[emp]||{};
-    const filtro=dia?(v:any)=>v.data===today():(v:any)=>v.data?.startsWith(mes);
+    const filtro=dia?(v:any)=>v.data===budgetRef:(v:any)=>v.data?.startsWith(mes);
     if(key==="vendas") return (d.vendas||[]).filter(filtro).reduce((s:number,v:any)=>s+(v.total||0),0);
     return (d.compras||[]).filter(filtro).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   };
@@ -496,9 +497,13 @@ function Vendas({db,setDb,state}){
         </div>
       </div>
 
-      {/* Destaque: valor disponível para compras hoje — CONFRARIA + SEAMA */}
+      {/* Destaque: valor disponível para compras — CONFRARIA + SEAMA */}
       <div style={{background:"linear-gradient(135deg,#0a1a30,#0d2040)",border:"2px solid #3b82f6",borderRadius:12,padding:"14px 16px",marginBottom:12,textAlign:"center"}}>
-        <div style={{fontSize:11,color:"#888",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>💰 Disponível para compras hoje ({fmtDate(today())}) — CONFRARIA + SEAMA</div>
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,marginBottom:4}}>
+          <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>💰 Budget disponível — CONFRARIA + SEAMA</span>
+          <input type="date" value={budgetRef} onChange={e=>setBudgetRef(e.target.value)}
+            style={{background:"#0d2040",border:"1px solid #2a4070",borderRadius:6,color:"#60a5fa",fontSize:11,padding:"2px 6px",cursor:"pointer"}}/>
+        </div>
         <div style={{fontSize:30,fontWeight:800,color:saldoTotalHoje>=0?"#60a5fa":"#ff5c7a",lineHeight:1.1}}>{fmtMoney(Math.abs(saldoTotalHoje))}</div>
         {saldoTotalHoje<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-saldoTotalHoje)}</div>}
         <div style={{fontSize:11,color:"#555",marginTop:6}}>{fmtMoney(vendasTotalHoje)} vendidos × {budgetCmv}% = {fmtMoney(budgetTotalHoje)} budget − {fmtMoney(comprasTotalHoje)} compras</div>
