@@ -252,7 +252,12 @@ function sefazSync(emp) {
 
           if (maxNSU > nsuResp) saveNsu(nsuKey, maxNSU);
 
-          resolve({ nfes, total: nfes.length, ultNSU: maxNSU });
+          // Return the 10 most recent NF-es (sorted by date descending)
+          const nfesOrdenadas = nfes
+            .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+            .slice(0, 10);
+
+          resolve({ nfes: nfesOrdenadas, total: nfes.length, ultNSU: maxNSU });
         } catch (e) {
           reject(new Error('Erro ao parsear resposta SEFAZ: ' + e.message));
         }
