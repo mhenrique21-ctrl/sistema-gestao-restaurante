@@ -1465,10 +1465,18 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
               {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
               {fmtDate(nfe.data)} · {(nfe.itens||[]).length} produto(s)
             </div>
-            <button className="btn" onClick={()=>importarNFeSefaz(nfe)}
-              style={{background:"#7c8fff",color:"#fff",padding:"8px 16px",fontSize:13,width:"100%"}}>
-              📥 Importar esta NF-e
-            </button>
+            <div style={{display:"flex",gap:6}}>
+              <button className="btn" onClick={()=>importarNFeSefaz(nfe)}
+                style={{background:"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13,flex:1}}>
+                📥 Importar
+              </button>
+              <button className="btn" onClick={()=>{
+                removeFromCache([nfe.nsu]);
+                setSefazList(l=>l.filter((_,j)=>j!==i));
+              }} style={{background:"#2a1520",color:"#ff5c7a",padding:"8px 12px",fontSize:13}}>
+                🗑️
+              </button>
+            </div>
           </div>
         ))}
         {sefazList.length>1&&<button className="btn" onClick={importarTodasNFeSefaz}
