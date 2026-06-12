@@ -380,6 +380,7 @@ function Vendas({db,setDb,state}){
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
   const [budgetRef,setBudgetRef]=useState(today());
+  const [busca,setBusca]=useState("");
   const ifoodBruto=parseMoney(form.ifood||0);
   const nfoodBruto=parseMoney(form["99food"]||0);
   const ifoodTaxaPct=parseFloat(form.ifoodTaxa)||0;
@@ -666,7 +667,7 @@ function Vendas({db,setDb,state}){
           </table>`));
       }} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir Vendas</button>
     </div>
-    {(db.vendas||[]).map(v=>{
+    {(()=>{const q=busca.toLowerCase();const vendasFiltradas=(db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))).sort((a,b)=>a.data<b.data?1:-1);return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
       const bDia=v.total*(budgetCmv/100);
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
       const sDia=bDia-cDia;
@@ -696,8 +697,7 @@ function Vendas({db,setDb,state}){
           <button className="btn" onClick={()=>del(v.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
       </div>;
-    })}
-    {!(db.vendas||[]).length&&<EmptyState msg="Nenhum registro de venda"/>}
+    })}{!vendasFiltradas.length&&<EmptyState msg="Nenhum registro de venda"/>}</>;})()}
   </div>;
 }
 
@@ -786,6 +786,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
   const [normEdit,setNormEdit]=useState<string|null>(null);
   const [buscaProd,setBuscaProd]=useState("");
+  const [buscaHist,setBuscaHist]=useState("");
   const [catColaps,setCatColaps]=useState<Set<string>>(new Set());
   const [prodSubTab,setProdSubTab]=useState<"catalogo"|"substituicoes">("catalogo");
   const catsBase=["insumos","descartáveis","material de limpeza","proteína","bebidas"];
@@ -1489,6 +1490,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 
     {subTab==="lista"&&<div>
       <div className="section-title">Histórico de Compras</div>
+      <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar fornecedor ou produto..." value={buscaHist} onChange={e=>setBuscaHist(e.target.value)} className="inp" style={{paddingRight:buscaHist?36:14}}/>{buscaHist&&<button onClick={()=>setBuscaHist("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
       {(()=>{
         // Uma pasta por nota de compra (grupoId), com número sequencial
         const grupos:Record<string,any[]>={};
@@ -1509,9 +1511,11 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         // número sequencial por data crescente (mais antigas = #001)
         const seq:Record<string,number>={};
         [...notas].reverse().forEach((n,i)=>{seq[n.grupoId]=i+1;});
+        const bq=buscaHist.toLowerCase();
+        const notasFiltradas=bq?notas.filter(nota=>{const itensVivos=(db.compras||[]).filter(c=>c.grupoId===nota.grupoId&&!c.excluido);return nota.fornecedor?.toLowerCase().includes(bq)||fmtDate(nota.data).toLowerCase().includes(bq)||itensVivos.some(it=>it.nomeProduto?.toLowerCase().includes(bq));}):notas;
 
         return <>
-          {notas.map(nota=>{
+          {notasFiltradas.map(nota=>{
             const open=verNota===nota.grupoId;
             const itensVivos=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId);
             const totalVivo=itensVivos.reduce((s,c)=>s+parseMoney(c.valor),0);
@@ -1871,6 +1875,7 @@ function Contas({db,setDb}){
   const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
   const [verConta,setVerConta]=useState<any>(null);
   const [verGrupo,setVerGrupo]=useState<string|null>(null);
+  const [busca,setBusca]=useState("");
 
   const gerarVenc=(base:string,i:number,periodo:string)=>{
     const d=new Date(base+"T12:00:00");
@@ -1926,7 +1931,8 @@ function Contas({db,setDb}){
     return{...d,contas};
   });
 
-  const contasFiltradas=[...(db.contas||[])].filter((c:any)=>filtro==="todos"?true:c.status===filtro).sort((a:any,b:any)=>{const x=((a.vencimento||"")<(b.vencimento||""))?-1:1;return sortDir==="asc"?x:-x;});
+  const bq2=busca.toLowerCase();
+  const contasFiltradas=[...(db.contas||[])].filter((c:any)=>{if(filtro!=="todos"&&c.status!==filtro)return false;if(!bq2)return true;return(c.descricao||"").toLowerCase().includes(bq2)||(c.fornecedor||"").toLowerCase().includes(bq2)||(c.categoria||"").toLowerCase().includes(bq2)||fmtDate(c.vencimento||"").toLowerCase().includes(bq2);}).sort((a:any,b:any)=>{const x=((a.vencimento||"")<(b.vencimento||""))?-1:1;return sortDir==="asc"?x:-x;});
   const totPago=contasFiltradas.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const totPend=contasFiltradas.filter((c:any)=>c.status==="pendente").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const grupos:Record<string,any[]>={};
@@ -1981,6 +1987,7 @@ function Contas({db,setDb}){
           📅 {sortDir==="asc"?"↑":"↓"}
         </button>
       </div>
+      <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar descrição, fornecedor ou categoria..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
       <div style={{display:"flex",gap:10,marginBottom:14}}>
         <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#ff5c7a",fontWeight:700,fontSize:16}}>{fmtMoney(totPend)}</div><div className="muted" style={{fontSize:11}}>A Pagar</div></div>
         <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#4ade80",fontWeight:700,fontSize:16}}>{fmtMoney(totPago)}</div><div className="muted" style={{fontSize:11}}>Pago</div></div>
@@ -2158,6 +2165,7 @@ function FichaTecnica({db,setDb}){
   const [form,setForm]=useState({nome:"",insumos:[],porcoes:"1",cmv:"30"});
   const [novoIns,setNovoIns]=useState({mp:"",quantidade:"",unidade:"kg"});
   const [editId,setEditId]=useState(null);
+  const [busca,setBusca]=useState("");
   const mps=db.materiasPrimas||[];
   const addIns=()=>{
     if(!novoIns.mp||!novoIns.quantidade)return;
@@ -2200,7 +2208,8 @@ function FichaTecnica({db,setDb}){
     </div>
     {subTab==="lista"&&<div>
       <button className="btn" onClick={atualizar} style={{background:"#1a2a1a",color:"#4ade80",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
-      {(db.fichasTecnicas||[]).map(f=>{
+      <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar ficha técnica..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
+      {(db.fichasTecnicas||[]).filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())).map(f=>{
         const por=f.porcoes||1; const cmv=f.cmv||30;
         const cp=f.custoPorcao??(f.custoTotal/por);
         const pp=f.precoPorcao??(cp/(cmv/100));
@@ -2237,7 +2246,7 @@ function FichaTecnica({db,setDb}){
           </div>
         </div>;
       })}
-      {!(db.fichasTecnicas||[]).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
+      {!(db.fichasTecnicas||[]).filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
     </div>}
     {subTab==="novo"&&<div>
       <div className="card" style={{marginBottom:10}}>
@@ -2324,6 +2333,7 @@ function RH({db,setDb,empresa}){
   const [consForm,setConsForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   const [encEdit,setEncEdit]=useState(null);
+  const [buscaFunc,setBuscaFunc]=useState("");
   const funcs=[...(db.funcionarios||[])].sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0);
 
   const saveFunc=()=>{
@@ -2469,7 +2479,8 @@ function RH({db,setDb,empresa}){
         <div className="section-title" style={{marginBottom:8}}>Mês de Referência</div>
         <input type="month" value={relMes} onChange={e=>setRelMes(e.target.value)} className="inp"/>
       </div>
-      {funcs.map(f=>{
+      <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar funcionário..." value={buscaFunc} onChange={e=>setBuscaFunc(e.target.value)} className="inp" style={{paddingRight:buscaFunc?36:14}}/>{buscaFunc&&<button onClick={()=>setBuscaFunc("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
+      {funcs.filter(f=>!buscaFunc||f.nome?.toLowerCase().includes(buscaFunc.toLowerCase())||f.funcao?.toLowerCase().includes(buscaFunc.toLowerCase())).map(f=>{
         const totFalt=(db.faltas||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+x.desconto,0);
         const totAdt =(db.adiantamentos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
         const totCons=(db.consumacoes||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
@@ -2504,7 +2515,7 @@ function RH({db,setDb,empresa}){
           </div>
         </div>;
       })}
-      {!funcs.length&&<EmptyState msg="Nenhum funcionário cadastrado"/>}
+      {!funcs.filter(f=>!buscaFunc||f.nome?.toLowerCase().includes(buscaFunc.toLowerCase())||f.funcao?.toLowerCase().includes(buscaFunc.toLowerCase())).length&&<EmptyState msg="Nenhum funcionário cadastrado"/>}
     </div>}
 
     {subTab==="cadastro"&&<div>
