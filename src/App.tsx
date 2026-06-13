@@ -163,12 +163,8 @@ export default function App() {
     {id:"vendas",label:"Vendas",icon:"💰"},
     {id:"compras",label:"Compras",icon:"🛒"},
     {id:"contas",label:"Financeiro",icon:"📋"},
-    {id:"ficha",label:"Ficha",icon:"📝"},
-    {id:"rh",label:"RH",icon:"👥"},
-    {id:"dre",label:"DRE",icon:"📈"},
     {id:"fluxo",label:"Fluxo",icon:"💵"},
-    {id:"relatorios",label:"Relatórios",icon:"📄"},
-    {id:"comparativo",label:"Versus",icon:"⚖️"},
+    {id:"gestao",label:"Gestão",icon:"⚙️"},
   ];
 
   return (
@@ -219,12 +215,14 @@ export default function App() {
         <div style={{flex:1}}>
           {(()=>{
             const estoqueBaixo=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
+            const atrasadas=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
             return tabs.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)}
                 style={{background:tab===t.id?"var(--bg4)":"none",border:"none",borderLeft:tab===t.id?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:tab===t.id?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:tab===t.id?700:400,transition:"all .15s"}}>
                 <span style={{fontSize:17}}>{t.icon}</span>
                 <span>{t.label}</span>
-                {t.id==="compras"&&estoqueBaixo>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:4}}>{estoqueBaixo}</span>}
+                {t.id==="compras"&&estoqueBaixo>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:4}}>{estoqueBaixo}</span>}
+                {t.id==="contas"&&atrasadas>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:4}}>{atrasadas}</span>}
               </button>
             ));
           })()}
@@ -262,25 +260,23 @@ export default function App() {
         {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
         {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
         {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
-        {tab==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
-        {tab==="rh"         && <RH db={db} setDb={setDb} empresa={empresa}/>}
-        {tab==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-        {tab==="relatorios" && <Relatorios db={db} empresa={empresa} state={state}/>}
-        {tab==="comparativo"&& <Comparativo state={state}/>}
+        {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state}/>}
       </div>
 
       {/* BOTTOM NAV (mobile only) */}
       <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
         {(()=>{
           const estoqueBaixoNav=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
+          const atrasadasNav=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
           return tabs.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
                 color:tab===t.id?"#7c8fff":"var(--text3)",padding:"4px 1px",transition:"color .15s",position:"relative"}}>
               <span style={{fontSize:17}}>{t.icon}</span>
               <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{t.label}</span>
-              {t.id==="compras"&&estoqueBaixoNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoNav}</span>}
+              {t.id==="compras"&&estoqueBaixoNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoNav}</span>}
+              {t.id==="contas"&&atrasadasNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasNav}</span>}
             </button>
           ));
         })()}
@@ -2138,7 +2134,24 @@ function Contas({db,setDb}){
   contasFiltradas.filter((c:any)=>c.grupoRecorr).forEach((c:any)=>{if(!grupos[c.grupoRecorr])grupos[c.grupoRecorr]=[];grupos[c.grupoRecorr].push(c);});
   const normais=contasFiltradas.filter((c:any)=>!c.grupoRecorr);
 
+  const contasAtrasadas=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).sort((a:any,b:any)=>a.vencimento.localeCompare(b.vencimento));
+
   return <div>
+    {contasAtrasadas.length>0&&<div style={{background:"linear-gradient(135deg,#1a0808,#2a0a0a)",border:"1px solid #7f1d1d",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <span style={{fontSize:18}}>🔴</span>
+        <span style={{fontWeight:700,color:"#ff5c7a",fontSize:14}}>{contasAtrasadas.length} conta{contasAtrasadas.length>1?"s":""} em atraso</span>
+      </div>
+      {contasAtrasadas.slice(0,3).map((c:any)=>{
+        const dias=Math.floor((new Date(today()).getTime()-new Date(c.vencimento).getTime())/(1000*60*60*24));
+        return <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #3f0f0f",fontSize:12}}>
+          <span style={{flex:1,color:"#fca5a5",marginRight:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao}</span>
+          <span style={{color:"#f87171",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+          <span style={{color:"#ef4444",fontSize:11,marginLeft:8,whiteSpace:"nowrap" as const}}>{dias}d atraso</span>
+        </div>;
+      })}
+      {contasAtrasadas.length>3&&<div className="muted" style={{fontSize:11,marginTop:6,textAlign:"center"}}>+{contasAtrasadas.length-3} outras contas em atraso</div>}
+    </div>}
     {verConta&&(()=>{
       const itens=(db.compras||[]).filter((c:any)=>c.grupoId===verConta.grupoId);
       return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -3431,6 +3444,29 @@ function Comparativo({state}){
         </div>
       </div>;
     })}
+  </div>;
+}
+
+// ===================== GESTÃO (wrapper) =====================
+function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:any}){
+  const [sub,setSub]=useState("rh");
+  return <div>
+    <div style={{marginBottom:14}}>
+      <div className="section-title" style={{marginBottom:10}}>⚙️ Área Administrativa</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+        {([["rh","👥 RH"],["ficha","📝 Fichas"],["dre","📈 DRE"],["relatorios","📄 Relatórios"],["versus","⚖️ Versus"]] as const).map(([k,l])=>(
+          <button key={k} onClick={()=>setSub(k)} className="pill"
+            style={{background:sub===k?"#7c8fff":"var(--bg4)",color:sub===k?"#fff":"#777",fontSize:12,padding:"8px 14px"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+    {sub==="rh"         && <RH db={db} setDb={setDb} empresa={empresa}/>}
+    {sub==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
+    {sub==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
+    {sub==="relatorios" && <Relatorios db={db} empresa={empresa} state={state}/>}
+    {sub==="versus"     && <Comparativo state={state}/>}
   </div>;
 }
 
