@@ -435,14 +435,15 @@ function Vendas({db,setDb,state}){
   const budgetTotalHoje=vendasTotalHoje*(budgetCmv/100);
   const saldoTotalHoje=budgetTotalHoje-comprasTotalHoje;
   const save=()=>{
+    const now=new Date().toISOString();
     const reg={id:editId||uid(),data:form.data,total,
       maquininha:parseMoney(form.maquininha||0),
       dinheiro:parseMoney(form.dinheiro||0),
       ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
       "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
       delivery:parseMoney(form.delivery||0)};
-    if(editId){setDb(d=>({...d,vendas:d.vendas.map(v=>v.id===editId?reg:v)}));setEditId(null);}
-    else{setDb(d=>({...d,vendas:[reg,...d.vendas]}));}
+    if(editId){setDb(d=>({...d,vendas:d.vendas.map(v=>v.id===editId?{...reg,criadoEm:v.criadoEm||now,atualizadoEm:now}:v)}));setEditId(null);}
+    else{setDb(d=>({...d,vendas:[{...reg,criadoEm:now},...d.vendas]}));}
     setForm(emptyForm());
   };
   const edit=(v)=>{setEditId(v.id);setForm({data:v.data,
@@ -667,7 +668,7 @@ function Vendas({db,setDb,state}){
           </table>`));
       }} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir Vendas</button>
     </div>
-    {(()=>{const q=busca.toLowerCase();const vendasFiltradas=(db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))).sort((a,b)=>a.data<b.data?1:-1);return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
+    {(()=>{const q=busca.toLowerCase();const vendasFiltradas=(db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))).sort((a,b)=>{const d=a.data<b.data?1:a.data>b.data?-1:0;if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");});return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
       const bDia=v.total*(budgetCmv/100);
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
       const sDia=bDia-cDia;
@@ -696,6 +697,7 @@ function Vendas({db,setDb,state}){
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>del(v.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
+        {v.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(v.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;
     })}{!vendasFiltradas.length&&<EmptyState msg="Nenhum registro de venda"/>}</>;})()}
   </div>;
@@ -837,7 +839,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         quantidade:parseFloat(item.quantidade)||0,
         valorUnitario:parseMoney(item.valorUnit),
         valor:parseMoney(item.valorTotal),
-        data:dataCom, origem:"manual", grupoId,
+        data:dataCom, origem:"manual", grupoId, criadoEm:new Date().toISOString(),
       }));
       // atualizar / cadastrar matérias-primas
       let mps=[...(d.materiasPrimas||[])];
@@ -845,12 +847,12 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         const vUnit=parseMoney(item.valorUnit);
         const ex=mps.find(m=>m.nome.toLowerCase()===item.nomeProduto.toLowerCase());
         if(ex){if(vUnit>0)ex.ultimoValor=vUnit;}
-        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1)});
+        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1),criadoEm:new Date().toISOString()});
       });
       // cadastrar fornecedor se novo
       let fornecedores=[...(d.fornecedores||[])];
       if(fornecedor&&!fornecedores.find(f=>f.nome.toLowerCase()===fornecedor.toLowerCase()))
-        fornecedores.push({id:uid(),nome:fornecedor,endereco:""});
+        fornecedores.push({id:uid(),nome:fornecedor,endereco:"",criadoEm:new Date().toISOString()});
       // lançar no financeiro
       const statusFinanceiro=["dinheiro","pix","cartão débito"].includes(formaPag)?"pago":"pendente";
       const novaContaFinanceiro={
@@ -863,6 +865,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         tipo:"saida",
         origem:"compra",
         grupoId,
+        criadoEm:new Date().toISOString(),
       };
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])]};
     });
@@ -920,22 +923,22 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     setDb(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
-        fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||""});
+        fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
       const grupoId=uid();
       const novasCompras=(iaResult.itens||[]).map(item=>({
         id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
         unidade:item.unidade||"un",quantidade:item.quantidade||0,
         valor:item.valorTotal||0,valorUnitario:item.valorUnitario||0,
-        data:iaResult.data||today(),origem:"ia",grupoId,
+        data:iaResult.data||today(),origem:"ia",grupoId,criadoEm:new Date().toISOString(),
       }));
       let mps=[...(d.materiasPrimas||[])];
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){ex.ultimoValor=c.valorUnitario||c.valor;}
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor});
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,criadoEm:new Date().toISOString()});
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
-      const contaFin={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId};
+      const contaFin={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);
@@ -968,24 +971,24 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     setDb(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
-        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
+        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
       const grupoId=uid();
       const novasCompras=(nfeResult.itens||[]).map(item=>({
         id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
         data:nfeResult.data||today(),origem:"nfe",
-        nNF:nfeResult.nNF||"",grupoId,
+        nNF:nfeResult.nNF||"",grupoId,criadoEm:new Date().toISOString(),
       }));
       let mps=[...(d.materiasPrimas||[])];
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;}
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor});
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,criadoEm:new Date().toISOString()});
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
-      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId};
+      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
     });
     setNfeResult(null);setNfeError("");
@@ -1095,23 +1098,23 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     setDb(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
-        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||""});
+        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
       const grupoId=uid();
       const novasCompras=(nfe.itens||[]).map(item=>({
         id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
-        data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,
+        data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,criadoEm:new Date().toISOString(),
       }));
       let mps=[...(d.materiasPrimas||[])];
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;}
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor});
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,criadoEm:new Date().toISOString()});
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
-      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId};
+      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
     });
     if(!all){
@@ -1507,7 +1510,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
           nNF:itens[0]?.nNF||"",
           itens,
           total:itens.reduce((s,c)=>s+parseMoney(c.valor),0),
-        })).sort((a,b)=>a.data<b.data?1:-1);
+        })).sort((a,b)=>{const d=a.data<b.data?1:a.data>b.data?-1:0;if(d!==0)return d;const aCriado=a.itens.reduce((m,c)=>c.criadoEm&&c.criadoEm<m?c.criadoEm:m,a.itens[0]?.criadoEm||"");const bCriado=b.itens.reduce((m,c)=>c.criadoEm&&c.criadoEm<m?c.criadoEm:m,b.itens[0]?.criadoEm||"");return(bCriado||"").localeCompare(aCriado||"");});
         // número sequencial por data crescente (mais antigas = #001)
         const seq:Record<string,number>={};
         [...notas].reverse().forEach((n,i)=>{seq[n.grupoId]=i+1;});
@@ -1723,14 +1726,15 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
               if(!prodForm.nome)return alert("Nome é obrigatório.");
               const v=parseMoney(prodForm.valor);
               setDb(d=>{
+                const now=new Date().toISOString();
                 const mps=[...(d.materiasPrimas||[])];
                 if(prodEdit){
                   const idx=mps.findIndex(m=>m.id===prodEdit);
-                  if(idx>=0)mps[idx]={...mps[idx],nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||mps[idx].ultimoValor};
+                  if(idx>=0)mps[idx]={...mps[idx],nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||mps[idx].ultimoValor,atualizadoEm:now};
                 }else{
                   const ex=mps.find(m=>m.nome.toLowerCase()===prodForm.nome.toLowerCase());
-                  if(ex){ex.categoria=prodForm.categoria;ex.unidade=prodForm.unidade;if(v>0)ex.ultimoValor=v;}
-                  else mps.push({id:uid(),nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||0});
+                  if(ex){ex.categoria=prodForm.categoria;ex.unidade=prodForm.unidade;if(v>0)ex.ultimoValor=v;ex.atualizadoEm=now;}
+                  else mps.push({id:uid(),nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||0,criadoEm:now});
                 }
                 return{...d,materiasPrimas:mps};
               });
@@ -1887,6 +1891,7 @@ function Contas({db,setDb}){
 
   const save=()=>{
     if(!form.descricao||!form.valor)return alert("Preencha descrição e valor.");
+    const now=new Date().toISOString();
     const base={categoria:form.categoria,valor:parseMoney(form.valor),status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor};
     const n=form.recorrente?Math.max(parseInt(form.parcelas)||1,1):1;
     if(n>1){
@@ -1894,15 +1899,15 @@ function Contas({db,setDb}){
       const novas=Array.from({length:n},(_:any,i:number)=>({
         id:uid(),descricao:`${form.descricao} (${i+1}/${n})`,
         vencimento:gerarVenc(form.vencimento,i,form.periodo),
-        grupoRecorr:gRecorr,parcela:i+1,totalParcelas:n,...base,
+        grupoRecorr:gRecorr,parcela:i+1,totalParcelas:n,...base,criadoEm:now,
       }));
       if(editGrupoRecorr){setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[]).filter((c:any)=>c.grupoRecorr!==editGrupoRecorr)]}));}
       else{setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[])]}));}
       setEditGrupoRecorr(null);
     }else{
       const c={id:editId||uid(),descricao:form.descricao,vencimento:form.vencimento,...base};
-      if(editId){setDb((d:any)=>({...d,contas:(d.contas||[]).map((x:any)=>x.id===editId?c:x)}));setEditId(null);}
-      else{setDb((d:any)=>({...d,contas:[c,...(d.contas||[])]}));}
+      if(editId){setDb((d:any)=>({...d,contas:(d.contas||[]).map((x:any)=>x.id===editId?{...c,criadoEm:x.criadoEm||now,atualizadoEm:now}:x)}));setEditId(null);}
+      else{setDb((d:any)=>({...d,contas:[{...c,criadoEm:now},...(d.contas||[])]}));}
     }
     setForm(emptyForm);setSubTab("lista");
   };
@@ -1932,7 +1937,7 @@ function Contas({db,setDb}){
   });
 
   const bq2=busca.toLowerCase();
-  const contasFiltradas=[...(db.contas||[])].filter((c:any)=>{if(filtro!=="todos"&&c.status!==filtro)return false;if(!bq2)return true;return(c.descricao||"").toLowerCase().includes(bq2)||(c.fornecedor||"").toLowerCase().includes(bq2)||(c.categoria||"").toLowerCase().includes(bq2)||fmtDate(c.vencimento||"").toLowerCase().includes(bq2);}).sort((a:any,b:any)=>{const x=((a.vencimento||"")<(b.vencimento||""))?-1:1;return sortDir==="asc"?x:-x;});
+  const contasFiltradas=[...(db.contas||[])].filter((c:any)=>{if(filtro!=="todos"&&c.status!==filtro)return false;if(!bq2)return true;return(c.descricao||"").toLowerCase().includes(bq2)||(c.fornecedor||"").toLowerCase().includes(bq2)||(c.categoria||"").toLowerCase().includes(bq2)||fmtDate(c.vencimento||"").toLowerCase().includes(bq2);}).sort((a:any,b:any)=>{const vA=a.vencimento||"",vB=b.vencimento||"";const x=vA<vB?-1:vA>vB?1:0;const primary=sortDir==="asc"?x:-x;if(primary!==0)return primary;return(b.criadoEm||"").localeCompare(a.criadoEm||"");});
   const totPago=contasFiltradas.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const totPend=contasFiltradas.filter((c:any)=>c.status==="pendente").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const grupos:Record<string,any[]>={};
@@ -2081,7 +2086,7 @@ function Contas({db,setDb}){
         <div className="row" style={{marginBottom:8}}>
           <select value={form.categoria} onChange={e=>setForm((f:any)=>({...f,categoria:e.target.value}))} className="inp">
             <option value="">Categoria</option>
-            {(db.categorias||[]).map((c:string)=><option key={c} value={c}>{c}</option>)}
+            {[...(db.categorias||[])].sort((a,b)=>a.localeCompare(b,'pt-BR')).map((c:string)=><option key={c} value={c}>{c}</option>)}
           </select>
           <select value={form.tipo} onChange={e=>setForm((f:any)=>({...f,tipo:e.target.value}))} className="inp">
             <option value="saida">Saída</option><option value="entrada">Entrada</option>
@@ -2182,10 +2187,11 @@ function FichaTecnica({db,setDb}){
   const precoPorcao=custoPorcao/(cmvPct/100);
   const save=()=>{
     if(!form.nome||!form.insumos.length)return alert("Adicione nome e ao menos um insumo.");
+    const now=new Date().toISOString();
     const ft={id:editId||uid(),nome:form.nome,insumos:form.insumos,
       porcoes,cmv:cmvPct,custoTotal,custoPorcao,precoPorcao,precoSugerido:precoPorcao};
-    if(editId){setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.map(f=>f.id===editId?ft:f)}));setEditId(null);}
-    else{setDb(d=>({...d,fichasTecnicas:[ft,...(d.fichasTecnicas||[])]}));}
+    if(editId){setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.map(f=>f.id===editId?{...ft,criadoEm:f.criadoEm||now,atualizadoEm:now}:f)}));setEditId(null);}
+    else{setDb(d=>({...d,fichasTecnicas:[{...ft,criadoEm:now},...(d.fichasTecnicas||[])]}));}
     setForm({nome:"",insumos:[],porcoes:"1",cmv:"30"});
   };
   const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30)});setSubTab("novo");};
@@ -2209,7 +2215,7 @@ function FichaTecnica({db,setDb}){
     {subTab==="lista"&&<div>
       <button className="btn" onClick={atualizar} style={{background:"#1a2a1a",color:"#4ade80",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
       <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar ficha técnica..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
-      {(db.fichasTecnicas||[]).filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())).map(f=>{
+      {[...(db.fichasTecnicas||[])].filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||"")).map(f=>{
         const por=f.porcoes||1; const cmv=f.cmv||30;
         const cp=f.custoPorcao??(f.custoTotal/por);
         const pp=f.precoPorcao??(cp/(cmv/100));
@@ -2338,9 +2344,10 @@ function RH({db,setDb,empresa}){
 
   const saveFunc=()=>{
     if(!fForm.nome||!fForm.salario)return alert("Preencha nome e salário.");
+    const now=new Date().toISOString();
     const f={id:fEdit||uid(),...fForm,salario:parseMoney(fForm.salario)};
-    if(fEdit){setDb(d=>({...d,funcionarios:d.funcionarios.map(x=>x.id===fEdit?f:x)}));setFEdit(null);}
-    else{setDb(d=>({...d,funcionarios:[f,...d.funcionarios]}));}
+    if(fEdit){setDb(d=>({...d,funcionarios:d.funcionarios.map(x=>x.id===fEdit?{...f,criadoEm:x.criadoEm||now,atualizadoEm:now}:x)}));setFEdit(null);}
+    else{setDb(d=>({...d,funcionarios:[{...f,criadoEm:now},...d.funcionarios]}));}
     setFForm({nome:"",funcao:"",salario:"",cpf:"",contato:""});
   };
   const editFunc=(f)=>{setFEdit(f.id);setFForm({...f,salario:String(f.salario.toFixed(2)).replace(".",",")});setSubTab("cadastro");};
@@ -2350,10 +2357,11 @@ function RH({db,setDb,empresa}){
     if(!faltaForm.funcionarioId||!faltaForm.dias)return alert("Selecione funcionário e dias.");
     const fn=funcs.find(f=>f.id===faltaForm.funcionarioId);
     const desconto=(fn?.salario||0)/30*parseFloat(faltaForm.dias);
-    const falta={id:uid(),...faltaForm,desconto,mes:faltaForm.data.slice(0,7)};
+    const now=new Date().toISOString();
+    const falta={id:uid(),...faltaForm,desconto,mes:faltaForm.data.slice(0,7),criadoEm:now};
     setDb(d=>({...d,
       faltas:[falta,...(d.faltas||[])],
-      contas:[{id:uid(),descricao:`Desc. falta – ${fn?.nome}`,categoria:"Salários",valor:desconto,vencimento:faltaForm.data,status:"pendente",tipo:"saida"},...(d.contas||[])]}));
+      contas:[{id:uid(),descricao:`Desc. falta – ${fn?.nome}`,categoria:"Salários",valor:desconto,vencimento:faltaForm.data,status:"pendente",tipo:"saida",criadoEm:now},...(d.contas||[])]}));
     setFaltaForm({funcionarioId:"",data:today(),dias:"",motivo:""});
   };
 
@@ -2361,7 +2369,8 @@ function RH({db,setDb,empresa}){
     if(!adtForm.funcionarioId||!adtForm.valor)return alert("Selecione funcionário e valor.");
     const fn=funcs.find(f=>f.id===adtForm.funcionarioId);
     const contaId=uid();
-    const adt={id:uid(),...adtForm,valor:parseMoney(adtForm.valor),mes:adtForm.data.slice(0,7),contaId};
+    const now=new Date().toISOString();
+    const adt={id:uid(),...adtForm,valor:parseMoney(adtForm.valor),mes:adtForm.data.slice(0,7),contaId,criadoEm:now};
     setDb(d=>({...d,
       adiantamentos:[adt,...(d.adiantamentos||[])],
       // lançar em contas a PAGAR com categoria "Adiantamento"
@@ -2374,6 +2383,7 @@ function RH({db,setDb,empresa}){
         status:"pendente",   // fica como a pagar até ser quitado no acerto
         tipo:"saida",
         origem:"adiantamento_rh",
+        criadoEm:now,
       },...(d.contas||[])]}));
     setAdtForm({funcionarioId:"",data:today(),valor:"",descricao:""});
   };
@@ -2387,21 +2397,22 @@ function RH({db,setDb,empresa}){
 
   const saveCons=()=>{
     if(!consForm.funcionarioId||!consForm.valor)return alert("Selecione funcionário e valor.");
-    const cons={id:uid(),...consForm,valor:parseMoney(consForm.valor),mes:consForm.data.slice(0,7)};
+    const cons={id:uid(),...consForm,valor:parseMoney(consForm.valor),mes:consForm.data.slice(0,7),criadoEm:new Date().toISOString()};
     setDb(d=>({...d,consumacoes:[cons,...(d.consumacoes||[])]}));
     setConsForm({funcionarioId:"",data:today(),valor:"",descricao:""});
   };
 
   const saveEnc=()=>{
     if(!encForm.funcionarioId)return alert("Selecione o funcionário.");
+    const now=new Date().toISOString();
     const enc={id:encEdit||uid(),...encForm,
       valor:parseMoney(encForm.valor),
       bonificacao:parseMoney(encForm.bonificacao),
       comissao:parseMoney(encForm.comissao),
       salarioFamilia:parseMoney(encForm.salarioFamilia),
       mes:encForm.data.slice(0,7)};
-    if(encEdit){setDb(d=>({...d,encargos:(d.encargos||[]).map(x=>x.id===encEdit?enc:x)}));setEncEdit(null);}
-    else{setDb(d=>({...d,encargos:[enc,...(d.encargos||[])]}));}
+    if(encEdit){setDb(d=>({...d,encargos:(d.encargos||[]).map(x=>x.id===encEdit?{...enc,criadoEm:x.criadoEm||now,atualizadoEm:now}:x)}));setEncEdit(null);}
+    else{setDb(d=>({...d,encargos:[{...enc,criadoEm:now},...(d.encargos||[])]}));}
     setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   };
   const editEnc=(e)=>{setEncEdit(e.id);setEncForm({
@@ -2547,9 +2558,10 @@ function RH({db,setDb,empresa}){
         </div>}
         <button className="btn" onClick={saveFalta} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
-      {(db.faltas||[]).map(f=>{const fn=funcs.find(x=>x.id===f.funcionarioId);return <div key={f.id} className="list-item">
+      {[...(db.faltas||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(f=>{const fn=funcs.find(x=>x.id===f.funcionarioId);return <div key={f.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#ff5c7a",fontWeight:700}}>-{fmtMoney(f.desconto)}</span></div>
         <div className="muted">{f.dias} dia(s) • {fmtDate(f.data)}</div>{f.motivo&&<div className="muted">{f.motivo}</div>}
+        {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.faltas||[]).length&&<EmptyState msg="Nenhuma falta registrada"/>}
     </div>}
@@ -2570,13 +2582,14 @@ function RH({db,setDb,empresa}){
         <input placeholder="Descrição" value={adtForm.descricao} onChange={e=>setAdtForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <button className="btn" onClick={saveAdt} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
-      {(db.adiantamentos||[]).map(a=>{const fn=funcs.find(f=>f.id===a.funcionarioId);return <div key={a.id} className="list-item">
+      {[...(db.adiantamentos||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(a=>{const fn=funcs.find(f=>f.id===a.funcionarioId);return <div key={a.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#fbbf24",fontWeight:700}}>{fmtMoney(parseMoney(a.valor))}</span></div>
         <div className="muted">{fmtDate(a.data)}</div>{a.descricao&&<div className="muted">{a.descricao}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
           <span className="tag" style={{background:"#2a2010",color:"#fbbf24",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
           <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
+        {a.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(a.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.adiantamentos||[]).length&&<EmptyState msg="Nenhum adiantamento registrado"/>}
     </div>}
@@ -2607,7 +2620,7 @@ function RH({db,setDb,empresa}){
         <button className="btn" onClick={saveEnc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:4,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
         {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
-      {(db.encargos||[]).map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
+      {[...(db.encargos||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
           <span style={{fontWeight:700,fontSize:15}}>{fn?.nome||"—"}</span>
           <span style={{color:"#4ade80",fontWeight:700,fontSize:13}}>{fmtDate(e.data)}</span>
@@ -2623,6 +2636,7 @@ function RH({db,setDb,empresa}){
           <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
+        {e.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(e.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.encargos||[]).length&&<EmptyState msg="Nenhum encargo registrado"/>}
     </div>}
@@ -2639,9 +2653,10 @@ function RH({db,setDb,empresa}){
         <input placeholder="Descrição" value={consForm.descricao} onChange={e=>setConsForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <button className="btn" onClick={saveCons} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
-      {(db.consumacoes||[]).map(c=>{const fn=funcs.find(f=>f.id===c.funcionarioId);return <div key={c.id} className="list-item">
+      {[...(db.consumacoes||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(c=>{const fn=funcs.find(f=>f.id===c.funcionarioId);return <div key={c.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span></div>
         <div className="muted">{fmtDate(c.data)}</div>{c.descricao&&<div className="muted">{c.descricao}</div>}
+        {c.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(c.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.consumacoes||[]).length&&<EmptyState msg="Nenhuma consumação registrada"/>}
     </div>}
