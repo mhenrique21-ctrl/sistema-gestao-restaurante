@@ -1964,7 +1964,10 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     </div>}
 
     {subTab==="estoque"&&(()=>{
-      const mpsAll=[...(db.materiasPrimas||[])].sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+      const mpIdsComMov=new Set((db.movEstoque||[]).map((mv:any)=>mv.mpId));
+      const mpsAll=[...(db.materiasPrimas||[])]
+        .filter(m=>mpIdsComMov.has(m.id)||(m.estoqueAtual||0)>0)
+        .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
       const totalVal=mpsAll.reduce((s,m)=>(m.estoqueAtual||0)>0?s+(m.estoqueAtual||0)*(m.ultimoValor||0):s,0);
       const baixo=mpsAll.filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
       const zerado=mpsAll.filter(m=>(m.estoqueAtual||0)<=0);
@@ -2038,10 +2041,16 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
           </div>
         </div>}
         {/* Header with company badge */}
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap" as const}}>
           <div className="section-title" style={{marginBottom:0}}>📦 Estoque</div>
           <span style={{background:"#7c8fff22",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{empresa}</span>
         </div>
+        {(()=>{
+          const somente=(db.materiasPrimas||[]).filter((m:any)=>!mpIdsComMov.has(m.id)&&(m.estoqueAtual||0)<=0).length;
+          return somente>0?<div style={{background:"#1a1a2e",border:"1px solid #2a2a4a",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#888"}}>
+            {somente} produto{somente>1?"s":""} cadastrado{somente>1?"s":""} no catálogo sem movimentação de estoque — visíveis em <span style={{color:"#7c8fff",fontWeight:700}}>🗃️ Produtos</span>.
+          </div>:null;
+        })()}
         {/* Summary cards */}
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px"}}>
