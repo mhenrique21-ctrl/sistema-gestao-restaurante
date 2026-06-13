@@ -788,6 +788,9 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const [filtroEst,setFiltroEst]=useState("todos");
   const [ajusteModal,setAjusteModal]=useState<any>(null);
   const [verHistEst,setVerHistEst]=useState<string|null>(null);
+  const [mergeModal,setMergeModal]=useState<{src:any}|null>(null);
+  const [mergeTgt,setMergeTgt]=useState("");
+  const [buscaEst,setBuscaEst]=useState("");
 
   // ---- Carrinho (entrada manual multi-produto) ----
   const [fornecedor,setFornecedor]=useState("");
@@ -879,12 +882,15 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
           if(vUnit>0)ex.ultimoValor=vUnit;
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
-        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1),estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1),estoqueAtual:0,estoqueMinimo:0,fornecedores:[fornecedor].filter(Boolean),criadoEm:new Date().toISOString()});
         const qtd=parseFloat(item.quantidade)||0;
         const mp2=mps.find(m=>m.nome.toLowerCase()===item.nomeProduto.toLowerCase());
-        if(mp2&&qtd>0){
-          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
-          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataCom,descricao:`Compra – ${fornecedor}`,grupoId,criadoEm:new Date().toISOString()});
+        if(mp2){
+          if(fornecedor&&!(mp2.fornecedores||[]).some((f:string)=>f.toLowerCase()===fornecedor.toLowerCase()))mp2.fornecedores=[...(mp2.fornecedores||[]),fornecedor];
+          if(qtd>0){
+            mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+            movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataCom,descricao:`Compra – ${fornecedor}`,grupoId,criadoEm:new Date().toISOString()});
+          }
         }
       });
       // cadastrar fornecedor se novo
@@ -981,12 +987,16 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
           ex.ultimoValor=c.valorUnitario||c.valor;
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,fornecedores:[forn?.nome].filter(Boolean),criadoEm:new Date().toISOString()});
         const qtd=parseFloat(String(c.quantidade))||0;
         const mp2=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
-        if(mp2&&qtd>0){
-          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
-          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataIA,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+        if(mp2){
+          const fNomeIA=forn?.nome||"";
+          if(fNomeIA&&!(mp2.fornecedores||[]).some((f:string)=>f.toLowerCase()===fNomeIA.toLowerCase()))mp2.fornecedores=[...(mp2.fornecedores||[]),fNomeIA];
+          if(qtd>0){
+            mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+            movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataIA,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+          }
         }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
@@ -1044,12 +1054,16 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
           if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,fornecedores:[forn?.nome].filter(Boolean),criadoEm:new Date().toISOString()});
         const qtd=parseFloat(String(c.quantidade))||0;
         const mp2=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
-        if(mp2&&qtd>0){
-          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
-          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataNFe,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+        if(mp2){
+          const fNomeNFe=forn?.nome||"";
+          if(fNomeNFe&&!(mp2.fornecedores||[]).some((f:string)=>f.toLowerCase()===fNomeNFe.toLowerCase()))mp2.fornecedores=[...(mp2.fornecedores||[]),fNomeNFe];
+          if(qtd>0){
+            mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+            movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataNFe,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+          }
         }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
@@ -1184,12 +1198,16 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
           if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,fornecedores:[forn?.nome].filter(Boolean),criadoEm:new Date().toISOString()});
         const qtd=parseFloat(String(c.quantidade))||0;
         const mp2=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
-        if(mp2&&qtd>0){
-          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
-          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataSefaz,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+        if(mp2){
+          const fNomeSef=forn?.nome||"";
+          if(fNomeSef&&!(mp2.fornecedores||[]).some((f:string)=>f.toLowerCase()===fNomeSef.toLowerCase()))mp2.fornecedores=[...(mp2.fornecedores||[]),fNomeSef];
+          if(qtd>0){
+            mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+            movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataSefaz,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+          }
         }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
@@ -1950,7 +1968,23 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       const totalVal=mpsAll.reduce((s,m)=>(m.estoqueAtual||0)>0?s+(m.estoqueAtual||0)*(m.ultimoValor||0):s,0);
       const baixo=mpsAll.filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
       const zerado=mpsAll.filter(m=>(m.estoqueAtual||0)<=0);
-      const mpsFiltradas=filtroEst==="baixo"?baixo:filtroEst==="zerado"?zerado:filtroEst==="ok"?mpsAll.filter(m=>(m.estoqueAtual||0)>0&&((m.estoqueMinimo||0)===0||(m.estoqueAtual||0)>=(m.estoqueMinimo||0))):mpsAll;
+      const mpsBase=filtroEst==="baixo"?baixo:filtroEst==="zerado"?zerado:filtroEst==="ok"?mpsAll.filter(m=>(m.estoqueAtual||0)>0&&((m.estoqueMinimo||0)===0||(m.estoqueAtual||0)>=(m.estoqueMinimo||0))):mpsAll;
+      const mpsFiltradas=buscaEst.trim()?mpsBase.filter(m=>(m.nome||"").toLowerCase().includes(buscaEst.toLowerCase())):mpsBase;
+      const mergeProducts=(srcId:string,tgtId:string)=>{
+        setDb((d:any)=>{
+          const mps2=[...(d.materiasPrimas||[])];
+          const src2=mps2.find((m:any)=>m.id===srcId);
+          const tgt2=mps2.find((m:any)=>m.id===tgtId);
+          if(!src2||!tgt2||src2.id===tgt2.id)return d;
+          tgt2.estoqueAtual=(tgt2.estoqueAtual||0)+(src2.estoqueAtual||0);
+          const fornT=[...(tgt2.fornecedores||[])];
+          (src2.fornecedores||[]).forEach((f:string)=>{if(!fornT.some((tf:string)=>tf.toLowerCase()===f.toLowerCase()))fornT.push(f);});
+          tgt2.fornecedores=fornT;
+          const movs2=(d.movEstoque||[]).map((mv:any)=>mv.mpId===src2.id?{...mv,mpId:tgt2.id,mpNome:tgt2.nome}:mv);
+          const compras2=(d.compras||[]).map((c:any)=>c.nomeProduto.toLowerCase()===src2.nome.toLowerCase()?{...c,nomeProduto:tgt2.nome}:c);
+          return{...d,materiasPrimas:mps2.filter((m:any)=>m.id!==src2.id),movEstoque:movs2,compras:compras2};
+        });
+      };
       return <div>
         {/* Ajuste modal */}
         {ajusteModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -1983,6 +2017,31 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
             </div>
           </div>
         </div>}
+        {/* Merge modal */}
+        {mergeModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div className="card" style={{width:"100%",maxWidth:420}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>🔗 Agrupar Produto</div>
+            <div style={{fontSize:12,color:"#888",marginBottom:12}}>Mesclar <b style={{color:"#7c8fff"}}>{mergeModal.src.nome}</b> em outro produto. O estoque e histórico serão somados ao produto destino.</div>
+            <select value={mergeTgt} onChange={e=>setMergeTgt(e.target.value)} className="inp" style={{marginBottom:12}}>
+              <option value="">— Selecione o produto destino —</option>
+              {mpsAll.filter(m=>m.id!==mergeModal.src.id).map(m=><option key={m.id} value={m.id}>{m.nome} ({(m.estoqueAtual||0).toFixed(2)} {m.unidade})</option>)}
+            </select>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn" onClick={()=>{
+                if(!mergeTgt)return alert("Selecione o produto destino");
+                if(!confirm(`Mesclar "${mergeModal.src.nome}" em "${mpsAll.find(m=>m.id===mergeTgt)?.nome}"? Esta ação não pode ser desfeita.`))return;
+                mergeProducts(mergeModal.src.id,mergeTgt);
+                setMergeModal(null);setMergeTgt("");
+              }} style={{background:"#7c8fff",color:"#fff",padding:"10px",flex:1,fontSize:14}}>🔗 Mesclar</button>
+              <button className="btn" onClick={()=>{setMergeModal(null);setMergeTgt("");}} style={{background:"var(--border)",color:"#888",padding:"10px",flex:1,fontSize:14}}>Cancelar</button>
+            </div>
+          </div>
+        </div>}
+        {/* Header with company badge */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+          <div className="section-title" style={{marginBottom:0}}>📦 Estoque</div>
+          <span style={{background:"#7c8fff22",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{empresa}</span>
+        </div>
         {/* Summary cards */}
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px"}}>
@@ -1998,6 +2057,11 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
             <div className="muted" style={{fontSize:10}}>Sem estoque</div>
           </div>
         </div>
+        {/* Search */}
+        <div style={{position:"relative",marginBottom:10}}>
+          <input placeholder="🔍 Buscar produto..." value={buscaEst} onChange={e=>setBuscaEst(e.target.value)} className="inp" style={{paddingRight:buscaEst?36:14}}/>
+          {buscaEst&&<button onClick={()=>setBuscaEst("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+        </div>
         {/* Filters */}
         <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
           {[["todos","Todos"],["ok","✅ OK"],["baixo","⚠️ Baixo"],["zerado","🔴 Zerado"]].map(([k,l])=>(
@@ -2011,6 +2075,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
           const min=m.estoqueMinimo||0;
           const cor=est<=0?"#ff5c7a":min>0&&est<min?"#f59e0b":"#4ade80";
           const movs=(db.movEstoque||[]).filter((mv:any)=>mv.mpId===m.id).sort((a:any,b:any)=>b.criadoEm.localeCompare(a.criadoEm)).slice(0,10);
+          const fornList=(m.fornecedores||[]) as string[];
           return <div key={m.id} className="list-item" style={{marginBottom:8}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
               <span style={{fontWeight:700,flex:1,marginRight:8}}>{m.nome}</span>
@@ -2022,11 +2087,16 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
               {min>0&&<span className="muted" style={{fontSize:11,color:est<min?"#f59e0b":"#555"}}>Mín: {min} {m.unidade}</span>}
               {est>0&&<span className="muted" style={{fontSize:11,color:"#4ade80"}}>≈ {fmtMoney(est*(m.ultimoValor||0))}</span>}
             </div>
+            {fornList.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
+              <span style={{fontSize:10,color:"#555",alignSelf:"center"}}>Fornecedor:</span>
+              {fornList.map((f,i)=><span key={i} className="tag" style={{background:"#1e2a4a",color:"#7c8fff",fontSize:10,border:"1px solid #2a3a6a"}}>{f}</span>)}
+            </div>}
             {min>0&&<div style={{background:"#1e2235",borderRadius:4,height:5,marginBottom:8}}>
               <div style={{background:cor,height:5,borderRadius:4,width:`${Math.min(100,min>0?(est/min)*100:0)}%`,transition:"width .3s"}}/>
             </div>}
             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
               <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:""})} style={{background:"var(--border)",color:"#7c8fff",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
+              <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"#a78bfa",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <input type="number" min="0" step="0.1" value={m.estoqueMinimo||""} placeholder="0" onChange={e=>{const v=parseFloat(e.target.value)||0;setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((x:any)=>x.id===m.id?{...x,estoqueMinimo:v}:x)}));}}
                   style={{width:60,background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 6px",fontSize:12,color:"var(--text1)"}}/>
