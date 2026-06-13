@@ -8,7 +8,7 @@ const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d)
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[],
+  normalizacoes:[], movEstoque:[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -109,6 +109,7 @@ export default function App() {
       if(!m[e].consumacoes)m[e].consumacoes=[];
       if(!m[e].encargos)m[e].encargos=[];
       if(!m[e].normalizacoes)m[e].normalizacoes=[];
+      if(!m[e].movEstoque)m[e].movEstoque=[];
       if(!m[e].config)m[e].config={snAliquota:6};
       if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
     });
@@ -216,13 +217,17 @@ export default function App() {
           </div>
         </div>
         <div style={{flex:1}}>
-          {tabs.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)}
-              style={{background:tab===t.id?"var(--bg4)":"none",border:"none",borderLeft:tab===t.id?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:tab===t.id?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:tab===t.id?700:400,transition:"all .15s"}}>
-              <span style={{fontSize:17}}>{t.icon}</span>
-              <span>{t.label}</span>
-            </button>
-          ))}
+          {(()=>{
+            const estoqueBaixo=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
+            return tabs.map(t=>(
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                style={{background:tab===t.id?"var(--bg4)":"none",border:"none",borderLeft:tab===t.id?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:tab===t.id?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:tab===t.id?700:400,transition:"all .15s"}}>
+                <span style={{fontSize:17}}>{t.icon}</span>
+                <span>{t.label}</span>
+                {t.id==="compras"&&estoqueBaixo>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:4}}>{estoqueBaixo}</span>}
+              </button>
+            ));
+          })()}
         </div>
         <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <span style={{fontSize:11,color:syncStatus==="ok"?"#4ade80":syncStatus==="erro"?"#ff5c7a":syncStatus==="sync"?"#7c8fff":"var(--text3)"}}>
@@ -267,14 +272,18 @@ export default function App() {
 
       {/* BOTTOM NAV (mobile only) */}
       <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
-        {tabs.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-              color:tab===t.id?"#7c8fff":"var(--text3)",padding:"4px 1px",transition:"color .15s"}}>
-            <span style={{fontSize:17}}>{t.icon}</span>
-            <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{t.label}</span>
-          </button>
-        ))}
+        {(()=>{
+          const estoqueBaixoNav=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
+          return tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                color:tab===t.id?"#7c8fff":"var(--text3)",padding:"4px 1px",transition:"color .15s",position:"relative"}}>
+              <span style={{fontSize:17}}>{t.icon}</span>
+              <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{t.label}</span>
+              {t.id==="compras"&&estoqueBaixoNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoNav}</span>}
+            </button>
+          ));
+        })()}
       </div>
     </div>
   );
@@ -761,9 +770,28 @@ function parseNFe(xmlString) {
   return{fornecedor,itens,totalCompra:total,data,nNF};
 }
 
+// ===================== HELPERS =====================
+const checkDuplicataCompra=(db:any, fornecedor:string, total:number, data:string):boolean=>{
+  const cutoff=new Date(data+"T12:00:00");cutoff.setDate(cutoff.getDate()-3);
+  const cutoffStr=cutoff.toISOString().slice(0,10);
+  const grupos:Record<string,{fornecedor:string,total:number,data:string}>={};
+  (db.compras||[]).forEach((c:any)=>{
+    if(!grupos[c.grupoId])grupos[c.grupoId]={fornecedor:c.fornecedor||"",total:0,data:c.data||""};
+    grupos[c.grupoId].total+=parseMoney(c.valor);
+  });
+  return Object.values(grupos).some((g:any)=>
+    g.data>=cutoffStr&&g.data<=data&&
+    g.fornecedor.toLowerCase()===fornecedor.toLowerCase()&&
+    Math.abs(g.total-total)<0.02
+  );
+};
+
 // ===================== COMPRAS (multi-produto + IA + financeiro) =====================
 function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:string,state?:any,setState?:any}){
   const [subTab,setSubTab]=useState("novo");
+  const [filtroEst,setFiltroEst]=useState("todos");
+  const [ajusteModal,setAjusteModal]=useState<any>(null);
+  const [verHistEst,setVerHistEst]=useState<string|null>(null);
 
   // ---- Carrinho (entrada manual multi-produto) ----
   const [fornecedor,setFornecedor]=useState("");
@@ -830,6 +858,10 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const finalizarCompra=()=>{
     if(carrinho.length===0)return alert("Adicione ao menos um produto.");
     if(!fornecedor.trim())return alert("Informe o fornecedor.");
+    const totalCompraManual=carrinho.reduce((s,i)=>s+parseMoney(i.valorTotal),0);
+    if(checkDuplicataCompra(db,fornecedor,totalCompraManual,dataCom)){
+      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${fornecedor}" com valor similar em ${fmtDate(dataCom)}. Deseja continuar mesmo assim?`))return;
+    }
     setDb(d=>{
       // registrar cada item em compras
       const grupoId=uid();
@@ -843,11 +875,21 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       }));
       // atualizar / cadastrar matérias-primas
       let mps=[...(d.materiasPrimas||[])];
+      let movs=[...(d.movEstoque||[])];
       carrinho.forEach(item=>{
         const vUnit=parseMoney(item.valorUnit);
         const ex=mps.find(m=>m.nome.toLowerCase()===item.nomeProduto.toLowerCase());
-        if(ex){if(vUnit>0)ex.ultimoValor=vUnit;}
-        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1),criadoEm:new Date().toISOString()});
+        if(ex){
+          if(vUnit>0)ex.ultimoValor=vUnit;
+          if(ex.estoqueAtual==null)ex.estoqueAtual=0;
+        }
+        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1),estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        const qtd=parseFloat(item.quantidade)||0;
+        const mp2=mps.find(m=>m.nome.toLowerCase()===item.nomeProduto.toLowerCase());
+        if(mp2&&qtd>0){
+          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataCom,descricao:`Compra – ${fornecedor}`,grupoId,criadoEm:new Date().toISOString()});
+        }
       });
       // cadastrar fornecedor se novo
       let fornecedores=[...(d.fornecedores||[])];
@@ -867,7 +909,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         grupoId,
         criadoEm:new Date().toISOString(),
       };
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])]};
+      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])],movEstoque:[...movs]};
     });
     // reset
     setCarrinho([]);setFornecedor("");setDataCom(today());setFormaPag("dinheiro");setVencimento(today());
@@ -920,6 +962,10 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const confirmarIA=()=>{
     if(!iaResult)return;
     const forn=iaResult.fornecedor;
+    const dataIA=iaResult.data||today();
+    if(checkDuplicataCompra(db,forn?.nome||"",iaResult.totalCompra||0,dataIA)){
+      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataIA)}. Deseja continuar mesmo assim?`))return;
+    }
     setDb(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -932,14 +978,24 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         data:iaResult.data||today(),origem:"ia",grupoId,criadoEm:new Date().toISOString(),
       }));
       let mps=[...(d.materiasPrimas||[])];
+      let movs=[...(d.movEstoque||[])];
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
-        if(ex){ex.ultimoValor=c.valorUnitario||c.valor;}
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,criadoEm:new Date().toISOString()});
+        if(ex){
+          ex.ultimoValor=c.valorUnitario||c.valor;
+          if(ex.estoqueAtual==null)ex.estoqueAtual=0;
+        }
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        const qtd=parseFloat(String(c.quantidade))||0;
+        const mp2=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
+        if(mp2&&qtd>0){
+          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataIA,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+        }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
       const contaFin={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
+      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);
     alert("✅ Cupom importado! Estoque e financeiro atualizados.");
@@ -968,6 +1024,10 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const confirmarNFe=()=>{
     if(!nfeResult)return;
     const forn=nfeResult.fornecedor;
+    const dataNFe=nfeResult.data||today();
+    if(checkDuplicataCompra(db,forn?.nome||"",nfeResult.totalCompra||0,dataNFe)){
+      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataNFe)}. Deseja continuar mesmo assim?`))return;
+    }
     setDb(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -981,15 +1041,25 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         nNF:nfeResult.nNF||"",grupoId,criadoEm:new Date().toISOString(),
       }));
       let mps=[...(d.materiasPrimas||[])];
+      let movs=[...(d.movEstoque||[])];
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
-        if(ex){if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;}
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,criadoEm:new Date().toISOString()});
+        if(ex){
+          if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;
+          if(ex.estoqueAtual==null)ex.estoqueAtual=0;
+        }
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        const qtd=parseFloat(String(c.quantidade))||0;
+        const mp2=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
+        if(mp2&&qtd>0){
+          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataNFe,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+        }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
       const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
+      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
     });
     setNfeResult(null);setNfeError("");
     if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";
@@ -1095,6 +1165,10 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 
   const importarNFeSefaz=(nfe:any,all=false)=>{
     const forn=nfe.fornecedor;
+    const dataSefaz=nfe.data||today();
+    if(!all&&checkDuplicataCompra(db,forn?.nome||"",nfe.totalCompra||0,dataSefaz)){
+      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataSefaz)}. Deseja continuar mesmo assim?`))return;
+    }
     setDb(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -1107,15 +1181,25 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,criadoEm:new Date().toISOString(),
       }));
       let mps=[...(d.materiasPrimas||[])];
+      let movs=[...(d.movEstoque||[])];
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
-        if(ex){if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;}
-        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,criadoEm:new Date().toISOString()});
+        if(ex){
+          if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;
+          if(ex.estoqueAtual==null)ex.estoqueAtual=0;
+        }
+        else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,criadoEm:new Date().toISOString()});
+        const qtd=parseFloat(String(c.quantidade))||0;
+        const mp2=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
+        if(mp2&&qtd>0){
+          mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
+          movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataSefaz,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
+        }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
       const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])]};
+      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
     });
     if(!all){
       setSefazList(l=>l.filter(n=>n.nsu!==nfe.nsu));
@@ -1134,10 +1218,11 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"]].map(([k,l])=>(
+      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"],["estoque","📦 Estoque"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px",position:"relative"}}>
           {l}
           {k==="nfe"&&sefazList.length>0&&subTab!=="nfe"&&<span style={{position:"absolute",top:-4,right:-4,background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{sefazList.length}</span>}
+          {k==="estoque"&&(()=>{const n=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;return n>0?<span style={{position:"absolute",top:-4,right:-4,background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{n}</span>:null;})()}
         </button>
       ))}
     </div>
@@ -1863,6 +1948,108 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         {!(db.normalizacoes||[]).length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"24px"}}>Nenhuma substituição cadastrada.</div>}
       </div>}
     </div>}
+
+    {subTab==="estoque"&&(()=>{
+      const mpsAll=[...(db.materiasPrimas||[])].sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+      const totalVal=mpsAll.reduce((s,m)=>(m.estoqueAtual||0)>0?s+(m.estoqueAtual||0)*(m.ultimoValor||0):s,0);
+      const baixo=mpsAll.filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
+      const zerado=mpsAll.filter(m=>(m.estoqueAtual||0)<=0);
+      const mpsFiltradas=filtroEst==="baixo"?baixo:filtroEst==="zerado"?zerado:filtroEst==="ok"?mpsAll.filter(m=>(m.estoqueAtual||0)>0&&((m.estoqueMinimo||0)===0||(m.estoqueAtual||0)>=(m.estoqueMinimo||0))):mpsAll;
+      return <div>
+        {/* Ajuste modal */}
+        {ajusteModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div className="card" style={{width:"100%",maxWidth:400}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📝 Ajuste de Estoque — {ajusteModal.mp.nome}</div>
+            <div style={{fontSize:12,color:"#888",marginBottom:10}}>Atual: {(ajusteModal.mp.estoqueAtual||0).toFixed(2)} {ajusteModal.mp.unidade}</div>
+            <select value={ajusteModal.tipo} onChange={e=>setAjusteModal((m:any)=>({...m,tipo:e.target.value}))} className="inp" style={{marginBottom:8}}>
+              <option value="saida">▼ Saída (uso / perda)</option>
+              <option value="entrada">▲ Entrada manual</option>
+              <option value="ajuste">🔧 Inventário (definir valor absoluto)</option>
+            </select>
+            <input type="number" min="0" step="0.01" placeholder={ajusteModal.tipo==="ajuste"?"Novo valor absoluto":"Quantidade"} value={ajusteModal.qtd} onChange={e=>setAjusteModal((m:any)=>({...m,qtd:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+            <input placeholder="Descrição (opcional)" value={ajusteModal.descricao} onChange={e=>setAjusteModal((m:any)=>({...m,descricao:e.target.value}))} className="inp" style={{marginBottom:12}}/>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn" onClick={()=>{
+                const qtd=parseFloat(ajusteModal.qtd);
+                if(isNaN(qtd)||qtd<0)return alert("Quantidade inválida");
+                const mp=ajusteModal.mp;
+                const now=new Date().toISOString();
+                const ant=mp.estoqueAtual||0;
+                const novo=ajusteModal.tipo==="ajuste"?qtd:ajusteModal.tipo==="entrada"?ant+qtd:Math.max(0,ant-qtd);
+                const diff=ajusteModal.tipo==="ajuste"?novo-ant:ajusteModal.tipo==="entrada"?qtd:-qtd;
+                setDb((d:any)=>({...d,
+                  materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mp.id?{...m,estoqueAtual:novo}:m),
+                  movEstoque:[{id:uid(),mpId:mp.id,mpNome:mp.nome,tipo:ajusteModal.tipo,quantidade:Math.abs(diff),unidade:mp.unidade||"un",custo:mp.ultimoValor||0,data:today(),descricao:ajusteModal.descricao||ajusteModal.tipo,criadoEm:now},...(d.movEstoque||[])],
+                }));
+                setAjusteModal(null);
+              }} style={{background:"#7c8fff",color:"#fff",padding:"10px",flex:1,fontSize:14}}>✅ Confirmar</button>
+              <button className="btn" onClick={()=>setAjusteModal(null)} style={{background:"var(--border)",color:"#888",padding:"10px",flex:1,fontSize:14}}>Cancelar</button>
+            </div>
+          </div>
+        </div>}
+        {/* Summary cards */}
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px"}}>
+            <div style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(totalVal)}</div>
+            <div className="muted" style={{fontSize:10}}>Valor em estoque</div>
+          </div>
+          <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px",background:baixo.length?"#1a0e0a":"var(--bg3)"}}>
+            <div style={{color:"#f59e0b",fontWeight:700,fontSize:14}}>{baixo.length}</div>
+            <div className="muted" style={{fontSize:10}}>Abaixo do mín.</div>
+          </div>
+          <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px",background:zerado.length?"#1a0a0a":"var(--bg3)"}}>
+            <div style={{color:"#ff5c7a",fontWeight:700,fontSize:14}}>{zerado.length}</div>
+            <div className="muted" style={{fontSize:10}}>Sem estoque</div>
+          </div>
+        </div>
+        {/* Filters */}
+        <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
+          {[["todos","Todos"],["ok","✅ OK"],["baixo","⚠️ Baixo"],["zerado","🔴 Zerado"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setFiltroEst(k)} className="pill"
+              style={{background:filtroEst===k?"var(--border2)":"transparent",color:filtroEst===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
+          ))}
+        </div>
+        {/* Product list */}
+        {mpsFiltradas.map(m=>{
+          const est=m.estoqueAtual||0;
+          const min=m.estoqueMinimo||0;
+          const cor=est<=0?"#ff5c7a":min>0&&est<min?"#f59e0b":"#4ade80";
+          const movs=(db.movEstoque||[]).filter((mv:any)=>mv.mpId===m.id).sort((a:any,b:any)=>b.criadoEm.localeCompare(a.criadoEm)).slice(0,10);
+          return <div key={m.id} className="list-item" style={{marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontWeight:700,flex:1,marginRight:8}}>{m.nome}</span>
+              <span style={{fontWeight:700,color:cor,whiteSpace:"nowrap" as const}}>{est.toFixed(2)} {m.unidade}</span>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap" as const}}>
+              <span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{m.categoria}</span>
+              <span className="muted" style={{fontSize:11}}>Custo: {fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
+              {min>0&&<span className="muted" style={{fontSize:11,color:est<min?"#f59e0b":"#555"}}>Mín: {min} {m.unidade}</span>}
+              {est>0&&<span className="muted" style={{fontSize:11,color:"#4ade80"}}>≈ {fmtMoney(est*(m.ultimoValor||0))}</span>}
+            </div>
+            {min>0&&<div style={{background:"#1e2235",borderRadius:4,height:5,marginBottom:8}}>
+              <div style={{background:cor,height:5,borderRadius:4,width:`${Math.min(100,min>0?(est/min)*100:0)}%`,transition:"width .3s"}}/>
+            </div>}
+            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
+              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:""})} style={{background:"var(--border)",color:"#7c8fff",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <input type="number" min="0" step="0.1" value={m.estoqueMinimo||""} placeholder="0" onChange={e=>{const v=parseFloat(e.target.value)||0;setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((x:any)=>x.id===m.id?{...x,estoqueMinimo:v}:x)}));}}
+                  style={{width:60,background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 6px",fontSize:12,color:"var(--text1)"}}/>
+                <span style={{fontSize:11,color:"#555"}}>mín</span>
+              </div>
+              {movs.length>0&&<button onClick={()=>setVerHistEst(verHistEst===m.id?null:m.id)} style={{background:"none",border:"none",color:"#555",fontSize:11,cursor:"pointer",padding:"5px 0"}}>{verHistEst===m.id?"▼":"▶"} histórico ({movs.length})</button>}
+            </div>
+            {verHistEst===m.id&&movs.length>0&&<div style={{marginTop:8,background:"var(--bg4)",borderRadius:8,padding:"8px 10px"}}>
+              {movs.map((mv:any)=><div key={mv.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid #1e2235"}}>
+                <span style={{color:mv.tipo==="entrada"?"#4ade80":mv.tipo==="saida"?"#ff5c7a":"#f59e0b"}}>{mv.tipo==="entrada"?"▲":mv.tipo==="saida"?"▼":"🔧"} {(mv.quantidade||0).toFixed(2)} {mv.unidade}</span>
+                <span className="muted" style={{flex:1,marginLeft:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mv.descricao}</span>
+                <span className="muted" style={{flexShrink:0,marginLeft:8}}>{fmtDate(mv.data)}</span>
+              </div>)}
+            </div>}
+          </div>;
+        })}
+        {!mpsFiltradas.length&&<EmptyState msg="Nenhum produto encontrado. Registre compras para popular o estoque."/>}
+      </div>;
+    })()}
   </div>;
 }
 
@@ -1891,8 +2078,15 @@ function Contas({db,setDb}){
 
   const save=()=>{
     if(!form.descricao||!form.valor)return alert("Preencha descrição e valor.");
+    const valorNum=parseMoney(form.valor);
+    if(!editId&&!editGrupoRecorr){
+      const cutoff=new Date(form.vencimento);cutoff.setDate(cutoff.getDate()-7);
+      const cutoffStr=cutoff.toISOString().slice(0,10);
+      const dup=(db.contas||[]).some((c:any)=>c.vencimento>=cutoffStr&&c.vencimento<=form.vencimento&&(c.descricao||"").toLowerCase()===form.descricao.toLowerCase()&&Math.abs(parseMoney(c.valor)-valorNum)<0.02);
+      if(dup&&!confirm(`⚠️ Possível duplicata: já existe uma conta com a descrição "${form.descricao}" e valor similar nos últimos 7 dias. Continuar mesmo assim?`))return;
+    }
     const now=new Date().toISOString();
-    const base={categoria:form.categoria,valor:parseMoney(form.valor),status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor};
+    const base={categoria:form.categoria,valor:valorNum,status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor};
     const n=form.recorrente?Math.max(parseInt(form.parcelas)||1,1):1;
     if(n>1){
       const gRecorr=editGrupoRecorr||uid();
