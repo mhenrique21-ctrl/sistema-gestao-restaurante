@@ -1,4 +1,4 @@
-const CACHE = 'gestao-v2';
+const CACHE = 'gestao-v4';
 const ASSETS = ['/', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -11,17 +11,17 @@ self.addEventListener('activate', e => {
   ).then(() => self.clients.claim()));
 });
 
+// Network-first: always busca do servidor, usa cache só se offline
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('/api/')) return;
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const net = fetch(e.request).then(res => {
+    fetch(e.request)
+      .then(res => {
         if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         return res;
-      }).catch(() => cached);
-      return cached || net;
-    })
+      })
+      .catch(() => caches.match(e.request))
   );
 });
 

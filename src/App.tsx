@@ -270,7 +270,7 @@ export default function App() {
   const tabs=isOp?allTabs.filter(t=>t.id==="lista"):allTabs;
 
   return (
-    <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:84}}>
+    <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:84}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
         :root{--bg:#0a0c12;--bg2:#0d0f18;--bg3:#13161f;--bg4:#161922;--border:#1e2235;--border2:#252840;--text:#e8eaf0;--text2:#5a6080;--text3:#424668;--acc:#7c8fff}
@@ -368,18 +368,23 @@ export default function App() {
 
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
-        {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
-        {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
-        {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-        {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab}/>}
-        {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
-        {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
-        {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-        {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state}/>}
+        {isOp
+          ? <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}}/>
+          : <>
+              {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
+              {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
+              {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab}/>}
+              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
+              {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
+              {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
+              {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state}/>}
+            </>
+        }
       </div>
 
-      {/* BOTTOM NAV (mobile only) */}
-      <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
+      {/* BOTTOM NAV (mobile only, hidden for operators) */}
+      {!isOp&&<div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
         {(()=>{
           const estoqueBaixoNav=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
           const atrasadasNav=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
@@ -396,7 +401,7 @@ export default function App() {
             </button>
           ));
         })()}
-      </div>
+      </div>}
     </div>
   );
 }
