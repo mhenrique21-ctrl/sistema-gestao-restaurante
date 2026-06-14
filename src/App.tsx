@@ -151,10 +151,92 @@ const PRODS_SEED_V4=[
   {nome:"Saquinho para Sachê",           cat:"descartáveis", unidade:"un"},
   {nome:"Adesivo para Delivery",         cat:"descartáveis", unidade:"un"},
 ];
+const PRODS_SEED_V5=[
+  // polpas
+  {nome:"Polpa de Morango",              cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Maracujá",             cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Uva",                  cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Acerola",              cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Goiaba",               cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Graviola",             cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Abacaxi",              cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Abacaxi com Hortelã",  cat:"polpas", unidade:"un"},
+  {nome:"Polpa de Taperebá",             cat:"polpas", unidade:"un"},
+  {nome:"Sorvete",                       cat:"polpas", unidade:"un"},
+  // mercearia básica
+  {nome:"Açúcar",  cat:"mercearia básica", unidade:"kg"},
+  {nome:"Arroz",   cat:"mercearia básica", unidade:"kg"},
+  {nome:"Feijão",  cat:"mercearia básica", unidade:"kg"},
+  // farinhas
+  {nome:"Farinha de Trigo Dona Maria", cat:"farinhas", unidade:"kg"},
+  {nome:"Farinha de Trigo Mirella",    cat:"farinhas", unidade:"kg"},
+  {nome:"Farinha de Tapioca",          cat:"farinhas", unidade:"kg"},
+  {nome:"Flocão de Milho",             cat:"farinhas", unidade:"kg"},
+  {nome:"Fubá de Milho",               cat:"farinhas", unidade:"kg"},
+  {nome:"Farinha Panko",               cat:"farinhas", unidade:"kg"},
+  {nome:"Farinha de Rosca",            cat:"farinhas", unidade:"kg"},
+  // cafés e complementos
+  {nome:"Café em Grão",        cat:"cafés e complementos", unidade:"kg"},
+  {nome:"Café em Pó",          cat:"cafés e complementos", unidade:"un"},
+  {nome:"Café Solúvel",        cat:"cafés e complementos", unidade:"un"},
+  {nome:"Café Descafeinado",   cat:"cafés e complementos", unidade:"un"},
+  {nome:"Adoçante",            cat:"cafés e complementos", unidade:"un"},
+  {nome:"Chocolate Confraria", cat:"cafés e complementos", unidade:"un"},
+  // hortifruti
+  {nome:"Cebola",                    cat:"hortifruti", unidade:"kg"},
+  {nome:"Cenoura",                   cat:"hortifruti", unidade:"kg"},
+  {nome:"Pimentinha",                cat:"hortifruti", unidade:"kg"},
+  {nome:"Abóbora",                   cat:"hortifruti", unidade:"kg"},
+  {nome:"Couve",                     cat:"hortifruti", unidade:"kg"},
+  {nome:"Batata",                    cat:"hortifruti", unidade:"kg"},
+  {nome:"Tomate",                    cat:"hortifruti", unidade:"kg"},
+  {nome:"Tomate Cereja",             cat:"hortifruti", unidade:"kg"},
+  {nome:"Limão",                     cat:"hortifruti", unidade:"kg"},
+  {nome:"Maçã",                      cat:"hortifruti", unidade:"kg"},
+  {nome:"Mamão",                     cat:"hortifruti", unidade:"un"},
+  {nome:"Abacate",                   cat:"hortifruti", unidade:"un"},
+  {nome:"Banana",                    cat:"hortifruti", unidade:"kg"},
+  {nome:"Laranja",                   cat:"hortifruti", unidade:"kg"},
+  {nome:"Gengibre",                  cat:"hortifruti", unidade:"kg"},
+  {nome:"Alface",                    cat:"hortifruti", unidade:"un"},
+  {nome:"Abacaxi",                   cat:"hortifruti", unidade:"un"},
+  {nome:"Coco",                      cat:"hortifruti", unidade:"un"},
+  {nome:"Morango Congelado",         cat:"hortifruti", unidade:"kg"},
+  {nome:"Ameixa Seca sem Caroço",    cat:"hortifruti", unidade:"kg"},
+  {nome:"Ovos",                      cat:"hortifruti", unidade:"un"},
+  {nome:"Goma de Tapioca",           cat:"hortifruti", unidade:"kg"},
+  // chocolates
+  {nome:"Chocolate 50%",                  cat:"chocolates", unidade:"kg"},
+  {nome:"Chocolate 32%",                  cat:"chocolates", unidade:"kg"},
+  {nome:"Chocolate em Barra Meio Amargo", cat:"chocolates", unidade:"kg"},
+  {nome:"Nescau em Pó",                   cat:"chocolates", unidade:"un"},
+  {nome:"Confeito de Chocolate",          cat:"chocolates", unidade:"kg"},
+  {nome:"Nutella",                        cat:"chocolates", unidade:"un"},
+  // latas, caixas e temperos
+  {nome:"Creme de Leite em Caixa",      cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Leite Condensado Integral",    cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Leite Condensado em Lata",     cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Creme de Leite em Lata",       cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Gelatina sem Sabor",           cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Pimenta",                      cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Maizena",                      cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Biscoito para Café",           cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Doce de Leite",                cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Seleta de Legumes",            cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Milho",                        cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Azeitona",                     cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Sazón Picanha",                cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Sazón Nordeste",               cat:"latas, caixas e temperos", unidade:"un"},
+  {nome:"Sal",                          cat:"latas, caixas e temperos", unidade:"kg"},
+  {nome:"Arrozina",                     cat:"latas, caixas e temperos", unidade:"un"},
+  // massas
+  {nome:"Macarrão para Sopa",       cat:"massas", unidade:"kg"},
+  {nome:"Macarrão para Macarronada",cat:"massas", unidade:"kg"},
+];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -332,6 +414,12 @@ const migrateDb=(m:any)=>{
       const novos=PRODS_SEED_V4.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
       m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
       m[e].produtosSeedV4=true;
+    }
+    if(!m[e].produtosSeedV5){
+      const ex:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+      const novos=PRODS_SEED_V5.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+      m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
+      m[e].produtosSeedV5=true;
     }
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
@@ -2317,11 +2405,13 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 }
 
 // ===================== LISTA DE COMPRAS =====================
-const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","outros"];
+const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","polpas","mercearia básica","farinhas","cafés e complementos","chocolates","latas, caixas e temperos","massas","outros"];
 const CAT_ICONS:Record<string,string>={
   "carnes":"🥩","hortifruti":"🥦","laticínios":"🧀","grãos":"🌾","temperos":"🧂",
   "proteína":"🍖","bebidas":"🍺","embalagens":"📦","descartáveis":"🥤",
-  "material de limpeza":"🧹","limpeza":"🧹","outros":"📋",
+  "material de limpeza":"🧹","limpeza":"🧹",
+  "polpas":"🍓","mercearia básica":"🛒","farinhas":"🌾","cafés e complementos":"☕",
+  "chocolates":"🍫","latas, caixas e temperos":"🥫","massas":"🍝","outros":"📋",
 };
 const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
