@@ -8,7 +8,7 @@ const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d)
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[],
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -124,9 +124,10 @@ function LoginScreen({onLogin}:{onLogin:(info:any)=>void}){
       <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}`}</style>
       <div style={{width:"100%",maxWidth:340}}>
         <div style={{textAlign:"center",marginBottom:36}}>
-          <div style={{fontSize:48,marginBottom:8}}>🍽️</div>
-          <div style={{fontSize:28,fontWeight:800,color:"#e8eaf0",fontFamily:"'Syne',sans-serif",letterSpacing:-1}}>App Gestão</div>
-          <div style={{fontSize:13,color:"#5a6080",marginTop:4}}>Confraria & Seama</div>
+          <div style={{background:"#fff",borderRadius:20,padding:"18px 24px",display:"inline-block",marginBottom:16,boxShadow:"0 4px 24px #0006"}}>
+            <img src="/logo-confraria.png" alt="Confraria Café" style={{height:120,width:"auto",display:"block"}}/>
+          </div>
+          <div style={{fontSize:13,color:"#5a6080"}}>Sistema de Gestão</div>
         </div>
         <div style={{animation:shake?"shake .4s ease":"none"}}>
           <input
@@ -162,6 +163,7 @@ export default function App() {
       if(!m[e].encargos)m[e].encargos=[];
       if(!m[e].normalizacoes)m[e].normalizacoes=[];
       if(!m[e].movEstoque)m[e].movEstoque=[];
+      if(!m[e].listaCategorias)m[e].listaCategorias=[];
       if(!m[e].config)m[e].config={snAliquota:6};
       if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
     });
@@ -2121,20 +2123,35 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 }
 
 // ===================== LISTA DE COMPRAS =====================
+const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","outros"];
+
 function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(tab:string)=>void}){
   const [nome,setNome]=useState("");
   const [qtd,setQtd]=useState("1");
   const [unidade,setUnidade]=useState("un");
   const [cat,setCat]=useState("");
   const [busca,setBusca]=useState("");
+  const [showCatMgmt,setShowCatMgmt]=useState(false);
+  const [novaCat,setNovaCat]=useState("");
+  const [showHistSug,setShowHistSug]=useState(false);
+  const [editId,setEditId]=useState<string|null>(null);
+
+  const catsPers:string[]=db.listaCategorias||[];
+  const cats=[...CATS_DEFAULT,...catsPers.filter((c:string)=>!CATS_DEFAULT.includes(c))];
 
   const lista:any[]=db.listaCompras||[];
   const pendentes=lista.filter((i:any)=>!i.comprado);
   const comprados=lista.filter((i:any)=>i.comprado);
 
+  const getMpEstoque=(nomeProd:string)=>{
+    const mp=(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase()===nomeProd.toLowerCase());
+    return mp?(mp.estoqueAtual||0):null;
+  };
+
   const addItem=()=>{
-    if(!nome.trim())return alert("Informe o nome do item.");
-    const novo={id:uid(),nome:nome.trim(),quantidade:parseFloat(qtd)||1,unidade,categoria:cat||"outros",comprado:false,criadoEm:new Date().toISOString()};
+    if(!nome.trim())return;
+    const ordem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
+    const novo={id:uid(),nome:nome.trim(),quantidade:parseFloat(qtd)||1,unidade,categoria:cat||"outros",comprado:false,ordem,criadoEm:new Date().toISOString()};
     setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),novo]}));
     setNome("");setQtd("1");
   };
@@ -2143,17 +2160,64 @@ function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(
   const del=(id:string)=>setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id)}));
   const limparComprados=()=>{if(!comprados.length)return;if(!confirm("Remover todos os itens comprados?"))return;setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado)}));};
 
+  const moverItem=(id:string,dir:-1|1)=>{
+    setDb((d:any)=>{
+      const arr=[...(d.listaCompras||[])];
+      const cat0=arr.find(i=>i.id===id)?.categoria||"";
+      const catItens=arr.filter(i=>i.categoria===cat0).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+      const idx=catItens.findIndex(i=>i.id===id);
+      const swapIdx=idx+dir;
+      if(swapIdx<0||swapIdx>=catItens.length)return d;
+      const aOrd=catItens[idx].ordem||0;
+      const bOrd=catItens[swapIdx].ordem||0;
+      return{...d,listaCompras:arr.map(i=>{
+        if(i.id===catItens[idx].id)return{...i,ordem:bOrd};
+        if(i.id===catItens[swapIdx].id)return{...i,ordem:aOrd};
+        return i;
+      })};
+    });
+  };
+
   const sugerirDoEstoque=()=>{
     const mps=(db.materiasPrimas||[]).filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
     if(!mps.length)return alert("Nenhum produto abaixo do estoque mínimo.");
-    const jaHa=new Set((db.listaCompras||[]).map((i:any)=>i.nome.toLowerCase()));
-    const novos=mps.filter((m:any)=>!jaHa.has(m.nome.toLowerCase())).map((m:any)=>({
+    const jaHa=new Set(lista.map((i:any)=>i.nome.toLowerCase()));
+    const base=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
+    const novos=mps.filter((m:any)=>!jaHa.has(m.nome.toLowerCase())).map((m:any,idx:number)=>({
       id:uid(),nome:m.nome,quantidade:Math.max(1,Math.ceil((m.estoqueMinimo||0)-(m.estoqueAtual||0))),
-      unidade:m.unidade||"un",categoria:m.categoria||"outros",comprado:false,criadoEm:new Date().toISOString(),
+      unidade:m.unidade||"un",categoria:m.categoria||"outros",comprado:false,ordem:base+idx,criadoEm:new Date().toISOString(),
     }));
     if(!novos.length)return alert("Todos os itens abaixo do mínimo já estão na lista.");
     setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),...novos]}));
-    alert(`✅ ${novos.length} item(ns) adicionado(s) da sugestão de estoque.`);
+    alert(`✅ ${novos.length} item(ns) adicionado(s).`);
+  };
+
+  // Sugestões do histórico de compras (produtos únicos já comprados)
+  const histSugestoes=(()=>{
+    const jaHa=new Set(lista.map((i:any)=>i.nome.toLowerCase()));
+    const vistos=new Set<string>();
+    return (db.compras||[]).filter((c:any)=>{
+      const n=(c.nomeProduto||"").toLowerCase();
+      if(!n||jaHa.has(n)||vistos.has(n))return false;
+      vistos.add(n);return true;
+    }).map((c:any)=>({nome:c.nomeProduto,categoria:c.categoria||"outros",unidade:c.unidade||"un"}));
+  })();
+
+  const addFromHist=(h:any)=>{
+    const base=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
+    setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),nome:h.nome,quantidade:1,unidade:h.unidade,categoria:h.categoria,comprado:false,ordem:base,criadoEm:new Date().toISOString()}]}));
+  };
+
+  const addCat=()=>{
+    const n=novaCat.trim().toLowerCase();
+    if(!n)return;
+    if(cats.includes(n))return alert("Categoria já existe.");
+    setDb((d:any)=>({...d,listaCategorias:[...(d.listaCategorias||[]),n]}));
+    setNovaCat("");
+  };
+  const delCat=(c:string)=>{
+    if(!confirm(`Excluir categoria "${c}"?`))return;
+    setDb((d:any)=>({...d,listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c)}));
   };
 
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
@@ -2171,31 +2235,72 @@ function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(
       <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do item *" value={nome} onChange={e=>setNome(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addItem();}}
-          className="inp" style={{flex:"2 1 160px",marginBottom:0}}/>
+          className="inp" style={{flex:"2 1 150px",marginBottom:0}}/>
         <input type="number" min="0.1" step="0.1" placeholder="Qtd" value={qtd} onChange={e=>setQtd(e.target.value)}
-          className="inp" style={{flex:"0 0 70px",marginBottom:0}}/>
-        <select value={unidade} onChange={e=>setUnidade(e.target.value)} className="inp" style={{flex:"0 0 80px",marginBottom:0}}>
+          className="inp" style={{flex:"0 0 66px",marginBottom:0}}/>
+        <select value={unidade} onChange={e=>setUnidade(e.target.value)} className="inp" style={{flex:"0 0 76px",marginBottom:0}}>
           {["un","kg","L","cx","pc","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
         </select>
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
         <select value={cat} onChange={e=>setCat(e.target.value)} className="inp" style={{flex:"1 1 120px",marginBottom:0}}>
-          <option value="">Categoria (opcional)</option>
-          {["carnes","hortifruti","laticínios","grãos","temperos","bebidas","embalagens","descartáveis","material de limpeza","outros"].map(c=><option key={c} value={c}>{c}</option>)}
+          <option value="">Categoria</option>
+          {cats.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
         <button className="btn" onClick={addItem} style={{background:"#7c8fff",color:"#fff",padding:"10px 18px",fontSize:13,flex:"0 0 auto"}}>+ Adicionar</button>
       </div>
     </div>
 
     {/* Ações rápidas */}
-    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
-      <button className="btn" onClick={sugerirDoEstoque} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 12px",fontSize:12,border:"1px solid #2a4a2a"}}>
-        📦 Sugerir do Estoque
+    <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+      <button className="btn" onClick={sugerirDoEstoque} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 11px",fontSize:12,border:"1px solid #2a4a2a"}}>
+        📦 Estoque mínimo
       </button>
-      {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"#1a0a0a",color:"#888",padding:"7px 12px",fontSize:12}}>
-        🗑️ Limpar comprados ({comprados.length})
+      {histSugestoes.length>0&&<button className="btn" onClick={()=>setShowHistSug(v=>!v)} style={{background:showHistSug?"#1a2040":"#0f1628",color:"#7c8fff",padding:"7px 11px",fontSize:12,border:"1px solid #2a3260"}}>
+        📜 Histórico ({histSugestoes.length})
+      </button>}
+      <button className="btn" onClick={()=>setShowCatMgmt(v=>!v)} style={{background:showCatMgmt?"#1a1a2a":"#0f0f1a",color:"#a78bfa",padding:"7px 11px",fontSize:12,border:"1px solid #3a2a60"}}>
+        🏷️ Categorias
+      </button>
+      {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"#1a0a0a",color:"#888",padding:"7px 11px",fontSize:12}}>
+        🗑️ Limpar ({comprados.length})
       </button>}
     </div>
+
+    {/* Gerenciar categorias */}
+    {showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
+      <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Gerenciar Categorias</div>
+      <div style={{display:"flex",gap:6,marginBottom:10}}>
+        <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0}}/>
+        <button className="btn" onClick={addCat} style={{background:"#a78bfa",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap" as const,gap:6}}>
+        {CATS_DEFAULT.map(c=><span key={c} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:20,fontSize:11,padding:"3px 10px",color:"#666"}}>{c}</span>)}
+        {catsPers.map((c:string)=>(
+          <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#1a1030",border:"1px solid #3a2a60",borderRadius:20,fontSize:11,padding:"3px 10px",color:"#a78bfa"}}>
+            {c}
+            <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",padding:0,fontSize:12,lineHeight:1}}>×</button>
+          </span>
+        ))}
+      </div>
+    </div>}
+
+    {/* Sugestões do histórico */}
+    {showHistSug&&<div className="card" style={{marginBottom:12,border:"1px solid #2a3260"}}>
+      <div className="section-title" style={{color:"#7c8fff"}}>📜 Adicionar do Histórico de Compras</div>
+      <div style={{maxHeight:220,overflowY:"auto" as const}}>
+        {histSugestoes.map((h:any,i:number)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
+            <div>
+              <span style={{fontSize:13,fontWeight:600}}>{h.nome}</span>
+              <span style={{fontSize:11,color:"#666",marginLeft:8}}>{h.categoria} · {h.unidade}</span>
+            </div>
+            <button className="btn" onClick={()=>addFromHist(h)} style={{background:"#7c8fff",color:"#fff",padding:"4px 12px",fontSize:12}}>+ Add</button>
+          </div>
+        ))}
+      </div>
+    </div>}
 
     {/* Busca */}
     {lista.length>5&&<div style={{position:"relative",marginBottom:12}}>
@@ -2204,28 +2309,47 @@ function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(
     </div>}
 
     {/* Lista por categoria */}
-    {!lista.length&&<EmptyState msg="Lista vazia. Adicione itens manualmente ou use 📦 Sugerir do Estoque."/>}
+    {!lista.length&&<EmptyState msg="Lista vazia. Adicione itens manualmente ou use 📦 Estoque mínimo / 📜 Histórico."/>}
     {Object.entries(porCat).sort(([a],[b])=>a.localeCompare(b,"pt-BR")).map(([categoria,itens])=>{
-      const todosComprados=itens.every((i:any)=>i.comprado);
+      const itensSorted=[...itens].sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+      const todosComprados=itensSorted.every((i:any)=>i.comprado);
       return <div key={categoria} style={{marginBottom:14}}>
-        <div style={{fontSize:11,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:1,marginBottom:6,display:"flex",gap:6,alignItems:"center"}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:1,marginBottom:6,display:"flex",gap:6,alignItems:"center"}}>
           <span>{categoria}</span>
-          <span style={{fontWeight:400,color:"#444"}}>({itens.filter((i:any)=>!i.comprado).length}/{itens.length})</span>
+          <span style={{fontWeight:400,color:"#555"}}>({itensSorted.filter((i:any)=>!i.comprado).length}/{itensSorted.length})</span>
           {todosComprados&&<span style={{color:"#4ade80",fontSize:10}}>✅ tudo comprado</span>}
         </div>
-        {itens.map((item:any)=>(
-          <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:4,background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",opacity:item.comprado?0.55:1,transition:"opacity .2s"}}>
+        {itensSorted.map((item:any,idx:number)=>{
+          const estoque=getMpEstoque(item.nome);
+          return(
+          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",opacity:item.comprado?0.5:1,transition:"opacity .2s"}}>
+            {/* Checkbox */}
             <button onClick={()=>toggle(item.id)}
               style={{width:24,height:24,borderRadius:6,border:`2px solid ${item.comprado?"#4ade80":"#555"}`,background:item.comprado?"#4ade80":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
               {item.comprado&&<span style={{color:"#111",fontSize:14,fontWeight:900,lineHeight:1}}>✓</span>}
             </button>
+            {/* Info */}
             <div style={{flex:1,minWidth:0}}>
-              <span style={{fontSize:13,fontWeight:600,textDecoration:item.comprado?"line-through":"none",color:item.comprado?"#555":"inherit"}}>{item.nome}</span>
-              <span style={{marginLeft:8,fontSize:11,color:"#666"}}>{item.quantidade} {item.unidade}</span>
+              <div style={{fontSize:13,fontWeight:600,textDecoration:item.comprado?"line-through":"none",color:item.comprado?"#555":"inherit",whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{item.nome}</div>
+              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
+                <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.quantidade} {item.unidade}</span>
+                {estoque!==null&&<span style={{fontSize:10,color:estoque===0?"#ff5c7a":estoque<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 7px"}}>
+                  📦 {estoque} {item.unidade} em estoque
+                </span>}
+              </div>
             </div>
-            <button onClick={()=>del(item.id)} style={{background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:16,padding:"0 4px",flexShrink:0,lineHeight:1}}>×</button>
+            {/* Mover */}
+            {!item.comprado&&<div style={{display:"flex",flexDirection:"column" as const,gap:2,flexShrink:0}}>
+              <button onClick={()=>moverItem(item.id,-1)} disabled={idx===0}
+                style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#888",cursor:idx===0?"default":"pointer",fontSize:10,padding:"1px 5px",lineHeight:1}}>▲</button>
+              <button onClick={()=>moverItem(item.id,1)} disabled={idx===itensSorted.length-1}
+                style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===itensSorted.length-1?"#333":"#888",cursor:idx===itensSorted.length-1?"default":"pointer",fontSize:10,padding:"1px 5px",lineHeight:1}}>▼</button>
+            </div>}
+            {/* Excluir */}
+            <button onClick={()=>del(item.id)} style={{background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:16,padding:"0 2px",flexShrink:0,lineHeight:1}}>×</button>
           </div>
-        ))}
+          );
+        })}
       </div>;
     })}
   </div>;
