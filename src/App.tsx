@@ -208,31 +208,33 @@ function LoginScreen({onLogin}:{onLogin:(info:any)=>void}){
 }
 
 // ===================== MAIN APP =====================
+const migrateDb=(m:any)=>{
+  ["CONFRARIA","SEAMA"].forEach(e=>{
+    if(!m[e])m[e]=mkDb();
+    if(!m[e].consumacoes)m[e].consumacoes=[];
+    if(!m[e].encargos)m[e].encargos=[];
+    if(!m[e].normalizacoes)m[e].normalizacoes=[];
+    if(!m[e].movEstoque)m[e].movEstoque=[];
+    if(!m[e].listaCategorias)m[e].listaCategorias=[];
+    if(!m[e].listaCatOrdem)m[e].listaCatOrdem=[];
+    if(!m[e].pedidosLista)m[e].pedidosLista=[];
+    if(!m[e].produtosLista)m[e].produtosLista=[];
+    if(!m[e].produtosSeedDone){
+      const existentes:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+      const novos=PRODS_SEED.filter(p=>!existentes.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+      m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
+      m[e].produtosSeedDone=true;
+    }
+    if(!m[e].config)m[e].config={snAliquota:6};
+    if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
+  });
+  return m;
+};
+
 export default function App() {
   const [state,setState] = useState(()=>{
     const loaded=loadData();
-    if(!loaded)return initialState;
-    const m={...loaded};
-    ["CONFRARIA","SEAMA"].forEach(e=>{
-      if(!m[e])m[e]=mkDb();
-      if(!m[e].consumacoes)m[e].consumacoes=[];
-      if(!m[e].encargos)m[e].encargos=[];
-      if(!m[e].normalizacoes)m[e].normalizacoes=[];
-      if(!m[e].movEstoque)m[e].movEstoque=[];
-      if(!m[e].listaCategorias)m[e].listaCategorias=[];
-      if(!m[e].listaCatOrdem)m[e].listaCatOrdem=[];
-      if(!m[e].pedidosLista)m[e].pedidosLista=[];
-      if(!m[e].produtosLista)m[e].produtosLista=[];
-      if(!m[e].produtosSeedDone){
-        const existentes:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
-        const novos=PRODS_SEED.filter(p=>!existentes.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
-        m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
-        m[e].produtosSeedDone=true;
-      }
-      if(!m[e].config)m[e].config={snAliquota:6};
-      if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
-    });
-    return m;
+    return migrateDb(loaded?{...loaded}:{...initialState});
   });
   const [login,setLogin]   = useState<{role:string,label:string,empresa?:string}|null>(()=>{
     try{return JSON.parse(sessionStorage.getItem("app_login")||"null");}catch{return null;}
@@ -259,7 +261,7 @@ export default function App() {
     )).then(results=>{
       const updates:any={};
       results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
-      if(Object.keys(updates).length>0)setState(prev=>({...prev,...updates}));
+      if(Object.keys(updates).length>0)setState(prev=>migrateDb({...prev,...updates}));
     });
   },[]);
 
@@ -274,7 +276,7 @@ export default function App() {
       )).then(results=>{
         const updates:any={};
         results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
-        if(Object.keys(updates).length>0)setState(prev=>({...prev,...updates}));
+        if(Object.keys(updates).length>0)setState(prev=>migrateDb({...prev,...updates}));
       });
     };
     const t=setInterval(poll,10000);
