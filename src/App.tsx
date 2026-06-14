@@ -814,7 +814,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const [buscaHist,setBuscaHist]=useState("");
   const [catColaps,setCatColaps]=useState<Set<string>>(new Set());
   const [prodSubTab,setProdSubTab]=useState<"catalogo"|"substituicoes">("catalogo");
-  const catsBase=["insumos","descartáveis","material de limpeza","proteína","bebidas"];
+  const catsBase=["carnes","hortifruti","laticínios","grãos","temperos","proteína","insumos","bebidas","embalagens","descartáveis","material de limpeza","limpeza"];
   const cats=[...catsBase,...(db.config?.categoriasExtra||[])];
   const unds=["kg","un","L","g","ml","pct"];
   const formasPag=["dinheiro","cartão débito","cartão crédito","pix","boleto","fiado"];
@@ -944,7 +944,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     try{
       const userContent=imgBase64
         ?[{type:"image",source:{type:"base64",media_type:imgBase64.mediaType,data:imgBase64.data}},
-          {type:"text",text:"Analise este cupom/nota fiscal. Extraia fornecedor e TODOS os itens com quantidade e valor. Categorize: insumos, descartáveis, material de limpeza, proteína. Foque no tipo do produto, não na marca. Retorne SOMENTE JSON válido:\n{\"fornecedor\":{\"nome\":\"...\",\"endereco\":\"...\"},\"itens\":[{\"nome\":\"...\",\"categoria\":\"...\",\"unidade\":\"kg|un|L\",\"quantidade\":0,\"valorUnitario\":0,\"valorTotal\":0}],\"totalCompra\":0,\"data\":\"YYYY-MM-DD\"}"}]
+          {type:"text",text:"Analise este cupom/nota fiscal. Extraia fornecedor e TODOS os itens com quantidade e valor. Categorize: carnes, hortifruti, laticínios, grãos, temperos, proteína, insumos, bebidas, embalagens, descartáveis, material de limpeza, limpeza. Foque no tipo do produto, não na marca. Retorne SOMENTE JSON válido:\n{\"fornecedor\":{\"nome\":\"...\",\"endereco\":\"...\"},\"itens\":[{\"nome\":\"...\",\"categoria\":\"...\",\"unidade\":\"kg|un|L\",\"quantidade\":0,\"valorUnitario\":0,\"valorTotal\":0}],\"totalCompra\":0,\"data\":\"YYYY-MM-DD\"}"}]
         :`Analise este cupom fiscal e extraia os dados. Categorize cada item em: insumos, descartáveis, material de limpeza, proteína. Foque no tipo do produto, não na marca. Retorne SOMENTE JSON:\n{"fornecedor":{"nome":"...","endereco":"..."},"itens":[{"nome":"...","categoria":"...","unidade":"kg|un|L","quantidade":0,"valorUnitario":0,"valorTotal":0}],"totalCompra":0,"data":"YYYY-MM-DD"}\n\nTexto: ${iaText}`;
       const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:userContent}]})});
       const data=await res.json();
@@ -1963,6 +1963,21 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 }
 
 // ===================== ESTOQUE =====================
+const REGRAS_CAT:Record<string,{dias:number,perecivel:"alta"|"media"|"baixa",cmv:boolean,icon:string}>={
+  "carnes":    {dias:1,  perecivel:"alta",  cmv:true,  icon:"🥩"},
+  "hortifruti":{dias:3,  perecivel:"alta",  cmv:true,  icon:"🥦"},
+  "laticínios":{dias:4,  perecivel:"media", cmv:true,  icon:"🧀"},
+  "bebidas":   {dias:7,  perecivel:"baixa", cmv:true,  icon:"🍺"},
+  "embalagens":{dias:30, perecivel:"baixa", cmv:true,  icon:"📦"},
+  "grãos":     {dias:30, perecivel:"baixa", cmv:true,  icon:"🌾"},
+  "temperos":  {dias:30, perecivel:"baixa", cmv:true,  icon:"🧂"},
+  "proteína":  {dias:1,  perecivel:"alta",  cmv:true,  icon:"🥩"},
+  "insumos":   {dias:30, perecivel:"baixa", cmv:true,  icon:"🧂"},
+  "descartáveis":{dias:30,perecivel:"baixa",cmv:true,  icon:"🥤"},
+  "material de limpeza":{dias:30,perecivel:"baixa",cmv:false,icon:"🧹"},
+  "limpeza":   {dias:30, perecivel:"baixa", cmv:false, icon:"🧹"},
+};
+
 function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [sub,setSub]=useState("inventario");
   const [filtroEst,setFiltroEst]=useState("todos");
@@ -1978,6 +1993,18 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const mps:any[]=[...(db.materiasPrimas||[])];
   const movEstoque:any[]=db.movEstoque||[];
   const mpIdsComMov=new Set(movEstoque.map((mv:any)=>mv.mpId));
+
+  // Loss tracking
+  const totEntVal=movEstoque.filter((mv:any)=>mv.tipo==="entrada").reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(mv.custo||0),0);
+  const totPerdVal=movEstoque.filter((mv:any)=>mv.tipo==="perda").reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(mv.custo||0),0);
+  const perdaPercGlobal=totEntVal>0?(totPerdVal/totEntVal)*100:0;
+
+  // Expiry alerts
+  const em3d=new Date();em3d.setDate(em3d.getDate()+3);const em3Str=em3d.toISOString().slice(0,10);
+  const em7d=new Date();em7d.setDate(em7d.getDate()+7);const em7Str=em7d.toISOString().slice(0,10);
+  const vencRed=mps.filter((m:any)=>m.dataValidade&&m.dataValidade<=em3Str&&(m.estoqueAtual||0)>0);
+  const vencOrange=mps.filter((m:any)=>m.dataValidade&&m.dataValidade>em3Str&&m.dataValidade<=em7Str&&(m.estoqueAtual||0)>0);
+  const alertBadge=(vencRed.length+vencOrange.length)+(db.materiasPrimas||[]).filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
 
   const mergeProducts=(srcId:string,tgtId:string)=>{
     setDb((d:any)=>{
@@ -2005,7 +2032,7 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         <button key={k} onClick={()=>setSub(k)} className="pill"
           style={{background:sub===k?"#7c8fff":"var(--bg4)",color:sub===k?"#fff":"#777",fontSize:12,padding:"8px 14px",position:"relative"}}>
           {l}
-          {k==="inventario"&&(()=>{const n=(db.materiasPrimas||[]).filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;return n>0?<span style={{marginLeft:5,background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{n}</span>:null;})()}
+          {k==="inventario"&&alertBadge>0&&<span style={{marginLeft:5,background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{alertBadge}</span>}
         </button>
       ))}
     </div>
@@ -2025,21 +2052,35 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <div className="card" style={{width:"100%",maxWidth:400}}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📝 Ajuste — {ajusteModal.mp.nome}</div>
             <div style={{fontSize:12,color:"#888",marginBottom:10}}>Atual: {(ajusteModal.mp.estoqueAtual||0).toFixed(2)} {ajusteModal.mp.unidade}</div>
-            <select value={ajusteModal.tipo} onChange={e=>setAjusteModal((m:any)=>({...m,tipo:e.target.value}))} className="inp" style={{marginBottom:8}}>
-              <option value="saida">▼ Saída (uso / perda)</option>
+            <select value={ajusteModal.tipo} onChange={e=>setAjusteModal((m:any)=>({...m,tipo:e.target.value,razaoPerda:""}))} className="inp" style={{marginBottom:8}}>
+              <option value="saida">▼ Saída (consumo)</option>
+              <option value="perda">🗑️ Perda / Descarte</option>
               <option value="entrada">▲ Entrada manual</option>
               <option value="ajuste">🔧 Inventário (valor absoluto)</option>
             </select>
+            {ajusteModal.tipo==="perda"&&<select value={ajusteModal.razaoPerda||""} onChange={e=>setAjusteModal((m:any)=>({...m,razaoPerda:e.target.value}))} className="inp" style={{marginBottom:8}}>
+              <option value="">— Motivo da perda —</option>
+              <option value="vencimento">📅 Vencimento</option>
+              <option value="manuseio">🤲 Manuseio</option>
+              <option value="preparo">🍳 Preparo</option>
+              <option value="outros">❓ Outros</option>
+            </select>}
             <input type="number" min="0" step="0.01" placeholder={ajusteModal.tipo==="ajuste"?"Novo valor absoluto":"Quantidade"} value={ajusteModal.qtd} onChange={e=>setAjusteModal((m:any)=>({...m,qtd:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+            <div style={{fontSize:11,color:"#666",marginBottom:4}}>Validade do produto (opcional)</div>
+            <input type="date" value={ajusteModal.dataValidade||ajusteModal.mp.dataValidade||""} onChange={e=>setAjusteModal((m:any)=>({...m,dataValidade:e.target.value}))} className="inp" style={{marginBottom:8}}/>
             <input placeholder="Descrição (opcional)" value={ajusteModal.descricao} onChange={e=>setAjusteModal((m:any)=>({...m,descricao:e.target.value}))} className="inp" style={{marginBottom:12}}/>
             <div style={{display:"flex",gap:8}}>
               <button className="btn" onClick={()=>{
                 const qtd=parseFloat(ajusteModal.qtd);if(isNaN(qtd)||qtd<0)return alert("Quantidade inválida");
+                if(ajusteModal.tipo==="perda"&&!ajusteModal.razaoPerda)return alert("Selecione o motivo da perda");
                 const mp=ajusteModal.mp;const now=new Date().toISOString();const ant=mp.estoqueAtual||0;
-                const novo=ajusteModal.tipo==="ajuste"?qtd:ajusteModal.tipo==="entrada"?ant+qtd:Math.max(0,ant-qtd);
-                const diff=ajusteModal.tipo==="ajuste"?novo-ant:ajusteModal.tipo==="entrada"?qtd:-qtd;
-                setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mp.id?{...m,estoqueAtual:novo}:m),
-                  movEstoque:[{id:uid(),mpId:mp.id,mpNome:mp.nome,tipo:ajusteModal.tipo,quantidade:Math.abs(diff),unidade:mp.unidade||"un",custo:mp.ultimoValor||0,data:today(),descricao:ajusteModal.descricao||ajusteModal.tipo,criadoEm:now},...(d.movEstoque||[])]}));
+                const isPerda=ajusteModal.tipo==="perda";
+                const novo=ajusteModal.tipo==="ajuste"?qtd:(ajusteModal.tipo==="entrada"?ant+qtd:Math.max(0,ant-qtd));
+                const diff=ajusteModal.tipo==="ajuste"?novo-ant:(ajusteModal.tipo==="entrada"?qtd:-qtd);
+                const desc=ajusteModal.descricao||(isPerda?`Perda: ${ajusteModal.razaoPerda}`:ajusteModal.tipo);
+                setDb((d:any)=>({...d,
+                  materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mp.id?{...m,estoqueAtual:novo,...(ajusteModal.dataValidade?{dataValidade:ajusteModal.dataValidade}:{})}:m),
+                  movEstoque:[{id:uid(),mpId:mp.id,mpNome:mp.nome,tipo:ajusteModal.tipo,...(isPerda?{razaoPerda:ajusteModal.razaoPerda}:{}),quantidade:Math.abs(diff),unidade:mp.unidade||"un",custo:mp.ultimoValor||0,data:today(),descricao:desc,criadoEm:now},...(d.movEstoque||[])]}));
                 setAjusteModal(null);
               }} style={{background:"#7c8fff",color:"#fff",padding:"10px",flex:1,fontSize:14}}>✅ Confirmar</button>
               <button className="btn" onClick={()=>setAjusteModal(null)} style={{background:"var(--border)",color:"#888",padding:"10px",flex:1,fontSize:14}}>Cancelar</button>
@@ -2065,6 +2106,18 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           </div>
         </div>}
         {(()=>{const s=(db.materiasPrimas||[]).filter((m:any)=>!mpIdsComMov.has(m.id)&&(m.estoqueAtual||0)<=0).length;return s>0?<div style={{background:"#1a1a2e",border:"1px solid #2a2a4a",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#888"}}>{s} produto{s>1?"s":""} do catálogo sem movimentação — visíveis em <span style={{color:"#7c8fff",fontWeight:700}}>Compras → 🗃️ Produtos</span>.</div>:null;})()}
+        {vencRed.length>0&&<div style={{background:"#1a0a0a",border:"1px solid #ff5c7a55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+          <span style={{color:"#ff5c7a",fontWeight:700}}>🚨 Vencendo em até 3 dias: </span>
+          {vencRed.map((m:any)=>m.nome).join(", ")}
+        </div>}
+        {vencOrange.length>0&&<div style={{background:"#1a1200",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+          <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Vencendo em 4–7 dias: </span>
+          {vencOrange.map((m:any)=>m.nome).join(", ")}
+        </div>}
+        {perdaPercGlobal>3&&<div style={{background:"#1a0a0a",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+          <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Alto índice de perda: </span>
+          <span style={{color:"#ccc"}}>{perdaPercGlobal.toFixed(1)}% do total comprado foi descartado (meta: &lt;3%)</span>
+        </div>}
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px"}}>
             <div style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(totalVal)}</div>
@@ -2094,17 +2147,28 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           const cor=est<=0?"#ff5c7a":min>0&&est<min?"#f59e0b":"#4ade80";
           const movs=(db.movEstoque||[]).filter((mv:any)=>mv.mpId===m.id).sort((a:any,b:any)=>((b.criadoEm||"").localeCompare(a.criadoEm||""))).slice(0,10);
           const fornList=(m.fornecedores||[]) as string[];
-          return <div key={m.id} className="list-item" style={{marginBottom:8}}>
+          const regra=REGRAS_CAT[m.categoria||""]||null;
+          const catIcon=regra?.icon||"📦";
+          const isCMV=regra?.cmv!==false;
+          const isPerecAlta=regra?.perecivel==="alta";
+          const vencido=m.dataValidade&&m.dataValidade<today();
+          const vencendoBreve=m.dataValidade&&!vencido&&m.dataValidade<=em7Str;
+          return <div key={m.id} className="list-item" style={{marginBottom:8,borderLeft:vencido?"3px solid #ff5c7a":vencendoBreve?"3px solid #f59e0b":"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-              <span style={{fontWeight:700,flex:1,marginRight:8}}>{m.nome}</span>
+              <span style={{fontWeight:700,flex:1,marginRight:8}}>{catIcon} {m.nome}</span>
               <span style={{fontWeight:700,color:cor,whiteSpace:"nowrap" as const}}>{est.toFixed(2)} {m.unidade}</span>
             </div>
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap" as const}}>
               <span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{m.categoria}</span>
+              {!isCMV&&<span className="tag" style={{background:"#2a1a0a",color:"#f59e0b",fontSize:10,border:"1px solid #f59e0b44"}}>não CMV</span>}
+              {isPerecAlta&&<span className="tag" style={{background:"#1a0a1a",color:"#a78bfa",fontSize:10}}>perecível</span>}
               <span className="muted" style={{fontSize:11}}>Custo: {fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
               {min>0&&<span className="muted" style={{fontSize:11,color:est<min?"#f59e0b":"#555"}}>Mín: {min} {m.unidade}</span>}
               {est>0&&<span className="muted" style={{fontSize:11,color:"#4ade80"}}>≈ {fmtMoney(est*(m.ultimoValor||0))}</span>}
             </div>
+            {m.dataValidade&&<div style={{fontSize:11,marginBottom:6,color:vencido?"#ff5c7a":vencendoBreve&&m.dataValidade<=em3Str?"#ff5c7a":vencendoBreve?"#f59e0b":"#555"}}>
+              📅 Validade: {fmtDate(m.dataValidade)}{vencido?" — VENCIDO":vencendoBreve?" — vencendo em breve":""}
+            </div>}
             {fornList.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
               <span style={{fontSize:10,color:"#555",alignSelf:"center"}}>Fornecedor:</span>
               {fornList.map((f:string,i:number)=><span key={i} className="tag" style={{background:"#1e2a4a",color:"#7c8fff",fontSize:10,border:"1px solid #2a3a6a"}}>{f}</span>)}
@@ -2113,7 +2177,8 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
               <div style={{background:cor,height:5,borderRadius:4,width:`${Math.min(100,min>0?(est/min)*100:0)}%`,transition:"width .3s"}}/>
             </div>}
             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
-              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:""})} style={{background:"var(--border)",color:"#7c8fff",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
+              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"var(--border)",color:"#7c8fff",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
+              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"perda",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"#1a0a0a",color:"#f59e0b",padding:"5px 10px",fontSize:12,border:"1px solid #f59e0b44"}}>🗑️ Perda</button>
               <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"#a78bfa",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <input type="number" min="0" step="0.1" value={m.estoqueMinimo||""} placeholder="0"
@@ -2125,7 +2190,7 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             </div>
             {verHistEst===m.id&&movs.length>0&&<div style={{marginTop:8,background:"var(--bg4)",borderRadius:8,padding:"8px 10px"}}>
               {movs.map((mv:any)=><div key={mv.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid #1e2235"}}>
-                <span style={{color:mv.tipo==="entrada"?"#4ade80":mv.tipo==="saida"?"#ff5c7a":"#f59e0b"}}>{mv.tipo==="entrada"?"▲":mv.tipo==="saida"?"▼":"🔧"} {(mv.quantidade||0).toFixed(2)} {mv.unidade}</span>
+                <span style={{color:mv.tipo==="entrada"?"#4ade80":mv.tipo==="perda"?"#f59e0b":mv.tipo==="saida"?"#ff5c7a":"#888"}}>{mv.tipo==="entrada"?"▲":mv.tipo==="perda"?"🗑️":mv.tipo==="saida"?"▼":"🔧"} {(mv.quantidade||0).toFixed(2)} {mv.unidade}{mv.razaoPerda?` (${mv.razaoPerda})`:""}</span>
                 <span className="muted" style={{flex:1,marginLeft:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mv.descricao}</span>
                 <span className="muted" style={{flexShrink:0,marginLeft:8}}>{fmtDate(mv.data)}</span>
               </div>)}
@@ -2155,16 +2220,32 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         const media=total/periodoAnl;
         giroMap[m.id]=media>0?(m.estoqueAtual||0)/media:null;
       });
-      const cmvReal=movEstoque.filter((mv:any)=>mv.tipo==="saida"&&(mv.data||"")>=cutoffStr)
+      // CMV real: only categories that enter CMV
+      const catNaoCMV=["limpeza","material de limpeza"];
+      const mpsByCat:Record<string,string>=Object.fromEntries(mps.map((m:any)=>[m.id,m.categoria||""]));
+      const cmvReal=movEstoque.filter((mv:any)=>(mv.tipo==="saida")&&(mv.data||"")>=cutoffStr&&!catNaoCMV.includes((mpsByCat[mv.mpId]||"").toLowerCase()))
         .reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(cmpMap[mv.mpId]||mv.custo||0),0);
       const comprasPer=movEstoque.filter((mv:any)=>mv.tipo==="entrada"&&(mv.data||"")>=cutoffStr)
         .reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(mv.custo||0),0);
-      const valPorCat:Record<string,{valor:number,items:number}>={};
-      mps.forEach((m:any)=>{const cat=m.categoria||"outros";if(!valPorCat[cat])valPorCat[cat]={valor:0,items:0};valPorCat[cat].valor+=(m.estoqueAtual||0)*(m.ultimoValor||0);valPorCat[cat].items++;});
+      // Perdas in period
+      const perdasPer=movEstoque.filter((mv:any)=>mv.tipo==="perda"&&(mv.data||"")>=cutoffStr)
+        .reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(cmpMap[mv.mpId]||mv.custo||0),0);
+      const perdaPercPer=comprasPer>0?(perdasPer/comprasPer)*100:0;
+      // Perdas by reason
+      const perdasPorMotivo:Record<string,number>={};
+      movEstoque.filter((mv:any)=>mv.tipo==="perda"&&(mv.data||"")>=cutoffStr).forEach((mv:any)=>{
+        const r=mv.razaoPerda||"outros";
+        perdasPorMotivo[r]=(perdasPorMotivo[r]||0)+(mv.quantidade||0)*(cmpMap[mv.mpId]||mv.custo||0);
+      });
+      // CMV% vs receita bruta
+      const receitaBruta=(db.vendas||[]).filter((v:any)=>(v.data||"")>=cutoffStr)
+        .reduce((s:number,v:any)=>s+(v.maquininha||0)+(v.dinheiro||0)+(v.ifood||0)+(v.nfood||0)+(v.delivery||0),0);
+      const cmvPct=receitaBruta>0?(cmvReal/receitaBruta)*100:0;
+      const valPorCat:Record<string,{valor:number,items:number,isCMV:boolean}>={};
+      mps.forEach((m:any)=>{const cat=m.categoria||"outros";if(!valPorCat[cat])valPorCat[cat]={valor:0,items:0,isCMV:REGRAS_CAT[cat]?.cmv!==false};valPorCat[cat].valor+=(m.estoqueAtual||0)*(m.ultimoValor||0);valPorCat[cat].items++;});
       const comGiro=mps.filter((m:any)=>giroMap[m.id]!==null).map((m:any)=>({...m,diasCob:giroMap[m.id] as number}));
       const criticos=comGiro.filter((m:any)=>m.diasCob<3).sort((a:any,b:any)=>a.diasCob-b.diasCob);
-      const baixoGiro=comGiro.filter((m:any)=>m.diasCob>30).sort((a:any,b:any)=>b.diasCob-a.diasCob);
-      const catIcons:Record<string,string>={insumos:"🧂","descartáveis":"🥤","material de limpeza":"🧹","proteína":"🥩",bebidas:"🍺"};
+      const baixoGiro=comGiro.filter((m:any)=>{const expected=(REGRAS_CAT[m.categoria||""]?.dias||30)*2;return m.diasCob>expected;}).sort((a:any,b:any)=>b.diasCob-a.diasCob);
       return <div>
         <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center",flexWrap:"wrap" as const}}>
           <span style={{fontSize:11,color:"#666"}}>Período:</span>
@@ -2173,25 +2254,53 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
               style={{background:periodoAnl===d?"#7c8fff":"var(--border)",color:periodoAnl===d?"#fff":"#666",fontSize:11,padding:"4px 10px"}}>{l}</button>
           ))}
         </div>
+        {cmvPct>30&&receitaBruta>0&&<div style={{background:"#1a0a0a",border:"1px solid #ff5c7a55",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
+          <span style={{color:"#ff5c7a",fontWeight:700}}>🚨 CMV alto: {cmvPct.toFixed(1)}% da receita</span>
+          <span style={{color:"#ccc"}}> — meta ≤30%. Revise consumos e perdas.</span>
+        </div>}
+        {perdaPercPer>3&&comprasPer>0&&<div style={{background:"#1a1200",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
+          <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Perdas: {perdaPercPer.toFixed(1)}% das compras</span>
+          <span style={{color:"#ccc"}}> — meta &lt;3% ({fmtMoney(perdasPer)} em {periodoAnl}d)</span>
+        </div>}
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
-          {[["#4ade80",fmtMoney(totalValor),"Valor em estoque"],["#f59e0b",fmtMoney(cmvReal),`CMV consumido (${periodoAnl}d)`],["#7c8fff",fmtMoney(comprasPer),`Compras (${periodoAnl}d)`],["#ff5c7a",String(criticos.length),"Críticos (<3 dias)"]].map(([cor,val,lab])=>(
-            <div key={lab} className="card" style={{flex:"1 1 45%",textAlign:"center",padding:"12px 8px",background:lab.startsWith("Crít")&&criticos.length?"#1a0a0a":"var(--bg3)"}}>
-              <div style={{color:cor as string,fontWeight:700,fontSize:15}}>{val}</div>
+          {([["#4ade80",fmtMoney(totalValor),"Valor em estoque"],["#7c8fff",fmtMoney(cmvReal),`CMV real (${periodoAnl}d)`],["#f59e0b",fmtMoney(comprasPer),`Compras (${periodoAnl}d)`],["#ff5c7a",fmtMoney(perdasPer),`Perdas (${periodoAnl}d)`]] as [string,string,string][]).map(([cor,val,lab])=>(
+            <div key={lab} className="card" style={{flex:"1 1 45%",textAlign:"center",padding:"12px 8px"}}>
+              <div style={{color:cor,fontWeight:700,fontSize:15}}>{val}</div>
               <div className="muted" style={{fontSize:10}}>{lab}</div>
             </div>
           ))}
         </div>
+        {receitaBruta>0&&<div className="card" style={{marginBottom:14,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:12,fontWeight:700}}>CMV % da Receita</div>
+            <div className="muted" style={{fontSize:10}}>Receita bruta: {fmtMoney(receitaBruta)} ({periodoAnl}d)</div>
+          </div>
+          <div style={{textAlign:"right" as const}}>
+            <div style={{fontSize:20,fontWeight:800,color:cmvPct>30?"#ff5c7a":cmvPct>25?"#f59e0b":"#4ade80"}}>{cmvPct.toFixed(1)}%</div>
+            <div style={{fontSize:10,color:"#555"}}>Meta: ≤30%</div>
+          </div>
+        </div>}
+        {Object.keys(perdasPorMotivo).length>0&&<div style={{marginBottom:14}}>
+          <div className="section-title" style={{fontSize:12,marginBottom:8}}>🗑️ Perdas por Motivo ({periodoAnl}d)</div>
+          {Object.entries(perdasPorMotivo).sort((a,b)=>b[1]-a[1]).map(([razao,val])=>(
+            <div key={razao} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #1e2235"}}>
+              <span style={{textTransform:"capitalize" as const}}>{razao==="vencimento"?"📅":razao==="manuseio"?"🤲":razao==="preparo"?"🍳":"❓"} {razao}</span>
+              <span style={{color:"#f59e0b",fontWeight:700}}>{fmtMoney(val)}</span>
+            </div>
+          ))}
+        </div>}
         <div className="section-title" style={{fontSize:12,marginBottom:8}}>💰 Valor por Categoria</div>
         <div style={{marginBottom:16}}>
           {Object.entries(valPorCat).sort((a,b)=>b[1].valor-a[1].valor).map(([cat,data])=>{
             const pct=totalValor>0?(data.valor/totalValor)*100:0;
+            const catR=REGRAS_CAT[cat];
             return <div key={cat} style={{marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:3,fontSize:12}}>
-                <span>{catIcons[cat]||"📦"} <span style={{textTransform:"capitalize" as const}}>{cat}</span> <span className="muted">({data.items})</span></span>
+                <span>{catR?.icon||"📦"} <span style={{textTransform:"capitalize" as const}}>{cat}</span> <span className="muted">({data.items})</span>{!data.isCMV&&<span style={{marginLeft:4,fontSize:10,color:"#f59e0b"}}>não CMV</span>}</span>
                 <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(data.valor)} <span className="muted">({pct.toFixed(0)}%)</span></span>
               </div>
               <div style={{background:"#1e2235",borderRadius:4,height:6}}>
-                <div style={{background:"#4ade80",height:6,borderRadius:4,width:`${Math.min(100,pct)}%`,transition:"width .5s"}}/>
+                <div style={{background:data.isCMV?"#4ade80":"#f59e0b",height:6,borderRadius:4,width:`${Math.min(100,pct)}%`,transition:"width .5s"}}/>
               </div>
             </div>;
           })}
@@ -2201,43 +2310,45 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         {criticos.length>0&&<div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:"#ff5c7a",fontWeight:700,marginBottom:4}}>🔴 Crítico — menos de 3 dias</div>
           {criticos.map((m:any)=><div key={m.id} className="list-item" style={{marginBottom:4,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:12,fontWeight:600}}>{m.nome}</span>
+            <span style={{fontSize:12,fontWeight:600}}>{REGRAS_CAT[m.categoria||""]?.icon||"📦"} {m.nome}</span>
             <span style={{color:"#ff5c7a",fontWeight:700,fontSize:13}}>{m.diasCob.toFixed(1)}d</span>
           </div>)}
         </div>}
         {comGiro.length>0?<div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:"#888",fontWeight:700,marginBottom:4}}>📊 Cobertura por produto (baseado nos últimos {periodoAnl} dias)</div>
+          <div style={{fontSize:11,color:"#888",fontWeight:700,marginBottom:4}}>📊 Cobertura por produto (últimos {periodoAnl} dias)</div>
           {[...comGiro].sort((a:any,b:any)=>a.diasCob-b.diasCob).slice(0,20).map((m:any)=>{
-            const cor=m.diasCob<3?"#ff5c7a":m.diasCob<7?"#f59e0b":m.diasCob<30?"#4ade80":"#888";
+            const expected=REGRAS_CAT[m.categoria||""]?.dias||30;
+            const cor=m.diasCob<3?"#ff5c7a":m.diasCob<expected?"#f59e0b":"#4ade80";
             return <div key={m.id} className="list-item" style={{marginBottom:4,padding:"8px 12px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <span style={{fontSize:12,fontWeight:600}}>{m.nome}</span>
-                <span style={{color:cor,fontWeight:700,fontSize:12}}>{m.diasCob.toFixed(1)} dias</span>
+                <span style={{fontSize:12,fontWeight:600}}>{REGRAS_CAT[m.categoria||""]?.icon||"📦"} {m.nome}</span>
+                <span style={{color:cor,fontWeight:700,fontSize:12}}>{m.diasCob.toFixed(1)}d <span style={{fontSize:10,color:"#555"}}>/ {expected}d esp.</span></span>
               </div>
               <div style={{background:"#1e2235",borderRadius:4,height:4}}>
-                <div style={{background:cor,height:4,borderRadius:4,width:`${Math.min(100,(m.diasCob/30)*100)}%`}}/>
+                <div style={{background:cor,height:4,borderRadius:4,width:`${Math.min(100,(m.diasCob/expected)*100)}%`}}/>
               </div>
             </div>;
           })}
         </div>:<div className="muted" style={{textAlign:"center",padding:"16px",fontSize:12}}>Nenhuma saída registrada no período. Registre consumos via 📝 Ajustar para ver o giro.</div>}
         {baixoGiro.length>0&&<div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:4}}>⚠️ Giro lento — mais de 30 dias de cobertura</div>
-          {baixoGiro.slice(0,5).map((m:any)=><div key={m.id} className="list-item" style={{marginBottom:4,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:4}}>⚠️ Giro lento — cobertura acima do esperado para a categoria</div>
+          {baixoGiro.slice(0,5).map((m:any)=>{const exp=REGRAS_CAT[m.categoria||""]?.dias||30;return <div key={m.id} className="list-item" style={{marginBottom:4,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:12,fontWeight:600}}>{m.nome}</span>
             <div style={{textAlign:"right" as const}}>
-              <div style={{color:"#f59e0b",fontWeight:700,fontSize:12}}>{m.diasCob.toFixed(0)}d cobertura</div>
+              <div style={{color:"#f59e0b",fontWeight:700,fontSize:12}}>{m.diasCob.toFixed(0)}d <span style={{fontSize:10,color:"#555"}}>/ {exp}d esp.</span></div>
               <div style={{fontSize:10,color:"#555"}}>⚠️ risco de vencimento</div>
             </div>
-          </div>)}
+          </div>;})}
         </div>}
         <div className="section-title" style={{fontSize:12,marginBottom:8,marginTop:8}}>📊 Custo Médio Ponderado</div>
         {mps.filter((m:any)=>cmpMap[m.id]>0).sort((a:any,b:any)=>(cmpMap[b.id]||0)-(cmpMap[a.id]||0)).slice(0,15).map((m:any)=>{
           const cmp=cmpMap[m.id]||0;const ult=m.ultimoValor||0;
           const varP=cmp>0&&ult>0?((ult-cmp)/cmp)*100:0;
+          const catR=REGRAS_CAT[m.categoria||""];
           return <div key={m.id} className="list-item" style={{marginBottom:4,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:600}}>{m.nome}</div>
-              <div style={{fontSize:10,color:"#555"}}>CMP: {fmtMoney(cmp)}/{m.unidade}</div>
+              <div style={{fontSize:12,fontWeight:600}}>{catR?.icon||"📦"} {m.nome}</div>
+              <div style={{fontSize:10,color:"#555"}}>CMP: {fmtMoney(cmp)}/{m.unidade}{catR?.cmv===false?<span style={{color:"#f59e0b",marginLeft:4}}>não CMV</span>:""}</div>
             </div>
             <div style={{textAlign:"right" as const}}>
               <div style={{fontSize:12,fontWeight:700,color:"#7c8fff"}}>{fmtMoney(ult)}</div>
@@ -2259,15 +2370,20 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       }).slice(0,150);
       const totEnt=movsAll.filter((mv:any)=>mv.tipo==="entrada").reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(mv.custo||0),0);
       const totSai=movsAll.filter((mv:any)=>mv.tipo==="saida").reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(mv.custo||0),0);
+      const totPerd=movsAll.filter((mv:any)=>mv.tipo==="perda").reduce((s:number,mv:any)=>s+(mv.quantidade||0)*(mv.custo||0),0);
       return <div>
-        <div style={{display:"flex",gap:8,marginBottom:12}}>
-          <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px"}}>
+        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
+          <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"10px 6px"}}>
             <div style={{color:"#4ade80",fontWeight:700,fontSize:13}}>{fmtMoney(totEnt)}</div>
             <div className="muted" style={{fontSize:10}}>Total entradas</div>
           </div>
-          <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px"}}>
+          <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"10px 6px"}}>
             <div style={{color:"#ff5c7a",fontWeight:700,fontSize:13}}>{fmtMoney(totSai)}</div>
-            <div className="muted" style={{fontSize:10}}>Total saídas (CMV)</div>
+            <div className="muted" style={{fontSize:10}}>Total saídas</div>
+          </div>
+          <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"10px 6px",background:totPerd>0?"#1a0e00":"var(--bg3)"}}>
+            <div style={{color:"#f59e0b",fontWeight:700,fontSize:13}}>{fmtMoney(totPerd)}</div>
+            <div className="muted" style={{fontSize:10}}>Total perdas</div>
           </div>
         </div>
         <div style={{position:"relative",marginBottom:10}}>
@@ -2275,26 +2391,27 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           {buscaMov&&<button onClick={()=>setBuscaMov("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
         </div>
         <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
-          {[["todos","Todos"],["entrada","▲ Entradas"],["saida","▼ Saídas"],["ajuste","🔧 Ajustes"]].map(([k,l])=>(
+          {[["todos","Todos"],["entrada","▲ Entradas"],["saida","▼ Saídas"],["perda","🗑️ Perdas"],["ajuste","🔧 Ajustes"]].map(([k,l])=>(
             <button key={k} onClick={()=>setFiltroMov(k)} className="pill"
               style={{background:filtroMov===k?"var(--border2)":"transparent",color:filtroMov===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:11,padding:"4px 10px"}}>{l}</button>
           ))}
         </div>
-        {filtradas.map((mv:any)=>(
-          <div key={mv.id} className="list-item" style={{marginBottom:6,padding:"8px 12px"}}>
+        {filtradas.map((mv:any)=>{
+          const isPerda=mv.tipo==="perda";
+          const cor=mv.tipo==="entrada"?"#4ade80":isPerda?"#f59e0b":mv.tipo==="saida"?"#ff5c7a":"#888";
+          const icon=mv.tipo==="entrada"?"▲":isPerda?"🗑️":mv.tipo==="saida"?"▼":"🔧";
+          return <div key={mv.id} className="list-item" style={{marginBottom:6,padding:"8px 12px",borderLeft:isPerda?"3px solid #f59e0b44":"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
               <span style={{fontSize:12,fontWeight:600}}>{mv.mpNome}</span>
-              <span style={{color:mv.tipo==="entrada"?"#4ade80":mv.tipo==="saida"?"#ff5c7a":"#f59e0b",fontWeight:700,fontSize:12}}>
-                {mv.tipo==="entrada"?"▲":mv.tipo==="saida"?"▼":"🔧"} {(mv.quantidade||0).toFixed(2)} {mv.unidade}
-              </span>
+              <span style={{color:cor,fontWeight:700,fontSize:12}}>{icon} {(mv.quantidade||0).toFixed(2)} {mv.unidade}</span>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span className="muted" style={{fontSize:11,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mv.descricao}</span>
+              <span className="muted" style={{fontSize:11,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mv.descricao}{mv.razaoPerda?` — motivo: ${mv.razaoPerda}`:""}</span>
               <span className="muted" style={{fontSize:10,flexShrink:0,marginLeft:8}}>{fmtDate(mv.data)}</span>
             </div>
             {(mv.custo||0)>0&&<div style={{fontSize:10,color:"#555"}}>Custo: {fmtMoney(mv.custo)}/{mv.unidade} = {fmtMoney((mv.quantidade||0)*(mv.custo||0))}</div>}
-          </div>
-        ))}
+          </div>;
+        })}
         {!filtradas.length&&<EmptyState msg="Nenhuma movimentação encontrada."/>}
         {movsAll.length>150&&<div className="muted" style={{textAlign:"center",fontSize:11,padding:"10px"}}>Exibindo 150 de {movsAll.length} movimentações</div>}
       </div>;
