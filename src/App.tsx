@@ -161,7 +161,8 @@ export default function App() {
   const tabs=[
     {id:"dashboard",label:"Dashboard",icon:"📊"},
     {id:"vendas",label:"Vendas",icon:"💰"},
-    {id:"compras",label:"Compras",icon:"🛒"},
+    {id:"compras",label:"Compras",icon:"🏪"},
+    {id:"lista",label:"Lista",icon:"🛒"},
     {id:"contas",label:"Financeiro",icon:"📋"},
     {id:"estoque",label:"Estoque",icon:"📦"},
     {id:"fluxo",label:"Fluxo",icon:"💵"},
@@ -260,6 +261,7 @@ export default function App() {
         {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
         {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
         {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
+        {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} onNavigate={setTab}/>}
         {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
         {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -271,6 +273,7 @@ export default function App() {
         {(()=>{
           const estoqueBaixoNav=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
           const atrasadasNav=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
+          const listaNav=(db.listaCompras||[]).filter((i:any)=>!i.comprado).length;
           return tabs.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
@@ -279,6 +282,7 @@ export default function App() {
               <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{t.label}</span>
               {t.id==="estoque"&&estoqueBaixoNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoNav}</span>}
               {t.id==="contas"&&atrasadasNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasNav}</span>}
+              {t.id==="lista"&&listaNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{listaNav}</span>}
             </button>
           ));
         })()}
@@ -785,6 +789,18 @@ const checkDuplicataCompra=(db:any, fornecedor:string, total:number, data:string
 };
 
 // ===================== COMPRAS (multi-produto + IA + financeiro) =====================
+const reconciliarLista=(d:any,nomesComprados:string[])=>{
+  if(!(d.listaCompras||[]).length)return d;
+  const norms=nomesComprados.map(n=>n.toLowerCase().trim());
+  const novaLista=(d.listaCompras||[]).map((item:any)=>{
+    if(item.comprado)return item;
+    const iNorm=item.nome.toLowerCase().trim();
+    if(norms.some(n=>iNorm===n||iNorm.includes(n)||n.includes(iNorm)))return{...item,comprado:true};
+    return item;
+  });
+  return{...d,listaCompras:novaLista};
+};
+
 function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:string,state?:any,setState?:any}){
   const [subTab,setSubTab]=useState("novo");
 
@@ -907,7 +923,8 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         grupoId,
         criadoEm:new Date().toISOString(),
       };
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])],movEstoque:[...movs]};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])],movEstoque:[...movs]};
+      return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     // reset
     setCarrinho([]);setFornecedor("");setDataCom(today());setFormaPag("dinheiro");setVencimento(today());
@@ -997,7 +1014,8 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
       const contaFin={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);
     alert("✅ Cupom importado! Estoque e financeiro atualizados.");
@@ -1072,7 +1090,8 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
         nNF:nfeResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
         ...(nfeXml?{xmlNFe:nfeXml}:{}),criadoEm:new Date().toISOString()};
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     setNfeResult(null);setNfeError("");setNfeXml("");
     if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";
@@ -1217,7 +1236,8 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
       const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
         nNF:nfe.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",criadoEm:new Date().toISOString()};
-      return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     if(!all){
       setSefazList(l=>l.filter(n=>n.nsu!==nfe.nsu));
@@ -1236,7 +1256,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"],["compras_lista","🛒 Lista"]].map(([k,l])=>(
+      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px",position:"relative"}}>
           {l}
           {k==="nfe"&&sefazList.length>0&&subTab!=="nfe"&&<span style={{position:"absolute",top:-4,right:-4,background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{sefazList.length}</span>}
@@ -1968,13 +1988,12 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     </div>}
 
     {/* ===== LISTA DE COMPRAS ===== */}
-    {subTab==="compras_lista"&&<ListaComprasPanel db={db} setDb={setDb}/>}
 
   </div>;
 }
 
 // ===================== LISTA DE COMPRAS =====================
-function ListaComprasPanel({db,setDb}:{db:any,setDb:any}){
+function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(tab:string)=>void}){
   const [nome,setNome]=useState("");
   const [qtd,setQtd]=useState("1");
   const [unidade,setUnidade]=useState("un");
@@ -2017,6 +2036,7 @@ function ListaComprasPanel({db,setDb}:{db:any,setDb:any}){
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
+      {onNavigate&&<button className="btn" onClick={()=>onNavigate("compras")} style={{marginLeft:"auto",background:"#0d1f2d",color:"#60a5fa",border:"1px solid #1e3a5a",fontSize:11,padding:"5px 12px"}}>🏪 Ir para Compras</button>}
     </div>
 
     {/* Adicionar item */}
