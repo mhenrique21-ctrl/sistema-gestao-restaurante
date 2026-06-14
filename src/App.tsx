@@ -96,10 +96,23 @@ const PRODS_SEED_V2=[
   {nome:"Papel Higiênico",         cat:"material de limpeza", unidade:"un"},
   {nome:"Sabonete Líquido",        cat:"material de limpeza", unidade:"un"},
 ];
+const PRODS_SEED_V3=[
+  {nome:"Carne para Sopa",        cat:"carnes", unidade:"kg"},
+  {nome:"Carne Paulista",         cat:"carnes", unidade:"kg"},
+  {nome:"Picadinho",              cat:"carnes", unidade:"kg"},
+  {nome:"Carne Seca",             cat:"carnes", unidade:"kg"},
+  {nome:"Filé Mignon",            cat:"carnes", unidade:"kg"},
+  {nome:"Filé de Frango",         cat:"carnes", unidade:"kg"},
+  {nome:"Carne para Hambúrguer",  cat:"carnes", unidade:"kg"},
+  {nome:"Camarão Rosa",           cat:"carnes", unidade:"kg"},
+  {nome:"Camarão Regional",       cat:"carnes", unidade:"kg"},
+  {nome:"Calabresa",              cat:"carnes", unidade:"kg"},
+  {nome:"Caranguejo",             cat:"carnes", unidade:"kg"},
+];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -265,6 +278,12 @@ const migrateDb=(m:any)=>{
       const novos=PRODS_SEED_V2.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
       m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
       m[e].produtosSeedV2=true;
+    }
+    if(!m[e].produtosSeedV3){
+      const ex:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+      const novos=PRODS_SEED_V3.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+      m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
+      m[e].produtosSeedV3=true;
     }
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
