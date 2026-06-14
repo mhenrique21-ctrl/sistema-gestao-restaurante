@@ -427,13 +427,21 @@ const migrateDb=(m:any)=>{
   return m;
 };
 
+// IDs de itens deletados localmente nesta sessão — o poll nunca os restaura
+const _listaDeletados=new Set<string>();
+
 // Merge server data with local state: arrays com id preservam itens locais não salvos
+// e nunca restauram itens que o usuário deletou nesta sessão
 const mergeFromServer=(prev:any,updates:any)=>{
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
     const p=prev[emp]||{};
-    const byId=(sArr:any[],pArr:any[])=>{const sIds=new Set(sArr.map((i:any)=>i.id));return[...sArr,...pArr.filter((i:any)=>!sIds.has(i.id))];};
+    const byId=(sArr:any[],pArr:any[])=>{
+      const sIds=new Set(sArr.map((i:any)=>i.id));
+      const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
+      return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!_listaDeletados.has(i.id))];
+    };
     next[emp]={...s,listaCompras:byId(s.listaCompras||[],p.listaCompras||[]),produtosLista:byId(s.produtosLista||[],p.produtosLista||[])};
   });
   return migrateDb(next);
@@ -2475,7 +2483,7 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
     const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
     return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,ordem:nowComprado?maxOrdem+1:i.ordem}:i)};
   });
-  const del=(id:string)=>{if(!confirm("Excluir produto?"))return;setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id)}));};
+  const del=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id)}));};
   const limparComprados=()=>{if(!comprados.length)return;if(!confirm("Remover todos os produtos comprados?"))return;setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado)}));};
 
   const salvarPedido=()=>{
