@@ -1011,13 +1011,18 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const [nfeVenc,setNfeVenc]=useState(today());
   const [nfeError,setNfeError]=useState("");
   const nfeRef=useRef();
+  const [nfeXml,setNfeXml]=useState("");
 
   const handleNFe=(e)=>{
     const file=e.target.files[0]; if(!file)return;
-    setNfeError("");setNfeResult(null);
+    setNfeError("");setNfeResult(null);setNfeXml("");
     const reader=new FileReader();
     reader.onload=()=>{
-      try{setNfeResult(parseNFe(reader.result as string));}
+      try{
+        const xml=reader.result as string;
+        setNfeXml(xml);
+        setNfeResult(parseNFe(xml));
+      }
       catch(err){setNfeError("Erro ao ler XML: "+err.message);}
     };
     reader.readAsText(file,"utf-8");
@@ -1064,10 +1069,12 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
-      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
+      const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
+        nNF:nfeResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
+        ...(nfeXml?{xmlNFe:nfeXml}:{}),criadoEm:new Date().toISOString()};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
     });
-    setNfeResult(null);setNfeError("");
+    setNfeResult(null);setNfeError("");setNfeXml("");
     if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";
     alert(`✅ NF-e importada! ${nfeResult.itens.length} produto(s) registrado(s).`);
   };
@@ -1208,7 +1215,8 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
-      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
+      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
+        nNF:nfe.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",criadoEm:new Date().toISOString()};
       return{...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
     });
     if(!all){
@@ -2419,6 +2427,68 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   </div>;
 }
 
+// ===================== NF-e PRINT / DOWNLOAD =====================
+function imprimirNFe(conta:any,itens:any[]){
+  const win=window.open("","_blank");if(!win)return;
+  const fmt=(v:number)=>`R$ ${v.toFixed(2).replace(".",",")}`;
+  const total=itens.reduce((s:number,it:any)=>s+parseMoney(it.valor),0);
+  const rows=itens.map((it:any,i:number)=>`
+    <tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
+      <td style="padding:7px 10px">${it.nomeProduto||it.nome||"—"}</td>
+      <td style="padding:7px 10px;color:#555;font-size:12px">${it.categoria||"—"}</td>
+      <td style="padding:7px 10px;text-align:center">${(it.quantidade||0).toFixed(2)} ${it.unidade||""}</td>
+      <td style="padding:7px 10px;text-align:right">${fmt(it.valorUnitario||0)}</td>
+      <td style="padding:7px 10px;text-align:right;font-weight:700">${fmt(parseMoney(it.valor))}</td>
+    </tr>`).join("");
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>
+    <title>NF-e ${conta.nNF?`#${conta.nNF}`:""}${conta.fornecedorNome?` – ${conta.fornecedorNome}`:""}</title>
+    <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:24px;max-width:960px;margin:0 auto;color:#111;font-size:14px}
+      .hdr{border:2px solid #333;border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa}
+      h2{margin:0 0 6px;font-size:22px}
+      .nf-num{font-size:28px;font-weight:900;color:#333;letter-spacing:1px}
+      .row{display:flex;gap:32px;flex-wrap:wrap;margin-top:12px}
+      .field .lbl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+      .field .val{font-weight:700;font-size:14px}
+      table{width:100%;border-collapse:collapse;margin-top:4px}
+      th{background:#333;color:#fff;padding:9px 10px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+      th:last-child,th:nth-child(4){text-align:right}th:nth-child(3){text-align:center}
+      tfoot td{border-top:2px solid #333;padding:12px 10px;font-size:18px;font-weight:900;text-align:right}
+      .print-btn{background:#333;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;font-size:14px;margin-bottom:18px}
+      .footer{margin-top:24px;font-size:11px;color:#aaa;text-align:center}
+      @media print{.print-btn{display:none!important}body{padding:12px}}</style></head>
+  <body>
+    <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar como PDF</button>
+    <div class="hdr">
+      <h2>🧾 Nota Fiscal Eletrônica (NF-e)</h2>
+      ${conta.nNF?`<div class="nf-num">Nº ${conta.nNF}</div>`:""}
+      <div class="row">
+        <div class="field"><div class="lbl">Emitente / Fornecedor</div><div class="val">${conta.fornecedorNome||conta.fornecedor||"—"}</div></div>
+        ${conta.fornecedorCnpj?`<div class="field"><div class="lbl">CNPJ</div><div class="val">${conta.fornecedorCnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,"$1.$2.$3/$4-$5")}</div></div>`:""}
+        <div class="field"><div class="lbl">Data</div><div class="val">${conta.vencimento?new Date(conta.vencimento+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</div></div>
+        <div class="field"><div class="lbl">Total da NF-e</div><div class="val" style="color:#1a6f2a">${fmt(conta.valor||0)}</div></div>
+        <div class="field"><div class="lbl">Status</div><div class="val">${conta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Produto</th><th>Categoria</th><th style="text-align:center">Qtd / Und</th><th style="text-align:right">Valor Unit.</th><th style="text-align:right">Total</th></tr></thead>
+      <tbody>${rows||"<tr><td colspan='5' style='text-align:center;padding:20px;color:#888'>Nenhum item registrado</td></tr>"}</tbody>
+      <tfoot><tr><td colspan="4">Total Geral:</td><td>${fmt(total)}</td></tr></tfoot>
+    </table>
+    <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")} · Sistema de Gestão</div>
+  </body></html>`;
+  win.document.write(html);win.document.close();
+}
+
+function baixarXmlNFe(xmlNFe:string,nNF:string,fornecedor:string){
+  const blob=new Blob([xmlNFe],{type:"application/xml"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`nfe_${nNF||"sem_numero"}_${(fornecedor||"").replace(/\s+/g,"_").slice(0,30)||"fornecedor"}.xml`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ===================== CONTAS =====================
 function Contas({db,setDb}){
   const fPagOpts=["dinheiro","pix","cartão débito","cartão crédito","boleto","transferência","outros"];
@@ -2559,9 +2629,17 @@ function Contas({db,setDb}){
             <button onClick={()=>setVerConta(null)} style={{background:"none",border:"none",color:"#888",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
           </div>
           <div className="muted" style={{fontSize:12,marginBottom:8}}>{fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div>
-          {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"#1a2040",color:"#60a5fa",border:"1px solid #2a3a6a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:12,width:"100%"}}>
+          {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"#1a2040",color:"#60a5fa",border:"1px solid #2a3a6a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:8,width:"100%"}}>
             <span>📎</span><span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{verConta.anexo.nome}</span><span style={{fontSize:11,color:"#888"}}>abrir</span>
           </button>}
+          <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
+            {itens.length>0&&<button onClick={()=>imprimirNFe(verConta,itens)} style={{background:"#1a2a1a",color:"#4ade80",border:"1px solid #2a4a2a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              🖨️ Imprimir / PDF
+            </button>}
+            {verConta.xmlNFe&&<button onClick={()=>baixarXmlNFe(verConta.xmlNFe,verConta.nNF||"",verConta.fornecedorNome||"")} style={{background:"#1a1a2e",color:"#7c8fff",border:"1px solid #2a2a5a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              📥 Baixar XML
+            </button>}
+          </div>
           {itens.length?<>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead><tr style={{borderBottom:"1px solid #252840"}}>
@@ -2572,13 +2650,13 @@ function Contas({db,setDb}){
               </tr></thead>
               <tbody>{itens.map((it:any)=><tr key={it.id} style={{borderBottom:"1px solid #1a1d2e"}}>
                 <td style={{padding:"5px 6px"}}>{it.nomeProduto}<br/><span className="muted" style={{fontSize:10}}>{it.categoria}</span></td>
-                <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap"}}>{it.quantidade} {it.unidade}</td>
-                <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap"}}>{fmtMoney(it.valorUnitario||0)}</td>
-                <td style={{textAlign:"right",padding:"5px 6px",fontWeight:600,whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(it.valor))}</td>
+                <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap" as const}}>{(it.quantidade||0).toFixed(2)} {it.unidade}</td>
+                <td style={{textAlign:"right",padding:"5px 6px",whiteSpace:"nowrap" as const}}>{fmtMoney(it.valorUnitario||0)}</td>
+                <td style={{textAlign:"right",padding:"5px 6px",fontWeight:600,whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(it.valor))}</td>
               </tr>)}</tbody>
             </table>
-            <div style={{textAlign:"right",marginTop:10,fontWeight:700,fontSize:14}}>Total: {fmtMoney(itens.reduce((s:number,it:any)=>s+parseMoney(it.valor),0))}</div>
-          </>:<div className="muted" style={{textAlign:"center",padding:20}}>Itens não disponíveis</div>}
+            <div style={{textAlign:"right" as const,marginTop:10,fontWeight:700,fontSize:14}}>Total: {fmtMoney(itens.reduce((s:number,it:any)=>s+parseMoney(it.valor),0))}</div>
+          </>:<div className="muted" style={{textAlign:"center" as const,padding:20}}>Itens não disponíveis</div>}
         </div>
       </div>;
     })()}
@@ -2679,6 +2757,7 @@ function Contas({db,setDb}){
               {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
             </button>
             {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
+            {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"#1a2a1a",color:"#4ade80",padding:"6px 12px",fontSize:12}}>🖨️</button>}
             {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>📎</button>}
             <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
