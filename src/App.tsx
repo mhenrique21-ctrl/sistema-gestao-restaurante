@@ -2141,6 +2141,7 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
   const [busca,setBusca]=useState("");
   const [showCatMgmt,setShowCatMgmt]=useState(false);
   const [novaCat,setNovaCat]=useState("");
+  const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
 
   const catsPers:string[]=db.listaCategorias||[];
   const catOrdem:string[]=db.listaCatOrdem||[];
@@ -2237,6 +2238,20 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
     if(!confirm(`Excluir categoria "${c}"?`))return;
     setDb((d:any)=>({...d,listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c),listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c)}));
   };
+  const renameCat=(old:string,novo:string)=>{
+    novo=novo.trim().toLowerCase();
+    if(!novo){setEditCat(null);return;}
+    if(novo===old){setEditCat(null);return;}
+    if(allCats.filter(c=>c!==old).includes(novo)){alert("Categoria já existe.");return;}
+    setDb((d:any)=>{
+      const cl:string[]=d.listaCategorias||[];
+      const newCl=cl.includes(old)?cl.map(c=>c===old?novo:c):[...cl.filter(c=>c!==novo),novo];
+      const ordem=(d.listaCatOrdem||[]).map((c:string)=>c===old?novo:c);
+      const lista=(d.listaCompras||[]).map((i:any)=>i.categoria===old?{...i,categoria:novo}:i);
+      return{...d,listaCategorias:newCl,listaCatOrdem:ordem,listaCompras:lista};
+    });
+    setEditCat(null);
+  };
 
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
   const porCat:Record<string,any[]>={};
@@ -2261,14 +2276,28 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
         {cats.map((c,idx)=>(
           <div key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
             <span style={{fontSize:16}}>{catIcon(c)}</span>
-            <span style={{flex:1,fontSize:13,fontWeight:600}}>{c}</span>
-            <div style={{display:"flex",gap:2}}>
-              <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
-                style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#a78bfa",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
-              <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
-                style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#a78bfa",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
-            </div>
-            {!CATS_DEFAULT.includes(c)&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
+            {editCat?.name===c
+              ? <>
+                  <input autoFocus value={editCat.val}
+                    onChange={e=>setEditCat(ec=>ec?{...ec,val:e.target.value}:ec)}
+                    onKeyDown={e=>{if(e.key==="Enter")renameCat(c,editCat.val);if(e.key==="Escape")setEditCat(null);}}
+                    className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
+                  <button onClick={()=>renameCat(c,editCat.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                  <button onClick={()=>setEditCat(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
+                </>
+              : <>
+                  <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"capitalize"}}>{c}</span>
+                  <button onClick={()=>setEditCat({name:c,val:c})} title="Renomear"
+                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                  <div style={{display:"flex",gap:2}}>
+                    <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#a78bfa",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                    <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#a78bfa",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                  </div>
+                  {!CATS_DEFAULT.includes(c)&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
+                </>
+            }
           </div>
         ))}
       </div>
