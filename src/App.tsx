@@ -366,7 +366,7 @@ export default function App() {
         {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
         {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
         {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-        {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} onNavigate={setTab}/>}
+        {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab}/>}
         {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
         {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
         {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -2124,17 +2124,22 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 
 // ===================== LISTA DE COMPRAS =====================
 const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","outros"];
+const CAT_ICONS:Record<string,string>={
+  "carnes":"🥩","hortifruti":"🥦","laticínios":"🧀","grãos":"🌾","temperos":"🧂",
+  "proteína":"🍖","bebidas":"🍺","embalagens":"📦","descartáveis":"🥤",
+  "material de limpeza":"🧹","limpeza":"🧹","outros":"📋",
+};
+const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
-function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(tab:string)=>void}){
-  const [nome,setNome]=useState("");
-  const [qtd,setQtd]=useState("1");
-  const [unidade,setUnidade]=useState("un");
-  const [cat,setCat]=useState("");
+const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",fornecedor:"",obs:"",urgente:false};
+
+function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void}){
+  const [form,setForm]=useState(EMPTY_FORM_LISTA);
+  const [editId,setEditId]=useState<string|null>(null);
+  const [showForm,setShowForm]=useState(false);
   const [busca,setBusca]=useState("");
   const [showCatMgmt,setShowCatMgmt]=useState(false);
   const [novaCat,setNovaCat]=useState("");
-  const [showHistSug,setShowHistSug]=useState(false);
-  const [editId,setEditId]=useState<string|null>(null);
 
   const catsPers:string[]=db.listaCategorias||[];
   const cats=[...CATS_DEFAULT,...catsPers.filter((c:string)=>!CATS_DEFAULT.includes(c))];
@@ -2145,19 +2150,30 @@ function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(
 
   const getMpEstoque=(nomeProd:string)=>{
     const mp=(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase()===nomeProd.toLowerCase());
-    return mp?(mp.estoqueAtual||0):null;
+    return mp!=null?(mp.estoqueAtual||0):null;
   };
 
-  const addItem=()=>{
-    if(!nome.trim())return;
-    const ordem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-    const novo={id:uid(),nome:nome.trim(),quantidade:parseFloat(qtd)||1,unidade,categoria:cat||"outros",comprado:false,ordem,criadoEm:new Date().toISOString()};
-    setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),novo]}));
-    setNome("");setQtd("1");
+  const saveItem=()=>{
+    if(!form.nome.trim())return;
+    if(editId){
+      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,...form,quantidade:parseFloat(form.qtd)||1,nome:form.nome.trim()}:i)}));
+      setEditId(null);
+    }else{
+      const ordem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
+      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||"outros",fornecedor:form.fornecedor,obs:form.obs,urgente:form.urgente,comprado:false,ordem,criadoEm:new Date().toISOString()}]}));
+    }
+    setForm(EMPTY_FORM_LISTA);setShowForm(false);
   };
+
+  const startEdit=(item:any)=>{
+    setForm({nome:item.nome,qtd:String(item.quantidade),unidade:item.unidade||"un",cat:item.categoria||"",fornecedor:item.fornecedor||"",obs:item.obs||"",urgente:!!item.urgente});
+    setEditId(item.id);setShowForm(true);
+    setTimeout(()=>document.getElementById("lista-nome-inp")?.focus(),50);
+  };
+  const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setShowForm(false);};
 
   const toggle=(id:string)=>setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,comprado:!i.comprado}:i)}));
-  const del=(id:string)=>setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id)}));
+  const del=(id:string)=>{if(!confirm("Excluir item?"))return;setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id)}));};
   const limparComprados=()=>{if(!comprados.length)return;if(!confirm("Remover todos os itens comprados?"))return;setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado)}));};
 
   const moverItem=(id:string,dir:-1|1)=>{
@@ -2168,8 +2184,7 @@ function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(
       const idx=catItens.findIndex(i=>i.id===id);
       const swapIdx=idx+dir;
       if(swapIdx<0||swapIdx>=catItens.length)return d;
-      const aOrd=catItens[idx].ordem||0;
-      const bOrd=catItens[swapIdx].ordem||0;
+      const aOrd=catItens[idx].ordem||0,bOrd=catItens[swapIdx].ordem||0;
       return{...d,listaCompras:arr.map(i=>{
         if(i.id===catItens[idx].id)return{...i,ordem:bOrd};
         if(i.id===catItens[swapIdx].id)return{...i,ordem:aOrd};
@@ -2178,175 +2193,173 @@ function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(
     });
   };
 
-  const sugerirDoEstoque=()=>{
-    const mps=(db.materiasPrimas||[]).filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
-    if(!mps.length)return alert("Nenhum produto abaixo do estoque mínimo.");
-    const jaHa=new Set(lista.map((i:any)=>i.nome.toLowerCase()));
-    const base=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-    const novos=mps.filter((m:any)=>!jaHa.has(m.nome.toLowerCase())).map((m:any,idx:number)=>({
-      id:uid(),nome:m.nome,quantidade:Math.max(1,Math.ceil((m.estoqueMinimo||0)-(m.estoqueAtual||0))),
-      unidade:m.unidade||"un",categoria:m.categoria||"outros",comprado:false,ordem:base+idx,criadoEm:new Date().toISOString(),
-    }));
-    if(!novos.length)return alert("Todos os itens abaixo do mínimo já estão na lista.");
-    setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),...novos]}));
-    alert(`✅ ${novos.length} item(ns) adicionado(s).`);
-  };
-
-  // Sugestões do histórico de compras (produtos únicos já comprados)
-  const histSugestoes=(()=>{
-    const jaHa=new Set(lista.map((i:any)=>i.nome.toLowerCase()));
-    const vistos=new Set<string>();
-    return (db.compras||[]).filter((c:any)=>{
-      const n=(c.nomeProduto||"").toLowerCase();
-      if(!n||jaHa.has(n)||vistos.has(n))return false;
-      vistos.add(n);return true;
-    }).map((c:any)=>({nome:c.nomeProduto,categoria:c.categoria||"outros",unidade:c.unidade||"un"}));
-  })();
-
-  const addFromHist=(h:any)=>{
-    const base=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-    setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),nome:h.nome,quantidade:1,unidade:h.unidade,categoria:h.categoria,comprado:false,ordem:base,criadoEm:new Date().toISOString()}]}));
-  };
-
   const addCat=()=>{
-    const n=novaCat.trim().toLowerCase();
-    if(!n)return;
+    const n=novaCat.trim().toLowerCase();if(!n)return;
     if(cats.includes(n))return alert("Categoria já existe.");
-    setDb((d:any)=>({...d,listaCategorias:[...(d.listaCategorias||[]),n]}));
-    setNovaCat("");
+    setDb((d:any)=>({...d,listaCategorias:[...(d.listaCategorias||[]),n]}));setNovaCat("");
   };
   const delCat=(c:string)=>{
     if(!confirm(`Excluir categoria "${c}"?`))return;
     setDb((d:any)=>({...d,listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c)}));
   };
 
+  const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
+
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
   const porCat:Record<string,any[]>={};
   listaBusca.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(i);});
 
   return <div>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
+    {/* Header */}
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
-    </div>
-
-    {/* Adicionar item */}
-    <div className="card" style={{marginBottom:14}}>
-      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap" as const}}>
-        <input placeholder="Nome do item *" value={nome} onChange={e=>setNome(e.target.value)}
-          onKeyDown={e=>{if(e.key==="Enter")addItem();}}
-          className="inp" style={{flex:"2 1 150px",marginBottom:0}}/>
-        <input type="number" min="0.1" step="0.1" placeholder="Qtd" value={qtd} onChange={e=>setQtd(e.target.value)}
-          className="inp" style={{flex:"0 0 66px",marginBottom:0}}/>
-        <select value={unidade} onChange={e=>setUnidade(e.target.value)} className="inp" style={{flex:"0 0 76px",marginBottom:0}}>
-          {["un","kg","L","cx","pc","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
-        </select>
-      </div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-        <select value={cat} onChange={e=>setCat(e.target.value)} className="inp" style={{flex:"1 1 120px",marginBottom:0}}>
-          <option value="">Categoria</option>
-          {cats.map(c=><option key={c} value={c}>{c}</option>)}
-        </select>
-        <button className="btn" onClick={addItem} style={{background:"#7c8fff",color:"#fff",padding:"10px 18px",fontSize:13,flex:"0 0 auto"}}>+ Adicionar</button>
+      <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+        {isAdmin&&<button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowForm(false);}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>}
+        {!showForm&&<button className="btn" onClick={()=>{cancelEdit();setShowForm(true);setShowCatMgmt(false);setTimeout(()=>document.getElementById("lista-nome-inp")?.focus(),50);}} style={{background:"#7c8fff",color:"#fff",padding:"6px 14px",fontSize:13}}>+ Novo</button>}
       </div>
     </div>
 
-    {/* Ações rápidas */}
-    <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
-      <button className="btn" onClick={sugerirDoEstoque} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 11px",fontSize:12,border:"1px solid #2a4a2a"}}>
-        📦 Estoque mínimo
-      </button>
-      {histSugestoes.length>0&&<button className="btn" onClick={()=>setShowHistSug(v=>!v)} style={{background:showHistSug?"#1a2040":"#0f1628",color:"#7c8fff",padding:"7px 11px",fontSize:12,border:"1px solid #2a3260"}}>
-        📜 Histórico ({histSugestoes.length})
-      </button>}
-      <button className="btn" onClick={()=>setShowCatMgmt(v=>!v)} style={{background:showCatMgmt?"#1a1a2a":"#0f0f1a",color:"#a78bfa",padding:"7px 11px",fontSize:12,border:"1px solid #3a2a60"}}>
-        🏷️ Categorias
-      </button>
-      {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"#1a0a0a",color:"#888",padding:"7px 11px",fontSize:12}}>
-        🗑️ Limpar ({comprados.length})
-      </button>}
-    </div>
-
-    {/* Gerenciar categorias */}
-    {showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
-      <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Gerenciar Categorias</div>
+    {/* Gerenciar categorias (admin) */}
+    {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
+      <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Categorias</div>
       <div style={{display:"flex",gap:6,marginBottom:10}}>
         <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0}}/>
         <button className="btn" onClick={addCat} style={{background:"#a78bfa",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
       </div>
       <div style={{display:"flex",flexWrap:"wrap" as const,gap:6}}>
-        {CATS_DEFAULT.map(c=><span key={c} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:20,fontSize:11,padding:"3px 10px",color:"#666"}}>{c}</span>)}
+        {CATS_DEFAULT.map(c=><span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:20,fontSize:12,padding:"4px 10px",color:"#888"}}>
+          <span>{catIcon(c)}</span><span>{c}</span>
+        </span>)}
         {catsPers.map((c:string)=>(
-          <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#1a1030",border:"1px solid #3a2a60",borderRadius:20,fontSize:11,padding:"3px 10px",color:"#a78bfa"}}>
-            {c}
-            <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",padding:0,fontSize:12,lineHeight:1}}>×</button>
+          <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#1a1030",border:"1px solid #3a2a60",borderRadius:20,fontSize:12,padding:"4px 10px",color:"#a78bfa"}}>
+            <span>{catIcon(c)}</span><span>{c}</span>
+            <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",padding:0,fontSize:13,lineHeight:1,marginLeft:2}}>×</button>
           </span>
         ))}
       </div>
     </div>}
 
-    {/* Sugestões do histórico */}
-    {showHistSug&&<div className="card" style={{marginBottom:12,border:"1px solid #2a3260"}}>
-      <div className="section-title" style={{color:"#7c8fff"}}>📜 Adicionar do Histórico de Compras</div>
-      <div style={{maxHeight:220,overflowY:"auto" as const}}>
-        {histSugestoes.map((h:any,i:number)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
-            <div>
-              <span style={{fontSize:13,fontWeight:600}}>{h.nome}</span>
-              <span style={{fontSize:11,color:"#666",marginLeft:8}}>{h.categoria} · {h.unidade}</span>
-            </div>
-            <button className="btn" onClick={()=>addFromHist(h)} style={{background:"#7c8fff",color:"#fff",padding:"4px 12px",fontSize:12}}>+ Add</button>
-          </div>
-        ))}
+    {/* Form cadastro completo */}
+    {showForm&&<div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#2a3260"}`}}>
+      <div className="section-title" style={{color:editId?"#fbbf24":"#7c8fff",marginBottom:12}}>{editId?"✏️ Editar Item":"➕ Novo Item"}</div>
+      {/* Nome */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Nome do item *</div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <input id="lista-nome-inp" placeholder="Ex: Frango, Cebola, Detergente..." value={form.nome} onChange={e=>setF("nome",e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey)saveItem();}}
+            className="inp" style={{marginBottom:0,flex:1}}/>
+          <button onClick={()=>setF("urgente",!form.urgente)}
+            style={{background:form.urgente?"#ff5c7a22":"var(--bg4)",border:`1px solid ${form.urgente?"#ff5c7a":"var(--border2)"}`,borderRadius:10,padding:"10px 10px",cursor:"pointer",fontSize:16,flexShrink:0,lineHeight:1}} title="Urgente">
+            {form.urgente?"🔴":"⚪"}
+          </button>
+        </div>
+      </div>
+      {/* Qtd + Unidade */}
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Quantidade</div>
+          <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)} className="inp" style={{marginBottom:0}}/>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Unidade</div>
+          <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0}}>
+            {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+      </div>
+      {/* Categoria (admin) */}
+      {isAdmin&&<div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Categoria</div>
+        <select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0}}>
+          <option value="">Sem categoria</option>
+          {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+        </select>
+      </div>}
+      {/* Fornecedor */}
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Fornecedor (opcional)</div>
+        <input placeholder="Ex: Atacadão, Makro..." value={form.fornecedor} onChange={e=>setF("fornecedor",e.target.value)} className="inp" style={{marginBottom:0}}/>
+      </div>
+      {/* Observações */}
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Observações</div>
+        <textarea placeholder="Marca preferida, especificações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:64,marginBottom:0,resize:"vertical" as const}}/>
+      </div>
+      {/* Botões */}
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" onClick={saveItem} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"12px",fontSize:14}}>
+          {editId?"💾 Atualizar":"✅ Adicionar à Lista"}
+        </button>
+        <button className="btn" onClick={cancelEdit} style={{background:"var(--border2)",color:"var(--text2)",padding:"12px 14px",fontSize:14}}>✕</button>
       </div>
     </div>}
 
-    {/* Busca */}
-    {lista.length>5&&<div style={{position:"relative",marginBottom:12}}>
-      <input placeholder="🔍 Buscar item..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>
-      {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
-    </div>}
+    {/* Ações (limpar) */}
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
+      {lista.length>5&&<div style={{position:"relative",flex:1,minWidth:160}}>
+        <input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14,marginBottom:0}}/>
+        {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+      </div>}
+      {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"#1a0a0a",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
+        🗑️ Limpar comprados ({comprados.length})
+      </button>}
+    </div>
 
     {/* Lista por categoria */}
-    {!lista.length&&<EmptyState msg="Lista vazia. Adicione itens manualmente ou use 📦 Estoque mínimo / 📜 Histórico."/>}
+    {!lista.length&&<EmptyState msg="Lista vazia. Clique em + Novo para adicionar itens."/>}
     {Object.entries(porCat).sort(([a],[b])=>a.localeCompare(b,"pt-BR")).map(([categoria,itens])=>{
-      const itensSorted=[...itens].sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+      const itensSorted=[...itens].sort((a,b)=>(a.urgente?-1:b.urgente?1:0)||((a.ordem||0)-(b.ordem||0)));
       const todosComprados=itensSorted.every((i:any)=>i.comprado);
-      return <div key={categoria} style={{marginBottom:14}}>
-        <div style={{fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:1,marginBottom:6,display:"flex",gap:6,alignItems:"center"}}>
-          <span>{categoria}</span>
-          <span style={{fontWeight:400,color:"#555"}}>({itensSorted.filter((i:any)=>!i.comprado).length}/{itensSorted.length})</span>
-          {todosComprados&&<span style={{color:"#4ade80",fontSize:10}}>✅ tudo comprado</span>}
+      return <div key={categoria} style={{marginBottom:16}}>
+        {/* Cabeçalho da categoria */}
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"4px 0",borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:18}}>{catIcon(categoria)}</span>
+          <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:0.8}}>{categoria}</span>
+          <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itensSorted.filter((i:any)=>!i.comprado).length}/{itensSorted.length})</span>
+          {todosComprados&&<span style={{fontSize:11,color:"#4ade80",marginLeft:4}}>✅</span>}
         </div>
         {itensSorted.map((item:any,idx:number)=>{
           const estoque=getMpEstoque(item.nome);
+          const isEditing=editId===item.id;
           return(
-          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",opacity:item.comprado?0.5:1,transition:"opacity .2s"}}>
+          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente&&!item.comprado?"#1a0a0a":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente&&!item.comprado?"#ff5c7a44":isEditing?"#7c8fff":"var(--border)"}`,opacity:item.comprado?0.5:1,transition:"all .15s"}}>
             {/* Checkbox */}
             <button onClick={()=>toggle(item.id)}
-              style={{width:24,height:24,borderRadius:6,border:`2px solid ${item.comprado?"#4ade80":"#555"}`,background:item.comprado?"#4ade80":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
+              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.comprado?"#4ade80":item.urgente?"#ff5c7a":"#555"}`,background:item.comprado?"#4ade80":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
               {item.comprado&&<span style={{color:"#111",fontSize:14,fontWeight:900,lineHeight:1}}>✓</span>}
+              {!item.comprado&&item.urgente&&<span style={{fontSize:8,color:"#ff5c7a",fontWeight:900}}>!</span>}
             </button>
             {/* Info */}
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,textDecoration:item.comprado?"line-through":"none",color:item.comprado?"#555":"inherit",whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{item.nome}</div>
-              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
-                <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.quantidade} {item.unidade}</span>
-                {estoque!==null&&<span style={{fontSize:10,color:estoque===0?"#ff5c7a":estoque<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 7px"}}>
-                  📦 {estoque} {item.unidade} em estoque
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
+                <span style={{fontSize:13,fontWeight:600,textDecoration:item.comprado?"line-through":"none",color:item.comprado?"#555":item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
+                {item.urgente&&!item.comprado&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
+              </div>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
+                <span style={{fontSize:12,color:"#7c8fff",fontWeight:700}}>{item.quantidade} {item.unidade}</span>
+                {item.fornecedor&&<span style={{fontSize:11,color:"#888"}}>• {item.fornecedor}</span>}
+                {estoque!==null&&<span style={{fontSize:10,color:estoque===0?"#ff5c7a":estoque<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>
+                  📦 {estoque} {item.unidade}
                 </span>}
               </div>
+              {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:3,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
-            {/* Mover */}
-            {!item.comprado&&<div style={{display:"flex",flexDirection:"column" as const,gap:2,flexShrink:0}}>
-              <button onClick={()=>moverItem(item.id,-1)} disabled={idx===0}
-                style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#888",cursor:idx===0?"default":"pointer",fontSize:10,padding:"1px 5px",lineHeight:1}}>▲</button>
-              <button onClick={()=>moverItem(item.id,1)} disabled={idx===itensSorted.length-1}
-                style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===itensSorted.length-1?"#333":"#888",cursor:idx===itensSorted.length-1?"default":"pointer",fontSize:10,padding:"1px 5px",lineHeight:1}}>▼</button>
-            </div>}
-            {/* Excluir */}
-            <button onClick={()=>del(item.id)} style={{background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:16,padding:"0 2px",flexShrink:0,lineHeight:1}}>×</button>
+            {/* Actions */}
+            <div style={{display:"flex",flexDirection:"column" as const,gap:3,flexShrink:0,alignItems:"center"}}>
+              {isAdmin&&!item.comprado&&<div style={{display:"flex",gap:2}}>
+                <button onClick={()=>moverItem(item.id,-1)} disabled={idx===0}
+                  style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===0?"#333":"#888",cursor:idx===0?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▲</button>
+                <button onClick={()=>moverItem(item.id,1)} disabled={idx===itensSorted.length-1}
+                  style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===itensSorted.length-1?"#333":"#888",cursor:idx===itensSorted.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
+              </div>}
+              <div style={{display:"flex",gap:2}}>
+                {isAdmin&&<button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>}
+                <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
+              </div>
+            </div>
           </div>
           );
         })}
