@@ -2422,7 +2422,7 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
 // ===================== CONTAS =====================
 function Contas({db,setDb}){
   const fPagOpts=["dinheiro","pix","cartão débito","cartão crédito","boleto","transferência","outros"];
-  const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes",diasSemana:[1,2,3,4,5]};
+  const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes",diasSemana:[1,2,3,4,5],anexo:null as any};
   const [subTab,setSubTab]=useState("lista");
   const [form,setForm]=useState<any>(emptyForm);
   const [editId,setEditId]=useState<string|null>(null);
@@ -2462,7 +2462,7 @@ function Contas({db,setDb}){
       if(dup&&!confirm(`⚠️ Possível duplicata: já existe uma conta com a descrição "${form.descricao}" e valor similar nos últimos 7 dias. Continuar mesmo assim?`))return;
     }
     const now=new Date().toISOString();
-    const base={categoria:form.categoria,valor:valorNum,status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor};
+    const base={categoria:form.categoria,valor:valorNum,status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor,...(form.anexo?{anexo:form.anexo}:{})};
     const n=form.recorrente?Math.max(parseInt(form.parcelas)||1,1):1;
     if(n>1){
       const gRecorr=editGrupoRecorr||uid();
@@ -2485,7 +2485,7 @@ function Contas({db,setDb}){
   const edit=(c:any)=>{
     setEditId(c.id);setEditGrupoRecorr(null);
     const descBase=c.grupoRecorr?c.descricao.replace(/ \(\d+\/\d+\)$/,""):c.descricao;
-    setForm({...emptyForm,...c,descricao:descBase,valor:String(parseMoney(c.valor)).replace(".",","),recorrente:false,parcelas:"1"});
+    setForm({...emptyForm,...c,descricao:descBase,valor:String(parseMoney(c.valor)).replace(".",","),recorrente:false,parcelas:"1",anexo:c.anexo||null});
     setSubTab("novo");
   };
   const editGrupo=(gid:string,items:any[])=>{
@@ -2505,6 +2505,24 @@ function Contas({db,setDb}){
     if(novoStatus==="pago"&&conta?.origem==="adiantamento_rh")return{...d,contas,adiantamentos:(d.adiantamentos||[]).filter((a:any)=>a.contaId!==id)};
     return{...d,contas};
   });
+
+  const handleAnexo=(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    if(file.size>3*1024*1024)return alert("Arquivo muito grande. Máximo 3 MB.");
+    const reader=new FileReader();
+    reader.onload=ev=>setForm((f:any)=>({...f,anexo:{nome:file.name,tipo:file.type,dados:ev.target?.result as string}}));
+    reader.readAsDataURL(file);
+  };
+  const abrirAnexo=(anexo:{nome:string,tipo:string,dados:string})=>{
+    const win=window.open("","_blank");
+    if(!win)return;
+    if(anexo.tipo.startsWith("image/")){
+      win.document.write(`<html><body style="margin:0;background:#111"><img src="${anexo.dados}" style="max-width:100%;height:auto;display:block;margin:auto"/></body></html>`);
+    }else{
+      win.document.write(`<html><body style="margin:0;height:100vh"><iframe src="${anexo.dados}" style="width:100%;height:100%;border:none"></iframe></body></html>`);
+    }
+    win.document.title=anexo.nome;
+  };
 
   const bq2=busca.toLowerCase();
   const contasFiltradas=[...(db.contas||[])].filter((c:any)=>{if(filtro!=="todos"&&c.status!==filtro)return false;if(!bq2)return true;return(c.descricao||"").toLowerCase().includes(bq2)||(c.fornecedor||"").toLowerCase().includes(bq2)||(c.categoria||"").toLowerCase().includes(bq2)||fmtDate(c.vencimento||"").toLowerCase().includes(bq2);}).sort((a:any,b:any)=>{const vA=a.vencimento||"",vB=b.vencimento||"";const x=vA<vB?-1:vA>vB?1:0;const primary=sortDir==="asc"?x:-x;if(primary!==0)return primary;return(b.criadoEm||"").localeCompare(a.criadoEm||"");});
@@ -2540,7 +2558,10 @@ function Contas({db,setDb}){
             <span style={{fontWeight:700,fontSize:14}}>{verConta.descricao}</span>
             <button onClick={()=>setVerConta(null)} style={{background:"none",border:"none",color:"#888",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
           </div>
-          <div className="muted" style={{fontSize:12,marginBottom:12}}>{fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div>
+          <div className="muted" style={{fontSize:12,marginBottom:8}}>{fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div>
+          {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"#1a2040",color:"#60a5fa",border:"1px solid #2a3a6a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:12,width:"100%"}}>
+            <span>📎</span><span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{verConta.anexo.nome}</span><span style={{fontSize:11,color:"#888"}}>abrir</span>
+          </button>}
           {itens.length?<>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead><tr style={{borderBottom:"1px solid #252840"}}>
@@ -2624,6 +2645,7 @@ function Contas({db,setDb}){
                 <div style={{fontSize:11,color:"#888",marginBottom:6}}>{fmtDate(c.vencimento)}</div>
                 <div style={{display:"flex",gap:5}}>
                   <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
+                  {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"5px 10px",fontSize:11}}>📎</button>}
                   <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"5px 10px",fontSize:11}}>✏️</button>
                   <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>🗑️</button>
                 </div>
@@ -2657,6 +2679,7 @@ function Contas({db,setDb}){
               {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
             </button>
             {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
+            {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>📎</button>}
             <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
           </div>
@@ -2753,6 +2776,19 @@ function Contas({db,setDb}){
               })()}
             </div>}
           </div>}
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:12,color:"#888",marginBottom:6}}>📎 Documento comprovante (opcional)</div>
+          {form.anexo?<div style={{display:"flex",gap:8,alignItems:"center",background:"var(--bg4)",borderRadius:8,padding:"8px 12px",border:"1px solid var(--border)"}}>
+            <span style={{fontSize:12,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>📄 {form.anexo.nome}</span>
+            <button type="button" onClick={()=>abrirAnexo(form.anexo)} style={{background:"#1a2040",color:"#60a5fa",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>👁️ Ver</button>
+            <button type="button" onClick={()=>setForm((f:any)=>({...f,anexo:null}))} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>✕</button>
+          </div>:<label style={{display:"block",cursor:"pointer"}}>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{display:"none"}} onChange={handleAnexo}/>
+            <div style={{border:"2px dashed var(--border2)",borderRadius:8,padding:"14px",textAlign:"center" as const,color:"#555",fontSize:13}}>
+              📂 Toque para selecionar arquivo<br/><span style={{fontSize:11,color:"#444"}}>PDF, JPG ou PNG · máx. 3 MB</span>
+            </div>
+          </label>}
         </div>
         <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15}}>
           {editId||editGrupoRecorr?"💾 Atualizar":"💾 Salvar"}
