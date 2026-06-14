@@ -8,7 +8,7 @@ const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d)
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[],
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -166,6 +166,7 @@ export default function App() {
       if(!m[e].listaCategorias)m[e].listaCategorias=[];
       if(!m[e].listaCatOrdem)m[e].listaCatOrdem=[];
       if(!m[e].pedidosLista)m[e].pedidosLista=[];
+      if(!m[e].produtosLista)m[e].produtosLista=[];
       if(!m[e].config)m[e].config={snAliquota:6};
       if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
     });
@@ -2144,6 +2145,10 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
   const [showCatMgmt,setShowCatMgmt]=useState(false);
   const [novaCat,setNovaCat]=useState("");
   const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
+  const [showProdMgmt,setShowProdMgmt]=useState(false);
+  const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un"});
+  const [editProdId,setEditProdId]=useState<string|null>(null);
+  const [showSugg,setShowSugg]=useState(false);
 
   const catsPers:string[]=db.listaCategorias||[];
   const catOrdem:string[]=db.listaCatOrdem||[];
@@ -2255,6 +2260,28 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
     setEditCat(null);
   };
 
+  const prodsCatalog:any[]=db.produtosLista||[];
+  const suggestions:any[]=form.nome.length>=1
+    ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.toLowerCase())).slice(0,8)
+    :[];
+  const selectSugg=(p:any)=>{
+    setForm(f=>({...f,nome:p.nome,cat:p.cat||f.cat,unidade:p.unidade||f.unidade}));
+    setShowSugg(false);
+  };
+  const saveProd=()=>{
+    const n=prodForm.nome.trim();if(!n)return;
+    if(editProdId){
+      setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===editProdId?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade}:p)}));
+      setEditProdId(null);
+    }else{
+      if((db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===n.toLowerCase()))return alert("Produto já cadastrado.");
+      setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade}]}));
+    }
+    setProdForm({nome:"",cat:"",unidade:"un"});
+  };
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"});};
+  const delProd=(id:string)=>{if(!confirm("Excluir produto do catálogo?"))return;setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));};
+
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
   const porCat:Record<string,any[]>={};
   listaBusca.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(i);});
@@ -2268,7 +2295,10 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
-      {isAdmin&&<button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);cancelEdit();}} style={{marginLeft:"auto",background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>}
+      {isAdmin&&<div style={{marginLeft:"auto",display:"flex",gap:6}}>
+        <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
+        <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
+      </div>}
     </div>
 
     {/* Gerenciar categorias (admin only) */}
@@ -2310,6 +2340,38 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
       </div>
     </div>}
 
+    {/* Catálogo de produtos (admin only) */}
+    {isAdmin&&showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
+      <div className="section-title" style={{color:"#4ade80"}}>📦 Catálogo de Produtos</div>
+      {/* Form adicionar/editar */}
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+        <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
+          onKeyDown={e=>{if(e.key==="Enter")saveProd();}} className="inp" style={{flex:"2 1 120px",marginBottom:0}}/>
+        <select value={prodForm.cat} onChange={e=>setProdForm(f=>({...f,cat:e.target.value}))} className="inp" style={{flex:"1 1 90px",marginBottom:0}}>
+          <option value="">Categoria</option>
+          {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+        </select>
+        <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
+          {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+        </select>
+        <button className="btn" onClick={saveProd} style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
+        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
+      </div>
+      {/* Lista do catálogo */}
+      <div style={{maxHeight:220,overflowY:"auto" as const}}>
+        {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
+        {[...prodsCatalog].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>(
+          <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
+            <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
+            <span style={{flex:1,fontSize:13}}>{p.nome}</span>
+            <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
+            <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
+            <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+          </div>
+        ))}
+      </div>
+    </div>}
+
     {/* Form cadastro de produto — sempre visível */}
     <div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#2a3260"}`}}>
       <div className="section-title" style={{color:editId?"#fbbf24":"#7c8fff",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
@@ -2317,10 +2379,25 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
       <div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *</div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <input id="lista-nome-inp" placeholder="Ex: Frango, Cebola, Detergente..." value={form.nome}
-            onChange={e=>{setF("nome",e.target.value);}}
-            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey)saveItem();}}
-            className="inp" style={{marginBottom:0,flex:1}}/>
+          <div style={{flex:1,position:"relative"}}>
+            <input id="lista-nome-inp" placeholder="Ex: Frango, Cebola, Detergente..." value={form.nome}
+              onChange={e=>{setF("nome",e.target.value);setShowSugg(true);}}
+              onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!showSugg)saveItem();if(e.key==="Escape")setShowSugg(false);}}
+              onFocus={()=>setShowSugg(true)}
+              onBlur={()=>setTimeout(()=>setShowSugg(false),150)}
+              className="inp" style={{marginBottom:0,width:"100%"}}/>
+            {showSugg&&suggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:220,overflowY:"auto" as const}}>
+              {suggestions.map((p:any)=>(
+                <div key={p.id} onMouseDown={()=>selectSugg(p)}
+                  style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                  <span style={{fontSize:15}}>{catIcon(p.cat||"outros")}</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:600}}>{p.nome}</span>
+                  <span style={{fontSize:11,color:"#888"}}>{p.unidade}</span>
+                  {p.cat&&<span style={{fontSize:10,color:"#a78bfa",background:"#a78bfa18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+                </div>
+              ))}
+            </div>}
+          </div>
           <button onClick={()=>setF("urgente",!form.urgente)}
             style={{background:form.urgente?"#ff5c7a22":"var(--bg4)",border:`1px solid ${form.urgente?"#ff5c7a":"var(--border2)"}`,borderRadius:10,padding:"10px",cursor:"pointer",fontSize:16,flexShrink:0,lineHeight:1}} title="Urgente">
             {form.urgente?"🔴":"⚪"}
