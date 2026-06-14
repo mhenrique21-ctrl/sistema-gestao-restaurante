@@ -61,10 +61,45 @@ const PRODS_SEED=[
   {nome:"H2OH! Limão 350 ml",            cat:"bebidas", unidade:"un"},
   {nome:"H2OH! Limoneto 350 ml",         cat:"bebidas", unidade:"un"},
 ];
+const PRODS_SEED_V2=[
+  {nome:"Saco Lixo 30L",           cat:"material de limpeza", unidade:"un"},
+  {nome:"Lava Louça",              cat:"material de limpeza", unidade:"un"},
+  {nome:"Desengordurante",         cat:"material de limpeza", unidade:"un"},
+  {nome:"Limpador Multiuso",       cat:"material de limpeza", unidade:"un"},
+  {nome:"Esponjas",                cat:"material de limpeza", unidade:"un"},
+  {nome:"Bombril",                 cat:"material de limpeza", unidade:"un"},
+  {nome:"Panos Multiuso",          cat:"material de limpeza", unidade:"un"},
+  {nome:"Água Sanitária",          cat:"material de limpeza", unidade:"un"},
+  {nome:"Desinfetante",            cat:"material de limpeza", unidade:"un"},
+  {nome:"Cera Líquida",            cat:"material de limpeza", unidade:"un"},
+  {nome:"Limpador Perfumado",      cat:"material de limpeza", unidade:"un"},
+  {nome:"Removedor",               cat:"material de limpeza", unidade:"un"},
+  {nome:"Sabão em Pó",             cat:"material de limpeza", unidade:"un"},
+  {nome:"Sabão Líquido",           cat:"material de limpeza", unidade:"un"},
+  {nome:"Amaciante",               cat:"material de limpeza", unidade:"un"},
+  {nome:"Alvejante",               cat:"material de limpeza", unidade:"un"},
+  {nome:"Tira-manchas",            cat:"material de limpeza", unidade:"un"},
+  {nome:"Cloro Líquido",           cat:"material de limpeza", unidade:"un"},
+  {nome:"Desengraxante",           cat:"material de limpeza", unidade:"un"},
+  {nome:"Detergente Concentrado",  cat:"material de limpeza", unidade:"un"},
+  {nome:"Álcool",                  cat:"material de limpeza", unidade:"un"},
+  {nome:"Limpeza Pesada",          cat:"material de limpeza", unidade:"un"},
+  {nome:"Sacos de Lixo 100L",     cat:"material de limpeza", unidade:"un"},
+  {nome:"Vassouras",               cat:"material de limpeza", unidade:"un"},
+  {nome:"Rodos",                   cat:"material de limpeza", unidade:"un"},
+  {nome:"Baldes",                  cat:"material de limpeza", unidade:"un"},
+  {nome:"Escovas",                 cat:"material de limpeza", unidade:"un"},
+  {nome:"Flanelas",                cat:"material de limpeza", unidade:"un"},
+  {nome:"Mops",                    cat:"material de limpeza", unidade:"un"},
+  {nome:"Limpa Vaso Sanitário",    cat:"material de limpeza", unidade:"un"},
+  {nome:"Limpa Vidro",             cat:"material de limpeza", unidade:"un"},
+  {nome:"Papel Higiênico",         cat:"material de limpeza", unidade:"un"},
+  {nome:"Sabonete Líquido",        cat:"material de limpeza", unidade:"un"},
+];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -220,10 +255,16 @@ const migrateDb=(m:any)=>{
     if(!m[e].pedidosLista)m[e].pedidosLista=[];
     if(!m[e].produtosLista)m[e].produtosLista=[];
     if(!m[e].produtosSeedDone){
-      const existentes:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
-      const novos=PRODS_SEED.filter(p=>!existentes.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+      const ex:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+      const novos=PRODS_SEED.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
       m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
       m[e].produtosSeedDone=true;
+    }
+    if(!m[e].produtosSeedV2){
+      const ex:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+      const novos=PRODS_SEED_V2.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+      m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
+      m[e].produtosSeedV2=true;
     }
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
