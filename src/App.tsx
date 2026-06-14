@@ -5,10 +5,66 @@ const STORAGE_KEY = "gestao_app_v4";
 const loadData = () => { try { const r=localStorage.getItem(STORAGE_KEY); return r?JSON.parse(r):null; } catch{return null;} };
 const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}catch{} };
 
+const PRODS_SEED=[
+  // laticínios
+  {nome:"Leite Integral",          cat:"laticínios", unidade:"L"},
+  {nome:"Leite Zero Lactose",      cat:"laticínios", unidade:"L"},
+  {nome:"Margarina Qualy",         cat:"laticínios", unidade:"un"},
+  {nome:"Manteiga Comum",          cat:"laticínios", unidade:"un"},
+  {nome:"Catupiry Confraria",      cat:"laticínios", unidade:"un"},
+  {nome:"Catupiry Escola",         cat:"laticínios", unidade:"un"},
+  {nome:"Queijo Muçarela",         cat:"laticínios", unidade:"kg"},
+  {nome:"Queijo Coalho",           cat:"laticínios", unidade:"kg"},
+  {nome:"Queijo Parmesão",         cat:"laticínios", unidade:"kg"},
+  {nome:"Queijo Provolone",        cat:"laticínios", unidade:"kg"},
+  {nome:"Presunto de Peru",        cat:"laticínios", unidade:"kg"},
+  {nome:"Peito de Peru",           cat:"laticínios", unidade:"kg"},
+  {nome:"Salame",                  cat:"laticínios", unidade:"kg"},
+  {nome:"Bacon",                   cat:"laticínios", unidade:"kg"},
+  {nome:"Calabresa",               cat:"laticínios", unidade:"kg"},
+  {nome:"Charque",                 cat:"laticínios", unidade:"kg"},
+  {nome:"Carne Seca",              cat:"laticínios", unidade:"kg"},
+  {nome:"Margarina para Folhado",  cat:"laticínios", unidade:"un"},
+  {nome:"Margarina Pastelera",     cat:"laticínios", unidade:"un"},
+  {nome:"Leite em Pó Integral",   cat:"laticínios", unidade:"un"},
+  {nome:"Nescauzinho",             cat:"laticínios", unidade:"un"},
+  {nome:"Chocolate Líquido",       cat:"laticínios", unidade:"un"},
+  {nome:"Chocolate Líquido Integral", cat:"laticínios", unidade:"un"},
+  {nome:"Chocolate Líquido Zero", cat:"laticínios", unidade:"un"},
+  // bebidas
+  {nome:"Coca-Cola 220 ml",              cat:"bebidas", unidade:"un"},
+  {nome:"Coca-Cola Zero 220 ml",         cat:"bebidas", unidade:"un"},
+  {nome:"Fanta Laranja 220 ml",          cat:"bebidas", unidade:"un"},
+  {nome:"Sprite 220 ml",                 cat:"bebidas", unidade:"un"},
+  {nome:"Pepsi 220 ml",                  cat:"bebidas", unidade:"un"},
+  {nome:"Pepsi Black 220 ml",            cat:"bebidas", unidade:"un"},
+  {nome:"Guaraná Antarctica 220 ml",     cat:"bebidas", unidade:"un"},
+  {nome:"Guaraná Antarctica Zero 220 ml",cat:"bebidas", unidade:"un"},
+  {nome:"Sukita Laranja 220 ml",         cat:"bebidas", unidade:"un"},
+  {nome:"Sukita Uva 220 ml",             cat:"bebidas", unidade:"un"},
+  {nome:"Coca-Cola 350 ml",              cat:"bebidas", unidade:"un"},
+  {nome:"Coca-Cola Zero 350 ml",         cat:"bebidas", unidade:"un"},
+  {nome:"Fanta Laranja 350 ml",          cat:"bebidas", unidade:"un"},
+  {nome:"Fanta Uva 350 ml",             cat:"bebidas", unidade:"un"},
+  {nome:"Sprite 350 ml",                 cat:"bebidas", unidade:"un"},
+  {nome:"Sprite Zero 350 ml",            cat:"bebidas", unidade:"un"},
+  {nome:"Guaraná Antarctica 350 ml",     cat:"bebidas", unidade:"un"},
+  {nome:"Guaraná Antarctica Zero 350 ml",cat:"bebidas", unidade:"un"},
+  {nome:"Pepsi 350 ml",                  cat:"bebidas", unidade:"un"},
+  {nome:"Pepsi Black 350 ml",            cat:"bebidas", unidade:"un"},
+  {nome:"Kuat 350 ml",                   cat:"bebidas", unidade:"un"},
+  {nome:"Kuat Zero 350 ml",              cat:"bebidas", unidade:"un"},
+  {nome:"Schweppes Citrus 350 ml",       cat:"bebidas", unidade:"un"},
+  {nome:"Schweppes Tônica 350 ml",       cat:"bebidas", unidade:"un"},
+  {nome:"Sukita Laranja 350 ml",         cat:"bebidas", unidade:"un"},
+  {nome:"Sukita Uva 350 ml",             cat:"bebidas", unidade:"un"},
+  {nome:"H2OH! Limão 350 ml",            cat:"bebidas", unidade:"un"},
+  {nome:"H2OH! Limoneto 350 ml",         cat:"bebidas", unidade:"un"},
+];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[],
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -167,6 +223,12 @@ export default function App() {
       if(!m[e].listaCatOrdem)m[e].listaCatOrdem=[];
       if(!m[e].pedidosLista)m[e].pedidosLista=[];
       if(!m[e].produtosLista)m[e].produtosLista=[];
+      if(!m[e].produtosSeedDone){
+        const existentes:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+        const novos=PRODS_SEED.filter(p=>!existentes.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+        m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
+        m[e].produtosSeedDone=true;
+      }
       if(!m[e].config)m[e].config={snAliquota:6};
       if(!m[e].categorias.includes("Adiantamento"))m[e].categorias=["Adiantamento",...m[e].categorias];
     });
