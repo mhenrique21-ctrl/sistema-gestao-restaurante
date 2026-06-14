@@ -196,6 +196,24 @@ export default function App() {
     });
   },[]);
 
+  // Auto-refresh every 60s (keeps shopping list in sync between users)
+  useEffect(()=>{
+    if(!login)return;
+    const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
+    const poll=()=>{
+      if(syncTimer.current)return; // skip if a local save is pending
+      Promise.all(emps.map(emp=>
+        fetch(`/api/dados/${emp}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
+      )).then(results=>{
+        const updates:any={};
+        results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
+        if(Object.keys(updates).length>0)setState(prev=>({...prev,...updates}));
+      });
+    };
+    const t=setInterval(poll,60000);
+    return()=>clearInterval(t);
+  },[login]);
+
   // On state change: save to localStorage + debounced save to server
   useEffect(()=>{
     saveData(state);
