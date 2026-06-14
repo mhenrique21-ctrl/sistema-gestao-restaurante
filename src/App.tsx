@@ -214,7 +214,7 @@ export default function App() {
         if(Object.keys(updates).length>0)setState(prev=>({...prev,...updates}));
       });
     };
-    const t=setInterval(poll,60000);
+    const t=setInterval(poll,10000);
     return()=>clearInterval(t);
   },[login]);
 
@@ -230,7 +230,9 @@ export default function App() {
           fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
         ));
         setSyncStatus("ok");
-      }catch{setSyncStatus("erro");}
+      }catch{setSyncStatus("erro");}finally{
+        syncTimer.current=null;
+      }
     },1500);
   },[state]);
 
