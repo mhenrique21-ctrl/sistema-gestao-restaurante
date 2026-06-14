@@ -938,6 +938,23 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const [imgPreview,setImgPreview]=useState(null);
   const [imgBase64,setImgBase64]=useState(null);
   const fileRef=useRef();
+  const xmlIaRef=useRef<HTMLInputElement>(null);
+
+  const handleXmlIA=(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        const xml=reader.result as string;
+        const parsed=parseNFe(xml);
+        setNfeXml(xml);
+        setIaResult(parsed);
+        setImgPreview(null);setImgBase64(null);setIaText("");
+      }catch(err:any){alert("Erro ao ler XML: "+err.message);}
+    };
+    reader.readAsText(file,"utf-8");
+    if(xmlIaRef.current)xmlIaRef.current.value="";
+  };
 
   const handleFile=(e)=>{
     const file=e.target.files[0]; if(!file)return;
@@ -1013,11 +1030,11 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
-      const contaFin={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,criadoEm:new Date().toISOString()};
+      const contaFin:any={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,...(nfeXml?{xmlNFe:nfeXml,nNF:iaResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||""}:{}),criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
-    setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);
+    setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);setNfeXml("");
     alert("✅ Cupom importado! Estoque e financeiro atualizados.");
   };
 
@@ -1448,21 +1465,29 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     {/* ===== CUPOM IA ===== */}
     {subTab==="ia"&&<div>
       <div className="section-title">Importar Cupom / Nota Fiscal com IA</div>
-      <div className="camera-zone" onClick={()=>fileRef.current.click()} style={{marginBottom:10}}>
-        {imgPreview
-          ?<img src={imgPreview} alt="preview" style={{maxWidth:"100%",borderRadius:10,maxHeight:200,objectFit:"contain"}}/>
-          :<div><div style={{fontSize:36,marginBottom:8}}>📷</div>
-            <div style={{fontWeight:600,marginBottom:4}}>Foto, PDF ou Imagem</div>
-            <div className="muted" style={{fontSize:12}}>Toque para tirar foto ou escolher arquivo</div></div>}
-        <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{display:"none"}}/>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <div className="camera-zone" onClick={()=>fileRef.current.click()} style={{flex:1,marginBottom:0}}>
+          {imgPreview
+            ?<img src={imgPreview} alt="preview" style={{maxWidth:"100%",borderRadius:10,maxHeight:200,objectFit:"contain"}}/>
+            :<div><div style={{fontSize:36,marginBottom:8}}>📷</div>
+              <div style={{fontWeight:600,marginBottom:4}}>Foto / PDF</div>
+              <div className="muted" style={{fontSize:12}}>Toque para escolher</div></div>}
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{display:"none"}}/>
+        </div>
+        <div className="camera-zone" onClick={()=>xmlIaRef.current?.click()} style={{flex:1,marginBottom:0,background:"#0a1a10",borderColor:"#14532d"}}>
+          <div style={{fontSize:36,marginBottom:8}}>📄</div>
+          <div style={{fontWeight:600,marginBottom:4,color:"#4ade80"}}>XML NF-e</div>
+          <div className="muted" style={{fontSize:12}}>Anexar XML</div>
+          <input ref={xmlIaRef} type="file" accept=".xml,text/xml,application/xml" onChange={handleXmlIA} style={{display:"none"}}/>
+        </div>
       </div>
       {imgPreview&&<button className="btn" onClick={()=>{setImgPreview(null);setImgBase64(null);}}
         style={{background:"var(--border)",color:"#888",padding:"8px",width:"100%",fontSize:12,marginBottom:8}}>❌ Remover imagem</button>}
       {!imgBase64&&<textarea value={iaText} onChange={e=>setIaText(e.target.value)} placeholder="Ou cole o texto do cupom aqui..." className="inp" style={{marginBottom:8}}/>}
-      <button className="btn" onClick={processarIA} disabled={iaLoading}
+      {!iaResult&&<button className="btn" onClick={processarIA} disabled={iaLoading||!!nfeXml}
         style={{background:iaLoading?"var(--border2)":"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15,marginBottom:14}}>
         {iaLoading?"⏳ Processando com IA...":"🤖 Processar com IA"}
-      </button>
+      </button>}
       {iaResult&&<div className="card" style={{marginBottom:12}}>
         <div className="section-title">Resultado da Leitura</div>
         {iaResult.fornecedor&&<div style={{marginBottom:10,padding:"10px",background:"var(--border)",borderRadius:10}}>
@@ -1495,7 +1520,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         )}
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button className="btn" onClick={confirmarIA} style={{background:"#4ade80",color:"#051208",padding:"12px",flex:1,fontSize:14}}>✅ Confirmar</button>
-          <button className="btn" onClick={()=>setIaResult(null)} style={{background:"var(--border)",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Descartar</button>
+          <button className="btn" onClick={()=>{setIaResult(null);setNfeXml("");}} style={{background:"var(--border)",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Descartar</button>
         </div>
       </div>}
     </div>}
