@@ -2131,7 +2131,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 // ===================== CONTAS =====================
 function Contas({db,setDb}){
   const fPagOpts=["dinheiro","pix","cartão débito","cartão crédito","boleto","transferência","outros"];
-  const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes"};
+  const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes",diasSemana:[1,2,3,4,5]};
   const [subTab,setSubTab]=useState("lista");
   const [form,setForm]=useState<any>(emptyForm);
   const [editId,setEditId]=useState<string|null>(null);
@@ -2143,11 +2143,21 @@ function Contas({db,setDb}){
   const [verGrupo,setVerGrupo]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
 
-  const gerarVenc=(base:string,i:number,periodo:string)=>{
+  const gerarVenc=(base:string,i:number,periodo:string,diasSemana:number[]=[])=>{
     const d=new Date(base+"T12:00:00");
-    if(periodo==="dia")d.setDate(d.getDate()+i);
-    else if(periodo==="semana")d.setDate(d.getDate()+i*7);
-    else d.setMonth(d.getMonth()+i);
+    if(periodo==="dia"){d.setDate(d.getDate()+i);}
+    else if(periodo==="semana"){d.setDate(d.getDate()+i*7);}
+    else if(periodo==="quinzena"){d.setDate(d.getDate()+i*14);}
+    else if(periodo==="diasuteis"){
+      while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()+1);
+      let c=0;while(c<i){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)c++;}
+    }
+    else if(periodo==="semana_dias"){
+      const ds=diasSemana.length?[...diasSemana].sort((a,b)=>a-b):[1,2,3,4,5];
+      while(!ds.includes(d.getDay()))d.setDate(d.getDate()+1);
+      for(let k=0;k<i;k++){d.setDate(d.getDate()+1);while(!ds.includes(d.getDay()))d.setDate(d.getDate()+1);}
+    }
+    else{d.setMonth(d.getMonth()+i);}
     return d.toISOString().slice(0,10);
   };
 
@@ -2167,8 +2177,8 @@ function Contas({db,setDb}){
       const gRecorr=editGrupoRecorr||uid();
       const novas=Array.from({length:n},(_:any,i:number)=>({
         id:uid(),descricao:`${form.descricao} (${i+1}/${n})`,
-        vencimento:gerarVenc(form.vencimento,i,form.periodo),
-        grupoRecorr:gRecorr,parcela:i+1,totalParcelas:n,...base,criadoEm:now,
+        vencimento:gerarVenc(form.vencimento,i,form.periodo,form.diasSemana||[]),
+        grupoRecorr:gRecorr,parcela:i+1,totalParcelas:n,periodo:form.periodo,diasSemana:form.diasSemana||[],...base,criadoEm:now,
       }));
       if(editGrupoRecorr){setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[]).filter((c:any)=>c.grupoRecorr!==editGrupoRecorr)]}));}
       else{setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[])]}));}
@@ -2191,7 +2201,7 @@ function Contas({db,setDb}){
     const first=items[0];
     const descBase=first.descricao.replace(/ \(\d+\/\d+\)$/,"");
     setEditId(null);setEditGrupoRecorr(gid);
-    setForm({...emptyForm,...first,descricao:descBase,valor:String(parseMoney(first.valor)).replace(".",","),recorrente:true,parcelas:String(items.length),periodo:"mes"});
+    setForm({...emptyForm,...first,descricao:descBase,valor:String(parseMoney(first.valor)).replace(".",","),recorrente:true,parcelas:String(items.length),periodo:first.periodo||"mes",diasSemana:first.diasSemana||[1,2,3,4,5]});
     setSubTab("novo");
   };
   const del=(id:string)=>setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));
@@ -2407,19 +2417,49 @@ function Contas({db,setDb}){
             <div className="row">
               <div style={{flex:1}}>
                 <label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Nº de parcelas</label>
-                <input type="number" min="2" max="60" value={form.parcelas} onChange={e=>setForm((f:any)=>({...f,parcelas:e.target.value}))} className="inp" style={{textAlign:"center"}}/>
+                <input type="number" min="2" max="120" value={form.parcelas} onChange={e=>setForm((f:any)=>({...f,parcelas:e.target.value}))} className="inp" style={{textAlign:"center"}}/>
               </div>
               <div style={{flex:2}}>
                 <label style={{fontSize:11,color:"#888",display:"block",marginBottom:3}}>Periodicidade</label>
                 <select value={form.periodo} onChange={e=>setForm((f:any)=>({...f,periodo:e.target.value}))} className="inp">
                   <option value="dia">Diário</option>
+                  <option value="diasuteis">Dias úteis (Seg–Sex)</option>
+                  <option value="semana_dias">Dias da semana específicos</option>
                   <option value="semana">Semanal</option>
+                  <option value="quinzena">Quinzenal</option>
                   <option value="mes">Mensal</option>
                 </select>
               </div>
             </div>
+            {form.periodo==="semana_dias"&&<div style={{marginTop:10}}>
+              <label style={{fontSize:11,color:"#888",display:"block",marginBottom:6}}>Dias da semana</label>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:8}}>
+                {([["Dom",0],["Seg",1],["Ter",2],["Qua",3],["Qui",4],["Sex",5],["Sáb",6]] as [string,number][]).map(([l,v])=>{
+                  const sel=(form.diasSemana||[]).includes(v);
+                  return <button key={v} type="button" onClick={()=>{
+                    const cur=form.diasSemana||[];
+                    setForm((f:any)=>({...f,diasSemana:sel?cur.filter((d:number)=>d!==v):[...cur,v].sort((a:number,b:number)=>a-b)}));
+                  }} style={{background:sel?"#7c8fff":"var(--bg4)",color:sel?"#fff":"#666",border:`1px solid ${sel?"#7c8fff":"var(--border)"}`,borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer",fontWeight:sel?700:400}}>{l}</button>;
+                })}
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button type="button" onClick={()=>setForm((f:any)=>({...f,diasSemana:[1,2,3,4,5]}))}
+                  style={{background:"var(--border)",color:"#7c8fff",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Dias úteis</button>
+                <button type="button" onClick={()=>setForm((f:any)=>({...f,diasSemana:[1,2,3,4,5,6]}))}
+                  style={{background:"var(--border)",color:"#888",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Seg–Sáb</button>
+                <button type="button" onClick={()=>setForm((f:any)=>({...f,diasSemana:[0,1,2,3,4,5,6]}))}
+                  style={{background:"var(--border)",color:"#888",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Todos</button>
+              </div>
+              {!(form.diasSemana||[]).length&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>Selecione pelo menos um dia.</div>}
+            </div>}
             {parseInt(form.parcelas)>1&&<div style={{marginTop:8,fontSize:11,color:"#7c8fff",background:"#0d1220",borderRadius:6,padding:"6px 10px"}}>
-              Vai gerar {form.parcelas}x de {fmtMoney(parseMoney(form.valor))} — Total: {fmtMoney(parseMoney(form.valor)*(parseInt(form.parcelas)||1))}
+              {(()=>{
+                const n=parseInt(form.parcelas)||1;
+                const v=parseMoney(form.valor);
+                const primeiro=gerarVenc(form.vencimento,0,form.periodo,form.diasSemana||[]);
+                const ultimo=gerarVenc(form.vencimento,n-1,form.periodo,form.diasSemana||[]);
+                return `Vai gerar ${n}x de ${fmtMoney(v)} — Total: ${fmtMoney(v*n)} · ${fmtDate(primeiro)} → ${fmtDate(ultimo)}`;
+              })()}
             </div>}
           </div>}
         </div>
