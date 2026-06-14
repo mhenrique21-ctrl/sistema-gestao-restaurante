@@ -98,6 +98,58 @@ function LogoEmpresa({empresa}) {
   );
 }
 
+// ===================== LOGIN =====================
+const LOGINS:{[pwd:string]:{role:"admin"|"op",label:string,empresa?:string}}={
+  "172839":{role:"admin",label:"Administrativo"},
+  "1234":  {role:"op",   label:"Op. Lista SEAMA",    empresa:"SEAMA"},
+  "4321":  {role:"op",   label:"Op. Lista CONFRARIA", empresa:"CONFRARIA"},
+};
+
+function LoginScreen({onLogin}:{onLogin:(info:any)=>void}){
+  const [pwd,setPwd]=useState("");
+  const [erro,setErro]=useState(false);
+  const [shake,setShake]=useState(false);
+
+  const tentar=()=>{
+    const info=LOGINS[pwd.trim()];
+    if(info){onLogin(info);}
+    else{
+      setErro(true);setShake(true);setPwd("");
+      setTimeout(()=>setShake(false),500);
+    }
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0c12",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}`}</style>
+      <div style={{width:"100%",maxWidth:340}}>
+        <div style={{textAlign:"center",marginBottom:36}}>
+          <div style={{fontSize:48,marginBottom:8}}>🍽️</div>
+          <div style={{fontSize:28,fontWeight:800,color:"#e8eaf0",fontFamily:"'Syne',sans-serif",letterSpacing:-1}}>App Gestão</div>
+          <div style={{fontSize:13,color:"#5a6080",marginTop:4}}>Confraria & Seama</div>
+        </div>
+        <div style={{animation:shake?"shake .4s ease":"none"}}>
+          <input
+            type="password"
+            placeholder="Senha de acesso"
+            value={pwd}
+            onChange={e=>{setPwd(e.target.value);setErro(false);}}
+            onKeyDown={e=>{if(e.key==="Enter")tentar();}}
+            autoFocus
+            style={{width:"100%",background:"#13161f",border:`1.5px solid ${erro?"#ff5c7a":"#1e2235"}`,borderRadius:12,color:"#e8eaf0",padding:"14px 16px",fontSize:18,letterSpacing:4,textAlign:"center",boxSizing:"border-box",marginBottom:12,outline:"none",fontFamily:"inherit"}}
+          />
+          {erro&&<div style={{color:"#ff5c7a",fontSize:13,textAlign:"center",marginBottom:12}}>Senha incorreta. Tente novamente.</div>}
+          <button
+            onClick={tentar}
+            style={{width:"100%",background:"#7c8fff",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:16,fontWeight:700,cursor:"pointer",letterSpacing:0.5}}>
+            Entrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== MAIN APP =====================
 export default function App() {
   const [state,setState] = useState(()=>{
@@ -115,8 +167,13 @@ export default function App() {
     });
     return m;
   });
+  const [login,setLogin]   = useState<{role:string,label:string,empresa?:string}|null>(()=>{
+    try{return JSON.parse(sessionStorage.getItem("app_login")||"null");}catch{return null;}
+  });
   const [tab,setTab]       = useState("dashboard");
-  const [empresa,setEmpresa] = useState("CONFRARIA");
+  const [empresa,setEmpresa] = useState(()=>{
+    try{const l=JSON.parse(sessionStorage.getItem("app_login")||"null");return l?.empresa||"CONFRARIA";}catch{return "CONFRARIA";}
+  });
   const [theme,setTheme]   = useState<"dark"|"light">(()=>(localStorage.getItem("app_theme")||"dark") as "dark"|"light");
   const [syncStatus,setSyncStatus] = useState<"idle"|"sync"|"ok"|"erro">("idle");
 
@@ -158,7 +215,24 @@ export default function App() {
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
 
-  const tabs=[
+  const isOp=login?.role==="op";
+  const isAdmin=login?.role==="admin";
+
+  const doLogin=(info:any)=>{
+    sessionStorage.setItem("app_login",JSON.stringify(info));
+    setLogin(info);
+    if(info.empresa)setEmpresa(info.empresa);
+    if(info.role==="op")setTab("lista");
+  };
+  const doLogout=()=>{
+    sessionStorage.removeItem("app_login");
+    setLogin(null);
+    setTab("dashboard");
+  };
+
+  if(!login)return <LoginScreen onLogin={doLogin}/>;
+
+  const allTabs=[
     {id:"dashboard",label:"Dashboard",icon:"📊"},
     {id:"vendas",label:"Vendas",icon:"💰"},
     {id:"compras",label:"Compras",icon:"🏪"},
@@ -168,6 +242,7 @@ export default function App() {
     {id:"fluxo",label:"Fluxo",icon:"💵"},
     {id:"gestao",label:"Gestão",icon:"⚙️"},
   ];
+  const tabs=isOp?allTabs.filter(t=>t.id==="lista"):allTabs;
 
   return (
     <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:84}}>
@@ -207,12 +282,15 @@ export default function App() {
       <div className="app-sidebar">
         <div style={{padding:"16px 16px 12px"}}>
           <LogoEmpresa empresa={empresa}/>
-          <div style={{display:"flex",gap:5,marginTop:10}}>
+          {isAdmin&&<div style={{display:"flex",gap:5,marginTop:10}}>
             {["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
                 style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:10,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`,flex:1,justifyContent:"center",padding:"5px 6px"}}>{e}</button>
             ))}
-          </div>
+          </div>}
+          {isOp&&<div style={{marginTop:8,fontSize:11,color:"#5a6080",background:"var(--bg4)",borderRadius:8,padding:"6px 10px"}}>
+            👤 {login.label}
+          </div>}
         </div>
         <div style={{flex:1}}>
           {(()=>{
@@ -229,12 +307,17 @@ export default function App() {
             ));
           })()}
         </div>
-        <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontSize:11,color:syncStatus==="ok"?"#4ade80":syncStatus==="erro"?"#ff5c7a":syncStatus==="sync"?"#7c8fff":"var(--text3)"}}>
-            {syncStatus==="sync"?"⟳ Salvando...":syncStatus==="ok"?"✓ Sincronizado":syncStatus==="erro"?"⚠ Erro":"App Gestão v2.0"}
-          </span>
-          <button onClick={toggleTheme} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
-            {theme==="dark"?"☀️":"🌙"}
+        <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:11,color:syncStatus==="ok"?"#4ade80":syncStatus==="erro"?"#ff5c7a":syncStatus==="sync"?"#7c8fff":"var(--text3)"}}>
+              {syncStatus==="sync"?"⟳ Salvando...":syncStatus==="ok"?"✓ Sincronizado":syncStatus==="erro"?"⚠ Erro":"App Gestão v2.0"}
+            </span>
+            <button onClick={toggleTheme} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
+              {theme==="dark"?"☀️":"🌙"}
+            </button>
+          </div>
+          <button onClick={doLogout} style={{width:"100%",background:"#1a0a0a",border:"1px solid #3a1515",borderRadius:8,color:"#ff7a7a",fontSize:11,fontWeight:700,padding:"7px",cursor:"pointer",letterSpacing:0.3}}>
+            🔒 Sair ({login.label})
           </button>
         </div>
       </div>
@@ -248,10 +331,12 @@ export default function App() {
             <button onClick={toggleTheme} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
               {theme==="dark"?"☀️":"🌙"}
             </button>
-            {["CONFRARIA","SEAMA"].map(e=>(
+            {isAdmin&&["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
                 style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`}}>{e}</button>
             ))}
+            {isOp&&<span style={{fontSize:11,color:"#5a6080",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"4px 10px"}}>{empresa}</span>}
+            <button onClick={doLogout} title="Sair" style={{background:"none",border:"1px solid #3a1515",borderRadius:8,cursor:"pointer",color:"#ff7a7a",fontSize:13,padding:"4px 8px",lineHeight:1}}>🔒</button>
           </div>
         </div>
       </div>
