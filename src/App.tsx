@@ -429,9 +429,11 @@ const migrateDb=(m:any)=>{
 
 // IDs de itens deletados localmente nesta sessão — o poll nunca os restaura
 const _listaDeletados=new Set<string>();
+// IDs de itens adicionados localmente mas ainda não salvos no servidor
+const _localAddIds=new Set<string>();
 
-// Merge server data with local state: arrays com id preservam itens locais não salvos
-// e nunca restauram itens que o usuário deletou nesta sessão
+// Merge server data with local state: preserva apenas itens adicionados localmente
+// (em _localAddIds) que ainda não chegaram ao servidor; aceita remoções do admin
 const mergeFromServer=(prev:any,updates:any)=>{
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
@@ -442,7 +444,13 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
       return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!_listaDeletados.has(i.id))];
     };
-    next[emp]={...s,listaCompras:byId(s.listaCompras||[],p.listaCompras||[]),produtosLista:byId(s.produtosLista||[],p.produtosLista||[])};
+    // listaCompras: só preserva itens locais que ainda não foram ao servidor (em _localAddIds)
+    const byIdLista=(sArr:any[],pArr:any[])=>{
+      const sIds=new Set(sArr.map((i:any)=>i.id));
+      const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
+      return[...sFiltered,...pArr.filter((i:any)=>_localAddIds.has(i.id)&&!sIds.has(i.id)&&!_listaDeletados.has(i.id))];
+    };
+    next[emp]={...s,listaCompras:byIdLista(s.listaCompras||[],p.listaCompras||[]),produtosLista:byId(s.produtosLista||[],p.produtosLista||[])};
   });
   return migrateDb(next);
 };
@@ -495,6 +503,7 @@ export default function App() {
         if(Object.keys(updates).length>0)setState(prev=>mergeFromServer(prev,updates));
       });
     };
+    poll(); // busca imediata ao logar/relogar
     const t=setInterval(poll,10000);
     return()=>clearInterval(t);
   },[login]);
@@ -511,6 +520,7 @@ export default function App() {
           fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
         ));
         setSyncStatus("ok");
+        _localAddIds.clear();
       }catch{setSyncStatus("erro");}finally{
         syncTimer.current=null;
       }
@@ -531,6 +541,8 @@ export default function App() {
   };
   const doLogout=()=>{
     sessionStorage.removeItem("app_login");
+    _localAddIds.clear();
+    _listaDeletados.clear();
     setLogin(null);
     setTab("dashboard");
   };
@@ -649,7 +661,7 @@ export default function App() {
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
-          ? <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}}/>
+          ? <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout}/>
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
@@ -2425,7 +2437,7 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false};
 
-function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void}){
   const [form,setForm]=useState(EMPTY_FORM_LISTA);
   const [editId,setEditId]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
@@ -2464,7 +2476,9 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
       setEditId(null);
     }else{
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||"outros",estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,criadoEm:new Date().toISOString()}]}));
+      const novoId=uid();
+      _localAddIds.add(novoId);
+      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:novoId,nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||"outros",estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,criadoEm:new Date().toISOString()}]}));
     }
     setForm(EMPTY_FORM_LISTA);
   };
@@ -2584,10 +2598,13 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
-      {isAdmin&&<div style={{marginLeft:"auto",display:"flex",gap:6}}>
-        <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
-        <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
-      </div>}
+      <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+        {isAdmin&&<>
+          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
+          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
+        </>}
+        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
+      </div>
     </div>
 
     {/* Gerenciar categorias (admin only) */}
@@ -2741,7 +2758,7 @@ function ListaComprasPanel({db,setDb,isAdmin}:{db:any,setDb:any,isAdmin?:boolean
         <input placeholder="🔍 Buscar produto..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14,marginBottom:0}}/>
         {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
       </div>}
-      {comprados.length>0&&<>
+      {isAdmin&&comprados.length>0&&<>
         <button className="btn" onClick={salvarPedido} style={{background:"#0a2010",color:"#4ade80",border:"1px solid #14532d",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
           💾 Salvar Pedido ({comprados.length})
         </button>
