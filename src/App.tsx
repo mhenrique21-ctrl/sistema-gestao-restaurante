@@ -2781,88 +2781,68 @@ function Contas({db,setDb}){
         <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#4ade80",fontWeight:700,fontSize:16}}>{fmtMoney(totPago)}</div><div className="muted" style={{fontSize:11}}>Pago</div></div>
       </div>
 
-      {/* Recurring groups */}
-      {Object.entries(grupos).map(([gid,items]:any)=>{
-        const sorted=[...items].sort((a:any,b:any)=>(a.vencimento||"").localeCompare(b.vencimento||""));
-        const expanded=verGrupo===gid;
-        const totalG=items.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
-        const pagasG=items.filter((c:any)=>c.status==="pago").length;
-        const descBase=sorted[0].descricao.replace(/ \(\d+\/\d+\)$/,"");
-        const nextPend=sorted.find((c:any)=>c.status==="pendente");
-        return <div key={gid} style={{marginBottom:8,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
-          <div onClick={()=>setVerGrupo((v:any)=>v===gid?null:gid)}
-            style={{padding:"12px 14px",cursor:"pointer",background:"var(--bg3)",display:"flex",gap:10,alignItems:"center"}}>
-            <span style={{fontSize:18,lineHeight:1}}>{expanded?"📂":"📁"}</span>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:700,fontSize:13,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
-                {descBase}
-                <span style={{fontSize:10,color:"#a78bfa",background:"#2d1a4f",borderRadius:20,padding:"1px 7px",fontWeight:700}}>🔄 {items.length}x</span>
+      {/* Agrupado por dia */}
+      {(()=>{
+        const porDia:Record<string,any[]>={};
+        contasFiltradas.forEach((c:any)=>{const d=c.vencimento||"sem-data";if(!porDia[d])porDia[d]=[];porDia[d].push(c);});
+        const dias=Object.keys(porDia).sort((a,b)=>sortDir==="asc"?a.localeCompare(b):b.localeCompare(a));
+        if(!dias.length)return <EmptyState msg="Nenhuma conta encontrada"/>;
+        const todayStr=today();
+        const DIAS_PT=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+        const MESES_PT=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+        return dias.map(dia=>{
+          const itens=porDia[dia];
+          const pendDia=itens.filter((c:any)=>c.status==="pendente").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+          const pagoDia=itens.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+          const isHoje=dia===todayStr;
+          const isAtras=dia<todayStr&&dia!=="sem-data";
+          const temPend=pendDia>0;
+          let diaLabel="Sem data";
+          if(dia!=="sem-data"){const d=new Date(dia+"T12:00:00");diaLabel=`${DIAS_PT[d.getDay()]}, ${String(d.getDate()).padStart(2,"0")} ${MESES_PT[d.getMonth()]} ${d.getFullYear()}`;}
+          return <div key={dia} style={{marginBottom:18}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderRadius:8,background:isHoje?"#1a1f3a":isAtras&&temPend?"#1a0a0a":"var(--bg3)",marginBottom:6,border:`1px solid ${isHoje?"#3a3f7a":isAtras&&temPend?"#3f1010":"var(--border)"}`}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
+                <span style={{fontWeight:700,fontSize:13,color:isHoje?"#a0a8ff":isAtras&&temPend?"#ff5c7a":"#ccc"}}>{diaLabel}</span>
+                {isHoje&&<span style={{background:"#7c8fff",color:"#fff",fontSize:10,borderRadius:20,padding:"1px 8px",fontWeight:700}}>HOJE</span>}
+                {!isHoje&&isAtras&&temPend&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",fontSize:10,borderRadius:20,padding:"1px 8px",fontWeight:700,border:"1px solid #ff5c7a44"}}>ATRASADO</span>}
               </div>
-              <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-                {sorted[0].categoria&&<span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{sorted[0].categoria}</span>}
-                {sorted[0].formaPag&&<span>{sorted[0].formaPag}</span>}
-                {sorted[0].fornecedor&&<span>• {sorted[0].fornecedor}</span>}
-                {nextPend&&<span style={{color:"#fbbf24"}}>• Próx: {fmtDate(nextPend.vencimento)}</span>}
+              <div style={{display:"flex",gap:10,fontSize:12,flexShrink:0}}>
+                {pendDia>0&&<span style={{color:"#ff5c7a",fontWeight:700}}>↑ {fmtMoney(pendDia)}</span>}
+                {pagoDia>0&&<span style={{color:"#4ade80",fontWeight:600}}>✅ {fmtMoney(pagoDia)}</span>}
               </div>
             </div>
-            <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontWeight:700,fontSize:14,color:"#a78bfa"}}>{fmtMoney(totalG)}</div>
-              <div style={{fontSize:11,color:pagasG===items.length?"#4ade80":"#888"}}>{pagasG}/{items.length} pagas</div>
-            </div>
-          </div>
-          {expanded&&<div>
-            {sorted.map((c:any)=>(
-              <div key={c.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)",background:"var(--bg2)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                  <span style={{fontSize:13,fontWeight:600}}>{c.descricao}</span>
-                  <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a"}}>{fmtMoney(parseMoney(c.valor))}</span>
+            {itens.map((c:any)=>{
+              const isRecorr=!!c.grupoRecorr;
+              const allGrupo=isRecorr?(db.contas||[]).filter((x:any)=>x.grupoRecorr===c.grupoRecorr):[];
+              const pagasGrupo=allGrupo.filter((x:any)=>x.status==="pago").length;
+              return <div key={c.id} className="list-item" style={{marginBottom:6,borderLeft:isRecorr?"3px solid #a78bfa44":"none"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{fontWeight:600,flex:1,marginRight:8}}>{c.descricao}</span>
+                  <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
                 </div>
-                <div style={{fontSize:11,color:"#888",marginBottom:6}}>{fmtDate(c.vencimento)}</div>
-                <div style={{display:"flex",gap:5}}>
-                  <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
-                  {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"5px 10px",fontSize:11}}>📎</button>}
-                  <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"5px 10px",fontSize:11}}>✏️</button>
-                  <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>🗑️</button>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginBottom:6,fontSize:11,color:"#888",alignItems:"center"}}>
+                  {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"var(--border)",color:c.categoria==="Adiantamento"?"#fbbf24":"#888"}}>{c.categoria}</span>}
+                  {isRecorr&&<span style={{fontSize:10,color:"#a78bfa",background:"#2d1a4f",borderRadius:20,padding:"1px 6px",fontWeight:700}}>🔄 {pagasGrupo}/{allGrupo.length}</span>}
+                  {c.formaPag&&<span>· {c.formaPag}</span>}
+                  {c.fornecedor&&<span>· {c.fornecedor}</span>}
+                  {c.origem==="compra"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>compra</span>}
                 </div>
-              </div>
-            ))}
-            <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",background:"var(--bg3)",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-              <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
-              <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"#7c8fff",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
-              <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
-            </div>
-          </div>}
-        </div>;
-      })}
-
-      {/* Normal contas */}
-      {normais.map((c:any)=>(
-        <div key={c.id} className="list-item">
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-            <span style={{fontWeight:600,flex:1,marginRight:8}}>{c.descricao}</span>
-            <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a",whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(c.valor))}</span>
-          </div>
-          <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginBottom:6,fontSize:11,color:"#888",alignItems:"center"}}>
-            {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"var(--border)",color:c.categoria==="Adiantamento"?"#fbbf24":"#888"}}>{c.categoria}</span>}
-            <span>Vence: {fmtDate(c.vencimento)}</span>
-            {c.formaPag&&<span>· {c.formaPag}</span>}
-            {c.fornecedor&&<span>· {c.fornecedor}</span>}
-            {c.origem==="compra"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>compra</span>}
-          </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-            <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"6px 12px",fontSize:12}}>
-              {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
-            </button>
-            {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
-            {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"#1a2a1a",color:"#4ade80",padding:"6px 12px",fontSize:12}}>🖨️</button>}
-            {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>📎</button>}
-            <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-            <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
-          </div>
-          {c.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(c.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
-        </div>
-      ))}
-      {!normais.length&&!Object.keys(grupos).length&&<EmptyState msg="Nenhuma conta encontrada"/>}
+                <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                  <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"6px 12px",fontSize:12}}>
+                    {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
+                  </button>
+                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🧾</button>}
+                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"#1a2a1a",color:"#4ade80",padding:"6px 12px",fontSize:12}}>🖨️</button>}
+                  {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>📎</button>}
+                  <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
+                  <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+                  {isRecorr&&<button className="btn" onClick={()=>delGrupo(c.grupoRecorr)} style={{background:"#1a0a1a",color:"#a78bfa",padding:"6px 10px",fontSize:11}}>🗑️série</button>}
+                </div>
+              </div>;
+            })}
+          </div>;
+        });
+      })()}
     </div>}
 
     {subTab==="novo"&&<div>
