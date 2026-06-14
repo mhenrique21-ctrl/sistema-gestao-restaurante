@@ -109,10 +109,52 @@ const PRODS_SEED_V3=[
   {nome:"Calabresa",              cat:"carnes", unidade:"kg"},
   {nome:"Caranguejo",             cat:"carnes", unidade:"kg"},
 ];
+const PRODS_SEED_V4=[
+  {nome:"Papel Interfolhado",              cat:"descartáveis", unidade:"un"},
+  {nome:"Lenço de Mesa",                   cat:"descartáveis", unidade:"un"},
+  {nome:"Embalagem de Crepioca",           cat:"descartáveis", unidade:"un"},
+  {nome:"Embalagem GA10",                  cat:"descartáveis", unidade:"un"},
+  {nome:"Embalagem de Torta",              cat:"descartáveis", unidade:"un"},
+  {nome:"Embalagem de Bolo G60",           cat:"descartáveis", unidade:"un"},
+  {nome:"Embalagem de Tapioca",            cat:"descartáveis", unidade:"un"},
+  {nome:"Embalagem para Mousse",           cat:"descartáveis", unidade:"un"},
+  {nome:"Saco para Salgado",               cat:"descartáveis", unidade:"un"},
+  {nome:"Saco para Porção de Alimentos",   cat:"descartáveis", unidade:"un"},
+  {nome:"Saco para Brownie",               cat:"descartáveis", unidade:"un"},
+  {nome:"Sacola 2 kg",                     cat:"descartáveis", unidade:"un"},
+  {nome:"Sacola de Papel Delivery Grande", cat:"descartáveis", unidade:"un"},
+  {nome:"Sacola de Papel Delivery Média",  cat:"descartáveis", unidade:"un"},
+  {nome:"Sacola de Papel Delivery Pequena",cat:"descartáveis", unidade:"un"},
+  {nome:"Sacola de Papel Delivery PP",     cat:"descartáveis", unidade:"un"},
+  {nome:"Sacola de Bolo Dany",             cat:"descartáveis", unidade:"un"},
+  {nome:"Papel Filme",                     cat:"descartáveis", unidade:"un"},
+  {nome:"Pote para Molho Mostarda",        cat:"descartáveis", unidade:"un"},
+  {nome:"Pote para Cuscuz 250 ml",         cat:"descartáveis", unidade:"un"},
+  {nome:"Garfo Descartável Grande",        cat:"descartáveis", unidade:"un"},
+  {nome:"Garfo Descartável Pequeno",       cat:"descartáveis", unidade:"un"},
+  {nome:"Colher Descartável Grande",       cat:"descartáveis", unidade:"un"},
+  {nome:"Colher Descartável Pequena",      cat:"descartáveis", unidade:"un"},
+  {nome:"Faca Descartável",               cat:"descartáveis", unidade:"un"},
+  {nome:"Kit Faca e Garfo",               cat:"descartáveis", unidade:"un"},
+  {nome:"Kit Colher",                     cat:"descartáveis", unidade:"un"},
+  {nome:"Bobina Grande",                  cat:"descartáveis", unidade:"un"},
+  {nome:"Bobina Pequena",                 cat:"descartáveis", unidade:"un"},
+  {nome:"Prato Descartável Pequeno",      cat:"descartáveis", unidade:"un"},
+  {nome:"Prato Descartável Grande",       cat:"descartáveis", unidade:"un"},
+  {nome:"Prato de Isopor",               cat:"descartáveis", unidade:"un"},
+  {nome:"Copo Café 180 ml",              cat:"descartáveis", unidade:"un"},
+  {nome:"Copo Salada de Fruta 300 ml",   cat:"descartáveis", unidade:"un"},
+  {nome:"Copo de Suco 300 ml",           cat:"descartáveis", unidade:"un"},
+  {nome:"Canudo para Suco",              cat:"descartáveis", unidade:"un"},
+  {nome:"Canudo para Shake",             cat:"descartáveis", unidade:"un"},
+  {nome:"Fita Durex",                    cat:"descartáveis", unidade:"un"},
+  {nome:"Saquinho para Sachê",           cat:"descartáveis", unidade:"un"},
+  {nome:"Adesivo para Delivery",         cat:"descartáveis", unidade:"un"},
+];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -284,6 +326,12 @@ const migrateDb=(m:any)=>{
       const novos=PRODS_SEED_V3.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
       m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
       m[e].produtosSeedV3=true;
+    }
+    if(!m[e].produtosSeedV4){
+      const ex:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+      const novos=PRODS_SEED_V4.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+      m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
+      m[e].produtosSeedV4=true;
     }
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
