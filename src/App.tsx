@@ -8,7 +8,7 @@ const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d)
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[],
+  normalizacoes:[], movEstoque:[], listaCompras:[],
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -1236,7 +1236,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"]].map(([k,l])=>(
+      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"],["compras_lista","🛒 Lista"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px",position:"relative"}}>
           {l}
           {k==="nfe"&&sefazList.length>0&&subTab!=="nfe"&&<span style={{position:"absolute",top:-4,right:-4,background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{sefazList.length}</span>}
@@ -1967,6 +1967,120 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       </div>}
     </div>}
 
+    {/* ===== LISTA DE COMPRAS ===== */}
+    {subTab==="compras_lista"&&<ListaComprasPanel db={db} setDb={setDb}/>}
+
+  </div>;
+}
+
+// ===================== LISTA DE COMPRAS =====================
+function ListaComprasPanel({db,setDb}:{db:any,setDb:any}){
+  const [nome,setNome]=useState("");
+  const [qtd,setQtd]=useState("1");
+  const [unidade,setUnidade]=useState("un");
+  const [cat,setCat]=useState("");
+  const [busca,setBusca]=useState("");
+
+  const lista:any[]=db.listaCompras||[];
+  const pendentes=lista.filter((i:any)=>!i.comprado);
+  const comprados=lista.filter((i:any)=>i.comprado);
+
+  const addItem=()=>{
+    if(!nome.trim())return alert("Informe o nome do item.");
+    const novo={id:uid(),nome:nome.trim(),quantidade:parseFloat(qtd)||1,unidade,categoria:cat||"outros",comprado:false,criadoEm:new Date().toISOString()};
+    setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),novo]}));
+    setNome("");setQtd("1");
+  };
+
+  const toggle=(id:string)=>setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,comprado:!i.comprado}:i)}));
+  const del=(id:string)=>setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id)}));
+  const limparComprados=()=>{if(!comprados.length)return;if(!confirm("Remover todos os itens comprados?"))return;setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado)}));};
+
+  const sugerirDoEstoque=()=>{
+    const mps=(db.materiasPrimas||[]).filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
+    if(!mps.length)return alert("Nenhum produto abaixo do estoque mínimo.");
+    const jaHa=new Set((db.listaCompras||[]).map((i:any)=>i.nome.toLowerCase()));
+    const novos=mps.filter((m:any)=>!jaHa.has(m.nome.toLowerCase())).map((m:any)=>({
+      id:uid(),nome:m.nome,quantidade:Math.max(1,Math.ceil((m.estoqueMinimo||0)-(m.estoqueAtual||0))),
+      unidade:m.unidade||"un",categoria:m.categoria||"outros",comprado:false,criadoEm:new Date().toISOString(),
+    }));
+    if(!novos.length)return alert("Todos os itens abaixo do mínimo já estão na lista.");
+    setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),...novos]}));
+    alert(`✅ ${novos.length} item(ns) adicionado(s) da sugestão de estoque.`);
+  };
+
+  const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
+  const porCat:Record<string,any[]>={};
+  listaBusca.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(i);});
+
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
+      <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
+      {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
+    </div>
+
+    {/* Adicionar item */}
+    <div className="card" style={{marginBottom:14}}>
+      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap" as const}}>
+        <input placeholder="Nome do item *" value={nome} onChange={e=>setNome(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")addItem();}}
+          className="inp" style={{flex:"2 1 160px",marginBottom:0}}/>
+        <input type="number" min="0.1" step="0.1" placeholder="Qtd" value={qtd} onChange={e=>setQtd(e.target.value)}
+          className="inp" style={{flex:"0 0 70px",marginBottom:0}}/>
+        <select value={unidade} onChange={e=>setUnidade(e.target.value)} className="inp" style={{flex:"0 0 80px",marginBottom:0}}>
+          {["un","kg","L","cx","pc","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
+        </select>
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+        <select value={cat} onChange={e=>setCat(e.target.value)} className="inp" style={{flex:"1 1 120px",marginBottom:0}}>
+          <option value="">Categoria (opcional)</option>
+          {["carnes","hortifruti","laticínios","grãos","temperos","bebidas","embalagens","descartáveis","material de limpeza","outros"].map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <button className="btn" onClick={addItem} style={{background:"#7c8fff",color:"#fff",padding:"10px 18px",fontSize:13,flex:"0 0 auto"}}>+ Adicionar</button>
+      </div>
+    </div>
+
+    {/* Ações rápidas */}
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
+      <button className="btn" onClick={sugerirDoEstoque} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 12px",fontSize:12,border:"1px solid #2a4a2a"}}>
+        📦 Sugerir do Estoque
+      </button>
+      {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"#1a0a0a",color:"#888",padding:"7px 12px",fontSize:12}}>
+        🗑️ Limpar comprados ({comprados.length})
+      </button>}
+    </div>
+
+    {/* Busca */}
+    {lista.length>5&&<div style={{position:"relative",marginBottom:12}}>
+      <input placeholder="🔍 Buscar item..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>
+      {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+    </div>}
+
+    {/* Lista por categoria */}
+    {!lista.length&&<EmptyState msg="Lista vazia. Adicione itens manualmente ou use 📦 Sugerir do Estoque."/>}
+    {Object.entries(porCat).sort(([a],[b])=>a.localeCompare(b,"pt-BR")).map(([categoria,itens])=>{
+      const todosComprados=itens.every((i:any)=>i.comprado);
+      return <div key={categoria} style={{marginBottom:14}}>
+        <div style={{fontSize:11,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:1,marginBottom:6,display:"flex",gap:6,alignItems:"center"}}>
+          <span>{categoria}</span>
+          <span style={{fontWeight:400,color:"#444"}}>({itens.filter((i:any)=>!i.comprado).length}/{itens.length})</span>
+          {todosComprados&&<span style={{color:"#4ade80",fontSize:10}}>✅ tudo comprado</span>}
+        </div>
+        {itens.map((item:any)=>(
+          <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:4,background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",opacity:item.comprado?0.55:1,transition:"opacity .2s"}}>
+            <button onClick={()=>toggle(item.id)}
+              style={{width:24,height:24,borderRadius:6,border:`2px solid ${item.comprado?"#4ade80":"#555"}`,background:item.comprado?"#4ade80":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
+              {item.comprado&&<span style={{color:"#111",fontSize:14,fontWeight:900,lineHeight:1}}>✓</span>}
+            </button>
+            <div style={{flex:1,minWidth:0}}>
+              <span style={{fontSize:13,fontWeight:600,textDecoration:item.comprado?"line-through":"none",color:item.comprado?"#555":"inherit"}}>{item.nome}</span>
+              <span style={{marginLeft:8,fontSize:11,color:"#666"}}>{item.quantidade} {item.unidade}</span>
+            </div>
+            <button onClick={()=>del(item.id)} style={{background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:16,padding:"0 4px",flexShrink:0,lineHeight:1}}>×</button>
+          </div>
+        ))}
+      </div>;
+    })}
   </div>;
 }
 
