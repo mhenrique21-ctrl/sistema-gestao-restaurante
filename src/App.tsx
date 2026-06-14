@@ -2146,7 +2146,6 @@ function ListaComprasPanel({db,setDb,onNavigate}:{db:any,setDb:any,onNavigate?:(
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
-      {onNavigate&&<button className="btn" onClick={()=>onNavigate("compras")} style={{marginLeft:"auto",background:"#0d1f2d",color:"#60a5fa",border:"1px solid #1e3a5a",fontSize:11,padding:"5px 12px"}}>🏪 Ir para Compras</button>}
     </div>
 
     {/* Adicionar item */}
