@@ -1,4 +1,4 @@
-const CACHE = 'gestao-v1';
+const CACHE = 'gestao-v2';
 const ASSETS = ['/', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -21,6 +21,36 @@ self.addEventListener('fetch', e => {
         return res;
       }).catch(() => cached);
       return cached || net;
+    })
+  );
+});
+
+// ===== PUSH NOTIFICATIONS =====
+self.addEventListener('push', e => {
+  let data = { title: '💰 App Gestão', body: 'Você tem contas para verificar.' };
+  try { data = e.data?.json() || data; } catch {}
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: data.tag || 'gestao-notif',
+      data: { url: data.url || '/' },
+      requireInteraction: true,
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const url = e.notification.data?.url || '/';
+      for (const c of list) {
+        if (c.url.includes(self.location.origin) && 'focus' in c) return c.focus();
+      }
+      return clients.openWindow(url);
     })
   );
 });

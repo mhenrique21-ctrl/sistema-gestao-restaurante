@@ -2427,6 +2427,14 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   </div>;
 }
 
+// ===================== PUSH NOTIFICATIONS HELPER =====================
+function urlBase64ToUint8Array(base64:string){
+  const pad='='.repeat((4-base64.length%4)%4);
+  const b64=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=window.atob(b64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+
 // ===================== NF-e PRINT / DOWNLOAD =====================
 function imprimirNFe(conta:any,itens:any[]){
   const win=window.open("","_blank");if(!win)return;
@@ -2503,6 +2511,66 @@ function Contas({db,setDb}){
   const [verConta,setVerConta]=useState<any>(null);
   const [verGrupo,setVerGrupo]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
+  const [notifStatus,setNotifStatus]=useState<"idle"|"granted"|"denied"|"subscribed"|"unsupported">("idle");
+  const [notifLoading,setNotifLoading]=useState(false);
+  const [notifEmpresa,setNotifEmpresa]=useState<string>("");
+
+  useEffect(()=>{
+    if(!("Notification" in window)||!("serviceWorker" in navigator)){setNotifStatus("unsupported");return;}
+    const p=Notification.permission;
+    if(p==="denied")setNotifStatus("denied");
+    else if(p==="granted"){
+      navigator.serviceWorker.ready.then(reg=>reg.pushManager.getSubscription()).then(sub=>{
+        setNotifStatus(sub?"subscribed":"granted");
+      }).catch(()=>setNotifStatus("granted"));
+    }
+    // Detect empresa from db config or fallback
+    const e=(db.config?.empresa||"").toUpperCase()||"CONFRARIA";
+    setNotifEmpresa(e);
+  },[]);
+
+  const ativarNotificacoes=async(empresa:string)=>{
+    if(!("Notification" in window)||!("serviceWorker" in navigator))return alert("Seu navegador não suporta notificações.");
+    setNotifLoading(true);
+    try{
+      const perm=await Notification.requestPermission();
+      if(perm!=="granted"){setNotifStatus("denied");setNotifLoading(false);return;}
+      const keyRes=await fetch("/api/push-vapid-key");
+      const {publicKey}=await keyRes.json();
+      if(!publicKey){alert("Notificações não configuradas no servidor.\nAdicione VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY no .env da VPS.");setNotifLoading(false);return;}
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(publicKey)});
+      await fetch("/api/push-subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,subscription:sub.toJSON()})});
+      setNotifStatus("subscribed");
+      alert("✅ Notificações ativadas!\nVocê receberá alertas às 7h–9h quando houver contas vencendo no dia seguinte.");
+    }catch(err:any){alert("Erro ao ativar: "+err.message);}
+    setNotifLoading(false);
+  };
+
+  const desativarNotificacoes=async()=>{
+    setNotifLoading(true);
+    try{
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.getSubscription();
+      if(sub){
+        await fetch("/api/push-unsubscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:sub.endpoint})});
+        await sub.unsubscribe();
+      }
+      setNotifStatus("idle");
+    }catch(err:any){alert("Erro: "+err.message);}
+    setNotifLoading(false);
+  };
+
+  const testarNotificacao=async(empresa:string)=>{
+    setNotifLoading(true);
+    try{
+      const r=await fetch("/api/push-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})});
+      const d=await r.json();
+      if(!r.ok)alert("Erro: "+d.error);
+      else alert(`✅ Notificação de teste enviada (${d.enviados} dispositivo(s))!`);
+    }catch(err:any){alert("Erro: "+err.message);}
+    setNotifLoading(false);
+  };
 
   const gerarVenc=(base:string,i:number,periodo:string,diasSemana:number[]=[])=>{
     const d=new Date(base+"T12:00:00");
@@ -2893,6 +2961,39 @@ function Contas({db,setDb}){
             style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
       ))}
+
+      <div className="section-title" style={{marginTop:20}}>🔔 Notificações Push</div>
+      <div className="card">
+        <div style={{fontSize:13,color:"#ccc",marginBottom:10}}>
+          Receba um alerta no celular às 7h–9h quando houver contas vencendo no dia seguinte.
+        </div>
+        {notifStatus==="unsupported"&&<div style={{fontSize:12,color:"#f59e0b",marginBottom:8}}>⚠️ Seu navegador não suporta notificações push. Use Chrome ou Safari 16.4+.</div>}
+        {notifStatus==="denied"&&<div style={{fontSize:12,color:"#ff5c7a",marginBottom:8}}>🚫 Permissão negada. Acesse as configurações do navegador e permita notificações para este site.</div>}
+        {notifStatus==="subscribed"&&<div style={{fontSize:12,color:"#4ade80",marginBottom:8}}>✅ Notificações ativas neste dispositivo.</div>}
+        {notifStatus==="idle"&&<div style={{fontSize:12,color:"#888",marginBottom:8}}>⏸ Notificações desativadas.</div>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
+          {notifEmpresa&&<select value={notifEmpresa} onChange={e=>setNotifEmpresa(e.target.value)} className="inp" style={{maxWidth:140,marginBottom:0}}>
+            <option value="CONFRARIA">CONFRARIA</option>
+            <option value="SEAMA">SEAMA</option>
+          </select>}
+          {notifStatus!=="subscribed"&&notifStatus!=="unsupported"&&notifStatus!=="denied"&&(
+            <button className="btn" disabled={notifLoading} onClick={()=>ativarNotificacoes(notifEmpresa||"CONFRARIA")}
+              style={{background:"#7c8fff",color:"#fff",padding:"10px 16px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              {notifLoading?"Aguarde...":"🔔 Ativar notificações"}
+            </button>
+          )}
+          {notifStatus==="subscribed"&&<>
+            <button className="btn" disabled={notifLoading} onClick={()=>testarNotificacao(notifEmpresa||"CONFRARIA")}
+              style={{background:"#1e3a2a",color:"#4ade80",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              {notifLoading?"...":"📲 Testar agora"}
+            </button>
+            <button className="btn" disabled={notifLoading} onClick={desativarNotificacoes}
+              style={{background:"#2a1520",color:"#ff5c7a",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              {notifLoading?"...":"🔕 Desativar"}
+            </button>
+          </>}
+        </div>
+      </div>
     </div>}
   </div>;
 }

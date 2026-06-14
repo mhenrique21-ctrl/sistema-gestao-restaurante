@@ -5,6 +5,7 @@ import fs from 'fs';
 import zlib from 'zlib';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import webPush from 'web-push';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,72 @@ const CERTS_DIR = path.join(__dirname, 'certs');
 const DADOS_DIR = path.join(__dirname, 'dados');
 const CACHE_FILE = path.join(CERTS_DIR, 'sefaz_cache.json');
 fs.mkdirSync(DADOS_DIR, { recursive: true });
+
+// ===== WEB PUSH =====
+const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_EMAIL   = process.env.VAPID_EMAIL || 'mailto:admin@gestao.local';
+const SUBS_FILE     = path.join(DADOS_DIR, 'push_subscriptions.json');
+const PUSH_SENT_FILE= path.join(DADOS_DIR, 'push_last_sent.json');
+
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webPush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
+  console.log('[Push] VAPID configurado ✅');
+} else {
+  console.warn('[Push] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY não definidas — notificações desativadas.');
+}
+
+function loadSubs() {
+  try { return JSON.parse(fs.readFileSync(SUBS_FILE, 'utf-8')); } catch { return []; }
+}
+function saveSubs(subs) {
+  fs.writeFileSync(SUBS_FILE, JSON.stringify(subs));
+}
+
+async function checkPushNotifications() {
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
+  const now = new Date();
+  const hour = now.getHours();
+  if (hour < 7 || hour > 9) return; // só 7h–9h
+  const today = now.toISOString().slice(0, 10);
+  let lastSent = {};
+  try { lastSent = JSON.parse(fs.readFileSync(PUSH_SENT_FILE, 'utf-8')); } catch {}
+  if (lastSent.date === today) return; // já enviou hoje
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  const subs = loadSubs();
+  if (!subs.length) return;
+  const byEmpresa = {};
+  subs.forEach(s => { if (!byEmpresa[s.empresa]) byEmpresa[s.empresa] = []; byEmpresa[s.empresa].push(s.subscription); });
+  let enviou = false;
+  for (const [empresa, subscriptions] of Object.entries(byEmpresa)) {
+    const dbFile = path.join(DADOS_DIR, `${empresa.toLowerCase()}.json`);
+    let db = {};
+    try { db = JSON.parse(fs.readFileSync(dbFile, 'utf-8')); } catch { continue; }
+    const contas = (db.contas || []).filter(c => c.status === 'pendente' && c.vencimento === tomorrowStr);
+    if (!contas.length) continue;
+    const total = contas.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
+    const resumo = contas.slice(0, 3).map(c => `• ${c.descricao}: R$ ${parseFloat(c.valor).toFixed(2).replace('.', ',')}`).join('\n')
+      + (contas.length > 3 ? `\n+${contas.length - 3} outra(s)` : '');
+    const payload = JSON.stringify({
+      title: `💰 ${contas.length} conta(s) vencem amanhã — ${empresa}`,
+      body: `Total: R$ ${total.toFixed(2).replace('.', ',')}\n${resumo}`,
+      tag: `contas-${empresa}-${tomorrowStr}`,
+      url: '/',
+    });
+    for (const sub of subscriptions) {
+      webPush.sendNotification(sub, payload).catch(err => {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          saveSubs(loadSubs().filter(s => s.subscription.endpoint !== sub.endpoint));
+        }
+      });
+    }
+    enviou = true;
+    console.log(`[Push] Notificação enviada: ${empresa} — ${contas.length} conta(s) amanhã.`);
+  }
+  if (enviou) fs.writeFileSync(PUSH_SENT_FILE, JSON.stringify({ date: today }));
+}
 
 function loadCache() {
   try { return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8')); } catch { return {}; }
@@ -452,6 +519,74 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Push: chave pública VAPID
+  if (req.method === 'GET' && urlPath === '/api/push-vapid-key') {
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ publicKey: VAPID_PUBLIC || null }));
+    return;
+  }
+
+  // Push: salvar subscription
+  if (req.method === 'POST' && urlPath === '/api/push-subscribe') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { empresa, subscription } = JSON.parse(body);
+        if (!empresa || !subscription?.endpoint) { res.writeHead(400); res.end('{}'); return; }
+        const subs = loadSubs().filter(s => s.subscription.endpoint !== subscription.endpoint);
+        subs.push({ empresa: empresa.toUpperCase(), subscription, criadoEm: new Date().toISOString() });
+        saveSubs(subs);
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end('{"ok":true}');
+      } catch { res.writeHead(400); res.end('{}'); }
+    });
+    return;
+  }
+
+  // Push: cancelar subscription
+  if (req.method === 'POST' && urlPath === '/api/push-unsubscribe') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { endpoint } = JSON.parse(body);
+        saveSubs(loadSubs().filter(s => s.subscription.endpoint !== endpoint));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end('{"ok":true}');
+      } catch { res.writeHead(400); res.end('{}'); }
+    });
+    return;
+  }
+
+  // Push: enviar notificação de teste
+  if (req.method === 'POST' && urlPath === '/api/push-test') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { empresa } = JSON.parse(body);
+        if (!VAPID_PUBLIC || !VAPID_PRIVATE) { res.writeHead(503); res.end(JSON.stringify({ error: 'VAPID não configurado' })); return; }
+        const subs = loadSubs().filter(s => s.empresa === (empresa||'').toUpperCase());
+        if (!subs.length) { res.writeHead(404); res.end(JSON.stringify({ error: 'Nenhuma assinatura ativa para esta empresa' })); return; }
+        const payload = JSON.stringify({ title: '🔔 Teste — App Gestão', body: 'Notificações funcionando! Você receberá alertas de contas a vencer.', tag: 'teste', url: '/' });
+        let ok = 0;
+        for (const s of subs) {
+          await webPush.sendNotification(s.subscription, payload).then(() => ok++).catch(err => {
+            if (err.statusCode === 410 || err.statusCode === 404) saveSubs(loadSubs().filter(x => x.subscription.endpoint !== s.subscription.endpoint));
+          });
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, enviados: ok }));
+      } catch (e) { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); }
+    });
+    return;
+  }
+
   // Dados da empresa — GET
   if (req.method === 'GET' && urlPath.startsWith('/api/dados/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
@@ -585,4 +720,7 @@ server.listen(PORT, () => {
   setTimeout(() => autoSyncSEFAZ(), 15000);
   setInterval(() => autoSyncSEFAZ(), 65 * 60 * 1000);
   console.log('[AutoSync] Agendado: 15s após start, depois a cada 65 minutos.');
+  // Push notifications: verificar a cada hora (envia entre 7h–9h)
+  setInterval(() => checkPushNotifications(), 60 * 60 * 1000);
+  setTimeout(() => checkPushNotifications(), 5000);
 });
