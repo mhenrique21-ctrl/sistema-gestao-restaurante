@@ -2511,6 +2511,7 @@ function Contas({db,setDb}){
   const [verConta,setVerConta]=useState<any>(null);
   const [verGrupo,setVerGrupo]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
+  const [mesFiltro,setMesFiltro]=useState(()=>today().slice(0,7));
   const [notifStatus,setNotifStatus]=useState<"idle"|"granted"|"denied"|"subscribed"|"unsupported">("idle");
   const [notifLoading,setNotifLoading]=useState(false);
   const [notifEmpresa,setNotifEmpresa]=useState<string>("");
@@ -2663,7 +2664,16 @@ function Contas({db,setDb}){
   };
 
   const bq2=busca.toLowerCase();
-  const contasFiltradas=[...(db.contas||[])].filter((c:any)=>{if(filtro!=="todos"&&c.status!==filtro)return false;if(!bq2)return true;return(c.descricao||"").toLowerCase().includes(bq2)||(c.fornecedor||"").toLowerCase().includes(bq2)||(c.categoria||"").toLowerCase().includes(bq2)||fmtDate(c.vencimento||"").toLowerCase().includes(bq2);}).sort((a:any,b:any)=>{const vA=a.vencimento||"",vB=b.vencimento||"";const x=vA<vB?-1:vA>vB?1:0;const primary=sortDir==="asc"?x:-x;if(primary!==0)return primary;return(b.criadoEm||"").localeCompare(a.criadoEm||"");});
+  const fmtMes=(ym:string)=>{const[y,m]=ym.split("-");const MS=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];return`${MS[parseInt(m,10)-1]}/${y.slice(2)}`;};
+  const mesesDisponiveis=[...new Set((db.contas||[]).map((c:any)=>(c.vencimento||"").slice(0,7)).filter(Boolean))].sort() as string[];
+  const pendPorMes:Record<string,number>={};
+  (db.contas||[]).forEach((c:any)=>{const m=(c.vencimento||"").slice(0,7);if(m&&c.status==="pendente")pendPorMes[m]=(pendPorMes[m]||0)+1;});
+  const contasFiltradas=[...(db.contas||[])].filter((c:any)=>{
+    if(filtro!=="todos"&&c.status!==filtro)return false;
+    if(mesFiltro!=="todos"&&(c.vencimento||"").slice(0,7)!==mesFiltro)return false;
+    if(!bq2)return true;
+    return(c.descricao||"").toLowerCase().includes(bq2)||(c.fornecedor||"").toLowerCase().includes(bq2)||(c.categoria||"").toLowerCase().includes(bq2)||fmtDate(c.vencimento||"").toLowerCase().includes(bq2);
+  }).sort((a:any,b:any)=>{const vA=a.vencimento||"",vB=b.vencimento||"";const x=vA<vB?-1:vA>vB?1:0;const primary=sortDir==="asc"?x:-x;if(primary!==0)return primary;return(b.criadoEm||"").localeCompare(a.criadoEm||"");});
   const totPago=contasFiltradas.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const totPend=contasFiltradas.filter((c:any)=>c.status==="pendente").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const grupos:Record<string,any[]>={};
@@ -2736,7 +2746,26 @@ function Contas({db,setDb}){
     </div>
 
     {subTab==="lista"&&<div>
-      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+      {/* Month tabs */}
+      <div style={{overflowX:"auto",marginBottom:12,paddingBottom:4}}>
+        <div style={{display:"flex",gap:6,minWidth:"max-content"}}>
+          <button onClick={()=>setMesFiltro("todos")} className="pill"
+            style={{background:mesFiltro==="todos"?"#7c8fff":"var(--bg4)",color:mesFiltro==="todos"?"#fff":"#666",fontSize:12,padding:"7px 14px",whiteSpace:"nowrap" as const,border:"1px solid #252840"}}>
+            Todos
+          </button>
+          {mesesDisponiveis.map(mes=>{
+            const pend=pendPorMes[mes]||0;
+            const isCur=mesFiltro===mes;
+            const isHoje=mes===today().slice(0,7);
+            return <button key={mes} onClick={()=>setMesFiltro(mes)} className="pill"
+              style={{background:isCur?"#7c8fff":isHoje?"#1a1f3a":"var(--bg4)",color:isCur?"#fff":isHoje?"#a0a8ff":"#666",fontSize:12,padding:"7px 14px",whiteSpace:"nowrap" as const,border:`1px solid ${isCur?"#7c8fff":isHoje?"#3a3f7a":"#252840"}`,position:"relative" as const,fontWeight:isHoje&&!isCur?600:400}}>
+              {fmtMes(mes)}
+              {pend>0&&<span style={{marginLeft:5,background:isCur?"rgba(255,255,255,0.3)":"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{pend}</span>}
+            </button>;
+          })}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
         {[["todos","Todos"],["pendente","Pendente"],["pago","Pago"]].map(([k,l])=>(
           <button key={k} onClick={()=>setFiltro(k)} className="pill"
             style={{background:filtro===k?"var(--border2)":"transparent",color:filtro===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
