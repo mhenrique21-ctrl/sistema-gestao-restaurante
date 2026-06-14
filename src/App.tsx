@@ -291,6 +291,18 @@ const migrateDb=(m:any)=>{
   return m;
 };
 
+// Merge server data with local state: arrays com id preservam itens locais não salvos
+const mergeFromServer=(prev:any,updates:any)=>{
+  const next={...prev};
+  Object.keys(updates).forEach(emp=>{
+    const s=updates[emp];
+    const p=prev[emp]||{};
+    const byId=(sArr:any[],pArr:any[])=>{const sIds=new Set(sArr.map((i:any)=>i.id));return[...sArr,...pArr.filter((i:any)=>!sIds.has(i.id))];};
+    next[emp]={...s,listaCompras:byId(s.listaCompras||[],p.listaCompras||[]),produtosLista:byId(s.produtosLista||[],p.produtosLista||[])};
+  });
+  return migrateDb(next);
+};
+
 export default function App() {
   const [state,setState] = useState(()=>{
     const loaded=loadData();
@@ -321,11 +333,11 @@ export default function App() {
     )).then(results=>{
       const updates:any={};
       results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
-      if(Object.keys(updates).length>0)setState(prev=>migrateDb({...prev,...updates}));
+      if(Object.keys(updates).length>0)setState(prev=>mergeFromServer(prev,updates));
     });
   },[]);
 
-  // Auto-refresh every 60s (keeps shopping list in sync between users)
+  // Auto-refresh every 10s (keeps shopping list in sync between users)
   useEffect(()=>{
     if(!login)return;
     const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
@@ -336,7 +348,7 @@ export default function App() {
       )).then(results=>{
         const updates:any={};
         results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
-        if(Object.keys(updates).length>0)setState(prev=>migrateDb({...prev,...updates}));
+        if(Object.keys(updates).length>0)setState(prev=>mergeFromServer(prev,updates));
       });
     };
     const t=setInterval(poll,10000);
