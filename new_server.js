@@ -605,6 +605,120 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Varredura específica por data (14/06/2026) e locais de backup de hospedagem
+  if (req.method === 'GET' && urlPath === '/api/scan-date') {
+    const results = { byDate: [], pmLogs: [], hostingDirs: [], dbDumps: [] };
+    const TARGET_DATE = '2026-06-14';
+    const TARGET_TS_START = new Date('2026-06-14T00:00:00Z').getTime();
+    const TARGET_TS_END   = new Date('2026-06-14T23:59:59Z').getTime();
+
+    const tryParseJson = (filePath) => {
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.size < 20 || stat.size > 100 * 1024 * 1024) return null;
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const d = JSON.parse(content);
+        if (typeof d !== 'object' || Array.isArray(d)) return null;
+        const contas = (d.contas || []).length;
+        const vendas = (d.vendas || []).length;
+        const compras = (d.compras || []).length;
+        const funcionarios = (d.funcionarios || []).length;
+        return { contas, vendas, compras, funcionarios, size: stat.size, mtime: stat.mtime };
+      } catch { return null; }
+    };
+
+    // 1. Varrer JSON modificados em 14/06/2026 no projeto e arredores
+    const scanForDate = (dir, depth = 0) => {
+      if (depth > 4) return;
+      try {
+        for (const entry of fs.readdirSync(dir)) {
+          if (['node_modules','.git','dist'].includes(entry)) continue;
+          const full = path.join(dir, entry);
+          try {
+            const stat = fs.statSync(full);
+            if (stat.isDirectory()) { scanForDate(full, depth + 1); continue; }
+            const mts = stat.mtimeMs;
+            const isTargetDate = mts >= TARGET_TS_START && mts <= TARGET_TS_END;
+            if (!entry.endsWith('.json') && !entry.endsWith('.bak') && !isTargetDate) continue;
+            const info = tryParseJson(full);
+            if (info && (info.contas + info.vendas + info.compras > 0)) {
+              results.byDate.push({ path: full, ...info });
+            }
+          } catch {}
+        }
+      } catch {}
+    };
+    [__dirname, path.join(__dirname, '..'), '/tmp', '/var/tmp'].forEach(d => { try { scanForDate(d); } catch {} });
+
+    // 2. Locais comuns de backup de hospedagem
+    const hostingPaths = [
+      '/home', '/var/backups', '/backup', '/backups',
+      '/home/backup', '/root/backup', '/root/backups',
+      path.join(__dirname, '../../backup'),
+      path.join(__dirname, '../../backups'),
+    ];
+    const scanHosting = (dir) => {
+      try {
+        const entries = fs.readdirSync(dir);
+        for (const entry of entries) {
+          const full = path.join(dir, entry);
+          try {
+            const stat = fs.statSync(full);
+            if (stat.isDirectory() && fs.readdirSync(full).length < 200) {
+              scanHosting(full);
+            } else if (entry.endsWith('.json') || entry.endsWith('.tar') || entry.endsWith('.tar.gz') || entry.endsWith('.zip')) {
+              const info = entry.endsWith('.json') ? tryParseJson(full) : null;
+              if (info && (info.contas + info.vendas + info.compras > 0)) {
+                results.hostingDirs.push({ path: full, ...info });
+              } else if (!entry.endsWith('.json') && stat.size > 1000) {
+                results.hostingDirs.push({ path: full, size: stat.size, mtime: stat.mtime, type: 'archive' });
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    };
+    hostingPaths.forEach(p => { try { if (fs.existsSync(p)) scanHosting(p); } catch {} });
+
+    // 3. pm2 logs — extrair qualquer bloco JSON de dados
+    const pm2LogDirs = [
+      '/root/.pm2/logs',
+      path.join(process.env.HOME || '/root', '.pm2/logs'),
+    ];
+    pm2LogDirs.forEach(logDir => {
+      try {
+        if (!fs.existsSync(logDir)) return;
+        for (const f of fs.readdirSync(logDir)) {
+          if (!f.endsWith('.log')) continue;
+          const full = path.join(logDir, f);
+          try {
+            const stat = fs.statSync(full);
+            results.pmLogs.push({ path: full, size: stat.size, mtime: stat.mtime });
+          } catch {}
+        }
+      } catch {}
+    });
+
+    // 4. Arquivos de sistema que podem conter backups de DB
+    const dbPaths = [
+      '/var/lib/mysql', '/var/lib/postgresql', '/var/lib/mongodb',
+      '/etc/cron.daily', '/etc/cron.weekly',
+    ];
+    dbPaths.forEach(p => {
+      try {
+        if (fs.existsSync(p)) results.dbDumps.push({ path: p, exists: true });
+      } catch {}
+    });
+
+    results.byDate.sort((a, b) => (b.contas + b.vendas + b.compras) - (a.contas + a.vendas + a.compras));
+    results.hostingDirs.sort((a, b) => ((b.contas||0) + (b.vendas||0) + (b.compras||0)) - ((a.contas||0) + (a.vendas||0) + (a.compras||0)));
+
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify(results));
+    return;
+  }
+
   // Varredura de recuperação: busca qualquer JSON com dados de empresa
   if (req.method === 'GET' && urlPath === '/api/scan-recovery') {
     const found = [];

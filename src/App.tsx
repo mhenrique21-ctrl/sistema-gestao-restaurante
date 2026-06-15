@@ -5273,6 +5273,8 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
   const [restaurando,setRestaurando]=useState<string|null>(null);
   const [scan,setScan]=useState<any[]|null>(null);
   const [scanning,setScanning]=useState(false);
+  const [dateScan,setDateScan]=useState<any|null>(null);
+  const [dateScanning,setDateScanning]=useState(false);
   const importRef=useRef<HTMLInputElement>(null);
 
   const carregar=async()=>{
@@ -5296,6 +5298,17 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
     setScanning(false);
   };
 
+  const varrerData14=async()=>{
+    setDateScanning(true);
+    setDateScan(null);
+    try{
+      const r=await fetch('/api/scan-date');
+      const d=await r.json();
+      setDateScan(d);
+    }catch{setDateScan({});}
+    setDateScanning(false);
+  };
+
   const restaurarPath=async(filePath:string)=>{
     if(!confirm(`Restaurar arquivo:\n${filePath}\n\nIsso substituirá os dados atuais de ${empresa}.\nA página será recarregada.`))return;
     try{
@@ -5306,7 +5319,11 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
     }catch(e:any){alert('Erro: '+e.message);}
   };
 
-  useEffect(()=>{carregar();},[empresa]);
+  const fmtMtime=(mt:string)=>{
+    if(!mt)return"";
+    try{return new Date(mt).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return mt;}
+  };
+
 
   const exportarJSON=()=>{
     const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
@@ -5394,11 +5411,79 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
       </div>
     </div>
 
-    {/* Varredura de recuperação */}
-    <div className="card" style={{marginBottom:14,background:"#1a0a20",border:"1px solid #4a2060"}}>
-      <div style={{fontSize:13,fontWeight:700,color:"#c084fc",marginBottom:8}}>🔍 Varredura de Recuperação</div>
+    {/* Varredura específica — 14/06/2026 */}
+    <div className="card" style={{marginBottom:14,background:"#0a1520",border:"2px solid #f59e0b"}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#f59e0b",marginBottom:8}}>📅 Recuperar dados de 14/06/2026</div>
       <div style={{fontSize:12,color:"#666",marginBottom:10,lineHeight:1.6}}>
-        Varre o servidor em busca de qualquer arquivo JSON com dados que possam ter sido perdidos (pastas do projeto, /tmp, etc.).
+        Busca no servidor arquivos modificados em 14/06/2026, diretórios de backup da hospedagem (/home, /var/backups, /backup),
+        logs do pm2 e outros locais onde os dados possam ter ficado.
+      </div>
+      <button className="btn" onClick={varrerData14} disabled={dateScanning}
+        style={{background:"#2a1800",color:"#f59e0b",padding:"10px 16px",fontSize:13,width:"100%",fontWeight:700}}>
+        {dateScanning?"⏳ Varrendo servidor...":"📅 Buscar dados de 14/06/2026 agora"}
+      </button>
+      {dateScan!==null&&<div style={{marginTop:12}}>
+        {/* Arquivos do dia 14 */}
+        {(dateScan.byDate||[]).length>0&&<div style={{marginBottom:10}}>
+          <div style={{fontSize:12,color:"#f59e0b",fontWeight:700,marginBottom:6}}>📄 Arquivos de 14/06/2026 com dados ({(dateScan.byDate||[]).length}):</div>
+          {(dateScan.byDate||[]).map((f:any,i:number)=><div key={i} className="list-item" style={{marginBottom:6,borderLeft:"3px solid #f59e0b"}}>
+            <div style={{fontSize:11,color:"#888",wordBreak:"break-all" as const,marginBottom:4}}>{f.path}</div>
+            <div style={{fontSize:11,color:"#555",marginBottom:4}}>{fmtMtime(f.mtime)}</div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
+              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.contas} contas</span>
+              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.vendas} vendas</span>
+              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.compras} compras</span>
+              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.funcionarios} funcs</span>
+            </div>
+            <button className="btn" onClick={()=>restaurarPath(f.path)} style={{background:"#2a1800",color:"#f59e0b",padding:"6px 14px",fontSize:12,width:"100%"}}>
+              ♻️ Restaurar como {empresa}
+            </button>
+          </div>)}
+        </div>}
+        {/* Diretórios de hospedagem */}
+        {(dateScan.hostingDirs||[]).length>0&&<div style={{marginBottom:10}}>
+          <div style={{fontSize:12,color:"#4ade80",fontWeight:700,marginBottom:6}}>🗄️ Arquivos em diretórios de backup ({(dateScan.hostingDirs||[]).length}):</div>
+          {(dateScan.hostingDirs||[]).map((f:any,i:number)=><div key={i} className="list-item" style={{marginBottom:6,borderLeft:"3px solid #4ade80"}}>
+            <div style={{fontSize:11,color:"#888",wordBreak:"break-all" as const,marginBottom:4}}>{f.path}</div>
+            <div style={{fontSize:11,color:"#555",marginBottom:4}}>{fmtMtime(f.mtime)}</div>
+            {f.type==="archive"
+              ?<span className="tag" style={{background:"#2a1020",color:"#fbbf24"}}>⚠️ arquivo compactado — restaurar manualmente no servidor</span>
+              :<><div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
+                <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.contas} contas</span>
+                <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.vendas} vendas</span>
+                <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.compras} compras</span>
+              </div>
+              <button className="btn" onClick={()=>restaurarPath(f.path)} style={{background:"#1a2a10",color:"#4ade80",padding:"6px 14px",fontSize:12,width:"100%"}}>
+                ♻️ Restaurar como {empresa}
+              </button></>
+            }
+          </div>)}
+        </div>}
+        {/* pm2 logs */}
+        {(dateScan.pmLogs||[]).length>0&&<div style={{marginBottom:10}}>
+          <div style={{fontSize:12,color:"#60a5fa",fontWeight:700,marginBottom:6}}>📋 Logs pm2 encontrados ({(dateScan.pmLogs||[]).length}):</div>
+          {(dateScan.pmLogs||[]).map((f:any,i:number)=><div key={i} style={{fontSize:11,color:"#555",padding:"4px 0",borderBottom:"1px solid #1a1d2e"}}>
+            <span style={{wordBreak:"break-all" as const}}>{f.path}</span>
+            <span style={{color:"#888",marginLeft:8}}>{(f.size/1024).toFixed(1)} KB · {fmtMtime(f.mtime)}</span>
+          </div>)}
+          <div style={{marginTop:6,fontSize:11,color:"#555"}}>Para extrair dados dos logs, acesse o servidor via SSH e verifique esses arquivos.</div>
+        </div>}
+        {/* Nada encontrado */}
+        {(dateScan.byDate||[]).length===0&&(dateScan.hostingDirs||[]).length===0&&
+          <div style={{textAlign:"center",color:"#555",fontSize:12,padding:"12px 0"}}>
+            Nenhum arquivo com dados encontrado para 14/06/2026 no servidor.
+            {(dateScan.dbDumps||[]).some((d:any)=>d.exists)&&
+              <div style={{marginTop:8,color:"#f59e0b"}}>⚠️ Banco de dados detectado no servidor — verifique se há snapshots via painel da hospedagem.</div>}
+          </div>
+        }
+      </div>}
+    </div>
+
+    {/* Varredura de recuperação geral */}
+    <div className="card" style={{marginBottom:14,background:"#1a0a20",border:"1px solid #4a2060"}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#c084fc",marginBottom:8}}>🔍 Varredura Geral</div>
+      <div style={{fontSize:12,color:"#666",marginBottom:10,lineHeight:1.6}}>
+        Varre o servidor em busca de qualquer arquivo JSON com dados (qualquer data).
       </div>
       <button className="btn" onClick={varrer} disabled={scanning}
         style={{background:"#2a1040",color:"#c084fc",padding:"10px 16px",fontSize:13,width:"100%"}}>
