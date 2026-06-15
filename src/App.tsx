@@ -236,7 +236,7 @@ const PRODS_SEED_V5=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -421,6 +421,7 @@ const migrateDb=(m:any)=>{
       m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
       m[e].produtosSeedV5=true;
     }
+    if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
   });
@@ -429,26 +430,27 @@ const migrateDb=(m:any)=>{
 
 // IDs de itens deletados localmente nesta sessão — o poll nunca os restaura
 const _listaDeletados=new Set<string>();
-// IDs de itens adicionados localmente mas ainda não salvos no servidor
-const _localAddIds=new Set<string>();
 
-// Merge server data with local state: preserva apenas itens adicionados localmente
-// (em _localAddIds) que ainda não chegaram ao servidor; aceita remoções do admin
+// Merge server data with local state.
+// listaCompras: preserva itens locais não salvos ainda (adicionados nesta sessão),
+// mas respeita listaDeletedIds do servidor para propagar exclusões do admin aos operadores.
 const mergeFromServer=(prev:any,updates:any)=>{
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
     const p=prev[emp]||{};
+    // IDs excluídos persistidos no servidor + excluídos localmente nesta sessão
+    const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
     const byId=(sArr:any[],pArr:any[])=>{
       const sIds=new Set(sArr.map((i:any)=>i.id));
       const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
       return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!_listaDeletados.has(i.id))];
     };
-    // listaCompras: só preserva itens locais que ainda não foram ao servidor (em _localAddIds)
+    // listaCompras usa serverDeleted para respeitar exclusões remotas do admin
     const byIdLista=(sArr:any[],pArr:any[])=>{
       const sIds=new Set(sArr.map((i:any)=>i.id));
-      const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
-      return[...sFiltered,...pArr.filter((i:any)=>_localAddIds.has(i.id)&&!sIds.has(i.id)&&!_listaDeletados.has(i.id))];
+      const sFiltered=sArr.filter((i:any)=>!serverDeleted.has(i.id));
+      return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!serverDeleted.has(i.id))];
     };
     next[emp]={...s,listaCompras:byIdLista(s.listaCompras||[],p.listaCompras||[]),produtosLista:byId(s.produtosLista||[],p.produtosLista||[])};
   });
@@ -520,7 +522,6 @@ export default function App() {
           fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
         ));
         setSyncStatus("ok");
-        _localAddIds.clear();
       }catch{setSyncStatus("erro");}finally{
         syncTimer.current=null;
       }
@@ -541,7 +542,6 @@ export default function App() {
   };
   const doLogout=()=>{
     sessionStorage.removeItem("app_login");
-    _localAddIds.clear();
     _listaDeletados.clear();
     setLogin(null);
     setTab("dashboard");
@@ -2476,9 +2476,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin
       setEditId(null);
     }else{
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-      const novoId=uid();
-      _localAddIds.add(novoId);
-      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:novoId,nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||"outros",estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,criadoEm:new Date().toISOString()}]}));
+      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||"outros",estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,criadoEm:new Date().toISOString()}]}));
     }
     setForm(EMPTY_FORM_LISTA);
   };
@@ -2497,14 +2495,39 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin
     const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
     return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,ordem:nowComprado?maxOrdem+1:i.ordem}:i)};
   });
-  const del=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id)}));};
-  const limparComprados=()=>{if(!comprados.length)return;if(!confirm("Remover todos os produtos comprados?"))return;setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado)}));};
+  const del=(id:string)=>{
+    if(!confirm("Excluir produto?"))return;
+    _listaDeletados.add(id);
+    setDb((d:any)=>({
+      ...d,
+      listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-500),
+    }));
+  };
+  const limparComprados=()=>{
+    if(!comprados.length)return;
+    if(!confirm("Remover todos os produtos comprados?"))return;
+    const ids=comprados.map((i:any)=>i.id);
+    ids.forEach(id=>_listaDeletados.add(id));
+    setDb((d:any)=>({
+      ...d,
+      listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-500),
+    }));
+  };
 
   const salvarPedido=()=>{
     if(!comprados.length)return;
     if(!confirm(`Salvar ${comprados.length} produto(s) comprado(s) como pedido finalizado?`))return;
+    const ids=comprados.map((i:any)=>i.id);
+    ids.forEach(id=>_listaDeletados.add(id));
     const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente})),criadoEm:new Date().toISOString()};
-    setDb((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado)}));
+    setDb((d:any)=>({
+      ...d,
+      pedidosLista:[pedido,...(d.pedidosLista||[])],
+      listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-500),
+    }));
     alert("✅ Pedido salvo! Os itens comprados foram removidos da lista.");
   };
 
