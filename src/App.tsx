@@ -5271,6 +5271,8 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
   const [lista,setLista]=useState<any[]>([]);
   const [loading,setLoading]=useState(false);
   const [restaurando,setRestaurando]=useState<string|null>(null);
+  const [scan,setScan]=useState<any[]|null>(null);
+  const [scanning,setScanning]=useState(false);
   const importRef=useRef<HTMLInputElement>(null);
 
   const carregar=async()=>{
@@ -5281,6 +5283,27 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
       setLista(Array.isArray(d)?d:[]);
     }catch{setLista([]);}
     setLoading(false);
+  };
+
+  const varrer=async()=>{
+    setScanning(true);
+    setScan(null);
+    try{
+      const r=await fetch('/api/scan-recovery');
+      const d=await r.json();
+      setScan(Array.isArray(d)?d:[]);
+    }catch{setScan([]);}
+    setScanning(false);
+  };
+
+  const restaurarPath=async(filePath:string)=>{
+    if(!confirm(`Restaurar arquivo:\n${filePath}\n\nIsso substituirá os dados atuais de ${empresa}.\nA página será recarregada.`))return;
+    try{
+      const r=await fetch('/api/restore-from-path',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emp:empresa,filePath})});
+      const d=await r.json();
+      if(d.ok){alert('✅ Dados restaurados! Recarregando...');window.location.reload();}
+      else alert('Erro: '+(d.error||'desconhecido'));
+    }catch(e:any){alert('Erro: '+e.message);}
   };
 
   useEffect(()=>{carregar();},[empresa]);
@@ -5369,6 +5392,36 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
         </button>
         <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={importarJSON}/>
       </div>
+    </div>
+
+    {/* Varredura de recuperação */}
+    <div className="card" style={{marginBottom:14,background:"#1a0a20",border:"1px solid #4a2060"}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#c084fc",marginBottom:8}}>🔍 Varredura de Recuperação</div>
+      <div style={{fontSize:12,color:"#666",marginBottom:10,lineHeight:1.6}}>
+        Varre o servidor em busca de qualquer arquivo JSON com dados que possam ter sido perdidos (pastas do projeto, /tmp, etc.).
+      </div>
+      <button className="btn" onClick={varrer} disabled={scanning}
+        style={{background:"#2a1040",color:"#c084fc",padding:"10px 16px",fontSize:13,width:"100%"}}>
+        {scanning?"⏳ Varrendo servidor...":"🔍 Varrer servidor agora"}
+      </button>
+      {scan!==null&&scan.length===0&&<div style={{marginTop:10,fontSize:12,color:"#666",textAlign:"center"}}>Nenhum arquivo com dados encontrado no servidor.</div>}
+      {scan&&scan.length>0&&<div style={{marginTop:10}}>
+        <div style={{fontSize:12,color:"#c084fc",marginBottom:8,fontWeight:700}}>✅ {scan.length} arquivo(s) encontrado(s):</div>
+        {scan.map((f:any,i:number)=><div key={i} className="list-item" style={{marginBottom:8,borderLeft:"3px solid #c084fc"}}>
+          <div style={{fontSize:11,color:"#888",wordBreak:"break-all" as const,marginBottom:4}}>{f.path}</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
+            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.contas} contas</span>
+            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.vendas} vendas</span>
+            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.compras} compras</span>
+            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.funcionarios} funcs</span>
+            <span className="tag" style={{background:"#1a1020",color:"#888"}}>{(f.size/1024).toFixed(1)} KB</span>
+          </div>
+          <button className="btn" onClick={()=>restaurarPath(f.path)}
+            style={{background:"#2a1040",color:"#c084fc",padding:"6px 14px",fontSize:12,width:"100%"}}>
+            ♻️ Restaurar como dados de {empresa}
+          </button>
+        </div>)}
+      </div>}
     </div>
 
     {/* Backups automáticos do servidor */}

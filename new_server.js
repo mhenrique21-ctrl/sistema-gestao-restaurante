@@ -605,6 +605,80 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Varredura de recuperação: busca qualquer JSON com dados de empresa
+  if (req.method === 'GET' && urlPath === '/api/scan-recovery') {
+    const found = [];
+    const scanDirs = [
+      DADOS_DIR,
+      path.join(__dirname),
+      '/tmp',
+      path.join(__dirname, '..'),
+    ];
+    const tryParse = (filePath) => {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        if (content.length < 20) return null;
+        const d = JSON.parse(content);
+        if (typeof d !== 'object' || Array.isArray(d)) return null;
+        const contas = (d.contas || []).length;
+        const vendas = (d.vendas || []).length;
+        const compras = (d.compras || []).length;
+        const funcionarios = (d.funcionarios || []).length;
+        if (contas + vendas + compras + funcionarios === 0) return null;
+        return { contas, vendas, compras, funcionarios, size: content.length };
+      } catch { return null; }
+    };
+    const scanDir = (dir, depth = 0) => {
+      if (depth > 3) return;
+      try {
+        const entries = fs.readdirSync(dir);
+        for (const entry of entries) {
+          if (entry.startsWith('.') || entry === 'node_modules' || entry === 'dist') continue;
+          const full = path.join(dir, entry);
+          try {
+            const stat = fs.statSync(full);
+            if (stat.isDirectory()) { scanDir(full, depth + 1); continue; }
+            if (!entry.endsWith('.json') && !entry.endsWith('.bak') && !entry.endsWith('.tmp')) continue;
+            if (stat.size < 50 || stat.size > 50 * 1024 * 1024) continue;
+            const preview = tryParse(full);
+            if (preview) found.push({ path: full, mtime: stat.mtime, ...preview });
+          } catch {}
+        }
+      } catch {}
+    };
+    scanDirs.forEach(d => scanDir(d));
+    found.sort((a, b) => (b.contas + b.vendas + b.compras) - (a.contas + a.vendas + a.compras));
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify(found));
+    return;
+  }
+
+  // Restaurar a partir de um path absoluto encontrado na varredura
+  if (req.method === 'POST' && urlPath === '/api/restore-from-path') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { emp, filePath } = JSON.parse(body);
+        if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+        if (!filePath || filePath.includes('..')) { res.writeHead(400); res.end('{"error":"invalid path"}'); return; }
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const data = JSON.parse(content);
+        if (typeof data !== 'object' || Array.isArray(data)) throw new Error('JSON inválido');
+        const mainFile = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+        fs.writeFileSync(mainFile, content);
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end('{"ok":true}');
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Listar backups disponíveis
   if (req.method === 'GET' && urlPath.startsWith('/api/backups/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
