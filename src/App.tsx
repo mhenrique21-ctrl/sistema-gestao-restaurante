@@ -2576,7 +2576,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
     if(!confirm(`Salvar pedido com ${comprados.length} item(ns) comprado(s)?\nA lista inteira será zerada para o próximo pedido.`))return;
     const todosIds=lista.map((i:any)=>i.id);
     todosIds.forEach(id=>_listaDeletados.add(id));
-    const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente})),criadoEm:new Date().toISOString()};
+    const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||""})),criadoEm:new Date().toISOString()};
     setDb((d:any)=>({
       ...d,
       pedidosLista:[pedido,...(d.pedidosLista||[])],
@@ -2684,11 +2684,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
     const porCatImp:Record<string,any[]>={};
     itens.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCatImp[c])porCatImp[c]=[];porCatImp[c].push(i);});
     const rows=Object.entries(porCatImp).map(([cat,its])=>`
-      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}</td></tr>
+      <tr><td colspan="5" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}</td></tr>
       ${(its as any[]).map(i=>`<tr>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee">${i.nome}${i.urgente?` <b style="color:#e00">(!)</b>`:""}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;font-weight:${i.urgente?"700":"400"};color:${i.urgente?"#cc0000":"#222"}">${i.nome}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.quantidade||1}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.unidade||"un"}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#555">${i.urgente?"⚠ URGENTE":""}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
       </tr>`).join("")}`).join("");
     const dataFmt=pedido.data?pedido.data.split("-").reverse().join("/"):"-";
@@ -2712,7 +2713,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
       <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
       <table>
         <tr>
-          <th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Observação</th>
+          <th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>Observação</th>
         </tr>
         ${rows}
       </table>
@@ -2723,17 +2724,19 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
 
   const imprimirListaAtual=()=>{
     if(!lista.length)return alert("A lista está vazia.");
-    const w=window.open("","_blank","width=800,height=700");
+    const w=window.open("","_blank","width=900,height=700");
     if(!w)return;
     const porCatImp:Record<string,any[]>={};
     pendentes.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCatImp[c])porCatImp[c]=[];porCatImp[c].push(i);});
     const ordemCat=[...cats.filter(c=>porCatImp[c]),...Object.keys(porCatImp).filter(c=>!cats.includes(c))];
     const rows=ordemCat.map(cat=>`
-      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}</td></tr>
+      <tr><td colspan="6" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}</td></tr>
       ${(porCatImp[cat]||[]).sort((a:any,b:any)=>(a.urgente?-1:b.urgente?1:0)).map((i:any)=>`<tr>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee">${i.nome}${i.urgente?` <b style="color:#e00">(URGENTE)</b>`:""}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;font-weight:${i.urgente?"700":"400"};color:${i.urgente?"#cc0000":"#222"}">${i.nome}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.quantidade||1}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.unidade||"un"}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#555">${i.urgente?"⚠ URGENTE":""}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#777">${i.estoqueQtd!=null&&i.estoqueQtd!==""?i.estoqueQtd+" "+( i.unidade||"un"):""}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
       </tr>`).join("")}`).join("");
     const dataHoje=new Date().toLocaleDateString("pt-BR");
@@ -2756,7 +2759,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
       <div class="sub">Data: ${dataHoje} · ${pendentes.length} pendente(s) · ${ordemCat.length} categoria(s)</div>
       <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
       <table>
-        <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Observação</th></tr>
+        <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>Qtd Ref. Estoque</th><th>Observação</th></tr>
         ${rows}
       </table>
       <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div>
