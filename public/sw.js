@@ -1,4 +1,4 @@
-const CACHE = 'gestao-v4';
+const CACHE = 'gestao-v5';
 const ASSETS = ['/', '/manifest.json'];
 
 self.addEventListener('install', e => {
