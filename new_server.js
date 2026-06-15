@@ -605,6 +605,56 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Listar backups disponíveis
+  if (req.method === 'GET' && urlPath.startsWith('/api/backups/')) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('[]'); return; }
+    const backDir = path.join(DADOS_DIR, 'backups', emp.toLowerCase());
+    try {
+      fs.mkdirSync(backDir, { recursive: true });
+      const files = fs.readdirSync(backDir).filter(f => f.endsWith('.json')).sort().reverse().slice(0, 48);
+      const list = files.map(f => {
+        const stat = fs.statSync(path.join(backDir, f));
+        let preview = {};
+        try {
+          const d = JSON.parse(fs.readFileSync(path.join(backDir, f), 'utf-8'));
+          preview = { contas: (d.contas||[]).length, vendas: (d.vendas||[]).length, compras: (d.compras||[]).length, funcionarios: (d.funcionarios||[]).length };
+        } catch {}
+        return { file: f, size: stat.size, mtime: stat.mtime, preview };
+      });
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end(JSON.stringify(list));
+    } catch (e) {
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Restaurar um backup específico
+  if (req.method === 'POST' && urlPath.startsWith('/api/restore/')) {
+    const parts = urlPath.split('/');
+    const emp = (parts[3] || '').toUpperCase();
+    const fileName = parts[4] || '';
+    if (!['CONFRARIA','SEAMA'].includes(emp) || !fileName) { res.writeHead(400); res.end('{}'); return; }
+    const backFile = path.join(DADOS_DIR, 'backups', emp.toLowerCase(), fileName);
+    const mainFile = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+    try {
+      const data = fs.readFileSync(backFile, 'utf-8');
+      JSON.parse(data);
+      fs.writeFileSync(mainFile, data);
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end('{"ok":true}');
+    } catch (e) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // Dados da empresa — POST (salvar)
   if (req.method === 'POST' && urlPath.startsWith('/api/dados/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
@@ -614,7 +664,40 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        JSON.parse(body);
+        const incoming = JSON.parse(body);
+        // Rotating backup: keep last 48 backups (hourly over 2 days)
+        const backDir = path.join(DADOS_DIR, 'backups', emp.toLowerCase());
+        fs.mkdirSync(backDir, { recursive: true });
+        if (fs.existsSync(file)) {
+          try {
+            const existing = JSON.parse(fs.readFileSync(file, 'utf-8'));
+            const existingContas = (existing.contas||[]).length;
+            const incomingContas = (incoming.contas||[]).length;
+            const existingVendas = (existing.vendas||[]).length;
+            const incomingVendas = (incoming.vendas||[]).length;
+            // If incoming data has significantly fewer records than current, save a safety backup
+            if (existingContas > 5 && incomingContas === 0 || existingVendas > 5 && incomingVendas === 0) {
+              const safetyFile = path.join(backDir, `safety_${Date.now()}.json`);
+              fs.writeFileSync(safetyFile, fs.readFileSync(file));
+              console.warn(`[Backup] SAFETY backup criado para ${emp}: contas ${existingContas}->${incomingContas} vendas ${existingVendas}->${incomingVendas}`);
+            }
+            // Regular rotating backup every ~1h (check if last backup is older than 30min)
+            const backups = fs.readdirSync(backDir).filter(f => f.endsWith('.json') && !f.startsWith('safety_')).sort();
+            const lastBack = backups[backups.length - 1];
+            const lastTs = lastBack ? parseInt(lastBack.replace('backup_','').replace('.json','')) : 0;
+            if (Date.now() - lastTs > 30 * 60 * 1000) {
+              const backFile = path.join(backDir, `backup_${Date.now()}.json`);
+              fs.writeFileSync(backFile, fs.readFileSync(file));
+              // Keep only last 48 regular backups
+              const allBackups = fs.readdirSync(backDir).filter(f => f.startsWith('backup_')).sort();
+              if (allBackups.length > 48) {
+                allBackups.slice(0, allBackups.length - 48).forEach(f => {
+                  try { fs.unlinkSync(path.join(backDir, f)); } catch {}
+                });
+              }
+            }
+          } catch {}
+        }
         fs.writeFileSync(file, body);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);

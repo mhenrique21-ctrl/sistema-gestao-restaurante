@@ -5266,6 +5266,87 @@ function Comparativo({state}){
   </div>;
 }
 
+// ===================== BACKUPS PANEL =====================
+function BackupsPanel({empresa}:{empresa:string}){
+  const [lista,setLista]=useState<any[]>([]);
+  const [loading,setLoading]=useState(false);
+  const [restaurando,setRestaurando]=useState<string|null>(null);
+
+  const carregar=async()=>{
+    setLoading(true);
+    try{
+      const r=await fetch(`/api/backups/${empresa}`);
+      const d=await r.json();
+      setLista(Array.isArray(d)?d:[]);
+    }catch{setLista([]);}
+    setLoading(false);
+  };
+
+  useEffect(()=>{carregar();},[empresa]);
+
+  const restaurar=async(fileName:string)=>{
+    if(!confirm(`Restaurar backup "${fileName}"?\n\nIsso substituirá todos os dados atuais de ${empresa} pelo conteúdo deste backup.\n\nA página será recarregada após a restauração.`))return;
+    setRestaurando(fileName);
+    try{
+      const r=await fetch(`/api/restore/${empresa}/${fileName}`,{method:"POST"});
+      const d=await r.json();
+      if(d.ok){
+        alert("✅ Backup restaurado! A página será recarregada.");
+        window.location.reload();
+      }else{
+        alert("Erro ao restaurar: "+(d.error||"desconhecido"));
+      }
+    }catch(e:any){
+      alert("Erro ao restaurar: "+e.message);
+    }
+    setRestaurando(null);
+  };
+
+  const fmtTs=(fileName:string)=>{
+    const ts=parseInt((fileName.replace("backup_","").replace("safety_","").replace(".json","")));
+    if(!ts||isNaN(ts))return fileName;
+    return new Date(ts).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+  };
+
+  return <div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+      <div className="section-title" style={{margin:0}}>💾 Backups de {empresa}</div>
+      <button className="btn" onClick={carregar} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}} disabled={loading}>
+        {loading?"⏳ Carregando...":"🔄 Atualizar"}
+      </button>
+    </div>
+    <div className="card" style={{marginBottom:12,background:"#1a1d2e",border:"1px solid #2a3050"}}>
+      <div style={{fontSize:12,color:"#888",lineHeight:1.6}}>
+        O sistema salva backups automáticos a cada 30 minutos e backups de segurança sempre que detecta perda de dados.
+        Você pode restaurar qualquer backup listado abaixo.
+      </div>
+    </div>
+    {lista.length===0&&!loading&&<EmptyState msg="Nenhum backup disponível. Os backups são criados automaticamente após o próximo salvamento."/>}
+    {lista.map((b:any)=>{
+      const isSafety=b.file.startsWith("safety_");
+      return <div key={b.file} className="list-item" style={{borderLeft:`3px solid ${isSafety?"#fbbf24":"#4ade80"}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:13}}>{fmtTs(b.file)}</div>
+            {isSafety&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24",fontSize:10}}>⚠️ backup de segurança</span>}
+          </div>
+          <span style={{fontSize:11,color:"#555"}}>{b.size?`${(b.size/1024).toFixed(1)} KB`:"—"}</span>
+        </div>
+        {b.preview&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.contas} contas</span>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.vendas} vendas</span>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.compras} compras</span>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.funcionarios} funcionários</span>
+        </div>}
+        <button className="btn" onClick={()=>restaurar(b.file)} disabled={restaurando===b.file}
+          style={{background:isSafety?"#2a2010":"#1a2a10",color:isSafety?"#fbbf24":"#4ade80",padding:"6px 14px",fontSize:12,width:"100%"}}>
+          {restaurando===b.file?"⏳ Restaurando...":"♻️ Restaurar este backup"}
+        </button>
+      </div>;
+    })}
+  </div>;
+}
+
 // ===================== GESTÃO (wrapper) =====================
 function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:any}){
   const [sub,setSub]=useState("rh");
@@ -5273,7 +5354,7 @@ function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:
     <div style={{marginBottom:14}}>
       <div className="section-title" style={{marginBottom:10}}>⚙️ Área Administrativa</div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-        {([["rh","👥 RH"],["ficha","📝 Fichas"],["dre","📈 DRE"],["relatorios","📄 Relatórios"],["versus","⚖️ Versus"]] as const).map(([k,l])=>(
+        {([["rh","👥 RH"],["ficha","📝 Fichas"],["dre","📈 DRE"],["relatorios","📄 Relatórios"],["versus","⚖️ Versus"],["backups","💾 Backups"]] as const).map(([k,l])=>(
           <button key={k} onClick={()=>setSub(k)} className="pill"
             style={{background:sub===k?"#7c8fff":"var(--bg4)",color:sub===k?"#fff":"#777",fontSize:12,padding:"8px 14px"}}>
             {l}
@@ -5286,6 +5367,7 @@ function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:
     {sub==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
     {sub==="relatorios" && <Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/>}
     {sub==="versus"     && <Comparativo state={state}/>}
+    {sub==="backups"    && <BackupsPanel empresa={empresa}/>}
   </div>;
 }
 
