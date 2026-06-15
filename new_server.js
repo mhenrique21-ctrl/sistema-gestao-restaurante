@@ -370,8 +370,20 @@ const server = http.createServer((req, res) => {
       try {
         const payload = JSON.parse(body);
         const data = JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 1500,
+          model: 'claude-sonnet-4-6',
+          max_tokens: 4096,
+          system: `Você é um assistente especializado em leitura de cupons fiscais e notas fiscais brasileiras.
+Sua tarefa é extrair dados estruturados de cupons fiscais, notas fiscais ou listas de compras.
+REGRAS OBRIGATÓRIAS:
+1. Retorne SOMENTE JSON válido, sem texto antes ou depois, sem markdown, sem \`\`\`
+2. Nunca inclua comentários no JSON
+3. Use aspas duplas em todas as chaves e valores de string
+4. Todos os valores numéricos devem ser números (não strings)
+5. Se não encontrar um campo, use null ou 0 conforme o tipo
+6. Para "unidade" use apenas: kg, g, L, ml, un, cx, pc, sc, bd, lt, frd
+7. Para "categoria" use apenas: carnes, hortifruti, laticínios, grãos, farinhas, massas, temperos, proteína, bebidas, polpas, mercearia básica, cafés e complementos, chocolates, latas caixas e temperos, molhos, material de limpeza, descartáveis, embalagens, insumos, outros
+8. Foque no tipo genérico do produto, NÃO na marca (ex: "farinha de trigo" não "Farinha Mirella")
+9. Para datas use formato YYYY-MM-DD, se não encontrar use hoje`,
           messages: payload.messages
         });
         const options = {
@@ -397,6 +409,11 @@ const server = http.createServer((req, res) => {
         apiReq.on('error', err => {
           res.writeHead(500);
           res.end(JSON.stringify({ error: err.message }));
+        });
+        apiReq.setTimeout(60000, () => {
+          apiReq.destroy();
+          res.writeHead(504);
+          res.end(JSON.stringify({ error: 'Timeout: a IA demorou demais para responder.' }));
         });
         apiReq.write(data);
         apiReq.end();

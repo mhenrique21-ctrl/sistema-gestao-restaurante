@@ -1436,20 +1436,69 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     }
   };
 
+  const PROMPT_CUPOM=`Extraia TODOS os dados deste cupom/nota fiscal brasileira.
+
+Retorne SOMENTE o JSON abaixo, sem texto extra, sem markdown:
+{"fornecedor":{"nome":"nome da loja/empresa","cnpj":"00.000.000/0000-00","endereco":"endereço completo"},"itens":[{"nome":"nome genérico do produto (sem marca)","categoria":"carnes|hortifruti|laticínios|grãos|farinhas|massas|temperos|proteína|bebidas|polpas|mercearia básica|cafés e complementos|chocolates|latas caixas e temperos|molhos|material de limpeza|descartáveis|embalagens|insumos|outros","unidade":"kg|g|L|ml|un|cx|pc","quantidade":1,"valorUnitario":0.00,"valorTotal":0.00}],"totalCompra":0.00,"data":"YYYY-MM-DD"}
+
+REGRAS:
+- Inclua TODOS os itens visíveis, sem exceção
+- Nome do produto: tipo genérico (ex: "queijo muçarela", não "Queijo Polenghi")
+- quantidade: número real (ex: 2.5 para 2,5 kg)
+- valorUnitario e valorTotal em reais como número decimal
+- data: data da emissão no formato YYYY-MM-DD
+- Se não conseguir ler algum campo, use 0 ou string vazia`;
+
+  const extrairJSON=(text:string)=>{
+    // tenta extrair bloco JSON da resposta
+    const cleaned=text.replace(/```json/g,"").replace(/```/g,"").trim();
+    // tenta direto
+    try{return JSON.parse(cleaned);}catch{}
+    // tenta encontrar o objeto JSON no texto
+    const match=cleaned.match(/\{[\s\S]*\}/);
+    if(match){try{return JSON.parse(match[0]);}catch{}}
+    // tenta consertar trailing commas
+    try{return JSON.parse(cleaned.replace(/,\s*([}\]])/g,"$1"));}catch{}
+    // último recurso: match + fix
+    if(match){try{return JSON.parse(match[0].replace(/,\s*([}\]])/g,"$1"));}catch{}}
+    throw new Error("JSON inválido retornado pela IA.\n\nResposta: "+text.slice(0,300));
+  };
+
+  const chamarIA=async(userContent:any,tentativa=1):Promise<any>=>{
+    const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({messages:[{role:"user",content:userContent}]})});
+    if(!res.ok){
+      const err=await res.json().catch(()=>({}));
+      throw new Error(`Erro ${res.status}: ${err.error||res.statusText}`);
+    }
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+    const text=(data.content||[]).map((b:any)=>b.text||"").join("").trim();
+    if(!text)throw new Error("IA retornou resposta vazia.");
+    return extrairJSON(text);
+  };
+
   const processarIA=async()=>{
-    if(!iaText.trim()&&!imgBase64)return alert("Adicione um cupom.");
+    if(!iaText.trim()&&!imgBase64)return alert("Adicione uma imagem ou texto do cupom.");
     setIaLoading(true);setIaResult(null);
-    try{
-      const userContent=imgBase64
-        ?[{type:"image",source:{type:"base64",media_type:imgBase64.mediaType,data:imgBase64.data}},
-          {type:"text",text:"Analise este cupom/nota fiscal. Extraia fornecedor e TODOS os itens com quantidade e valor. Categorize: carnes, hortifruti, laticínios, grãos, temperos, proteína, insumos, bebidas, embalagens, descartáveis, material de limpeza, limpeza. Foque no tipo do produto, não na marca. Retorne SOMENTE JSON válido:\n{\"fornecedor\":{\"nome\":\"...\",\"endereco\":\"...\"},\"itens\":[{\"nome\":\"...\",\"categoria\":\"...\",\"unidade\":\"kg|un|L\",\"quantidade\":0,\"valorUnitario\":0,\"valorTotal\":0}],\"totalCompra\":0,\"data\":\"YYYY-MM-DD\"}"}]
-        :`Analise este cupom fiscal e extraia os dados. Categorize cada item em: insumos, descartáveis, material de limpeza, proteína. Foque no tipo do produto, não na marca. Retorne SOMENTE JSON:\n{"fornecedor":{"nome":"...","endereco":"..."},"itens":[{"nome":"...","categoria":"...","unidade":"kg|un|L","quantidade":0,"valorUnitario":0,"valorTotal":0}],"totalCompra":0,"data":"YYYY-MM-DD"}\n\nTexto: ${iaText}`;
-      const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:userContent}]})});
-      const data=await res.json();
-      const text=(data.content||[]).map(b=>b.text||"").join("");
-      setIaResult(JSON.parse(text.replace(/```json|```/g,"").trim()));
-    }catch(e){alert("Erro ao processar. Tente novamente.");}
+    let lastErr="";
+    for(let t=1;t<=3;t++){
+      try{
+        const userContent=imgBase64
+          ?[{type:"image",source:{type:"base64",media_type:imgBase64.mediaType,data:imgBase64.data}},
+            {type:"text",text:PROMPT_CUPOM}]
+          :`${PROMPT_CUPOM}\n\nTexto do cupom:\n${iaText}`;
+        const result=await chamarIA(userContent,t);
+        setIaResult(result);
+        setIaLoading(false);
+        return;
+      }catch(e:any){
+        lastErr=e.message||String(e);
+        if(t<3){await new Promise(r=>setTimeout(r,1500*t));}
+      }
+    }
     setIaLoading(false);
+    alert(`❌ Falha após 3 tentativas.\n\n${lastErr}\n\nDica: verifique se a imagem está nítida e bem iluminada, ou tente copiar o texto do cupom manualmente.`);
   };
 
   const [iaFormaPag,setIaFormaPag]=useState("dinheiro");
