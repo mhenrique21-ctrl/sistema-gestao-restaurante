@@ -233,10 +233,24 @@ const PRODS_SEED_V5=[
   {nome:"Macarrão para Sopa",       cat:"massas", unidade:"kg"},
   {nome:"Macarrão para Macarronada",cat:"massas", unidade:"kg"},
 ];
+const PRODS_SEED_V6=[
+  // molhos
+  {nome:"Molho para Hot Dog",  cat:"molhos", unidade:"un"},
+  {nome:"Molho para Pizza",    cat:"molhos", unidade:"un"},
+  {nome:"Extrato de Tomate",   cat:"molhos", unidade:"un"},
+  {nome:"Molho Barbecue",      cat:"molhos", unidade:"un"},
+  {nome:"Ketchup Sachê",       cat:"molhos", unidade:"un"},
+  {nome:"Maionese Sachê",      cat:"molhos", unidade:"un"},
+  {nome:"Mostarda Sachê",      cat:"molhos", unidade:"un"},
+  {nome:"Açúcar Sachê",        cat:"molhos", unidade:"un"},
+  {nome:"Maionese em Quilo",   cat:"molhos", unidade:"kg"},
+  {nome:"Ketchup em Quilo",    cat:"molhos", unidade:"kg"},
+  {nome:"Mostarda em Quilo",   cat:"molhos", unidade:"kg"},
+];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -421,10 +435,20 @@ const migrateDb=(m:any)=>{
       m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
       m[e].produtosSeedV5=true;
     }
+    if(!m[e].produtosSeedV6){
+      const ex:string[]=(m[e].produtosLista||[]).map((p:any)=>p.nome.toLowerCase());
+      const novos=PRODS_SEED_V6.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+      m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
+      m[e].produtosSeedV6=true;
+    }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].listaCatOrdemV2){
       m[e].listaCatOrdem=["bebidas","grãos","mercearia básica","material de limpeza","farinhas","massas","latas, caixas e temperos","chocolates","cafés e complementos","laticínios","carnes","polpas","hortifruti","descartáveis","temperos","proteína","embalagens","outros"];
       m[e].listaCatOrdemV2=true;
+    }
+    if(!m[e].listaCatOrdemV3){
+      m[e].listaCatOrdem=["bebidas","grãos","mercearia básica","material de limpeza","farinhas","massas","latas, caixas e temperos","molhos","chocolates","cafés e complementos","laticínios","carnes","polpas","hortifruti","descartáveis","temperos","proteína","embalagens","outros"];
+      m[e].listaCatOrdemV3=true;
     }
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
@@ -2429,13 +2453,13 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
 }
 
 // ===================== LISTA DE COMPRAS =====================
-const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","polpas","mercearia básica","farinhas","cafés e complementos","chocolates","latas, caixas e temperos","massas","outros"];
+const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","polpas","mercearia básica","farinhas","cafés e complementos","chocolates","latas, caixas e temperos","molhos","massas","outros"];
 const CAT_ICONS:Record<string,string>={
   "carnes":"🥩","hortifruti":"🥦","laticínios":"🧀","grãos":"🌾","temperos":"🧂",
   "proteína":"🍖","bebidas":"🍺","embalagens":"📦","descartáveis":"🥤",
   "material de limpeza":"🧹","limpeza":"🧹",
   "polpas":"🍓","mercearia básica":"🛒","farinhas":"🌾","cafés e complementos":"☕",
-  "chocolates":"🍫","latas, caixas e temperos":"🥫","massas":"🍝","outros":"📋",
+  "chocolates":"🍫","latas, caixas e temperos":"🥫","molhos":"🫙","massas":"🍝","outros":"📋",
 };
 const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
