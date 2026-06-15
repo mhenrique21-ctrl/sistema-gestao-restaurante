@@ -5293,6 +5293,7 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
   const [lista,setLista]=useState<any[]>([]);
   const [loading,setLoading]=useState(false);
   const [restaurando,setRestaurando]=useState<string|null>(null);
+  const [excluindo,setExcluindo]=useState<string|null>(null);
   const importRef=useRef<HTMLInputElement>(null);
 
   const carregar=async()=>{
@@ -5337,6 +5338,18 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
       else alert("Erro: "+(d.error||"desconhecido"));
     }catch(e:any){alert("Erro: "+e.message);}
     setRestaurando(null);
+  };
+
+  const excluirBackup=async(fileName:string)=>{
+    if(!confirm(`Excluir backup de ${fmtTs(fileName)}?\n\nEsta ação não pode ser desfeita.`))return;
+    setExcluindo(fileName);
+    try{
+      const r=await fetch(`/api/backups/${emp}/${fileName}`,{method:"DELETE"});
+      const d=await r.json();
+      if(d.ok){setLista(l=>l.filter(b=>b.file!==fileName));}
+      else alert("Erro: "+(d.error||"desconhecido"));
+    }catch(e:any){alert("Erro: "+e.message);}
+    setExcluindo(null);
   };
 
   const totContas=(db.contas||[]).length;const totVendas=(db.vendas||[]).length;const totCompras=(db.compras||[]).length;const totFuncs=(db.funcionarios||[]).length;
@@ -5403,10 +5416,16 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
           <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.compras} compras</span>
           <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.funcionarios} funcs</span>
         </div>}
-        <button className="btn" onClick={()=>restaurar(b.file)} disabled={restaurando===b.file}
-          style={{background:isSafety?"#2a2010":"#1a2a10",color:isSafety?"#fbbf24":"#4ade80",padding:"5px 10px",fontSize:11,width:"100%"}}>
-          {restaurando===b.file?"⏳ Restaurando...":"♻️ Restaurar"}
-        </button>
+        <div style={{display:"flex",gap:6}}>
+          <button className="btn" onClick={()=>restaurar(b.file)} disabled={restaurando===b.file||excluindo===b.file}
+            style={{background:isSafety?"#2a2010":"#1a2a10",color:isSafety?"#fbbf24":"#4ade80",padding:"5px 10px",fontSize:11,flex:1}}>
+            {restaurando===b.file?"⏳ Restaurando...":"♻️ Restaurar"}
+          </button>
+          <button className="btn" onClick={()=>excluirBackup(b.file)} disabled={excluindo===b.file||restaurando===b.file}
+            style={{background:"#2a1015",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>
+            {excluindo===b.file?"⏳":"🗑️"}
+          </button>
+        </div>
       </div>;
     })}
   </div>;

@@ -821,6 +821,25 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Excluir um backup específico
+  if (req.method === 'DELETE' && urlPath.startsWith('/api/backups/')) {
+    const parts = urlPath.split('/');
+    const emp = (parts[3] || '').toUpperCase();
+    const fileName = parts[4] || '';
+    if (!['CONFRARIA','SEAMA'].includes(emp) || !fileName) { res.writeHead(400); res.end('{}'); return; }
+    const backFile = path.join(DADOS_DIR, 'backups', emp.toLowerCase(), fileName);
+    try {
+      fs.unlinkSync(backFile);
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end('{"ok":true}');
+    } catch (e) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // Restaurar um backup específico
   if (req.method === 'POST' && urlPath.startsWith('/api/restore/')) {
     const parts = urlPath.split('/');
