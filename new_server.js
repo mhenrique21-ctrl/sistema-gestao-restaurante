@@ -365,7 +365,7 @@ const server = http.createServer((req, res) => {
   // IA proxy
   if (req.method === 'POST' && urlPath === '/api/scan') {
     let body = '';
-    req.on('data', chunk => body += chunk);
+    req.on('data', chunk => { body += chunk; if (body.length > 20 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({error:'Imagem muito grande. Reduza o tamanho antes de enviar.'})); req.destroy(); } });
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);

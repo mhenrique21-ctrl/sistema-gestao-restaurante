@@ -1420,6 +1420,25 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     if(xmlIaRef.current)xmlIaRef.current.value="";
   };
 
+  const redimensionarImagem=(dataUrl:string,maxPx=1400,quality=0.82):Promise<string>=>{
+    return new Promise(resolve=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>maxPx||h>maxPx){
+          if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}
+          else{w=Math.round(w*maxPx/h);h=maxPx;}
+        }
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        canvas.getContext("2d")!.drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL("image/jpeg",quality));
+      };
+      img.onerror=()=>resolve(dataUrl);
+      img.src=dataUrl;
+    });
+  };
+
   const handleFile=(e)=>{
     const file=e.target.files[0]; if(!file)return;
     const reader=new FileReader();
@@ -1427,10 +1446,13 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
       reader.onload=()=>{setImgBase64(null);setImgPreview(null);setIaText(`PDF: ${file.name} — Cole ou descreva o conteúdo do cupom abaixo.`);};
       reader.readAsDataURL(file);
     } else {
-      reader.onload=()=>{
-        const b64=reader.result.split(",")[1];
-        setImgBase64({data:b64,mediaType:file.type||"image/jpeg"});
-        setImgPreview(reader.result); setIaText("");
+      reader.onload=async()=>{
+        const original=reader.result as string;
+        const resized=await redimensionarImagem(original);
+        const b64=resized.split(",")[1];
+        setImgBase64({data:b64,mediaType:"image/jpeg"});
+        setImgPreview(resized);
+        setIaText("");
       };
       reader.readAsDataURL(file);
     }
