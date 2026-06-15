@@ -2504,7 +2504,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin
       setEditId(null);
     }else{
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||"outros",estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,criadoEm:new Date().toISOString()}]}));
+      const nome=form.nome.trim();
+      const cat=form.cat||"outros";
+      setDb((d:any)=>{
+        const prodExiste=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
+        return{
+          ...d,
+          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,criadoEm:new Date().toISOString()}],
+          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade}],
+        };
+      });
     }
     setForm(EMPTY_FORM_LISTA);
   };
