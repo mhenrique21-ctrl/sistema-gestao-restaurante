@@ -236,7 +236,7 @@ const PRODS_SEED_V5=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -422,6 +422,10 @@ const migrateDb=(m:any)=>{
       m[e].produtosSeedV5=true;
     }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
+    if(!m[e].listaCatOrdemV2){
+      m[e].listaCatOrdem=["bebidas","grãos","mercearia básica","material de limpeza","farinhas","massas","latas, caixas e temperos","chocolates","cafés e complementos","laticínios","carnes","polpas","hortifruti","descartáveis","temperos","proteína","embalagens","outros"];
+      m[e].listaCatOrdemV2=true;
+    }
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
   });
