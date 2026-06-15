@@ -726,7 +726,7 @@ export default function App() {
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state}/>}
+              {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
             </>
         }
@@ -5289,333 +5289,154 @@ function Comparativo({state}){
 }
 
 // ===================== BACKUPS PANEL =====================
-function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
+function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any)=>void}){
   const [lista,setLista]=useState<any[]>([]);
   const [loading,setLoading]=useState(false);
   const [restaurando,setRestaurando]=useState<string|null>(null);
-  const [scan,setScan]=useState<any[]|null>(null);
-  const [scanning,setScanning]=useState(false);
-  const [dateScan,setDateScan]=useState<any|null>(null);
-  const [dateScanning,setDateScanning]=useState(false);
   const importRef=useRef<HTMLInputElement>(null);
 
   const carregar=async()=>{
     setLoading(true);
-    try{
-      const r=await fetch(`/api/backups/${empresa}`);
-      const d=await r.json();
-      setLista(Array.isArray(d)?d:[]);
-    }catch{setLista([]);}
+    try{const r=await fetch(`/api/backups/${emp}`);const d=await r.json();setLista(Array.isArray(d)?d:[]);}catch{setLista([]);}
     setLoading(false);
   };
+  useEffect(()=>{carregar();},[emp]);
 
-  const varrer=async()=>{
-    setScanning(true);
-    setScan(null);
-    try{
-      const r=await fetch('/api/scan-recovery');
-      const d=await r.json();
-      setScan(Array.isArray(d)?d:[]);
-    }catch{setScan([]);}
-    setScanning(false);
-  };
-
-  const varrerData14=async()=>{
-    setDateScanning(true);
-    setDateScan(null);
-    try{
-      const r=await fetch('/api/scan-date');
-      const d=await r.json();
-      setDateScan(d);
-    }catch{setDateScan({});}
-    setDateScanning(false);
-  };
-
-  const restaurarPath=async(filePath:string)=>{
-    if(!confirm(`Restaurar arquivo:\n${filePath}\n\nIsso substituirá os dados atuais de ${empresa}.\nA página será recarregada.`))return;
-    try{
-      const r=await fetch('/api/restore-from-path',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emp:empresa,filePath})});
-      const d=await r.json();
-      if(d.ok){alert('✅ Dados restaurados! Recarregando...');window.location.reload();}
-      else alert('Erro: '+(d.error||'desconhecido'));
-    }catch(e:any){alert('Erro: '+e.message);}
-  };
-
-  const fmtMtime=(mt:string)=>{
-    if(!mt)return"";
-    try{return new Date(mt).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return mt;}
-  };
-
+  const fmtTs=(f:string)=>{const ts=parseInt(f.replace("backup_","").replace("safety_","").replace(".json",""));if(!ts||isNaN(ts))return f;return new Date(ts).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});};
 
   const exportarJSON=()=>{
     const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
-    const hoje=new Date().toISOString().slice(0,19).replace("T","_").replace(/:/g,"-");
-    a.href=url;
-    a.download=`backup_${empresa.toLowerCase()}_${hoje}.json`;
-    a.click();
+    a.href=url;a.download=`backup_${emp.toLowerCase()}_${new Date().toISOString().slice(0,19).replace("T","_").replace(/:/g,"-")}.json`;a.click();
     URL.revokeObjectURL(url);
   };
 
   const importarJSON=(e:any)=>{
-    const file=e.target.files?.[0];
-    if(!file)return;
+    const file=e.target.files?.[0];if(!file)return;
     const reader=new FileReader();
     reader.onload=(ev)=>{
       try{
         const data=JSON.parse(ev.target?.result as string);
         if(!data||typeof data!=="object")throw new Error("Arquivo inválido");
-        if(!confirm(`Importar backup "${file.name}"?\n\nIsso substituirá TODOS os dados atuais de ${empresa}.\n\nConteúdo encontrado:\n• ${(data.contas||[]).length} contas\n• ${(data.vendas||[]).length} vendas\n• ${(data.compras||[]).length} compras\n• ${(data.funcionarios||[]).length} funcionários\n\nDeseja continuar?`))return;
-        setDb((_:any)=>data);
-        alert("✅ Dados importados! Salvando no servidor...");
-      }catch(err:any){
-        alert("Erro ao importar: "+err.message);
-      }
+        if(!confirm(`Importar "${file.name}" para ${emp}?\n\n• ${(data.contas||[]).length} contas\n• ${(data.vendas||[]).length} vendas\n• ${(data.compras||[]).length} compras\n• ${(data.funcionarios||[]).length} funcionários\n\nSubstituirá TODOS os dados atuais.`))return;
+        setDb(()=>data);
+        alert("✅ Dados importados!");
+      }catch(err:any){alert("Erro: "+err.message);}
     };
-    reader.readAsText(file);
-    e.target.value="";
+    reader.readAsText(file);e.target.value="";
   };
 
   const restaurar=async(fileName:string)=>{
-    if(!confirm(`Restaurar backup "${fileName}"?\n\nIsso substituirá todos os dados atuais de ${empresa} pelo conteúdo deste backup.\n\nA página será recarregada após a restauração.`))return;
+    if(!confirm(`Restaurar backup de ${fmtTs(fileName)} para ${emp}?\n\nSubstituirá todos os dados atuais. A página será recarregada.`))return;
     setRestaurando(fileName);
     try{
-      const r=await fetch(`/api/restore/${empresa}/${fileName}`,{method:"POST"});
+      const r=await fetch(`/api/restore/${emp}/${fileName}`,{method:"POST"});
       const d=await r.json();
-      if(d.ok){
-        alert("✅ Backup restaurado! A página será recarregada.");
-        window.location.reload();
-      }else{
-        alert("Erro ao restaurar: "+(d.error||"desconhecido"));
-      }
-    }catch(e:any){
-      alert("Erro ao restaurar: "+e.message);
-    }
+      if(d.ok){alert("✅ Restaurado!");window.location.reload();}
+      else alert("Erro: "+(d.error||"desconhecido"));
+    }catch(e:any){alert("Erro: "+e.message);}
     setRestaurando(null);
   };
 
-  const fmtTs=(fileName:string)=>{
-    const ts=parseInt((fileName.replace("backup_","").replace("safety_","").replace(".json","")));
-    if(!ts||isNaN(ts))return fileName;
-    return new Date(ts).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
-  };
+  const totContas=(db.contas||[]).length;const totVendas=(db.vendas||[]).length;const totCompras=(db.compras||[]).length;const totFuncs=(db.funcionarios||[]).length;
 
-  const totContas=(db.contas||[]).length;
-  const totVendas=(db.vendas||[]).length;
-  const totCompras=(db.compras||[]).length;
-  const totFuncs=(db.funcionarios||[]).length;
+  // LocalStorage emergência
+  let localRaw:any=null;try{localRaw=JSON.parse(localStorage.getItem("gestao_app_v4")||"null");}catch{}
+  const localEmp=localRaw?.[emp]||null;
+  const lContas=(localEmp?.contas||[]).length;const lVendas=(localEmp?.vendas||[]).length;const lCompras=(localEmp?.compras||[]).length;
+  const temDados=lContas+lVendas+lCompras>0;
 
   return <div>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-      <div className="section-title" style={{margin:0}}>💾 Backups — {empresa}</div>
-      <button className="btn" onClick={carregar} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}} disabled={loading}>
-        {loading?"⏳":"🔄"} Atualizar
-      </button>
+    {/* Resumo atual */}
+    <div style={{fontSize:12,color:"#666",marginBottom:10}}>
+      Servidor: <b style={{color:"#e8eaf0"}}>{totContas} contas · {totVendas} vendas · {totCompras} compras · {totFuncs} funcionários</b>
     </div>
 
-    {/* EMERGÊNCIA — dados neste dispositivo */}
-    {(()=>{
-      let localRaw:any=null;
-      try{localRaw=JSON.parse(localStorage.getItem("gestao_app_v4")||"null");}catch{}
-      const localEmp=localRaw?.[empresa]||null;
-      const lContas=(localEmp?.contas||[]).length;
-      const lVendas=(localEmp?.vendas||[]).length;
-      const lCompras=(localEmp?.compras||[]).length;
-      const lFuncs=(localEmp?.funcionarios||[]).length;
-      const temDados=lContas+lVendas+lCompras>0;
-      return <div className="card" style={{marginBottom:14,background:temDados?"#0a1a0a":"#1a0a0a",border:`2px solid ${temDados?"#22c55e":"#ff5c7a"}`}}>
-        <div style={{fontSize:13,fontWeight:700,color:temDados?"#22c55e":"#ff5c7a",marginBottom:6}}>
-          {temDados?"✅ ESTE DISPOSITIVO TEM DADOS!":"❌ Este dispositivo não tem dados"}
-        </div>
-        <div style={{fontSize:12,color:"#888",marginBottom:10,lineHeight:1.6}}>
-          LocalStorage — <b style={{color:"#e8eaf0"}}>{empresa}: {lContas} contas · {lVendas} vendas · {lCompras} compras · {lFuncs} funcionários</b>
-        </div>
-        {temDados&&<>
-          <div style={{fontSize:12,color:"#f59e0b",marginBottom:8}}>
-            ⚠️ Este dispositivo ainda tem dados! Baixe o backup AGORA antes de sair ou recarregar a página.
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
-            <button className="btn" onClick={()=>{
-              const blob=new Blob([JSON.stringify(localEmp,null,2)],{type:"application/json"});
-              const url=URL.createObjectURL(blob);
-              const a=document.createElement("a");
-              const hoje=new Date().toISOString().slice(0,19).replace("T","_").replace(/:/g,"-");
-              a.href=url; a.download=`EMERGENCIA_${empresa}_${hoje}.json`; a.click();
-              URL.revokeObjectURL(url);
-            }} style={{background:"#1a3a10",color:"#22c55e",padding:"12px 16px",fontSize:14,fontWeight:700,flex:1}}>
-              ⬇️ BAIXAR DADOS AGORA
-            </button>
-            <button className="btn" onClick={async()=>{
-              if(!confirm(`Restaurar os dados deste dispositivo no servidor?\n\n${lContas} contas · ${lVendas} vendas · ${lCompras} compras\n\nIsso vai sobrescrever o servidor com esses dados.`))return;
-              try{
-                const r=await fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(localEmp)});
-                const d=await r.json();
-                if(d.ok){alert("✅ Dados enviados ao servidor!");window.location.reload();}
-                else alert("Erro: "+(d.error||"desconhecido"));
-              }catch(e:any){alert("Erro: "+e.message);}
-            }} style={{background:"#2a1800",color:"#f59e0b",padding:"12px 16px",fontSize:14,fontWeight:700,flex:1}}>
-              ⬆️ ENVIAR AO SERVIDOR
-            </button>
-          </div>
-        </>}
-        {!temDados&&<div style={{fontSize:12,color:"#555"}}>
-          Se você tiver outro celular ou computador onde o app foi aberto antes de 15/06, abra ele <b style={{color:"#e8eaf0"}}>sem internet (modo avião)</b> e acesse esta tela para ver se tem dados.
-        </div>}
-      </div>;
-    })()}
-
-    {/* Export / Import manual */}
-    <div className="card" style={{marginBottom:14,background:"#0f1520",border:"1px solid #2a4060"}}>
-      <div style={{fontSize:13,fontWeight:700,color:"#60a5fa",marginBottom:8}}>📤 Export / Import Manual</div>
-      <div style={{fontSize:12,color:"#666",marginBottom:10,lineHeight:1.6}}>
-        Dados atuais: <b style={{color:"#e8eaf0"}}>{totContas} contas · {totVendas} vendas · {totCompras} compras · {totFuncs} funcionários</b>
+    {/* LocalStorage emergência */}
+    <div className="card" style={{marginBottom:10,background:temDados?"#0a1a0a":"#151515",border:`1.5px solid ${temDados?"#22c55e":"#333"}`}}>
+      <div style={{fontSize:12,fontWeight:700,color:temDados?"#22c55e":"#444",marginBottom:4}}>
+        {temDados?"✅ Este dispositivo tem dados locais":"📱 Dispositivo: sem dados locais"}
       </div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
-        <button className="btn" onClick={exportarJSON}
-          style={{background:"#1a3a20",color:"#4ade80",padding:"10px 16px",fontSize:13,flex:1}}>
-          ⬇️ Baixar backup JSON
-        </button>
-        <button className="btn" onClick={()=>importRef.current?.click()}
-          style={{background:"#1a2040",color:"#60a5fa",padding:"10px 16px",fontSize:13,flex:1}}>
-          ⬆️ Importar backup JSON
-        </button>
-        <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={importarJSON}/>
+      <div style={{fontSize:11,color:"#666",marginBottom:temDados?8:0}}>
+        LocalStorage — {lContas} contas · {lVendas} vendas · {lCompras} compras
       </div>
-    </div>
-
-    {/* Varredura específica — 14/06/2026 */}
-    <div className="card" style={{marginBottom:14,background:"#0a1520",border:"2px solid #f59e0b"}}>
-      <div style={{fontSize:13,fontWeight:700,color:"#f59e0b",marginBottom:8}}>📅 Recuperar dados de 14/06/2026</div>
-      <div style={{fontSize:12,color:"#666",marginBottom:10,lineHeight:1.6}}>
-        Busca no servidor arquivos modificados em 14/06/2026, diretórios de backup da hospedagem (/home, /var/backups, /backup),
-        logs do pm2 e outros locais onde os dados possam ter ficado.
-      </div>
-      <button className="btn" onClick={varrerData14} disabled={dateScanning}
-        style={{background:"#2a1800",color:"#f59e0b",padding:"10px 16px",fontSize:13,width:"100%",fontWeight:700}}>
-        {dateScanning?"⏳ Varrendo servidor...":"📅 Buscar dados de 14/06/2026 agora"}
-      </button>
-      {dateScan!==null&&<div style={{marginTop:12}}>
-        {/* Arquivos do dia 14 */}
-        {(dateScan.byDate||[]).length>0&&<div style={{marginBottom:10}}>
-          <div style={{fontSize:12,color:"#f59e0b",fontWeight:700,marginBottom:6}}>📄 Arquivos de 14/06/2026 com dados ({(dateScan.byDate||[]).length}):</div>
-          {(dateScan.byDate||[]).map((f:any,i:number)=><div key={i} className="list-item" style={{marginBottom:6,borderLeft:"3px solid #f59e0b"}}>
-            <div style={{fontSize:11,color:"#888",wordBreak:"break-all" as const,marginBottom:4}}>{f.path}</div>
-            <div style={{fontSize:11,color:"#555",marginBottom:4}}>{fmtMtime(f.mtime)}</div>
-            <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
-              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.contas} contas</span>
-              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.vendas} vendas</span>
-              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.compras} compras</span>
-              <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.funcionarios} funcs</span>
-            </div>
-            <button className="btn" onClick={()=>restaurarPath(f.path)} style={{background:"#2a1800",color:"#f59e0b",padding:"6px 14px",fontSize:12,width:"100%"}}>
-              ♻️ Restaurar como {empresa}
-            </button>
-          </div>)}
-        </div>}
-        {/* Diretórios de hospedagem */}
-        {(dateScan.hostingDirs||[]).length>0&&<div style={{marginBottom:10}}>
-          <div style={{fontSize:12,color:"#4ade80",fontWeight:700,marginBottom:6}}>🗄️ Arquivos em diretórios de backup ({(dateScan.hostingDirs||[]).length}):</div>
-          {(dateScan.hostingDirs||[]).map((f:any,i:number)=><div key={i} className="list-item" style={{marginBottom:6,borderLeft:"3px solid #4ade80"}}>
-            <div style={{fontSize:11,color:"#888",wordBreak:"break-all" as const,marginBottom:4}}>{f.path}</div>
-            <div style={{fontSize:11,color:"#555",marginBottom:4}}>{fmtMtime(f.mtime)}</div>
-            {f.type==="archive"
-              ?<span className="tag" style={{background:"#2a1020",color:"#fbbf24"}}>⚠️ arquivo compactado — restaurar manualmente no servidor</span>
-              :<><div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
-                <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.contas} contas</span>
-                <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.vendas} vendas</span>
-                <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.compras} compras</span>
-              </div>
-              <button className="btn" onClick={()=>restaurarPath(f.path)} style={{background:"#1a2a10",color:"#4ade80",padding:"6px 14px",fontSize:12,width:"100%"}}>
-                ♻️ Restaurar como {empresa}
-              </button></>
-            }
-          </div>)}
-        </div>}
-        {/* pm2 logs */}
-        {(dateScan.pmLogs||[]).length>0&&<div style={{marginBottom:10}}>
-          <div style={{fontSize:12,color:"#60a5fa",fontWeight:700,marginBottom:6}}>📋 Logs pm2 encontrados ({(dateScan.pmLogs||[]).length}):</div>
-          {(dateScan.pmLogs||[]).map((f:any,i:number)=><div key={i} style={{fontSize:11,color:"#555",padding:"4px 0",borderBottom:"1px solid #1a1d2e"}}>
-            <span style={{wordBreak:"break-all" as const}}>{f.path}</span>
-            <span style={{color:"#888",marginLeft:8}}>{(f.size/1024).toFixed(1)} KB · {fmtMtime(f.mtime)}</span>
-          </div>)}
-          <div style={{marginTop:6,fontSize:11,color:"#555"}}>Para extrair dados dos logs, acesse o servidor via SSH e verifique esses arquivos.</div>
-        </div>}
-        {/* Nada encontrado */}
-        {(dateScan.byDate||[]).length===0&&(dateScan.hostingDirs||[]).length===0&&
-          <div style={{textAlign:"center",color:"#555",fontSize:12,padding:"12px 0"}}>
-            Nenhum arquivo com dados encontrado para 14/06/2026 no servidor.
-            {(dateScan.dbDumps||[]).some((d:any)=>d.exists)&&
-              <div style={{marginTop:8,color:"#f59e0b"}}>⚠️ Banco de dados detectado no servidor — verifique se há snapshots via painel da hospedagem.</div>}
-          </div>
-        }
+      {temDados&&<div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+        <button className="btn" onClick={()=>{
+          const blob=new Blob([JSON.stringify(localEmp,null,2)],{type:"application/json"});
+          const url=URL.createObjectURL(blob);const a=document.createElement("a");
+          a.href=url;a.download=`LOCAL_${emp}_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);
+        }} style={{background:"#1a3a10",color:"#22c55e",padding:"8px 12px",fontSize:12,flex:1}}>⬇️ Baixar local</button>
+        <button className="btn" onClick={async()=>{
+          if(!confirm(`Enviar dados locais deste dispositivo para o servidor (${emp})?\n\n${lContas} contas · ${lVendas} vendas · ${lCompras} compras`))return;
+          const r=await fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(localEmp)});
+          const d=await r.json();
+          if(d.ok){alert("✅ Enviado!");window.location.reload();}else alert("Erro: "+(d.error||"—"));
+        }} style={{background:"#2a1800",color:"#f59e0b",padding:"8px 12px",fontSize:12,flex:1}}>⬆️ Enviar ao servidor</button>
       </div>}
     </div>
 
-    {/* Varredura de recuperação geral */}
-    <div className="card" style={{marginBottom:14,background:"#1a0a20",border:"1px solid #4a2060"}}>
-      <div style={{fontSize:13,fontWeight:700,color:"#c084fc",marginBottom:8}}>🔍 Varredura Geral</div>
-      <div style={{fontSize:12,color:"#666",marginBottom:10,lineHeight:1.6}}>
-        Varre o servidor em busca de qualquer arquivo JSON com dados (qualquer data).
-      </div>
-      <button className="btn" onClick={varrer} disabled={scanning}
-        style={{background:"#2a1040",color:"#c084fc",padding:"10px 16px",fontSize:13,width:"100%"}}>
-        {scanning?"⏳ Varrendo servidor...":"🔍 Varrer servidor agora"}
-      </button>
-      {scan!==null&&scan.length===0&&<div style={{marginTop:10,fontSize:12,color:"#666",textAlign:"center"}}>Nenhum arquivo com dados encontrado no servidor.</div>}
-      {scan&&scan.length>0&&<div style={{marginTop:10}}>
-        <div style={{fontSize:12,color:"#c084fc",marginBottom:8,fontWeight:700}}>✅ {scan.length} arquivo(s) encontrado(s):</div>
-        {scan.map((f:any,i:number)=><div key={i} className="list-item" style={{marginBottom:8,borderLeft:"3px solid #c084fc"}}>
-          <div style={{fontSize:11,color:"#888",wordBreak:"break-all" as const,marginBottom:4}}>{f.path}</div>
-          <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
-            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.contas} contas</span>
-            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.vendas} vendas</span>
-            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.compras} compras</span>
-            <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{f.funcionarios} funcs</span>
-            <span className="tag" style={{background:"#1a1020",color:"#888"}}>{(f.size/1024).toFixed(1)} KB</span>
-          </div>
-          <button className="btn" onClick={()=>restaurarPath(f.path)}
-            style={{background:"#2a1040",color:"#c084fc",padding:"6px 14px",fontSize:12,width:"100%"}}>
-            ♻️ Restaurar como dados de {empresa}
-          </button>
-        </div>)}
-      </div>}
+    {/* Export / Import */}
+    <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+      <button className="btn" onClick={exportarJSON} style={{background:"#1a3a20",color:"#4ade80",padding:"9px 12px",fontSize:12,flex:1}}>⬇️ Baixar backup JSON</button>
+      <button className="btn" onClick={()=>importRef.current?.click()} style={{background:"#1a2040",color:"#60a5fa",padding:"9px 12px",fontSize:12,flex:1}}>⬆️ Importar JSON</button>
+      <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={importarJSON}/>
     </div>
 
-    {/* Backups automáticos do servidor */}
-    <div className="card" style={{marginBottom:12,background:"#1a1d2e",border:"1px solid #2a3050"}}>
-      <div style={{fontSize:12,color:"#888",lineHeight:1.6}}>
-        Backups automáticos do servidor são criados a cada 30 min. Se houver perda de dados, um backup de segurança é salvo automaticamente.
-      </div>
+    {/* Backups do servidor */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+      <div style={{fontSize:12,color:"#555"}}>Backups automáticos do servidor</div>
+      <button className="btn" onClick={carregar} style={{background:"#1a2040",color:"#60a5fa",padding:"4px 10px",fontSize:11}} disabled={loading}>{loading?"⏳":"🔄"}</button>
     </div>
-    {lista.length===0&&!loading&&<EmptyState msg="Nenhum backup do servidor disponível ainda. Use o botão acima para baixar um backup manual agora."/>}
+    {lista.length===0&&!loading&&<div style={{fontSize:12,color:"#444",textAlign:"center",padding:"10px 0"}}>Nenhum backup do servidor ainda.</div>}
     {lista.map((b:any)=>{
       const isSafety=b.file.startsWith("safety_");
-      return <div key={b.file} className="list-item" style={{borderLeft:`3px solid ${isSafety?"#fbbf24":"#4ade80"}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-          <div>
-            <div style={{fontWeight:700,fontSize:13}}>{fmtTs(b.file)}</div>
-            {isSafety&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24",fontSize:10}}>⚠️ backup de segurança</span>}
-          </div>
-          <span style={{fontSize:11,color:"#555"}}>{b.size?`${(b.size/1024).toFixed(1)} KB`:"—"}</span>
+      return <div key={b.file} className="list-item" style={{borderLeft:`3px solid ${isSafety?"#fbbf24":"#4ade80"}`,padding:"8px 10px",marginBottom:6}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <span style={{fontWeight:700,fontSize:12}}>{fmtTs(b.file)}</span>
+          {isSafety&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24",fontSize:9}}>⚠️ segurança</span>}
+          <span style={{fontSize:10,color:"#555"}}>{b.size?`${(b.size/1024).toFixed(0)} KB`:""}</span>
         </div>
-        {b.preview&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.contas} contas</span>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.vendas} vendas</span>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.compras} compras</span>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa"}}>{b.preview.funcionarios} funcionários</span>
+        {b.preview&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.contas} contas</span>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.vendas} vendas</span>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.compras} compras</span>
+          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.funcionarios} funcs</span>
         </div>}
         <button className="btn" onClick={()=>restaurar(b.file)} disabled={restaurando===b.file}
-          style={{background:isSafety?"#2a2010":"#1a2a10",color:isSafety?"#fbbf24":"#4ade80",padding:"6px 14px",fontSize:12,width:"100%"}}>
-          {restaurando===b.file?"⏳ Restaurando...":"♻️ Restaurar este backup"}
+          style={{background:isSafety?"#2a2010":"#1a2a10",color:isSafety?"#fbbf24":"#4ade80",padding:"5px 10px",fontSize:11,width:"100%"}}>
+          {restaurando===b.file?"⏳ Restaurando...":"♻️ Restaurar"}
         </button>
       </div>;
     })}
   </div>;
 }
 
+function BackupsPanel({empresaAtual,state,setState}:{empresaAtual:string,state:any,setState:any}){
+  const [emp,setEmp]=useState<"CONFRARIA"|"SEAMA">(empresaAtual as any);
+
+  const makeSetDb=(e:string)=>(fn:(d:any)=>any)=>{
+    setState((s:any)=>({...s,[e]:fn(s[e]||{})}));
+  };
+
+  return <div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+      <div className="section-title" style={{margin:0}}>💾 Backups</div>
+      <div style={{display:"flex",gap:4}}>
+        {(["CONFRARIA","SEAMA"] as const).map(e=>(
+          <button key={e} onClick={()=>setEmp(e)} className="pill"
+            style={{background:emp===e?"#7c8fff":"var(--bg4)",color:emp===e?"#fff":"#777",fontSize:12,padding:"6px 14px",fontWeight:emp===e?700:400}}>
+            {e}
+          </button>
+        ))}
+      </div>
+    </div>
+    <BackupsEmpresa key={emp} emp={emp} db={state[emp]||{}} setDb={makeSetDb(emp)}/>
+  </div>;
+}
+
 // ===================== GESTÃO (wrapper) =====================
-function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:any}){
+function Gestao({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:string,state:any,setState:any}){
   const [sub,setSub]=useState("rh");
   return <div>
     <div style={{marginBottom:14}}>
@@ -5634,7 +5455,7 @@ function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:
     {sub==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
     {sub==="relatorios" && <Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/>}
     {sub==="versus"     && <Comparativo state={state}/>}
-    {sub==="backups"    && <BackupsPanel empresa={empresa} db={db} setDb={setDb}/>}
+    {sub==="backups"    && <BackupsPanel empresaAtual={empresa} state={state} setState={setState}/>}
   </div>;
 }
 
