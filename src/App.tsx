@@ -2407,15 +2407,19 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
               const np=normForm.nomePadrao.trim();
               if(!np)return alert("Informe o nome padrão.");
               const termos=normForm.termos.split(",").map(t=>t.trim()).filter(Boolean);
-              setDb(d=>{
-                const norms=[...(d.normalizacoes||[])];
-                if(normEdit){
-                  const idx=norms.findIndex(n=>n.id===normEdit);
-                  if(idx>=0)norms[idx]={...norms[idx],nomePadrao:np,termos};
-                }else{
-                  norms.push({id:uid(),nomePadrao:np,termos});
-                }
-                return{...d,normalizacoes:norms};
+              setState((s:any)=>{
+                const next={...s};
+                ["CONFRARIA","SEAMA"].forEach(emp=>{
+                  const norms=[...(next[emp]?.normalizacoes||[])];
+                  if(normEdit){
+                    const idx=norms.findIndex((n:any)=>n.id===normEdit);
+                    if(idx>=0)norms[idx]={...norms[idx],nomePadrao:np,termos};
+                  }else{
+                    norms.push({id:uid(),nomePadrao:np,termos});
+                  }
+                  next[emp]={...next[emp],normalizacoes:norms};
+                });
+                return next;
               });
               setNormForm({nomePadrao:"",termos:""});setNormEdit(null);
             }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
@@ -2437,7 +2441,11 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
               <div style={{display:"flex",gap:4,flexShrink:0}}>
                 <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
                   style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
-                <button onClick={()=>{if(confirm("Excluir substituição?"))setDb(d=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}
+                <button onClick={()=>{if(confirm("Excluir substituição?"))setState((s:any)=>{
+                  const next={...s};
+                  ["CONFRARIA","SEAMA"].forEach(emp=>{next[emp]={...next[emp],normalizacoes:(next[emp]?.normalizacoes||[]).filter((x:any)=>x.id!==n.id)};});
+                  return next;
+                });}}
                   style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
               </div>
             </div>
