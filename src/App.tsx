@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
@@ -445,6 +445,15 @@ const migrateDb=(m:any)=>{
       const novos=PRODS_SEED_V6.filter(p=>!ex.includes(p.nome.toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
       m[e].produtosLista=[...(m[e].produtosLista||[]),...novos];
       m[e].produtosSeedV6=true;
+    }
+    if(!m[e].produtosDedupV1){
+      const seen=new Set<string>();
+      m[e].produtosLista=(m[e].produtosLista||[]).filter((p:any)=>{
+        const k=p.nome.trim().toLowerCase();
+        if(seen.has(k))return false;
+        seen.add(k);return true;
+      });
+      m[e].produtosDedupV1=true;
     }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].usuarios)m[e].usuarios=[];
@@ -2680,6 +2689,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
   };
   const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"});};
   const delProd=(id:string)=>{if(!confirm("Excluir produto do catálogo?"))return;setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));};
+  const removerDuplicatas=()=>{
+    const total=(db.produtosLista||[]).length;
+    const seen=new Set<string>();
+    const uniq=(db.produtosLista||[]).filter((p:any)=>{const k=p.nome.trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
+    const removidos=total-uniq.length;
+    if(removidos===0){alert("Nenhum produto duplicado encontrado.");return;}
+    if(!confirm(`Remover ${removidos} produto(s) duplicado(s) do catálogo?`))return;
+    setDb((d:any)=>({...d,produtosLista:uniq,produtosDedupV1:true}));
+    alert(`✅ ${removidos} duplicata(s) removida(s). Restaram ${uniq.length} produtos.`);
+  };
 
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
   const listaBuscaPend=listaBusca.filter((i:any)=>!i.comprado);
@@ -2874,7 +2893,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
 
     {/* Catálogo de produtos (admin only) */}
     {isAdmin&&showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
-      <div className="section-title" style={{color:"#4ade80"}}>📦 Catálogo de Produtos</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div className="section-title" style={{color:"#4ade80",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
+        <button className="btn" onClick={removerDuplicatas} style={{background:"#2a1020",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
+      </div>
       {/* Form adicionar/editar */}
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
