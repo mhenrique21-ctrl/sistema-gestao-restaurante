@@ -2518,17 +2518,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin
 
   const salvarPedido=()=>{
     if(!comprados.length)return;
-    if(!confirm(`Salvar ${comprados.length} produto(s) comprado(s) como pedido finalizado?`))return;
-    const ids=comprados.map((i:any)=>i.id);
-    ids.forEach(id=>_listaDeletados.add(id));
+    if(!confirm(`Salvar pedido com ${comprados.length} item(ns) comprado(s)?\nA lista inteira será zerada para o próximo pedido.`))return;
+    const todosIds=lista.map((i:any)=>i.id);
+    todosIds.forEach(id=>_listaDeletados.add(id));
     const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente})),criadoEm:new Date().toISOString()};
     setDb((d:any)=>({
       ...d,
       pedidosLista:[pedido,...(d.pedidosLista||[])],
-      listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-500),
+      listaCompras:[],
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500),
     }));
-    alert("✅ Pedido salvo! Os itens comprados foram removidos da lista.");
+    alert("✅ Pedido salvo! Lista zerada para o próximo pedido.");
   };
 
   const moverItem=(id:string,dir:-1|1)=>{
