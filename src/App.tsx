@@ -2104,7 +2104,16 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     </div>}
 
     {subTab==="lista"&&<div>
-      <div className="section-title">Histórico de Compras</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div className="section-title" style={{margin:0}}>Histórico de Compras</div>
+        {isAdmin&&(db.compras||[]).length>0&&<button className="btn" onClick={()=>{
+          if(!confirm(`⚠️ Apagar TODO o histórico de compras da ${empresa}?\n\n${(db.compras||[]).length} registro(s) serão removidos permanentemente.\n\nDigite "CONFIRMAR" para continuar.`))return;
+          const confirmacao=window.prompt('Digite CONFIRMAR para apagar todo o histórico de compras:');
+          if(confirmacao!=="CONFIRMAR")return alert("Cancelado. Nenhum dado foi removido.");
+          setDb((d:any)=>({...d,compras:[]}));
+          alert("✅ Histórico de compras apagado.");
+        }} style={{background:"#2a1015",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
+      </div>
       <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar fornecedor ou produto..." value={buscaHist} onChange={e=>setBuscaHist(e.target.value)} className="inp" style={{paddingRight:buscaHist?36:14}}/>{buscaHist&&<button onClick={()=>setBuscaHist("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
       {(()=>{
         // Uma pasta por nota de compra (grupoId), com número sequencial
