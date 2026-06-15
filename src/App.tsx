@@ -5392,6 +5392,57 @@ function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
       </button>
     </div>
 
+    {/* EMERGÊNCIA — dados neste dispositivo */}
+    {(()=>{
+      let localRaw:any=null;
+      try{localRaw=JSON.parse(localStorage.getItem("gestao_app_v4")||"null");}catch{}
+      const localEmp=localRaw?.[empresa]||null;
+      const lContas=(localEmp?.contas||[]).length;
+      const lVendas=(localEmp?.vendas||[]).length;
+      const lCompras=(localEmp?.compras||[]).length;
+      const lFuncs=(localEmp?.funcionarios||[]).length;
+      const temDados=lContas+lVendas+lCompras>0;
+      return <div className="card" style={{marginBottom:14,background:temDados?"#0a1a0a":"#1a0a0a",border:`2px solid ${temDados?"#22c55e":"#ff5c7a"}`}}>
+        <div style={{fontSize:13,fontWeight:700,color:temDados?"#22c55e":"#ff5c7a",marginBottom:6}}>
+          {temDados?"✅ ESTE DISPOSITIVO TEM DADOS!":"❌ Este dispositivo não tem dados"}
+        </div>
+        <div style={{fontSize:12,color:"#888",marginBottom:10,lineHeight:1.6}}>
+          LocalStorage — <b style={{color:"#e8eaf0"}}>{empresa}: {lContas} contas · {lVendas} vendas · {lCompras} compras · {lFuncs} funcionários</b>
+        </div>
+        {temDados&&<>
+          <div style={{fontSize:12,color:"#f59e0b",marginBottom:8}}>
+            ⚠️ Este dispositivo ainda tem dados! Baixe o backup AGORA antes de sair ou recarregar a página.
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
+            <button className="btn" onClick={()=>{
+              const blob=new Blob([JSON.stringify(localEmp,null,2)],{type:"application/json"});
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement("a");
+              const hoje=new Date().toISOString().slice(0,19).replace("T","_").replace(/:/g,"-");
+              a.href=url; a.download=`EMERGENCIA_${empresa}_${hoje}.json`; a.click();
+              URL.revokeObjectURL(url);
+            }} style={{background:"#1a3a10",color:"#22c55e",padding:"12px 16px",fontSize:14,fontWeight:700,flex:1}}>
+              ⬇️ BAIXAR DADOS AGORA
+            </button>
+            <button className="btn" onClick={async()=>{
+              if(!confirm(`Restaurar os dados deste dispositivo no servidor?\n\n${lContas} contas · ${lVendas} vendas · ${lCompras} compras\n\nIsso vai sobrescrever o servidor com esses dados.`))return;
+              try{
+                const r=await fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(localEmp)});
+                const d=await r.json();
+                if(d.ok){alert("✅ Dados enviados ao servidor!");window.location.reload();}
+                else alert("Erro: "+(d.error||"desconhecido"));
+              }catch(e:any){alert("Erro: "+e.message);}
+            }} style={{background:"#2a1800",color:"#f59e0b",padding:"12px 16px",fontSize:14,fontWeight:700,flex:1}}>
+              ⬆️ ENVIAR AO SERVIDOR
+            </button>
+          </div>
+        </>}
+        {!temDados&&<div style={{fontSize:12,color:"#555"}}>
+          Se você tiver outro celular ou computador onde o app foi aberto antes de 15/06, abra ele <b style={{color:"#e8eaf0"}}>sem internet (modo avião)</b> e acesse esta tela para ver se tem dados.
+        </div>}
+      </div>;
+    })()}
+
     {/* Export / Import manual */}
     <div className="card" style={{marginBottom:14,background:"#0f1520",border:"1px solid #2a4060"}}>
       <div style={{fontSize:13,fontWeight:700,color:"#60a5fa",marginBottom:8}}>📤 Export / Import Manual</div>
