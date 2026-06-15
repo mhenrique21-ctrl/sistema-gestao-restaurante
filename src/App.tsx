@@ -5267,10 +5267,11 @@ function Comparativo({state}){
 }
 
 // ===================== BACKUPS PANEL =====================
-function BackupsPanel({empresa}:{empresa:string}){
+function BackupsPanel({empresa,db,setDb}:{empresa:string,db:any,setDb:any}){
   const [lista,setLista]=useState<any[]>([]);
   const [loading,setLoading]=useState(false);
   const [restaurando,setRestaurando]=useState<string|null>(null);
+  const importRef=useRef<HTMLInputElement>(null);
 
   const carregar=async()=>{
     setLoading(true);
@@ -5283,6 +5284,36 @@ function BackupsPanel({empresa}:{empresa:string}){
   };
 
   useEffect(()=>{carregar();},[empresa]);
+
+  const exportarJSON=()=>{
+    const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    const hoje=new Date().toISOString().slice(0,19).replace("T","_").replace(/:/g,"-");
+    a.href=url;
+    a.download=`backup_${empresa.toLowerCase()}_${hoje}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importarJSON=(e:any)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const data=JSON.parse(ev.target?.result as string);
+        if(!data||typeof data!=="object")throw new Error("Arquivo inválido");
+        if(!confirm(`Importar backup "${file.name}"?\n\nIsso substituirá TODOS os dados atuais de ${empresa}.\n\nConteúdo encontrado:\n• ${(data.contas||[]).length} contas\n• ${(data.vendas||[]).length} vendas\n• ${(data.compras||[]).length} compras\n• ${(data.funcionarios||[]).length} funcionários\n\nDeseja continuar?`))return;
+        setDb((_:any)=>data);
+        alert("✅ Dados importados! Salvando no servidor...");
+      }catch(err:any){
+        alert("Erro ao importar: "+err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value="";
+  };
 
   const restaurar=async(fileName:string)=>{
     if(!confirm(`Restaurar backup "${fileName}"?\n\nIsso substituirá todos os dados atuais de ${empresa} pelo conteúdo deste backup.\n\nA página será recarregada após a restauração.`))return;
@@ -5308,20 +5339,45 @@ function BackupsPanel({empresa}:{empresa:string}){
     return new Date(ts).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
   };
 
+  const totContas=(db.contas||[]).length;
+  const totVendas=(db.vendas||[]).length;
+  const totCompras=(db.compras||[]).length;
+  const totFuncs=(db.funcionarios||[]).length;
+
   return <div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-      <div className="section-title" style={{margin:0}}>💾 Backups de {empresa}</div>
+      <div className="section-title" style={{margin:0}}>💾 Backups — {empresa}</div>
       <button className="btn" onClick={carregar} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}} disabled={loading}>
-        {loading?"⏳ Carregando...":"🔄 Atualizar"}
+        {loading?"⏳":"🔄"} Atualizar
       </button>
     </div>
-    <div className="card" style={{marginBottom:12,background:"#1a1d2e",border:"1px solid #2a3050"}}>
-      <div style={{fontSize:12,color:"#888",lineHeight:1.6}}>
-        O sistema salva backups automáticos a cada 30 minutos e backups de segurança sempre que detecta perda de dados.
-        Você pode restaurar qualquer backup listado abaixo.
+
+    {/* Export / Import manual */}
+    <div className="card" style={{marginBottom:14,background:"#0f1520",border:"1px solid #2a4060"}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#60a5fa",marginBottom:8}}>📤 Export / Import Manual</div>
+      <div style={{fontSize:12,color:"#666",marginBottom:10,lineHeight:1.6}}>
+        Dados atuais: <b style={{color:"#e8eaf0"}}>{totContas} contas · {totVendas} vendas · {totCompras} compras · {totFuncs} funcionários</b>
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
+        <button className="btn" onClick={exportarJSON}
+          style={{background:"#1a3a20",color:"#4ade80",padding:"10px 16px",fontSize:13,flex:1}}>
+          ⬇️ Baixar backup JSON
+        </button>
+        <button className="btn" onClick={()=>importRef.current?.click()}
+          style={{background:"#1a2040",color:"#60a5fa",padding:"10px 16px",fontSize:13,flex:1}}>
+          ⬆️ Importar backup JSON
+        </button>
+        <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={importarJSON}/>
       </div>
     </div>
-    {lista.length===0&&!loading&&<EmptyState msg="Nenhum backup disponível. Os backups são criados automaticamente após o próximo salvamento."/>}
+
+    {/* Backups automáticos do servidor */}
+    <div className="card" style={{marginBottom:12,background:"#1a1d2e",border:"1px solid #2a3050"}}>
+      <div style={{fontSize:12,color:"#888",lineHeight:1.6}}>
+        Backups automáticos do servidor são criados a cada 30 min. Se houver perda de dados, um backup de segurança é salvo automaticamente.
+      </div>
+    </div>
+    {lista.length===0&&!loading&&<EmptyState msg="Nenhum backup do servidor disponível ainda. Use o botão acima para baixar um backup manual agora."/>}
     {lista.map((b:any)=>{
       const isSafety=b.file.startsWith("safety_");
       return <div key={b.file} className="list-item" style={{borderLeft:`3px solid ${isSafety?"#fbbf24":"#4ade80"}`}}>
@@ -5367,7 +5423,7 @@ function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:
     {sub==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
     {sub==="relatorios" && <Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/>}
     {sub==="versus"     && <Comparativo state={state}/>}
-    {sub==="backups"    && <BackupsPanel empresa={empresa}/>}
+    {sub==="backups"    && <BackupsPanel empresa={empresa} db={db} setDb={setDb}/>}
   </div>;
 }
 
