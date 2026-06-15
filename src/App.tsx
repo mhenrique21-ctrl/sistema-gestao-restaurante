@@ -2721,12 +2721,56 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
     w.document.close();
   };
 
+  const imprimirListaAtual=()=>{
+    if(!lista.length)return alert("A lista está vazia.");
+    const w=window.open("","_blank","width=800,height=700");
+    if(!w)return;
+    const porCatImp:Record<string,any[]>={};
+    pendentes.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCatImp[c])porCatImp[c]=[];porCatImp[c].push(i);});
+    const ordemCat=[...cats.filter(c=>porCatImp[c]),...Object.keys(porCatImp).filter(c=>!cats.includes(c))];
+    const rows=ordemCat.map(cat=>`
+      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}</td></tr>
+      ${(porCatImp[cat]||[]).sort((a:any,b:any)=>(a.urgente?-1:b.urgente?1:0)).map((i:any)=>`<tr>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee">${i.nome}${i.urgente?` <b style="color:#e00">(URGENTE)</b>`:""}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.quantidade||1}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.unidade||"un"}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
+      </tr>`).join("")}`).join("");
+    const dataHoje=new Date().toLocaleDateString("pt-BR");
+    w.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8"/>
+      <title>Lista de Compras — ${dataHoje}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:30px;color:#222}
+        h1{font-size:22px;margin:0 0 4px}
+        .sub{font-size:13px;color:#666;margin-bottom:18px}
+        table{width:100%;border-collapse:collapse;margin-top:8px}
+        th{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
+        td{font-size:13px}
+        .print-btn{margin-bottom:16px;padding:8px 22px;background:#222;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}
+        .footer{margin-top:20px;font-size:11px;color:#aaa}
+        @media print{.print-btn{display:none}}
+      </style>
+    </head><body>
+      <h1>🛒 Lista de Compras</h1>
+      <div class="sub">Data: ${dataHoje} · ${pendentes.length} pendente(s) · ${ordemCat.length} categoria(s)</div>
+      <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+      <table>
+        <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Observação</th></tr>
+        ${rows}
+      </table>
+      <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+    </body></html>`);
+    w.document.close();
+  };
+
   return <div>
     {/* Header */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+        {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#0d1520",color:"#60a5fa",border:"1px solid #1e3a5f",padding:"6px 12px",fontSize:12}}>🖨️</button>}
         {isAdmin&&<>
           <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
           <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
