@@ -374,6 +374,7 @@ function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]
             <img src="/logo-confraria.png" alt="Confraria Café" style={{height:120,width:"auto",display:"block"}}/>
           </div>
           <div style={{fontSize:13,color:"#5a6080"}}>Sistema de Gestão</div>
+          <div style={{fontSize:12,color:"#3a4060",marginTop:4,letterSpacing:0.3}}>www.confrariacafe.com.br</div>
         </div>
         <div style={{animation:shake?"shake .4s ease":"none"}}>
           <input
