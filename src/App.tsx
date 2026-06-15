@@ -534,6 +534,7 @@ export default function App() {
   };
   const syncTimer = useRef<any>(null);
   const firstRender = useRef(true);
+  const prevState = useRef<any>(null);
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -565,15 +566,19 @@ export default function App() {
     return()=>clearInterval(t);
   },[login]);
 
-  // On state change: save to localStorage + debounced save to server
+  // On state change: save to localStorage + debounced save to server (only changed companies)
   useEffect(()=>{
     saveData(state);
-    if(firstRender.current){firstRender.current=false;return;}
+    if(firstRender.current){firstRender.current=false;prevState.current=state;return;}
+    // detect which companies actually changed
+    const changed=["CONFRARIA","SEAMA"].filter(emp=>state[emp]!==prevState.current?.[emp]);
+    prevState.current=state;
+    if(!changed.length)return;
     clearTimeout(syncTimer.current);
     setSyncStatus("sync");
     syncTimer.current=setTimeout(async()=>{
       try{
-        await Promise.all(["CONFRARIA","SEAMA"].map(emp=>
+        await Promise.all(changed.map(emp=>
           fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
         ));
         setSyncStatus("ok");
@@ -2516,19 +2521,15 @@ REGRAS:
               const np=normForm.nomePadrao.trim();
               if(!np)return alert("Informe o nome padrão.");
               const termos=normForm.termos.split(",").map(t=>t.trim()).filter(Boolean);
-              setState((s:any)=>{
-                const next={...s};
-                ["CONFRARIA","SEAMA"].forEach(emp=>{
-                  const norms=[...(next[emp]?.normalizacoes||[])];
-                  if(normEdit){
-                    const idx=norms.findIndex((n:any)=>n.id===normEdit);
-                    if(idx>=0)norms[idx]={...norms[idx],nomePadrao:np,termos};
-                  }else{
-                    norms.push({id:uid(),nomePadrao:np,termos});
-                  }
-                  next[emp]={...next[emp],normalizacoes:norms};
-                });
-                return next;
+              setDb((d:any)=>{
+                const norms=[...(d.normalizacoes||[])];
+                if(normEdit){
+                  const idx=norms.findIndex((n:any)=>n.id===normEdit);
+                  if(idx>=0)norms[idx]={...norms[idx],nomePadrao:np,termos};
+                }else{
+                  norms.push({id:uid(),nomePadrao:np,termos});
+                }
+                return {...d,normalizacoes:norms};
               });
               setNormForm({nomePadrao:"",termos:""});setNormEdit(null);
             }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
@@ -2550,11 +2551,7 @@ REGRAS:
               <div style={{display:"flex",gap:4,flexShrink:0}}>
                 <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
                   style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
-                <button onClick={()=>{if(confirm("Excluir substituição?"))setState((s:any)=>{
-                  const next={...s};
-                  ["CONFRARIA","SEAMA"].forEach(emp=>{next[emp]={...next[emp],normalizacoes:(next[emp]?.normalizacoes||[]).filter((x:any)=>x.id!==n.id)};});
-                  return next;
-                });}}
+                <button onClick={()=>{if(confirm("Excluir substituição?"))setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}
                   style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
               </div>
             </div>
@@ -2583,14 +2580,8 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false};
 
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any}){
-  // Aplica fn nas duas empresas (para categorias/produtos sincronizados)
-  const setBothDb=(fn:(d:any)=>any)=>{
-    if(setState){
-      setState((s:any)=>{const next={...s};["CONFRARIA","SEAMA"].forEach(emp=>{next[emp]=fn(next[emp]||{});});return next;});
-    }else{
-      setDb(fn);
-    }
-  };
+  // Cada empresa tem dados independentes — setBothDb removido
+  const setBothDb=setDb;
   const [form,setForm]=useState(EMPTY_FORM_LISTA);
   const [editId,setEditId]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
