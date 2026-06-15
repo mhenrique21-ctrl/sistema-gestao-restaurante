@@ -689,12 +689,12 @@ export default function App() {
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
-          ? <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout}/>
+          ? <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState}/>
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -2473,7 +2473,15 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false};
 
-function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any}){
+  // Aplica fn nas duas empresas (para categorias/produtos sincronizados)
+  const setBothDb=(fn:(d:any)=>any)=>{
+    if(setState){
+      setState((s:any)=>{const next={...s};["CONFRARIA","SEAMA"].forEach(emp=>{next[emp]=fn(next[emp]||{});});return next;});
+    }else{
+      setDb(fn);
+    }
+  };
   const [form,setForm]=useState(EMPTY_FORM_LISTA);
   const [editId,setEditId]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
@@ -2596,7 +2604,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin
   };
 
   const moverCat=(c:string,dir:-1|1)=>{
-    setDb((d:any)=>{
+    setBothDb((d:any)=>{
       const ordem=[...((d.listaCatOrdem||[]).length>0?d.listaCatOrdem:allCats)];
       if(!ordem.includes(c)){const ext=allCats.filter(x=>!ordem.includes(x));ordem.push(...ext);}
       const idx=ordem.indexOf(c);
@@ -2610,18 +2618,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout}:{db:any,setDb:any,isAdmin
   const addCat=()=>{
     const n=novaCat.trim().toLowerCase();if(!n)return;
     if(allCats.includes(n))return alert("Categoria já existe.");
-    setDb((d:any)=>({...d,listaCategorias:[...(d.listaCategorias||[]),n]}));setNovaCat("");
+    setBothDb((d:any)=>({...d,listaCategorias:[...(d.listaCategorias||[]),n]}));setNovaCat("");
   };
   const delCat=(c:string)=>{
     if(!confirm(`Excluir categoria "${c}"?`))return;
-    setDb((d:any)=>({...d,listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c),listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c)}));
+    setBothDb((d:any)=>({...d,listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c),listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c)}));
   };
   const renameCat=(old:string,novo:string)=>{
     novo=novo.trim().toLowerCase();
     if(!novo){setEditCat(null);return;}
     if(novo===old){setEditCat(null);return;}
     if(allCats.filter(c=>c!==old).includes(novo)){alert("Categoria já existe.");return;}
-    setDb((d:any)=>{
+    setBothDb((d:any)=>{
       const cl:string[]=d.listaCategorias||[];
       const newCl=cl.includes(old)?cl.map(c=>c===old?novo:c):[...cl.filter(c=>c!==novo),novo];
       const ordem=(d.listaCatOrdem||[]).map((c:string)=>c===old?novo:c);
