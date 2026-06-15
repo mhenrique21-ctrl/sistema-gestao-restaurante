@@ -251,6 +251,7 @@ const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false,
+  usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
@@ -347,14 +348,17 @@ const LOGINS:{[pwd:string]:{role:"admin"|"op",label:string,empresa?:string}}={
   "4321":  {role:"op",   label:"Op. Lista CONFRARIA", empresa:"CONFRARIA"},
 };
 
-function LoginScreen({onLogin}:{onLogin:(info:any)=>void}){
+function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]}){
   const [pwd,setPwd]=useState("");
   const [erro,setErro]=useState(false);
   const [shake,setShake]=useState(false);
 
   const tentar=()=>{
-    const info=LOGINS[pwd.trim()];
-    if(info){onLogin(info);}
+    const p=pwd.trim();
+    // Verifica usuários dinâmicos (fallback para LOGINS hardcoded se lista vazia)
+    const usuarios_=usuarios.length>0?usuarios:Object.entries(LOGINS).map(([s,v])=>({id:s,nome:v.label,senha:s,role:v.role,empresa:(v as any).empresa}));
+    const u=usuarios_.find((u:any)=>u.senha===p);
+    if(u){onLogin({role:u.role,label:u.nome,empresa:u.empresa||undefined});}
     else{
       setErro(true);setShake(true);setPwd("");
       setTimeout(()=>setShake(false),500);
@@ -442,6 +446,19 @@ const migrateDb=(m:any)=>{
       m[e].produtosSeedV6=true;
     }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
+    if(!m[e].usuarios)m[e].usuarios=[];
+    if(!m[e].usuariosSeedDone){
+      const ids=["usr-admin","usr-op-seama","usr-op-confraria"];
+      if(!m[e].usuarios.some((u:any)=>ids.includes(u.id))){
+        m[e].usuarios=[
+          {id:"usr-admin",    nome:"Administrativo",      senha:"172839",role:"admin"},
+          {id:"usr-op-seama", nome:"Op. Lista SEAMA",     senha:"1234",  role:"op",empresa:"SEAMA"},
+          {id:"usr-op-cfr",   nome:"Op. Lista CONFRARIA", senha:"4321",  role:"op",empresa:"CONFRARIA"},
+          ...m[e].usuarios,
+        ];
+      }
+      m[e].usuariosSeedDone=true;
+    }
     if(!m[e].listaCatOrdemV2){
       m[e].listaCatOrdem=["bebidas","grãos","mercearia básica","material de limpeza","farinhas","massas","latas, caixas e temperos","chocolates","cafés e complementos","laticínios","carnes","polpas","hortifruti","descartáveis","temperos","proteína","embalagens","outros"];
       m[e].listaCatOrdemV2=true;
@@ -575,7 +592,7 @@ export default function App() {
     setTab("dashboard");
   };
 
-  if(!login)return <LoginScreen onLogin={doLogin}/>;
+  if(!login)return <LoginScreen onLogin={doLogin} usuarios={state.CONFRARIA?.usuarios||[]}/>;
 
   const allTabs=[
     {id:"dashboard",label:"Dashboard",icon:"📊"},
@@ -586,6 +603,7 @@ export default function App() {
     {id:"estoque",label:"Estoque",icon:"📦"},
     {id:"fluxo",label:"Fluxo",icon:"💵"},
     {id:"gestao",label:"Gestão",icon:"⚙️"},
+    {id:"usuarios",label:"Usuários",icon:"👥"},
   ];
   const tabs=isOp?allTabs.filter(t=>t.id==="lista"):allTabs;
 
@@ -699,6 +717,7 @@ export default function App() {
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state}/>}
+              {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
             </>
         }
       </div>
@@ -5266,6 +5285,105 @@ function Gestao({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:
     {sub==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
     {sub==="relatorios" && <Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/>}
     {sub==="versus"     && <Comparativo state={state}/>}
+  </div>;
+}
+
+// ===================== USUÁRIOS =====================
+function UsuariosPanel({state,setState}:{state:any,setState:any}){
+  const usuarios:any[]=state.CONFRARIA?.usuarios||[];
+  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op",empresa:"CONFRARIA" as string};
+  const [form,setForm]=useState(EMPTY);
+  const [editId,setEditId]=useState<string|null>(null);
+  const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
+
+  const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
+
+  const setBoth=(fn:(arr:any[])=>any[])=>{
+    setState((s:any)=>{
+      const next={...s};
+      ["CONFRARIA","SEAMA"].forEach(emp=>{
+        next[emp]={...next[emp],usuarios:fn(next[emp]?.usuarios||[])};
+      });
+      return next;
+    });
+  };
+
+  const save=()=>{
+    const nome=form.nome.trim();
+    const senha=form.senha.trim();
+    if(!nome)return alert("Informe o nome.");
+    if(!senha)return alert("Informe a senha.");
+    if(!editId&&usuarios.some((u:any)=>u.senha===senha))return alert("Esta senha já está em uso por outro usuário.");
+    if(editId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editId))return alert("Esta senha já está em uso por outro usuário.");
+    if(editId){
+      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined}:u));
+      setEditId(null);
+    }else{
+      const novo={id:uid(),nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined};
+      setBoth(arr=>[...arr,novo]);
+    }
+    setForm(EMPTY);
+  };
+
+  const del=(id:string,nome:string)=>{
+    if(!confirm(`Excluir o usuário "${nome}"?`))return;
+    setBoth(arr=>arr.filter((u:any)=>u.id!==id));
+  };
+
+  const startEdit=(u:any)=>{
+    setForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA"});
+    setEditId(u.id);
+  };
+
+  return <div>
+    <div className="section-title">👥 Cadastro de Usuários</div>
+    <div className="card" style={{marginBottom:14}}>
+      <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>{editId?"✏️ Editar Usuário":"➕ Novo Usuário"}</div>
+      <input placeholder="Nome do usuário" value={form.nome} onChange={e=>setF("nome",e.target.value)} className="inp" style={{marginBottom:8}}/>
+      <input placeholder="Senha de acesso" value={form.senha} onChange={e=>setF("senha",e.target.value)} className="inp" style={{marginBottom:8}}/>
+      <select value={form.role} onChange={e=>setF("role",e.target.value)} className="inp" style={{marginBottom:8}}>
+        <option value="admin">Administrador — acesso completo</option>
+        <option value="op">Operador de Lista — somente lista de compras</option>
+      </select>
+      {form.role==="op"&&<select value={form.empresa} onChange={e=>setF("empresa",e.target.value)} className="inp" style={{marginBottom:8}}>
+        <option value="CONFRARIA">Empresa: CONFRARIA</option>
+        <option value="SEAMA">Empresa: SEAMA</option>
+      </select>}
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" onClick={save} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"11px",fontSize:13}}>
+          {editId?"💾 Salvar Alterações":"➕ Criar Usuário"}
+        </button>
+        {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(EMPTY);}} style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
+      </div>
+    </div>
+
+    <div style={{marginBottom:8,fontSize:11,color:"var(--text2)",fontWeight:600,textTransform:"uppercase" as const,letterSpacing:0.8}}>
+      {usuarios.length} usuário{usuarios.length!==1?"s":""} cadastrado{usuarios.length!==1?"s":""}
+    </div>
+    {usuarios.map((u:any)=>(
+      <div key={u.id} className="card" style={{marginBottom:8,border:`1px solid ${u.role==="admin"?"#3a2a60":"#1a3a1a"}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:22}}>{u.role==="admin"?"🔐":"👤"}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:2}}>{u.nome}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center"}}>
+              <span className="tag" style={{background:u.role==="admin"?"#3a2a6044":"#1a3a1a44",color:u.role==="admin"?"#a78bfa":"#4ade80",border:`1px solid ${u.role==="admin"?"#5a3a90":"#2a5a2a"}`}}>
+                {u.role==="admin"?"Admin":"Operador"}
+              </span>
+              {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)"}}>{u.empresa}</span>}
+              <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
+                {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver senha"}
+              </button>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:4,flexShrink:0}}>
+            <button onClick={()=>startEdit(u)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+            <button onClick={()=>del(u.id,u.nome)} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+          </div>
+        </div>
+      </div>
+    ))}
+    {!usuarios.length&&<EmptyState msg="Nenhum usuário cadastrado."/>}
   </div>;
 }
 
