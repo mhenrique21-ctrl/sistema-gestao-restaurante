@@ -2106,7 +2106,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     {subTab==="lista"&&<div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div className="section-title" style={{margin:0}}>Histórico de Compras</div>
-        {isAdmin&&(db.compras||[]).length>0&&<button className="btn" onClick={()=>{
+        {(db.compras||[]).length>0&&<button className="btn" onClick={()=>{
           if(!confirm(`⚠️ Apagar TODO o histórico de compras da ${empresa}?\n\n${(db.compras||[]).length} registro(s) serão removidos permanentemente.\n\nDigite "CONFIRMAR" para continuar.`))return;
           const confirmacao=window.prompt('Digite CONFIRMAR para apagar todo o histórico de compras:');
           if(confirmacao!=="CONFIRMAR")return alert("Cancelado. Nenhum dado foi removido.");
