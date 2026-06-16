@@ -496,6 +496,8 @@ const mergeFromServer=(prev:any,updates:any)=>{
     const p=prev[emp]||{};
     // IDs excluídos persistidos no servidor + excluídos localmente nesta sessão
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
+    // Merge por ID: itens do servidor primeiro (servidor vence para IDs em comum),
+    // itens locais com IDs novos são preservados (evita perda em falha de save)
     const byId=(sArr:any[],pArr:any[])=>{
       const sIds=new Set(sArr.map((i:any)=>i.id));
       const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
@@ -507,7 +509,16 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const sFiltered=sArr.filter((i:any)=>!serverDeleted.has(i.id));
       return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!serverDeleted.has(i.id))];
     };
-    next[emp]={...s,listaCompras:byIdLista(s.listaCompras||[],p.listaCompras||[]),produtosLista:byId(s.produtosLista||[],p.produtosLista||[])};
+    next[emp]={
+      ...s,
+      vendas:       byId(s.vendas||[],        p.vendas||[]),
+      contas:       byId(s.contas||[],         p.contas||[]),
+      compras:      byId(s.compras||[],        p.compras||[]),
+      fornecedores: byId(s.fornecedores||[],   p.fornecedores||[]),
+      funcionarios: byId(s.funcionarios||[],   p.funcionarios||[]),
+      listaCompras: byIdLista(s.listaCompras||[],p.listaCompras||[]),
+      produtosLista:byId(s.produtosLista||[],  p.produtosLista||[]),
+    };
   });
   return migrateDb(next);
 };
