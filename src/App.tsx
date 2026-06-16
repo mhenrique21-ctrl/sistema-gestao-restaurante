@@ -1778,6 +1778,13 @@ REGRAS:
     setSefazLastSync(localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
   },[empresa]);
 
+  const limparCacheESincronizar=async()=>{
+    if(!confirm("⚠️ Isso vai limpar todas as NF-es pendentes do cache e buscar dados frescos do SEFAZ.\n\nNF-es já importadas não são afetadas.\n\nContinuar?"))return;
+    setSefazLoading(true);setSefazError("");setSefazList([]);
+    await fetch("/api/nfe-cache/clear",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})}).catch(()=>{});
+    sincronizarSEFAZ(false);
+  };
+
   const sincronizarSEFAZ=async(resetNsu=false)=>{
     setSefazLoading(true);setSefazError("");setSefazList([]);
     try{
@@ -2215,6 +2222,10 @@ REGRAS:
           </button>
         )}
         {sefazError&&<div style={{background:"#2a1520",borderRadius:8,padding:"10px",fontSize:12,color:"#ff5c7a",marginTop:8}}>{sefazError}</div>}
+        {sefazConfig[empresa]&&!sefazLoading&&<button onClick={limparCacheESincronizar}
+          style={{background:"none",border:"none",color:"#f59e0b",fontSize:11,cursor:"pointer",marginTop:6,width:"100%",textAlign:"center" as const,padding:"4px"}}>
+          🗑️ Limpar cache e re-sincronizar (corrige NF-es com produtos incorretos)
+        </button>}
       </div>
 
       {/* -- Resultado da sync -- */}
@@ -2233,28 +2244,38 @@ REGRAS:
               <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{nfe.fornecedor?.nome||"Fornecedor"}</span>
               <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(nfe.totalCompra)}</span>
             </div>
-            <div className="muted" style={{fontSize:12,marginBottom:6}}>
-              {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
-              {fmtDate(nfe.data)} · {(nfe.itens||[]).length} produto(s)
-              {nfe.tipoDoc==="resumo"&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ resumo</span>}
-            </div>
-            {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>
-              <span style={{fontSize:9,fontFamily:"monospace",color:"#666",flex:1,wordBreak:"break-all" as const}}>{nfe.chNFe}</span>
-              <button onClick={()=>copiarChave(nfe.chNFe)} style={{background:"none",border:"1px solid #2a2a5a",borderRadius:5,color:"#7c8fff",padding:"2px 7px",fontSize:10,cursor:"pointer",whiteSpace:"nowrap" as const}}>📋</button>
-            </div>}
-            <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-              {nfe.tipoDoc==="resumo"&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)}
+            {(()=>{
+              // Detecta entradas antigas do cache com item falso (criadas antes da correção)
+              const isFakeItem=!nfe.tipoDoc&&(nfe.itens||[]).length===1&&(nfe.itens[0]?.nome||"").startsWith("NF-e ");
+              const isResumo=nfe.tipoDoc==="resumo"||isFakeItem;
+              const canBuscar=nfe.chNFe&&nfe.tipoDoc!=="completo";
+              const semItens=isResumo&&!(nfe.itens||[]).filter((it:any)=>!it.nome?.startsWith("NF-e ")).length;
+              return <>
+              <div className="muted" style={{fontSize:12,marginBottom:6}}>
+                {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
+                {fmtDate(nfe.data)} · {isFakeItem?0:(nfe.itens||[]).length} produto(s)
+                {isResumo&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ sem produtos</span>}
+              </div>
+              {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>
+                <span style={{fontSize:9,fontFamily:"monospace",color:"#666",flex:1,wordBreak:"break-all" as const}}>{nfe.chNFe}</span>
+                <button onClick={()=>copiarChave(nfe.chNFe)} style={{background:"none",border:"1px solid #2a2a5a",borderRadius:5,color:"#7c8fff",padding:"2px 7px",fontSize:10,cursor:"pointer",whiteSpace:"nowrap" as const}}>📋</button>
+              </div>}
+              {!nfe.chNFe&&isResumo&&<div style={{fontSize:10,color:"#f59e0b",marginBottom:6,background:"#1a1500",borderRadius:5,padding:"4px 8px"}}>
+                ⚠️ Chave de acesso não disponível — use "Limpar cache e re-sincronizar" abaixo para atualizar
+              </div>}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+              {canBuscar&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)}
                 disabled={fetchingChave===nfe.chNFe}
                 style={{background:"#1a2235",color:"#7c8fff",border:"1px solid #2a3a6a",padding:"8px 12px",fontSize:12,flex:1}}>
-                {fetchingChave===nfe.chNFe?"⏳ Buscando...":"🔍 Buscar itens"}
+                {fetchingChave===nfe.chNFe?"⏳ Buscando...":"🔍 Buscar produtos"}
               </button>}
               {nfe.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfe.rawXml,nfe.nNF||"",nfe.fornecedor?.nome||"")}
                 style={{background:"#1a2030",color:"#4ade80",border:"1px solid #1a3a20",padding:"8px 12px",fontSize:12}}>
                 ⬇️ XML
               </button>}
               <button className="btn" onClick={()=>importarNFeSefaz(nfe)}
-                disabled={nfe.tipoDoc==="resumo"&&!(nfe.itens||[]).length}
-                style={{background:nfe.tipoDoc==="resumo"&&!(nfe.itens||[]).length?"#1a1a2a":"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13,flex:1,opacity:nfe.tipoDoc==="resumo"&&!(nfe.itens||[]).length?0.5:1}}>
+                disabled={semItens}
+                style={{background:semItens?"#1a1a2a":"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13,flex:1,opacity:semItens?0.4:1}}>
                 📥 Importar
               </button>
               <button className="btn" onClick={()=>{
@@ -2264,6 +2285,7 @@ REGRAS:
                 🗑️
               </button>
             </div>
+            </>;})()}
           </div>
         ))}
         {sefazList.length>1&&<button className="btn" onClick={importarTodasNFeSefaz}

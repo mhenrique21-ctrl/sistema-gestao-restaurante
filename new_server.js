@@ -588,6 +588,28 @@ REGRAS OBRIGATÓRIAS:
     return;
   }
 
+  // NF-e cache — limpar todas as NF-es de uma empresa
+  if (req.method === 'POST' && urlPath === '/api/nfe-cache/clear') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { empresa } = JSON.parse(body);
+        const cnpj = (process.env[`CNPJ_${empresa}`]||'').replace(/\D/g,'');
+        const key = cnpj || empresa;
+        const cache = loadCache();
+        if (cache[key]) { cache[key].nfes = []; saveCache(cache); }
+        res.setHeader('Content-Type','application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok:true }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // NF-e sync via SEFAZ
   if (req.method === 'POST' && urlPath === '/api/nfe-sync') {
     let body = '';
