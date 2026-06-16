@@ -2719,6 +2719,20 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [showSugg,setShowSugg]=useState(false);
   const [showHistorico,setShowHistorico]=useState(false);
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
+  const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
+  const undoTimerRef=useRef<any>(null);
+
+  const pushUndo=(label:string,prevLista:any[],prevDeletedIds:string[],newSetIds:string[]=[])=>{
+    setUndoInfo({lista:prevLista,deletedIds:prevDeletedIds,setIds:newSetIds,label});
+    clearTimeout(undoTimerRef.current);
+    undoTimerRef.current=setTimeout(()=>setUndoInfo(null),6000);
+  };
+  const desfazer=()=>{
+    if(!undoInfo)return;
+    undoInfo.setIds.forEach(id=>_listaDeletados.delete(id));
+    setDb((d:any)=>({...d,listaCompras:undoInfo.lista,listaDeletedIds:undoInfo.deletedIds}));
+    setUndoInfo(null);clearTimeout(undoTimerRef.current);
+  };
 
   const catsPers:string[]=db.listaCategorias||[];
   const catOrdem:string[]=db.listaCatOrdem||[];
@@ -2779,15 +2793,25 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   };
   const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);};
 
-  const toggle=(id:string)=>setDb((d:any)=>{
-    const arr=[...(d.listaCompras||[])];
-    const item=arr.find(i=>i.id===id);if(!item)return d;
-    const nowComprado=!item.comprado;
-    const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
-    return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,ordem:nowComprado?maxOrdem+1:i.ordem}:i)};
-  });
+  const toggle=(id:string)=>{
+    const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
+    if(!item)return;
+    if(!item.comprado){
+      pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
+    }
+    setDb((d:any)=>{
+      const arr=[...(d.listaCompras||[])];
+      const it=arr.find(i=>i.id===id);if(!it)return d;
+      const nowComprado=!it.comprado;
+      const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
+      return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,ordem:nowComprado?maxOrdem+1:i.ordem}:i)};
+    });
+  };
   const del=(id:string)=>{
-    if(!confirm("Excluir produto?"))return;
+    const prevLista=[...(db.listaCompras||[])];
+    const prevDeletedIds=[...(db.listaDeletedIds||[])];
+    const item=prevLista.find((i:any)=>i.id===id);
+    pushUndo(`"${item?.nome||"Produto"}" excluído`,prevLista,prevDeletedIds,[id]);
     _listaDeletados.add(id);
     setDb((d:any)=>({
       ...d,
@@ -2797,8 +2821,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   };
   const limparComprados=()=>{
     if(!comprados.length)return;
-    if(!confirm("Remover todos os produtos comprados?"))return;
     const ids=comprados.map((i:any)=>i.id);
+    pushUndo(`${comprados.length} comprado(s) removido(s)`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])],ids);
     ids.forEach(id=>_listaDeletados.add(id));
     setDb((d:any)=>({
       ...d,
@@ -3298,6 +3322,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
           <button onClick={()=>del(item.id)} style={{background:"none",border:"none",borderRadius:6,color:"#555",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
         </div>
       ))}
+    </div>}
+
+    {undoInfo&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"#1e2235",border:"1px solid #7c8fff",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:12,zIndex:200,boxShadow:"0 4px 20px #0008",whiteSpace:"nowrap" as const}}>
+      <span style={{fontSize:13,color:"var(--text)"}}>↩ {undoInfo.label}</span>
+      <button onClick={desfazer} style={{background:"#7c8fff",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Desfazer</button>
     </div>}
   </div>;
 }
