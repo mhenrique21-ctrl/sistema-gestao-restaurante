@@ -358,7 +358,7 @@ function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]
     // Verifica usuários dinâmicos (fallback para LOGINS hardcoded se lista vazia)
     const usuarios_=usuarios.length>0?usuarios:Object.entries(LOGINS).map(([s,v])=>({id:s,nome:v.label,senha:s,role:v.role,empresa:(v as any).empresa}));
     const u=usuarios_.find((u:any)=>u.senha===p);
-    if(u){onLogin({role:u.role,label:u.nome,empresa:u.empresa||undefined});}
+    if(u){onLogin({role:u.role,label:u.nome,empresa:u.empresa||undefined,corTexto:u.corTexto||"#e8eaf0"});}
     else{
       setErro(true);setShake(true);setPwd("");
       setTimeout(()=>setShake(false),500);
@@ -667,7 +667,7 @@ export default function App() {
             ))}
           </div>}
           {isOp&&<div style={{marginTop:8,fontSize:11,color:"#5a6080",background:"var(--bg4)",borderRadius:8,padding:"6px 10px"}}>
-            👤 {login.label}
+            👤 <span style={{color:login.corTexto||"#e8eaf0",fontWeight:700}}>{login.label}</span>
           </div>}
         </div>
         <div style={{flex:1}}>
@@ -722,12 +722,12 @@ export default function App() {
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
-          ? <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState}/>
+          ? <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login}/>
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -2619,7 +2619,7 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false};
 
-function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any}){
   // Cada empresa tem dados independentes — setBothDb removido
   const setBothDb=setDb;
   const [form,setForm]=useState(EMPTY_FORM_LISTA);
@@ -2668,7 +2668,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
         const prodExiste=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
         return{
           ...d,
-          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,criadoEm:new Date().toISOString()}],
+          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",corTexto:login?.corTexto||"",criadoEm:new Date().toISOString()}],
           produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade}],
         };
       });
@@ -3161,6 +3161,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState}:{db:any,setDb:an
                   📦 {estoqueRef} {item.unidade}
                 </span>}
               </div>
+              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:item.corTexto||"#888",fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column" as const,gap:3,flexShrink:0,alignItems:"center"}}>
@@ -5599,7 +5600,7 @@ function Gestao({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:stri
 // ===================== USUÁRIOS =====================
 function UsuariosPanel({state,setState}:{state:any,setState:any}){
   const usuarios:any[]=state.CONFRARIA?.usuarios||[];
-  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op",empresa:"CONFRARIA" as string};
+  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0"};
   const [form,setForm]=useState(EMPTY);
   const [editId,setEditId]=useState<string|null>(null);
   const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
@@ -5624,10 +5625,10 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
     if(!editId&&usuarios.some((u:any)=>u.senha===senha))return alert("Esta senha já está em uso por outro usuário.");
     if(editId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editId))return alert("Esta senha já está em uso por outro usuário.");
     if(editId){
-      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined}:u));
+      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"}:u));
       setEditId(null);
     }else{
-      const novo={id:uid(),nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined};
+      const novo={id:uid(),nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"};
       setBoth(arr=>[...arr,novo]);
     }
     setForm(EMPTY);
@@ -5639,7 +5640,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
   };
 
   const startEdit=(u:any)=>{
-    setForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA"});
+    setForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0"});
     setEditId(u.id);
   };
 
@@ -5657,6 +5658,17 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
         <option value="CONFRARIA">Empresa: CONFRARIA</option>
         <option value="SEAMA">Empresa: SEAMA</option>
       </select>}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:"var(--bg4)",borderRadius:10,padding:"8px 14px",border:"1.5px solid var(--border2)"}}>
+        <span style={{fontSize:13,color:"var(--text2)",flex:1}}>Cor do texto na lista</span>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {["#e8eaf0","#7c8fff","#4ade80","#f59e0b","#ff9aa8","#60a5fa","#c084fc","#34d399","#fb923c","#f472b6"].map(c=>(
+            <button key={c} onClick={()=>setF("corTexto",c)}
+              style={{width:20,height:20,borderRadius:"50%",background:c,border:form.corTexto===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0,flexShrink:0}}/>
+          ))}
+          <input type="color" value={form.corTexto||"#e8eaf0"} onChange={e=>setF("corTexto",e.target.value)}
+            style={{width:22,height:22,borderRadius:"50%",border:"none",padding:0,cursor:"pointer",background:"none"}} title="Cor personalizada"/>
+        </div>
+      </div>
       <div style={{display:"flex",gap:8}}>
         <button className="btn" onClick={save} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"11px",fontSize:13}}>
           {editId?"💾 Salvar Alterações":"➕ Criar Usuário"}
@@ -5671,9 +5683,12 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
     {usuarios.map((u:any)=>(
       <div key={u.id} className="card" style={{marginBottom:8,border:`1px solid ${u.role==="admin"?"#3a2a60":"#1a3a1a"}`}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{fontSize:22}}>{u.role==="admin"?"🔐":"👤"}</div>
+          <div style={{position:"relative",flexShrink:0}}>
+            <div style={{fontSize:22}}>{u.role==="admin"?"🔐":"👤"}</div>
+            <div style={{position:"absolute",bottom:0,right:-2,width:10,height:10,borderRadius:"50%",background:u.corTexto||"#e8eaf0",border:"1.5px solid #0a0c18"}}/>
+          </div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:2}}>{u.nome}</div>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:u.corTexto||"inherit"}}>{u.nome}</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center"}}>
               <span className="tag" style={{background:u.role==="admin"?"#3a2a6044":"#1a3a1a44",color:u.role==="admin"?"#a78bfa":"#4ade80",border:`1px solid ${u.role==="admin"?"#5a3a90":"#2a5a2a"}`}}>
                 {u.role==="admin"?"Admin":"Operador"}
