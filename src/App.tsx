@@ -874,6 +874,9 @@ function Vendas({db,setDb,state}){
   const [editId,setEditId]=useState(null);
   const [budgetRef,setBudgetRef]=useState(today());
   const [busca,setBusca]=useState("");
+  const [periodoTipo,setPeriodoTipo]=useState<"semana"|"mes"|"trimestre"|"personalizado">("mes");
+  const [periodoIni,setPeriodoIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
+  const [periodoFim,setPeriodoFim]=useState(today());
   const ifoodBruto=parseMoney(form.ifood||0);
   const nfoodBruto=parseMoney(form["99food"]||0);
   const ifoodTaxaPct=parseFloat(form.ifoodTaxa)||0;
@@ -886,10 +889,33 @@ function Vendas({db,setDb,state}){
   const budgetCmv=parseFloat(db.config?.budgetCmv??30)||30;
   const setBudgetCmv=(v)=>setDb(d=>({...d,config:{...(d.config||{}),budgetCmv:parseFloat(v)||30}}));
 
-  // Budget do mês atual
-  const mes=today().slice(0,7);
-  const vendasMes=(db.vendas||[]).filter(v=>v.data?.startsWith(mes)).reduce((s,v)=>s+v.total,0);
-  const comprasMes=(db.compras||[]).filter(c=>c.data?.startsWith(mes)).reduce((s,c)=>s+parseMoney(c.valor),0);
+  // Período selecionado para budget acumulado
+  const getPeriodRange=():[string,string]=>{
+    const now=new Date();
+    if(periodoTipo==="semana"){
+      const dow=now.getDay()||7;
+      const mon=new Date(now);mon.setDate(now.getDate()-(dow-1));
+      const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+      return[mon.toISOString().slice(0,10),sun.toISOString().slice(0,10)];
+    }
+    if(periodoTipo==="trimestre"){
+      const q=Math.floor(now.getMonth()/3);
+      return[new Date(now.getFullYear(),q*3,1).toISOString().slice(0,10),today()];
+    }
+    if(periodoTipo==="personalizado")return[periodoIni,periodoFim];
+    // mes (default)
+    return[`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,today()];
+  };
+  const [pIni,pFim]=getPeriodRange();
+  const periodoLabel=(()=>{
+    if(periodoTipo==="semana")return`Semana (${fmtDate(pIni)} – ${fmtDate(pFim)})`;
+    if(periodoTipo==="trimestre"){const meses=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];const q=Math.floor(new Date().getMonth()/3);return`${q+1}º Trimestre (${meses[q*3]} – ${meses[q*3+2]})/${new Date().getFullYear()}`;}
+    if(periodoTipo==="personalizado")return`${fmtDate(pIni)} – ${fmtDate(pFim)}`;
+    const d=new Date();return`${d.toLocaleString("pt-BR",{month:"long"})}/${d.getFullYear()}`;
+  })();
+
+  const vendasMes=(db.vendas||[]).filter(v=>v.data>=pIni&&v.data<=pFim).reduce((s,v)=>s+v.total,0);
+  const comprasMes=(db.compras||[]).filter(c=>c.data>=pIni&&c.data<=pFim).reduce((s,c)=>s+parseMoney(c.valor),0);
   const budgetMes=vendasMes*(budgetCmv/100);
   const saldoMes=budgetMes-comprasMes;
 
@@ -907,19 +933,19 @@ function Vendas({db,setDb,state}){
   const budgetHoje=vendasHoje*(budgetCmv/100);
   const disponivelHoje=budgetHoje-comprasHoje;
 
-  // Budget combinado das duas empresas (mês atual)
+  // Budget combinado das duas empresas (período selecionado)
   const empresas=["CONFRARIA","SEAMA"];
-  const totalDual=(emp:string,key:"vendas"|"compras",tipo:"mes"|"vendas-dia"|"compras-dia"="mes")=>{
+  const totalDual=(emp:string,key:"vendas"|"compras",tipo:"periodo"|"vendas-dia"|"compras-dia"="periodo")=>{
     const d=state?.[emp]||{};
-    if(tipo==="mes"){
-      if(key==="vendas") return (d.vendas||[]).filter((v:any)=>v.data?.startsWith(mes)).reduce((s:number,v:any)=>s+(v.total||0),0);
-      return (d.compras||[]).filter((c:any)=>c.data?.startsWith(mes)).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+    if(tipo==="periodo"){
+      if(key==="vendas") return (d.vendas||[]).filter((v:any)=>v.data>=pIni&&v.data<=pFim).reduce((s:number,v:any)=>s+(v.total||0),0);
+      return (d.compras||[]).filter((c:any)=>c.data>=pIni&&c.data<=pFim).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
     }
     if(tipo==="vendas-dia") return (d.vendas||[]).filter((v:any)=>v.data===diaRef).reduce((s:number,v:any)=>s+(v.total||0),0);
     return (d.compras||[]).filter((c:any)=>c.data===diaSeguinte).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   };
-  const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas","mes"),0);
-  const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras","mes"),0);
+  const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas","periodo"),0);
+  const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras","periodo"),0);
   const budgetTotal=vendasTotal*(budgetCmv/100);
   const saldoTotal=budgetTotal-comprasTotal;
   // Dual: vendas do diaRef → budget p/ diaSeguinte
@@ -1062,24 +1088,40 @@ function Vendas({db,setDb,state}){
         {saldoDia<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:8,textAlign:"center"}}>⚠️ Compras excedem o budget do dia em {fmtMoney(-saldoDia)}</div>}
       </div>
 
-      {/* Mês */}
+      {/* Período selecionado */}
       <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px"}}>
-        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>📆 Acumulado do mês</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap" as const,gap:6,marginBottom:8}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase" as const,letterSpacing:.5}}>📆 Acumulado — {periodoLabel}</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
+            {(["semana","mes","trimestre","personalizado"] as const).map(t=>(
+              <button key={t} onClick={()=>setPeriodoTipo(t)}
+                style={{background:periodoTipo===t?"#7c8fff":"#1a1d2e",color:periodoTipo===t?"#fff":"#666",border:`1px solid ${periodoTipo===t?"#7c8fff":"#2a2d4a"}`,borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",fontWeight:periodoTipo===t?700:400}}>
+                {t==="semana"?"Semana":t==="mes"?"Mês":t==="trimestre"?"Trimestre":"Personalizado"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {periodoTipo==="personalizado"&&<div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
+          <span style={{fontSize:11,color:"#888"}}>De</span>
+          <input type="date" value={periodoIni} onChange={e=>setPeriodoIni(e.target.value)} style={{flex:1,background:"#0d1020",border:"1px solid #2a2d4a",borderRadius:6,color:"#e8eaf0",fontSize:11,padding:"4px 6px"}}/>
+          <span style={{fontSize:11,color:"#888"}}>até</span>
+          <input type="date" value={periodoFim} onChange={e=>setPeriodoFim(e.target.value)} style={{flex:1,background:"#0d1020",border:"1px solid #2a2d4a",borderRadius:6,color:"#e8eaf0",fontSize:11,padding:"4px 6px"}}/>
+        </div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas do mês</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas no período</div>
             <div style={{fontWeight:700,color:"#4ade80"}}>{fmtMoney(vendasMes)}</div>
           </div>
           <div style={{fontWeight:700,textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget mensal</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget ({budgetCmv}%)</div>
             <div style={{color:"#60a5fa"}}>{fmtMoney(budgetMes)}</div>
           </div>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras no mês</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras no período</div>
             <div style={{fontWeight:700,color:"#fbbf24"}}>{fmtMoney(comprasMes)}</div>
           </div>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo do mês</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo do período</div>
             <div style={{fontWeight:700,color:saldoMes>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoMes))}{saldoMes<0?" ⚠️":""}</div>
           </div>
         </div>
@@ -1096,7 +1138,7 @@ function Vendas({db,setDb,state}){
 
       {/* CONFRARIA + SEAMA combinado */}
       <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginTop:10,border:"1px solid #353860"}}>
-        <div style={{fontSize:11,color:"var(--acc)",fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>🏢 CONFRARIA + SEAMA — Mês atual</div>
+        <div style={{fontSize:11,color:"var(--acc)",fontWeight:700,marginBottom:8,textTransform:"uppercase" as const,letterSpacing:.5}}>🏢 CONFRARIA + SEAMA — {periodoLabel}</div>
         {empresas.map(emp=>{
           const vE=totalDual(emp,"vendas");
           const cE=totalDual(emp,"compras");
