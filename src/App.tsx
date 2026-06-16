@@ -2749,11 +2749,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
       const nome=form.nome.trim();
       const cat=form.cat||"outros";
+      const qtdNova=parseFloat(form.qtd)||1;
+      // Verificar duplicata na lista de pendentes (não comprados)
+      const existente=(db.listaCompras||[]).find((i:any)=>!i.comprado&&i.nome.trim().toLowerCase()===nome.toLowerCase());
+      if(existente){
+        const qtdExist=existente.quantidade||1;
+        const msg=`"${nome}" já está na lista (${qtdExist} ${existente.unidade||"un"}).\n\nDeseja somar a quantidade? (+${qtdNova} → total ${qtdExist+qtdNova} ${existente.unidade||"un"})`;
+        if(!confirm(msg))return;
+        setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova}:i)}));
+        setForm(EMPTY_FORM_LISTA);
+        return;
+      }
       setDb((d:any)=>{
         const prodExiste=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
         return{
           ...d,
-          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()}],
+          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()}],
           produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade}],
         };
       });
