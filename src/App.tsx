@@ -593,6 +593,8 @@ export default function App() {
 
   const isOp=login?.role==="op";
   const isAdmin=login?.role==="admin";
+  // Cor em tempo real do usuário logado (ignora sessão desatualizada)
+  const loginCorTexto=(()=>{if(!login?.label)return"#e8eaf0";const u=(state.CONFRARIA?.usuarios||[]).find((u:any)=>u.nome===login.label);return u?.corTexto||login?.corTexto||"#e8eaf0";})();
 
   const doLogin=(info:any)=>{
     sessionStorage.setItem("app_login",JSON.stringify(info));
@@ -667,7 +669,7 @@ export default function App() {
             ))}
           </div>}
           {isOp&&<div style={{marginTop:8,fontSize:11,color:"#5a6080",background:"var(--bg4)",borderRadius:8,padding:"6px 10px"}}>
-            👤 <span style={{color:login.corTexto||"#e8eaf0",fontWeight:700}}>{login.label}</span>
+            👤 <span style={{color:loginCorTexto,fontWeight:700}}>{login.label}</span>
           </div>}
         </div>
         <div style={{flex:1}}>
@@ -2622,6 +2624,14 @@ const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:""
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any}){
   // Cada empresa tem dados independentes — setBothDb removido
   const setBothDb=setDb;
+  // Cor em tempo real: busca no db.usuarios pelo nome do login (não depende da sessão)
+  const usuarioAtual=login?.label?(db.usuarios||[]).find((u:any)=>u.nome===login.label):null;
+  const corUsuarioAtual:string=usuarioAtual?.corTexto||login?.corTexto||"#e8eaf0";
+  const getCorPorNome=(nome:string):string=>{
+    if(!nome)return "#888";
+    const u=(db.usuarios||[]).find((u:any)=>u.nome===nome);
+    return u?.corTexto||"#888";
+  };
   const [form,setForm]=useState(EMPTY_FORM_LISTA);
   const [editId,setEditId]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
@@ -2668,7 +2678,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         const prodExiste=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
         return{
           ...d,
-          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",corTexto:login?.corTexto||"",criadoEm:new Date().toISOString()}],
+          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()}],
           produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade}],
         };
       });
@@ -3161,7 +3171,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                   📦 {estoqueRef} {item.unidade}
                 </span>}
               </div>
-              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:item.corTexto||"#888",fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
+              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column" as const,gap:3,flexShrink:0,alignItems:"center"}}>
