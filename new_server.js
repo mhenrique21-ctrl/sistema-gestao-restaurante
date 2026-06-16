@@ -176,15 +176,98 @@ function parseNFeXml(xml) {
     return { nome, categoria: categorize(nome), unidade: normalizeUnit(uCom), quantidade: qtd, valorUnitario: vUnit, valorTotal: vTotal };
   }).filter(i => i.nome);
   const total = parseFloat(g('vNF')) || itens.reduce((s, i) => s + i.valorTotal, 0);
+  // chNFe: from infNFe Id attribute (NFe + 44 digits) or explicit tag
+  const chNFeAttr = (xml.match(/Id="NFe(\d{44})"/) || [])[1] || '';
+  const chNFe = chNFeAttr || g('chNFe') || '';
   // nNF: direct tag first, fallback to chNFe positions 25-34
   let nNF = g('nNF') || '';
-  if (!nNF) {
-    const chNFe = g('chNFe') || '';
-    if (chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
-  }
+  if (!nNF && chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
   // date: dEmi (v3) or dhEmi (v4)
   const data = (g('dEmi') || g('dhEmi') || '').substring(0, 10);
-  return { fornecedor, itens, totalCompra: total, data, nNF };
+  return { fornecedor, itens, totalCompra: total, data, nNF, chNFe, rawXml: xml };
+}
+
+function buildChaveEnvelope(cnpj, uf, chNFe) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
+  <soap12:Header>
+    <nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+      <cUF>${uf}</cUF>
+      <versaoDados>1.01</versaoDados>
+    </nfeCabecMsg>
+  </soap12:Header>
+  <soap12:Body>
+    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+      <nfeDadosMsg>
+        <distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+          <tpAmb>1</tpAmb>
+          <cUFAutor>${uf}</cUFAutor>
+          <CNPJ>${cnpj}</CNPJ>
+          <consChNFe>
+            <chNFe>${chNFe}</chNFe>
+          </consChNFe>
+        </distDFeInt>
+      </nfeDadosMsg>
+    </nfeDistDFeInteresse>
+  </soap12:Body>
+</soap12:Envelope>`;
+}
+
+function sefazFetchByChave(emp, chNFe) {
+  return new Promise((resolve, reject) => {
+    const pfxPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
+    const keyPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}_key.pem`);
+    const certPath = path.join(CERTS_DIR, `${emp.toLowerCase()}_cert.pem`);
+    const hasPem = fs.existsSync(keyPath) && fs.existsSync(certPath);
+    const hasPfx = fs.existsSync(pfxPath);
+    if (!hasPem && !hasPfx) return reject(new Error(`Certificado não encontrado para ${emp}`));
+    const passphrase = process.env[`CERT_${emp}_PASS`] || '';
+    const cnpj       = (process.env[`CNPJ_${emp}`] || '').replace(/\D/g, '');
+    const uf         = process.env[`UF_${emp}`] || '35';
+    if (!cnpj) return reject(new Error(`CNPJ_${emp} não configurado`));
+    const soapBody = buildChaveEnvelope(cnpj, uf, chNFe);
+    const bodyBuf  = Buffer.from(soapBody, 'utf-8');
+    const tlsOpts  = hasPem
+      ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
+      : { pfx: fs.readFileSync(pfxPath), passphrase };
+    const options = {
+      hostname: 'www1.nfe.fazenda.gov.br',
+      path: '/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'Content-Length': bodyBuf.length, 'SOAPAction': '' },
+      ...tlsOpts, rejectUnauthorized: true, timeout: 30000,
+    };
+    const apiReq = https.request(options, apiRes => {
+      const chunks = [];
+      apiRes.on('data', c => chunks.push(c));
+      apiRes.on('end', () => {
+        try {
+          const xml = Buffer.concat(chunks).toString('utf-8');
+          const cStat = getTag(xml, 'cStat');
+          const xMotivo = getTag(xml, 'xMotivo');
+          if (cStat && cStat !== '138') return reject(new Error(`SEFAZ cStat ${cStat}: ${xMotivo}`));
+          const docZipRe = /<docZip[^>]*>([\s\S]*?)<\/docZip>/g;
+          let match;
+          while ((match = docZipRe.exec(xml)) !== null) {
+            try {
+              const decompressed = zlib.gunzipSync(Buffer.from(match[1].trim(), 'base64')).toString('utf-8');
+              if (decompressed.includes('<infNFe') || decompressed.includes('<NFe')) {
+                const parsed = parseNFeXml(decompressed);
+                return resolve({ ...parsed, tipoDoc: 'completo' });
+              }
+            } catch {}
+          }
+          reject(new Error('NF-e completa não encontrada na resposta SEFAZ'));
+        } catch (e) { reject(new Error('Erro ao parsear: ' + e.message)); }
+      });
+    });
+    apiReq.on('error', err => reject(new Error('Conexão SEFAZ: ' + err.message)));
+    apiReq.on('timeout', () => { apiReq.destroy(); reject(new Error('Timeout SEFAZ')); });
+    apiReq.write(bodyBuf);
+    apiReq.end();
+  });
 }
 
 function buildSoapEnvelope(cnpj, uf, ultNSU) {
@@ -305,12 +388,12 @@ function sefazSync(emp) {
               const decompressed = zlib.gunzipSync(compressed).toString('utf-8');
               if (decompressed.includes('<infNFe') || decompressed.includes('<NFe')) {
                 const parsed = parseNFeXml(decompressed);
-                if (parsed.itens.length > 0) nfes.push({ ...parsed, nsu });
+                if (parsed.itens.length > 0) nfes.push({ ...parsed, nsu, tipoDoc: 'completo' });
               } else if (decompressed.includes('<resNFe')) {
-                // Summary document — no item detail, create a single-line entry
+                // Summary document — no item detail; chNFe stored so client can fetch full XML on demand
                 const chNFe  = getTag(decompressed, 'chNFe') || '';
                 const xNome  = getTag(decompressed, 'xNome') || 'Fornecedor';
-                const cnpj   = getTag(decompressed, 'CNPJ')  || '';
+                const cnpjDoc = getTag(decompressed, 'CNPJ') || '';
                 const vNF    = parseFloat(getTag(decompressed, 'vNF')) || 0;
                 const rawDt  = getTag(decompressed, 'dhEmi') || getTag(decompressed, 'dEmi') || '';
                 const data   = rawDt.substring(0, 10);
@@ -318,12 +401,10 @@ function sefazSync(emp) {
                 if (chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
                 if (vNF > 0) {
                   nfes.push({
-                    fornecedor: { nome: xNome, cnpj, endereco: '' },
-                    itens: [{ nome: `NF-e ${nNF||chNFe.slice(-9)} – ${xNome}`, categoria: 'insumos', unidade: 'un', quantidade: 1, valorUnitario: vNF, valorTotal: vNF }],
+                    fornecedor: { nome: xNome, cnpj: cnpjDoc, endereco: '' },
+                    itens: [],
                     totalCompra: vNF,
-                    data,
-                    nNF,
-                    nsu,
+                    data, nNF, chNFe, nsu, tipoDoc: 'resumo',
                   });
                 }
               }
@@ -524,6 +605,28 @@ REGRAS OBRIGATÓRIAS:
         if (resetNsu) saveNsu(nsuKeySync, 0);
         else if (customNsu !== undefined && !isNaN(parseInt(customNsu))) saveNsu(nsuKeySync, parseInt(customNsu));
         const result = await sefazSync(empresa);
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // NF-e: buscar XML completo por chave de acesso
+  if (req.method === 'POST' && urlPath === '/api/nfe-fetch-chave') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { empresa, chNFe } = JSON.parse(body);
+        if (!['CONFRARIA', 'SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Empresa inválida' })); return; }
+        if (!chNFe || chNFe.length !== 44) { res.writeHead(400); res.end(JSON.stringify({ error: 'chNFe inválida' })); return; }
+        const result = await sefazFetchByChave(empresa, chNFe);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end(JSON.stringify(result));

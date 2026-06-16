@@ -1235,10 +1235,13 @@ function parseNFe(xmlString) {
   const total=parseFloat(g("vNF"))||itens.reduce((s,i)=>s+i.valorTotal,0);
   // dEmi = v3, dhEmi = v4 (datetime, take first 10 chars)
   const data=(g("dEmi")||g("dhEmi")||today()).substring(0,10);
-  // nNF: direct tag or extract from chNFe key (positions 25-34 of 44-digit key)
+  // chNFe: from infNFe Id attribute (NFe + 44 digits) or explicit tag
+  const chNFeAttr=(xmlString.match(/Id="NFe(\d{44})"/)??[])[1]||"";
+  const chNFe=chNFeAttr||g("chNFe")||"";
+  // nNF: direct tag or extract from chNFe positions 25-34
   let nNF=g("nNF")||"";
-  if(!nNF){const ch=g("chNFe");if(ch&&ch.length===44)nNF=String(parseInt(ch.substring(25,34),10)||"");}
-  return{fornecedor,itens,totalCompra:total,data,nNF};
+  if(!nNF&&chNFe.length===44)nNF=String(parseInt(chNFe.substring(25,34),10)||"");
+  return{fornecedor,itens,totalCompra:total,data,nNF,chNFe};
 }
 
 // ===================== HELPERS =====================
@@ -1646,6 +1649,7 @@ REGRAS:
       const desc=`NF-e ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
       const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
         nNF:nfeResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
+        chNFe:nfeResult.chNFe||"",
         ...(nfeXml?{xmlNFe:nfeXml}:{}),criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
@@ -1660,6 +1664,7 @@ REGRAS:
   const [sefazList,setSefazList]=useState<any[]>([]);
   const [sefazLoading,setSefazLoading]=useState(false);
   const [sefazError,setSefazError]=useState("");
+  const [fetchingChave,setFetchingChave]=useState<string|null>(null);
   const [sefazLastSync,setSefazLastSync]=useState(()=>localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
   const [sefazFormaPag,setSefazFormaPag]=useState("boleto");
   const [sefazVenc,setSefazVenc]=useState(today());
@@ -1752,6 +1757,23 @@ REGRAS:
     fetch("/api/nfe-cache/remove",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,nsus})}).catch(()=>{});
   };
 
+  const copiarChave=(chave:string)=>{
+    if(navigator.clipboard){navigator.clipboard.writeText(chave).then(()=>alert("✅ Chave de acesso copiada!")).catch(()=>{});}
+    else{const ta=document.createElement("textarea");ta.value=chave;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave de acesso copiada!");}
+  };
+
+  const buscarItensNFe=async(nfe:any,i:number)=>{
+    if(!nfe.chNFe||nfe.chNFe.length!==44){alert("Chave de acesso não disponível para esta NF-e.");return;}
+    setFetchingChave(nfe.chNFe);
+    try{
+      const res=await fetch("/api/nfe-fetch-chave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
+      const data=await res.json();
+      if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
+      setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
+    }catch(e:any){alert("❌ Erro ao buscar NF-e completa: "+e.message);}
+    finally{setFetchingChave(null);}
+  };
+
   const importarNFeSefaz=(nfe:any,all=false)=>{
     const forn=nfe.fornecedor;
     const dataSefaz=nfe.data||today();
@@ -1791,8 +1813,11 @@ REGRAS:
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
       const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
-      const contaFin={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
-        nNF:nfe.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",criadoEm:new Date().toISOString()};
+      const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
+        nNF:nfe.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
+        chNFe:nfe.chNFe||"",
+        ...(nfe.rawXml?{xmlNFe:nfe.rawXml}:{}),
+        criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
@@ -2156,10 +2181,25 @@ REGRAS:
             <div className="muted" style={{fontSize:12,marginBottom:6}}>
               {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
               {fmtDate(nfe.data)} · {(nfe.itens||[]).length} produto(s)
+              {nfe.tipoDoc==="resumo"&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ resumo</span>}
             </div>
-            <div style={{display:"flex",gap:6}}>
+            {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>
+              <span style={{fontSize:9,fontFamily:"monospace",color:"#666",flex:1,wordBreak:"break-all" as const}}>{nfe.chNFe}</span>
+              <button onClick={()=>copiarChave(nfe.chNFe)} style={{background:"none",border:"1px solid #2a2a5a",borderRadius:5,color:"#7c8fff",padding:"2px 7px",fontSize:10,cursor:"pointer",whiteSpace:"nowrap" as const}}>📋</button>
+            </div>}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+              {nfe.tipoDoc==="resumo"&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)}
+                disabled={fetchingChave===nfe.chNFe}
+                style={{background:"#1a2235",color:"#7c8fff",border:"1px solid #2a3a6a",padding:"8px 12px",fontSize:12,flex:1}}>
+                {fetchingChave===nfe.chNFe?"⏳ Buscando...":"🔍 Buscar itens"}
+              </button>}
+              {nfe.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfe.rawXml,nfe.nNF||"",nfe.fornecedor?.nome||"")}
+                style={{background:"#1a2030",color:"#4ade80",border:"1px solid #1a3a20",padding:"8px 12px",fontSize:12}}>
+                ⬇️ XML
+              </button>}
               <button className="btn" onClick={()=>importarNFeSefaz(nfe)}
-                style={{background:"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13,flex:1}}>
+                disabled={nfe.tipoDoc==="resumo"&&!(nfe.itens||[]).length}
+                style={{background:nfe.tipoDoc==="resumo"&&!(nfe.itens||[]).length?"#1a1a2a":"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13,flex:1,opacity:nfe.tipoDoc==="resumo"&&!(nfe.itens||[]).length?0.5:1}}>
                 📥 Importar
               </button>
               <button className="btn" onClick={()=>{
@@ -3902,6 +3942,10 @@ function Contas({db,setDb}){
             <button onClick={()=>setVerConta(null)} style={{background:"none",border:"none",color:"#888",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
           </div>
           <div className="muted" style={{fontSize:12,marginBottom:8}}>{fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div>
+          {verConta.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#0a0d18",borderRadius:7,padding:"5px 8px",marginBottom:8}}>
+            <span style={{fontSize:9,fontFamily:"monospace",color:"#555",flex:1,wordBreak:"break-all" as const,lineHeight:1.4}}>{verConta.chNFe}</span>
+            <button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"none",border:"1px solid #1e2235",borderRadius:5,color:"#666",padding:"2px 7px",fontSize:10,cursor:"pointer",whiteSpace:"nowrap" as const}}>📋 Copiar chave</button>
+          </div>}
           {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"#1a2040",color:"#60a5fa",border:"1px solid #2a3a6a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:8,width:"100%"}}>
             <span>📎</span><span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{verConta.anexo.nome}</span><span style={{fontSize:11,color:"#888"}}>abrir</span>
           </button>}
@@ -3911,6 +3955,9 @@ function Contas({db,setDb}){
             </button>}
             {verConta.xmlNFe&&<button onClick={()=>baixarXmlNFe(verConta.xmlNFe,verConta.nNF||"",verConta.fornecedorNome||"")} style={{background:"#1a1a2e",color:"#7c8fff",border:"1px solid #2a2a5a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               📥 Baixar XML
+            </button>}
+            {verConta.chNFe&&<button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"#0d1020",color:"#888",border:"1px solid #1e2235",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              📋 Copiar chave
             </button>}
           </div>
           {itens.length?<>
