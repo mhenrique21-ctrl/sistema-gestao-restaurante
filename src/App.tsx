@@ -2909,11 +2909,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   };
   const saveProd=()=>{
     const n=prodForm.nome.trim();if(!n)return;
+    const dup=(db.produtosLista||[]).find((p:any)=>p.nome.trim().toLowerCase()===n.toLowerCase()&&p.id!==editProdId);
+    if(dup)return alert(`Produto "${dup.nome}" já cadastrado.`);
     if(editProdId){
       setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===editProdId?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade}:p)}));
       setEditProdId(null);
     }else{
-      if((db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===n.toLowerCase()))return alert("Produto já cadastrado.");
       setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade}]}));
     }
     setProdForm({nome:"",cat:"",unidade:"un"});
