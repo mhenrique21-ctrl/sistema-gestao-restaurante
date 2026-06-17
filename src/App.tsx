@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
@@ -455,6 +455,15 @@ const migrateDb=(m:any)=>{
       });
       m[e].produtosDedupV1=true;
     }
+    if(!m[e].produtosDedupV2){
+      const seen2=new Set<string>();
+      m[e].produtosLista=(m[e].produtosLista||[]).filter((p:any)=>{
+        const k=p.nome.trim().toLowerCase();
+        if(seen2.has(k))return false;
+        seen2.add(k);return true;
+      });
+      m[e].produtosDedupV2=true;
+    }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].usuarios)m[e].usuarios=[];
     if(!m[e].usuariosSeedDone){
@@ -509,6 +518,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const sFiltered=sArr.filter((i:any)=>!serverDeleted.has(i.id));
       return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!serverDeleted.has(i.id))];
     };
+    const byIdDedup=(sArr:any[],pArr:any[])=>{
+      const merged=byId(sArr,pArr);
+      const seen=new Set<string>();
+      return merged.filter((p:any)=>{const k=(p.nome||"").trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
+    };
     next[emp]={
       ...s,
       vendas:       byId(s.vendas||[],        p.vendas||[]),
@@ -517,7 +531,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       fornecedores: byId(s.fornecedores||[],   p.fornecedores||[]),
       funcionarios: byId(s.funcionarios||[],   p.funcionarios||[]),
       listaCompras: byIdLista(s.listaCompras||[],p.listaCompras||[]),
-      produtosLista:byId(s.produtosLista||[],  p.produtosLista||[]),
+      produtosLista:byIdDedup(s.produtosLista||[],  p.produtosLista||[]),
     };
   });
   return migrateDb(next);
