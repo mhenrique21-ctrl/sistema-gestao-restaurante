@@ -559,6 +559,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       listaCategorias:mergeArr(s.listaCategorias||[], p.listaCategorias||[]),
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
       listaCatOrdem: (p.listaCatOrdem||[]).length>=(s.listaCatOrdem||[]).length?(p.listaCatOrdem):(s.listaCatOrdem||[]),
+      ruaCatMap:{...(s.ruaCatMap||{}),...(p.ruaCatMap||{})},
     };
   });
   // Unificar listaRuas entre empresas (compartilhada)
@@ -2828,7 +2829,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         setForm(EMPTY_FORM_LISTA);
         return;
       }
-      const ruaVal=form.rua||getRuaProd(nome);
+      const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
       setDb((d:any)=>{
         const prodExiste=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
         return{
@@ -2976,7 +2977,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.toLowerCase())).slice(0,8)
     :[];
   const selectSugg=(p:any)=>{
-    setForm(f=>({...f,nome:p.nome,cat:p.cat||f.cat,unidade:p.unidade||f.unidade,rua:p.rua||f.rua}));
+    setForm(f=>({...f,nome:p.nome,cat:p.cat||f.cat,unidade:p.unidade||f.unidade,rua:p.rua||getRuaDaCat(p.cat||"")||f.rua}));
     setShowSugg(false);
   };
   const saveProd=()=>{
@@ -3006,6 +3007,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 
   // === RUAS ===
   const ruas:string[]=db.listaRuas||[];
+  const ruaCatMap:Record<string,string>=db.ruaCatMap||{};
+  const getRuaDaCat=(cat:string):string=>ruaCatMap[cat]||"";
+  const setRuaCat=(cat:string,rua:string)=>{
+    const apply=(d:any)=>{
+      const m={...(d.ruaCatMap||{})};
+      if(rua)m[cat]=rua;else delete m[cat];
+      return{...d,ruaCatMap:m};
+    };
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=apply(nx[e]);});return nx;});
+    else setDb(apply);
+  };
   const addRua=()=>{
     const n=novaRua.trim();if(!n)return;
     if(ruas.some(r=>r.toLowerCase()===n.toLowerCase()))return alert("Rua já existe.");
@@ -3016,11 +3028,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   };
   const delRua=(r:string)=>{
     if(!confirm(`Excluir rua "${r}"?\nProdutos dessa rua ficarão sem rua.`))return;
-    const applyDel=(d:any)=>({...d,
-      listaRuas:(d.listaRuas||[]).filter((x:string)=>x!==r),
-      listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===r?{...i,rua:""}:i),
-      produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===r?{...p,rua:""}:p),
-    });
+    const applyDel=(d:any)=>{
+      const m={...(d.ruaCatMap||{})};
+      Object.keys(m).forEach(k=>{if(m[k]===r)delete m[k];});
+      return{...d,
+        listaRuas:(d.listaRuas||[]).filter((x:string)=>x!==r),
+        listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===r?{...i,rua:""}:i),
+        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===r?{...p,rua:""}:p),
+        ruaCatMap:m,
+      };
+    };
     if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyDel(nx[e]);});return nx;});
     else setDb(applyDel);
   };
@@ -3029,11 +3046,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!novo){setEditRua(null);return;}
     if(novo===old){setEditRua(null);return;}
     if(ruas.some(r=>r.toLowerCase()===novo.toLowerCase()&&r!==old)){alert("Rua já existe.");return;}
-    const applyRen=(d:any)=>({...d,
-      listaRuas:(d.listaRuas||[]).map((x:string)=>x===old?novo:x),
-      listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===old?{...i,rua:novo}:i),
-      produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===old?{...p,rua:novo}:p),
-    });
+    const applyRen=(d:any)=>{
+      const m={...(d.ruaCatMap||{})};
+      Object.keys(m).forEach(k=>{if(m[k]===old)m[k]=novo;});
+      return{...d,
+        listaRuas:(d.listaRuas||[]).map((x:string)=>x===old?novo:x),
+        listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===old?{...i,rua:novo}:i),
+        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===old?{...p,rua:novo}:p),
+        ruaCatMap:m,
+      };
+    };
     if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyRen(nx[e]);});return nx;});
     else setDb(applyRen);
     setEditRua(null);
@@ -3049,9 +3071,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyMov(nx[e]);});return nx;});
     else setDb(applyMov);
   };
-  const getRuaProd=(nome:string):string=>{
+  const getRuaProd=(nome:string,cat?:string):string=>{
     const p=(db.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
-    return p?.rua||"";
+    if(p?.rua)return p.rua;
+    const c=cat||p?.cat||"";
+    return c?getRuaDaCat(c):"";
   };
 
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
@@ -3063,7 +3087,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const catsExtra=Object.keys(porCat).filter(c=>!catsSorted.includes(c));
 
   const porRua:Record<string,any[]>={};
-  listaBuscaPend.forEach((i:any)=>{const r=i.rua||getRuaProd(i.nome)||"Sem rua";if(!porRua[r])porRua[r]=[];porRua[r].push(i);});
+  listaBuscaPend.forEach((i:any)=>{const r=i.rua||getRuaProd(i.nome,i.categoria)||getRuaDaCat(i.categoria||"outros")||"Sem rua";if(!porRua[r])porRua[r]=[];porRua[r].push(i);});
   const ruasSorted=[...ruas.filter(r=>porRua[r]),...Object.keys(porRua).filter(r=>!ruas.includes(r))];
 
   const estoquePreview=form.nome.length>=2?getMpEstoqueByName(form.nome):null;
@@ -3253,36 +3277,53 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     {/* Gerenciar ruas (admin only) */}
     {isAdmin&&showRuaMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #065f46"}}>
       <div className="section-title" style={{color:"#34d399"}}>🛤️ Ruas — Ordem de compra</div>
-      <div style={{fontSize:11,color:"#888",marginBottom:10}}>Defina as ruas do mercado para organizar a lista pela ordem de compra. Cada produto pode ter uma rua associada.</div>
+      <div style={{fontSize:11,color:"#888",marginBottom:10}}>Defina as ruas do mercado e associe categorias. Produtos dessas categorias herdarão a rua automaticamente.</div>
       <div style={{marginBottom:10}}>
         {!ruas.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhuma rua cadastrada</div>}
-        {ruas.map((r,idx)=>(
-          <div key={r} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
-            <span style={{fontSize:14,color:"#34d399",fontWeight:800,minWidth:22,textAlign:"center"}}>{idx+1}</span>
-            {editRua?.name===r
-              ? <>
-                  <input autoFocus value={editRua.val}
-                    onChange={e=>setEditRua(er=>er?{...er,val:e.target.value}:er)}
-                    onKeyDown={e=>{if(e.key==="Enter")renameRua(r,editRua.val);if(e.key==="Escape")setEditRua(null);}}
-                    className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
-                  <button onClick={()=>renameRua(r,editRua.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
-                  <button onClick={()=>setEditRua(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
-                </>
-              : <>
-                  <span style={{flex:1,fontSize:13,fontWeight:600}}>{r}</span>
-                  <button onClick={()=>setEditRua({name:r,val:r})} title="Renomear"
-                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
-                  <div style={{display:"flex",gap:2}}>
-                    <button onClick={()=>moverRua(r,-1)} disabled={idx===0}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#34d399",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
-                    <button onClick={()=>moverRua(r,1)} disabled={idx===ruas.length-1}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"#333":"#34d399",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
-                  </div>
-                  <button onClick={()=>delRua(r)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
-                </>
-            }
-          </div>
-        ))}
+        {ruas.map((r,idx)=>{
+          const catsNaRua=cats.filter(c=>ruaCatMap[c]===r);
+          const catsDisponiveis=cats.filter(c=>!ruaCatMap[c]||ruaCatMap[c]===r);
+          return <div key={r} style={{marginBottom:6,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px"}}>
+              <span style={{fontSize:14,color:"#34d399",fontWeight:800,minWidth:22,textAlign:"center"}}>{idx+1}</span>
+              {editRua?.name===r
+                ? <>
+                    <input autoFocus value={editRua.val}
+                      onChange={e=>setEditRua(er=>er?{...er,val:e.target.value}:er)}
+                      onKeyDown={e=>{if(e.key==="Enter")renameRua(r,editRua.val);if(e.key==="Escape")setEditRua(null);}}
+                      className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
+                    <button onClick={()=>renameRua(r,editRua.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                    <button onClick={()=>setEditRua(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
+                  </>
+                : <>
+                    <span style={{flex:1,fontSize:13,fontWeight:600}}>{r}</span>
+                    <button onClick={()=>setEditRua({name:r,val:r})} title="Renomear"
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                    <div style={{display:"flex",gap:2}}>
+                      <button onClick={()=>moverRua(r,-1)} disabled={idx===0}
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#34d399",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                      <button onClick={()=>moverRua(r,1)} disabled={idx===ruas.length-1}
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"#333":"#34d399",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                    </div>
+                    <button onClick={()=>delRua(r)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                  </>
+              }
+            </div>
+            {/* Categorias associadas a esta rua */}
+            <div style={{padding:"2px 8px 6px",display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center"}}>
+              {catsNaRua.map(c=>(
+                <span key={c} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#34d39918",color:"#34d399",border:"1px solid #34d39944",borderRadius:12,padding:"2px 8px"}}>
+                  {catIcon(c)} {c}
+                  <button onClick={()=>setRuaCat(c,"")} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                </span>
+              ))}
+              <select onChange={e=>{if(e.target.value)setRuaCat(e.target.value,r);e.target.value="";}} style={{fontSize:10,background:"var(--bg3)",color:"#888",border:"1px solid var(--border2)",borderRadius:12,padding:"2px 6px",cursor:"pointer"}}>
+                <option value="">+ categoria</option>
+                {catsDisponiveis.filter(c=>!catsNaRua.includes(c)).map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+              </select>
+            </div>
+          </div>;
+        })}
       </div>
       <div style={{display:"flex",gap:6}}>
         <input placeholder="Nova rua..." value={novaRua} onChange={e=>setNovaRua(e.target.value)}
@@ -3301,7 +3342,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
           onKeyDown={e=>{if(e.key==="Enter")saveProd();}} className="inp" style={{flex:"2 1 120px",marginBottom:0}}/>
-        <select value={prodForm.cat} onChange={e=>setProdForm(f=>({...f,cat:e.target.value}))} className="inp" style={{flex:"1 1 90px",marginBottom:0}}>
+        <select value={prodForm.cat} onChange={e=>{const c=e.target.value;setProdForm(f=>({...f,cat:c,rua:f.rua||getRuaDaCat(c)}));}} className="inp" style={{flex:"1 1 90px",marginBottom:0}}>
           <option value="">Categoria</option>
           {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
         </select>
@@ -3387,7 +3428,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       {isAdmin&&<div style={{display:"flex",gap:8,marginBottom:10}}>
         <div style={{flex:1}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Categoria</div>
-          <select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0}}>
+          <select value={form.cat} onChange={e=>{const c=e.target.value;setF("cat",c);if(!form.rua){const r=getRuaDaCat(c);if(r)setF("rua",r);}}} className="inp" style={{marginBottom:0}}>
             <option value="">Sem categoria</option>
             {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
           </select>
