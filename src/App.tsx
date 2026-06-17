@@ -561,6 +561,14 @@ const mergeFromServer=(prev:any,updates:any)=>{
       listaCatOrdem: (p.listaCatOrdem||[]).length>=(s.listaCatOrdem||[]).length?(p.listaCatOrdem):(s.listaCatOrdem||[]),
     };
   });
+  // Unificar listaRuas entre empresas (compartilhada)
+  const allEmps=Object.keys(next).filter(e=>next[e]&&typeof next[e]==="object"&&"listaCompras" in next[e]);
+  if(allEmps.length>1){
+    const seen=new Set<string>();
+    const unified:string[]=[];
+    allEmps.forEach(e=>(next[e].listaRuas||[]).forEach((r:string)=>{if(!seen.has(r)){seen.add(r);unified.push(r);}}));
+    allEmps.forEach(e=>{next[e].listaRuas=unified;});
+  }
   return migrateDb(next);
 };
 
