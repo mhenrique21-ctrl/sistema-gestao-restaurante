@@ -2895,8 +2895,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     setBothDb((d:any)=>({...d,listaCategorias:[...(d.listaCategorias||[]),n]}));setNovaCat("");
   };
   const delCat=(c:string)=>{
-    if(!confirm(`Excluir categoria "${c}"?`))return;
-    setBothDb((d:any)=>({...d,listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c),listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c)}));
+    if(c==="outros"){alert("A categoria \"outros\" não pode ser excluída.");return;}
+    const itensNaCat=(db.listaCompras||[]).filter((i:any)=>(i.categoria||"outros")===c).length;
+    const msg=itensNaCat?`Excluir categoria "${c}"?\n\n${itensNaCat} produto(s) serão movidos para "outros".`:`Excluir categoria "${c}"?`;
+    if(!confirm(msg))return;
+    setBothDb((d:any)=>({...d,
+      listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c),
+      listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c),
+      listaCompras:(d.listaCompras||[]).map((i:any)=>(i.categoria||"outros")===c?{...i,categoria:"outros"}:i),
+      produtosLista:(d.produtosLista||[]).map((p:any)=>(p.cat||"")===c?{...p,cat:"outros"}:p),
+    }));
   };
   const renameCat=(old:string,novo:string)=>{
     novo=novo.trim().toLowerCase();
@@ -3124,7 +3132,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                     <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
                       style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#a78bfa",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                   </div>
-                  {!CATS_DEFAULT.includes(c)&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
+                  {c!=="outros"&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
                 </>
             }
           </div>
