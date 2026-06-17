@@ -2750,7 +2750,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 
   const catsPers:string[]=db.listaCategorias||[];
   const catOrdem:string[]=db.listaCatOrdem||[];
-  const allCats=[...CATS_DEFAULT,...catsPers.filter((c:string)=>!CATS_DEFAULT.includes(c))];
+  const catsDel:string[]=db.listaCatDeleted||[];
+  const allCats=[...CATS_DEFAULT,...catsPers.filter((c:string)=>!CATS_DEFAULT.includes(c))].filter(c=>!catsDel.includes(c));
   const cats=catOrdem.length>0?[...catOrdem.filter(c=>allCats.includes(c)),...allCats.filter(c=>!catOrdem.includes(c))]:allCats;
 
   const lista:any[]=db.listaCompras||[];
@@ -2892,19 +2893,28 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const addCat=()=>{
     const n=novaCat.trim().toLowerCase();if(!n)return;
     if(allCats.includes(n))return alert("Categoria já existe.");
-    setBothDb((d:any)=>({...d,listaCategorias:[...(d.listaCategorias||[]),n]}));setNovaCat("");
+    const applyAdd=(d:any)=>({...d,
+      listaCategorias:[...new Set([...(d.listaCategorias||[]),n])],
+      listaCatDeleted:(d.listaCatDeleted||[]).filter((x:string)=>x!==n),
+    });
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyAdd(nx[e]);});return nx;});
+    else setDb(applyAdd);
+    setNovaCat("");
   };
   const delCat=(c:string)=>{
     if(c==="outros"){alert("A categoria \"outros\" não pode ser excluída.");return;}
     const itensNaCat=(db.listaCompras||[]).filter((i:any)=>(i.categoria||"outros")===c).length;
     const msg=itensNaCat?`Excluir categoria "${c}"?\n\n${itensNaCat} produto(s) serão movidos para "outros".`:`Excluir categoria "${c}"?`;
     if(!confirm(msg))return;
-    setBothDb((d:any)=>({...d,
+    const applyDel=(d:any)=>({...d,
       listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c),
       listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c),
+      listaCatDeleted:[...new Set([...(d.listaCatDeleted||[]),c])],
       listaCompras:(d.listaCompras||[]).map((i:any)=>(i.categoria||"outros")===c?{...i,categoria:"outros"}:i),
       produtosLista:(d.produtosLista||[]).map((p:any)=>(p.cat||"")===c?{...p,cat:"outros"}:p),
-    }));
+    });
+    if(setState) setState((prev:any)=>{const n={...prev};Object.keys(n).forEach(e=>{if(n[e]&&typeof n[e]==="object"&&"listaCompras" in n[e])n[e]=applyDel(n[e]);});return n;});
+    else setDb(applyDel);
   };
   const renameCat=(old:string,novo:string)=>{
     novo=novo.trim().toLowerCase();
