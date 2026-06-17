@@ -3310,7 +3310,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
               }
             </div>
             {/* Categorias associadas a esta rua */}
-            <div style={{padding:"2px 8px 6px",display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center"}}>
+            <div style={{padding:"2px 8px 4px",display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center"}}>
+              <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Categorias:</span>
               {catsNaRua.map(c=>(
                 <span key={c} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#34d39918",color:"#34d399",border:"1px solid #34d39944",borderRadius:12,padding:"2px 8px"}}>
                   {catIcon(c)} {c}
@@ -3322,6 +3323,25 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                 {catsDisponiveis.filter(c=>!catsNaRua.includes(c)).map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
               </select>
             </div>
+            {/* Produtos associados a esta rua */}
+            {(()=>{
+              const prodsNaRua=(db.produtosLista||[]).filter((p:any)=>p.rua===r).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+              const prodsDisp=(db.produtosLista||[]).filter((p:any)=>!p.rua).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+              return <div style={{padding:"0 8px 6px",display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center"}}>
+                <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Produtos:</span>
+                {prodsNaRua.slice(0,20).map((p:any)=>(
+                  <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#7c8fff18",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:12,padding:"2px 8px"}}>
+                    {p.nome}
+                    <button onClick={()=>setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>pp.id===p.id?{...pp,rua:""}:pp)}))} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                  </span>
+                ))}
+                {prodsNaRua.length>20&&<span style={{fontSize:10,color:"#888"}}>+{prodsNaRua.length-20} mais</span>}
+                <select onChange={e=>{if(!e.target.value)return;setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===e.target.value?{...p,rua:r}:p)}));e.target.value="";}} style={{fontSize:10,background:"var(--bg3)",color:"#888",border:"1px solid var(--border2)",borderRadius:12,padding:"2px 6px",cursor:"pointer"}}>
+                  <option value="">+ produto</option>
+                  {prodsDisp.map((p:any)=><option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+              </div>;
+            })()}
           </div>;
         })}
       </div>
