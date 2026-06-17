@@ -3284,7 +3284,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         {ruas.map((r,idx)=>{
           const catsNaRua=cats.filter(c=>ruaCatMap[c]===r);
           const catsDisponiveis=cats.filter(c=>!ruaCatMap[c]||ruaCatMap[c]===r);
-          return <div key={r} style={{marginBottom:6,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)",overflow:"hidden"}}>
+          return <div key={r} style={{marginBottom:6,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px"}}>
               <span style={{fontSize:14,color:"#34d399",fontWeight:800,minWidth:22,textAlign:"center"}}>{idx+1}</span>
               {editRua?.name===r
