@@ -2773,6 +2773,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [novaRua,setNovaRua]=useState("");
   const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
   const [vistaRua,setVistaRua]=useState(false);
+  const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
   const undoTimerRef=useRef<any>(null);
 
@@ -3326,20 +3327,43 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
             {/* Produtos associados a esta rua */}
             {(()=>{
               const prodsNaRua=(db.produtosLista||[]).filter((p:any)=>p.rua===r).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-              const prodsDisp=(db.produtosLista||[]).filter((p:any)=>!p.rua).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-              return <div style={{padding:"0 8px 6px",display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center"}}>
-                <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Produtos:</span>
-                {prodsNaRua.slice(0,20).map((p:any)=>(
-                  <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#7c8fff18",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:12,padding:"2px 8px"}}>
-                    {p.nome}
-                    <button onClick={()=>setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>pp.id===p.id?{...pp,rua:""}:pp)}))} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
-                  </span>
-                ))}
-                {prodsNaRua.length>20&&<span style={{fontSize:10,color:"#888"}}>+{prodsNaRua.length-20} mais</span>}
-                <select onChange={e=>{if(!e.target.value)return;setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===e.target.value?{...p,rua:r}:p)}));e.target.value="";}} style={{fontSize:10,background:"var(--bg3)",color:"#888",border:"1px solid var(--border2)",borderRadius:12,padding:"2px 6px",cursor:"pointer"}}>
-                  <option value="">+ produto</option>
-                  {prodsDisp.map((p:any)=><option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
+              const isBuscando=buscaProdRua?.rua===r;
+              const q=(buscaProdRua?.query||"").toLowerCase();
+              const prodsDisp=isBuscando&&q.length>=1
+                ?(db.produtosLista||[]).filter((p:any)=>p.rua!==r&&(p.nome||"").toLowerCase().includes(q)).slice(0,10)
+                :[];
+              return <div style={{padding:"0 8px 6px"}}>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center",marginBottom:4}}>
+                  <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Produtos ({prodsNaRua.length}):</span>
+                  {prodsNaRua.slice(0,30).map((p:any)=>(
+                    <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#7c8fff18",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:12,padding:"2px 8px"}}>
+                      {p.nome}
+                      <button onClick={()=>setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>pp.id===p.id?{...pp,rua:""}:pp)}))} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                    </span>
+                  ))}
+                  {prodsNaRua.length>30&&<span style={{fontSize:10,color:"#888"}}>+{prodsNaRua.length-30} mais</span>}
+                </div>
+                <div style={{position:"relative"}}>
+                  <input placeholder="Buscar produto para adicionar..."
+                    value={isBuscando?buscaProdRua.query:""}
+                    onFocus={()=>setBuscaProdRua({rua:r,query:""})}
+                    onChange={e=>setBuscaProdRua({rua:r,query:e.target.value})}
+                    className="inp" style={{marginBottom:0,fontSize:11,padding:"5px 8px"}}/>
+                  {isBuscando&&prodsDisp.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:200,overflowY:"auto" as const}}>
+                    {prodsDisp.map((p:any)=>(
+                      <div key={p.id} onMouseDown={()=>{
+                        setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>pp.id===p.id?{...pp,rua:r}:pp)}));
+                        setBuscaProdRua({rua:r,query:""});
+                      }} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                        <span style={{fontSize:13}}>{catIcon(p.cat||"outros")}</span>
+                        <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
+                        {p.rua&&<span style={{fontSize:9,color:"#34d399"}}>🛤️ {p.rua}</span>}
+                        <span style={{fontSize:10,color:"#888"}}>{p.unidade}</span>
+                      </div>
+                    ))}
+                  </div>}
+                  {isBuscando&&q.length>=1&&!prodsDisp.length&&<div style={{fontSize:11,color:"#666",marginTop:4}}>Nenhum produto encontrado</div>}
+                </div>
               </div>;
             })()}
           </div>;
