@@ -2708,7 +2708,7 @@ const CAT_ICONS:Record<string,string>={
 };
 const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
-const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false};
+const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false,rua:""};
 
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any}){
   // Cada empresa tem dados independentes — setBothDb removido
@@ -2728,11 +2728,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [novaCat,setNovaCat]=useState("");
   const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
   const [showProdMgmt,setShowProdMgmt]=useState(false);
-  const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un"});
+  const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un",rua:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
   const [showSugg,setShowSugg]=useState(false);
   const [showHistorico,setShowHistorico]=useState(false);
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
+  const [showRuaMgmt,setShowRuaMgmt]=useState(false);
+  const [novaRua,setNovaRua]=useState("");
+  const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
+  const [vistaRua,setVistaRua]=useState(false);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
   const undoTimerRef=useRef<any>(null);
 
@@ -2772,7 +2776,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const saveItem=()=>{
     if(!form.nome.trim())return;
     if(editId){
-      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
+      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
       setEditId(null);
     }else{
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
@@ -2789,12 +2793,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         setForm(EMPTY_FORM_LISTA);
         return;
       }
+      const ruaVal=form.rua||getRuaProd(nome);
       setDb((d:any)=>{
         const prodExiste=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
         return{
           ...d,
-          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()}],
-          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade}],
+          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()}],
+          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal}],
         };
       });
     }
@@ -2802,7 +2807,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   };
 
   const startEdit=(item:any)=>{
-    setForm({nome:item.nome,qtd:String(item.quantidade),unidade:item.unidade||"un",cat:item.categoria||"",estoqueQtd:item.estoqueQtd||"",obs:item.obs||"",urgente:!!item.urgente});
+    setForm({nome:item.nome,qtd:String(item.quantidade),unidade:item.unidade||"un",cat:item.categoria||"",estoqueQtd:item.estoqueQtd||"",obs:item.obs||"",urgente:!!item.urgente,rua:item.rua||""});
     setEditId(item.id);
     setTimeout(()=>document.getElementById("lista-nome-inp")?.focus(),50);
   };
@@ -2936,7 +2941,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.toLowerCase())).slice(0,8)
     :[];
   const selectSugg=(p:any)=>{
-    setForm(f=>({...f,nome:p.nome,cat:p.cat||f.cat,unidade:p.unidade||f.unidade}));
+    setForm(f=>({...f,nome:p.nome,cat:p.cat||f.cat,unidade:p.unidade||f.unidade,rua:p.rua||f.rua}));
     setShowSugg(false);
   };
   const saveProd=()=>{
@@ -2944,14 +2949,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     const dup=(db.produtosLista||[]).find((p:any)=>p.nome.trim().toLowerCase()===n.toLowerCase()&&p.id!==editProdId);
     if(dup)return alert(`Produto "${dup.nome}" já cadastrado.`);
     if(editProdId){
-      setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===editProdId?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade}:p)}));
+      setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===editProdId?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}:p)}));
       setEditProdId(null);
     }else{
-      setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade}]}));
+      setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}]}));
     }
-    setProdForm({nome:"",cat:"",unidade:"un"});
+    setProdForm({nome:"",cat:"",unidade:"un",rua:""});
   };
-  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"});};
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un",rua:p.rua||""});};
   const delProd=(id:string)=>{if(!confirm("Excluir produto do catálogo?"))return;setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));};
   const removerDuplicatas=()=>{
     const total=(db.produtosLista||[]).length;
@@ -2964,6 +2969,56 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     alert(`✅ ${removidos} duplicata(s) removida(s). Restaram ${uniq.length} produtos.`);
   };
 
+  // === RUAS ===
+  const ruas:string[]=db.listaRuas||[];
+  const addRua=()=>{
+    const n=novaRua.trim();if(!n)return;
+    if(ruas.some(r=>r.toLowerCase()===n.toLowerCase()))return alert("Rua já existe.");
+    const applyAdd=(d:any)=>({...d,listaRuas:[...(d.listaRuas||[]),n]});
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyAdd(nx[e]);});return nx;});
+    else setDb(applyAdd);
+    setNovaRua("");
+  };
+  const delRua=(r:string)=>{
+    if(!confirm(`Excluir rua "${r}"?\nProdutos dessa rua ficarão sem rua.`))return;
+    const applyDel=(d:any)=>({...d,
+      listaRuas:(d.listaRuas||[]).filter((x:string)=>x!==r),
+      listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===r?{...i,rua:""}:i),
+      produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===r?{...p,rua:""}:p),
+    });
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyDel(nx[e]);});return nx;});
+    else setDb(applyDel);
+  };
+  const renameRua=(old:string,novo:string)=>{
+    novo=novo.trim();
+    if(!novo){setEditRua(null);return;}
+    if(novo===old){setEditRua(null);return;}
+    if(ruas.some(r=>r.toLowerCase()===novo.toLowerCase()&&r!==old)){alert("Rua já existe.");return;}
+    const applyRen=(d:any)=>({...d,
+      listaRuas:(d.listaRuas||[]).map((x:string)=>x===old?novo:x),
+      listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===old?{...i,rua:novo}:i),
+      produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===old?{...p,rua:novo}:p),
+    });
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyRen(nx[e]);});return nx;});
+    else setDb(applyRen);
+    setEditRua(null);
+  };
+  const moverRua=(r:string,dir:-1|1)=>{
+    const applyMov=(d:any)=>{
+      const arr=[...(d.listaRuas||[])];
+      const i=arr.indexOf(r);if(i<0)return d;
+      const j=i+dir;if(j<0||j>=arr.length)return d;
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+      return{...d,listaRuas:arr};
+    };
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyMov(nx[e]);});return nx;});
+    else setDb(applyMov);
+  };
+  const getRuaProd=(nome:string):string=>{
+    const p=(db.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
+    return p?.rua||"";
+  };
+
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
   const listaBuscaPend=listaBusca.filter((i:any)=>!i.comprado);
   const listaBuscaComp=listaBusca.filter((i:any)=>i.comprado).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
@@ -2971,6 +3026,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   listaBuscaPend.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(i);});
   const catsSorted=cats.filter(c=>porCat[c]);
   const catsExtra=Object.keys(porCat).filter(c=>!catsSorted.includes(c));
+
+  const porRua:Record<string,any[]>={};
+  listaBuscaPend.forEach((i:any)=>{const r=i.rua||getRuaProd(i.nome)||"Sem rua";if(!porRua[r])porRua[r]=[];porRua[r].push(i);});
+  const ruasSorted=[...ruas.filter(r=>porRua[r]),...Object.keys(porRua).filter(r=>!ruas.includes(r))];
 
   const estoquePreview=form.nome.length>=2?getMpEstoqueByName(form.nome):null;
 
@@ -3078,9 +3137,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#0d1520",color:"#60a5fa",border:"1px solid #1e3a5f",padding:"6px 12px",fontSize:12}}>🖨️</button>}
         {isAdmin&&<>
-          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
-          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
-          <button className="btn" onClick={()=>{setShowHistorico(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);cancelEdit();}} style={{background:showHistorico?"#1a120a":"#120d06",color:"#fb923c",border:"1px solid #7c3a10",padding:"6px 12px",fontSize:12}}>📂 Histórico{(db.pedidosLista||[]).length>0?` (${(db.pedidosLista||[]).length})`:""}</button>
+          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
+          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
+          <button className="btn" onClick={()=>{setShowRuaMgmt(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showRuaMgmt?"#1a2a1a":"#0d150d",color:"#34d399",border:"1px solid #065f46",padding:"6px 12px",fontSize:12}}>🛤️ Ruas</button>
+          <button className="btn" onClick={()=>{setShowHistorico(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showHistorico?"#1a120a":"#120d06",color:"#fb923c",border:"1px solid #7c3a10",padding:"6px 12px",fontSize:12}}>📂 Histórico{(db.pedidosLista||[]).length>0?` (${(db.pedidosLista||[]).length})`:""}</button>
         </>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
@@ -3155,6 +3215,47 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       </div>
     </div>}
 
+    {/* Gerenciar ruas (admin only) */}
+    {isAdmin&&showRuaMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #065f46"}}>
+      <div className="section-title" style={{color:"#34d399"}}>🛤️ Ruas — Ordem de compra</div>
+      <div style={{fontSize:11,color:"#888",marginBottom:10}}>Defina as ruas do mercado para organizar a lista pela ordem de compra. Cada produto pode ter uma rua associada.</div>
+      <div style={{marginBottom:10}}>
+        {!ruas.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhuma rua cadastrada</div>}
+        {ruas.map((r,idx)=>(
+          <div key={r} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
+            <span style={{fontSize:14,color:"#34d399",fontWeight:800,minWidth:22,textAlign:"center"}}>{idx+1}</span>
+            {editRua?.name===r
+              ? <>
+                  <input autoFocus value={editRua.val}
+                    onChange={e=>setEditRua(er=>er?{...er,val:e.target.value}:er)}
+                    onKeyDown={e=>{if(e.key==="Enter")renameRua(r,editRua.val);if(e.key==="Escape")setEditRua(null);}}
+                    className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
+                  <button onClick={()=>renameRua(r,editRua.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                  <button onClick={()=>setEditRua(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
+                </>
+              : <>
+                  <span style={{flex:1,fontSize:13,fontWeight:600}}>{r}</span>
+                  <button onClick={()=>setEditRua({name:r,val:r})} title="Renomear"
+                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                  <div style={{display:"flex",gap:2}}>
+                    <button onClick={()=>moverRua(r,-1)} disabled={idx===0}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#34d399",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                    <button onClick={()=>moverRua(r,1)} disabled={idx===ruas.length-1}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"#333":"#34d399",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                  </div>
+                  <button onClick={()=>delRua(r)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                </>
+            }
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input placeholder="Nova rua..." value={novaRua} onChange={e=>setNovaRua(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")addRua();}} className="inp" style={{marginBottom:0}}/>
+        <button className="btn" onClick={addRua} style={{background:"#34d399",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>+ Add</button>
+      </div>
+    </div>}
+
     {/* Catálogo de produtos (admin only) */}
     {isAdmin&&showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -3172,8 +3273,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
           {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
         </select>
+        {ruas.length>0&&<select value={prodForm.rua} onChange={e=>setProdForm(f=>({...f,rua:e.target.value}))} className="inp" style={{flex:"1 1 80px",marginBottom:0}}>
+          <option value="">Rua</option>
+          {ruas.map(r=><option key={r} value={r}>{r}</option>)}
+        </select>}
         <button className="btn" onClick={saveProd} style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
-        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
+        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un",rua:""});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
       {/* Lista do catálogo */}
       <div style={{maxHeight:220,overflowY:"auto" as const}}>
@@ -3182,6 +3287,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
           <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
             <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
+            {p.rua&&<span style={{fontSize:10,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
             <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
             <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
@@ -3243,12 +3349,21 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         </div>
       </div>
       {/* Categoria (admin) */}
-      {isAdmin&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Categoria</div>
-        <select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0}}>
-          <option value="">Sem categoria</option>
-          {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
-        </select>
+      {isAdmin&&<div style={{display:"flex",gap:8,marginBottom:10}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Categoria</div>
+          <select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0}}>
+            <option value="">Sem categoria</option>
+            {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+          </select>
+        </div>
+        {ruas.length>0&&<div style={{flex:1}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Rua</div>
+          <select value={form.rua} onChange={e=>setF("rua",e.target.value)} className="inp" style={{marginBottom:0}}>
+            <option value="">Sem rua</option>
+            {ruas.map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>}
       </div>}
       {/* Observações */}
       <div style={{marginBottom:12}}>
@@ -3280,9 +3395,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       </>}
     </div>
 
+    {/* Toggle vista por rua (admin only) */}
+    {isAdmin&&ruas.length>0&&pendentes.length>0&&<div style={{display:"flex",gap:8,marginBottom:10}}>
+      <button onClick={()=>setVistaRua(false)} className="pill" style={{background:!vistaRua?"#7c8fff":"var(--bg4)",color:!vistaRua?"#fff":"#777",fontSize:12,padding:"7px 14px"}}>🏷️ Por Categoria</button>
+      <button onClick={()=>setVistaRua(true)} className="pill" style={{background:vistaRua?"#34d399":"var(--bg4)",color:vistaRua?"#111":"#777",fontSize:12,padding:"7px 14px"}}>🛤️ Por Rua</button>
+    </div>}
+
     {/* Lista por categoria — somente pendentes */}
     {!lista.length&&<EmptyState msg="Lista vazia. Adicione produtos acima."/>}
-    {[...catsSorted,...catsExtra].map(categoria=>{
+    {!(isAdmin&&vistaRua&&ruas.length>0)&&[...catsSorted,...catsExtra].map(categoria=>{
       const itens=porCat[categoria]||[];
       const itensSorted=[...itens].sort((a,b)=>
         (a.urgente?-1:b.urgente?1:0)||((a.ordem||0)-(b.ordem||0)));
@@ -3307,6 +3428,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
                 {item.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
+                {isAdmin&&(item.rua||getRuaProd(item.nome))&&<span style={{fontSize:9,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {item.rua||getRuaProd(item.nome)}</span>}
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:12,color:"#7c8fff",fontWeight:700}}>{item.quantidade} {item.unidade}</span>
@@ -3331,6 +3453,47 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
             </div>
           </div>
           );
+        })}
+      </div>;
+    })}
+
+    {/* Lista por rua (admin only) */}
+    {isAdmin&&vistaRua&&ruas.length>0&&ruasSorted.map(rua=>{
+      const itens=porRua[rua]||[];
+      const itensSorted=[...itens].sort((a:any,b:any)=>(a.urgente?-1:b.urgente?1:0)||((a.ordem||0)-(b.ordem||0)));
+      return <div key={rua} style={{marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"4px 0",borderBottom:"1px solid #065f46"}}>
+          <span style={{fontSize:16}}>🛤️</span>
+          <span style={{fontSize:12,fontWeight:700,color:"#34d399",textTransform:"uppercase" as const,letterSpacing:0.8}}>{rua}</span>
+          <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itens.length})</span>
+        </div>
+        {itensSorted.map((item:any)=>{
+          const estoque=getMpEstoque(item.nome);
+          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):estoque;
+          return(
+          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":"var(--border)"}`,transition:"all .15s"}}>
+            <button onClick={()=>toggle(item.id)}
+              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#ff5c7a":"#555"}`,background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              {item.urgente&&<span style={{fontSize:9,color:"#ff5c7a",fontWeight:900}}>!</span>}
+            </button>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
+                <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
+                {item.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
+                <span style={{fontSize:10,color:"#a78bfa",background:"#a78bfa18",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
+              </div>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
+                <span style={{fontSize:12,color:"#7c8fff",fontWeight:700}}>{item.quantidade} {item.unidade}</span>
+                {estoqueRef!=null&&<span style={{fontSize:10,color:estoqueRef===0?"#ff5c7a":estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 {estoqueRef} {item.unidade}</span>}
+              </div>
+              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
+              {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
+            </div>
+            <div style={{display:"flex",gap:2}}>
+              <button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>
+              <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
+            </div>
+          </div>);
         })}
       </div>;
     })}
