@@ -562,13 +562,25 @@ const mergeFromServer=(prev:any,updates:any)=>{
       ruaCatMap:{...(s.ruaCatMap||{}),...(p.ruaCatMap||{})},
     };
   });
-  // Unificar listaRuas entre empresas (compartilhada)
+  // Unificar listaRuas e ruaCatMap entre empresas (compartilhadas)
   const allEmps=Object.keys(next).filter(e=>next[e]&&typeof next[e]==="object"&&"listaCompras" in next[e]);
   if(allEmps.length>1){
     const seen=new Set<string>();
     const unified:string[]=[];
     allEmps.forEach(e=>(next[e].listaRuas||[]).forEach((r:string)=>{if(!seen.has(r)){seen.add(r);unified.push(r);}}));
-    allEmps.forEach(e=>{next[e].listaRuas=unified;});
+    const unifiedMap:Record<string,string>={};
+    allEmps.forEach(e=>Object.assign(unifiedMap,next[e].ruaCatMap||{}));
+    allEmps.forEach(e=>{next[e].listaRuas=unified;next[e].ruaCatMap={...unifiedMap};});
+    // Sincronizar rua dos produtos por nome entre empresas
+    const ruaPorNome:Record<string,string>={};
+    allEmps.forEach(e=>(next[e].produtosLista||[]).forEach((p:any)=>{if(p.rua&&p.nome)ruaPorNome[p.nome.toLowerCase()]=p.rua;}));
+    allEmps.forEach(e=>{
+      next[e].produtosLista=(next[e].produtosLista||[]).map((p:any)=>{
+        if(p.rua||!p.nome)return p;
+        const r=ruaPorNome[p.nome.toLowerCase()];
+        return r?{...p,rua:r}:p;
+      });
+    });
   }
   return migrateDb(next);
 };
@@ -3332,13 +3344,19 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
               const prodsDisp=isBuscando&&q.length>=1
                 ?(db.produtosLista||[]).filter((p:any)=>p.rua!==r&&(p.nome||"").toLowerCase().includes(q)).slice(0,10)
                 :[];
+              const setProdRuaBoth=(nome:string,rua:string)=>{
+                const nLow=nome.toLowerCase();
+                const apply=(d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>(pp.nome||"").toLowerCase()===nLow?{...pp,rua}:pp)});
+                if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"produtosLista" in nx[e])nx[e]=apply(nx[e]);});return nx;});
+                else setDb(apply);
+              };
               return <div style={{padding:"0 8px 6px"}}>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center",marginBottom:4}}>
                   <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Produtos ({prodsNaRua.length}):</span>
                   {prodsNaRua.slice(0,30).map((p:any)=>(
                     <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#7c8fff18",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:12,padding:"2px 8px"}}>
                       {p.nome}
-                      <button onClick={()=>setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>pp.id===p.id?{...pp,rua:""}:pp)}))} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                      <button onClick={()=>setProdRuaBoth(p.nome,"")} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
                     </span>
                   ))}
                   {prodsNaRua.length>30&&<span style={{fontSize:10,color:"#888"}}>+{prodsNaRua.length-30} mais</span>}
@@ -3352,7 +3370,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                   {isBuscando&&prodsDisp.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:200,overflowY:"auto" as const}}>
                     {prodsDisp.map((p:any)=>(
                       <div key={p.id} onMouseDown={()=>{
-                        setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>pp.id===p.id?{...pp,rua:r}:pp)}));
+                        setProdRuaBoth(p.nome,r);
                         setBuscaProdRua({rua:r,query:""});
                       }} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
                         <span style={{fontSize:13}}>{catIcon(p.cat||"outros")}</span>
