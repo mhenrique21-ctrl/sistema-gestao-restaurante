@@ -492,12 +492,14 @@ const migrateDb=(m:any)=>{
   return m;
 };
 
-// IDs de itens deletados localmente nesta sessão — o poll nunca os restaura
-const _listaDeletados=new Set<string>();
+const _listaDeletados=new Set<string>(
+  (()=>{try{return JSON.parse(localStorage.getItem("_delIds")||"[]");}catch{return[];}})()
+);
+const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-1000);localStorage.setItem("_delIds",JSON.stringify(arr));}catch{}};
+const _origAdd=_listaDeletados.add.bind(_listaDeletados);
+_listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
-// Merge server data with local state.
-// listaCompras: preserva itens locais não salvos ainda (adicionados nesta sessão),
-// mas respeita listaDeletedIds do servidor para propagar exclusões do admin aos operadores.
+// Merge: servidor vence. _listaDeletados impede restauração de itens excluídos localmente.
 const mergeFromServer=(prev:any,updates:any)=>{
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
@@ -506,18 +508,14 @@ const mergeFromServer=(prev:any,updates:any)=>{
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
     // Merge por ID: servidor vence para IDs em comum,
     // itens locais com IDs novos são preservados (evita perda em falha de save)
-    const byId=(sArr:any[],pArr:any[])=>{
-      const sIds=new Set(sArr.map((i:any)=>i.id));
-      const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
-      return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!_listaDeletados.has(i.id))];
+    const byId=(sArr:any[])=>{
+      return sArr.filter((i:any)=>!_listaDeletados.has(i.id));
     };
-    const byIdLista=(sArr:any[],pArr:any[])=>{
-      const sIds=new Set(sArr.map((i:any)=>i.id));
-      const sFiltered=sArr.filter((i:any)=>!serverDeleted.has(i.id));
-      return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!serverDeleted.has(i.id))];
+    const byIdLista=(sArr:any[])=>{
+      return sArr.filter((i:any)=>!serverDeleted.has(i.id));
     };
-    const byIdDedup=(sArr:any[],pArr:any[])=>{
-      const merged=byId(sArr,pArr);
+    const byIdDedup=(sArr:any[])=>{
+      const merged=byId(sArr);
       const seen=new Set<string>();
       return merged.filter((p:any)=>{const k=(p.nome||"").trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
     };
@@ -527,14 +525,23 @@ const mergeFromServer=(prev:any,updates:any)=>{
     };
     next[emp]={
       ...s,
-      vendas:        byId(s.vendas||[],        p.vendas||[]),
-      contas:        byId(s.contas||[],         p.contas||[]),
-      compras:       byId(s.compras||[],        p.compras||[]),
-      fornecedores:  byId(s.fornecedores||[],   p.fornecedores||[]),
-      funcionarios:  byId(s.funcionarios||[],   p.funcionarios||[]),
-      listaCompras:  byIdLista(s.listaCompras||[],p.listaCompras||[]),
-      produtosLista: byIdDedup(s.produtosLista||[],  p.produtosLista||[]),
-      pedidosLista:  byId(s.pedidosLista||[],   p.pedidosLista||[]),
+      vendas:        byId(s.vendas||[]),
+      contas:        byId(s.contas||[]),
+      compras:       byId(s.compras||[]),
+      fornecedores:  byId(s.fornecedores||[]),
+      funcionarios:  byId(s.funcionarios||[]),
+      fichasTecnicas:byId(s.fichasTecnicas||[]),
+      materiasPrimas:byId(s.materiasPrimas||[]),
+      faltas:        byId(s.faltas||[]),
+      adiantamentos: byId(s.adiantamentos||[]),
+      consumacoes:   byId(s.consumacoes||[]),
+      encargos:      byId(s.encargos||[]),
+      normalizacoes: byId(s.normalizacoes||[]),
+      movEstoque:    byId(s.movEstoque||[]),
+      usuarios:      byId(s.usuarios||[]),
+      listaCompras:  byIdLista(s.listaCompras||[]),
+      produtosLista: byIdDedup(s.produtosLista||[]),
+      pedidosLista:  byId(s.pedidosLista||[]),
       listaRuas:     mergeArr(s.listaRuas||[], p.listaRuas||[]),
       listaCategorias:mergeArr(s.listaCategorias||[], p.listaCategorias||[]),
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
@@ -1017,7 +1024,7 @@ function Vendas({db,setDb,state}){
     nfoodTaxa:v.nfoodTaxa?String(v.nfoodTaxa):"",
     delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","): "",
   });};
-  const del=(id)=>setDb(d=>({...d,vendas:d.vendas.filter(v=>v.id!==id)}));
+  const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,vendas:d.vendas.filter(v=>v.id!==id)}));};
   return <div>
     <div className="section-title">Lançar Vendas do Dia</div>
     <div className="card" style={{marginBottom:14}}>
@@ -1679,7 +1686,7 @@ REGRAS:
     alert("✅ Cupom importado! Estoque e financeiro atualizados.");
   };
 
-  const del=(id)=>setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==id)}));
+  const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==id)}));};
 
   // ---- NF-e ----
   const [nfeResult,setNfeResult]=useState(null);
@@ -2462,7 +2469,7 @@ REGRAS:
                         </div>
                         <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"#60a5fa",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
-                        <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==item.id)}));}}
+                        <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;_listaDeletados.add(item.id);setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==item.id)}));}}
                           style={{background:"none",border:"none",color:"#ff5c7a55",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
                       </div>
                     )}
@@ -2495,6 +2502,9 @@ REGRAS:
                     }} style={{background:"#1a1a30",color:"#a78bfa",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={()=>{
                       if(!confirm("Excluir esta nota e todos os seus itens?"))return;
+                      const cIds=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId).map(c=>c.id);
+                      const ctIds=(db.contas||[]).filter(c=>c.grupoId===nota.grupoId).map(c=>c.id);
+                      [...cIds,...ctIds].forEach(id=>_listaDeletados.add(id));
                       setDb(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
                       setVerNota(null);
                     }} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Excluir</button>
@@ -2647,7 +2657,7 @@ REGRAS:
                       setProdEdit(mp.id);
                       window.scrollTo({top:0,behavior:"smooth"});
                     }} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#7c8fff"}}>✏️</button>
-                    <button onClick={()=>{if(confirm(`Excluir "${mp.nome}"?`))setDb(d=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter(m=>m.id!==mp.id)}));}}
+                    <button onClick={()=>{if(confirm(`Excluir "${mp.nome}"?`)){_listaDeletados.add(mp.id);setDb(d=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter(m=>m.id!==mp.id)}));}}}
                       style={{background:"var(--bg4)",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#ff5c7a"}}>🗑️</button>
                   </div>
                 </div>
@@ -2711,7 +2721,7 @@ REGRAS:
               <div style={{display:"flex",gap:4,flexShrink:0}}>
                 <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
                   style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
-                <button onClick={()=>{if(confirm("Excluir substituição?"))setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}
+                <button onClick={()=>{if(confirm("Excluir substituição?")){_listaDeletados.add(n.id);setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
                   style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
               </div>
             </div>
@@ -3018,7 +3028,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     setProdForm({nome:"",cat:"",unidade:"un",rua:""});
   };
   const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un",rua:p.rua||""});};
-  const delProd=(id:string)=>{if(!confirm("Excluir produto do catálogo?"))return;setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));};
+  const delProd=(id:string)=>{if(!confirm("Excluir produto do catálogo?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));};
   const removerDuplicatas=()=>{
     const total=(db.produtosLista||[]).length;
     const seen=new Set<string>();
@@ -3120,6 +3130,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 
   const delPedido=(id:string)=>{
     if(!confirm("Excluir este pedido do histórico?"))return;
+    _listaDeletados.add(id);
     setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));
     if(expandedPedido===id)setExpandedPedido(null);
   };
@@ -3765,6 +3776,7 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       tgt2.fornecedores=fornT;
       const movs2=(d.movEstoque||[]).map((mv:any)=>mv.mpId===src2.id?{...mv,mpId:tgt2.id,mpNome:tgt2.nome}:mv);
       const compras2=(d.compras||[]).map((c:any)=>c.nomeProduto.toLowerCase()===src2.nome.toLowerCase()?{...c,nomeProduto:tgt2.nome}:c);
+      _listaDeletados.add(src2.id);
       return{...d,materiasPrimas:mps2.filter((m:any)=>m.id!==src2.id),movEstoque:movs2,compras:compras2};
     });
   };
@@ -4373,8 +4385,8 @@ function Contas({db,setDb}){
     setForm({...emptyForm,...first,descricao:descBase,valor:String(parseMoney(first.valor)).replace(".",","),recorrente:true,parcelas:String(items.length),periodo:first.periodo||"mes",diasSemana:first.diasSemana||[1,2,3,4,5]});
     setSubTab("novo");
   };
-  const del=(id:string)=>setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));
-  const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
+  const del=(id:string)=>{_listaDeletados.add(id);setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));};
+  const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;const ids=(db.contas||[]).filter((c:any)=>c.grupoRecorr===gid).map((c:any)=>c.id);ids.forEach(id=>_listaDeletados.add(id));setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
   const pagarGrupo=(gid:string)=>setDb((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.grupoRecorr===gid?{...c,status:"pago"}:c)}));
   const toggle=(id:string)=>setDb((d:any)=>{
     const conta=(d.contas||[]).find((c:any)=>c.id===id);
@@ -4804,7 +4816,7 @@ function FichaTecnica({db,setDb}){
     setForm({nome:"",insumos:[],porcoes:"1",cmv:"30"});
   };
   const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30)});setSubTab("novo");};
-  const del=(id)=>setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.filter(f=>f.id!==id)}));
+  const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.filter(f=>f.id!==id)}));};
   const atualizar=()=>{
     setDb(d=>({...d,fichasTecnicas:(d.fichasTecnicas||[]).map(f=>{
       const ins=f.insumos.map(i=>{const mp=(d.materiasPrimas||[]).find(m=>m.id===i.mpId);const v=mp?.ultimoValor||i.valorUnd;return{...i,valorUnd:v,custo:v*i.quantidade};});
@@ -4961,7 +4973,7 @@ function RH({db,setDb,empresa}){
     setFForm({nome:"",funcao:"",salario:"",cpf:"",contato:""});
   };
   const editFunc=(f)=>{setFEdit(f.id);setFForm({...f,salario:String(f.salario.toFixed(2)).replace(".",",")});setSubTab("cadastro");};
-  const delFunc=(id)=>setDb(d=>({...d,funcionarios:d.funcionarios.filter(f=>f.id!==id)}));
+  const delFunc=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,funcionarios:d.funcionarios.filter(f=>f.id!==id)}));};
 
   const saveFalta=()=>{
     if(!faltaForm.funcionarioId||!faltaForm.dias)return alert("Selecione funcionário e dias.");
@@ -4997,13 +5009,17 @@ function RH({db,setDb,empresa}){
       },...(d.contas||[])]}));
     setAdtForm({funcionarioId:"",data:today(),valor:"",descricao:""});
   };
-  const delAdt=(a)=>setDb(d=>({...d,
-    adiantamentos:(d.adiantamentos||[]).filter(x=>x.id!==a.id),
-    // remove a conta vinculada (por contaId; fallback p/ registros antigos)
-    contas:(d.contas||[]).filter(c=>a.contaId
-      ? c.id!==a.contaId
-      : !(c.origem==="adiantamento_rh" && parseMoney(c.valor)===parseMoney(a.valor) && c.vencimento===a.data)),
-  }));
+  const delAdt=(a)=>{
+    _listaDeletados.add(a.id);
+    if(a.contaId)_listaDeletados.add(a.contaId);
+    setDb(d=>{
+      const contasFilt=(d.contas||[]).filter(c=>a.contaId
+        ? c.id!==a.contaId
+        : !(c.origem==="adiantamento_rh" && parseMoney(c.valor)===parseMoney(a.valor) && c.vencimento===a.data));
+      (d.contas||[]).filter(c=>!contasFilt.includes(c)).forEach(c=>_listaDeletados.add(c.id));
+      return{...d,adiantamentos:(d.adiantamentos||[]).filter(x=>x.id!==a.id),contas:contasFilt};
+    });
+  };
 
   const saveCons=()=>{
     if(!consForm.funcionarioId||!consForm.valor)return alert("Selecione funcionário e valor.");
@@ -5032,7 +5048,7 @@ function RH({db,setDb,empresa}){
     comissao:e.comissao>0?String(e.comissao.toFixed(2)).replace(".",","):"",
     salarioFamilia:e.salarioFamilia>0?String(e.salarioFamilia.toFixed(2)).replace(".",","):"",
     descricao:e.descricao||""});};
-  const delEnc=(id)=>setDb(d=>({...d,encargos:(d.encargos||[]).filter(e=>e.id!==id)}));
+  const delEnc=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,encargos:(d.encargos||[]).filter(e=>e.id!==id)}));};
 
   const gerarHolerite=(func)=>{
     const mes=relMes;
@@ -5816,7 +5832,7 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");a.href=url;a.download=`pedido_${ped.data}.csv`;a.click();URL.revokeObjectURL(url);
   };
-  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
+  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
   const pedidos=(db.pedidosLista||[]);
 
   const rels=[
@@ -6139,6 +6155,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
 
   const del=(id:string,nome:string)=>{
     if(!confirm(`Excluir o usuário "${nome}"?`))return;
+    _listaDeletados.add(id);
     setBoth(arr=>arr.filter((u:any)=>u.id!==id));
   };
 
