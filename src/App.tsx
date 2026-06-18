@@ -506,8 +506,6 @@ const mergeFromServer=(prev:any,updates:any)=>{
     const s=updates[emp];
     const p=prev[emp]||{};
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
-    // Merge por ID: servidor vence para IDs em comum,
-    // itens locais com IDs novos são preservados (evita perda em falha de save)
     const byId=(sArr:any[])=>{
       return sArr.filter((i:any)=>!_listaDeletados.has(i.id));
     };
@@ -518,10 +516,6 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const merged=byId(sArr);
       const seen=new Set<string>();
       return merged.filter((p:any)=>{const k=(p.nome||"").trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
-    };
-    const mergeArr=(sA:any[],pA:any[])=>{
-      const set=new Set(sA.map(String));
-      return[...sA,...pA.filter(x=>!set.has(String(x)))];
     };
     next[emp]={
       ...s,
@@ -542,11 +536,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       listaCompras:  byIdLista(s.listaCompras||[]),
       produtosLista: byIdDedup(s.produtosLista||[]),
       pedidosLista:  byId(s.pedidosLista||[]),
-      listaRuas:     mergeArr(s.listaRuas||[], p.listaRuas||[]),
-      listaCategorias:mergeArr(s.listaCategorias||[], p.listaCategorias||[]),
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
-      listaCatOrdem: (p.listaCatOrdem||[]).length>=(s.listaCatOrdem||[]).length?(p.listaCatOrdem):(s.listaCatOrdem||[]),
-      ruaCatMap:{...(p.ruaCatMap||{}),...(s.ruaCatMap||{})},
     };
   });
   // Unificar listaRuas e ruaCatMap entre empresas (compartilhadas)
@@ -595,6 +585,7 @@ export default function App() {
   const syncTimer = useRef<any>(null);
   const firstRender = useRef(true);
   const prevState = useRef<any>(null);
+  const fromPollRef = useRef(false);
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -603,7 +594,7 @@ export default function App() {
     )).then(results=>{
       const updates:any={};
       results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
-      if(Object.keys(updates).length>0)setState(prev=>mergeFromServer(prev,updates));
+      if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
     });
   },[]);
 
@@ -619,7 +610,7 @@ export default function App() {
         if(syncTimer.current)return;
         const updates:any={};
         results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
-        if(Object.keys(updates).length>0)setState(prev=>mergeFromServer(prev,updates));
+        if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
       });
     };
     poll(); // busca imediata ao logar/relogar
@@ -631,7 +622,7 @@ export default function App() {
   useEffect(()=>{
     saveData(state);
     if(firstRender.current){firstRender.current=false;prevState.current=state;return;}
-    // detect which companies actually changed
+    if(fromPollRef.current){fromPollRef.current=false;prevState.current=state;return;}
     const changed=["CONFRARIA","SEAMA"].filter(emp=>state[emp]!==prevState.current?.[emp]);
     prevState.current=state;
     if(!changed.length)return;
