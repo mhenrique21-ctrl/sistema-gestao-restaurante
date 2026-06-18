@@ -503,38 +503,18 @@ const mergeFromServer=(prev:any,updates:any)=>{
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
     const p=prev[emp]||{};
-    // IDs excluídos persistidos no servidor + excluídos localmente nesta sessão
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
-    // Merge por ID: para IDs em comum, mescla campos (local sobrescreve servidor)
+    // Merge por ID: servidor vence para IDs em comum,
     // itens locais com IDs novos são preservados (evita perda em falha de save)
     const byId=(sArr:any[],pArr:any[])=>{
-      const pMap=new Map(pArr.map((i:any)=>[i.id,i]));
       const sIds=new Set(sArr.map((i:any)=>i.id));
-      const result:any[]=[];
-      sArr.forEach((si:any)=>{
-        if(_listaDeletados.has(si.id))return;
-        const pi=pMap.get(si.id);
-        result.push(pi?{...si,...pi}:si);
-      });
-      pArr.forEach((pi:any)=>{
-        if(!sIds.has(pi.id)&&!_listaDeletados.has(pi.id))result.push(pi);
-      });
-      return result;
+      const sFiltered=sArr.filter((i:any)=>!_listaDeletados.has(i.id));
+      return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!_listaDeletados.has(i.id))];
     };
-    // listaCompras usa serverDeleted para respeitar exclusões remotas do admin
     const byIdLista=(sArr:any[],pArr:any[])=>{
-      const pMap=new Map(pArr.map((i:any)=>[i.id,i]));
       const sIds=new Set(sArr.map((i:any)=>i.id));
-      const result:any[]=[];
-      sArr.forEach((si:any)=>{
-        if(serverDeleted.has(si.id))return;
-        const pi=pMap.get(si.id);
-        result.push(pi?{...si,...pi}:si);
-      });
-      pArr.forEach((pi:any)=>{
-        if(!sIds.has(pi.id)&&!serverDeleted.has(pi.id))result.push(pi);
-      });
-      return result;
+      const sFiltered=sArr.filter((i:any)=>!serverDeleted.has(i.id));
+      return[...sFiltered,...pArr.filter((i:any)=>!sIds.has(i.id)&&!serverDeleted.has(i.id))];
     };
     const byIdDedup=(sArr:any[],pArr:any[])=>{
       const merged=byId(sArr,pArr);
@@ -546,7 +526,6 @@ const mergeFromServer=(prev:any,updates:any)=>{
       return[...sA,...pA.filter(x=>!set.has(String(x)))];
     };
     next[emp]={
-      ...p,
       ...s,
       vendas:        byId(s.vendas||[],        p.vendas||[]),
       contas:        byId(s.contas||[],         p.contas||[]),
@@ -555,11 +534,12 @@ const mergeFromServer=(prev:any,updates:any)=>{
       funcionarios:  byId(s.funcionarios||[],   p.funcionarios||[]),
       listaCompras:  byIdLista(s.listaCompras||[],p.listaCompras||[]),
       produtosLista: byIdDedup(s.produtosLista||[],  p.produtosLista||[]),
+      pedidosLista:  byId(s.pedidosLista||[],   p.pedidosLista||[]),
       listaRuas:     mergeArr(s.listaRuas||[], p.listaRuas||[]),
       listaCategorias:mergeArr(s.listaCategorias||[], p.listaCategorias||[]),
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
       listaCatOrdem: (p.listaCatOrdem||[]).length>=(s.listaCatOrdem||[]).length?(p.listaCatOrdem):(s.listaCatOrdem||[]),
-      ruaCatMap:{...(s.ruaCatMap||{}),...(p.ruaCatMap||{})},
+      ruaCatMap:{...(p.ruaCatMap||{}),...(s.ruaCatMap||{})},
     };
   });
   // Unificar listaRuas e ruaCatMap entre empresas (compartilhadas)
