@@ -586,7 +586,6 @@ export default function App() {
   const firstRender = useRef(true);
   const prevState = useRef<any>(null);
   const fromPollRef = useRef(false);
-  const flushNowRef = useRef(false);
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -615,7 +614,7 @@ export default function App() {
       });
     };
     poll();
-    const interval=tab==="lista"?3000:10000;
+    const interval=3000;
     const t=setInterval(poll,interval);
     return()=>clearInterval(t);
   },[login,tab]);
@@ -630,8 +629,6 @@ export default function App() {
     if(!changed.length)return;
     clearTimeout(syncTimer.current);
     setSyncStatus("sync");
-    const delay=flushNowRef.current?200:1500;
-    flushNowRef.current=false;
     syncTimer.current=setTimeout(async()=>{
       try{
         await Promise.all(changed.map(emp=>
@@ -641,7 +638,7 @@ export default function App() {
       }catch{setSyncStatus("erro");}finally{
         syncTimer.current=null;
       }
-    },delay);
+    },200);
   },[state]);
 
   const db    = state[empresa];
@@ -2813,7 +2810,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 
   const saveItem=()=>{
     if(!form.nome.trim())return;
-    flushNowRef.current=true;
+
     if(editId){
       setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
       setEditId(null);
@@ -2858,7 +2855,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!item.comprado){
       pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
-    flushNowRef.current=true;
+
     setDb((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
@@ -2873,7 +2870,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!item.naoTem){
       pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
-    flushNowRef.current=true;
+
     setDb((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
       return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:!it.naoTem,comprado:false}:i)};
@@ -2885,7 +2882,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     const item=prevLista.find((i:any)=>i.id===id);
     pushUndo(`"${item?.nome||"Produto"}" excluído`,prevLista,prevDeletedIds,[id]);
     _listaDeletados.add(id);
-    flushNowRef.current=true;
+
     setDb((d:any)=>({
       ...d,
       listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
@@ -2897,7 +2894,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     const ids=comprados.map((i:any)=>i.id);
     pushUndo(`${comprados.length} comprado(s) removido(s)`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])],ids);
     ids.forEach(id=>_listaDeletados.add(id));
-    flushNowRef.current=true;
+
     setDb((d:any)=>({
       ...d,
       listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
@@ -2910,7 +2907,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!confirm(`Salvar pedido com ${comprados.length} item(ns) comprado(s)?\nA lista inteira será zerada para o próximo pedido.`))return;
     const todosIds=lista.map((i:any)=>i.id);
     todosIds.forEach(id=>_listaDeletados.add(id));
-    flushNowRef.current=true;
+
     const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||""})),criadoEm:new Date().toISOString()};
     setDb((d:any)=>({
       ...d,
