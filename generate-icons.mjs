@@ -2,39 +2,42 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 
-const makeSvg = (size, rounded = true) => {
-  const s = size;
-  const rx = rounded ? Math.round(s * 0.18) : 0;
-  // Use a wider viewBox to avoid clipping, then let sharp crop
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 200 200">
-  <defs>
-    <linearGradient id="stm1" x1="0.3" y1="1" x2="0.7" y2="0">
-      <stop offset="0%" stop-color="#C07A50"/>
-      <stop offset="50%" stop-color="#B8876A"/>
-      <stop offset="100%" stop-color="#D4A88A"/>
-    </linearGradient>
-    <linearGradient id="stm2" x1="0.4" y1="1" x2="0.6" y2="0">
-      <stop offset="0%" stop-color="#A56840"/>
-      <stop offset="100%" stop-color="#C9907A"/>
-    </linearGradient>
-  </defs>
-  <rect width="200" height="200" rx="${Math.round(rx * 200/s)}" fill="#FFFFFF"/>
-  <g>
-    <!-- Vapor S -->
-    <path d="M 118,10 C 108,2 104,9 106,17 C 110,30 126,28 128,42 C 130,52 118,56 114,47"
-          fill="none" stroke="url(#stm1)" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
-    <path d="M 127,7 C 119,1 115,6 117,13 C 120,24 134,22 136,34 C 138,43 126,47 123,39"
-          fill="none" stroke="url(#stm2)" stroke-width="5" stroke-linecap="round" opacity="0.75"/>
-    <!-- CONFRARIA -->
-    <text x="100" y="78" text-anchor="middle"
+const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -5 350 200">
+  <path d="M158,12 C148,4 162,-2 165,8 C168,18 154,22 152,32 C150,42 162,46 164,36"
+        fill="none" stroke="#C4713A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M148,8 C140,2 152,-3 154,6 C156,15 144,18 142,27 C140,36 150,40 152,30"
+        fill="none" stroke="#D4936A" stroke-width="4" stroke-linecap="round"/>
+  <text x="18" y="72"
+        font-family="'Arial','Helvetica',sans-serif"
+        font-size="19" font-weight="700" fill="#7B2E10"
+        letter-spacing="5">CONFRARIA</text>
+  <text x="10" y="175"
+        font-family="'Arial Black','Impact','Arial',sans-serif"
+        font-size="118" font-weight="900" fill="#7B2E10">CAFE</text>
+  <rect x="10" y="178" width="22" height="8" rx="3" fill="#7B2E10"/>
+  <rect x="155" y="178" width="35" height="8" rx="3" fill="#7B2E10"/>
+</svg>`;
+
+const makeIcon = (size, rounded = true) => {
+  const rx = rounded ? Math.round(size * 0.18) : 0;
+  const pad = Math.round(size * 0.06);
+  const inner = size - pad * 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <rect width="${size}" height="${size}" rx="${rx}" fill="#FFFFFF"/>
+  <g transform="translate(${pad},${pad + Math.round(inner * 0.08)}) scale(${(inner / 200).toFixed(4)})">
+    <path d="M158,12 C148,4 162,-2 165,8 C168,18 154,22 152,32 C150,42 162,46 164,36"
+          fill="none" stroke="#C4713A" stroke-width="7" stroke-linecap="round"/>
+    <path d="M148,8 C140,2 152,-3 154,6 C156,15 144,18 142,27 C140,36 150,40 152,30"
+          fill="none" stroke="#D4936A" stroke-width="4" stroke-linecap="round"/>
+    <text x="18" y="72"
           font-family="'Arial','Helvetica',sans-serif"
-          font-size="17" font-weight="800" fill="#A0603A"
-          letter-spacing="3">CONFRARIA</text>
-    <!-- CAFE -->
-    <text x="100" y="175" text-anchor="middle"
-          font-family="'Arial Black','Impact',sans-serif"
-          font-size="65" font-weight="900" fill="#A0603A"
-          letter-spacing="4">CAFÉ</text>
+          font-size="19" font-weight="700" fill="#7B2E10"
+          letter-spacing="5">CONFRARIA</text>
+    <text x="10" y="175"
+          font-family="'Arial Black','Impact','Arial',sans-serif"
+          font-size="118" font-weight="900" fill="#7B2E10">CAFE</text>
+    <rect x="10" y="178" width="22" height="8" rx="3" fill="#7B2E10"/>
+    <rect x="155" y="178" width="35" height="8" rx="3" fill="#7B2E10"/>
   </g>
 </svg>`;
 };
@@ -43,36 +46,109 @@ async function generate() {
   const outDir = path.join(process.cwd(), 'public', 'icons');
   fs.mkdirSync(outDir, { recursive: true });
 
+  // First render the logo SVG at high resolution to see its natural bounds
+  const logoBuf = Buffer.from(logoSvg);
+  const logoWide = await sharp(logoBuf, { density: 300 })
+    .png()
+    .toBuffer();
+  const logoMeta = await sharp(logoWide).metadata();
+  console.log(`Logo natural size: ${logoMeta.width}x${logoMeta.height}`);
+
+  // Generate square icons with padding
   for (const size of [192, 512]) {
-    await sharp(Buffer.from(makeSvg(size, true))).resize(size, size).png().toFile(path.join(outDir, `icon-${size}.png`));
+    // Render logo at high res then composite on white square
+    const rendered = await sharp(logoBuf, { density: 300 })
+      .resize({ width: Math.round(size * 0.88), height: Math.round(size * 0.88), fit: 'inside' })
+      .png()
+      .toBuffer();
+    const renderedMeta = await sharp(rendered).metadata();
+
+    const rx = Math.round(size * 0.18);
+    const bgSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+      <rect width="${size}" height="${size}" rx="${rx}" fill="#FFFFFF"/>
+    </svg>`;
+
+    await sharp(Buffer.from(bgSvg))
+      .composite([{
+        input: rendered,
+        left: Math.round((size - renderedMeta.width) / 2),
+        top: Math.round((size - renderedMeta.height) / 2),
+      }])
+      .png()
+      .toFile(path.join(outDir, `icon-${size}.png`));
     console.log(`✅ icon-${size}.png`);
   }
-  await sharp(Buffer.from(makeSvg(180, false))).resize(180, 180).png().toFile(path.join(outDir, 'apple-touch-icon.png'));
-  console.log('✅ apple-touch-icon.png');
-  await sharp(Buffer.from(makeSvg(64, true))).resize(32, 32).png().toFile(path.join(outDir, 'favicon-32.png'));
-  console.log('✅ favicon-32.png');
 
-  const ogSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-    <defs>
-      <linearGradient id="stm1" x1="0.3" y1="1" x2="0.7" y2="0">
-        <stop offset="0%" stop-color="#C07A50"/><stop offset="50%" stop-color="#B8876A"/><stop offset="100%" stop-color="#D4A88A"/>
-      </linearGradient>
-      <linearGradient id="stm2" x1="0.4" y1="1" x2="0.6" y2="0">
-        <stop offset="0%" stop-color="#A56840"/><stop offset="100%" stop-color="#C9907A"/>
-      </linearGradient>
-    </defs>
-    <rect width="1200" height="630" fill="#FFFFFF"/>
-    <g transform="translate(250,20) scale(3)">
-      <path d="M 118,10 C 108,2 104,9 106,17 C 110,30 126,28 128,42 C 130,52 118,56 114,47"
-            fill="none" stroke="url(#stm1)" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
-      <path d="M 127,7 C 119,1 115,6 117,13 C 120,24 134,22 136,34 C 138,43 126,47 123,39"
-            fill="none" stroke="url(#stm2)" stroke-width="5" stroke-linecap="round" opacity="0.75"/>
-      <text x="100" y="78" text-anchor="middle" font-family="'Arial','Helvetica',sans-serif" font-size="17" font-weight="800" fill="#A0603A" letter-spacing="3">CONFRARIA</text>
-      <text x="100" y="175" text-anchor="middle" font-family="'Arial Black','Impact',sans-serif" font-size="65" font-weight="900" fill="#A0603A" letter-spacing="4">CAFÉ</text>
-    </g>
-  </svg>`;
-  await sharp(Buffer.from(ogSvg)).png().toFile(path.join(outDir, 'og-image.png'));
-  console.log('✅ og-image.png');
+  // Apple touch icon (no rounded corners)
+  {
+    const size = 180;
+    const rendered = await sharp(logoBuf, { density: 300 })
+      .resize({ width: Math.round(size * 0.85), height: Math.round(size * 0.85), fit: 'inside' })
+      .png()
+      .toBuffer();
+    const renderedMeta = await sharp(rendered).metadata();
+
+    const bgSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+      <rect width="${size}" height="${size}" fill="#FFFFFF"/>
+    </svg>`;
+
+    await sharp(Buffer.from(bgSvg))
+      .composite([{
+        input: rendered,
+        left: Math.round((size - renderedMeta.width) / 2),
+        top: Math.round((size - renderedMeta.height) / 2),
+      }])
+      .png()
+      .toFile(path.join(outDir, 'apple-touch-icon.png'));
+    console.log('✅ apple-touch-icon.png');
+  }
+
+  // Favicon 32x32
+  {
+    const rendered = await sharp(logoBuf, { density: 300 })
+      .resize({ width: 28, height: 28, fit: 'inside' })
+      .png()
+      .toBuffer();
+    const renderedMeta = await sharp(rendered).metadata();
+
+    const bgSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+      <rect width="32" height="32" rx="4" fill="#FFFFFF"/>
+    </svg>`;
+
+    await sharp(Buffer.from(bgSvg))
+      .composite([{
+        input: rendered,
+        left: Math.round((32 - renderedMeta.width) / 2),
+        top: Math.round((32 - renderedMeta.height) / 2),
+      }])
+      .png()
+      .toFile(path.join(outDir, 'favicon-32.png'));
+    console.log('✅ favicon-32.png');
+  }
+
+  // OG Image 1200x630
+  {
+    const rendered = await sharp(logoBuf, { density: 300 })
+      .resize({ width: 800, height: 500, fit: 'inside' })
+      .png()
+      .toBuffer();
+    const renderedMeta = await sharp(rendered).metadata();
+
+    const bgSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">
+      <rect width="1200" height="630" fill="#FFFFFF"/>
+    </svg>`;
+
+    await sharp(Buffer.from(bgSvg))
+      .composite([{
+        input: rendered,
+        left: Math.round((1200 - renderedMeta.width) / 2),
+        top: Math.round((630 - renderedMeta.height) / 2),
+      }])
+      .png()
+      .toFile(path.join(outDir, 'og-image.png'));
+    console.log('✅ og-image.png');
+  }
+
   console.log('\n🎉 Pronto!');
 }
 
