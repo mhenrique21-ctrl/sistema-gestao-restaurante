@@ -586,6 +586,7 @@ export default function App() {
   const firstRender = useRef(true);
   const prevState = useRef<any>(null);
   const fromPollRef = useRef(false);
+  const saveSeqRef = useRef(0);
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -603,11 +604,12 @@ export default function App() {
     if(!login)return;
     const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
     const poll=()=>{
-      if(syncTimer.current)return; // skip if a local save is pending
+      if(syncTimer.current)return;
+      const seq=saveSeqRef.current;
       Promise.all(emps.map(emp=>
         fetch(`/api/dados/${emp}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
       )).then(results=>{
-        if(syncTimer.current)return;
+        if(syncTimer.current||saveSeqRef.current!==seq)return;
         const updates:any={};
         results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
         if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
@@ -629,6 +631,7 @@ export default function App() {
     if(!changed.length)return;
     clearTimeout(syncTimer.current);
     setSyncStatus("sync");
+    saveSeqRef.current++;
     syncTimer.current=setTimeout(async()=>{
       try{
         await Promise.all(changed.map(emp=>
