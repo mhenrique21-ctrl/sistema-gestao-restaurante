@@ -764,14 +764,16 @@ export default function App() {
             <button onClick={toggleTheme} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
               {theme==="dark"?"☀️":"🌙"}
             </button>
-            {isAdmin&&["CONFRARIA","SEAMA"].map(e=>(
-              <button key={e} onClick={()=>setEmpresa(e)} className="pill"
-                style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`}}>{e}</button>
-            ))}
             {isOp&&<span style={{fontSize:11,color:"#5a6080",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"4px 10px"}}>{empresa}</span>}
             <button onClick={doLogout} title="Sair" style={{background:"none",border:"1px solid #3a1515",borderRadius:8,cursor:"pointer",color:"#ff7a7a",fontSize:13,padding:"4px 8px",lineHeight:1}}>🔒</button>
           </div>
         </div>
+        {isAdmin&&<div style={{display:"flex",gap:6,marginTop:8,justifyContent:"center"}}>
+          {["CONFRARIA","SEAMA"].map(e=>(
+            <button key={e} onClick={()=>setEmpresa(e)} className="pill"
+              style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`,flex:1,maxWidth:140,justifyContent:"center",padding:"6px 10px"}}>{e}</button>
+          ))}
+        </div>}
       </div>
 
       {/* CONTENT */}
