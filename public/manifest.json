@@ -1,13 +1,23 @@
 {
-  "name": "App Gestão – Confraria & Seama",
-  "short_name": "App Gestão",
-  "description": "Sistema de gestão para Confraria e Seama",
+  "name": "Confraria Café – Gestão",
+  "short_name": "Confraria",
+  "description": "Sistema de gestão – Confraria Café & Seama",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0c12",
-  "theme_color": "#0a0c12",
+  "background_color": "#0e0805",
+  "theme_color": "#1a0f08",
   "orientation": "portrait",
   "icons": [
+    {
+      "src": "/icons/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
