@@ -1287,8 +1287,9 @@ function Vendas({db,setDb,state}){
 
 // ===================== NF-e XML PARSER =====================
 function parseNFe(xmlString) {
+  const cleanXml=xmlString.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g,'');
   const parser=new DOMParser();
-  const doc=parser.parseFromString(xmlString,"application/xml");
+  const doc=parser.parseFromString(cleanXml,"application/xml");
   if(doc.querySelector("parsererror"))throw new Error("XML inválido");
   const g=(tag)=>{const el=doc.querySelector(tag);return el?el.textContent.trim():"";};
   const ga=(parent,tag)=>{const el=parent.querySelector(tag);return el?el.textContent.trim():"";};
@@ -1334,7 +1335,8 @@ function parseNFe(xmlString) {
     return{nome,categoria:categorizarProduto(nome),unidade:unidadeNFe(uCom),quantidade:qtd,valorUnitario:vUnit,valorTotal:vTotal};
   }).filter(Boolean);
 
-  const total=parseFloat(g("vNF"))||itens.reduce((s,i)=>s+i.valorTotal,0);
+  const icmsTot=doc.querySelector("ICMSTot");
+  const total=parseFloat(icmsTot?ga(icmsTot,"vNF"):g("vNF"))||itens.reduce((s,i)=>s+i.valorTotal,0);
   // dEmi = v3, dhEmi = v4 (datetime, take first 10 chars)
   const data=(g("dEmi")||g("dhEmi")||today()).substring(0,10);
   // chNFe: from infNFe Id attribute (NFe + 44 digits) or explicit tag

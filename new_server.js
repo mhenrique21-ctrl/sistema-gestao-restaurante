@@ -156,7 +156,8 @@ function normalizeUnit(u) {
   return 'un';
 }
 
-function parseNFeXml(xml) {
+function parseNFeXml(rawXml) {
+  const xml = rawXml.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g, '');
   const g = (tag) => getTag(xml, tag);
   const emitXml = xml.match(/<emit>[\s\S]*?<\/emit>/)?.[0] || '';
   const endXml  = emitXml.match(/<enderEmit>[\s\S]*?<\/enderEmit>/)?.[0] || '';
@@ -175,7 +176,8 @@ function parseNFeXml(xml) {
     const uCom      = getTag(prod, 'uCom') || 'un';
     return { nome, categoria: categorize(nome), unidade: normalizeUnit(uCom), quantidade: qtd, valorUnitario: vUnit, valorTotal: vTotal };
   }).filter(i => i.nome);
-  const total = parseFloat(g('vNF')) || itens.reduce((s, i) => s + i.valorTotal, 0);
+  const totalBlock = xml.match(/<ICMSTot>[\s\S]*?<\/ICMSTot>/)?.[0] || '';
+  const total = parseFloat(totalBlock ? getTag(totalBlock, 'vNF') : g('vNF')) || itens.reduce((s, i) => s + i.valorTotal, 0);
   // chNFe: from infNFe Id attribute (NFe + 44 digits) or explicit tag
   const chNFeAttr = (xml.match(/Id="NFe(\d{44})"/) || [])[1] || '';
   const chNFe = chNFeAttr || g('chNFe') || '';
@@ -184,7 +186,7 @@ function parseNFeXml(xml) {
   if (!nNF && chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
   // date: dEmi (v3) or dhEmi (v4)
   const data = (g('dEmi') || g('dhEmi') || '').substring(0, 10);
-  return { fornecedor, itens, totalCompra: total, data, nNF, chNFe, rawXml: xml };
+  return { fornecedor, itens, totalCompra: total, data, nNF, chNFe, rawXml: rawXml };
 }
 
 function buildChaveEnvelope(cnpj, uf, chNFe) {
