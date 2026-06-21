@@ -2989,6 +2989,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [vistaRua,setVistaRua]=useState(false);
   const [showEstimativa,setShowEstimativa]=useState(false);
   const [estConcItem,setEstConcItem]=useState<string|null>(null);
+  const [catConcItem,setCatConcItem]=useState<string|null>(null);
   const [pendingMpLink,setPendingMpLink]=useState<string|null>(null);
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
@@ -3836,39 +3837,82 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       {(()=>{
         const q=prodForm.nome.trim().toLowerCase();
         if(q.length<2)return null;
-        const mps=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,5);
-        if(!mps.length)return <div style={{fontSize:11,color:"#666",padding:"4px 8px",marginBottom:8,background:"#0d1020",borderRadius:6,border:"1px solid #1e2235"}}>🔍 Nenhum produto de compra encontrado para "{prodForm.nome.trim()}"</div>;
+        const editingProd=editProdId?prodsCatalog.find((p:any)=>p.id===editProdId):null;
+        const savedMpId=editingProd?.mpVinculadoId||null;
+        const mps=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,8);
+        const savedMp=savedMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===savedMpId):null;
+        const allMps=savedMp&&!mps.find((m:any)=>m.id===savedMp.id)?[savedMp,...mps]:mps;
+        if(!allMps.length)return <div style={{fontSize:11,color:"#666",padding:"4px 8px",marginBottom:8,background:"#0d1020",borderRadius:6,border:"1px solid #1e2235"}}>🔍 Nenhum produto de compra encontrado para "{prodForm.nome.trim()}"</div>;
         return <div style={{marginBottom:8,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 8px"}}>
-          <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>💰 Preços de compra encontrados</div>
-          {mps.map((mp:any)=>(
-            <div key={mp.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:"1px solid var(--border)",fontSize:12}}>
-              <span style={{flex:1,color:"#ccc"}}>{mp.nome}</span>
+          <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — clique para vincular</div>
+          {allMps.map((mp:any)=>{
+            const isLinked=savedMpId===mp.id;
+            return <div key={mp.id} onClick={()=>{
+              if(editProdId){
+                if(isLinked)desvincularMp(editProdId);
+                else vincularMp(editProdId,mp.id);
+              }
+            }}
+              style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:editProdId?"pointer":"default",borderRadius:6,marginBottom:2,
+                background:isLinked?"#4ade8015":"transparent",border:isLinked?"1px solid #4ade8044":"1px solid transparent"}}>
+              <span style={{fontSize:13}}>{isLinked?"🔗":"⬜"}</span>
+              <span style={{flex:1,color:isLinked?"#4ade80":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
               <span style={{color:"#888",fontSize:10}}>{mp.unidade||"un"}</span>
               {mp.ultimoValor>0
                 ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                 :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
-              {mp.estoqueAtual!=null&&<span style={{fontSize:10,color:mp.estoqueAtual>0?"#4ade80":"#ff5c7a",background:"var(--bg4)",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const}}>est: {mp.estoqueAtual} {mp.unidade||"un"}</span>}
-            </div>
-          ))}
+              {mp.estoqueAtual!=null&&<span style={{fontSize:10,color:mp.estoqueAtual>0?"#4ade80":"#ff5c7a",background:"var(--bg4)",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const}}>est: {mp.estoqueAtual}</span>}
+            </div>;
+          })}
+          {!editProdId&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>⚡ Salve o produto primeiro, depois clique para vincular</div>}
         </div>;
       })()}
       {/* Lista do catálogo */}
-      <div style={{maxHeight:220,overflowY:"auto" as const}}>
+      <div style={{maxHeight:350,overflowY:"auto" as const}}>
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
         {[...prodsCatalog].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>{
           const mp=getMpByName(p.nome,p.id);
           const isLinked=!!p.mpVinculadoId;
-          return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
-            <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
-            <span style={{flex:1,fontSize:13}}>{p.nome}</span>
-            {mp&&mp.ultimoValor>0&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#4ade80",background:"#4ade8018",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const}}>
-              {isLinked?"🔗":"💰"} {fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}
-              {isLinked&&<button onClick={(e)=>{e.stopPropagation();desvincularMp(p.id);}} title="Desvincular" style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:10,padding:0,lineHeight:1}}>✕</button>}
-            </span>}
-            {p.rua&&<span style={{fontSize:10,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
-            <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
-            <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
-            <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+          const isExpConc=catConcItem===p.id;
+          return <div key={p.id}>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:isExpConc?"none":"1px solid var(--border)"}}>
+              <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
+              <span style={{flex:1,fontSize:13,cursor:"pointer"}} onClick={()=>setCatConcItem(isExpConc?null:p.id)}>{p.nome}</span>
+              {mp&&mp.ultimoValor>0?<span onClick={()=>setCatConcItem(isExpConc?null:p.id)} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#4ade80",background:"#4ade8018",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const,cursor:"pointer"}}>
+                {isLinked?"🔗":"💰"} {fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}
+              </span>:
+              <span onClick={()=>setCatConcItem(isExpConc?null:p.id)} style={{fontSize:10,color:"#f59e0b",cursor:"pointer",whiteSpace:"nowrap" as const}}>sem preço</span>}
+              {p.rua&&<span style={{fontSize:10,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
+              <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
+              <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
+              <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+            </div>
+            {isExpConc&&(()=>{
+              const q2=p.nome.toLowerCase();
+              const mpOpts=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q2)||q2.includes(m.nome.toLowerCase())).slice(0,10);
+              const linkedMp=p.mpVinculadoId?(db.materiasPrimas||[]).find((m:any)=>m.id===p.mpVinculadoId):null;
+              const allOpts=linkedMp&&!mpOpts.find((m:any)=>m.id===linkedMp.id)?[linkedMp,...mpOpts]:mpOpts;
+              return <div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
+                <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
+                {!allOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada</div>}
+                {allOpts.map((m:any)=>{
+                  const mLinked=p.mpVinculadoId===m.id;
+                  return <div key={m.id} onClick={()=>{if(mLinked)desvincularMp(p.id);else vincularMp(p.id,m.id);setCatConcItem(null);}}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
+                      background:mLinked?"#4ade8015":"transparent",border:mLinked?"1px solid #4ade8044":"1px solid transparent"}}>
+                    <span style={{fontSize:13}}>{mLinked?"🔗":"⬜"}</span>
+                    <span style={{flex:1,color:mLinked?"#4ade80":"#ccc",fontWeight:mLinked?700:400}}>{m.nome}</span>
+                    {m.ultimoValor>0
+                      ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>
+                      :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
+                  </div>;
+                })}
+                {isLinked&&<button onClick={()=>{desvincularMp(p.id);setCatConcItem(null);}}
+                  className="btn" style={{width:"100%",marginTop:4,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
+                  ✕ Desvincular
+                </button>}
+              </div>;
+            })()}
           </div>;
         })}
       </div>
