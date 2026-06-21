@@ -3055,21 +3055,31 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       ||(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase().includes(nome.toLowerCase())||nome.toLowerCase().includes(m.nome.toLowerCase()))
       ||null;
   };
+  const applyBothProd=(fn:(d:any)=>any)=>{
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"produtosLista" in nx[e])nx[e]=fn(nx[e]);});return nx;});
+    else setDb(fn);
+  };
+  const syncProdByName=(nome:string,updater:(p:any)=>any)=>{
+    const nl=nome.trim().toLowerCase();
+    applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===nl?updater(p):p)}));
+  };
   const vincularMp=(prodId:string,mpId:string)=>{
-    setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>{
-      if(p.id!==prodId)return p;
+    const prod=(db.produtosLista||[]).find((p:any)=>p.id===prodId);
+    if(!prod)return;
+    syncProdByName(prod.nome,(p:any)=>{
       const ids=getProdVinculados(p);
       if(ids.includes(mpId))return p;
       return{...p,mpVinculados:[...ids,mpId],mpVinculadoId:undefined};
-    })}));
+    });
   };
   const desvincularMp=(prodId:string,mpId?:string)=>{
-    setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>{
-      if(p.id!==prodId)return p;
+    const prod=(db.produtosLista||[]).find((p:any)=>p.id===prodId);
+    if(!prod)return;
+    syncProdByName(prod.nome,(p:any)=>{
       if(!mpId)return{...p,mpVinculados:[],mpVinculadoId:undefined};
       const ids=getProdVinculados(p).filter((id:string)=>id!==mpId);
       return{...p,mpVinculados:ids,mpVinculadoId:undefined};
-    })}));
+    });
   };
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
@@ -3079,16 +3089,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 
     if(editId){
       const editNome=form.nome.trim();
-      setDb((d:any)=>{
-        const updated={...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)};
-        if(pendingMpLinks!==null){
-          const prod=(d.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===editNome.toLowerCase());
-          if(prod){
-            updated.produtosLista=(d.produtosLista||[]).map((p:any)=>p.id===prod.id?{...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}:p);
-          }
-        }
-        return updated;
-      });
+      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
+      if(pendingMpLinks!==null){
+        syncProdByName(editNome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
+      }
       setEditId(null);
       setPendingMpLinks(null);
     }else{
@@ -3109,16 +3113,24 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       }
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
       const newItem={id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()};
-      setDb((d:any)=>{
-        const prodExiste=(d.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
-        const listaNew=[...(d.listaCompras||[]),newItem];
-        if(prodExiste&&pendingMpLinks!==null){
-          return{...d,listaCompras:listaNew,
-            produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===prodExiste.id?{...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}:p)};
+      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),newItem]}));
+      const nl=nome.toLowerCase();
+      if(pendingMpLinks!==null){
+        const prodExiste=(db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl);
+        if(prodExiste){
+          syncProdByName(nome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
+        }else{
+          applyBothProd((d:any)=>{
+            if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl))return d;
+            return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLinks?.length?{mpVinculados:pendingMpLinks}:{})}]};
+          });
         }
-        return{...d,listaCompras:listaNew,
-          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLinks?.length?{mpVinculados:pendingMpLinks}:{})}]};
-      });
+      }else{
+        applyBothProd((d:any)=>{
+          if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl))return d;
+          return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal}]};
+        });
+      }
     }
     setForm(EMPTY_FORM_LISTA);
     setPendingMpLinks(null);
@@ -3300,15 +3312,35 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     const dup=(db.produtosLista||[]).find((p:any)=>p.nome.trim().toLowerCase()===n.toLowerCase()&&p.id!==editProdId);
     if(dup)return alert(`Produto "${dup.nome}" já cadastrado.`);
     if(editProdId){
-      setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===editProdId?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}:p)}));
+      const oldProd=(db.produtosLista||[]).find((p:any)=>p.id===editProdId);
+      const oldName=oldProd?.nome||n;
+      if(oldName.toLowerCase()===n.toLowerCase()){
+        syncProdByName(n,(p:any)=>({...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}));
+      }else{
+        setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===editProdId?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}:p)}));
+      }
       setEditProdId(null);
     }else{
-      setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}]}));
+      applyBothProd((d:any)=>{
+        const exists=(d.produtosLista||[]).some((p:any)=>p.nome.trim().toLowerCase()===n.toLowerCase());
+        if(exists)return d;
+        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}]};
+      });
     }
     setProdForm({nome:"",cat:"",unidade:"un",rua:""});
   };
   const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un",rua:p.rua||""});};
-  const delProd=(id:string)=>{if(!confirm("Excluir produto do catálogo?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));};
+  const delProd=(id:string)=>{
+    if(!confirm("Excluir produto do catálogo?"))return;
+    const prod=(db.produtosLista||[]).find((p:any)=>p.id===id);
+    _listaDeletados.add(id);
+    if(prod){
+      const nl=prod.nome.trim().toLowerCase();
+      applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.nome.trim().toLowerCase()!==nl)}));
+    }else{
+      setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));
+    }
+  };
   const removerDuplicatas=()=>{
     const total=(db.produtosLista||[]).length;
     const seen=new Set<string>();
@@ -3316,7 +3348,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     const removidos=total-uniq.length;
     if(removidos===0){alert("Nenhum produto duplicado encontrado.");return;}
     if(!confirm(`Remover ${removidos} produto(s) duplicado(s) do catálogo?`))return;
-    setDb((d:any)=>({...d,produtosLista:uniq,produtosDedupV1:true}));
+    applyBothProd((d:any)=>{
+      const s2=new Set<string>();
+      const u2=(d.produtosLista||[]).filter((p:any)=>{const k=p.nome.trim().toLowerCase();if(s2.has(k))return false;s2.add(k);return true;});
+      return{...d,produtosLista:u2,produtosDedupV1:true};
+    });
     alert(`✅ ${removidos} duplicata(s) removida(s). Restaram ${uniq.length} produtos.`);
   };
 
@@ -3663,7 +3699,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                       const linked=vIds.includes(mp.id);
                       return <div key={mp.id} onClick={(e)=>{e.stopPropagation();
                         if(!l.prodId){
-                          setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:l.nome,cat:l.categoria,unidade:l.unidade,mpVinculados:[mp.id]}]}));
+                          applyBothProd((d:any)=>{
+                            if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===l.nome.toLowerCase()))return d;
+                            return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:l.nome,cat:l.categoria,unidade:l.unidade,mpVinculados:[mp.id]}]};
+                          });
                         }else{
                           if(linked)desvincularMp(l.prodId,mp.id);
                           else vincularMp(l.prodId,mp.id);
@@ -4069,7 +4108,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
             </div>
             {hasUnsaved&&<button onClick={()=>{
               if(existingProd){
-                setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===existingProd.id?{...p,mpVinculados:pendingMpLinks||[],mpVinculadoId:undefined}:p)}));
+                syncProdByName(existingProd.nome,(p:any)=>({...p,mpVinculados:pendingMpLinks||[],mpVinculadoId:undefined}));
                 setPendingMpLinks(null);
               }
             }} className="btn" style={{width:"100%",marginTop:4,background:"#4ade80",color:"#111",padding:"8px",fontSize:12,fontWeight:700}}>
