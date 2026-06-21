@@ -3733,8 +3733,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 }
 
 // ===================== PRODUÇÃO =====================
-const CATS_PRODUCAO_DEFAULT=["BOLO","TORTAS","PUDIM","PRODUÇÃO IVANE","COXINHAS","TRANÇA","ESFIRRAS","MASSAS FOLHADAS","CROISSANTS"];
-const ICON_PROD:Record<string,string>={"BOLO":"🎂","TORTAS":"🥧","PUDIM":"🍮","PRODUÇÃO IVANE":"👩‍🍳","COXINHAS":"🍗","TRANÇA":"🥖","ESFIRRAS":"🥟","MASSAS FOLHADAS":"🥐","CROISSANTS":"🥐"};
+const CATS_PRODUCAO_DEFAULT=["BOLO","TORTAS","PUDIM","PRODUÇÃO IVANE","COXINHAS","TRANÇA","ESFIRRAS","MASSAS FOLHADAS","CROISSANTS","IVAM SALADEIRO","DANY GOMES"];
+const ICON_PROD:Record<string,string>={"BOLO":"🎂","TORTAS":"🥧","PUDIM":"🍮","PRODUÇÃO IVANE":"👩‍🍳","COXINHAS":"🍗","TRANÇA":"🥖","ESFIRRAS":"🥟","MASSAS FOLHADAS":"🥐","CROISSANTS":"🥐","IVAM SALADEIRO":"🧑‍🍳","DANY GOMES":"👨‍🍳"};
 const prodCatIcon=(c:string)=>ICON_PROD[c]||"📦";
 
 function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,onLogout?:()=>void}){
