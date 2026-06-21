@@ -342,7 +342,7 @@ function LogoEmpresa({empresa}) {
 }
 
 // ===================== LOGIN =====================
-const LOGINS:{[pwd:string]:{role:"admin"|"op"|"op_producao",label:string,empresa?:string}}={
+const LOGINS:{[pwd:string]:{role:"admin"|"op"|"op_lista"|"op_producao",label:string,empresa?:string}}={
   "172839":{role:"admin",label:"Administrativo"},
   "1234":  {role:"op",   label:"Op. Lista SEAMA",    empresa:"SEAMA"},
   "4321":  {role:"op",   label:"Op. Lista CONFRARIA", empresa:"CONFRARIA"},
@@ -650,7 +650,7 @@ export default function App() {
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
 
-  const isOp=login?.role==="op"||login?.role==="op_producao";
+  const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao";
   const isAdmin=login?.role==="admin";
   // Cor em tempo real do usuário logado (ignora sessão desatualizada)
   const loginCorTexto=(()=>{if(!login?.label)return"#e8eaf0";const u=(state.CONFRARIA?.usuarios||[]).find((u:any)=>u.nome===login.label);return u?.corTexto||login?.corTexto||"#e8eaf0";})();
@@ -659,7 +659,7 @@ export default function App() {
     sessionStorage.setItem("app_login",JSON.stringify(info));
     setLogin(info);
     if(info.empresa)setEmpresa(info.empresa);
-    if(info.role==="op")setTab("lista");
+    if(info.role==="op"||info.role==="op_lista")setTab("lista");
     if(info.role==="op_producao")setTab("producao");
   };
   const doLogout=()=>{
@@ -683,7 +683,7 @@ export default function App() {
     {id:"gestao",label:"Gestão",icon:"⚙️"},
     {id:"usuarios",label:"Usuários",icon:"👥"},
   ];
-  const tabs=isOp?(login?.role==="op_producao"?allTabs.filter(t=>t.id==="producao"):allTabs.filter(t=>t.id==="lista"||t.id==="producao")):allTabs;
+  const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):allTabs.filter(t=>t.id==="producao")):allTabs;
 
   return (
     <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:84}}>
@@ -6855,7 +6855,7 @@ function Gestao({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:stri
 // ===================== USUÁRIOS =====================
 function UsuariosPanel({state,setState}:{state:any,setState:any}){
   const usuarios:any[]=state.CONFRARIA?.usuarios||[];
-  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op"|"op_producao",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0"};
+  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op"|"op_lista"|"op_producao",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0"};
   const [form,setForm]=useState(EMPTY);
   const [editId,setEditId]=useState<string|null>(null);
   const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
@@ -6908,8 +6908,9 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
       <input placeholder="Senha de acesso" value={form.senha} onChange={e=>setF("senha",e.target.value)} className="inp" style={{marginBottom:8}}/>
       <select value={form.role} onChange={e=>setF("role",e.target.value)} className="inp" style={{marginBottom:8}}>
         <option value="admin">Administrador — acesso completo</option>
-        <option value="op">Operador de Lista — lista de compras + produção</option>
-        <option value="op_producao">Operador de Produção — somente produção</option>
+        <option value="op">Lista + Produção</option>
+        <option value="op_lista">Somente Lista</option>
+        <option value="op_producao">Somente Produção</option>
       </select>
       {form.role!=="admin"&&<select value={form.empresa} onChange={e=>setF("empresa",e.target.value)} className="inp" style={{marginBottom:8}}>
         <option value="CONFRARIA">Empresa: CONFRARIA</option>
@@ -6938,17 +6939,17 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
       {usuarios.length} usuário{usuarios.length!==1?"s":""} cadastrado{usuarios.length!==1?"s":""}
     </div>
     {usuarios.map((u:any)=>(
-      <div key={u.id} className="card" style={{marginBottom:8,border:`1px solid ${u.role==="admin"?"#3a2a60":u.role==="op_producao"?"#3a2a1a":"#1a3a1a"}`}}>
+      <div key={u.id} className="card" style={{marginBottom:8,border:`1px solid ${({admin:"#3a2a60",op:"#1a3a3a",op_lista:"#1a3a1a",op_producao:"#3a2a1a"})[u.role]||"#1a3a1a"}`}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{position:"relative",flexShrink:0}}>
-            <div style={{fontSize:22}}>{u.role==="admin"?"🔐":u.role==="op_producao"?"🏭":"👤"}</div>
+            <div style={{fontSize:22}}>{({admin:"🔐",op:"🛒",op_lista:"📋",op_producao:"🏭"})[u.role]||"👤"}</div>
             <div style={{position:"absolute",bottom:0,right:-2,width:10,height:10,borderRadius:"50%",background:u.corTexto||"#e8eaf0",border:"1.5px solid #0a0c18"}}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:u.corTexto||"inherit"}}>{u.nome}</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center"}}>
-              <span className="tag" style={{background:u.role==="admin"?"#3a2a6044":u.role==="op_producao"?"#3a2a1a44":"#1a3a1a44",color:u.role==="admin"?"#a78bfa":u.role==="op_producao"?"#f59e0b":"#4ade80",border:`1px solid ${u.role==="admin"?"#5a3a90":u.role==="op_producao"?"#5a3a1a":"#2a5a2a"}`}}>
-                {u.role==="admin"?"Admin":u.role==="op_producao"?"Op. Produção":"Op. Lista"}
+              <span className="tag" style={{background:({admin:"#3a2a6044",op:"#1a3a3a44",op_lista:"#1a3a1a44",op_producao:"#3a2a1a44"})[u.role]||"#1a3a1a44",color:({admin:"#a78bfa",op:"#60a5fa",op_lista:"#4ade80",op_producao:"#f59e0b"})[u.role]||"#4ade80",border:`1px solid ${({admin:"#5a3a90",op:"#2a5a5a",op_lista:"#2a5a2a",op_producao:"#5a3a1a"})[u.role]||"#2a5a2a"}`}}>
+                {({admin:"Admin",op:"Lista + Produção",op_lista:"Lista",op_producao:"Produção"})[u.role]||"Operador"}
               </span>
               {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)"}}>{u.empresa}</span>}
               <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
