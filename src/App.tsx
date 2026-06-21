@@ -4060,10 +4060,8 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
       {itens.length>0&&<span style={{background:"#c084fc22",color:"#c084fc",border:"1px solid #c084fc44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itens.length} item(ns)</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap" as const}}>
         <button className="btn" onClick={()=>{setShowHist(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);}} style={{background:showHist?"#1a1040":"#120a20",color:"#c084fc",border:"1px solid #5b21b6",padding:"6px 12px",fontSize:12}}>📂 Pedidos{(db.pedidosProducao||[]).length>0?` (${(db.pedidosProducao||[]).length})`:""}</button>
-        {isAdmin&&<>
-          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHist(false);}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
-          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHist(false);}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
-        </>}
+        <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHist(false);}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
+        {isAdmin&&<button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHist(false);}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
@@ -4107,8 +4105,8 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
       </div>
     </div>}
 
-    {/* Product catalog (admin) */}
-    {isAdmin&&showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
+    {/* Product catalog */}
+    {showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
       <div className="section-title" style={{color:"#4ade80",margin:0,marginBottom:10}}>📦 Produtos de Produção <span style={{fontSize:11,color:"#555"}}>({prodsCatalog.length})</span></div>
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
