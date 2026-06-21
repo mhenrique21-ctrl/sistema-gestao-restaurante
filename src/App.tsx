@@ -3626,7 +3626,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                     <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
                     <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} onClick={e=>e.stopPropagation()}
                       className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-                    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada{concBusca?` para "${concBusca}"`:""}</div>}
+                    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
                     {mpOptions.map((mp:any)=>{
                       const linked=l.mpVinculadoId===mp.id;
                       return <div key={mp.id} onClick={(e)=>{e.stopPropagation();
@@ -3847,11 +3847,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb4?(mn.includes(cb4)||cb4.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15);
         const savedMp=savedMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===savedMpId):null;
         const allMps=savedMp&&!mps.find((m:any)=>m.id===savedMp.id)?[savedMp,...mps]:mps;
-        if(!allMps.length&&!cb4)return <div style={{fontSize:11,color:"#666",padding:"4px 8px",marginBottom:8,background:"#0d1020",borderRadius:6,border:"1px solid #1e2235"}}>🔍 Nenhum produto de compra encontrado para "{prodForm.nome.trim()}"</div>;
         return <div style={{marginBottom:8,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 8px"}}>
           <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — clique para vincular</div>
           <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
             className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
+          {!allMps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
           {allMps.map((mp:any)=>{
             const isLinked=savedMpId===mp.id;
             return <div key={mp.id} onClick={()=>{
@@ -3904,7 +3904,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                 <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
                 <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
                   className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-                {!allOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada{concBusca?` para "${concBusca}"`:""}</div>}
+                {!allOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
                 {allOpts.map((m:any)=>{
                   const mLinked=p.mpVinculadoId===m.id;
                   return <div key={m.id} onClick={()=>{if(mLinked)desvincularMp(p.id);else vincularMp(p.id,m.id);setCatConcItem(null);setConcBusca("");}}
@@ -3971,13 +3971,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
           const activeMp=activeMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===activeMpId):null;
           const cb3=concBusca.trim().toLowerCase();
           const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb3?(mn.includes(cb3)||cb3.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15);
-          if(!mps.length&&!activeMp)return null;
           const allMps=activeMp&&!mps.find((m:any)=>m.id===activeMp.id)?[activeMp,...mps]:mps;
           const hasUnsaved=existingProd&&pendingMpLink!==null&&pendingMpLink!==savedMpId;
           return <div style={{marginTop:6,background:"#0d1020",borderRadius:8,border:`1px solid ${hasUnsaved?"#fbbf2466":"#1e2235"}`,padding:"6px 10px"}}>
             <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar com compra — clique para vincular</div>
             <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
               className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
+            {!allMps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
             {allMps.map((mp:any)=>{
               const isLinked=activeMpId===mp.id;
               return <div key={mp.id} onClick={()=>{
