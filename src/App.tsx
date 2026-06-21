@@ -3826,7 +3826,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
     Object.entries(pc).forEach(([cat,its])=>{
       txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
-      its.forEach((it:any)=>{txt+=`  • ${it.nome}: *${it.quantidade} ${it.unidade||"un"}*${it.qtdAtual?` (atual: ${it.qtdAtual})`:""} ${it.obs?`— ${it.obs}`:""}\n`;});
+      its.forEach((it:any)=>{txt+=`• ${it.nome} | *${it.quantidade}${it.unidade||"un"}*${it.qtdAtual?` | atual:${it.qtdAtual}`:""}${it.obs?` | ${it.obs}`:""}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
