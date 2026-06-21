@@ -4,6 +4,8 @@ import https from 'https';
 import fs from 'fs';
 import zlib from 'zlib';
 import path from 'path';
+import crypto from 'crypto';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import webPush from 'web-push';
 
@@ -274,6 +276,108 @@ function sefazFetchByChave(emp, chNFe) {
   });
 }
 
+// ===== MANIFESTAÇÃO DO DESTINATÁRIO (Ciência da Operação) =====
+
+function ensurePemFiles(emp) {
+  const keyPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}_key.pem`);
+  const certPath = path.join(CERTS_DIR, `${emp.toLowerCase()}_cert.pem`);
+  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) return { keyPath, certPath };
+  const pfxPath = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
+  if (!fs.existsSync(pfxPath)) return null;
+  const pass = process.env[`CERT_${emp}_PASS`] || '';
+  try {
+    execSync(`openssl pkcs12 -in "${pfxPath}" -nocerts -nodes -out "${keyPath}" -passin pass:"${pass}" 2>/dev/null`);
+    execSync(`openssl pkcs12 -in "${pfxPath}" -nokeys -out "${certPath}" -passin pass:"${pass}" 2>/dev/null`);
+    console.log(`[SEFAZ ${emp}] PEM extraído do PFX ✅`);
+    return { keyPath, certPath };
+  } catch (e) {
+    console.error(`[SEFAZ ${emp}] Falha ao extrair PEM do PFX: ${e.message}`);
+    return null;
+  }
+}
+
+function getX509CertBase64(certPem) {
+  const certs = certPem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) || [];
+  if (!certs.length) return '';
+  return certs[0].replace(/-----BEGIN CERTIFICATE-----/,'').replace(/-----END CERTIFICATE-----/,'').replace(/\s/g,'');
+}
+
+function signXmlInfEvento(infEventoXml, privateKeyPem, certPem) {
+  const c14n = infEventoXml.replace(/\r?\n/g,'').replace(/>\s+</g,'><').trim();
+  const idMatch = infEventoXml.match(/Id="([^"]+)"/);
+  const refUri = idMatch ? `#${idMatch[1]}` : '';
+  const digest = crypto.createHash('sha256').update(c14n, 'utf8').digest('base64');
+  const signedInfoXml = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update(signedInfoXml);
+  const signatureValue = signer.sign(privateKeyPem, 'base64');
+  const x509 = getX509CertBase64(certPem);
+  return `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfoXml}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${x509}</X509Certificate></X509Data></KeyInfo></Signature>`;
+}
+
+function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
+  const tpEvento = '210210';
+  const nSeqEvento = '1';
+  const evId = `ID${tpEvento}${chNFe}0${nSeqEvento}`;
+  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z/, '-03:00');
+  const cOrgao = '91';
+  const infEventoXml = `<infEvento Id="${evId}" xmlns="http://www.portalfiscal.inf.br/nfe"><cOrgao>${cOrgao}</cOrgao><tpAmb>1</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciencia da Operacao</descEvento></detEvento></infEvento>`;
+  const signature = signXmlInfEvento(infEventoXml, privateKeyPem, certPem);
+  const eventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">${infEventoXml}${signature}</evento>`;
+  const envEvento = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>1</idLote>${eventoXml}</envEvento>`;
+  return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeRecepcaoEvento xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${envEvento}</nfeDadosMsg></nfeRecepcaoEvento></soap12:Body></soap12:Envelope>`;
+}
+
+function sefazManifestar(emp, chNFe) {
+  return new Promise((resolve, reject) => {
+    const pem = ensurePemFiles(emp);
+    if (!pem) return reject(new Error(`Certificado PEM não disponível para ${emp}. Verifique o .pfx e openssl.`));
+    const pfxPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
+    const passphrase = process.env[`CERT_${emp}_PASS`] || '';
+    const cnpj = (process.env[`CNPJ_${emp}`] || '').replace(/\D/g, '');
+    const uf   = process.env[`UF_${emp}`] || '35';
+    if (!cnpj) return reject(new Error(`CNPJ_${emp} não configurado`));
+    const privateKeyPem = fs.readFileSync(pem.keyPath, 'utf-8');
+    const certPem = fs.readFileSync(pem.certPath, 'utf-8');
+    const soapBody = buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem);
+    const bodyBuf = Buffer.from(soapBody, 'utf-8');
+    const hasPem = fs.existsSync(pem.keyPath) && fs.existsSync(pem.certPath);
+    const tlsOpts = hasPem
+      ? { key: fs.readFileSync(pem.keyPath), cert: fs.readFileSync(pem.certPath) }
+      : { pfx: fs.readFileSync(pfxPath), passphrase };
+    const options = {
+      hostname: 'www.nfe.fazenda.gov.br',
+      path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'Content-Length': bodyBuf.length },
+      ...tlsOpts, rejectUnauthorized: true, timeout: 30000,
+    };
+    console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
+    const apiReq = https.request(options, apiRes => {
+      const chunks = [];
+      apiRes.on('data', c => chunks.push(c));
+      apiRes.on('end', () => {
+        try {
+          let xml = Buffer.concat(chunks).toString('utf-8');
+          xml = xml.replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
+          const cStatEvento = getTag(xml, 'cStat');
+          const xMotivo = getTag(xml, 'xMotivo');
+          console.log(`[SEFAZ ${emp}] Manifestação ${chNFe.slice(-8)}: cStat=${cStatEvento} ${xMotivo}`);
+          if (['135','573'].includes(cStatEvento)) {
+            resolve({ ok: true, cStat: cStatEvento, xMotivo });
+          } else {
+            reject(new Error(`Manifestação cStat ${cStatEvento}: ${xMotivo}`));
+          }
+        } catch (e) { reject(new Error('Erro ao parsear resposta manifestação: ' + e.message)); }
+      });
+    });
+    apiReq.on('error', err => reject(new Error('Conexão SEFAZ manifestação: ' + err.message)));
+    apiReq.on('timeout', () => { apiReq.destroy(); reject(new Error('Timeout SEFAZ manifestação')); });
+    apiReq.write(bodyBuf);
+    apiReq.end();
+  });
+}
+
 function buildSoapEnvelope(cnpj, uf, ultNSU) {
   const nsu = String(ultNSU || 0).padStart(15, '0');
   return `<?xml version="1.0" encoding="utf-8"?>
@@ -435,10 +539,14 @@ async function sefazSync(emp) {
   const result = await sefazDistDFe(emp);
   const resumos = (result.nfes || []).filter(n => n.tipoDoc === 'resumo' && n.chNFe && n.chNFe.length === 44);
   if (resumos.length > 0) {
-    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — buscando NF-e completa para cada...`);
+    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — manifestando e buscando NF-e completa...`);
     for (const resumo of resumos) {
       try {
         await delay(1000);
+        try { await sefazManifestar(emp, resumo.chNFe); } catch (me) {
+          console.log(`[SEFAZ ${emp}] Manifestação ${resumo.chNFe.slice(-8)}: ${me.message} (continuando...)`);
+        }
+        await delay(2000);
         const completa = await sefazFetchByChave(emp, resumo.chNFe);
         const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
         if (idx >= 0) {
@@ -651,6 +759,33 @@ REGRAS OBRIGATÓRIAS:
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end(JSON.stringify(result));
+      } catch (e) {
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // NF-e: manifestar + buscar completa
+  if (req.method === 'POST' && urlPath === '/api/nfe-manifestar') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { empresa, chNFe } = JSON.parse(body);
+        if (!['CONFRARIA', 'SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Empresa inválida' })); return; }
+        if (!chNFe || chNFe.length !== 44) { res.writeHead(400); res.end(JSON.stringify({ error: 'chNFe inválida' })); return; }
+        let manifestResult = null;
+        try { manifestResult = await sefazManifestar(empresa, chNFe); } catch (me) {
+          console.log(`[SEFAZ] Manifestação falhou: ${me.message}`);
+        }
+        await delay(2000);
+        const result = await sefazFetchByChave(empresa, chNFe);
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ ...result, manifestacao: manifestResult }));
       } catch (e) {
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(500);
@@ -1160,6 +1295,10 @@ async function autoSyncSEFAZ() {
         for (const resumo of oldResumos) {
           try {
             await delay(1500);
+            try { await sefazManifestar(emp, resumo.chNFe); } catch (me) {
+              console.log(`[AutoSync] ${emp}: manifestação ${resumo.chNFe.slice(-8)}: ${me.message}`);
+            }
+            await delay(2000);
             const completa = await sefazFetchByChave(emp, resumo.chNFe);
             const idx = cache[key].nfes.findIndex(n => n.nsu === resumo.nsu);
             if (idx >= 0) {

@@ -1923,9 +1923,9 @@ REGRAS:
       for(const resumo of resumos){
         try{
           setFetchingChave(resumo.chNFe);
-          const res=await fetch("/api/nfe-fetch-chave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:resumo.chNFe})});
+          const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:resumo.chNFe})});
           const data=await res.json();
-          if(res.ok&&!data.error){
+          if(res.ok&&!data.error&&(data.itens||[]).length>0){
             setSefazList(l=>l.map(n=>n.nsu===resumo.nsu?{...n,...data,tipoDoc:"completo"}:n));
           }
         }catch{}
@@ -2000,7 +2000,7 @@ REGRAS:
     if(!nfe.chNFe||nfe.chNFe.length!==44){alert("Chave de acesso não disponível para esta NF-e.");return;}
     setFetchingChave(nfe.chNFe);
     try{
-      const res=await fetch("/api/nfe-fetch-chave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
+      const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
       const data=await res.json();
       if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
       setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
