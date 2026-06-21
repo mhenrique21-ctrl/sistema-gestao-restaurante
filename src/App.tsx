@@ -5167,7 +5167,12 @@ function FichaTecnica({db,setDb}){
   const [novoIns,setNovoIns]=useState({mp:"",quantidade:"",unidade:"kg"});
   const [editId,setEditId]=useState(null);
   const [busca,setBusca]=useState("");
+  const [editInsId,setEditInsId]=useState<string|null>(null);
+  const [editInsForm,setEditInsForm]=useState({quantidade:"",unidade:"kg",valorUnd:""});
+  const [concFichaId,setConcFichaId]=useState<string|null>(null);
+  const [concBusca,setConcBusca]=useState<Record<string,string>>({});
   const mps=db.materiasPrimas||[];
+  const compras=db.compras||[];
   const addIns=()=>{
     if(!novoIns.mp||!novoIns.quantidade)return;
     const mp=mps.find(m=>m.id===novoIns.mp);if(!mp)return;
@@ -5176,6 +5181,13 @@ function FichaTecnica({db,setDb}){
     setNovoIns({mp:"",quantidade:"",unidade:"kg"});
   };
   const remIns=(id)=>setForm(f=>({...f,insumos:f.insumos.filter(i=>i.id!==id)}));
+  const startEditIns=(ins)=>{setEditInsId(ins.id);setEditInsForm({quantidade:String(ins.quantidade),unidade:ins.unidade,valorUnd:String(ins.valorUnd)});};
+  const saveEditIns=()=>{
+    if(!editInsId)return;
+    const qtd=parseFloat(editInsForm.quantidade)||0;const val=parseFloat(editInsForm.valorUnd)||0;
+    setForm(f=>({...f,insumos:f.insumos.map(i=>i.id===editInsId?{...i,quantidade:qtd,unidade:editInsForm.unidade,valorUnd:val,custo:qtd*val}:i)}));
+    setEditInsId(null);
+  };
   const custoTotal=form.insumos.reduce((s,i)=>s+i.custo,0);
   const porcoes=Math.max(parseFloat(form.porcoes)||1,1);
   const cmvPct=Math.max(Math.min(parseFloat(form.cmv)||30,100),1);
@@ -5200,11 +5212,41 @@ function FichaTecnica({db,setDb}){
       const cp=ct/por; const pp=cp/(cmv/100);
       return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
     })}));
-    alert("✅ Fichas atualizadas!");
+    alert("Fichas atualizadas!");
+  };
+  const findCompras=(nome:string)=>{
+    const nl=nome.toLowerCase().trim();
+    return compras.filter(c=>{const np=(c.nomeProduto||"").toLowerCase();return np.includes(nl)||nl.includes(np);})
+      .sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  };
+  const conciliarInsumo=(fichaId:string,insId:string,novoValor:number)=>{
+    setDb(d=>({...d,fichasTecnicas:(d.fichasTecnicas||[]).map(f=>{
+      if(f.id!==fichaId)return f;
+      const ins=f.insumos.map(i=>{if(i.id!==insId)return i;return{...i,valorUnd:novoValor,custo:novoValor*i.quantidade};});
+      const ct=ins.reduce((s,i)=>s+i.custo,0);
+      const por=f.porcoes||1;const cmv=f.cmv||30;
+      const cp=ct/por;const pp=cp/(cmv/100);
+      return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
+    })}));
+  };
+  const vincularInsumo=(fichaId:string,insId:string,compra:any)=>{
+    const mp=mps.find(m=>(m.nome||"").toLowerCase()===((compra.nomeProduto||"").toLowerCase()));
+    setDb(d=>({...d,fichasTecnicas:(d.fichasTecnicas||[]).map(f=>{
+      if(f.id!==fichaId)return f;
+      const ins=f.insumos.map(i=>{
+        if(i.id!==insId)return i;
+        const val=compra.valorUnitario||0;
+        return{...i,nome:compra.nomeProduto||i.nome,valorUnd:val,custo:val*i.quantidade,mpId:mp?.id||i.mpId};
+      });
+      const ct=ins.reduce((s,i)=>s+i.custo,0);
+      const por=f.porcoes||1;const cmv=f.cmv||30;
+      const cp=ct/por;const pp=cp/(cmv/100);
+      return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
+    })}));
   };
   return <div>
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
-      {[["lista","📋 Fichas"],["novo",editId?"✏️ Editando":"➕ Nova"],["mps","🥩 Matérias"]].map(([k,l])=>(
+      {[["lista","📋 Fichas"],["novo",editId?"✏️ Editando":"➕ Nova"],["conciliacao","🔗 Conciliação"],["mps","🥩 Matérias"]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
       ))}
     </div>
@@ -5243,7 +5285,8 @@ function FichaTecnica({db,setDb}){
             </div>
           ))}
           <div style={{display:"flex",gap:8,marginTop:10}}>
-            <button className="btn" onClick={()=>edit(f)} style={{background:"var(--border)",color:"#888",padding:"6px 14px",fontSize:12}}>✏️</button>
+            <button className="btn" onClick={()=>edit(f)} style={{background:"var(--border)",color:"#888",padding:"6px 14px",fontSize:12}}>✏️ Editar</button>
+            <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"#1a1a30",color:"#7c8fff",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
             <button className="btn" onClick={()=>del(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
           {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
@@ -5277,19 +5320,54 @@ function FichaTecnica({db,setDb}){
         <div className="row" style={{marginBottom:8}}>
           <input type="number" placeholder="Qtd" value={novoIns.quantidade} onChange={e=>setNovoIns(i=>({...i,quantidade:e.target.value}))} className="inp"/>
           <select value={novoIns.unidade} onChange={e=>setNovoIns(i=>({...i,unidade:e.target.value}))} className="inp">
-            {["kg","un","L"].map(u=><option key={u} value={u}>{u}</option>)}
+            {["kg","un","L","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
         <button className="btn" onClick={addIns} style={{background:"var(--border)",color:"var(--text)",padding:"10px",width:"100%"}}>+ Adicionar</button>
       </div>
       {form.insumos.length>0&&<div className="card" style={{marginBottom:10}}>
-        {form.insumos.map(i=>(
-          <div key={i.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #1e2235"}}>
-            <div><div style={{fontSize:13,fontWeight:600}}>{i.nome}</div><div className="muted" style={{fontSize:11}}>{i.quantidade}{i.unidade} × {fmtMoney(i.valorUnd)}</div></div>
-            <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontWeight:600,color:"#60a5fa"}}>{fmtMoney(i.custo)}</span>
-              <button className="btn" onClick={()=>remIns(i.id)} style={{background:"transparent",color:"#ff5c7a",fontSize:16,padding:"0 4px"}}>✕</button></div>
-          </div>
-        ))}
+        <div className="section-title" style={{marginBottom:8}}>Insumos</div>
+        {form.insumos.map(i=>{
+          const isEditing=editInsId===i.id;
+          return <div key={i.id} style={{padding:"8px 0",borderBottom:"1px solid #1e2235"}}>
+            {isEditing?<div>
+              <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>{i.nome}</div>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                <div style={{flex:"1 1 60px"}}>
+                  <label style={{fontSize:10,color:"#666"}}>Qtd</label>
+                  <input type="number" min="0" step="0.01" value={editInsForm.quantidade}
+                    onChange={e=>setEditInsForm(f=>({...f,quantidade:e.target.value}))}
+                    className="inp" style={{marginBottom:0,fontSize:12,padding:"5px"}}/>
+                </div>
+                <div style={{flex:"0 0 55px"}}>
+                  <label style={{fontSize:10,color:"#666"}}>Und</label>
+                  <select value={editInsForm.unidade} onChange={e=>setEditInsForm(f=>({...f,unidade:e.target.value}))}
+                    className="inp" style={{marginBottom:0,fontSize:12,padding:"5px"}}>
+                    {["kg","un","L","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div style={{flex:"1 1 70px"}}>
+                  <label style={{fontSize:10,color:"#666"}}>Valor/und</label>
+                  <input type="number" min="0" step="0.01" value={editInsForm.valorUnd}
+                    onChange={e=>setEditInsForm(f=>({...f,valorUnd:e.target.value}))}
+                    className="inp" style={{marginBottom:0,fontSize:12,padding:"5px"}}/>
+                </div>
+                <div style={{display:"flex",gap:4,alignSelf:"flex-end",paddingBottom:2}}>
+                  <button onClick={saveEditIns} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"5px 10px"}}>✓</button>
+                  <button onClick={()=>setEditInsId(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,padding:"5px 8px"}}>✕</button>
+                </div>
+              </div>
+            </div>
+            :<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div><div style={{fontSize:13,fontWeight:600}}>{i.nome}</div><div className="muted" style={{fontSize:11}}>{i.quantidade}{i.unidade} × {fmtMoney(i.valorUnd)}</div></div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontWeight:600,color:"#60a5fa"}}>{fmtMoney(i.custo)}</span>
+                <button onClick={()=>startEditIns(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#fbbf24",fontSize:13,padding:"0 3px"}}>✏️</button>
+                <button className="btn" onClick={()=>remIns(i.id)} style={{background:"transparent",color:"#ff5c7a",fontSize:16,padding:"0 4px"}}>✕</button>
+              </div>
+            </div>}
+          </div>;
+        })}
         <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
           <span style={{fontWeight:700}}>Custo total</span>
           <span style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(custoTotal)}</span>
@@ -5304,7 +5382,93 @@ function FichaTecnica({db,setDb}){
         </div>
       </div>}
       <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Ficha"}</button>
-      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({nome:"",insumos:[]});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({nome:"",insumos:[],porcoes:"1",cmv:"30"});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+    </div>}
+    {subTab==="conciliacao"&&<div>
+      <div className="section-title" style={{color:"#7c8fff"}}>🔗 Conciliação com Compras</div>
+      <div style={{fontSize:11,color:"#888",marginBottom:12}}>Compare os preços dos insumos das fichas com as últimas compras registradas. Vincule e atualize valores.</div>
+      {!(db.fichasTecnicas||[]).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
+      {(db.fichasTecnicas||[]).map(f=>{
+        const isOpen=concFichaId===f.id;
+        return <div key={f.id} className="card" style={{marginBottom:10,border:isOpen?"1px solid #7c8fff":"1px solid var(--border)"}}>
+          <div onClick={()=>setConcFichaId(isOpen?null:f.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+            <div style={{fontWeight:700,fontSize:14}}>{f.nome}</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <span style={{fontSize:11,color:"#60a5fa"}}>{fmtMoney(f.custoTotal)}</span>
+              <span style={{fontSize:14,color:"#888"}}>{isOpen?"▲":"▼"}</span>
+            </div>
+          </div>
+          {isOpen&&<div style={{marginTop:10}}>
+            {(f.insumos||[]).map(ins=>{
+              const mp=mps.find(m=>m.id===ins.mpId);
+              const comprasMatch=findCompras(ins.nome);
+              const ultimaCompra=comprasMatch[0];
+              const precoCompra=ultimaCompra?.valorUnitario||0;
+              const precoFicha=ins.valorUnd||0;
+              const diff=precoCompra&&precoFicha?((precoCompra-precoFicha)/precoFicha*100):0;
+              const buscaKey=`${f.id}_${ins.id}`;
+              const buscaVal=concBusca[buscaKey]||"";
+              const buscaResults=buscaVal.length>=2?compras.filter(c=>(c.nomeProduto||"").toLowerCase().includes(buscaVal.toLowerCase())).sort((a,b)=>(b.data||"").localeCompare(a.data||"")).slice(0,8):[];
+              return <div key={ins.id} style={{padding:"10px 0",borderBottom:"1px solid #1e2235"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div style={{fontWeight:600,fontSize:13}}>{ins.nome} <span style={{color:"#888",fontWeight:400,fontSize:11}}>({ins.quantidade}{ins.unidade})</span></div>
+                </div>
+                <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#60a5fa"}}>{fmtMoney(precoFicha)}/{ins.unidade}</div>
+                    <div style={{fontSize:9,color:"#666"}}>Preço ficha</div>
+                  </div>
+                  <div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:ultimaCompra?"#4ade80":"#666"}}>{ultimaCompra?`${fmtMoney(precoCompra)}/${ultimaCompra.unidade||ins.unidade}`:"—"}</div>
+                    <div style={{fontSize:9,color:"#666"}}>{ultimaCompra?`Compra ${fmtDate(ultimaCompra.data)}`:"Sem compra"}</div>
+                  </div>
+                  {ultimaCompra&&diff!==0&&<div style={{flex:"0 0 60px",background:diff>0?"#2a151a":"#152a1a",borderRadius:8,padding:"6px 8px",textAlign:"center",border:`1px solid ${diff>0?"#ff5c7a33":"#4ade8033"}`}}>
+                    <div style={{fontSize:12,fontWeight:700,color:diff>0?"#ff5c7a":"#4ade80"}}>{diff>0?"+":""}{diff.toFixed(1)}%</div>
+                    <div style={{fontSize:9,color:"#666"}}>Variação</div>
+                  </div>}
+                </div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {ultimaCompra&&Math.abs(diff)>0.5&&<button onClick={()=>conciliarInsumo(f.id,ins.id,precoCompra)} className="btn"
+                    style={{background:"#7c8fff22",color:"#7c8fff",border:"1px solid #7c8fff44",padding:"5px 10px",fontSize:11}}>
+                    ✓ Usar preço compra ({fmtMoney(precoCompra)})
+                  </button>}
+                  {mp&&mp.ultimoValor!==precoFicha&&<button onClick={()=>conciliarInsumo(f.id,ins.id,mp.ultimoValor||0)} className="btn"
+                    style={{background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",padding:"5px 10px",fontSize:11}}>
+                    ✓ Usar matéria-prima ({fmtMoney(mp.ultimoValor||0)})
+                  </button>}
+                </div>
+                {!ultimaCompra&&<div style={{marginTop:6}}>
+                  <div style={{position:"relative"}}>
+                    <input placeholder="Buscar produto nas compras..." value={buscaVal}
+                      onChange={e=>setConcBusca(b=>({...b,[buscaKey]:e.target.value}))}
+                      className="inp" style={{marginBottom:0,fontSize:11,padding:"6px 8px"}}/>
+                    {buscaResults.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:180,overflowY:"auto" as const}}>
+                      {buscaResults.map((c,idx)=>(
+                        <div key={idx} onMouseDown={()=>{vincularInsumo(f.id,ins.id,c);setConcBusca(b=>({...b,[buscaKey]:""}));}}
+                          style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                          <div><div style={{fontSize:12,fontWeight:600}}>{c.nomeProduto}</div><div style={{fontSize:10,color:"#888"}}>{c.fornecedor} · {fmtDate(c.data)}</div></div>
+                          <span style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"}</span>
+                        </div>
+                      ))}
+                    </div>}
+                  </div>
+                </div>}
+                {comprasMatch.length>1&&<details style={{marginTop:6}}>
+                  <summary style={{fontSize:10,color:"#888",cursor:"pointer"}}>Histórico de compras ({comprasMatch.length})</summary>
+                  <div style={{maxHeight:120,overflowY:"auto" as const,marginTop:4}}>
+                    {comprasMatch.slice(0,10).map((c,idx)=>(
+                      <div key={idx} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid #1e223522"}}>
+                        <span style={{color:"#888"}}>{fmtDate(c.data)} · {c.fornecedor||"—"}</span>
+                        <span style={{color:"#60a5fa",cursor:"pointer"}} onClick={()=>conciliarInsumo(f.id,ins.id,c.valorUnitario||0)}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>}
+              </div>;
+            })}
+          </div>}
+        </div>;
+      })}
     </div>}
     {subTab==="mps"&&<div>
       <div className="section-title">Matérias-Primas</div>
