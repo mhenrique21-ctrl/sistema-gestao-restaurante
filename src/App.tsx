@@ -5164,21 +5164,28 @@ function Contas({db,setDb}){
 function FichaTecnica({db,setDb}){
   const [subTab,setSubTab]=useState("lista");
   const [form,setForm]=useState({nome:"",insumos:[],porcoes:"1",cmv:"30"});
-  const [novoIns,setNovoIns]=useState({mp:"",quantidade:"",unidade:"kg"});
+  const [novoIns,setNovoIns]=useState({nome:"",mp:"",quantidade:"",unidade:"kg",valorUnd:""});
   const [editId,setEditId]=useState(null);
   const [busca,setBusca]=useState("");
   const [editInsId,setEditInsId]=useState<string|null>(null);
   const [editInsForm,setEditInsForm]=useState({quantidade:"",unidade:"kg",valorUnd:""});
   const [concFichaId,setConcFichaId]=useState<string|null>(null);
   const [concBusca,setConcBusca]=useState<Record<string,string>>({});
+  const [showInsSugg,setShowInsSugg]=useState(false);
   const mps=db.materiasPrimas||[];
   const compras=db.compras||[];
+  const insSuggestions=novoIns.nome.length>=1?mps.filter(m=>(m.nome||"").toLowerCase().includes(novoIns.nome.toLowerCase())).slice(0,8):[];
+  const selectInsSugg=(mp:any)=>{setNovoIns(i=>({...i,nome:mp.nome,mp:mp.id,unidade:mp.unidade||i.unidade,valorUnd:String(mp.ultimoValor||0)}));setShowInsSugg(false);};
   const addIns=()=>{
-    if(!novoIns.mp||!novoIns.quantidade)return;
-    const mp=mps.find(m=>m.id===novoIns.mp);if(!mp)return;
-    const custo=(mp.ultimoValor||0)*parseFloat(novoIns.quantidade);
-    setForm(f=>({...f,insumos:[...f.insumos,{id:uid(),mpId:mp.id,nome:mp.nome,quantidade:parseFloat(novoIns.quantidade),unidade:novoIns.unidade,valorUnd:mp.ultimoValor||0,custo}]}));
-    setNovoIns({mp:"",quantidade:"",unidade:"kg"});
+    const nome=novoIns.nome.trim();
+    if(!nome||!novoIns.quantidade)return alert("Informe nome e quantidade.");
+    const qtd=parseFloat(novoIns.quantidade)||0;
+    if(qtd<=0)return alert("Quantidade deve ser maior que 0.");
+    const mp=novoIns.mp?mps.find(m=>m.id===novoIns.mp):null;
+    const val=parseFloat(novoIns.valorUnd)||(mp?.ultimoValor||0);
+    const custo=val*qtd;
+    setForm(f=>({...f,insumos:[...f.insumos,{id:uid(),mpId:mp?.id||"",nome,quantidade:qtd,unidade:novoIns.unidade,valorUnd:val,custo}]}));
+    setNovoIns({nome:"",mp:"",quantidade:"",unidade:"kg",valorUnd:""});
   };
   const remIns=(id)=>setForm(f=>({...f,insumos:f.insumos.filter(i=>i.id!==id)}));
   const startEditIns=(ins)=>{setEditInsId(ins.id);setEditInsForm({quantidade:String(ins.quantidade),unidade:ins.unidade,valorUnd:String(ins.valorUnd)});};
@@ -5313,16 +5320,46 @@ function FichaTecnica({db,setDb}){
       </div>
       <div className="card" style={{marginBottom:10}}>
         <div className="section-title">Adicionar Insumo</div>
-        <select value={novoIns.mp} onChange={e=>setNovoIns(i=>({...i,mp:e.target.value}))} className="inp" style={{marginBottom:8}}>
-          <option value="">Selecionar matéria-prima</option>
-          {mps.map(m=><option key={m.id} value={m.id}>{m.nome} ({fmtMoney(m.ultimoValor||0)}/{m.unidade})</option>)}
-        </select>
-        <div className="row" style={{marginBottom:8}}>
-          <input type="number" placeholder="Qtd" value={novoIns.quantidade} onChange={e=>setNovoIns(i=>({...i,quantidade:e.target.value}))} className="inp"/>
-          <select value={novoIns.unidade} onChange={e=>setNovoIns(i=>({...i,unidade:e.target.value}))} className="inp">
-            {["kg","un","L","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
-          </select>
+        <div style={{position:"relative",marginBottom:8}}>
+          <input placeholder="Nome do produto (ex: Farinha, Ovo, Açúcar...)" value={novoIns.nome}
+            onChange={e=>{setNovoIns(i=>({...i,nome:e.target.value,mp:""}));setShowInsSugg(true);}}
+            onKeyDown={e=>{if(e.key==="Enter"&&!showInsSugg)addIns();if(e.key==="Escape")setShowInsSugg(false);}}
+            onFocus={()=>setShowInsSugg(true)}
+            onBlur={()=>setTimeout(()=>setShowInsSugg(false),150)}
+            className="inp" style={{marginBottom:0}}/>
+          {showInsSugg&&insSuggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:200,overflowY:"auto" as const}}>
+            {insSuggestions.map((m:any)=>(
+              <div key={m.id} onMouseDown={()=>selectInsSugg(m)}
+                style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                <span style={{fontSize:13,fontWeight:600}}>{m.nome}</span>
+                <span style={{fontSize:11,color:"#4ade80"}}>{fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
+              </div>
+            ))}
+          </div>}
+          {novoIns.mp&&<div style={{fontSize:10,color:"#4ade80",marginTop:3}}>Vinculado à matéria-prima</div>}
+          {novoIns.nome&&!novoIns.mp&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>Produto manual — concilie com compras depois</div>}
         </div>
+        <div className="row" style={{marginBottom:8}}>
+          <div style={{flex:1}}>
+            <label style={{fontSize:10,color:"#666"}}>Qtd</label>
+            <input type="number" placeholder="0" min="0.01" step="0.01" value={novoIns.quantidade} onChange={e=>setNovoIns(i=>({...i,quantidade:e.target.value}))}
+              onKeyDown={e=>{if(e.key==="Enter")addIns();}} className="inp" style={{marginBottom:0}}/>
+          </div>
+          <div style={{flex:"0 0 65px"}}>
+            <label style={{fontSize:10,color:"#666"}}>Und</label>
+            <select value={novoIns.unidade} onChange={e=>setNovoIns(i=>({...i,unidade:e.target.value}))} className="inp" style={{marginBottom:0}}>
+              {["kg","un","L","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <div style={{flex:1}}>
+            <label style={{fontSize:10,color:"#666"}}>Valor/und (R$)</label>
+            <input type="number" placeholder="0.00" min="0" step="0.01" value={novoIns.valorUnd} onChange={e=>setNovoIns(i=>({...i,valorUnd:e.target.value}))}
+              onKeyDown={e=>{if(e.key==="Enter")addIns();}} className="inp" style={{marginBottom:0}}/>
+          </div>
+        </div>
+        {novoIns.nome&&novoIns.quantidade&&<div style={{fontSize:11,color:"#60a5fa",marginBottom:6}}>
+          Custo: {fmtMoney((parseFloat(novoIns.valorUnd)||0)*(parseFloat(novoIns.quantidade)||0))}
+        </div>}
         <button className="btn" onClick={addIns} style={{background:"var(--border)",color:"var(--text)",padding:"10px",width:"100%"}}>+ Adicionar</button>
       </div>
       {form.insumos.length>0&&<div className="card" style={{marginBottom:10}}>
