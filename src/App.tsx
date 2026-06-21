@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
@@ -411,6 +411,7 @@ const migrateDb=(m:any)=>{
     if(!m[e].consumacoes)m[e].consumacoes=[];
     if(!m[e].encargos)m[e].encargos=[];
     if(!m[e].normalizacoes)m[e].normalizacoes=[];
+    if(!m[e].iconesProducao)m[e].iconesProducao={};
     if(!m[e].movEstoque)m[e].movEstoque=[];
     if(!m[e].listaCategorias)m[e].listaCategorias=[];
     if(!m[e].listaCatOrdem)m[e].listaCatOrdem=[];
@@ -3920,10 +3921,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 // ===================== PRODUÇÃO =====================
 const CATS_PRODUCAO_DEFAULT=["BOLO","TORTAS","PUDIM","PRODUÇÃO IVANE","COXINHAS","TRANÇA","ESFIRRAS","MASSAS FOLHADAS","CROISSANTS","IVAM SALADEIRO","DANY GOMES"];
 const ICON_PROD:Record<string,string>={"BOLO":"🎂","TORTAS":"🥧","PUDIM":"🍮","PRODUÇÃO IVANE":"👩‍🍳","COXINHAS":"🍗","TRANÇA":"🥖","ESFIRRAS":"🥟","MASSAS FOLHADAS":"🥐","CROISSANTS":"🥐","IVAM SALADEIRO":"🧑‍🍳","DANY GOMES":"👨‍🍳"};
-const prodCatIcon=(c:string)=>ICON_PROD[c]||"📦";
+const EMOJI_PALETTE=["🎂","🥧","🍮","🍗","🥖","🥟","🥐","👩‍🍳","🧑‍🍳","👨‍🍳","🍰","🧁","🍩","🍪","🥮","🍞","🥯","🥨","🥞","🧇","🍕","🌮","🥪","🍔","🌯","🥙","🧆","🥗","🍝","🍜","🍲","🍛","🍣","🍱","🥘","🫕","🍖","🥩","🐟","🦐","🥚","🧀","🥬","🥕","🍅","🌽","🥔","🧅","🍋","🍓","🫐","🍫","🍦","☕","🧃","🍺","🧊","📦","🏷️","⭐","💎","🔥","❄️","🌿","🌶️","🫒","🧈","🍯","🥛","🫘","🥜","🧂","💼","🏪","🛒","📋","✨"];
+let _dbIconesProd:Record<string,string>={};
+const prodCatIcon=(c:string)=>_dbIconesProd[c]||ICON_PROD[c]||"📦";
 
 function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,onLogout?:()=>void}){
   const isAdmin=login?.role==="admin";
+  _dbIconesProd=db.iconesProducao||{};
+  const [iconPicker,setIconPicker]=useState<string|null>(null);
+  const setCatIcon=(cat:string,icon:string)=>{setDb((d:any)=>({...d,iconesProducao:{...(d.iconesProducao||{}), [cat]:icon}}));setIconPicker(null);};
+  const [novaIcone,setNovaIcone]=useState("📦");
   // Seed default categories once
   if(!db.pedidosProducaoSeedCats){
     setTimeout(()=>setDb((d:any)=>({...d,pedidosProducaoSeedCats:true,categoriasProducao:d.categoriasProducao?.length?d.categoriasProducao:[...CATS_PRODUCAO_DEFAULT]})),0);
@@ -3958,12 +3965,12 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const [novaCat,setNovaCat]=useState("");
   const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
 
-  const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c]}));setNovaCat("");};
+  const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c],iconesProducao:{...(d.iconesProducao||{}),[c]:novaIcone}}));setNovaCat("");setNovaIcone("📦");};
   const delCat=(c:string)=>{
     if(!confirm(`Excluir categoria "${c}"? Produtos serão movidos para "outros".`))return;
-    setDb((d:any)=>({...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===c?{...p,cat:""}:p)}));
+    setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===c?{...p,cat:""}:p),iconesProducao:icons};});
   };
-  const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>({...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===old?{...p,cat:v}:p)}));setEditCat(null);};
+  const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>{const icons={...(d.iconesProducao||{})};if(icons[old]&&v!==old){icons[v]=icons[old];delete icons[old];}return{...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===old?{...p,cat:v}:p),iconesProducao:icons};});setEditCat(null);};
   const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
 
   // Order form (Lista-style)
@@ -4071,8 +4078,11 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
       <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Categorias de Produção</div>
       <div style={{marginBottom:10}}>
         {cats.map((c,idx)=>(
-          <div key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
-            <span style={{fontSize:16}}>{prodCatIcon(c)}</span>
+          <div key={c} style={{position:"relative" as const,display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
+            <button onClick={()=>setIconPicker(iconPicker===c?null:c)} title="Alterar ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",fontSize:16,padding:"2px 4px",lineHeight:1}}>{prodCatIcon(c)}</button>
+            {iconPicker===c&&<div style={{position:"absolute" as const,top:36,left:0,zIndex:99,background:"#1a1030",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
+              {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>setCatIcon(c,em)} style={{background:prodCatIcon(c)===em?"#5b21b644":"none",border:prodCatIcon(c)===em?"1px solid #a78bfa":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
+            </div>}
             {editCat?.name===c
               ? <>
                   <input autoFocus value={editCat.val}
@@ -4098,9 +4108,13 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
           </div>
         ))}
       </div>
-      <div style={{display:"flex",gap:6}}>
+      <div style={{position:"relative" as const,display:"flex",gap:6,alignItems:"center"}}>
+        <button onClick={()=>setIconPicker(iconPicker==="_new"?null:"_new")} title="Escolher ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",fontSize:18,padding:"4px 6px",lineHeight:1}}>{novaIcone}</button>
+        {iconPicker==="_new"&&<div style={{position:"absolute" as const,bottom:42,left:0,zIndex:99,background:"#1a1030",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
+          {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>{setNovaIcone(em);setIconPicker(null);}} style={{background:novaIcone===em?"#5b21b644":"none",border:novaIcone===em?"1px solid #a78bfa":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
+        </div>}
         <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
-          onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0}}/>
+          onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0,flex:1}}/>
         <button className="btn" onClick={addCat} style={{background:"#a78bfa",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
       </div>
     </div>}
