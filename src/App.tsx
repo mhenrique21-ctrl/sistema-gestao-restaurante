@@ -5220,14 +5220,31 @@ function FichaTecnica({db,setDb}){
   const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30)});setSubTab("novo");};
   const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.filter(f=>f.id!==id)}));};
   const atualizar=()=>{
-    setDb(d=>({...d,fichasTecnicas:(d.fichasTecnicas||[]).map(f=>{
-      const ins=f.insumos.map(i=>{const mp=(d.materiasPrimas||[]).find(m=>m.id===i.mpId);const v=mp?.ultimoValor||i.valorUnd;return{...i,valorUnd:v,custo:v*i.quantidade};});
-      const ct=ins.reduce((s,i)=>s+i.custo,0);
-      const por=f.porcoes||1; const cmv=f.cmv||30;
-      const cp=ct/por; const pp=cp/(cmv/100);
-      return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
-    })}));
-    alert("Fichas atualizadas!");
+    setDb(d=>{
+      const allMps=d.materiasPrimas||[];
+      const allCompras=d.compras||[];
+      const fichas=(d.fichasTecnicas||[]).map(f=>{
+        const ins=f.insumos.map(i=>{
+          let mp=i.mpId?allMps.find(m=>m.id===i.mpId):null;
+          if(!mp){
+            mp=allMps.find(m=>(m.nome||"").toLowerCase()===(i.nome||"").toLowerCase());
+          }
+          if(!mp){
+            const compra=allCompras.filter(c=>{const np=(c.nomeProduto||"").toLowerCase();const nl=(i.nome||"").toLowerCase();return np.includes(nl)||nl.includes(np);}).sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0];
+            if(compra){const v=compra.valorUnitario||i.valorUnd;return{...i,valorUnd:v,custo:v*i.quantidade};}
+            return i;
+          }
+          const v=mp.ultimoValor||i.valorUnd;
+          return{...i,valorUnd:v,custo:v*i.quantidade,mpId:mp.id};
+        });
+        const ct=ins.reduce((s,i)=>s+i.custo,0);
+        const por=f.porcoes||1;const cmv=f.cmv||30;
+        const cp=ct/por;const pp=cp/(cmv/100);
+        return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
+      });
+      return{...d,fichasTecnicas:fichas};
+    });
+    alert("Fichas atualizadas com preços das compras!");
   };
   const findCompras=(nome:string)=>{
     const nl=nome.toLowerCase().trim();
@@ -5245,19 +5262,27 @@ function FichaTecnica({db,setDb}){
     })}));
   };
   const vincularInsumo=(fichaId:string,insId:string,compra:any)=>{
-    const mp=mps.find(m=>(m.nome||"").toLowerCase()===((compra.nomeProduto||"").toLowerCase()));
-    setDb(d=>({...d,fichasTecnicas:(d.fichasTecnicas||[]).map(f=>{
-      if(f.id!==fichaId)return f;
-      const ins=f.insumos.map(i=>{
-        if(i.id!==insId)return i;
-        const val=compra.valorUnitario||0;
-        return{...i,nome:compra.nomeProduto||i.nome,valorUnd:val,custo:val*i.quantidade,mpId:mp?.id||i.mpId};
+    setDb(d=>{
+      let mpsList=[...(d.materiasPrimas||[])];
+      let mp=mpsList.find(m=>(m.nome||"").toLowerCase()===((compra.nomeProduto||"").toLowerCase()));
+      if(!mp){
+        mp={id:uid(),nome:compra.nomeProduto,categoria:"insumos",unidade:compra.unidade||"un",ultimoValor:compra.valorUnitario||0,estoqueAtual:0,estoqueMinimo:0,fornecedores:[compra.fornecedor].filter(Boolean),criadoEm:new Date().toISOString()};
+        mpsList=[...mpsList,mp];
+      }
+      const fichas=(d.fichasTecnicas||[]).map(f=>{
+        if(f.id!==fichaId)return f;
+        const ins=f.insumos.map(i=>{
+          if(i.id!==insId)return i;
+          const val=compra.valorUnitario||0;
+          return{...i,nome:compra.nomeProduto||i.nome,valorUnd:val,custo:val*i.quantidade,mpId:mp.id};
+        });
+        const ct=ins.reduce((s,i)=>s+i.custo,0);
+        const por=f.porcoes||1;const cmv=f.cmv||30;
+        const cp=ct/por;const pp=cp/(cmv/100);
+        return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
       });
-      const ct=ins.reduce((s,i)=>s+i.custo,0);
-      const por=f.porcoes||1;const cmv=f.cmv||30;
-      const cp=ct/por;const pp=cp/(cmv/100);
-      return{...f,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
-    })}));
+      return{...d,materiasPrimas:mpsList,fichasTecnicas:fichas};
+    });
   };
   return <div>
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
@@ -5446,13 +5471,25 @@ function FichaTecnica({db,setDb}){
     </div>}
     {subTab==="conciliacao"&&<div>
       <div className="section-title" style={{color:"#7c8fff"}}>🔗 Conciliação com Compras</div>
-      <div style={{fontSize:11,color:"#888",marginBottom:12}}>Compare os preços dos insumos das fichas com as últimas compras registradas. Vincule e atualize valores.</div>
+      <div style={{fontSize:11,color:"#888",marginBottom:6}}>Vincule os insumos das fichas aos produtos de compra para atualização automática de preços.</div>
+      <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap" as const}}>
+        <span style={{fontSize:10,display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:4,background:"#4ade80",display:"inline-block"}}></span> Vinculado</span>
+        <span style={{fontSize:10,display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:4,background:"#fbbf24",display:"inline-block"}}></span> Manual (sem vínculo)</span>
+      </div>
       {!(db.fichasTecnicas||[]).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
       {(db.fichasTecnicas||[]).map(f=>{
         const isOpen=concFichaId===f.id;
+        const totalVinc=(f.insumos||[]).filter(i=>i.mpId).length;
+        const totalMan=(f.insumos||[]).filter(i=>!i.mpId).length;
         return <div key={f.id} className="card" style={{marginBottom:10,border:isOpen?"1px solid #7c8fff":"1px solid var(--border)"}}>
           <div onClick={()=>setConcFichaId(isOpen?null:f.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-            <div style={{fontWeight:700,fontSize:14}}>{f.nome}</div>
+            <div>
+              <div style={{fontWeight:700,fontSize:14}}>{f.nome}</div>
+              <div style={{display:"flex",gap:6,marginTop:2}}>
+                {totalVinc>0&&<span style={{fontSize:10,color:"#4ade80"}}>✓ {totalVinc} vinculado(s)</span>}
+                {totalMan>0&&<span style={{fontSize:10,color:"#fbbf24"}}>⚠ {totalMan} manual(is)</span>}
+              </div>
+            </div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               <span style={{fontSize:11,color:"#60a5fa"}}>{fmtMoney(f.custoTotal)}</span>
               <span style={{fontSize:14,color:"#888"}}>{isOpen?"▲":"▼"}</span>
@@ -5461,6 +5498,7 @@ function FichaTecnica({db,setDb}){
           {isOpen&&<div style={{marginTop:10}}>
             {(f.insumos||[]).map(ins=>{
               const mp=mps.find(m=>m.id===ins.mpId);
+              const isVinculado=!!ins.mpId&&!!mp;
               const comprasMatch=findCompras(ins.nome);
               const ultimaCompra=comprasMatch[0];
               const precoCompra=ultimaCompra?.valorUnitario||0;
@@ -5471,7 +5509,14 @@ function FichaTecnica({db,setDb}){
               const buscaResults=buscaVal.length>=2?compras.filter(c=>(c.nomeProduto||"").toLowerCase().includes(buscaVal.toLowerCase())).sort((a,b)=>(b.data||"").localeCompare(a.data||"")).slice(0,8):[];
               return <div key={ins.id} style={{padding:"10px 0",borderBottom:"1px solid #1e2235"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                  <div style={{fontWeight:600,fontSize:13}}>{ins.nome} <span style={{color:"#888",fontWeight:400,fontSize:11}}>({ins.quantidade}{ins.unidade})</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{width:8,height:8,borderRadius:4,background:isVinculado?"#4ade80":"#fbbf24",display:"inline-block",flexShrink:0}}></span>
+                    <div>
+                      <span style={{fontWeight:600,fontSize:13}}>{ins.nome}</span>
+                      <span style={{color:"#888",fontWeight:400,fontSize:11}}> ({ins.quantidade}{ins.unidade})</span>
+                    </div>
+                  </div>
+                  {isVinculado&&<span style={{fontSize:9,color:"#4ade80",background:"#4ade8015",border:"1px solid #4ade8033",borderRadius:10,padding:"2px 7px"}}>MP: {mp.nome}</span>}
                 </div>
                 <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
                   <div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
@@ -5482,26 +5527,32 @@ function FichaTecnica({db,setDb}){
                     <div style={{fontSize:12,fontWeight:700,color:ultimaCompra?"#4ade80":"#666"}}>{ultimaCompra?`${fmtMoney(precoCompra)}/${ultimaCompra.unidade||ins.unidade}`:"—"}</div>
                     <div style={{fontSize:9,color:"#666"}}>{ultimaCompra?`Compra ${fmtDate(ultimaCompra.data)}`:"Sem compra"}</div>
                   </div>
+                  {isVinculado&&mp&&<div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#a78bfa"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</div>
+                    <div style={{fontSize:9,color:"#666"}}>Matéria-prima</div>
+                  </div>}
                   {ultimaCompra&&diff!==0&&<div style={{flex:"0 0 60px",background:diff>0?"#2a151a":"#152a1a",borderRadius:8,padding:"6px 8px",textAlign:"center",border:`1px solid ${diff>0?"#ff5c7a33":"#4ade8033"}`}}>
                     <div style={{fontSize:12,fontWeight:700,color:diff>0?"#ff5c7a":"#4ade80"}}>{diff>0?"+":""}{diff.toFixed(1)}%</div>
                     <div style={{fontSize:9,color:"#666"}}>Variação</div>
                   </div>}
                 </div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>
                   {ultimaCompra&&Math.abs(diff)>0.5&&<button onClick={()=>conciliarInsumo(f.id,ins.id,precoCompra)} className="btn"
                     style={{background:"#7c8fff22",color:"#7c8fff",border:"1px solid #7c8fff44",padding:"5px 10px",fontSize:11}}>
                     ✓ Usar preço compra ({fmtMoney(precoCompra)})
                   </button>}
-                  {mp&&mp.ultimoValor!==precoFicha&&<button onClick={()=>conciliarInsumo(f.id,ins.id,mp.ultimoValor||0)} className="btn"
+                  {isVinculado&&mp&&mp.ultimoValor!==precoFicha&&<button onClick={()=>conciliarInsumo(f.id,ins.id,mp.ultimoValor||0)} className="btn"
                     style={{background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",padding:"5px 10px",fontSize:11}}>
                     ✓ Usar matéria-prima ({fmtMoney(mp.ultimoValor||0)})
                   </button>}
                 </div>
-                {!ultimaCompra&&<div style={{marginTop:6}}>
+                {/* Buscar e vincular a produto de compra */}
+                <div style={{marginTop:4}}>
                   <div style={{position:"relative"}}>
-                    <input placeholder="Buscar produto nas compras..." value={buscaVal}
+                    <input placeholder={isVinculado?"Revincular a outro produto de compra...":"Buscar produto de compra para vincular..."} value={buscaVal}
                       onChange={e=>setConcBusca(b=>({...b,[buscaKey]:e.target.value}))}
-                      className="inp" style={{marginBottom:0,fontSize:11,padding:"6px 8px"}}/>
+                      onFocus={()=>{if(!buscaVal)setConcBusca(b=>({...b,[buscaKey]:ins.nome}));}}
+                      className="inp" style={{marginBottom:0,fontSize:11,padding:"6px 8px",border:`1px solid ${isVinculado?"var(--border)":"#fbbf2444"}`}}/>
                     {buscaResults.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:180,overflowY:"auto" as const}}>
                       {buscaResults.map((c,idx)=>(
                         <div key={idx} onMouseDown={()=>{vincularInsumo(f.id,ins.id,c);setConcBusca(b=>({...b,[buscaKey]:""}));}}
@@ -5512,14 +5563,14 @@ function FichaTecnica({db,setDb}){
                       ))}
                     </div>}
                   </div>
-                </div>}
+                </div>
                 {comprasMatch.length>1&&<details style={{marginTop:6}}>
                   <summary style={{fontSize:10,color:"#888",cursor:"pointer"}}>Histórico de compras ({comprasMatch.length})</summary>
                   <div style={{maxHeight:120,overflowY:"auto" as const,marginTop:4}}>
                     {comprasMatch.slice(0,10).map((c,idx)=>(
                       <div key={idx} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid #1e223522"}}>
                         <span style={{color:"#888"}}>{fmtDate(c.data)} · {c.fornecedor||"—"}</span>
-                        <span style={{color:"#60a5fa",cursor:"pointer"}} onClick={()=>conciliarInsumo(f.id,ins.id,c.valorUnitario||0)}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"}</span>
+                        <span style={{color:"#60a5fa",cursor:"pointer"}} onClick={()=>{vincularInsumo(f.id,ins.id,c);}}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"} 🔗</span>
                       </div>
                     ))}
                   </div>
