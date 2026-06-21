@@ -2990,6 +2990,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [showEstimativa,setShowEstimativa]=useState(false);
   const [estConcItem,setEstConcItem]=useState<string|null>(null);
   const [catConcItem,setCatConcItem]=useState<string|null>(null);
+  const [concBusca,setConcBusca]=useState("");
   const [pendingMpLink,setPendingMpLink]=useState<string|null>(null);
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
@@ -3607,7 +3608,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
               {catLinhas.map((l,idx)=>{
                 const isExpanded=estConcItem===l.itemId;
                 const q=l.nome.toLowerCase();
-                const mpOptions=isExpanded?(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,10):[];
+                const cb=concBusca.trim().toLowerCase();
+                const mpOptions=isExpanded?(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15):[];
                 return <div key={idx}>
                   <div onClick={()=>setEstConcItem(isExpanded?null:l.itemId)}
                     style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:isExpanded?"none":"1px solid var(--border)",fontSize:12,cursor:"pointer",background:isExpanded?"#1a1a30":"transparent",borderRadius:isExpanded?"6px 6px 0 0":0,paddingLeft:isExpanded?6:0,paddingRight:isExpanded?6:0}}>
@@ -3622,7 +3624,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                   </div>
                   {isExpanded&&<div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
                     <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
-                    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada para "{l.nome}"</div>}
+                    <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} onClick={e=>e.stopPropagation()}
+                      className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
+                    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada{concBusca?` para "${concBusca}"`:""}</div>}
                     {mpOptions.map((mp:any)=>{
                       const linked=l.mpVinculadoId===mp.id;
                       return <div key={mp.id} onClick={(e)=>{e.stopPropagation();
@@ -3632,7 +3636,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                           if(linked)desvincularMp(l.prodId);
                           else vincularMp(l.prodId,mp.id);
                         }
-                        setEstConcItem(null);
+                        setEstConcItem(null);setConcBusca("");
                       }}
                         style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
                           background:linked?"#4ade8015":"transparent",border:linked?"1px solid #4ade8044":"1px solid transparent"}}>
@@ -3643,7 +3647,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                           :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
                       </div>;
                     })}
-                    {l.isLinked&&<button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId);setEstConcItem(null);}}
+                    {l.isLinked&&<button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId);setEstConcItem(null);setConcBusca("");}}
                       className="btn" style={{width:"100%",marginTop:4,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
                       ✕ Desvincular
                     </button>}
@@ -3839,12 +3843,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         if(q.length<2)return null;
         const editingProd=editProdId?prodsCatalog.find((p:any)=>p.id===editProdId):null;
         const savedMpId=editingProd?.mpVinculadoId||null;
-        const mps=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,8);
+        const cb4=concBusca.trim().toLowerCase();
+        const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb4?(mn.includes(cb4)||cb4.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15);
         const savedMp=savedMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===savedMpId):null;
         const allMps=savedMp&&!mps.find((m:any)=>m.id===savedMp.id)?[savedMp,...mps]:mps;
-        if(!allMps.length)return <div style={{fontSize:11,color:"#666",padding:"4px 8px",marginBottom:8,background:"#0d1020",borderRadius:6,border:"1px solid #1e2235"}}>🔍 Nenhum produto de compra encontrado para "{prodForm.nome.trim()}"</div>;
+        if(!allMps.length&&!cb4)return <div style={{fontSize:11,color:"#666",padding:"4px 8px",marginBottom:8,background:"#0d1020",borderRadius:6,border:"1px solid #1e2235"}}>🔍 Nenhum produto de compra encontrado para "{prodForm.nome.trim()}"</div>;
         return <div style={{marginBottom:8,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 8px"}}>
           <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — clique para vincular</div>
+          <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
+            className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
           {allMps.map((mp:any)=>{
             const isLinked=savedMpId===mp.id;
             return <div key={mp.id} onClick={()=>{
@@ -3889,15 +3896,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
             </div>
             {isExpConc&&(()=>{
               const q2=p.nome.toLowerCase();
-              const mpOpts=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q2)||q2.includes(m.nome.toLowerCase())).slice(0,10);
+              const cb2=concBusca.trim().toLowerCase();
+              const mpOpts=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb2?(mn.includes(cb2)||cb2.includes(mn)):(mn.includes(q2)||q2.includes(mn));}).slice(0,15);
               const linkedMp=p.mpVinculadoId?(db.materiasPrimas||[]).find((m:any)=>m.id===p.mpVinculadoId):null;
               const allOpts=linkedMp&&!mpOpts.find((m:any)=>m.id===linkedMp.id)?[linkedMp,...mpOpts]:mpOpts;
               return <div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
                 <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
-                {!allOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada</div>}
+                <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
+                  className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
+                {!allOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada{concBusca?` para "${concBusca}"`:""}</div>}
                 {allOpts.map((m:any)=>{
                   const mLinked=p.mpVinculadoId===m.id;
-                  return <div key={m.id} onClick={()=>{if(mLinked)desvincularMp(p.id);else vincularMp(p.id,m.id);setCatConcItem(null);}}
+                  return <div key={m.id} onClick={()=>{if(mLinked)desvincularMp(p.id);else vincularMp(p.id,m.id);setCatConcItem(null);setConcBusca("");}}
                     style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
                       background:mLinked?"#4ade8015":"transparent",border:mLinked?"1px solid #4ade8044":"1px solid transparent"}}>
                     <span style={{fontSize:13}}>{mLinked?"🔗":"⬜"}</span>
@@ -3907,7 +3917,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                       :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
                   </div>;
                 })}
-                {isLinked&&<button onClick={()=>{desvincularMp(p.id);setCatConcItem(null);}}
+                {isLinked&&<button onClick={()=>{desvincularMp(p.id);setCatConcItem(null);setConcBusca("");}}
                   className="btn" style={{width:"100%",marginTop:4,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
                   ✕ Desvincular
                 </button>}
@@ -3959,12 +3969,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
           const savedMpId=existingProd?.mpVinculadoId||null;
           const activeMpId=pendingMpLink!==null?pendingMpLink:savedMpId;
           const activeMp=activeMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===activeMpId):null;
-          const mps=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,8);
+          const cb3=concBusca.trim().toLowerCase();
+          const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb3?(mn.includes(cb3)||cb3.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15);
           if(!mps.length&&!activeMp)return null;
           const allMps=activeMp&&!mps.find((m:any)=>m.id===activeMp.id)?[activeMp,...mps]:mps;
           const hasUnsaved=existingProd&&pendingMpLink!==null&&pendingMpLink!==savedMpId;
           return <div style={{marginTop:6,background:"#0d1020",borderRadius:8,border:`1px solid ${hasUnsaved?"#fbbf2466":"#1e2235"}`,padding:"6px 10px"}}>
             <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar com compra — clique para vincular</div>
+            <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
+              className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
             {allMps.map((mp:any)=>{
               const isLinked=activeMpId===mp.id;
               return <div key={mp.id} onClick={()=>{
