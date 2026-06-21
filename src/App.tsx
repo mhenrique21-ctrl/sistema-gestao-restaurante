@@ -342,7 +342,7 @@ function LogoEmpresa({empresa}) {
 }
 
 // ===================== LOGIN =====================
-const LOGINS:{[pwd:string]:{role:"admin"|"op",label:string,empresa?:string}}={
+const LOGINS:{[pwd:string]:{role:"admin"|"op"|"op_producao",label:string,empresa?:string}}={
   "172839":{role:"admin",label:"Administrativo"},
   "1234":  {role:"op",   label:"Op. Lista SEAMA",    empresa:"SEAMA"},
   "4321":  {role:"op",   label:"Op. Lista CONFRARIA", empresa:"CONFRARIA"},
@@ -650,7 +650,7 @@ export default function App() {
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
 
-  const isOp=login?.role==="op";
+  const isOp=login?.role==="op"||login?.role==="op_producao";
   const isAdmin=login?.role==="admin";
   // Cor em tempo real do usuário logado (ignora sessão desatualizada)
   const loginCorTexto=(()=>{if(!login?.label)return"#e8eaf0";const u=(state.CONFRARIA?.usuarios||[]).find((u:any)=>u.nome===login.label);return u?.corTexto||login?.corTexto||"#e8eaf0";})();
@@ -660,6 +660,7 @@ export default function App() {
     setLogin(info);
     if(info.empresa)setEmpresa(info.empresa);
     if(info.role==="op")setTab("lista");
+    if(info.role==="op_producao")setTab("producao");
   };
   const doLogout=()=>{
     sessionStorage.removeItem("app_login");
@@ -682,7 +683,7 @@ export default function App() {
     {id:"gestao",label:"Gestão",icon:"⚙️"},
     {id:"usuarios",label:"Usuários",icon:"👥"},
   ];
-  const tabs=isOp?allTabs.filter(t=>t.id==="lista"||t.id==="producao"):allTabs;
+  const tabs=isOp?(login?.role==="op_producao"?allTabs.filter(t=>t.id==="producao"):allTabs.filter(t=>t.id==="lista"||t.id==="producao")):allTabs;
 
   return (
     <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:84}}>
@@ -6854,7 +6855,7 @@ function Gestao({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:stri
 // ===================== USUÁRIOS =====================
 function UsuariosPanel({state,setState}:{state:any,setState:any}){
   const usuarios:any[]=state.CONFRARIA?.usuarios||[];
-  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0"};
+  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op"|"op_producao",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0"};
   const [form,setForm]=useState(EMPTY);
   const [editId,setEditId]=useState<string|null>(null);
   const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
@@ -6879,10 +6880,10 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
     if(!editId&&usuarios.some((u:any)=>u.senha===senha))return alert("Esta senha já está em uso por outro usuário.");
     if(editId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editId))return alert("Esta senha já está em uso por outro usuário.");
     if(editId){
-      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"}:u));
+      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"}:u));
       setEditId(null);
     }else{
-      const novo={id:uid(),nome,senha,role:form.role,empresa:form.role==="op"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"};
+      const novo={id:uid(),nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"};
       setBoth(arr=>[...arr,novo]);
     }
     setForm(EMPTY);
@@ -6907,9 +6908,10 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
       <input placeholder="Senha de acesso" value={form.senha} onChange={e=>setF("senha",e.target.value)} className="inp" style={{marginBottom:8}}/>
       <select value={form.role} onChange={e=>setF("role",e.target.value)} className="inp" style={{marginBottom:8}}>
         <option value="admin">Administrador — acesso completo</option>
-        <option value="op">Operador de Lista — somente lista de compras</option>
+        <option value="op">Operador de Lista — lista de compras + produção</option>
+        <option value="op_producao">Operador de Produção — somente produção</option>
       </select>
-      {form.role==="op"&&<select value={form.empresa} onChange={e=>setF("empresa",e.target.value)} className="inp" style={{marginBottom:8}}>
+      {form.role!=="admin"&&<select value={form.empresa} onChange={e=>setF("empresa",e.target.value)} className="inp" style={{marginBottom:8}}>
         <option value="CONFRARIA">Empresa: CONFRARIA</option>
         <option value="SEAMA">Empresa: SEAMA</option>
       </select>}
@@ -6936,17 +6938,17 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
       {usuarios.length} usuário{usuarios.length!==1?"s":""} cadastrado{usuarios.length!==1?"s":""}
     </div>
     {usuarios.map((u:any)=>(
-      <div key={u.id} className="card" style={{marginBottom:8,border:`1px solid ${u.role==="admin"?"#3a2a60":"#1a3a1a"}`}}>
+      <div key={u.id} className="card" style={{marginBottom:8,border:`1px solid ${u.role==="admin"?"#3a2a60":u.role==="op_producao"?"#3a2a1a":"#1a3a1a"}`}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{position:"relative",flexShrink:0}}>
-            <div style={{fontSize:22}}>{u.role==="admin"?"🔐":"👤"}</div>
+            <div style={{fontSize:22}}>{u.role==="admin"?"🔐":u.role==="op_producao"?"🏭":"👤"}</div>
             <div style={{position:"absolute",bottom:0,right:-2,width:10,height:10,borderRadius:"50%",background:u.corTexto||"#e8eaf0",border:"1.5px solid #0a0c18"}}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:u.corTexto||"inherit"}}>{u.nome}</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center"}}>
-              <span className="tag" style={{background:u.role==="admin"?"#3a2a6044":"#1a3a1a44",color:u.role==="admin"?"#a78bfa":"#4ade80",border:`1px solid ${u.role==="admin"?"#5a3a90":"#2a5a2a"}`}}>
-                {u.role==="admin"?"Admin":"Operador"}
+              <span className="tag" style={{background:u.role==="admin"?"#3a2a6044":u.role==="op_producao"?"#3a2a1a44":"#1a3a1a44",color:u.role==="admin"?"#a78bfa":u.role==="op_producao"?"#f59e0b":"#4ade80",border:`1px solid ${u.role==="admin"?"#5a3a90":u.role==="op_producao"?"#5a3a1a":"#2a5a2a"}`}}>
+                {u.role==="admin"?"Admin":u.role==="op_producao"?"Op. Produção":"Op. Lista"}
               </span>
               {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)"}}>{u.empresa}</span>}
               <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
