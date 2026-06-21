@@ -3832,6 +3832,24 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         {estoquePreview!==null&&<div style={{fontSize:11,color:estoquePreview===0?"#ff5c7a":estoquePreview<2?"#fbbf24":"#4ade80",marginTop:4}}>
           📦 Em estoque: {estoquePreview} {form.unidade}
         </div>}
+        {isAdmin&&(()=>{
+          const q=form.nome.trim().toLowerCase();
+          if(q.length<2)return null;
+          const mps=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,5);
+          if(!mps.length)return null;
+          return <div style={{marginTop:6,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 10px"}}>
+            <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>💰 Preço de compra</div>
+            {mps.map((mp:any)=>(
+              <div key={mp.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",fontSize:12}}>
+                <span style={{flex:1,color:"#ccc"}}>{mp.nome}</span>
+                {mp.ultimoValor>0
+                  ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
+                  :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
+                {mp.estoqueAtual!=null&&<span style={{fontSize:10,color:mp.estoqueAtual>0?"#4ade80":"#ff5c7a",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>est: {mp.estoqueAtual}</span>}
+              </div>
+            ))}
+          </div>;
+        })()}
       </div>
       {/* Qtd + Unidade + Estoque atual */}
       <div style={{display:"flex",gap:8,marginBottom:10}}>
