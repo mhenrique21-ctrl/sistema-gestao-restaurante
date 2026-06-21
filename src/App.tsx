@@ -2991,7 +2991,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [estConcItem,setEstConcItem]=useState<string|null>(null);
   const [catConcItem,setCatConcItem]=useState<string|null>(null);
   const [concBusca,setConcBusca]=useState("");
-  const [pendingMpLink,setPendingMpLink]=useState<string|null>(null);
+  const [pendingMpLinks,setPendingMpLinks]=useState<string[]|null>(null);
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
   const undoTimerRef=useRef<any>(null);
@@ -3029,28 +3029,47 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     const mp=(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase().includes(nome.toLowerCase())||nome.toLowerCase().includes(m.nome.toLowerCase()));
     return mp?(mp.estoqueAtual||0):null;
   };
+  const getProdVinculados=(prod:any):string[]=>{
+    if(prod?.mpVinculados?.length)return prod.mpVinculados;
+    if(prod?.mpVinculadoId)return[prod.mpVinculadoId];
+    return[];
+  };
   const getMpByName=(nome:string,prodId?:string)=>{
+    const findProd=(p:any)=>{
+      const ids=getProdVinculados(p);
+      if(!ids.length)return null;
+      const mps=(db.materiasPrimas||[]).filter((m:any)=>ids.includes(m.id));
+      if(!mps.length)return null;
+      const vals=mps.filter((m:any)=>m.ultimoValor>0);
+      if(!vals.length)return mps[0];
+      const avg=vals.reduce((s:number,m:any)=>s+m.ultimoValor,0)/vals.length;
+      return{...vals[0],ultimoValor:avg,_avgCount:vals.length};
+    };
     if(prodId){
       const prod=(db.produtosLista||[]).find((p:any)=>p.id===prodId);
-      if(prod?.mpVinculadoId){
-        const linked=(db.materiasPrimas||[]).find((m:any)=>m.id===prod.mpVinculadoId);
-        if(linked)return linked;
-      }
+      const r=findProd(prod);if(r)return r;
     }
     const prodByNome=(db.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
-    if(prodByNome?.mpVinculadoId){
-      const linked=(db.materiasPrimas||[]).find((m:any)=>m.id===prodByNome.mpVinculadoId);
-      if(linked)return linked;
-    }
+    const r2=findProd(prodByNome);if(r2)return r2;
     return (db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase()===nome.toLowerCase())
       ||(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase().includes(nome.toLowerCase())||nome.toLowerCase().includes(m.nome.toLowerCase()))
       ||null;
   };
   const vincularMp=(prodId:string,mpId:string)=>{
-    setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===prodId?{...p,mpVinculadoId:mpId}:p)}));
+    setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>{
+      if(p.id!==prodId)return p;
+      const ids=getProdVinculados(p);
+      if(ids.includes(mpId))return p;
+      return{...p,mpVinculados:[...ids,mpId],mpVinculadoId:undefined};
+    })}));
   };
-  const desvincularMp=(prodId:string)=>{
-    setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===prodId?{...p,mpVinculadoId:undefined}:p)}));
+  const desvincularMp=(prodId:string,mpId?:string)=>{
+    setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>{
+      if(p.id!==prodId)return p;
+      if(!mpId)return{...p,mpVinculados:[],mpVinculadoId:undefined};
+      const ids=getProdVinculados(p).filter((id:string)=>id!==mpId);
+      return{...p,mpVinculados:ids,mpVinculadoId:undefined};
+    })}));
   };
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
@@ -3062,16 +3081,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       const editNome=form.nome.trim();
       setDb((d:any)=>{
         const updated={...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)};
-        if(pendingMpLink!==null){
+        if(pendingMpLinks!==null){
           const prod=(d.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===editNome.toLowerCase());
           if(prod){
-            updated.produtosLista=(d.produtosLista||[]).map((p:any)=>p.id===prod.id?{...p,mpVinculadoId:pendingMpLink||undefined}:p);
+            updated.produtosLista=(d.produtosLista||[]).map((p:any)=>p.id===prod.id?{...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}:p);
           }
         }
         return updated;
       });
       setEditId(null);
-      setPendingMpLink(null);
+      setPendingMpLinks(null);
     }else{
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
       const nome=form.nome.trim();
@@ -3085,7 +3104,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         if(!confirm(msg))return;
         setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova}:i)}));
         setForm(EMPTY_FORM_LISTA);
-        setPendingMpLink(null);
+        setPendingMpLinks(null);
         return;
       }
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
@@ -3093,16 +3112,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       setDb((d:any)=>{
         const prodExiste=(d.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
         const listaNew=[...(d.listaCompras||[]),newItem];
-        if(prodExiste&&pendingMpLink!==null){
+        if(prodExiste&&pendingMpLinks!==null){
           return{...d,listaCompras:listaNew,
-            produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===prodExiste.id?{...p,mpVinculadoId:pendingMpLink||undefined}:p)};
+            produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===prodExiste.id?{...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}:p)};
         }
         return{...d,listaCompras:listaNew,
-          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLink?{mpVinculadoId:pendingMpLink}:{})}]};
+          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLinks?.length?{mpVinculados:pendingMpLinks}:{})}]};
       });
     }
     setForm(EMPTY_FORM_LISTA);
-    setPendingMpLink(null);
+    setPendingMpLinks(null);
   };
 
   const startEdit=(item:any)=>{
@@ -3110,7 +3129,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     setEditId(item.id);
     setTimeout(()=>document.getElementById("lista-nome-inp")?.focus(),50);
   };
-  const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setPendingMpLink(null);};
+  const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setPendingMpLinks(null);setConcBusca("");};
 
   const toggle=(id:string)=>{
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
@@ -3554,8 +3573,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         const qtd=parseFloat(item.quantidade)||1;
         const unitario=mp?.ultimoValor||0;
         const subtotal=qtd*unitario;
-        const isLinked=!!prod?.mpVinculadoId;
-        return{nome:item.nome,itemId:item.id,prodId:prod?.id||null,mpVinculadoId:prod?.mpVinculadoId||null,qtd,unidade:item.unidade||"un",categoria:item.categoria||"",mpNome:mp?.nome||"",unitario,subtotal,temPreco:unitario>0,isLinked};
+        const vIds=prod?getProdVinculados(prod):[];
+        const isLinked=vIds.length>0;
+        return{nome:item.nome,itemId:item.id,prodId:prod?.id||null,vinculados:vIds,qtd,unidade:item.unidade||"un",categoria:item.categoria||"",mpNome:mp?.nome||"",unitario,subtotal,temPreco:unitario>0,isLinked,avgCount:mp?._avgCount||0};
       });
       const comPreco=linhas.filter(l=>l.temPreco);
       const semPreco=linhas.filter(l=>!l.temPreco);
@@ -3609,48 +3629,66 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                 const isExpanded=estConcItem===l.itemId;
                 const q=l.nome.toLowerCase();
                 const cb=concBusca.trim().toLowerCase();
-                const mpOptions=isExpanded?(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15):[];
+                const mpOptions=isExpanded?(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,20):[];
+                const vIds=l.vinculados as string[];
+                const vinculadosMps=vIds.length?(db.materiasPrimas||[]).filter((m:any)=>vIds.includes(m.id)):[];
                 return <div key={idx}>
-                  <div onClick={()=>setEstConcItem(isExpanded?null:l.itemId)}
+                  <div onClick={()=>{setEstConcItem(isExpanded?null:l.itemId);setConcBusca("");}}
                     style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:isExpanded?"none":"1px solid var(--border)",fontSize:12,cursor:"pointer",background:isExpanded?"#1a1a30":"transparent",borderRadius:isExpanded?"6px 6px 0 0":0,paddingLeft:isExpanded?6:0,paddingRight:isExpanded?6:0}}>
-                    <span style={{flex:1}}>{l.isLinked&&<span style={{fontSize:10,marginRight:3}}>🔗</span>}{l.nome}</span>
+                    <span style={{flex:1}}>{l.isLinked&&<span style={{fontSize:10,marginRight:3}}>🔗{l.avgCount>1?`(${l.avgCount})`:""}</span>}{l.nome}</span>
                     <span style={{color:"#888",whiteSpace:"nowrap" as const}}>{l.qtd} {l.unidade}</span>
                     {l.temPreco?<>
-                      <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>× {fmtMoney(l.unitario)}</span>
+                      <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>{l.avgCount>1?"média ":""}× {fmtMoney(l.unitario)}</span>
                       <span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const,minWidth:75,textAlign:"right" as const}}>{fmtMoney(l.subtotal)}</span>
                     </>:
                       <span style={{color:"#f59e0b",fontSize:10,whiteSpace:"nowrap" as const}}>sem preço</span>
                     }
                   </div>
                   {isExpanded&&<div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
-                    <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
-                    <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} onClick={e=>e.stopPropagation()}
+                    <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produtos de compra</div>
+                    <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} onClick={e=>e.stopPropagation()} autoFocus
                       className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
+                    {vinculadosMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
+                      <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinculadosMps.length}):{vinculadosMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinculadosMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinculadosMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+                      {vinculadosMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
+                        <span style={{color:"#4ade80"}}>🔗 {m.nome}</span>
+                        <span style={{flex:1}}/>
+                        {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+                        <button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId,m.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
+                      </div>)}
+                    </div>}
                     {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
+                    <div style={{maxHeight:150,overflowY:"auto" as const}}>
                     {mpOptions.map((mp:any)=>{
-                      const linked=l.mpVinculadoId===mp.id;
+                      const linked=vIds.includes(mp.id);
                       return <div key={mp.id} onClick={(e)=>{e.stopPropagation();
                         if(!l.prodId){
-                          setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:l.nome,cat:l.categoria,unidade:l.unidade,mpVinculadoId:mp.id}]}));
+                          setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:l.nome,cat:l.categoria,unidade:l.unidade,mpVinculados:[mp.id]}]}));
                         }else{
-                          if(linked)desvincularMp(l.prodId);
+                          if(linked)desvincularMp(l.prodId,mp.id);
                           else vincularMp(l.prodId,mp.id);
                         }
-                        setEstConcItem(null);setConcBusca("");
                       }}
                         style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
                           background:linked?"#4ade8015":"transparent",border:linked?"1px solid #4ade8044":"1px solid transparent"}}>
-                        <span style={{fontSize:13}}>{linked?"🔗":"⬜"}</span>
+                        <span style={{fontSize:13}}>{linked?"☑️":"⬜"}</span>
                         <span style={{flex:1,color:linked?"#4ade80":"#ccc",fontWeight:linked?700:400}}>{mp.nome}</span>
                         {mp.ultimoValor>0
                           ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                           :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
                       </div>;
                     })}
-                    {l.isLinked&&<button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId);setEstConcItem(null);setConcBusca("");}}
-                      className="btn" style={{width:"100%",marginTop:4,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
-                      ✕ Desvincular
-                    </button>}
+                    </div>
+                    <div style={{display:"flex",gap:6,marginTop:6}}>
+                      {l.isLinked&&<button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId);}}
+                        className="btn" style={{flex:1,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
+                        ✕ Desvincular Todos
+                      </button>}
+                      <button onClick={(e)=>{e.stopPropagation();setEstConcItem(null);setConcBusca("");}}
+                        className="btn" style={{flex:1,background:"#334155",color:"#e2e8f0",padding:"6px",fontSize:11,fontWeight:700}}>
+                        ✓ Fechar
+                      </button>
+                    </div>
                   </div>}
                 </div>;
               })}
@@ -3842,36 +3880,44 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         const q=prodForm.nome.trim().toLowerCase();
         if(q.length<2)return null;
         const editingProd=editProdId?prodsCatalog.find((p:any)=>p.id===editProdId):null;
-        const savedMpId=editingProd?.mpVinculadoId||null;
+        const eVids=editingProd?getProdVinculados(editingProd):[];
         const cb4=concBusca.trim().toLowerCase();
-        const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb4?(mn.includes(cb4)||cb4.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15);
-        const savedMp=savedMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===savedMpId):null;
-        const allMps=savedMp&&!mps.find((m:any)=>m.id===savedMp.id)?[savedMp,...mps]:mps;
+        const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb4?(mn.includes(cb4)||cb4.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,20);
+        const vinMps=(db.materiasPrimas||[]).filter((m:any)=>eVids.includes(m.id));
+        vinMps.forEach((m:any)=>{if(!mps.find((o:any)=>o.id===m.id))mps.unshift(m);});
         return <div style={{marginBottom:8,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 8px"}}>
           <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — clique para vincular</div>
           <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
             className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-          {!allMps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
-          {allMps.map((mp:any)=>{
-            const isLinked=savedMpId===mp.id;
+          {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
+            <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+            {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
+              <span style={{color:"#4ade80"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
+              {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+              {editProdId&&<button onClick={()=>desvincularMp(editProdId,m.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>}
+            </div>)}
+          </div>}
+          {!mps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
+          <div style={{maxHeight:150,overflowY:"auto" as const}}>
+          {mps.map((mp:any)=>{
+            const isLinked=eVids.includes(mp.id);
             return <div key={mp.id} onClick={()=>{
               if(editProdId){
-                if(isLinked)desvincularMp(editProdId);
+                if(isLinked)desvincularMp(editProdId,mp.id);
                 else vincularMp(editProdId,mp.id);
               }
             }}
               style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:editProdId?"pointer":"default",borderRadius:6,marginBottom:2,
                 background:isLinked?"#4ade8015":"transparent",border:isLinked?"1px solid #4ade8044":"1px solid transparent"}}>
-              <span style={{fontSize:13}}>{isLinked?"🔗":"⬜"}</span>
+              <span style={{fontSize:13}}>{isLinked?"☑️":"⬜"}</span>
               <span style={{flex:1,color:isLinked?"#4ade80":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
-              <span style={{color:"#888",fontSize:10}}>{mp.unidade||"un"}</span>
               {mp.ultimoValor>0
                 ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                 :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
-              {mp.estoqueAtual!=null&&<span style={{fontSize:10,color:mp.estoqueAtual>0?"#4ade80":"#ff5c7a",background:"var(--bg4)",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const}}>est: {mp.estoqueAtual}</span>}
             </div>;
           })}
-          {!editProdId&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>⚡ Salve o produto primeiro, depois clique para vincular</div>}
+          </div>
+          {!editProdId&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>Salve o produto primeiro para vincular</div>}
         </div>;
       })()}
       {/* Lista do catálogo */}
@@ -3879,16 +3925,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
         {[...prodsCatalog].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>{
           const mp=getMpByName(p.nome,p.id);
-          const isLinked=!!p.mpVinculadoId;
+          const pVids=getProdVinculados(p);
+          const isLinked=pVids.length>0;
           const isExpConc=catConcItem===p.id;
           return <div key={p.id}>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:isExpConc?"none":"1px solid var(--border)"}}>
               <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
-              <span style={{flex:1,fontSize:13,cursor:"pointer"}} onClick={()=>setCatConcItem(isExpConc?null:p.id)}>{p.nome}</span>
-              {mp&&mp.ultimoValor>0?<span onClick={()=>setCatConcItem(isExpConc?null:p.id)} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#4ade80",background:"#4ade8018",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const,cursor:"pointer"}}>
-                {isLinked?"🔗":"💰"} {fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}
+              <span style={{flex:1,fontSize:13,cursor:"pointer"}} onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}}>{p.nome}</span>
+              {mp&&mp.ultimoValor>0?<span onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#4ade80",background:"#4ade8018",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const,cursor:"pointer"}}>
+                {isLinked?"🔗":"💰"}{mp._avgCount>1?`(${mp._avgCount})`:""} {fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}
               </span>:
-              <span onClick={()=>setCatConcItem(isExpConc?null:p.id)} style={{fontSize:10,color:"#f59e0b",cursor:"pointer",whiteSpace:"nowrap" as const}}>sem preço</span>}
+              <span onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}} style={{fontSize:10,color:"#f59e0b",cursor:"pointer",whiteSpace:"nowrap" as const}}>sem preço</span>}
               {p.rua&&<span style={{fontSize:10,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
               <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
               <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
@@ -3897,30 +3944,46 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
             {isExpConc&&(()=>{
               const q2=p.nome.toLowerCase();
               const cb2=concBusca.trim().toLowerCase();
-              const mpOpts=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb2?(mn.includes(cb2)||cb2.includes(mn)):(mn.includes(q2)||q2.includes(mn));}).slice(0,15);
-              const linkedMp=p.mpVinculadoId?(db.materiasPrimas||[]).find((m:any)=>m.id===p.mpVinculadoId):null;
-              const allOpts=linkedMp&&!mpOpts.find((m:any)=>m.id===linkedMp.id)?[linkedMp,...mpOpts]:mpOpts;
+              const mpOpts=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb2?(mn.includes(cb2)||cb2.includes(mn)):(mn.includes(q2)||q2.includes(mn));}).slice(0,20);
+              const vinMps=(db.materiasPrimas||[]).filter((m:any)=>pVids.includes(m.id));
+              vinMps.forEach((m:any)=>{if(!mpOpts.find((o:any)=>o.id===m.id))mpOpts.unshift(m);});
               return <div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
-                <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
-                <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
+                <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produtos de compra</div>
+                <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} autoFocus
                   className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-                {!allOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
-                {allOpts.map((m:any)=>{
-                  const mLinked=p.mpVinculadoId===m.id;
-                  return <div key={m.id} onClick={()=>{if(mLinked)desvincularMp(p.id);else vincularMp(p.id,m.id);setCatConcItem(null);setConcBusca("");}}
+                {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
+                  <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+                  {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
+                    <span style={{color:"#4ade80"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
+                    {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+                    <button onClick={()=>desvincularMp(p.id,m.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
+                  </div>)}
+                </div>}
+                {!mpOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
+                <div style={{maxHeight:150,overflowY:"auto" as const}}>
+                {mpOpts.map((m:any)=>{
+                  const mLinked=pVids.includes(m.id);
+                  return <div key={m.id} onClick={()=>{if(mLinked)desvincularMp(p.id,m.id);else vincularMp(p.id,m.id);}}
                     style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
                       background:mLinked?"#4ade8015":"transparent",border:mLinked?"1px solid #4ade8044":"1px solid transparent"}}>
-                    <span style={{fontSize:13}}>{mLinked?"🔗":"⬜"}</span>
+                    <span style={{fontSize:13}}>{mLinked?"☑️":"⬜"}</span>
                     <span style={{flex:1,color:mLinked?"#4ade80":"#ccc",fontWeight:mLinked?700:400}}>{m.nome}</span>
                     {m.ultimoValor>0
                       ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>
                       :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
                   </div>;
                 })}
-                {isLinked&&<button onClick={()=>{desvincularMp(p.id);setCatConcItem(null);setConcBusca("");}}
-                  className="btn" style={{width:"100%",marginTop:4,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
-                  ✕ Desvincular
-                </button>}
+                </div>
+                <div style={{display:"flex",gap:6,marginTop:6}}>
+                  {isLinked&&<button onClick={()=>desvincularMp(p.id)}
+                    className="btn" style={{flex:1,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
+                    ✕ Desvincular Todos
+                  </button>}
+                  <button onClick={()=>{setCatConcItem(null);setConcBusca("");}}
+                    className="btn" style={{flex:1,background:"#334155",color:"#e2e8f0",padding:"6px",fontSize:11,fontWeight:700}}>
+                    ✓ Fechar
+                  </button>
+                </div>
               </div>;
             })()}
           </div>;
@@ -3966,44 +4029,53 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
           const q=form.nome.trim().toLowerCase();
           if(q.length<2)return null;
           const existingProd=prodsCatalog.find((p:any)=>p.nome.toLowerCase()===q);
-          const savedMpId=existingProd?.mpVinculadoId||null;
-          const activeMpId=pendingMpLink!==null?pendingMpLink:savedMpId;
-          const activeMp=activeMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===activeMpId):null;
+          const savedIds=existingProd?getProdVinculados(existingProd):[];
+          const activeIds=pendingMpLinks!==null?pendingMpLinks:savedIds;
           const cb3=concBusca.trim().toLowerCase();
-          const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb3?(mn.includes(cb3)||cb3.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,15);
-          const allMps=activeMp&&!mps.find((m:any)=>m.id===activeMp.id)?[activeMp,...mps]:mps;
-          const hasUnsaved=existingProd&&pendingMpLink!==null&&pendingMpLink!==savedMpId;
+          const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb3?(mn.includes(cb3)||cb3.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,20);
+          const vinMps=(db.materiasPrimas||[]).filter((m:any)=>activeIds.includes(m.id));
+          vinMps.forEach((m:any)=>{if(!mps.find((o:any)=>o.id===m.id))mps.unshift(m);});
+          const hasUnsaved=existingProd&&pendingMpLinks!==null&&JSON.stringify(pendingMpLinks.sort())!==JSON.stringify(savedIds.sort());
           return <div style={{marginTop:6,background:"#0d1020",borderRadius:8,border:`1px solid ${hasUnsaved?"#fbbf2466":"#1e2235"}`,padding:"6px 10px"}}>
             <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar com compra — clique para vincular</div>
             <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
               className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-            {!allMps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
-            {allMps.map((mp:any)=>{
-              const isLinked=activeMpId===mp.id;
+            {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
+              <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+              {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
+                <span style={{color:"#4ade80"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
+                {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+                <button onClick={()=>{const nw=activeIds.filter((id:string)=>id!==m.id);setPendingMpLinks(nw);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
+              </div>)}
+            </div>}
+            {!mps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
+            <div style={{maxHeight:150,overflowY:"auto" as const}}>
+            {mps.map((mp:any)=>{
+              const isLinked=activeIds.includes(mp.id);
               return <div key={mp.id} onClick={()=>{
-                  if(isLinked){setPendingMpLink(savedMpId===mp.id?"":null);}
-                  else setPendingMpLink(mp.id);
+                  const cur=pendingMpLinks!==null?[...pendingMpLinks]:[...savedIds];
+                  if(isLinked)setPendingMpLinks(cur.filter((id:string)=>id!==mp.id));
+                  else setPendingMpLinks([...cur,mp.id]);
                 }}
                 style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
                   background:isLinked?"#4ade8015":"transparent",border:isLinked?"1px solid #4ade8044":"1px solid transparent"}}>
-                <span style={{fontSize:13}}>{isLinked?"🔗":"⬜"}</span>
+                <span style={{fontSize:13}}>{isLinked?"☑️":"⬜"}</span>
                 <span style={{flex:1,color:isLinked?"#4ade80":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
                 {mp.ultimoValor>0
                   ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                   :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
-                {mp.estoqueAtual!=null&&<span style={{fontSize:10,color:mp.estoqueAtual>0?"#4ade80":"#ff5c7a",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>est: {mp.estoqueAtual}</span>}
               </div>;
             })}
+            </div>
             {hasUnsaved&&<button onClick={()=>{
               if(existingProd){
-                if(pendingMpLink)vincularMp(existingProd.id,pendingMpLink);
-                else desvincularMp(existingProd.id);
-                setPendingMpLink(null);
+                setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===existingProd.id?{...p,mpVinculados:pendingMpLinks||[],mpVinculadoId:undefined}:p)}));
+                setPendingMpLinks(null);
               }
             }} className="btn" style={{width:"100%",marginTop:4,background:"#4ade80",color:"#111",padding:"8px",fontSize:12,fontWeight:700}}>
-              💾 Salvar Vínculo
+              💾 Salvar Vínculo{(pendingMpLinks?.length||0)>0?` (${pendingMpLinks?.length})`:""}
             </button>}
-            {!existingProd&&pendingMpLink&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>⚡ Vínculo será salvo ao adicionar o produto</div>}
+            {!existingProd&&activeIds.length>0&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>⚡ Vínculos serão salvos ao adicionar o produto</div>}
           </div>;
         })()}
       </div>
