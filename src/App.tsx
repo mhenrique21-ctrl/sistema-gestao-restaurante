@@ -2988,6 +2988,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
   const [vistaRua,setVistaRua]=useState(false);
   const [showEstimativa,setShowEstimativa]=useState(false);
+  const [pendingMpLink,setPendingMpLink]=useState<string|null>(null);
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
   const undoTimerRef=useRef<any>(null);
@@ -3055,8 +3056,19 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!form.nome.trim())return;
 
     if(editId){
-      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:form.nome.trim(),quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
+      const editNome=form.nome.trim();
+      setDb((d:any)=>{
+        const updated={...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)};
+        if(pendingMpLink!==null){
+          const prod=(d.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===editNome.toLowerCase());
+          if(prod){
+            updated.produtosLista=(d.produtosLista||[]).map((p:any)=>p.id===prod.id?{...p,mpVinculadoId:pendingMpLink||undefined}:p);
+          }
+        }
+        return updated;
+      });
       setEditId(null);
+      setPendingMpLink(null);
     }else{
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
       const nome=form.nome.trim();
@@ -3070,19 +3082,24 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         if(!confirm(msg))return;
         setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova}:i)}));
         setForm(EMPTY_FORM_LISTA);
+        setPendingMpLink(null);
         return;
       }
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
+      const newItem={id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()};
       setDb((d:any)=>{
-        const prodExiste=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
-        return{
-          ...d,
-          listaCompras:[...(d.listaCompras||[]),{id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()}],
-          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal}],
-        };
+        const prodExiste=(d.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
+        const listaNew=[...(d.listaCompras||[]),newItem];
+        if(prodExiste&&pendingMpLink!==null){
+          return{...d,listaCompras:listaNew,
+            produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===prodExiste.id?{...p,mpVinculadoId:pendingMpLink||undefined}:p)};
+        }
+        return{...d,listaCompras:listaNew,
+          produtosLista:prodExiste?d.produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLink?{mpVinculadoId:pendingMpLink}:{})}]};
       });
     }
     setForm(EMPTY_FORM_LISTA);
+    setPendingMpLink(null);
   };
 
   const startEdit=(item:any)=>{
@@ -3090,7 +3107,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     setEditId(item.id);
     setTimeout(()=>document.getElementById("lista-nome-inp")?.focus(),50);
   };
-  const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);};
+  const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setPendingMpLink(null);};
 
   const toggle=(id:string)=>{
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
@@ -3860,17 +3877,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
           const q=form.nome.trim().toLowerCase();
           if(q.length<2)return null;
           const existingProd=prodsCatalog.find((p:any)=>p.nome.toLowerCase()===q);
-          const linkedMpId=existingProd?.mpVinculadoId;
-          const linkedMp=linkedMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===linkedMpId):null;
+          const savedMpId=existingProd?.mpVinculadoId||null;
+          const activeMpId=pendingMpLink!==null?pendingMpLink:savedMpId;
+          const activeMp=activeMpId?(db.materiasPrimas||[]).find((m:any)=>m.id===activeMpId):null;
           const mps=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,8);
-          if(!mps.length&&!linkedMp)return null;
-          const allMps=linkedMp&&!mps.find((m:any)=>m.id===linkedMp.id)?[linkedMp,...mps]:mps;
-          return <div style={{marginTop:6,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 10px"}}>
-            <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>💰 Preço de compra — clique para vincular</div>
+          if(!mps.length&&!activeMp)return null;
+          const allMps=activeMp&&!mps.find((m:any)=>m.id===activeMp.id)?[activeMp,...mps]:mps;
+          const hasUnsaved=existingProd&&pendingMpLink!==null&&pendingMpLink!==savedMpId;
+          return <div style={{marginTop:6,background:"#0d1020",borderRadius:8,border:`1px solid ${hasUnsaved?"#fbbf2466":"#1e2235"}`,padding:"6px 10px"}}>
+            <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar com compra — clique para vincular</div>
             {allMps.map((mp:any)=>{
-              const isLinked=linkedMpId===mp.id;
-              return <div key={mp.id} onClick={()=>{if(existingProd){if(isLinked)desvincularMp(existingProd.id);else vincularMp(existingProd.id,mp.id);}}}
-                style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:existingProd?"pointer":"default",borderRadius:6,marginBottom:2,
+              const isLinked=activeMpId===mp.id;
+              return <div key={mp.id} onClick={()=>{
+                  if(isLinked){setPendingMpLink(savedMpId===mp.id?"":null);}
+                  else setPendingMpLink(mp.id);
+                }}
+                style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
                   background:isLinked?"#4ade8015":"transparent",border:isLinked?"1px solid #4ade8044":"1px solid transparent"}}>
                 <span style={{fontSize:13}}>{isLinked?"🔗":"⬜"}</span>
                 <span style={{flex:1,color:isLinked?"#4ade80":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
@@ -3880,7 +3902,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
                 {mp.estoqueAtual!=null&&<span style={{fontSize:10,color:mp.estoqueAtual>0?"#4ade80":"#ff5c7a",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>est: {mp.estoqueAtual}</span>}
               </div>;
             })}
-            {!existingProd&&<div style={{fontSize:10,color:"#666",marginTop:2}}>Salve o produto primeiro para vincular</div>}
+            {hasUnsaved&&<button onClick={()=>{
+              if(existingProd){
+                if(pendingMpLink)vincularMp(existingProd.id,pendingMpLink);
+                else desvincularMp(existingProd.id);
+                setPendingMpLink(null);
+              }
+            }} className="btn" style={{width:"100%",marginTop:4,background:"#4ade80",color:"#111",padding:"8px",fontSize:12,fontWeight:700}}>
+              💾 Salvar Vínculo
+            </button>}
+            {!existingProd&&pendingMpLink&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>⚡ Vínculo será salvo ao adicionar o produto</div>}
           </div>;
         })()}
       </div>
