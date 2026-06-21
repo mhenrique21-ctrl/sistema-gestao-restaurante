@@ -1294,7 +1294,8 @@ function Vendas({db,setDb,state}){
 
 // ===================== NF-e XML PARSER =====================
 function parseNFe(xmlString) {
-  const cleanXml=xmlString.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g,'');
+  let cleanXml=xmlString.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g,'');
+  cleanXml=cleanXml.replace(/<(\/?)([a-zA-Z0-9]+):/g,'<$1');
   const parser=new DOMParser();
   const doc=parser.parseFromString(cleanXml,"application/xml");
   if(doc.querySelector("parsererror"))throw new Error("XML inválido");
@@ -2319,6 +2320,18 @@ REGRAS:
               {!nfe.chNFe&&isResumo&&<div style={{fontSize:10,color:"#f59e0b",marginBottom:6,background:"#1a1500",borderRadius:5,padding:"4px 8px"}}>
                 ⚠️ Chave de acesso não disponível — use "Limpar cache e re-sincronizar" abaixo para atualizar
               </div>}
+              {!isResumo&&(nfe.itens||[]).length>0&&<details style={{marginBottom:6}}>
+                <summary style={{fontSize:11,color:"#7c8fff",cursor:"pointer",marginBottom:4}}>📦 {(nfe.itens||[]).length} produto(s)</summary>
+                <div style={{maxHeight:180,overflowY:"auto" as const,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>
+                  {(nfe.itens||[]).map((it:any,idx:number)=>(
+                    <div key={idx} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid #111420",fontSize:11}}>
+                      <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{it.nome}</span>
+                      <span style={{color:"#888",marginLeft:6,whiteSpace:"nowrap" as const}}>{it.quantidade} {it.unidade}</span>
+                      <span style={{color:"#4ade80",marginLeft:6,fontWeight:600,whiteSpace:"nowrap" as const}}>{fmtMoney(it.valorTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>}
               <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
               {canBuscar&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)}
                 disabled={fetchingChave===nfe.chNFe}
@@ -2349,6 +2362,55 @@ REGRAS:
           ✅ Importar Todas ({sefazList.length} NF-es)
         </button>}
       </div>}
+
+      {/* -- Upload manual de XML -- */}
+      <div className="card" style={{marginBottom:14,border:"1px solid #2a3260"}}>
+        <div className="section-title" style={{marginBottom:8}}>📎 Importar XML manualmente</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:8}}>Selecione um arquivo XML de NF-e para importar diretamente.</div>
+        <input ref={nfeRef} type="file" accept=".xml,text/xml,application/xml" onChange={handleNFe}
+          style={{display:"none"}}/>
+        <button className="btn" onClick={()=>(nfeRef.current as HTMLInputElement)?.click()}
+          style={{background:"#1a2235",color:"#7c8fff",border:"1px solid #2a3a6a",padding:"12px",width:"100%",fontSize:14,fontWeight:600,marginBottom:8}}>
+          📄 Selecionar arquivo XML
+        </button>
+        {nfeError&&<div style={{background:"#2a1520",borderRadius:8,padding:"10px",fontSize:12,color:"#ff5c7a",marginBottom:8}}>{nfeError}</div>}
+        {nfeResult&&<div style={{background:"var(--bg4)",borderRadius:12,padding:12,border:"1px solid #1e2235"}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontWeight:700,fontSize:14}}>{nfeResult.fornecedor?.nome||"Fornecedor"}</span>
+            <span style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(nfeResult.totalCompra)}</span>
+          </div>
+          <div className="muted" style={{fontSize:12,marginBottom:8}}>
+            {nfeResult.nNF?`NF-e #${nfeResult.nNF} · `:""}
+            {fmtDate(nfeResult.data)} · {(nfeResult.itens||[]).length} produto(s)
+          </div>
+          {nfeResult.chNFe&&<div style={{fontSize:9,fontFamily:"monospace",color:"#666",marginBottom:8,wordBreak:"break-all" as const,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>{nfeResult.chNFe}</div>}
+          {(nfeResult.itens||[]).length>0&&<div style={{marginBottom:8,maxHeight:200,overflowY:"auto" as const}}>
+            {nfeResult.itens.map((it,idx)=>(
+              <div key={idx} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #111420",fontSize:12}}>
+                <span style={{flex:1}}>{it.nome}</span>
+                <span style={{color:"#888",marginLeft:8}}>{it.quantidade} {it.unidade}</span>
+                <span style={{color:"#4ade80",marginLeft:8,fontWeight:600}}>{fmtMoney(it.valorTotal)}</span>
+              </div>
+            ))}
+          </div>}
+          <div className="row" style={{marginBottom:8,gap:6}}>
+            <select value={nfeFormaPag} onChange={e=>setNfeFormaPag(e.target.value)} className="inp" style={{flex:1}}>
+              {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
+            </select>
+            <input type="date" value={nfeVenc} onChange={e=>setNfeVenc(e.target.value)} className="inp" style={{flex:1}}/>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            {nfeXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfeXml,nfeResult.nNF||"",nfeResult.fornecedor?.nome||"")}
+              style={{background:"#1a2030",color:"#4ade80",border:"1px solid #1a3a20",padding:"10px 14px",fontSize:12}}>
+              ⬇️ XML
+            </button>}
+            <button className="btn" onClick={confirmarNFe}
+              style={{background:"#7c8fff",color:"#fff",padding:"10px 14px",fontSize:14,fontWeight:700,flex:1}}>
+              📥 Importar NF-e
+            </button>
+          </div>
+        </div>}
+      </div>
 
     </div>}
 

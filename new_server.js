@@ -157,7 +157,8 @@ function normalizeUnit(u) {
 }
 
 function parseNFeXml(rawXml) {
-  const xml = rawXml.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g, '');
+  let xml = rawXml.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g, '');
+  xml = xml.replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
   const g = (tag) => getTag(xml, tag);
   const emitXml = xml.match(/<emit>[\s\S]*?<\/emit>/)?.[0] || '';
   const endXml  = emitXml.match(/<enderEmit>[\s\S]*?<\/enderEmit>/)?.[0] || '';
@@ -246,7 +247,8 @@ function sefazFetchByChave(emp, chNFe) {
       apiRes.on('data', c => chunks.push(c));
       apiRes.on('end', () => {
         try {
-          const xml = Buffer.concat(chunks).toString('utf-8');
+          let xml = Buffer.concat(chunks).toString('utf-8');
+          xml = xml.replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
           const cStat = getTag(xml, 'cStat');
           const xMotivo = getTag(xml, 'xMotivo');
           if (cStat && cStat !== '138') return reject(new Error(`SEFAZ cStat ${cStat}: ${xMotivo}`));
@@ -349,7 +351,8 @@ function sefazSync(emp) {
       apiRes.on('data', c => chunks.push(c));
       apiRes.on('end', () => {
         try {
-          const xml = Buffer.concat(chunks).toString('utf-8');
+          let xml = Buffer.concat(chunks).toString('utf-8');
+          xml = xml.replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
 
           // Parse SEFAZ status
           const cStat   = getTag(xml, 'cStat');
@@ -392,12 +395,12 @@ function sefazSync(emp) {
                 const parsed = parseNFeXml(decompressed);
                 if (parsed.itens.length > 0) nfes.push({ ...parsed, nsu, tipoDoc: 'completo' });
               } else if (decompressed.includes('<resNFe')) {
-                // Summary document — no item detail; chNFe stored so client can fetch full XML on demand
-                const chNFe  = getTag(decompressed, 'chNFe') || '';
-                const xNome  = getTag(decompressed, 'xNome') || 'Fornecedor';
-                const cnpjDoc = getTag(decompressed, 'CNPJ') || '';
-                const vNF    = parseFloat(getTag(decompressed, 'vNF')) || 0;
-                const rawDt  = getTag(decompressed, 'dhEmi') || getTag(decompressed, 'dEmi') || '';
+                const cleanRes = decompressed.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g, '').replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
+                const chNFe  = getTag(cleanRes, 'chNFe') || '';
+                const xNome  = getTag(cleanRes, 'xNome') || 'Fornecedor';
+                const cnpjDoc = getTag(cleanRes, 'CNPJ') || '';
+                const vNF    = parseFloat(getTag(cleanRes, 'vNF')) || 0;
+                const rawDt  = getTag(cleanRes, 'dhEmi') || getTag(cleanRes, 'dEmi') || '';
                 const data   = rawDt.substring(0, 10);
                 let nNF = '';
                 if (chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
@@ -415,10 +418,8 @@ function sefazSync(emp) {
 
           if (maxNSU > nsuResp) saveNsu(nsuKey, maxNSU);
 
-          // Return the 10 most recent NF-es (sorted by date descending)
           const nfesOrdenadas = nfes
-            .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
-            .slice(0, 10);
+            .sort((a, b) => (b.data || '').localeCompare(a.data || ''));
 
           resolve({ nfes: nfesOrdenadas, total: nfes.length, ultNSU: maxNSU });
         } catch (e) {
