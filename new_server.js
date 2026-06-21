@@ -303,7 +303,7 @@ function buildSoapEnvelope(cnpj, uf, ultNSU) {
 </soap12:Envelope>`;
 }
 
-function sefazSync(emp) {
+function sefazDistDFe(emp) {
   return new Promise((resolve, reject) => {
     const pfxPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
     const keyPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}_key.pem`);
@@ -320,14 +320,12 @@ function sefazSync(emp) {
     if (!cnpj) return reject(new Error(`CNPJ_${emp} não configurado no .env`));
 
     const nsuMap = getNsuMap();
-    // Key by CNPJ so companies sharing the same CNPJ share the same NSU counter
     const nsuKey = cnpj || emp;
     const ultNSU = nsuMap[nsuKey] ?? nsuMap[emp] ?? 0;
 
     const soapBody = buildSoapEnvelope(cnpj, uf, ultNSU);
     const bodyBuf  = Buffer.from(soapBody, 'utf-8');
 
-    // Prefer PEM files (no passphrase needed); fall back to PFX
     const tlsOpts = hasPem
       ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
       : { pfx: fs.readFileSync(pfxPath), passphrase };
@@ -354,14 +352,12 @@ function sefazSync(emp) {
           let xml = Buffer.concat(chunks).toString('utf-8');
           xml = xml.replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
 
-          // Parse SEFAZ status
           const cStat   = getTag(xml, 'cStat');
           const xMotivo = getTag(xml, 'xMotivo');
           const nsuResp = parseInt(getTag(xml, 'ultNSU')) || 0;
 
           console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} cStat=${cStat} xMotivo=${xMotivo} ultNSU=${nsuResp}`);
 
-          // On 656: SEFAZ includes the correct ultNSU in the response — save it so next attempt uses the right starting point
           if (cStat === '656') {
             if (nsuResp > 0 && nsuResp > (parseInt(String(ultNSU)) || 0)) {
               saveNsu(nsuKey, nsuResp);
@@ -369,7 +365,6 @@ function sefazSync(emp) {
             }
             return reject(new Error(`SEFAZ limitou as consultas (cStat 656). ${xMotivo}. Tente novamente em 1 hora.`));
           }
-          // On 137 (no more docs): save NSU so next request continues from here
           if (cStat === '137') {
             if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(nsuKey, nsuResp);
             return resolve({ nfes: [], total: 0, ultNSU: nsuResp, cStat, xMotivo });
@@ -378,7 +373,6 @@ function sefazSync(emp) {
             return reject(new Error(`SEFAZ retornou cStat ${cStat}: ${xMotivo}`));
           }
 
-          // Extract docZip elements (cStat 138)
           const docZipRe = /<docZip[^>]*NSU="(\d+)"[^>]*>([\s\S]*?)<\/docZip>/g;
           let match;
           const nfes = [];
@@ -433,6 +427,30 @@ function sefazSync(emp) {
     apiReq.write(bodyBuf);
     apiReq.end();
   });
+}
+
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function sefazSync(emp) {
+  const result = await sefazDistDFe(emp);
+  const resumos = (result.nfes || []).filter(n => n.tipoDoc === 'resumo' && n.chNFe && n.chNFe.length === 44);
+  if (resumos.length > 0) {
+    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — buscando NF-e completa para cada...`);
+    for (const resumo of resumos) {
+      try {
+        await delay(1000);
+        const completa = await sefazFetchByChave(emp, resumo.chNFe);
+        const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
+        if (idx >= 0) {
+          result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo' };
+          console.log(`[SEFAZ ${emp}] ✅ NF-e ${resumo.chNFe.slice(-8)} completada (${(completa.itens||[]).length} itens)`);
+        }
+      } catch (e) {
+        console.log(`[SEFAZ ${emp}] ⚠️ Falha ao buscar NF-e ${resumo.chNFe.slice(-8)}: ${e.message}`);
+      }
+    }
+  }
+  return result;
 }
 
 // ---- HTTP Server ----
@@ -1123,11 +1141,39 @@ async function autoSyncSEFAZ() {
       const existing = cache[key]?.nfes || [];
       const existingNsus = new Set(existing.map(n => n.nsu));
       const novas = (result.nfes||[]).filter(n => !existingNsus.has(n.nsu));
-      const merged = [...novas, ...existing]
+      // Upgrade existing resumos to completo if the new sync brought the full version
+      const upgradedExisting = existing.map(ex => {
+        if (ex.tipoDoc === 'resumo' && ex.chNFe) {
+          const full = (result.nfes||[]).find(n => n.chNFe === ex.chNFe && n.tipoDoc === 'completo');
+          if (full) return { ...full, nsu: ex.nsu };
+        }
+        return ex;
+      });
+      const merged = [...novas, ...upgradedExisting]
         .sort((a,b) => (b.data||'').localeCompare(a.data||''))
         .slice(0, 50);
       cache[key] = { nfes: merged, timestamp: new Date().toISOString(), ultNSU: result.ultNSU, empresa: emp };
-      saveCache(cache);
+      // Also resolve any old resumos still in cache
+      const oldResumos = merged.filter(n => n.tipoDoc === 'resumo' && n.chNFe && n.chNFe.length === 44);
+      if (oldResumos.length > 0) {
+        console.log(`[AutoSync] ${emp}: resolvendo ${oldResumos.length} resumo(s) antigo(s) no cache...`);
+        for (const resumo of oldResumos) {
+          try {
+            await delay(1500);
+            const completa = await sefazFetchByChave(emp, resumo.chNFe);
+            const idx = cache[key].nfes.findIndex(n => n.nsu === resumo.nsu);
+            if (idx >= 0) {
+              cache[key].nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo' };
+              console.log(`[AutoSync] ${emp}: ✅ resumo ${resumo.chNFe.slice(-8)} → completa (${(completa.itens||[]).length} itens)`);
+            }
+          } catch (e2) {
+            console.log(`[AutoSync] ${emp}: ⚠️ falha ao resolver resumo ${resumo.chNFe.slice(-8)}: ${e2.message}`);
+          }
+        }
+        saveCache(cache);
+      } else {
+        saveCache(cache);
+      }
       if (novas.length > 0) {
         console.log(`[AutoSync] ${emp}: ${novas.length} nova(s) NF-e(s) adicionada(s) ao cache. Total: ${merged.length}.`);
       } else {

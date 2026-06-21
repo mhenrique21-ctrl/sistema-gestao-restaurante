@@ -1820,6 +1820,28 @@ REGRAS:
   // Auto-load cache when NF-e sub-tab opens
   useEffect(()=>{if(subTab==="nfe")fetchCache();},[subTab,empresa]);
 
+  // Auto-fetch complete NF-e for any resumos in the list
+  const autoFetchingRef=useRef(false);
+  useEffect(()=>{
+    const resumos=sefazList.filter(n=>(n.tipoDoc==="resumo"||(!(n.tipoDoc)&&(n.itens||[]).length===0))&&n.chNFe&&n.chNFe.length===44);
+    if(resumos.length===0||autoFetchingRef.current||sefazLoading)return;
+    autoFetchingRef.current=true;
+    (async()=>{
+      for(const resumo of resumos){
+        try{
+          setFetchingChave(resumo.chNFe);
+          const res=await fetch("/api/nfe-fetch-chave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:resumo.chNFe})});
+          const data=await res.json();
+          if(res.ok&&!data.error){
+            setSefazList(l=>l.map(n=>n.nsu===resumo.nsu?{...n,...data,tipoDoc:"completo"}:n));
+          }
+        }catch{}
+        setFetchingChave(null);
+      }
+      autoFetchingRef.current=false;
+    })();
+  },[sefazList.length,sefazLoading]);
+
   const salvarNSUManual=async()=>{
     const val=parseInt(sefazNsuInput);
     if(isNaN(val)||val<0){alert("NSU inválido");return;}
@@ -2311,7 +2333,8 @@ REGRAS:
               <div className="muted" style={{fontSize:12,marginBottom:6}}>
                 {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
                 {fmtDate(nfe.data)} · {isFakeItem?0:(nfe.itens||[]).length} produto(s)
-                {isResumo&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ sem produtos</span>}
+                {isResumo&&fetchingChave===nfe.chNFe&&<span style={{color:"#7c8fff",marginLeft:6}}>⏳ buscando completa...</span>}
+                {isResumo&&fetchingChave!==nfe.chNFe&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ resumo</span>}
               </div>
               {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>
                 <span style={{fontSize:9,fontFamily:"monospace",color:"#666",flex:1,wordBreak:"break-all" as const}}>{nfe.chNFe}</span>
@@ -2336,7 +2359,7 @@ REGRAS:
               {canBuscar&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)}
                 disabled={fetchingChave===nfe.chNFe}
                 style={{background:"#1a2235",color:"#7c8fff",border:"1px solid #2a3a6a",padding:"8px 12px",fontSize:12,flex:1}}>
-                {fetchingChave===nfe.chNFe?"⏳ Buscando...":"🔍 Buscar produtos"}
+                {fetchingChave===nfe.chNFe?"⏳ Buscando completa...":"🔍 Buscar produtos"}
               </button>}
               {nfe.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfe.rawXml,nfe.nNF||"",nfe.fornecedor?.nome||"")}
                 style={{background:"#1a2030",color:"#4ade80",border:"1px solid #1a3a20",padding:"8px 12px",fontSize:12}}>
