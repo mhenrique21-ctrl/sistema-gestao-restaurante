@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
@@ -537,6 +537,8 @@ const mergeFromServer=(prev:any,updates:any)=>{
       produtosLista: byIdDedup(s.produtosLista||[]),
       pedidosLista:  byId(s.pedidosLista||[]),
       pedidosProducao: byId(s.pedidosProducao||[]),
+      produtosProducao: byId(s.produtosProducao||[]),
+      categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
     };
   });
@@ -3731,99 +3733,228 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 }
 
 // ===================== PRODUÇÃO =====================
-const CATS_PRODUCAO=["BOLO","TORTAS","PUDIM","PRODUÇÃO IVANE","COXINHAS","TRANÇA","ESFIRRAS","MASSAS FOLHADAS","CROISSANTS"];
+const CATS_PRODUCAO_DEFAULT=["BOLO","TORTAS","PUDIM","PRODUÇÃO IVANE","COXINHAS","TRANÇA","ESFIRRAS","MASSAS FOLHADAS","CROISSANTS"];
 const ICON_PROD:Record<string,string>={"BOLO":"🎂","TORTAS":"🥧","PUDIM":"🍮","PRODUÇÃO IVANE":"👩‍🍳","COXINHAS":"🍗","TRANÇA":"🥖","ESFIRRAS":"🥟","MASSAS FOLHADAS":"🥐","CROISSANTS":"🥐"};
+const prodCatIcon=(c:string)=>ICON_PROD[c]||"📦";
 
 function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,onLogout?:()=>void}){
-  const [qtds,setQtds]=useState<Record<string,string>>({});
-  const [busca,setBusca]=useState("");
-  const [catFiltro,setCatFiltro]=useState<string|null>(null);
+  const isAdmin=login?.role==="admin";
+  // Seed default categories once
+  if(!db.pedidosProducaoSeedCats){
+    setTimeout(()=>setDb((d:any)=>({...d,pedidosProducaoSeedCats:true,categoriasProducao:d.categoriasProducao?.length?d.categoriasProducao:[...CATS_PRODUCAO_DEFAULT]})),0);
+  }
+  const cats:string[]=(db.categoriasProducao||[]).length?db.categoriasProducao:CATS_PRODUCAO_DEFAULT;
+
+  // Sub-panels
+  const [showProdMgmt,setShowProdMgmt]=useState(false);
+  const [showCatMgmt,setShowCatMgmt]=useState(false);
   const [showHist,setShowHist]=useState(false);
-  const [editPedId,setEditPedId]=useState<string|null>(null);
-  const [editQtds,setEditQtds]=useState<Record<string,string>>({});
 
-  const prods:any[]=(db.produtosLista||[]).filter((p:any)=>{
-    if(busca&&!(p.nome||"").toLowerCase().includes(busca.toLowerCase()))return false;
-    if(catFiltro&&(p.cat||"outros")!==catFiltro)return false;
-    return true;
-  }).sort((a:any,b:any)=>(a.cat||"").localeCompare(b.cat||"")||((a.nome||"").localeCompare(b.nome||"","pt-BR")));
+  // Product catalog management
+  const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un"});
+  const [editProdId,setEditProdId]=useState<string|null>(null);
+  const prodsCatalog:any[]=db.produtosProducao||[];
 
-  const getEstoque=(nome:string)=>{
-    const mp=(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase()===nome.toLowerCase());
-    return mp?{atual:mp.estoqueAtual||0,unidade:mp.unidade||"un"}:null;
+  const saveProd=()=>{
+    const nome=prodForm.nome.trim();
+    if(!nome)return alert("Nome obrigatório.");
+    if(editProdId){
+      setDb((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cat:prodForm.cat,unidade:prodForm.unidade}:p)}));
+      setEditProdId(null);
+    }else{
+      setDb((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cat:prodForm.cat,unidade:prodForm.unidade}]}));
+    }
+    setProdForm({nome:"",cat:"",unidade:"un"});
   };
-  const itensComQtd=prods.filter(p=>{const q=qtds[p.id];return q&&parseFloat(q)>0;});
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"});};
+  const delProd=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).filter((p:any)=>p.id!==id)}));};
 
+  // Category management
+  const [novaCat,setNovaCat]=useState("");
+  const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
+
+  const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c]}));setNovaCat("");};
+  const delCat=(c:string)=>{
+    if(!confirm(`Excluir categoria "${c}"? Produtos serão movidos para "outros".`))return;
+    setDb((d:any)=>({...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===c?{...p,cat:""}:p)}));
+  };
+  const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>({...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===old?{...p,cat:v}:p)}));setEditCat(null);};
+  const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
+
+  // Order form (Lista-style)
+  const [form,setForm]=useState({nome:"",qtd:"1",unidade:"un",cat:"",obs:""});
+  const [editId,setEditId]=useState<string|null>(null);
+  const [showSugg,setShowSugg]=useState(false);
+  const [itens,setItens]=useState<any[]>([]);
+  const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
+
+  const suggestions=form.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(form.nome.toLowerCase())).slice(0,8):[];
+  const selectSugg=(p:any)=>{setForm(f=>({...f,nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"}));setShowSugg(false);};
+
+  const addItem=()=>{
+    const nome=form.nome.trim();if(!nome)return alert("Produto obrigatório.");
+    const qtd=parseFloat(form.qtd)||0;if(qtd<=0)return alert("Quantidade deve ser maior que 0.");
+    if(editId){
+      setItens(prev=>prev.map(it=>it.id===editId?{...it,nome,quantidade:qtd,unidade:form.unidade,cat:form.cat,obs:form.obs}:it));
+      setEditId(null);
+    }else{
+      setItens(prev=>[...prev,{id:uid(),nome,quantidade:qtd,unidade:form.unidade,cat:form.cat,obs:form.obs}]);
+    }
+    setForm({nome:"",qtd:"1",unidade:"un",cat:"",obs:""});
+  };
+  const editItem=(it:any)=>{setEditId(it.id);setForm({nome:it.nome,qtd:String(it.quantidade),unidade:it.unidade||"un",cat:it.cat||"",obs:it.obs||""});};
+  const delItem=(id:string)=>setItens(prev=>prev.filter(it=>it.id!==id));
+  const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"1",unidade:"un",cat:"",obs:""});};
+
+  // Group items by category
+  const porCat:Record<string,any[]>={};
+  itens.forEach(it=>{const c=it.cat||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(it);});
+
+  // Generate order
   const gerarPedido=()=>{
-    if(!itensComQtd.length)return alert("Informe a quantidade de pelo menos 1 produto.");
-    const itens=itensComQtd.map(p=>{
-      const est=getEstoque(p.nome);
-      return{nome:p.nome,quantidade:parseFloat(qtds[p.id])||0,unidade:p.unidade||est?.unidade||"un",estoque:est?.atual??null,categoria:p.cat||""};
-    });
-    const pedido={id:uid(),data:today(),itens,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    if(!itens.length)return alert("Adicione pelo menos 1 produto ao pedido.");
+    const pedido={id:uid(),data:today(),itens:itens.map(it=>({nome:it.nome,quantidade:it.quantidade,unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     const txt=montarTextoWhats(pedido);
-    setQtds({});
-    const acao=confirm(`✅ Pedido de produção salvo! (${itens.length} produto(s))\n\nDeseja compartilhar no WhatsApp?`);
+    setItens([]);
+    const acao=confirm(`Pedido de produção salvo! (${pedido.itens.length} produto(s))\n\nDeseja compartilhar no WhatsApp?`);
     if(acao)window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
   };
 
   const montarTextoWhats=(ped:any)=>{
-    const porCat:Record<string,any[]>={};
-    (ped.itens||[]).forEach((it:any)=>{const c=it.categoria||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(it);});
+    const pc:Record<string,any[]>={};
+    (ped.itens||[]).forEach((it:any)=>{const c=it.categoria||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
-    Object.entries(porCat).forEach(([cat,itens])=>{
-      txt+=`\n${ICON_PROD[cat]||"📦"} *${cat}*\n`;
-      itens.forEach((it:any)=>{txt+=`  • ${it.nome}: *${it.quantidade} ${it.unidade||"un"}*${it.estoque!=null?` (est: ${it.estoque})`:""}\n`;});
+    Object.entries(pc).forEach(([cat,its])=>{
+      txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
+      its.forEach((it:any)=>{txt+=`  • ${it.nome}: *${it.quantidade} ${it.unidade||"un"}*${it.obs?` — ${it.obs}`:""}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
   };
 
   const imprimirPedido=(pedido?:any)=>{
-    const itens=pedido?pedido.itens:itensComQtd.map(p=>{const est=getEstoque(p.nome);return{nome:p.nome,quantidade:parseFloat(qtds[p.id])||0,unidade:p.unidade||est?.unidade||"un",estoque:est?.atual??null,categoria:p.cat||""};});
-    if(!itens.length)return alert("Nenhum produto com quantidade.");
-    const porCat:Record<string,any[]>={};
-    itens.forEach((it:any)=>{const c=it.categoria||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(it);});
+    const lista=pedido?pedido.itens:itens;
+    if(!lista.length)return alert("Nenhum produto no pedido.");
+    const pc:Record<string,any[]>={};
+    lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
-    const sections=Object.entries(porCat).map(([cat,its])=>`
-      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${ICON_PROD[cat]||"📦"} ${cat}</td></tr>
-      ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.estoque??"-"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.unidade||"un"}</td></tr>`).join("")}
+    const sections=Object.entries(pc).map(([cat,its])=>`
+      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${prodCatIcon(cat)} ${cat}</td></tr>
+      ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade} ${it.unidade||"un"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
     `).join("");
     const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR");
     const solicitante=pedido?.solicitante||login?.label||"—";
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.print-btn{margin-bottom:16px;padding:8px 22px;background:#5b21b6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.print-btn{display:none}}</style></head><body><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${itens.length} produto(s) · Solicitante: ${solicitante}</div><button class="print-btn" onclick="window.print()">🖨️ Imprimir</button><table><tr><th>Produto</th><th style="text-align:center">Estoque</th><th style="text-align:center">Qtd Solicitada</th><th style="text-align:center">Unidade</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.print-btn{margin-bottom:16px;padding:8px 22px;background:#5b21b6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.print-btn{display:none}}</style></head><body><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><button class="print-btn" onclick="window.print()">🖨️ Imprimir</button><table><tr><th>Produto</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
     w.document.close();
   };
 
+  // History edit
+  const [editPedId,setEditPedId]=useState<string|null>(null);
+  const [editQtds,setEditQtds]=useState<Record<string,string>>({});
+  const [editObs,setEditObs]=useState<Record<string,string>>({});
   const salvarEdicaoPedido=(pedId:string)=>{
     setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>{
       if(p.id!==pedId)return p;
       const novosItens=(p.itens||[]).map((it:any)=>{
         const key=`${pedId}_${it.nome}`;
         const novaQtd=parseFloat(editQtds[key]);
-        return!isNaN(novaQtd)&&novaQtd>=0?{...it,quantidade:novaQtd}:it;
+        const novaObs=editObs[key]!==undefined?editObs[key]:it.obs;
+        return!isNaN(novaQtd)&&novaQtd>=0?{...it,quantidade:novaQtd,obs:novaObs}:it;
       }).filter((it:any)=>it.quantidade>0);
       return{...p,itens:novosItens};
     })}));
-    setEditPedId(null);setEditQtds({});
+    setEditPedId(null);setEditQtds({});setEditObs({});
   };
 
-  const porCatProds:Record<string,any[]>={};
-  prods.forEach(p=>{const c=p.cat||"outros";if(!porCatProds[c])porCatProds[c]=[];porCatProds[c].push(p);});
-  const catsComProds=CATS_PRODUCAO.filter(c=>!catFiltro||c===catFiltro);
+  const closeAll=()=>{setShowProdMgmt(false);setShowCatMgmt(false);setShowHist(false);};
 
   return <div>
+    {/* Header */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🏭 Produção</div>
-      {itensComQtd.length>0&&<span style={{background:"#c084fc22",color:"#c084fc",border:"1px solid #c084fc44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itensComQtd.length} selecionado(s)</span>}
-      <div style={{marginLeft:"auto",display:"flex",gap:6}}>
-        <button className="btn" onClick={()=>setShowHist(v=>!v)} style={{background:showHist?"#1a1040":"#120a20",color:"#c084fc",border:"1px solid #5b21b6",padding:"6px 12px",fontSize:12}}>📂 Pedidos{(db.pedidosProducao||[]).length>0?` (${(db.pedidosProducao||[]).length})`:""}</button>
+      {itens.length>0&&<span style={{background:"#c084fc22",color:"#c084fc",border:"1px solid #c084fc44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itens.length} item(ns)</span>}
+      <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap" as const}}>
+        <button className="btn" onClick={()=>{setShowHist(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);}} style={{background:showHist?"#1a1040":"#120a20",color:"#c084fc",border:"1px solid #5b21b6",padding:"6px 12px",fontSize:12}}>📂 Pedidos{(db.pedidosProducao||[]).length>0?` (${(db.pedidosProducao||[]).length})`:""}</button>
+        {isAdmin&&<>
+          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHist(false);}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
+          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHist(false);}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
+        </>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
 
-    {/* Histórico de pedidos */}
+    {/* Category management (admin) */}
+    {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
+      <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Categorias de Produção</div>
+      <div style={{marginBottom:10}}>
+        {cats.map((c,idx)=>(
+          <div key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
+            <span style={{fontSize:16}}>{prodCatIcon(c)}</span>
+            {editCat?.name===c
+              ? <>
+                  <input autoFocus value={editCat.val}
+                    onChange={e=>setEditCat(ec=>ec?{...ec,val:e.target.value}:ec)}
+                    onKeyDown={e=>{if(e.key==="Enter")renameCat(c,editCat.val);if(e.key==="Escape")setEditCat(null);}}
+                    className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
+                  <button onClick={()=>renameCat(c,editCat.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                  <button onClick={()=>setEditCat(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
+                </>
+              : <>
+                  <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"uppercase" as const}}>{c}</span>
+                  <button onClick={()=>setEditCat({name:c,val:c})} title="Renomear"
+                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                  <div style={{display:"flex",gap:2}}>
+                    <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#a78bfa",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                    <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#a78bfa",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                  </div>
+                  <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                </>
+            }
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0}}/>
+        <button className="btn" onClick={addCat} style={{background:"#a78bfa",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
+      </div>
+    </div>}
+
+    {/* Product catalog (admin) */}
+    {isAdmin&&showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
+      <div className="section-title" style={{color:"#4ade80",margin:0,marginBottom:10}}>📦 Produtos de Produção <span style={{fontSize:11,color:"#555"}}>({prodsCatalog.length})</span></div>
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+        <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
+          onKeyDown={e=>{if(e.key==="Enter")saveProd();}} className="inp" style={{flex:"2 1 120px",marginBottom:0}}/>
+        <select value={prodForm.cat} onChange={e=>setProdForm(f=>({...f,cat:e.target.value}))} className="inp" style={{flex:"1 1 90px",marginBottom:0}}>
+          <option value="">Categoria</option>
+          {cats.map(c=><option key={c} value={c}>{prodCatIcon(c)} {c}</option>)}
+        </select>
+        <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
+          {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+        </select>
+        <button className="btn" onClick={saveProd} style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
+        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
+      </div>
+      <div style={{maxHeight:260,overflowY:"auto" as const}}>
+        {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
+        {[...prodsCatalog].sort((a,b)=>(a.cat||"").localeCompare(b.cat||"")||(a.nome||"").localeCompare(b.nome||"","pt-BR")).map((p:any)=>(
+          <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
+            <span style={{fontSize:14}}>{prodCatIcon(p.cat||"")}</span>
+            <span style={{flex:1,fontSize:13}}>{p.nome}</span>
+            {p.cat&&<span style={{fontSize:10,color:"#c084fc",background:"#c084fc18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+            <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
+            <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
+            <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+          </div>
+        ))}
+      </div>
+    </div>}
+
+    {/* Order history */}
     {showHist&&<div className="card" style={{marginBottom:12,border:"1px solid #5b21b6"}}>
       <div className="section-title" style={{color:"#c084fc"}}>📂 Histórico de Pedidos</div>
       {!(db.pedidosProducao||[]).length&&<div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:16}}>Nenhum pedido ainda.</div>}
@@ -3833,16 +3964,13 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
             <span style={{fontWeight:600,fontSize:12,color:"#c084fc"}}>{fmtDate(ped.data)} · {(ped.itens||[]).length} produto(s) · {ped.solicitante||"—"}</span>
             <div style={{display:"flex",gap:4}}>
-              <button onClick={()=>{
-                const txt=montarTextoWhats(ped);
-                window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
-              }} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>
+              <button onClick={()=>{window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>
               <button onClick={()=>imprimirPedido(ped)} style={{background:"none",border:"1px solid #60a5fa44",borderRadius:5,color:"#60a5fa",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
               <button onClick={()=>{
                 if(isEdit){salvarEdicaoPedido(ped.id);}
-                else{const q:Record<string,string>={};(ped.itens||[]).forEach((it:any)=>{q[`${ped.id}_${it.nome}`]=String(it.quantidade);});setEditQtds(q);setEditPedId(ped.id);}
+                else{const q:Record<string,string>={};const o:Record<string,string>={};(ped.itens||[]).forEach((it:any)=>{const k=`${ped.id}_${it.nome}`;q[k]=String(it.quantidade);o[k]=it.obs||"";});setEditQtds(q);setEditObs(o);setEditPedId(ped.id);}
               }} style={{background:"none",border:`1px solid ${isEdit?"#4ade8044":"#fbbf2444"}`,borderRadius:5,color:isEdit?"#4ade80":"#fbbf24",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{isEdit?"💾":"✏️"}</button>
-              {isEdit&&<button onClick={()=>{setEditPedId(null);setEditQtds({});}} style={{background:"none",border:"1px solid #88888844",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>✕</button>}
+              {isEdit&&<button onClick={()=>{setEditPedId(null);setEditQtds({});setEditObs({});}} style={{background:"none",border:"1px solid #88888844",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>✕</button>}
               <button onClick={()=>{
                 if(!confirm("Excluir este pedido?"))return;
                 _listaDeletados.add(ped.id);
@@ -3850,90 +3978,114 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
               }} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:5,color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
             </div>
           </div>
-          {(ped.itens||[]).map((it:any,j:number)=>(
-            <div key={j} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:j<(ped.itens||[]).length-1?"1px solid var(--border)":"none"}}>
-              <span style={{fontSize:12,flex:1}}>{ICON_PROD[it.categoria]||"📦"} {it.nome}</span>
-              {it.estoque!=null&&<span style={{fontSize:10,color:"#888"}}>est: {it.estoque}</span>}
+          {(ped.itens||[]).map((it:any,j:number)=>{
+            const key=`${ped.id}_${it.nome}`;
+            return <div key={j} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:j<(ped.itens||[]).length-1?"1px solid var(--border)":"none"}}>
+              <span style={{fontSize:12,flex:1}}>{prodCatIcon(it.categoria)} {it.nome}</span>
+              <span style={{fontSize:10,color:"#a78bfa"}}>{it.categoria||""}</span>
               {isEdit?<input type="number" inputMode="decimal" min="0" step="any"
-                value={editQtds[`${ped.id}_${it.nome}`]||""} onChange={e=>setEditQtds(q=>({...q,[`${ped.id}_${it.nome}`]:e.target.value}))}
+                value={editQtds[key]||""} onChange={e=>setEditQtds(q=>({...q,[key]:e.target.value}))}
                 className="inp" style={{width:55,marginBottom:0,textAlign:"center" as const,fontSize:12,padding:"4px"}}/>
               :<span style={{fontSize:12,fontWeight:700,color:"#c084fc"}}>{it.quantidade} {it.unidade||"un"}</span>}
-            </div>
-          ))}
+              {it.obs&&!isEdit&&<span style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>({it.obs})</span>}
+              {isEdit&&<input placeholder="Obs" value={editObs[key]||""} onChange={e=>setEditObs(o=>({...o,[key]:e.target.value}))}
+                className="inp" style={{width:80,marginBottom:0,fontSize:10,padding:"3px 5px"}}/>}
+            </div>;
+          })}
         </div>;
       })}
     </div>}
 
-    {/* Filtro por categoria */}
-    <div style={{display:"flex",gap:4,marginBottom:10,flexWrap:"wrap" as const,overflowX:"auto" as const}}>
-      <button onClick={()=>setCatFiltro(null)} className="pill" style={{background:!catFiltro?"#c084fc":"var(--bg4)",color:!catFiltro?"#fff":"#888",fontSize:10,padding:"5px 10px"}}>Todos</button>
-      {CATS_PRODUCAO.map(c=>(
-        <button key={c} onClick={()=>setCatFiltro(catFiltro===c?null:c)} className="pill" style={{background:catFiltro===c?"#c084fc":"var(--bg4)",color:catFiltro===c?"#fff":"#888",fontSize:10,padding:"5px 10px",whiteSpace:"nowrap" as const}}>{ICON_PROD[c]||"📦"} {c}</button>
+    {/* Form — add item to order (Lista-style) */}
+    <div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#5b21b644"}`}}>
+      <div className="section-title" style={{color:editId?"#fbbf24":"#c084fc",marginBottom:10}}>{editId?"✏️ Editar Item":"➕ Novo Item"}</div>
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *</div>
+        <div style={{position:"relative"}}>
+          <input placeholder="Ex: Bolo de Chocolate, Coxinha..." value={form.nome}
+            onChange={e=>{setF("nome",e.target.value);setShowSugg(true);}}
+            onKeyDown={e=>{if(e.key==="Enter"&&!showSugg)addItem();if(e.key==="Escape")setShowSugg(false);}}
+            onFocus={()=>setShowSugg(true)}
+            onBlur={()=>setTimeout(()=>setShowSugg(false),150)}
+            className="inp" style={{marginBottom:0,width:"100%"}}/>
+          {showSugg&&suggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:220,overflowY:"auto" as const}}>
+            {suggestions.map((p:any)=>(
+              <div key={p.id} onMouseDown={()=>selectSugg(p)}
+                style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                <span style={{fontSize:15}}>{prodCatIcon(p.cat||"")}</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600}}>{p.nome}</span>
+                <span style={{fontSize:11,color:"#888"}}>{p.unidade}</span>
+                {p.cat&&<span style={{fontSize:10,color:"#c084fc",background:"#c084fc18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+              </div>
+            ))}
+          </div>}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <div style={{flex:"1 1 70px"}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Quantidade *</div>
+          <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter")addItem();}}
+            className="inp" style={{marginBottom:0}}/>
+        </div>
+        <div style={{flex:"1 1 70px"}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Unidade</div>
+          <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0}}>
+            {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+        <div style={{flex:"1 1 90px"}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Categoria</div>
+          <select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0}}>
+            <option value="">Sem categoria</option>
+            {cats.map(c=><option key={c} value={c}>{prodCatIcon(c)} {c}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Observações</div>
+        <textarea placeholder="Detalhes, especificações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:50,marginBottom:0,resize:"vertical" as const}}/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" onClick={addItem} style={{flex:1,background:editId?"#fbbf24":"#7c3aed",color:editId?"#111":"#fff",padding:"12px",fontSize:14,fontWeight:700}}>
+          {editId?"💾 Atualizar":"✅ Adicionar ao Pedido"}
+        </button>
+        {editId&&<button className="btn" onClick={cancelEdit} style={{background:"var(--border2)",color:"var(--text2)",padding:"12px 14px",fontSize:14}}>✕</button>}
+      </div>
+    </div>
+
+    {/* Current order items grouped by category */}
+    {itens.length>0&&<>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <div className="section-title" style={{marginBottom:0,color:"#c084fc"}}>📋 Pedido Atual</div>
+        <span style={{fontSize:11,color:"#888"}}>{itens.length} produto(s)</span>
+      </div>
+      {Object.entries(porCat).sort(([a],[b])=>a.localeCompare(b)).map(([cat,its])=>(
+        <div key={cat} style={{marginBottom:8}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#c084fc",textTransform:"uppercase" as const,letterSpacing:.5,padding:"6px 0 4px",borderBottom:"1px solid #5b21b644",marginBottom:4}}>{prodCatIcon(cat)} {cat} <span style={{color:"#666",fontWeight:400}}>({its.length})</span></div>
+          {its.map((it:any)=>(
+            <div key={it.id} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600}}>{it.nome}</div>
+                {it.obs&&<div style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>{it.obs}</div>}
+              </div>
+              <span style={{fontSize:12,fontWeight:700,color:"#c084fc",flexShrink:0}}>{it.quantidade} {it.unidade}</span>
+              <button onClick={()=>editItem(it)} style={{background:"none",border:"none",cursor:"pointer",color:"#fbbf24",fontSize:13,padding:"0 3px"}}>✏️</button>
+              <button onClick={()=>delItem(it.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+            </div>
+          ))}
+        </div>
       ))}
-    </div>
 
-    {/* Busca */}
-    <div style={{position:"relative",marginBottom:10}}>
-      <input placeholder="🔍 Buscar produto..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{marginBottom:0,paddingRight:busca?36:14}}/>
-      {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
-    </div>
-
-    {/* Produtos por categoria */}
-    {prods.length===0&&<div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:24}}>Nenhum produto encontrado.{!catFiltro&&" Cadastre produtos na aba Lista → Produtos."}</div>}
-    {catsComProds.map(cat=>{
-      const prodsNaCat=(porCatProds[cat]||[]);
-      if(!prodsNaCat.length)return null;
-      return <div key={cat} style={{marginBottom:10}}>
-        <div style={{fontSize:12,fontWeight:700,color:"#c084fc",textTransform:"uppercase" as const,letterSpacing:.5,padding:"6px 0 4px",borderBottom:"1px solid #5b21b644",marginBottom:4}}>{ICON_PROD[cat]||"📦"} {cat} <span style={{color:"#666",fontWeight:400}}>({prodsNaCat.length})</span></div>
-        {prodsNaCat.map((p:any)=>{
-          const est=getEstoque(p.nome);
-          return <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
-              <div style={{fontSize:10,color:"#888"}}>{est!=null?<span style={{color:est.atual>0?"#4ade80":"#ff5c7a"}}>estoque: {est.atual} {est.unidade}</span>:<span style={{color:"#555"}}>sem estoque</span>}</div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              <input type="number" inputMode="decimal" min="0" step="any" placeholder="Qtd"
-                value={qtds[p.id]||""} onChange={e=>setQtds(q=>({...q,[p.id]:e.target.value}))}
-                className="inp" style={{width:65,marginBottom:0,textAlign:"center" as const,fontSize:13,padding:"6px 4px"}}/>
-              <span style={{fontSize:10,color:"#888",minWidth:20}}>{p.unidade||est?.unidade||"un"}</span>
-            </div>
-          </div>;
-        })}
-      </div>;
-    })}
-    {/* Outros (produtos sem categoria de produção) */}
-    {(()=>{
-      const outrosProd=prods.filter(p=>!CATS_PRODUCAO.includes(p.cat||""));
-      if(!outrosProd.length||catFiltro)return null;
-      return <div style={{marginBottom:10}}>
-        <div style={{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase" as const,letterSpacing:.5,padding:"6px 0 4px",borderBottom:"1px solid var(--border)",marginBottom:4}}>📦 Outros ({outrosProd.length})</div>
-        {outrosProd.map((p:any)=>{
-          const est=getEstoque(p.nome);
-          return <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
-              <div style={{fontSize:10,color:"#888"}}>{est!=null?<span style={{color:est.atual>0?"#4ade80":"#ff5c7a"}}>estoque: {est.atual} {est.unidade}</span>:<span style={{color:"#555"}}>sem estoque</span>}</div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              <input type="number" inputMode="decimal" min="0" step="any" placeholder="Qtd"
-                value={qtds[p.id]||""} onChange={e=>setQtds(q=>({...q,[p.id]:e.target.value}))}
-                className="inp" style={{width:65,marginBottom:0,textAlign:"center" as const,fontSize:13,padding:"6px 4px"}}/>
-              <span style={{fontSize:10,color:"#888",minWidth:20}}>{p.unidade||est?.unidade||"un"}</span>
-            </div>
-          </div>;
-        })}
-      </div>;
-    })()}
-
-    {/* Botões de ação */}
-    {itensComQtd.length>0&&<div style={{position:"sticky",bottom:80,display:"flex",gap:6,padding:"10px 0",background:"var(--bg)",zIndex:50}}>
-      <button onClick={gerarPedido} className="btn" style={{flex:1,background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"#fff",padding:"13px",fontSize:14,fontWeight:700}}>
-        📋 Gerar Pedido ({itensComQtd.length})
-      </button>
-      <button onClick={()=>imprimirPedido()} className="btn" style={{background:"#1a1040",color:"#c084fc",border:"1px solid #5b21b6",padding:"13px 16px",fontSize:13}}>🖨️</button>
-      <button onClick={()=>setQtds({})} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
-    </div>}
+      {/* Sticky action bar */}
+      <div style={{position:"sticky",bottom:80,display:"flex",gap:6,padding:"10px 0",background:"var(--bg)",zIndex:50}}>
+        <button onClick={gerarPedido} className="btn" style={{flex:1,background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"#fff",padding:"13px",fontSize:14,fontWeight:700}}>
+          📋 Gerar Pedido ({itens.length})
+        </button>
+        <button onClick={()=>imprimirPedido()} className="btn" style={{background:"#1a1040",color:"#c084fc",border:"1px solid #5b21b6",padding:"13px 16px",fontSize:13}}>🖨️</button>
+        <button onClick={()=>setItens([])} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
+      </div>
+    </>}
   </div>;
 }
 
