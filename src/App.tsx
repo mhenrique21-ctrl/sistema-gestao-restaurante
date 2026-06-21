@@ -828,6 +828,17 @@ export default function App() {
         </div>}
       </div>
 
+      {/* OPERATOR TABS (mobile, when operator has multiple tabs) */}
+      {isOp&&tabs.length>1&&<div style={{display:"flex",gap:6,padding:"8px 16px",background:"var(--bg2)",borderBottom:"1px solid #1e2235"}}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px 10px",borderRadius:10,fontSize:12,fontWeight:tab===t.id?700:500,
+              background:tab===t.id?"#7c8fff":"var(--bg4)",color:tab===t.id?"#fff":"var(--text2)",border:"none",cursor:"pointer"}}>
+            <span style={{fontSize:16}}>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>}
+
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
