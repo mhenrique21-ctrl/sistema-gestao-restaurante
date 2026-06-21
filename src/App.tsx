@@ -322,12 +322,18 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
   .summary-card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06);text-align:center}
   .summary-card .val{font-size:20px;font-weight:700;color:#2d3a6b}.summary-card .lbl{font-size:12px;color:#888;margin-top:4px}
   .footer{text-align:center;margin-top:24px;font-size:12px;color:#aaa}
-  @media print{body{padding:0}.section{box-shadow:none}}</style></head><body>
+  .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
+  .no-print-bar button{padding:10px 22px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
+  @media print{body{padding:0}.section{box-shadow:none}.no-print-bar{display:none!important}}</style></head><body>
+  <div class="no-print-bar">
+    <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
+    <button onclick="window.print()" style="background:#2d3a6b;color:#fff">🖨️ Imprimir / Salvar PDF</button>
+  </div>
   <div class="header"><h1>${titulo} — ${empresa}</h1>
   <p>Gerado em ${new Date().toLocaleString("pt-BR")} | ${new Date().toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</p></div>
   ${conteudo}
   <div class="footer">App Gestão • ${empresa}</div>
-  <script>window.onload=()=>window.print()</script></body></html>`;
+  </body></html>`;
 }
 function abrirRelatorio(html){const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();}}
 
@@ -3344,14 +3350,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         table{width:100%;border-collapse:collapse;margin-top:8px}
         th{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
         td{font-size:13px}
-        .print-btn{margin-bottom:16px;padding:8px 22px;background:#222;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}
+        .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
+        .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
         .footer{margin-top:20px;font-size:11px;color:#aaa}
-        @media print{.print-btn{display:none}}
+        @media print{.no-print-bar{display:none}}
       </style>
     </head><body>
+      <div class="no-print-bar">
+        <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
+        <button onclick="window.print()" style="background:#222;color:#fff">🖨️ Imprimir / Salvar PDF</button>
+      </div>
       <h1>🛒 Lista de Compras</h1>
       <div class="sub">Data: ${dataFmt} · ${itens.length} item(ns) · ${Object.keys(porCatImp).length} categoria(s)</div>
-      <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
       <table>
         <tr>
           <th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>Observação</th>
@@ -3391,14 +3401,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         table{width:100%;border-collapse:collapse;margin-top:8px}
         th{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
         td{font-size:13px}
-        .print-btn{margin-bottom:16px;padding:8px 22px;background:#222;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}
+        .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
+        .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
         .footer{margin-top:20px;font-size:11px;color:#aaa}
-        @media print{.print-btn{display:none}}
+        @media print{.no-print-bar{display:none}}
       </style>
     </head><body>
+      <div class="no-print-bar">
+        <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
+        <button onclick="window.print()" style="background:#222;color:#fff">🖨️ Imprimir / Salvar PDF</button>
+      </div>
       <h1>🛒 Lista de Compras</h1>
       <div class="sub">Data: ${dataHoje} · ${pendentes.length} pendente(s) · ${ordemCat.length} categoria(s)</div>
-      <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
       <table>
         <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>Qtd Ref. Estoque</th><th>Observação</th></tr>
         ${rows}
@@ -4015,7 +4029,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     `).join("");
     const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR");
     const solicitante=pedido?.solicitante||login?.label||"—";
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.print-btn{margin-bottom:16px;padding:8px 22px;background:#5b21b6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.print-btn{display:none}}</style></head><body><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><button class="print-btn" onclick="window.print()">🖨️ Imprimir</button><table><tr><th>Produto</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.no-print-bar{display:flex;gap:8px;margin-bottom:16px}.no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.no-print-bar{display:none}}</style></head><body><div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:#5b21b6;color:#fff">🖨️ Imprimir</button></div><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><table><tr><th>Produto</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
     w.document.close();
   };
 
@@ -4758,11 +4772,15 @@ function imprimirNFe(conta:any,itens:any[]){
       th{background:#333;color:#fff;padding:9px 10px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
       th:last-child,th:nth-child(4){text-align:right}th:nth-child(3){text-align:center}
       tfoot td{border-top:2px solid #333;padding:12px 10px;font-size:18px;font-weight:900;text-align:right}
-      .print-btn{background:#333;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;font-size:14px;margin-bottom:18px}
+      .no-print-bar{display:flex;gap:8px;margin-bottom:18px}
+      .no-print-bar button{padding:10px 22px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
       .footer{margin-top:24px;font-size:11px;color:#aaa;text-align:center}
-      @media print{.print-btn{display:none!important}body{padding:12px}}</style></head>
+      @media print{.no-print-bar{display:none!important}body{padding:12px}}</style></head>
   <body>
-    <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar como PDF</button>
+    <div class="no-print-bar">
+      <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
+      <button onclick="window.print()" style="background:#333;color:#fff">🖨️ Imprimir / Salvar como PDF</button>
+    </div>
     <div class="hdr">
       <h2>🧾 Nota Fiscal Eletrônica (NF-e)</h2>
       ${conta.nNF?`<div class="nf-num">Nº ${conta.nNF}</div>`:""}
