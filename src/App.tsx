@@ -3743,7 +3743,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         <button className="btn" onClick={removerDuplicatas} style={{background:"#2a1020",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
       </div>
       {/* Form adicionar/editar */}
-      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+      <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
           onKeyDown={e=>{if(e.key==="Enter")saveProd();}} className="inp" style={{flex:"2 1 120px",marginBottom:0}}/>
         <select value={prodForm.cat} onChange={e=>{const c=e.target.value;setProdForm(f=>({...f,cat:c,rua:f.rua||getRuaDaCat(c)}));}} className="inp" style={{flex:"1 1 90px",marginBottom:0}}>
@@ -3760,19 +3760,41 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         <button className="btn" onClick={saveProd} style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
         {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un",rua:""});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
+      {/* Conciliação com compras */}
+      {(()=>{
+        const q=prodForm.nome.trim().toLowerCase();
+        if(q.length<2)return null;
+        const mps=(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,5);
+        if(!mps.length)return <div style={{fontSize:11,color:"#666",padding:"4px 8px",marginBottom:8,background:"#0d1020",borderRadius:6,border:"1px solid #1e2235"}}>🔍 Nenhum produto de compra encontrado para "{prodForm.nome.trim()}"</div>;
+        return <div style={{marginBottom:8,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 8px"}}>
+          <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>💰 Preços de compra encontrados</div>
+          {mps.map((mp:any)=>(
+            <div key={mp.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:"1px solid var(--border)",fontSize:12}}>
+              <span style={{flex:1,color:"#ccc"}}>{mp.nome}</span>
+              <span style={{color:"#888",fontSize:10}}>{mp.unidade||"un"}</span>
+              {mp.ultimoValor>0
+                ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
+                :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
+              {mp.estoqueAtual!=null&&<span style={{fontSize:10,color:mp.estoqueAtual>0?"#4ade80":"#ff5c7a",background:"var(--bg4)",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const}}>est: {mp.estoqueAtual} {mp.unidade||"un"}</span>}
+            </div>
+          ))}
+        </div>;
+      })()}
       {/* Lista do catálogo */}
       <div style={{maxHeight:220,overflowY:"auto" as const}}>
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
-        {[...prodsCatalog].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>(
-          <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
+        {[...prodsCatalog].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>{
+          const mp=getMpByName(p.nome);
+          return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
             <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
+            {mp&&mp.ultimoValor>0&&<span style={{fontSize:10,color:"#4ade80",background:"#4ade8018",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const}}>💰 {fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>}
             {p.rua&&<span style={{fontSize:10,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
             <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
             <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
-          </div>
-        ))}
+          </div>;
+        })}
       </div>
     </div>}
 
