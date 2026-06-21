@@ -2987,6 +2987,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [novaRua,setNovaRua]=useState("");
   const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
   const [vistaRua,setVistaRua]=useState(false);
+  const [showEstimativa,setShowEstimativa]=useState(false);
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
   const undoTimerRef=useRef<any>(null);
@@ -3023,6 +3024,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const getMpEstoqueByName=(nome:string)=>{
     const mp=(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase().includes(nome.toLowerCase())||nome.toLowerCase().includes(m.nome.toLowerCase()));
     return mp?(mp.estoqueAtual||0):null;
+  };
+  const getMpByName=(nome:string)=>{
+    return (db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase()===nome.toLowerCase())
+      ||(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase().includes(nome.toLowerCase())||nome.toLowerCase().includes(m.nome.toLowerCase()))
+      ||null;
   };
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
@@ -3460,10 +3466,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#0d1520",color:"#60a5fa",border:"1px solid #1e3a5f",padding:"6px 12px",fontSize:12}}>🖨️</button>}
         {isAdmin&&<>
-          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
-          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
-          <button className="btn" onClick={()=>{setShowRuaMgmt(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showRuaMgmt?"#1a2a1a":"#0d150d",color:"#34d399",border:"1px solid #065f46",padding:"6px 12px",fontSize:12}}>🛤️ Ruas</button>
-          <button className="btn" onClick={()=>{setShowHistorico(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showHistorico?"#1a120a":"#120d06",color:"#fb923c",border:"1px solid #7c3a10",padding:"6px 12px",fontSize:12}}>📂 Histórico{(db.pedidosLista||[]).length>0?` (${(db.pedidosLista||[]).length})`:""}</button>
+          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);setShowEstimativa(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
+          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);setShowEstimativa(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
+          <button className="btn" onClick={()=>{setShowRuaMgmt(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);setShowHistorico(false);setShowEstimativa(false);cancelEdit();}} style={{background:showRuaMgmt?"#1a2a1a":"#0d150d",color:"#34d399",border:"1px solid #065f46",padding:"6px 12px",fontSize:12}}>🛤️ Ruas</button>
+          <button className="btn" onClick={()=>{setShowHistorico(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);setShowEstimativa(false);cancelEdit();}} style={{background:showHistorico?"#1a120a":"#120d06",color:"#fb923c",border:"1px solid #7c3a10",padding:"6px 12px",fontSize:12}}>📂 Histórico{(db.pedidosLista||[]).length>0?` (${(db.pedidosLista||[]).length})`:""}</button>
+          <button className="btn" onClick={()=>{setShowEstimativa(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showEstimativa?"#1a1a08":"#15130a",color:"#fbbf24",border:"1px solid #78600a",padding:"6px 12px",fontSize:12}}>💰 Estimativa</button>
         </>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
@@ -3499,6 +3506,89 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         </div>;
       })}
     </div>}
+
+    {/* Estimativa de custo (admin only) */}
+    {isAdmin&&showEstimativa&&(()=>{
+      const itensPend=pendentes.length?pendentes:lista.filter((i:any)=>!i.comprado);
+      const linhas=itensPend.map((item:any)=>{
+        const mp=getMpByName(item.nome);
+        const qtd=parseFloat(item.quantidade)||1;
+        const unitario=mp?.ultimoValor||0;
+        const subtotal=qtd*unitario;
+        return{nome:item.nome,qtd,unidade:item.unidade||"un",categoria:item.categoria||"",mpNome:mp?.nome||"",unitario,subtotal,temPreco:unitario>0};
+      });
+      const comPreco=linhas.filter(l=>l.temPreco);
+      const semPreco=linhas.filter(l=>!l.temPreco);
+      const totalEstimado=comPreco.reduce((s,l)=>s+l.subtotal,0);
+      const cats=[...new Set(linhas.map(l=>l.categoria||"outros"))].sort();
+      const imprimirEstimativa=()=>{
+        const w=window.open("","_blank","width=900,height=700");if(!w)return;
+        const dataHoje=new Date().toLocaleDateString("pt-BR");
+        const rows=cats.map(cat=>{
+          const cl=linhas.filter(l=>(l.categoria||"outros")===cat);
+          const ct=cl.filter(l=>l.temPreco).reduce((s,l)=>s+l.subtotal,0);
+          return `<tr><td colspan="5" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat} ${ct>0?`— ${fmtMoney(ct)}`:""}</td></tr>`+
+            cl.map(l=>`<tr>
+              <td style="padding:5px 10px;border-bottom:1px solid #eee">${l.nome}</td>
+              <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${l.qtd} ${l.unidade}</td>
+              <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right">${l.temPreco?fmtMoney(l.unitario):"—"}</td>
+              <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600;color:${l.temPreco?"#16a34a":"#999"}">${l.temPreco?fmtMoney(l.subtotal):"sem preço"}</td>
+            </tr>`).join("");
+        }).join("");
+        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Estimativa de Custo</title>
+          <style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.total{margin-top:16px;text-align:right;font-size:20px;font-weight:700}.no-print-bar{display:flex;gap:8px;margin-bottom:16px}.no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}@media print{.no-print-bar{display:none}}</style>
+          </head><body>
+          <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:#222;color:#fff">🖨️ Imprimir / Salvar PDF</button></div>
+          <h1>💰 Estimativa de Custo — Lista de Compras</h1>
+          <div class="sub">Data: ${dataHoje} · ${itensPend.length} item(ns) · ${comPreco.length} com preço · ${semPreco.length} sem preço</div>
+          <table><tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:right">Preço Un.</th><th style="text-align:right">Subtotal</th></tr>${rows}
+          <tr><td colspan="3" style="padding:12px 10px;text-align:right;font-weight:700;font-size:15px;border-top:2px solid #222">TOTAL ESTIMADO</td><td style="padding:12px 10px;text-align:right;font-weight:700;font-size:17px;color:#16a34a;border-top:2px solid #222">${fmtMoney(totalEstimado)}</td></tr></table>
+          ${semPreco.length>0?`<div style="margin-top:12px;font-size:11px;color:#999">* Itens sem preço cadastrado: ${semPreco.map(l=>l.nome).join(", ")}</div>`:""}
+          <div style="margin-top:20px;font-size:11px;color:#aaa">Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+        </body></html>`);
+        w.document.close();
+      };
+      return <div className="card" style={{marginBottom:12,border:"1px solid #78600a"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div className="section-title" style={{color:"#fbbf24",marginBottom:0}}>💰 Estimativa de Custo da Lista</div>
+          {itensPend.length>0&&<button className="btn" onClick={imprimirEstimativa} style={{background:"#15130a",color:"#fbbf24",border:"1px solid #78600a",padding:"5px 12px",fontSize:11}}>🖨️ Imprimir</button>}
+        </div>
+        {!itensPend.length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhum item pendente na lista.</div>}
+        {itensPend.length>0&&<>
+          <div style={{fontSize:11,color:"#888",marginBottom:10,background:"#1a1a08",borderRadius:6,padding:"6px 10px",border:"1px solid #333010"}}>
+            Valores baseados no último preço de compra registrado. {semPreco.length>0&&<span style={{color:"#f59e0b"}}>{semPreco.length} item(ns) sem preço cadastrado.</span>}
+          </div>
+          {cats.map(cat=>{
+            const catLinhas=linhas.filter(l=>(l.categoria||"outros")===cat);
+            const catTotal=catLinhas.filter(l=>l.temPreco).reduce((s,l)=>s+l.subtotal,0);
+            return <div key={cat} style={{marginBottom:8}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#a78bfa",textTransform:"uppercase" as const,padding:"4px 0",borderBottom:"1px solid #2a2050",marginBottom:4}}>
+                {catIcon(cat)} {cat} {catTotal>0&&<span style={{color:"#fbbf24",fontWeight:400}}>— {fmtMoney(catTotal)}</span>}
+              </div>
+              {catLinhas.map((l,idx)=>(
+                <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid var(--border)",fontSize:12}}>
+                  <span style={{flex:1}}>{l.nome}</span>
+                  <span style={{color:"#888",whiteSpace:"nowrap" as const}}>{l.qtd} {l.unidade}</span>
+                  {l.temPreco?<>
+                    <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>× {fmtMoney(l.unitario)}</span>
+                    <span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const,minWidth:75,textAlign:"right" as const}}>{fmtMoney(l.subtotal)}</span>
+                  </>:
+                    <span style={{color:"#f59e0b",fontSize:10,whiteSpace:"nowrap" as const}}>sem preço</span>
+                  }
+                </div>
+              ))}
+            </div>;
+          })}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",borderTop:"2px solid #78600a",marginTop:8}}>
+            <span style={{fontWeight:700,fontSize:15,color:"#fbbf24"}}>Total Estimado</span>
+            <span style={{fontWeight:700,fontSize:17,color:"#4ade80"}}>{fmtMoney(totalEstimado)}</span>
+          </div>
+          {semPreco.length>0&&<div style={{fontSize:11,color:"#888",marginTop:4}}>
+            * {semPreco.length} item(ns) sem preço: {semPreco.map(l=>l.nome).join(", ")}
+          </div>}
+        </>}
+      </div>;
+    })()}
 
     {/* Gerenciar categorias (admin only) */}
     {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
