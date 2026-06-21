@@ -578,6 +578,10 @@ export default function App() {
     try{const l=JSON.parse(sessionStorage.getItem("app_login")||"null");return l?.empresa||"CONFRARIA";}catch{return "CONFRARIA";}
   });
   const [theme,setTheme]   = useState<"dark"|"light">(()=>(localStorage.getItem("app_theme")||"dark") as "dark"|"light");
+  const [menuLayout,setMenuLayout]=useState<"bottom"|"top"|"fab">(()=>(localStorage.getItem("app_menu_layout")||"bottom") as "bottom"|"top"|"fab");
+  const [menuPickerOpen,setMenuPickerOpen]=useState(false);
+  const [fabOpen,setFabOpen]=useState(false);
+  const changeMenuLayout=(l:"bottom"|"top"|"fab")=>{setMenuLayout(l);localStorage.setItem("app_menu_layout",l);setMenuPickerOpen(false);setFabOpen(false);};
   const [syncStatus,setSyncStatus] = useState<"idle"|"sync"|"ok"|"erro">("idle");
 
   const toggleTheme=()=>{
@@ -686,7 +690,7 @@ export default function App() {
   const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):allTabs.filter(t=>t.id==="producao")):allTabs;
 
   return (
-    <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:84}}>
+    <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
         :root{--bg:#0a0c12;--bg2:#0d0f18;--bg3:#13161f;--bg4:#161922;--border:#1e2235;--border2:#252840;--text:#e8eaf0;--text2:#5a6080;--text3:#424668;--acc:#7c8fff}
@@ -712,6 +716,9 @@ export default function App() {
           .app-root{max-width:none!important;padding-left:220px;padding-bottom:0!important}
           .app-sidebar{display:flex!important}
           .bottom-nav-bar{display:none!important}
+          .fab-menu-container{display:none!important}
+          .top-tabs-mobile{display:none!important}
+          .menu-picker-btn{display:none!important}
           .app-header{padding:14px 32px!important}
           .app-content{padding:24px 32px 24px!important}
           .card{padding:20px!important}
@@ -772,6 +779,23 @@ export default function App() {
             <button onClick={toggleTheme} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
               {theme==="dark"?"☀️":"🌙"}
             </button>
+            {!isOp&&<div className="menu-picker-btn" style={{position:"relative"}}>
+              <button onClick={()=>setMenuPickerOpen(v=>!v)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:14,padding:"4px 8px",lineHeight:1}} title="Posição do menu">
+                {menuLayout==="bottom"?"▼":menuLayout==="top"?"▲":"⊕"}
+              </button>
+              {menuPickerOpen&&<>
+                <div onClick={()=>setMenuPickerOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
+                <div style={{position:"absolute",right:0,top:"110%",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:6,zIndex:200,minWidth:170,boxShadow:"0 8px 24px #0008"}}>
+                  {([["bottom","▼ Barra inferior","Menu fixo embaixo"],["top","▲ Abas no topo","Abas abaixo do header"],["fab","⊕ Botão flutuante","Botão redondo no canto"]] as const).map(([k,label,desc])=>(
+                    <button key={k} onClick={()=>changeMenuLayout(k)}
+                      style={{display:"block",width:"100%",textAlign:"left",background:menuLayout===k?"#7c8fff22":"none",border:menuLayout===k?"1px solid #7c8fff55":"1px solid transparent",borderRadius:8,padding:"8px 10px",cursor:"pointer",marginBottom:2}}>
+                      <div style={{fontSize:12,fontWeight:600,color:menuLayout===k?"#7c8fff":"var(--text)"}}>{label}</div>
+                      <div style={{fontSize:10,color:"var(--text2)"}}>{desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </>}
+            </div>}
             {isOp&&<span style={{fontSize:11,color:"#5a6080",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"4px 10px"}}>{empresa}</span>}
             <button onClick={doLogout} title="Sair" style={{background:"none",border:"1px solid #3a1515",borderRadius:8,cursor:"pointer",color:"#ff7a7a",fontSize:13,padding:"4px 8px",lineHeight:1}}>🔒</button>
           </div>
@@ -781,6 +805,26 @@ export default function App() {
             <button key={e} onClick={()=>setEmpresa(e)} className="pill"
               style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`,flex:1,maxWidth:140,justifyContent:"center",padding:"6px 10px"}}>{e}</button>
           ))}
+        </div>}
+
+        {/* TOP TABS (when menuLayout=top) */}
+        {!isOp&&menuLayout==="top"&&<div className="top-tabs-mobile" style={{display:"flex",gap:4,marginTop:8,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any}}>
+          <style>{`.top-tabs-mobile::-webkit-scrollbar{display:none}`}</style>
+          {(()=>{
+            const estoqueBaixoTop=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
+            const atrasadasTop=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
+            const listaTop=(db.listaCompras||[]).filter((i:any)=>!i.comprado).length;
+            return tabs.map(t=>(
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                style={{flexShrink:0,display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:20,fontSize:11,fontWeight:tab===t.id?700:500,
+                  background:tab===t.id?"#7c8fff":"var(--bg4)",color:tab===t.id?"#fff":"var(--text2)",border:"none",cursor:"pointer",position:"relative",whiteSpace:"nowrap"}}>
+                <span style={{fontSize:14}}>{t.icon}</span>{t.label}
+                {t.id==="estoque"&&estoqueBaixoTop>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoTop}</span>}
+                {t.id==="contas"&&atrasadasTop>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasTop}</span>}
+                {t.id==="lista"&&listaTop>0&&<span style={{background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{listaTop}</span>}
+              </button>
+            ));
+          })()}
         </div>}
       </div>
 
@@ -805,8 +849,8 @@ export default function App() {
         }
       </div>
 
-      {/* BOTTOM NAV (mobile only, hidden for operators) */}
-      {!isOp&&<div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
+      {/* BOTTOM NAV (menuLayout=bottom, hidden for operators) */}
+      {!isOp&&menuLayout==="bottom"&&<div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
         {(()=>{
           const estoqueBaixoNav=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
           const atrasadasNav=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
@@ -824,6 +868,36 @@ export default function App() {
           ));
         })()}
       </div>}
+
+      {/* FAB MENU (menuLayout=fab, hidden for operators) */}
+      {!isOp&&menuLayout==="fab"&&<>
+        {fabOpen&&<div onClick={()=>setFabOpen(false)} style={{position:"fixed",inset:0,background:"#00000066",zIndex:91}}/>}
+        <div className="fab-menu-container" style={{position:"fixed",bottom:20,right:16,zIndex:92,maxWidth:480,pointerEvents:"none"}}>
+        <div style={{pointerEvents:"auto",marginLeft:"auto",width:"fit-content"}}>
+          {fabOpen&&<div style={{position:"absolute",bottom:60,right:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:16,padding:6,minWidth:180,boxShadow:"0 8px 32px #000a"}}>
+            {(()=>{
+              const estoqueBaixoFab=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
+              const atrasadasFab=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
+              const listaFab=(db.listaCompras||[]).filter((i:any)=>!i.comprado).length;
+              return tabs.map(t=>(
+                <button key={t.id} onClick={()=>{setTab(t.id);setFabOpen(false);}}
+                  style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:10,border:"none",cursor:"pointer",
+                    background:tab===t.id?"#7c8fff22":"none",color:tab===t.id?"#7c8fff":"var(--text)",fontSize:13,fontWeight:tab===t.id?700:400,textAlign:"left",position:"relative"}}>
+                  <span style={{fontSize:18}}>{t.icon}</span><span>{t.label}</span>
+                  {t.id==="estoque"&&estoqueBaixoFab>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px",marginLeft:"auto"}}>{estoqueBaixoFab}</span>}
+                  {t.id==="contas"&&atrasadasFab>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px",marginLeft:"auto"}}>{atrasadasFab}</span>}
+                  {t.id==="lista"&&listaFab>0&&<span style={{background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px",marginLeft:"auto"}}>{listaFab}</span>}
+                </button>
+              ));
+            })()}
+          </div>}
+          <button onClick={()=>setFabOpen(v=>!v)}
+            style={{width:52,height:52,borderRadius:"50%",background:fabOpen?"#ff5c7a":"linear-gradient(135deg,#7c8fff,#5b6fff)",border:"none",cursor:"pointer",
+              boxShadow:"0 4px 16px #0006",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#fff",transition:"transform .2s",transform:fabOpen?"rotate(45deg)":"none"}}>
+            ✚
+          </button>
+        </div></div>
+      </>}
     </div>
   );
 }
