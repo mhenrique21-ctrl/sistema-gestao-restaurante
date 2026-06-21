@@ -1446,7 +1446,15 @@ function parseNFe(xmlString) {
   // nNF: direct tag or extract from chNFe positions 25-34
   let nNF=g("nNF")||"";
   if(!nNF&&chNFe.length===44)nNF=String(parseInt(chNFe.substring(25,34),10)||"");
-  return{fornecedor,itens,totalCompra:total,data,nNF,chNFe};
+  // Forma de pagamento: <pag> > <detPag> > <tPag>
+  const tPagMap:Record<string,string>={"01":"dinheiro","02":"dinheiro","03":"cartão crédito","04":"cartão débito","05":"dinheiro","10":"dinheiro","11":"dinheiro","14":"boleto","15":"boleto","16":"pix","17":"pix","18":"pix","99":"dinheiro"};
+  const detPag=doc.querySelector("detPag");
+  const tPag=detPag?ga(detPag,"tPag"):"";
+  const formaPag=tPagMap[tPag]||"";
+  // Vencimento: <cobr> > <dup> > <dVenc>
+  const dup=doc.querySelector("dup");
+  const dVenc=dup?ga(dup,"dVenc"):"";
+  return{fornecedor,itens,totalCompra:total,data,nNF,chNFe,formaPag,dVenc};
 }
 
 // ===================== HELPERS =====================
@@ -1674,7 +1682,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
   const PROMPT_CUPOM=`Extraia TODOS os dados deste cupom/nota fiscal brasileira.
 
 Retorne SOMENTE o JSON abaixo, sem texto extra, sem markdown:
-{"fornecedor":{"nome":"nome da loja/empresa","cnpj":"00.000.000/0000-00","endereco":"endereço completo"},"itens":[{"nome":"nome genérico do produto (sem marca)","categoria":"carnes|hortifruti|laticínios|grãos|farinhas|massas|temperos|proteína|bebidas|polpas|mercearia básica|cafés e complementos|chocolates|latas caixas e temperos|molhos|material de limpeza|descartáveis|embalagens|insumos|outros","unidade":"kg|g|L|ml|un|cx|pc","quantidade":1,"valorUnitario":0.00,"valorTotal":0.00}],"totalCompra":0.00,"data":"YYYY-MM-DD"}
+{"fornecedor":{"nome":"nome da loja/empresa","cnpj":"00.000.000/0000-00","endereco":"endereço completo"},"itens":[{"nome":"nome genérico do produto (sem marca)","categoria":"carnes|hortifruti|laticínios|grãos|farinhas|massas|temperos|proteína|bebidas|polpas|mercearia básica|cafés e complementos|chocolates|latas caixas e temperos|molhos|material de limpeza|descartáveis|embalagens|insumos|outros","unidade":"kg|g|L|ml|un|cx|pc","quantidade":1,"valorUnitario":0.00,"valorTotal":0.00}],"totalCompra":0.00,"data":"YYYY-MM-DD","formaPagamento":"dinheiro|cartão débito|cartão crédito|pix|boleto","dataVencimento":"YYYY-MM-DD"}
 
 REGRAS:
 - Inclua TODOS os itens visíveis, sem exceção
@@ -1682,6 +1690,8 @@ REGRAS:
 - quantidade: número real (ex: 2.5 para 2,5 kg)
 - valorUnitario e valorTotal em reais como número decimal
 - data: data da emissão no formato YYYY-MM-DD
+- formaPagamento: identifique a forma de pagamento (dinheiro, cartão débito, cartão crédito, pix, boleto). Se houver "CREDITO"/"CRÉDITO" é "cartão crédito", "DEBITO"/"DÉBITO" é "cartão débito", "PIX" é "pix", "DINHEIRO" é "dinheiro", "BOLETO"/"DUPLICATA" é "boleto". Se não encontrar, use "dinheiro"
+- dataVencimento: se boleto ou duplicata, extraia a data de vencimento (YYYY-MM-DD). Se não houver, use a mesma data de emissão
 - Se não conseguir ler algum campo, use 0 ou string vazia`;
 
   const extrairJSON=(text:string)=>{
@@ -1725,6 +1735,9 @@ REGRAS:
           :`${PROMPT_CUPOM}\n\nTexto do cupom:\n${iaText}`;
         const result=await chamarIA(userContent,t);
         setIaResult(result);
+        if(result.formaPagamento&&formasPag.includes(result.formaPagamento))setIaFormaPag(result.formaPagamento);
+        if(result.dataVencimento)setIaVenc(result.dataVencimento);
+        else if(result.data)setIaVenc(result.data);
         setIaLoading(false);
         return;
       }catch(e:any){
@@ -1804,7 +1817,11 @@ REGRAS:
       try{
         const xml=reader.result as string;
         setNfeXml(xml);
-        setNfeResult(parseNFe(xml));
+        const parsed=parseNFe(xml);
+        setNfeResult(parsed);
+        if(parsed.formaPag&&formasPag.includes(parsed.formaPag))setNfeFormaPag(parsed.formaPag);
+        if(parsed.dVenc)setNfeVenc(parsed.dVenc);
+        else if(parsed.data)setNfeVenc(parsed.data);
       }
       catch(err){setNfeError("Erro ao ler XML: "+err.message);}
     };
@@ -2045,9 +2062,11 @@ REGRAS:
           }
         }
       });
-      const statusFin=["dinheiro","pix","cartão débito"].includes(sefazFormaPag)?"pago":"pendente";
-      const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${sefazFormaPag})`;
-      const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:sefazVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
+      const fpNfe=(nfe.formaPag&&formasPag.includes(nfe.formaPag))?nfe.formaPag:sefazFormaPag;
+      const vencNfe=nfe.dVenc||sefazVenc;
+      const statusFin=["dinheiro","pix","cartão débito"].includes(fpNfe)?"pago":"pendente";
+      const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${fpNfe})`;
+      const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:vencNfe,status:statusFin,tipo:"saida",origem:"compra",grupoId,
         nNF:nfe.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
         chNFe:nfe.chNFe||"",
         ...(nfe.rawXml?{xmlNFe:nfe.rawXml}:{}),
@@ -2308,7 +2327,7 @@ REGRAS:
           <span>Total</span><span style={{color:"#4ade80"}}>{fmtMoney(iaResult.totalCompra||0)}</span>
         </div>
         <hr className="divider"/>
-        <div className="section-title" style={{marginTop:8}}>Pagamento</div>
+        <div className="section-title" style={{marginTop:8}}>Pagamento {iaResult.formaPagamento&&<span style={{fontSize:10,color:"#4ade80",fontWeight:400}}>(detectado do cupom)</span>}</div>
         <div className="row" style={{marginBottom:8}}>
           <select value={iaFormaPag} onChange={e=>setIaFormaPag(e.target.value)} className="inp">
             {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
@@ -2403,7 +2422,7 @@ REGRAS:
       {/* -- Resultado da sync -- */}
       {sefazList.length>0&&<div className="card" style={{marginBottom:14}}>
         <div className="section-title">📥 {sefazList.length} NF-e(s) encontrada(s)</div>
-        <div className="section-title" style={{marginBottom:8,color:"#888"}}>Forma de Pagamento (todas)</div>
+        <div className="section-title" style={{marginBottom:8,color:"#888"}}>Forma de Pagamento (padrão)</div>
         <div className="row" style={{marginBottom:8}}>
           <select value={sefazFormaPag} onChange={e=>setSefazFormaPag(e.target.value)} className="inp">
             {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
@@ -2423,12 +2442,16 @@ REGRAS:
               const canBuscar=nfe.chNFe&&nfe.tipoDoc!=="completo";
               const semItens=isResumo&&!(nfe.itens||[]).filter((it:any)=>!it.nome?.startsWith("NF-e ")).length;
               return <>
-              <div className="muted" style={{fontSize:12,marginBottom:6}}>
+              <div className="muted" style={{fontSize:12,marginBottom:4}}>
                 {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
                 {fmtDate(nfe.data)} · {isFakeItem?0:(nfe.itens||[]).length} produto(s)
                 {isResumo&&fetchingChave===nfe.chNFe&&<span style={{color:"#7c8fff",marginLeft:6}}>⏳ buscando completa...</span>}
                 {isResumo&&fetchingChave!==nfe.chNFe&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ resumo</span>}
               </div>
+              {(nfe.formaPag||nfe.dVenc)&&<div style={{fontSize:11,marginBottom:6,display:"flex",gap:8,flexWrap:"wrap" as const}}>
+                {nfe.formaPag&&<span style={{background:"#1a2040",border:"1px solid #2a3a6a",borderRadius:5,padding:"2px 8px",color:"#7c8fff"}}>💳 {nfe.formaPag}</span>}
+                {nfe.dVenc&&<span style={{background:"#1a2010",border:"1px solid #2a4a1a",borderRadius:5,padding:"2px 8px",color:"#4ade80"}}>📅 Venc: {fmtDate(nfe.dVenc)}</span>}
+              </div>}
               {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>
                 <span style={{fontSize:9,fontFamily:"monospace",color:"#666",flex:1,wordBreak:"break-all" as const}}>{nfe.chNFe}</span>
                 <button onClick={()=>copiarChave(nfe.chNFe)} style={{background:"none",border:"1px solid #2a2a5a",borderRadius:5,color:"#7c8fff",padding:"2px 7px",fontSize:10,cursor:"pointer",whiteSpace:"nowrap" as const}}>📋</button>
@@ -2495,10 +2518,14 @@ REGRAS:
             <span style={{fontWeight:700,fontSize:14}}>{nfeResult.fornecedor?.nome||"Fornecedor"}</span>
             <span style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(nfeResult.totalCompra)}</span>
           </div>
-          <div className="muted" style={{fontSize:12,marginBottom:8}}>
+          <div className="muted" style={{fontSize:12,marginBottom:4}}>
             {nfeResult.nNF?`NF-e #${nfeResult.nNF} · `:""}
             {fmtDate(nfeResult.data)} · {(nfeResult.itens||[]).length} produto(s)
           </div>
+          {(nfeResult.formaPag||nfeResult.dVenc)&&<div style={{fontSize:11,marginBottom:8,display:"flex",gap:8,flexWrap:"wrap" as const}}>
+            {nfeResult.formaPag&&<span style={{background:"#1a2040",border:"1px solid #2a3a6a",borderRadius:5,padding:"2px 8px",color:"#7c8fff"}}>💳 {nfeResult.formaPag} (detectado)</span>}
+            {nfeResult.dVenc&&<span style={{background:"#1a2010",border:"1px solid #2a4a1a",borderRadius:5,padding:"2px 8px",color:"#4ade80"}}>📅 Venc: {fmtDate(nfeResult.dVenc)}</span>}
+          </div>}
           {nfeResult.chNFe&&<div style={{fontSize:9,fontFamily:"monospace",color:"#666",marginBottom:8,wordBreak:"break-all" as const,background:"#0d1020",borderRadius:6,padding:"4px 8px"}}>{nfeResult.chNFe}</div>}
           {(nfeResult.itens||[]).length>0&&<div style={{marginBottom:8,maxHeight:200,overflowY:"auto" as const}}>
             {nfeResult.itens.map((it,idx)=>(

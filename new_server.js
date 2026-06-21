@@ -189,7 +189,15 @@ function parseNFeXml(rawXml) {
   if (!nNF && chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
   // date: dEmi (v3) or dhEmi (v4)
   const data = (g('dEmi') || g('dhEmi') || '').substring(0, 10);
-  return { fornecedor, itens, totalCompra: total, data, nNF, chNFe, rawXml: rawXml };
+  // Forma de pagamento: <pag> > <detPag> > <tPag>
+  const tPagMap = {"01":"dinheiro","02":"dinheiro","03":"cartão crédito","04":"cartão débito","05":"dinheiro","10":"dinheiro","11":"dinheiro","14":"boleto","15":"boleto","16":"pix","17":"pix","18":"pix","99":"dinheiro"};
+  const detPagBlock = xml.match(/<detPag>[\s\S]*?<\/detPag>/)?.[0] || '';
+  const tPag = getTag(detPagBlock, 'tPag');
+  const formaPag = tPagMap[tPag] || '';
+  // Vencimento: <cobr> > <dup> > <dVenc>
+  const dupBlock = xml.match(/<dup>[\s\S]*?<\/dup>/)?.[0] || '';
+  const dVenc = getTag(dupBlock, 'dVenc') || '';
+  return { fornecedor, itens, totalCompra: total, data, nNF, chNFe, formaPag, dVenc, rawXml: rawXml };
 }
 
 function buildChaveEnvelope(cnpj, uf, chNFe) {
