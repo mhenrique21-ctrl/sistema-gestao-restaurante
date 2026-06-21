@@ -3782,7 +3782,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
 
   // Order form (Lista-style)
-  const [form,setForm]=useState({nome:"",qtd:"1",unidade:"un",cat:"",obs:""});
+  const [form,setForm]=useState({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
   const [editId,setEditId]=useState<string|null>(null);
   const [showSugg,setShowSugg]=useState(false);
   const [itens,setItens]=useState<any[]>([]);
@@ -3795,16 +3795,16 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     const nome=form.nome.trim();if(!nome)return alert("Produto obrigatório.");
     const qtd=parseFloat(form.qtd)||0;if(qtd<=0)return alert("Quantidade deve ser maior que 0.");
     if(editId){
-      setItens(prev=>prev.map(it=>it.id===editId?{...it,nome,quantidade:qtd,unidade:form.unidade,cat:form.cat,obs:form.obs}:it));
+      setItens(prev=>prev.map(it=>it.id===editId?{...it,nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}:it));
       setEditId(null);
     }else{
-      setItens(prev=>[...prev,{id:uid(),nome,quantidade:qtd,unidade:form.unidade,cat:form.cat,obs:form.obs}]);
+      setItens(prev=>[...prev,{id:uid(),nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}]);
     }
-    setForm({nome:"",qtd:"1",unidade:"un",cat:"",obs:""});
+    setForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
-  const editItem=(it:any)=>{setEditId(it.id);setForm({nome:it.nome,qtd:String(it.quantidade),unidade:it.unidade||"un",cat:it.cat||"",obs:it.obs||""});};
+  const editItem=(it:any)=>{setEditId(it.id);setForm({nome:it.nome,qtd:String(it.quantidade),qtdAtual:it.qtdAtual||"",unidade:it.unidade||"un",cat:it.cat||"",obs:it.obs||""});};
   const delItem=(id:string)=>setItens(prev=>prev.filter(it=>it.id!==id));
-  const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"1",unidade:"un",cat:"",obs:""});};
+  const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});};
 
   // Group items by category
   const porCat:Record<string,any[]>={};
@@ -3813,12 +3813,11 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   // Generate order
   const gerarPedido=()=>{
     if(!itens.length)return alert("Adicione pelo menos 1 produto ao pedido.");
-    const pedido={id:uid(),data:today(),itens:itens.map(it=>({nome:it.nome,quantidade:it.quantidade,unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    const pedido={id:uid(),data:today(),itens:itens.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     const txt=montarTextoWhats(pedido);
     setItens([]);
-    const acao=confirm(`Pedido de produção salvo! (${pedido.itens.length} produto(s))\n\nDeseja compartilhar no WhatsApp?`);
-    if(acao)window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
+    window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
   };
 
   const montarTextoWhats=(ped:any)=>{
@@ -3827,7 +3826,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
     Object.entries(pc).forEach(([cat,its])=>{
       txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
-      its.forEach((it:any)=>{txt+=`  • ${it.nome}: *${it.quantidade} ${it.unidade||"un"}*${it.obs?` — ${it.obs}`:""}\n`;});
+      its.forEach((it:any)=>{txt+=`  • ${it.nome}: *${it.quantidade} ${it.unidade||"un"}*${it.qtdAtual?` (atual: ${it.qtdAtual})`:""} ${it.obs?`— ${it.obs}`:""}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
@@ -3841,11 +3840,11 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
     const sections=Object.entries(pc).map(([cat,its])=>`
       <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${prodCatIcon(cat)} ${cat}</td></tr>
-      ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade} ${it.unidade||"un"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
+      ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.qtdAtual||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade} ${it.unidade||"un"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
     `).join("");
     const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR");
     const solicitante=pedido?.solicitante||login?.label||"—";
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.print-btn{margin-bottom:16px;padding:8px 22px;background:#5b21b6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.print-btn{display:none}}</style></head><body><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><button class="print-btn" onclick="window.print()">🖨️ Imprimir</button><table><tr><th>Produto</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.print-btn{margin-bottom:16px;padding:8px 22px;background:#5b21b6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.print-btn{display:none}}</style></head><body><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><button class="print-btn" onclick="window.print()">🖨️ Imprimir</button><table><tr><th>Produto</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
     w.document.close();
   };
 
@@ -3983,6 +3982,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
             return <div key={j} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:j<(ped.itens||[]).length-1?"1px solid var(--border)":"none"}}>
               <span style={{fontSize:12,flex:1}}>{prodCatIcon(it.categoria)} {it.nome}</span>
               <span style={{fontSize:10,color:"#a78bfa"}}>{it.categoria||""}</span>
+              {it.qtdAtual&&<span style={{fontSize:10,color:"#888"}}>atual: {it.qtdAtual}</span>}
               {isEdit?<input type="number" inputMode="decimal" min="0" step="any"
                 value={editQtds[key]||""} onChange={e=>setEditQtds(q=>({...q,[key]:e.target.value}))}
                 className="inp" style={{width:55,marginBottom:0,textAlign:"center" as const,fontSize:12,padding:"4px"}}/>
@@ -4021,7 +4021,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
           </div>}
         </div>
       </div>
-      <div style={{display:"flex",gap:8,marginBottom:10}}>
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap" as const}}>
         <div style={{flex:"1 1 70px"}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Quantidade *</div>
           <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)}
@@ -4029,6 +4029,11 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
             className="inp" style={{marginBottom:0}}/>
         </div>
         <div style={{flex:"1 1 70px"}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Qtd Atual</div>
+          <input type="number" min="0" step="0.1" placeholder="0" value={form.qtdAtual} onChange={e=>setF("qtdAtual",e.target.value)}
+            className="inp" style={{marginBottom:0}}/>
+        </div>
+        <div style={{flex:"1 1 60px"}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Unidade</div>
           <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0}}>
             {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
@@ -4069,6 +4074,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
                 <div style={{fontSize:13,fontWeight:600}}>{it.nome}</div>
                 {it.obs&&<div style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>{it.obs}</div>}
               </div>
+              {it.qtdAtual&&<span style={{fontSize:10,color:"#888",flexShrink:0}}>atual: {it.qtdAtual}</span>}
               <span style={{fontSize:12,fontWeight:700,color:"#c084fc",flexShrink:0}}>{it.quantidade} {it.unidade}</span>
               <button onClick={()=>editItem(it)} style={{background:"none",border:"none",cursor:"pointer",color:"#fbbf24",fontSize:13,padding:"0 3px"}}>✏️</button>
               <button onClick={()=>delItem(it.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
