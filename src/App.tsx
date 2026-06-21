@@ -2988,6 +2988,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
   const [vistaRua,setVistaRua]=useState(false);
   const [showEstimativa,setShowEstimativa]=useState(false);
+  const [estConcItem,setEstConcItem]=useState<string|null>(null);
   const [pendingMpLink,setPendingMpLink]=useState<string|null>(null);
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
@@ -3552,7 +3553,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         const unitario=mp?.ultimoValor||0;
         const subtotal=qtd*unitario;
         const isLinked=!!prod?.mpVinculadoId;
-        return{nome:item.nome,qtd,unidade:item.unidade||"un",categoria:item.categoria||"",mpNome:mp?.nome||"",unitario,subtotal,temPreco:unitario>0,isLinked};
+        return{nome:item.nome,itemId:item.id,prodId:prod?.id||null,mpVinculadoId:prod?.mpVinculadoId||null,qtd,unidade:item.unidade||"un",categoria:item.categoria||"",mpNome:mp?.nome||"",unitario,subtotal,temPreco:unitario>0,isLinked};
       });
       const comPreco=linhas.filter(l=>l.temPreco);
       const semPreco=linhas.filter(l=>!l.temPreco);
@@ -3602,18 +3603,52 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
               <div style={{fontSize:11,fontWeight:700,color:"#a78bfa",textTransform:"uppercase" as const,padding:"4px 0",borderBottom:"1px solid #2a2050",marginBottom:4}}>
                 {catIcon(cat)} {cat} {catTotal>0&&<span style={{color:"#fbbf24",fontWeight:400}}>— {fmtMoney(catTotal)}</span>}
               </div>
-              {catLinhas.map((l,idx)=>(
-                <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid var(--border)",fontSize:12}}>
-                  <span style={{flex:1}}>{l.nome}</span>
-                  <span style={{color:"#888",whiteSpace:"nowrap" as const}}>{l.qtd} {l.unidade}</span>
-                  {l.temPreco?<>
-                    <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>× {fmtMoney(l.unitario)}</span>
-                    <span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const,minWidth:75,textAlign:"right" as const}}>{fmtMoney(l.subtotal)}</span>
-                  </>:
-                    <span style={{color:"#f59e0b",fontSize:10,whiteSpace:"nowrap" as const}}>sem preço</span>
-                  }
-                </div>
-              ))}
+              {catLinhas.map((l,idx)=>{
+                const isExpanded=estConcItem===l.itemId;
+                const q=l.nome.toLowerCase();
+                const mpOptions=isExpanded?(db.materiasPrimas||[]).filter((m:any)=>m.nome.toLowerCase().includes(q)||q.includes(m.nome.toLowerCase())).slice(0,10):[];
+                return <div key={idx}>
+                  <div onClick={()=>setEstConcItem(isExpanded?null:l.itemId)}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:isExpanded?"none":"1px solid var(--border)",fontSize:12,cursor:"pointer",background:isExpanded?"#1a1a30":"transparent",borderRadius:isExpanded?"6px 6px 0 0":0,paddingLeft:isExpanded?6:0,paddingRight:isExpanded?6:0}}>
+                    <span style={{flex:1}}>{l.isLinked&&<span style={{fontSize:10,marginRight:3}}>🔗</span>}{l.nome}</span>
+                    <span style={{color:"#888",whiteSpace:"nowrap" as const}}>{l.qtd} {l.unidade}</span>
+                    {l.temPreco?<>
+                      <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>× {fmtMoney(l.unitario)}</span>
+                      <span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const,minWidth:75,textAlign:"right" as const}}>{fmtMoney(l.subtotal)}</span>
+                    </>:
+                      <span style={{color:"#f59e0b",fontSize:10,whiteSpace:"nowrap" as const}}>sem preço</span>
+                    }
+                  </div>
+                  {isExpanded&&<div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
+                    <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produto de compra</div>
+                    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhuma matéria-prima encontrada para "{l.nome}"</div>}
+                    {mpOptions.map((mp:any)=>{
+                      const linked=l.mpVinculadoId===mp.id;
+                      return <div key={mp.id} onClick={(e)=>{e.stopPropagation();
+                        if(!l.prodId){
+                          setDb((d:any)=>({...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:l.nome,cat:l.categoria,unidade:l.unidade,mpVinculadoId:mp.id}]}));
+                        }else{
+                          if(linked)desvincularMp(l.prodId);
+                          else vincularMp(l.prodId,mp.id);
+                        }
+                        setEstConcItem(null);
+                      }}
+                        style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
+                          background:linked?"#4ade8015":"transparent",border:linked?"1px solid #4ade8044":"1px solid transparent"}}>
+                        <span style={{fontSize:13}}>{linked?"🔗":"⬜"}</span>
+                        <span style={{flex:1,color:linked?"#4ade80":"#ccc",fontWeight:linked?700:400}}>{mp.nome}</span>
+                        {mp.ultimoValor>0
+                          ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
+                          :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
+                      </div>;
+                    })}
+                    {l.isLinked&&<button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId);setEstConcItem(null);}}
+                      className="btn" style={{width:"100%",marginTop:4,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
+                      ✕ Desvincular
+                    </button>}
+                  </div>}
+                </div>;
+              })}
             </div>;
           })}
           <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",borderTop:"2px solid #78600a",marginTop:8}}>
