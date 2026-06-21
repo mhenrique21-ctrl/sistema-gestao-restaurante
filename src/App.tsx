@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
@@ -536,6 +536,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       listaCompras:  byIdLista(s.listaCompras||[]),
       produtosLista: byIdDedup(s.produtosLista||[]),
       pedidosLista:  byId(s.pedidosLista||[]),
+      pedidosProducao: byId(s.pedidosProducao||[]),
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
     };
   });
@@ -2779,6 +2780,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
   const undoTimerRef=useRef<any>(null);
   const autoArchiveRef=useRef(false);
+  const [showProducao,setShowProducao]=useState(false);
+  const [producaoQtds,setProducaoQtds]=useState<Record<string,string>>({});
+  const [producaoBusca,setProducaoBusca]=useState("");
+  const [producaoEditId,setProducaoEditId]=useState<string|null>(null);
+  const [showHistProducao,setShowHistProducao]=useState(false);
   const [autoArchiveMsg,setAutoArchiveMsg]=useState("");
 
   const pushUndo=(label:string,prevLista:any[],prevDeletedIds:string[],newSetIds:string[]=[])=>{
@@ -3239,11 +3245,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       {naoTemList.length>0&&<span style={{background:"#fbbf2422",color:"#fbbf24",border:"1px solid #fbbf2444",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>🚫 {naoTemList.length}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#0d1520",color:"#60a5fa",border:"1px solid #1e3a5f",padding:"6px 12px",fontSize:12}}>🖨️</button>}
+        <button className="btn" onClick={()=>{setShowProducao(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showProducao?"#1a1040":"#120a20",color:"#c084fc",border:"1px solid #5b21b6",padding:"6px 12px",fontSize:12}}>🏭 Produção</button>
         {isAdmin&&<>
-          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
-          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
-          <button className="btn" onClick={()=>{setShowRuaMgmt(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showRuaMgmt?"#1a2a1a":"#0d150d",color:"#34d399",border:"1px solid #065f46",padding:"6px 12px",fontSize:12}}>🛤️ Ruas</button>
-          <button className="btn" onClick={()=>{setShowHistorico(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);cancelEdit();}} style={{background:showHistorico?"#1a120a":"#120d06",color:"#fb923c",border:"1px solid #7c3a10",padding:"6px 12px",fontSize:12}}>📂 Histórico{(db.pedidosLista||[]).length>0?` (${(db.pedidosLista||[]).length})`:""}</button>
+          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);setShowProducao(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
+          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);setShowProducao(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
+          <button className="btn" onClick={()=>{setShowRuaMgmt(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);setShowHistorico(false);setShowProducao(false);cancelEdit();}} style={{background:showRuaMgmt?"#1a2a1a":"#0d150d",color:"#34d399",border:"1px solid #065f46",padding:"6px 12px",fontSize:12}}>🛤️ Ruas</button>
+          <button className="btn" onClick={()=>{setShowHistorico(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);setShowProducao(false);cancelEdit();}} style={{background:showHistorico?"#1a120a":"#120d06",color:"#fb923c",border:"1px solid #7c3a10",padding:"6px 12px",fontSize:12}}>📂 Histórico{(db.pedidosLista||[]).length>0?` (${(db.pedidosLista||[]).length})`:""}</button>
         </>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
@@ -3548,6 +3555,106 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         {editId&&<button className="btn" onClick={cancelEdit} style={{background:"var(--border2)",color:"var(--text2)",padding:"12px 14px",fontSize:14}}>✕</button>}
       </div>
     </div>
+
+    {/* ===== LISTA DE PRODUÇÃO ===== */}
+    {showProducao&&<div className="card" style={{marginBottom:12,border:"1px solid #5b21b6"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div className="section-title" style={{color:"#c084fc",margin:0}}>🏭 Lista de Produção</div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>setShowHistProducao(v=>!v)} className="btn" style={{background:showHistProducao?"#1a1040":"#120a20",color:"#c084fc",border:"1px solid #5b21b6",padding:"5px 10px",fontSize:11}}>📂 Histórico{(db.pedidosProducao||[]).length>0?` (${(db.pedidosProducao||[]).length})`:""}</button>
+        </div>
+      </div>
+      {showHistProducao&&(db.pedidosProducao||[]).length>0&&<div style={{marginBottom:12}}>
+        {(db.pedidosProducao||[]).slice(0,20).map((ped:any)=>(
+          <div key={ped.id} style={{background:"var(--bg4)",borderRadius:8,padding:"8px 10px",marginBottom:6,border:"1px solid #1e2235"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <span style={{fontWeight:600,fontSize:12,color:"#c084fc"}}>{fmtDate(ped.data)} · {(ped.itens||[]).length} produto(s)</span>
+              <div style={{display:"flex",gap:4}}>
+                <button onClick={()=>{
+                  const txt=`🏭 *PRODUÇÃO — ${fmtDate(ped.data)}*\n${(ped.itens||[]).map((it:any)=>`• ${it.nome}: *${it.quantidade} ${it.unidade||"un"}*${it.estoque!=null?` (estoque: ${it.estoque})`:""}`).join("\n")}\n\n_Solicitado por: ${ped.solicitante||"—"}_`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
+                }} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>
+                <button onClick={()=>{
+                  _listaDeletados.add(ped.id);
+                  setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).filter((p:any)=>p.id!==ped.id)}));
+                }} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:5,color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
+              {(ped.itens||[]).map((it:any,j:number)=>(
+                <span key={j} style={{fontSize:10,background:"#c084fc18",color:"#c084fc",border:"1px solid #c084fc44",borderRadius:12,padding:"2px 8px"}}>{it.nome} ×{it.quantidade}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>}
+      {showHistProducao&&!(db.pedidosProducao||[]).length&&<div style={{fontSize:12,color:"#666",marginBottom:10,textAlign:"center" as const}}>Nenhum pedido de produção ainda.</div>}
+      <div style={{position:"relative",marginBottom:8}}>
+        <input placeholder="🔍 Buscar produto..." value={producaoBusca} onChange={e=>setProducaoBusca(e.target.value)} className="inp" style={{marginBottom:0,paddingRight:producaoBusca?36:14}}/>
+        {producaoBusca&&<button onClick={()=>setProducaoBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+      </div>
+      {(()=>{
+        const prods:any[]=(db.produtosLista||[]).filter((p:any)=>{
+          if(!producaoBusca)return true;
+          return (p.nome||"").toLowerCase().includes(producaoBusca.toLowerCase());
+        }).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+        const getEstoque=(nome:string)=>{
+          const mp=(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase()===nome.toLowerCase());
+          return mp?{atual:mp.estoqueAtual||0,unidade:mp.unidade||"un"}:null;
+        };
+        const itensComQtd=prods.filter(p=>{const q=producaoQtds[p.id];return q&&parseFloat(q)>0;});
+        const gerarPedidoProducao=()=>{
+          if(!itensComQtd.length)return alert("Informe a quantidade de pelo menos 1 produto.");
+          const itens=itensComQtd.map(p=>{
+            const est=getEstoque(p.nome);
+            return{nome:p.nome,quantidade:parseFloat(producaoQtds[p.id])||0,unidade:p.unidade||est?.unidade||"un",estoque:est?.atual??null,categoria:p.cat||""};
+          });
+          const pedido={id:uid(),data:today(),itens,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+          setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
+          const txt=`🏭 *PRODUÇÃO — ${fmtDate(today())}*\n${itens.map(it=>`• ${it.nome}: *${it.quantidade} ${it.unidade}*${it.estoque!=null?` (estoque: ${it.estoque})`:""}`).join("\n")}\n\n_Solicitado por: ${login?.label||"—"}_`;
+          setProducaoQtds({});
+          const acao=confirm(`✅ Pedido de produção salvo! (${itens.length} produto(s))\n\nDeseja compartilhar no WhatsApp?`);
+          if(acao)window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
+        };
+        const imprimirProducao=()=>{
+          if(!itensComQtd.length)return alert("Informe a quantidade de pelo menos 1 produto.");
+          const w=window.open("","_blank","width=900,height=700");if(!w)return;
+          const rows=itensComQtd.map(p=>{
+            const est=getEstoque(p.nome);
+            return`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${p.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${est?.atual??"-"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${producaoQtds[p.id]}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${p.unidade||est?.unidade||"un"}</td></tr>`;
+          }).join("");
+          w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Lista de Produção</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.print-btn{margin-bottom:16px;padding:8px 22px;background:#5b21b6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.print-btn{display:none}}</style></head><body><h1>🏭 Lista de Produção</h1><div class="sub">Data: ${new Date().toLocaleDateString("pt-BR")} · ${itensComQtd.length} produto(s) · Solicitante: ${login?.label||"—"}</div><button class="print-btn" onclick="window.print()">🖨️ Imprimir</button><table><tr><th>Produto</th><th style="text-align:center">Estoque Atual</th><th style="text-align:center">Qtd Solicitada</th><th style="text-align:center">Unidade</th></tr>${rows}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
+          w.document.close();
+        };
+        return <>
+          {prods.length===0&&<div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:16}}>Nenhum produto cadastrado. Use o botão "📦 Produtos" para cadastrar.</div>}
+          {prods.length>0&&<div style={{maxHeight:400,overflowY:"auto" as const,marginBottom:8}}>
+            {prods.map(p=>{
+              const est=getEstoque(p.nome);
+              const isEdit=producaoEditId===p.id;
+              return <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
+                  <div style={{fontSize:10,color:"#888"}}>{p.cat||"outros"} · {est!=null?<span style={{color:est.atual>0?"#4ade80":"#ff5c7a"}}>estoque: {est.atual} {est.unidade}</span>:<span style={{color:"#555"}}>sem estoque</span>}</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                  <input type="number" inputMode="decimal" min="0" step="any" placeholder="Qtd"
+                    value={producaoQtds[p.id]||""} onChange={e=>setProducaoQtds(q=>({...q,[p.id]:e.target.value}))}
+                    className="inp" style={{width:65,marginBottom:0,textAlign:"center" as const,fontSize:13,padding:"6px 4px"}}/>
+                  <span style={{fontSize:10,color:"#888",minWidth:20}}>{p.unidade||est?.unidade||"un"}</span>
+                </div>
+              </div>;
+            })}
+          </div>}
+          {itensComQtd.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+            <button onClick={gerarPedidoProducao} className="btn" style={{flex:1,background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"#fff",padding:"12px",fontSize:14,fontWeight:700}}>
+              📋 Gerar Pedido ({itensComQtd.length})
+            </button>
+            <button onClick={imprimirProducao} className="btn" style={{background:"#1a1040",color:"#c084fc",border:"1px solid #5b21b6",padding:"12px 16px",fontSize:13}}>🖨️</button>
+          </div>}
+        </>;
+      })()}
+    </div>}
 
     {/* Busca + ações */}
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
