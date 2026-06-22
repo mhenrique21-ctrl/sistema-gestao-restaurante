@@ -541,14 +541,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       return sArr.filter((i:any)=>!_listaDeletados.has(i.id));
     };
     const byIdLista=(sArr:any[])=>{
-      return sArr.filter((i:any)=>!serverDeleted.has(i.id)).map((i:any)=>{
-        const pending=_pendingToggles.get(i.id);
-        if(pending){
-          if(i.comprado===pending.comprado&&i.naoTem===pending.naoTem)_pendingToggles.delete(i.id);
-          else return{...i,comprado:pending.comprado,naoTem:pending.naoTem};
-        }
-        return i;
-      });
+      return sArr.filter((i:any)=>!serverDeleted.has(i.id));
     };
     const byIdDedup=(sArr:any[])=>{
       const merged=byId(sArr);
@@ -627,9 +620,16 @@ const mergeFromServer=(prev:any,updates:any)=>{
     allEmps.forEach(e=>(next[e].listaRuas||[]).forEach((r:string)=>{if(!seen.has(r)){seen.add(r);unified.push(r);}}));
     const unifiedMap:Record<string,string>={};
     allEmps.forEach(e=>Object.assign(unifiedMap,next[e].ruaCatMap||{}));
+    // Aplicar pendingToggles na lista unificada (após merge de ambas empresas)
+    const finalLista=filteredLista.map((i:any)=>{
+      const pending=_pendingToggles.get(i.id);
+      if(!pending)return i;
+      if(i.comprado===pending.comprado&&i.naoTem===pending.naoTem)return i;
+      return{...i,comprado:pending.comprado,naoTem:pending.naoTem};
+    });
     // Aplicar a todas as empresas
     allEmps.forEach(e=>{
-      next[e].listaCompras=filteredLista;
+      next[e].listaCompras=finalLista;
       next[e].listaDeletedIds=unifiedDelArr;
       next[e].produtosLista=unifiedProds;
       next[e].listaCategorias=unifiedCats;
@@ -637,6 +637,16 @@ const mergeFromServer=(prev:any,updates:any)=>{
       next[e].pedidosLista=unifiedPed;
       next[e].listaRuas=unified;
       next[e].ruaCatMap={...unifiedMap};
+    });
+  }
+  // Aplicar pendingToggles mesmo quando só tem 1 empresa
+  if(allEmps.length===1&&_pendingToggles.size>0){
+    const e=allEmps[0];
+    next[e].listaCompras=(next[e].listaCompras||[]).map((i:any)=>{
+      const pending=_pendingToggles.get(i.id);
+      if(!pending)return i;
+      if(i.comprado===pending.comprado&&i.naoTem===pending.naoTem)return i;
+      return{...i,comprado:pending.comprado,naoTem:pending.naoTem};
     });
   }
   return migrateDb(next);
@@ -3304,11 +3314,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!item.comprado){
       pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
+    const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
       const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
-      return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,ordem:nowComprado?maxOrdem+1:i.ordem}:i)};
+      return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
     });
   };
   const toggleNaoTem=(id:string)=>{
@@ -3319,9 +3330,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!item.naoTem){
       pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
+    const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
-      return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:nowNaoTem,comprado:false}:i)};
+      return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:nowNaoTem,comprado:false,updatedAt:ts}:i)};
     });
   };
   const del=(id:string)=>{
