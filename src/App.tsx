@@ -1672,7 +1672,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     if(xmlIaRef.current)xmlIaRef.current.value="";
   };
 
-  const redimensionarImagem=(dataUrl:string,maxPx=1400,quality=0.82):Promise<string>=>{
+  const redimensionarImagem=(dataUrl:string,maxPx=2400,quality=0.92):Promise<string>=>{
     return new Promise(resolve=>{
       const img=new Image();
       img.onload=()=>{
@@ -1710,26 +1710,55 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     }
   };
 
-  const PROMPT_CUPOM=`Extraia TODOS os dados deste cupom fiscal / nota fiscal brasileira. Leia com atenção máxima cada linha de produto.
+  const PROMPT_CUPOM=`Analise esta imagem de cupom fiscal brasileiro e extraia todos os dados.
 
-Retorne SOMENTE JSON válido (sem markdown, sem texto extra):
-{"fornecedor":{"nome":"","cnpj":"00.000.000/0000-00","endereco":""},"itens":[{"nome":"nome genérico sem marca","categoria":"","unidade":"kg|g|L|ml|un|cx|pc|sc|bd","quantidade":1,"valorUnitario":0.00,"valorTotal":0.00}],"totalCompra":0.00,"data":"YYYY-MM-DD","formaPagamento":"dinheiro|cartão débito|cartão crédito|pix|boleto","dataVencimento":"YYYY-MM-DD"}
+IMPORTANTE: Retorne APENAS um JSON válido, sem nenhum texto antes ou depois, sem markdown.
 
-REGRAS IMPORTANTES:
-1. Leia TODOS os itens do cupom, linha por linha, sem pular nenhum
-2. Nome do produto: use nome genérico SEM marca (ex: "queijo muçarela" não "Queijo Polenghi", "farinha de trigo" não "Farinha Dona Benta")
-3. Quando aparecer "2,500 KG x 15,90" → quantidade=2.5, unidade="kg", valorUnitario=15.90
-4. Ignore linhas de TOTAL, SUBTOTAL, TROCO, DESCONTO — essas NÃO são itens
-5. Ignore códigos de barras (sequências longas de números sem nome de produto)
-6. Categorias: carnes | hortifruti | laticínios | grãos | farinhas | massas | temperos | proteína | bebidas | polpas | mercearia básica | cafés e complementos | chocolates | latas caixas e temperos | molhos | material de limpeza | descartáveis | embalagens | insumos | outros
-7. Exemplos de categorização: açúcar/sal/óleo/vinagre/margarina → "mercearia básica"; café/chá → "cafés e complementos"; frango/carne/peixe/linguiça/bacon/presunto → "carnes"; queijo/leite/manteiga/iogurte/requeijão → "laticínios"; arroz/feijão → "grãos"; macarrão/lasanha → "massas"; ketchup/mostarda/maionese/azeite → "molhos"; cerveja/refrigerante/suco/água → "bebidas"; enlatados/extrato/caldo → "latas caixas e temperos"
-8. Forma de pagamento: "CREDITO"/"CRÉDITO" → "cartão crédito", "DEBITO"/"DÉBITO" → "cartão débito", "PIX" → "pix", "BOLETO"/"DUPLICATA" → "boleto". Se não encontrar → "dinheiro"
-9. Se não conseguir ler algum campo, use 0 ou string vazia — nunca invente valores
-10. Verifique que a soma dos valorTotal de todos os itens é compatível com o totalCompra`;
+O JSON deve ter este formato exato:
+{
+  "fornecedor": {"nome": "nome da loja", "cnpj": "00.000.000/0000-00", "endereco": "endereço"},
+  "itens": [
+    {"nome": "produto genérico", "categoria": "categoria", "unidade": "un", "quantidade": 1, "valorUnitario": 10.00, "valorTotal": 10.00}
+  ],
+  "totalCompra": 100.00,
+  "data": "2026-01-15",
+  "formaPagamento": "dinheiro",
+  "dataVencimento": "2026-01-15"
+}
+
+INSTRUÇÕES DE LEITURA:
+- Leia CADA LINHA do cupom com cuidado. Não pule nenhum item.
+- O formato típico de cada linha é: "[código] NOME DO PRODUTO [quantidade] x [valor] = [total]"
+- Exemplo: "001 ACUCAR CRISTAL 5KG 1 UN x 18,90 (R$) 18,90" → nome="açúcar cristal 5kg", quantidade=1, unidade="un", valorUnitario=18.90, valorTotal=18.90
+- Exemplo: "FILÉ FRANGO  2,500 KG x 15,90 39,75" → nome="filé de frango", quantidade=2.5, unidade="kg", valorUnitario=15.90, valorTotal=39.75
+- NÃO inclua linhas de TOTAL, SUBTOTAL, TROCO, DESCONTO ou CÓDIGO DE BARRAS como itens
+- Use nomes genéricos SEM marca: "farinha de trigo" (não "Farinha Dona Benta"), "queijo muçarela" (não "Queijo Polenghi")
+
+CATEGORIAS (use exatamente uma destas):
+carnes, hortifruti, laticínios, grãos, farinhas, massas, temperos, proteína, bebidas, polpas, mercearia básica, cafés e complementos, chocolates, latas caixas e temperos, molhos, material de limpeza, descartáveis, embalagens, insumos, outros
+
+GUIA DE CATEGORIAS:
+- carnes: carne, frango, peixe, linguiça, salsicha, bacon, presunto, peito de peru, costela, alcatra, filé
+- hortifruti: tomate, cebola, alho, batata, banana, limão, laranja, alface, cenoura, verduras, frutas
+- laticínios: queijo, leite, manteiga, creme de leite, iogurte, requeijão, nata
+- grãos: arroz, feijão, lentilha, grão de bico, ervilha seca
+- farinhas: farinha de trigo, farinha de mandioca, farinha de rosca, amido, fubá, polvilho
+- mercearia básica: açúcar, sal, óleo, vinagre, margarina, fermento, corante, essência
+- bebidas: cerveja, refrigerante, suco, água, vinho, energético
+- molhos: ketchup, mostarda, maionese, azeite, shoyu, molho de tomate
+- latas caixas e temperos: milho em lata, ervilha em lata, atum, sardinha, extrato de tomate, caldo em cubo
+- cafés e complementos: café, chá, achocolatado, leite condensado, creme de avelã
+- material de limpeza: detergente, desinfetante, sabão, esponja, água sanitária, álcool
+- descartáveis: copo descartável, prato descartável, guardanapo, papel toalha, sacola, embalagem
+
+PAGAMENTO: CREDITO/CRÉDITO → "cartão crédito", DEBITO/DÉBITO → "cartão débito", PIX → "pix", BOLETO → "boleto", senão → "dinheiro"
+
+Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
 
   const extrairJSON=(text:string)=>{
-    // tenta extrair bloco JSON da resposta
-    const cleaned=text.replace(/```json/g,"").replace(/```/g,"").trim();
+    let cleaned=text.replace(/```json/g,"").replace(/```/g,"").trim();
+    // prefill: resposta pode começar sem { porque o server adicionou assistant:{
+    if(cleaned.length>0&&!cleaned.startsWith("{"))cleaned="{"+cleaned;
     // tenta direto
     try{return JSON.parse(cleaned);}catch{}
     // tenta encontrar o objeto JSON no texto
@@ -1737,9 +1766,11 @@ REGRAS IMPORTANTES:
     if(match){try{return JSON.parse(match[0]);}catch{}}
     // tenta consertar trailing commas
     try{return JSON.parse(cleaned.replace(/,\s*([}\]])/g,"$1"));}catch{}
-    // último recurso: match + fix
     if(match){try{return JSON.parse(match[0].replace(/,\s*([}\]])/g,"$1"));}catch{}}
-    throw new Error("JSON inválido retornado pela IA.\n\nResposta: "+text.slice(0,300));
+    // tenta remover texto antes/depois do JSON
+    const m2=cleaned.match(/\{[\s\S]*}/);
+    if(m2){try{return JSON.parse(m2[0]);}catch{}}
+    throw new Error("JSON inválido retornado pela IA.\n\nResposta: "+text.slice(0,500));
   };
 
   const chamarIA=async(userContent:any,tentativa=1):Promise<any>=>{
