@@ -580,24 +580,63 @@ const mergeFromServer=(prev:any,updates:any)=>{
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
     };
   });
-  // Unificar listaRuas e ruaCatMap entre empresas (compartilhadas)
+  // Unificar dados da Lista entre empresas (compartilhadas)
   const allEmps=Object.keys(next).filter(e=>next[e]&&typeof next[e]==="object"&&"listaCompras" in next[e]);
   if(allEmps.length>1){
+    // Unificar listaCompras por id (mais recente vence)
+    const listaById=new Map<string,any>();
+    allEmps.forEach(e=>(next[e].listaCompras||[]).forEach((i:any)=>{
+      const existing=listaById.get(i.id);
+      if(!existing)listaById.set(i.id,i);
+      else{
+        const et=existing.updatedAt||existing.criadoEm||0;
+        const it=i.updatedAt||i.criadoEm||0;
+        listaById.set(i.id,it>=et?i:existing);
+      }
+    }));
+    const unifiedLista=[...listaById.values()];
+    // Unificar listaDeletedIds
+    const unifiedDelIds=new Set<string>();
+    allEmps.forEach(e=>(next[e].listaDeletedIds||[]).forEach((id:string)=>unifiedDelIds.add(id)));
+    const unifiedDelArr=[...unifiedDelIds];
+    // Filtrar itens deletados
+    const filteredLista=unifiedLista.filter(i=>!unifiedDelIds.has(i.id));
+    // Unificar produtosLista por nome (dedup)
+    const prodByName=new Map<string,any>();
+    allEmps.forEach(e=>(next[e].produtosLista||[]).forEach((p:any)=>{
+      const k=(p.nome||"").trim().toLowerCase();
+      if(!prodByName.has(k))prodByName.set(k,p);
+      else{const ex=prodByName.get(k);if(!ex.rua&&p.rua)prodByName.set(k,{...ex,rua:p.rua});if(!ex.cat&&p.cat)prodByName.set(k,{...ex,cat:p.cat});}
+    }));
+    const unifiedProds=[...prodByName.values()];
+    // Unificar listaCategorias
+    const catSet=new Set<string>();
+    allEmps.forEach(e=>(next[e].listaCategorias||[]).forEach((c:string)=>catSet.add(c)));
+    const unifiedCats=[...catSet];
+    // Unificar listaCatDeleted
+    const catDelSet=new Set<string>();
+    allEmps.forEach(e=>(next[e].listaCatDeleted||[]).forEach((c:string)=>catDelSet.add(c)));
+    const unifiedCatDel=[...catDelSet];
+    // Unificar pedidosLista por id
+    const pedById=new Map<string,any>();
+    allEmps.forEach(e=>(next[e].pedidosLista||[]).forEach((p:any)=>{if(!pedById.has(p.id))pedById.set(p.id,p);}));
+    const unifiedPed=[...pedById.values()];
+    // Unificar listaRuas
     const seen=new Set<string>();
     const unified:string[]=[];
     allEmps.forEach(e=>(next[e].listaRuas||[]).forEach((r:string)=>{if(!seen.has(r)){seen.add(r);unified.push(r);}}));
     const unifiedMap:Record<string,string>={};
     allEmps.forEach(e=>Object.assign(unifiedMap,next[e].ruaCatMap||{}));
-    allEmps.forEach(e=>{next[e].listaRuas=unified;next[e].ruaCatMap={...unifiedMap};});
-    // Sincronizar rua dos produtos por nome entre empresas
-    const ruaPorNome:Record<string,string>={};
-    allEmps.forEach(e=>(next[e].produtosLista||[]).forEach((p:any)=>{if(p.rua&&p.nome)ruaPorNome[p.nome.toLowerCase()]=p.rua;}));
+    // Aplicar a todas as empresas
     allEmps.forEach(e=>{
-      next[e].produtosLista=(next[e].produtosLista||[]).map((p:any)=>{
-        if(p.rua||!p.nome)return p;
-        const r=ruaPorNome[p.nome.toLowerCase()];
-        return r?{...p,rua:r}:p;
-      });
+      next[e].listaCompras=filteredLista;
+      next[e].listaDeletedIds=unifiedDelArr;
+      next[e].produtosLista=unifiedProds;
+      next[e].listaCategorias=unifiedCats;
+      next[e].listaCatDeleted=unifiedCatDel;
+      next[e].pedidosLista=unifiedPed;
+      next[e].listaRuas=unified;
+      next[e].ruaCatMap={...unifiedMap};
     });
   }
   return migrateDb(next);
@@ -694,18 +733,36 @@ export default function App() {
   },[state]);
 
   const db    = state[empresa];
-  const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
+  const _listaFields=["listaCompras","listaDeletedIds","produtosLista","listaCategorias","listaCatDeleted","pedidosLista","listaRuas","ruaCatMap"];
+  const _syncLista=(next:any)=>{
+    const other=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
+    if(!next[other])return next;
+    const src=next[empresa];
+    const changed=_listaFields.some(f=>src[f]!==next[other][f]);
+    if(!changed)return next;
+    const oCopy={...next[other]};
+    _listaFields.forEach(f=>{if(src[f]!==undefined)oCopy[f]=src[f];});
+    return{...next,[other]:oCopy};
+  };
+  const setDb = (fn)=>setState(prev=>{
+    const next={...prev,[empresa]:fn(prev[empresa])};
+    return _syncLista(next);
+  });
   const setDbAndSave=(fn:(d:any)=>any)=>{
     directSaveRef.current=true;
     const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
     setState(prev=>{
-      const next={...prev,[empresa]:fn(prev[empresa])};
+      let next={...prev,[empresa]:fn(prev[empresa])};
+      next=_syncLista(next);
       saveSeqRef.current++;
       clearTimeout(syncTimer.current);
       syncTimer.current=null;
       setSyncStatus("sync");
-      fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true})
-        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
+      const other=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
+      Promise.all([
+        fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true}),
+        fetch(`/api/dados/${other}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[other]),keepalive:true})
+      ]).then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
       return next;
     });
   };
@@ -3057,7 +3114,6 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false,rua:""};
 
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
-  // Cada empresa tem dados independentes — setBothDb removido
   const setBothDb=setDb;
   // Cor em tempo real: busca no db.usuarios pelo nome do login (não depende da sessão)
   const usuarioAtual=login?.label?(db.usuarios||[]).find((u:any)=>u.nome===login.label):null;
