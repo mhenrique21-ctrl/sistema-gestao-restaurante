@@ -5420,6 +5420,9 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
   const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
   const [verConta,setVerConta]=useState<any>(null);
   const [verGrupo,setVerGrupo]=useState<string|null>(null);
+  const [collapsedDates,setCollapsedDates]=useState<Set<string>>(new Set());
+  const [recorrenteCollapsed,setRecorrenteCollapsed]=useState(false);
+  const toggleDateCollapse=(d:string)=>setCollapsedDates(prev=>{const n=new Set(prev);if(n.has(d))n.delete(d);else n.add(d);return n;});
   const [busca,setBusca]=useState("");
   const [mesFiltro,setMesFiltro]=useState(()=>today().slice(0,7));
   const [notifStatus,setNotifStatus]=useState<"idle"|"granted"|"denied"|"subscribed"|"unsupported">("idle");
@@ -5586,36 +5589,23 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
   }).sort((a:any,b:any)=>{const vA=a.vencimento||"",vB=b.vencimento||"";const x=vA<vB?-1:vA>vB?1:0;const primary=sortDir==="asc"?x:-x;if(primary!==0)return primary;return(b.criadoEm||"").localeCompare(a.criadoEm||"");});
   const totPago=contasFiltradas.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const totPend=contasFiltradas.filter((c:any)=>c.status==="pendente").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  // Recurring groups
   const grupos:Record<string,any[]>={};
   contasFiltradas.filter((c:any)=>c.grupoRecorr).forEach((c:any)=>{if(!grupos[c.grupoRecorr])grupos[c.grupoRecorr]=[];grupos[c.grupoRecorr].push(c);});
-
-  // Unified items: recurring groups (1 entry per group) + normal accounts, all sortable by date
-  const unifiedItems:(
-    {type:"grupo",gid:string,items:any[],date:string,totalG:number,pagasG:number,descBase:string,nextPend:any}|
-    {type:"normal",conta:any,date:string}
-  )[]=[];
-  const processedGroups=new Set<string>();
-  contasFiltradas.forEach((c:any)=>{
-    if(c.grupoRecorr){
-      if(processedGroups.has(c.grupoRecorr))return;
-      processedGroups.add(c.grupoRecorr);
-      const items=grupos[c.grupoRecorr]||[];
-      const sorted=[...items].sort((a:any,b:any)=>(a.vencimento||"").localeCompare(b.vencimento||""));
-      const nextPend=sorted.find((x:any)=>x.status==="pendente");
-      const date=nextPend?.vencimento||sorted[0]?.vencimento||"";
-      const totalG=items.reduce((s:number,x:any)=>s+parseMoney(x.valor),0);
-      const pagasG=items.filter((x:any)=>x.status==="pago").length;
-      const descBase=sorted[0].descricao.replace(/ \(\d+\/\d+\)$/,"");
-      unifiedItems.push({type:"grupo",gid:c.grupoRecorr,items:sorted,date,totalG,pagasG,descBase,nextPend});
-    }else{
-      unifiedItems.push({type:"normal",conta:c,date:c.vencimento||""});
-    }
+  const gruposList=Object.entries(grupos).map(([gid,items])=>{
+    const sorted=[...items].sort((a:any,b:any)=>(a.vencimento||"").localeCompare(b.vencimento||""));
+    const nextPend=sorted.find((x:any)=>x.status==="pendente");
+    const totalG=items.reduce((s:number,x:any)=>s+parseMoney(x.valor),0);
+    const pagasG=items.filter((x:any)=>x.status==="pago").length;
+    const descBase=sorted[0].descricao.replace(/ \(\d+\/\d+\)$/,"");
+    return{gid,items:sorted,totalG,pagasG,descBase,nextPend};
   });
-  unifiedItems.sort((a,b)=>{const x=a.date<b.date?-1:a.date>b.date?1:0;return sortDir==="asc"?x:-x;});
+  const totalRecorrente=gruposList.reduce((s,g)=>s+g.totalG,0);
 
-  // Group by date for headers
-  const byDate:Record<string,typeof unifiedItems>={};
-  unifiedItems.forEach(item=>{const d=item.date||"sem-data";if(!byDate[d])byDate[d]=[];byDate[d].push(item);});
+  // Normal (non-recurring) accounts grouped by date
+  const normais=contasFiltradas.filter((c:any)=>!c.grupoRecorr);
+  const byDate:Record<string,any[]>={};
+  normais.forEach((c:any)=>{const d=c.vencimento||"sem-data";if(!byDate[d])byDate[d]=[];byDate[d].push(c);});
   const sortedDates=Object.keys(byDate).sort((a,b)=>{const x=a<b?-1:a>b?1:0;return sortDir==="asc"?x:-x;});
 
   const contasAtrasadas=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).sort((a:any,b:any)=>a.vencimento.localeCompare(b.vencimento));
@@ -5726,71 +5716,92 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
         <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#4ade80",fontWeight:700,fontSize:16}}>{fmtMoney(totPago)}</div><div className="muted" style={{fontSize:11}}>Pago</div></div>
       </div>
 
-      {/* Accounts grouped by date, newest first */}
+      {/* ── Recurring accounts section ── */}
+      {gruposList.length>0&&<div style={{marginBottom:16,border:"1px solid #2d1a4f",borderRadius:12,overflow:"hidden"}}>
+        <div onClick={()=>setRecorrenteCollapsed(v=>!v)}
+          style={{padding:"10px 14px",cursor:"pointer",background:"linear-gradient(135deg,#1a1030,#1a1540)",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:14,transition:"transform .2s",transform:recorrenteCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▼</span>
+          <span style={{fontSize:15}}>🔄</span>
+          <span style={{fontWeight:700,fontSize:14,color:"#a78bfa",flex:1}}>Recorrentes</span>
+          <span style={{fontSize:11,color:"#888"}}>{gruposList.length} {gruposList.length===1?"série":"séries"}</span>
+          <span style={{fontWeight:700,fontSize:13,color:"#a78bfa"}}>{fmtMoney(totalRecorrente)}</span>
+        </div>
+        {!recorrenteCollapsed&&<div style={{padding:"6px 0"}}>
+          {gruposList.map(({gid,items:sorted,totalG,pagasG,descBase,nextPend})=>{
+            const expanded=verGrupo===gid;
+            return <div key={gid} style={{borderTop:"1px solid #1a1030"}}>
+              <div onClick={()=>setVerGrupo((v:any)=>v===gid?null:gid)}
+                style={{padding:"12px 14px",cursor:"pointer",display:"flex",gap:10,alignItems:"center"}}>
+                <span style={{fontSize:16,lineHeight:1}}>{expanded?"📂":"📁"}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
+                    {descBase}
+                    <span style={{fontSize:10,color:"#a78bfa",background:"#2d1a4f",borderRadius:20,padding:"1px 7px",fontWeight:700}}>{sorted.length}x</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                    {sorted[0].categoria&&<span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{sorted[0].categoria}</span>}
+                    {sorted[0].formaPag&&<span>{sorted[0].formaPag}</span>}
+                    {sorted[0].fornecedor&&<span>• {sorted[0].fornecedor}</span>}
+                    {nextPend&&<span style={{color:"#fbbf24"}}>• Próx: {fmtDate(nextPend.vencimento)}</span>}
+                  </div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"#a78bfa"}}>{fmtMoney(totalG)}</div>
+                  <div style={{fontSize:11,color:pagasG===sorted.length?"#4ade80":"#888"}}>{pagasG}/{sorted.length} pagas</div>
+                </div>
+              </div>
+              {expanded&&<div style={{background:"var(--bg2)"}}>
+                {sorted.map((c:any)=>(
+                  <div key={c.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:600}}>{c.descricao}</span>
+                      <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a"}}>{fmtMoney(parseMoney(c.valor))}</span>
+                    </div>
+                    <div style={{fontSize:11,color:"#888",marginBottom:6}}>{fmtDate(c.vencimento)}</div>
+                    <div style={{display:"flex",gap:5}}>
+                      <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
+                      {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"5px 10px",fontSize:11}}>📎</button>}
+                      <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"5px 10px",fontSize:11}}>✏️</button>
+                      <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>🗑️</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                  <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
+                  <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"#7c8fff",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
+                  <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
+                </div>
+              </div>}
+            </div>;
+          })}
+        </div>}
+      </div>}
+
+      {/* ── Accounts grouped by date, collapsible ── */}
       {sortedDates.map(date=>{
         const isToday=date===today();
         const isPast=date<today();
         const items=byDate[date];
-        const totalDia=items.reduce((s,item)=>s+(item.type==="grupo"?item.totalG:parseMoney(item.conta.valor)),0);
-        return <div key={date} style={{marginBottom:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
-            <span style={{fontSize:14}}>{isToday?"📌":isPast?"⏰":"📅"}</span>
+        const totalDia=items.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+        const collapsed=collapsedDates.has(date);
+        const pagasDia=items.filter((c:any)=>c.status==="pago").length;
+        const pendDia=items.length-pagasDia;
+        return <div key={date} style={{marginBottom:10}}>
+          <div onClick={()=>toggleDateCollapse(date)}
+            style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:collapsed?12:"12px 12px 0 0",background:"var(--bg3)",cursor:"pointer",border:"1px solid var(--border)",borderBottom:collapsed?"1px solid var(--border)":"none"}}>
+            <span style={{fontSize:12,transition:"transform .2s",transform:collapsed?"rotate(-90deg)":"rotate(0deg)"}}>▼</span>
+            <span style={{fontSize:13}}>{isToday?"📌":isPast?"⏰":"📅"}</span>
             <span style={{fontWeight:700,fontSize:13,color:isToday?"#7c8fff":isPast?"#ff5c7a":"#e8eaf0"}}>{date==="sem-data"?"Sem data":fmtDate(date)}</span>
-            {isToday&&<span style={{fontSize:10,color:"#7c8fff",background:"#1a1f3a",borderRadius:20,padding:"1px 8px",fontWeight:700}}>HOJE</span>}
-            <span style={{fontSize:12,color:"#888",marginLeft:"auto",fontWeight:600}}>{fmtMoney(totalDia)}</span>
-            <span style={{fontSize:10,color:"#555"}}>{items.length} {items.length===1?"conta":"contas"}</span>
+            {isToday&&<span style={{fontSize:9,color:"#7c8fff",background:"#1a1f3a",borderRadius:20,padding:"1px 7px",fontWeight:700}}>HOJE</span>}
+            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+              {pendDia>0&&<span style={{fontSize:10,color:"#ff5c7a",background:"#2a1015",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pendDia} pend.</span>}
+              {pagasDia>0&&<span style={{fontSize:10,color:"#4ade80",background:"#0a1a0a",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pagasDia} paga{pagasDia>1?"s":""}</span>}
+              <span style={{fontSize:13,color:"#888",fontWeight:700}}>{fmtMoney(totalDia)}</span>
+            </div>
           </div>
-          {items.map(item=>{
-            if(item.type==="grupo"){
-              const {gid,items:sorted,totalG,pagasG,descBase,nextPend}=item;
-              const expanded=verGrupo===gid;
-              return <div key={gid} style={{marginBottom:8,border:"1px solid #2d1a4f",borderRadius:12,overflow:"hidden"}}>
-                <div onClick={()=>setVerGrupo((v:any)=>v===gid?null:gid)}
-                  style={{padding:"12px 14px",cursor:"pointer",background:"var(--bg3)",display:"flex",gap:10,alignItems:"center"}}>
-                  <span style={{fontSize:18,lineHeight:1}}>{expanded?"📂":"📁"}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:700,fontSize:13,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
-                      {descBase}
-                      <span style={{fontSize:10,color:"#a78bfa",background:"#2d1a4f",borderRadius:20,padding:"1px 7px",fontWeight:700}}>🔄 {sorted.length}x</span>
-                    </div>
-                    <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-                      {sorted[0].categoria&&<span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{sorted[0].categoria}</span>}
-                      {sorted[0].formaPag&&<span>{sorted[0].formaPag}</span>}
-                      {sorted[0].fornecedor&&<span>• {sorted[0].fornecedor}</span>}
-                      {nextPend&&<span style={{color:"#fbbf24"}}>• Próx: {fmtDate(nextPend.vencimento)}</span>}
-                    </div>
-                  </div>
-                  <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontWeight:700,fontSize:14,color:"#a78bfa"}}>{fmtMoney(totalG)}</div>
-                    <div style={{fontSize:11,color:pagasG===sorted.length?"#4ade80":"#888"}}>{pagasG}/{sorted.length} pagas</div>
-                  </div>
-                </div>
-                {expanded&&<div>
-                  {sorted.map((c:any)=>(
-                    <div key={c.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)",background:"var(--bg2)"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                        <span style={{fontSize:13,fontWeight:600}}>{c.descricao}</span>
-                        <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a"}}>{fmtMoney(parseMoney(c.valor))}</span>
-                      </div>
-                      <div style={{fontSize:11,color:"#888",marginBottom:6}}>{fmtDate(c.vencimento)}</div>
-                      <div style={{display:"flex",gap:5}}>
-                        <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
-                        {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"5px 10px",fontSize:11}}>📎</button>}
-                        <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"5px 10px",fontSize:11}}>✏️</button>
-                        <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>🗑️</button>
-                      </div>
-                    </div>
-                  ))}
-                  <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",background:"var(--bg3)",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-                    <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
-                    <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"#7c8fff",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
-                    <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
-                  </div>
-                </div>}
-              </div>;
-            }else{
-              const c=item.conta;
-              return <div key={c.id} className="list-item">
+          {!collapsed&&<div style={{border:"1px solid var(--border)",borderTop:"none",borderRadius:"0 0 12px 12px",overflow:"hidden"}}>
+            {items.map((c:any)=>(
+              <div key={c.id} style={{padding:"12px 14px",borderTop:"1px solid var(--border)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                   <span style={{fontWeight:600,flex:1,marginRight:8}}>{c.descricao}</span>
                   <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a",whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(c.valor))}</span>
@@ -5811,12 +5822,12 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
                   <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
                   <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
                 </div>
-              </div>;
-            }
-          })}
+              </div>
+            ))}
+          </div>}
         </div>;
       })}
-      {!sortedDates.length&&<EmptyState msg="Nenhuma conta encontrada"/>}
+      {!sortedDates.length&&!gruposList.length&&<EmptyState msg="Nenhuma conta encontrada"/>}
     </div>}
 
     {subTab==="novo"&&<div>
