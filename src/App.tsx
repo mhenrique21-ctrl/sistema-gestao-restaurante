@@ -496,6 +496,25 @@ const migrateDb=(m:any)=>{
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
   });
+  if(!m.CONFRARIA?.produtosSyncV1||!m.SEAMA?.produtosSyncV1){
+    const allProds=new Map<string,any>();
+    ["CONFRARIA","SEAMA"].forEach(e=>{
+      (m[e]?.produtosLista||[]).forEach((p:any)=>{
+        const k=p.nome.trim().toLowerCase();
+        if(!allProds.has(k))allProds.set(k,{...p});
+        else{const ex=allProds.get(k);if(!ex.cat&&p.cat)ex.cat=p.cat;if(!ex.unidade&&p.unidade)ex.unidade=p.unidade;if(!ex.rua&&p.rua)ex.rua=p.rua;if(p.mpVinculados?.length&&!ex.mpVinculados?.length)ex.mpVinculados=p.mpVinculados;}
+      });
+    });
+    const merged=[...allProds.values()];
+    ["CONFRARIA","SEAMA"].forEach(e=>{
+      if(m[e]){
+        const existing=new Set((m[e].produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()));
+        const toAdd=merged.filter(p=>!existing.has(p.nome.trim().toLowerCase())).map(p=>({...p,id:Math.random().toString(36).slice(2)+Date.now().toString(36)}));
+        m[e].produtosLista=[...(m[e].produtosLista||[]),...toAdd];
+        m[e].produtosSyncV1=true;
+      }
+    });
+  }
   return m;
 };
 
@@ -858,7 +877,7 @@ export default function App() {
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
-              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
+              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa} setState={setState}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -3321,7 +3340,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       if(oldName.toLowerCase()===n.toLowerCase()){
         syncProdByName(n,(p:any)=>({...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}));
       }else{
-        setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.id===editProdId?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}:p)}));
+        applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===oldName.trim().toLowerCase()?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}:p)}));
       }
       setEditProdId(null);
     }else{
@@ -3342,7 +3361,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       const nl=prod.nome.trim().toLowerCase();
       applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.nome.trim().toLowerCase()!==nl)}));
     }else{
-      setDb((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));
+      applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));
     }
   };
   const removerDuplicatas=()=>{
@@ -3451,7 +3470,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const delPedido=(id:string)=>{
     if(!confirm("Excluir este pedido do histórico?"))return;
     _listaDeletados.add(id);
-    setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));
+    applyBothLista((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));
     if(expandedPedido===id)setExpandedPedido(null);
   };
 
@@ -4736,7 +4755,11 @@ const REGRAS_CAT:Record<string,{dias:number,perecivel:"alta"|"media"|"baixa",cmv
   "limpeza":   {dias:30, perecivel:"baixa", cmv:false, icon:"🧹"},
 };
 
-function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
+function EstoqueTab({db,setDb,empresa,setState}:{db:any,setDb:any,empresa:string,setState?:any}){
+  const applyBothLista=(fn:(d:any)=>any)=>{
+    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=fn(nx[e]);});return nx;});
+    else setDb(fn);
+  };
   const [sub,setSub]=useState("inventario");
   const [filtroEst,setFiltroEst]=useState("todos");
   const [ajusteModal,setAjusteModal]=useState<any>(null);
@@ -7111,7 +7134,7 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");a.href=url;a.download=`pedido_${ped.data}.csv`;a.click();URL.revokeObjectURL(url);
   };
-  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
+  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);applyBothLista((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
   const pedidos=(db.pedidosLista||[]);
 
   const rels=[
