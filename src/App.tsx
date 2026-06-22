@@ -697,6 +697,7 @@ export default function App() {
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
   const setDbAndSave=(fn:(d:any)=>any)=>{
     directSaveRef.current=true;
+    const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
     setState(prev=>{
       const next={...prev,[empresa]:fn(prev[empresa])};
       saveSeqRef.current++;
@@ -704,7 +705,7 @@ export default function App() {
       syncTimer.current=null;
       setSyncStatus("sync");
       fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true})
-        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();});
+        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
       return next;
     });
   };
@@ -3264,7 +3265,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     }
     (setDbAndSave||setDb)((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
-      return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:!it.naoTem,comprado:false}:i)};
+      return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:nowNaoTem,comprado:false}:i)};
     });
   };
   const del=(id:string)=>{
