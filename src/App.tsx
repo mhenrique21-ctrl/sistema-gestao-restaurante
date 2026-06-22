@@ -620,6 +620,7 @@ export default function App() {
   const prevState = useRef<any>(null);
   const fromPollRef = useRef(false);
   const saveSeqRef = useRef(0);
+  const directSaveRef = useRef(false);
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -637,12 +638,12 @@ export default function App() {
     if(!login)return;
     const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
     const poll=()=>{
-      if(syncTimer.current)return;
+      if(syncTimer.current||directSaveRef.current)return;
       const seq=saveSeqRef.current;
       Promise.all(emps.map(emp=>
         fetch(`/api/dados/${emp}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
       )).then(results=>{
-        if(syncTimer.current||saveSeqRef.current!==seq)return;
+        if(syncTimer.current||directSaveRef.current||saveSeqRef.current!==seq)return;
         const updates:any={};
         results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
         if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
@@ -659,6 +660,7 @@ export default function App() {
     saveData(state);
     if(firstRender.current){firstRender.current=false;prevState.current=state;return;}
     if(fromPollRef.current){fromPollRef.current=false;prevState.current=state;return;}
+    if(directSaveRef.current){prevState.current=state;return;}
     const changed=["CONFRARIA","SEAMA"].filter(emp=>state[emp]!==prevState.current?.[emp]);
     prevState.current=state;
     if(!changed.length)return;
@@ -680,14 +682,15 @@ export default function App() {
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
   const setDbAndSave=(fn:(d:any)=>any)=>{
+    directSaveRef.current=true;
     setState(prev=>{
       const next={...prev,[empresa]:fn(prev[empresa])};
       saveSeqRef.current++;
       clearTimeout(syncTimer.current);
+      syncTimer.current=null;
       setSyncStatus("sync");
       fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true})
-        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{syncTimer.current=null;});
-      syncTimer.current=-1 as any;
+        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{directSaveRef.current=false;});
       return next;
     });
   };
