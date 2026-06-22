@@ -889,7 +889,7 @@ export default function App() {
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
-              {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
+              {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
@@ -1520,7 +1520,7 @@ const reconciliarLista=(d:any,nomesComprados:string[])=>{
   return{...d,listaCompras:novaLista};
 };
 
-function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:string,state?:any,setState?:any}){
+function Compras({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:any,empresa:string,state?:any,setState?:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
   const [subTab,setSubTab]=useState("novo");
 
   // ---- Carrinho (entrada manual multi-produto) ----
@@ -1840,7 +1840,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     if(checkDuplicataCompra(db,forn?.nome||"",iaResult.totalCompra||0,dataIA)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataIA)}. Deseja continuar mesmo assim?`))return;
     }
-    setDbAndSave(d=>{
+    (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
@@ -1916,7 +1916,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     if(checkDuplicataCompra(db,forn?.nome||"",nfeResult.totalCompra||0,dataNFe)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataNFe)}. Deseja continuar mesmo assim?`))return;
     }
-    setDbAndSave(d=>{
+    (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
@@ -2112,7 +2112,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     if(!all&&checkDuplicataCompra(db,forn?.nome||"",nfe.totalCompra||0,dataSefaz)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataSefaz)}. Deseja continuar mesmo assim?`))return;
     }
-    setDbAndSave(d=>{
+    (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
