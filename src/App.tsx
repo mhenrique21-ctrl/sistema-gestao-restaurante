@@ -1761,7 +1761,15 @@ GUIA DE CATEGORIAS:
 - material de limpeza: detergente, desinfetante, sabão, esponja, água sanitária, álcool
 - descartáveis: copo descartável, prato descartável, guardanapo, papel toalha, sacola, embalagem
 
-PAGAMENTO: CREDITO/CRÉDITO → "cartão crédito", DEBITO/DÉBITO → "cartão débito", PIX → "pix", BOLETO → "boleto", senão → "dinheiro"
+FORMA DE PAGAMENTO — OBRIGATÓRIO extrair do cupom:
+- Procure seções: "FORMA PGTO", "PAGAMENTO", "F.PAGTO", "FORMA DE PAGAMENTO"
+- CREDITO/CRÉDITO/CRED → "cartão crédito", DEBITO/DÉBITO/DEB → "cartão débito", PIX/QR CODE → "pix", BOLETO/FATURA → "boleto", DINHEIRO/ESPECIE → "dinheiro", FIADO/PRAZO → "fiado"
+- Se não encontrar, use "dinheiro"
+
+DATA — OBRIGATÓRIO extrair do cupom:
+- Procure data de emissão (topo ou rodapé). Formatos: "22/06/2026", "22/06/26"
+- Converta para YYYY-MM-DD. Ano com 2 dígitos → prefixe "20"
+- dataVencimento: mesma data; se boleto/fiado/crédito, procure data de vencimento
 
 Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
 

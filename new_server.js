@@ -611,10 +611,15 @@ const server = http.createServer((req, res) => {
           max_tokens: 8192,
           system: `Você é um OCR especialista em cupons fiscais brasileiros (CF-e SAT, NFC-e, NF-e). Sua ÚNICA tarefa é ler a imagem/texto e retornar um JSON com os dados extraídos.
 
-FORMATO DE SAÍDA OBRIGATÓRIO:
-- Retorne SOMENTE JSON válido. Nada antes, nada depois. Sem markdown.
-- Valores numéricos como números (não strings). Strings com aspas duplas.
-- Comece a resposta diretamente com { e termine com }
+FORMATO DE SAÍDA OBRIGATÓRIO — retorne SOMENTE este JSON, sem texto extra:
+{
+  "fornecedor": {"nome": "...", "cnpj": "...", "endereco": "..."},
+  "itens": [{"nome": "...", "categoria": "...", "unidade": "un", "quantidade": 1, "valorUnitario": 10.00, "valorTotal": 10.00}],
+  "totalCompra": 0.00,
+  "data": "YYYY-MM-DD",
+  "formaPagamento": "dinheiro",
+  "dataVencimento": "YYYY-MM-DD"
+}
 
 COMO LER O CUPOM:
 - Cada linha de produto normalmente segue: [código] NOME PRODUTO [qtd] [unidade] x [valor_unit] [valor_total]
@@ -632,9 +637,19 @@ NOMES DE PRODUTOS:
 CATEGORIAS (use exatamente uma):
 carnes | hortifruti | laticínios | grãos | farinhas | massas | temperos | proteína | bebidas | polpas | mercearia básica | cafés e complementos | chocolates | latas caixas e temperos | molhos | material de limpeza | descartáveis | embalagens | insumos | outros
 
-PAGAMENTO: CREDITO→"cartão crédito", DEBITO→"cartão débito", PIX→"pix", BOLETO→"boleto", senão→"dinheiro"
-DATA: formato YYYY-MM-DD. Se não encontrar, use null.
-Se algum campo estiver ilegível, use 0 ou "". Nunca invente.`,
+DATA — OBRIGATÓRIO extrair:
+- Procure a data de emissão no cupom (geralmente no topo ou rodapé)
+- Formatos comuns: "22/06/2026", "22/06/26", "2026-06-22", "DATA: 22/06/2026"
+- Converta para YYYY-MM-DD. Se ano com 2 dígitos (ex: "26"), use "2026"
+- Se não encontrar, use null
+
+FORMA DE PAGAMENTO — OBRIGATÓRIO extrair:
+- Procure seções: "FORMA PGTO", "PAGAMENTO", "F.PAGTO", "FORMA DE PAGAMENTO", "Pgto"
+- Mapeamento: CREDITO/CRÉDITO/CRED → "cartão crédito", DEBITO/DÉBITO/DEB → "cartão débito", PIX/QR CODE → "pix", BOLETO/FATURA → "boleto", DINHEIRO/ESPECIE → "dinheiro", FIADO/PRAZO → "fiado"
+- Se não encontrar info de pagamento, use "dinheiro"
+- dataVencimento: use a data de emissão; se for boleto/fiado/crédito, procure data de vencimento
+
+Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`,
           messages: msgs
         });
         const options = {
