@@ -525,8 +525,8 @@ const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-1000);localStor
 const _origAdd=_listaDeletados.add.bind(_listaDeletados);
 _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
-// Merge: servidor vence para tudo EXCETO listaCompras.
-// Para listaCompras: itens locais SEMPRE mantidos, servidor só adiciona novos.
+// Merge listaCompras por ID: versão com updatedAt mais recente vence.
+// Itens novos do servidor são adicionados. Deletados são filtrados.
 const mergeFromServer=(prev:any,updates:any)=>{
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
@@ -563,12 +563,25 @@ const mergeFromServer=(prev:any,updates:any)=>{
       produtosLista: byIdDedup(s.produtosLista||[]),
       pedidosLista:  byId(s.pedidosLista||[]),
     };
-    // listaCompras: manter TODOS os itens locais, apenas adicionar novos do servidor
+    // listaCompras: merge por ID, versão mais recente (updatedAt) vence
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
-    const localIds=new Set((p.listaCompras||[]).map((i:any)=>i.id));
-    const localKept=(p.listaCompras||[]).filter((i:any)=>!serverDeleted.has(i.id));
-    const serverNew=(s.listaCompras||[]).filter((i:any)=>!localIds.has(i.id)&&!serverDeleted.has(i.id));
-    next[emp].listaCompras=[...localKept,...serverNew];
+    const localMap=new Map<string,any>();
+    (p.listaCompras||[]).forEach((i:any)=>localMap.set(i.id,i));
+    const serverMap=new Map<string,any>();
+    (s.listaCompras||[]).forEach((i:any)=>serverMap.set(i.id,i));
+    const allIds=new Set([...localMap.keys(),...serverMap.keys()]);
+    const merged:any[]=[];
+    allIds.forEach(id=>{
+      if(serverDeleted.has(id))return;
+      const local=localMap.get(id);
+      const server=serverMap.get(id);
+      if(local&&!server){merged.push(local);return;}
+      if(server&&!local){merged.push(server);return;}
+      const lt=local.updatedAt||0;
+      const st=server.updatedAt||0;
+      merged.push(st>lt?server:local);
+    });
+    next[emp].listaCompras=merged;
     // listaDeletedIds: unir local e servidor
     next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-500);
     // listaCategorias, listaRuas, ruaCatMap: unir
@@ -3167,7 +3180,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     if(editId){
       const editNome=form.nome.trim();
-      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
+      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
       if(pendingMpLinks!==null){
         syncProdByName(editNome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
       }
@@ -3184,13 +3197,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         const qtdExist=existente.quantidade||1;
         const msg=`"${nome}" já está na lista (${qtdExist} ${existente.unidade||"un"}).\n\nDeseja somar a quantidade? (+${qtdNova} → total ${qtdExist+qtdNova} ${existente.unidade||"un"})`;
         if(!confirm(msg))return;
-        setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova}:i)}));
+        setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova,updatedAt:Date.now()}:i)}));
         setForm(EMPTY_FORM_LISTA);
         setPendingMpLinks(null);
         return;
       }
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
-      const newItem={id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()};
+      const newItem={id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
       setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
       const nl=nome.toLowerCase();
       if(pendingMpLinks!==null){
