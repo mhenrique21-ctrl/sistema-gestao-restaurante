@@ -1601,8 +1601,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:an
     if(checkDuplicataCompra(db,fornecedor,totalCompraManual,dataCom)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${fornecedor}" com valor similar em ${fmtDate(dataCom)}. Deseja continuar mesmo assim?`))return;
     }
-    setDb(d=>{
-      // registrar cada item em compras
+    (setDbAndSave||setDb)(d=>{
       const grupoId=uid();
       const novasCompras=carrinho.map(item=>({
         id:uid(), fornecedor, nomeProduto:normalizarNome(item.nomeProduto,d.normalizacoes),
@@ -1889,7 +1888,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     alert("✅ Cupom importado! Estoque e financeiro atualizados.");
   };
 
-  const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==id)}));};
+  const del=(id)=>{_listaDeletados.add(id);(setDbAndSave||setDb)(d=>({...d,compras:d.compras.filter(c=>c.id!==id)}));};
 
   // ---- NF-e ----
   const [nfeResult,setNfeResult]=useState(null);
@@ -2806,7 +2805,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
                       const cIds=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId).map(c=>c.id);
                       const ctIds=(db.contas||[]).filter(c=>c.grupoId===nota.grupoId).map(c=>c.id);
                       [...cIds,...ctIds].forEach(id=>_listaDeletados.add(id));
-                      setDb(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
+                      (setDbAndSave||setDb)(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
                       setVerNota(null);
                     }} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Excluir</button>
                   </div>
