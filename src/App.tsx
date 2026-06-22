@@ -1823,7 +1823,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     if(checkDuplicataCompra(db,forn?.nome||"",iaResult.totalCompra||0,dataIA)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataIA)}. Deseja continuar mesmo assim?`))return;
     }
-    setDb(d=>{
+    setDbAndSave(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
@@ -1899,7 +1899,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     if(checkDuplicataCompra(db,forn?.nome||"",nfeResult.totalCompra||0,dataNFe)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataNFe)}. Deseja continuar mesmo assim?`))return;
     }
-    setDb(d=>{
+    setDbAndSave(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
@@ -2095,7 +2095,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     if(!all&&checkDuplicataCompra(db,forn?.nome||"",nfe.totalCompra||0,dataSefaz)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataSefaz)}. Deseja continuar mesmo assim?`))return;
     }
-    setDb(d=>{
+    setDbAndSave(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
