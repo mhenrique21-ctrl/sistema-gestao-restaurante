@@ -3223,9 +3223,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!item)return;
     const nowComprado=!item.comprado;
     _listaProtectedUntil=Date.now()+5000;
-    if(!item.comprado){
-      pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
-    }
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
@@ -3239,9 +3236,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!item)return;
     const nowNaoTem=!item.naoTem;
     _listaProtectedUntil=Date.now()+5000;
-    if(!item.naoTem){
-      pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
-    }
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
