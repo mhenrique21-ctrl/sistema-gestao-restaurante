@@ -525,13 +525,9 @@ const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-1000);localStor
 const _origAdd=_listaDeletados.add.bind(_listaDeletados);
 _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
-// Merge: servidor vence. _listaDeletados impede restauração de itens excluídos localmente.
-// _listaProtectedUntil: após mudança local na lista, ignora dados do servidor por 5s
-let _listaProtectedUntil=0;
-const LISTA_FIELDS=["listaCompras","listaDeletedIds","produtosLista","listaCategorias","listaCatDeleted","pedidosLista","listaRuas","ruaCatMap"];
+// Merge: servidor vence para tudo EXCETO listaCompras.
+// Para listaCompras: itens locais SEMPRE mantidos, servidor só adiciona novos.
 const mergeFromServer=(prev:any,updates:any)=>{
-  const now=Date.now();
-  const listaProtected=now<_listaProtectedUntil;
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
@@ -564,15 +560,22 @@ const mergeFromServer=(prev:any,updates:any)=>{
       pedidosProducao: byId(s.pedidosProducao||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
+      produtosLista: byIdDedup(s.produtosLista||[]),
+      pedidosLista:  byId(s.pedidosLista||[]),
     };
-    if(listaProtected){
-      LISTA_FIELDS.forEach(f=>{if(p[f]!==undefined)next[emp][f]=p[f];});
-    }else{
-      const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
-      next[emp].listaCompras=(s.listaCompras||[]).filter((i:any)=>!serverDeleted.has(i.id));
-      next[emp].produtosLista=byIdDedup(s.produtosLista||[]);
-      next[emp].pedidosLista=byId(s.pedidosLista||[]);
-    }
+    // listaCompras: manter TODOS os itens locais, apenas adicionar novos do servidor
+    const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
+    const localIds=new Set((p.listaCompras||[]).map((i:any)=>i.id));
+    const localKept=(p.listaCompras||[]).filter((i:any)=>!serverDeleted.has(i.id));
+    const serverNew=(s.listaCompras||[]).filter((i:any)=>!localIds.has(i.id)&&!serverDeleted.has(i.id));
+    next[emp].listaCompras=[...localKept,...serverNew];
+    // listaDeletedIds: unir local e servidor
+    next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-500);
+    // listaCategorias, listaRuas, ruaCatMap: unir
+    next[emp].listaCategorias=[...new Set([...(s.listaCategorias||[]),...(p.listaCategorias||[])])];
+    next[emp].listaRuas=[...new Set([...(s.listaRuas||[]),...(p.listaRuas||[])])];
+    const mergedRuaCatMap={...(s.ruaCatMap||{}),...(p.ruaCatMap||{})};
+    next[emp].ruaCatMap=mergedRuaCatMap;
   });
   return migrateDb(next);
 };
@@ -3160,7 +3163,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   const saveItem=()=>{
     if(!form.nome.trim())return;
-    _listaProtectedUntil=Date.now()+5000;
+
 
     if(editId){
       const editNome=form.nome.trim();
@@ -3222,7 +3225,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
     if(!item)return;
     const nowComprado=!item.comprado;
-    _listaProtectedUntil=Date.now()+5000;
+
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
@@ -3235,7 +3238,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
     if(!item)return;
     const nowNaoTem=!item.naoTem;
-    _listaProtectedUntil=Date.now()+5000;
+
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
@@ -3243,7 +3246,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     });
   };
   const del=(id:string)=>{
-    _listaProtectedUntil=Date.now()+5000;
+
     const prevLista=[...(db.listaCompras||[])];
     const prevDeletedIds=[...(db.listaDeletedIds||[])];
     const item=prevLista.find((i:any)=>i.id===id);
@@ -3258,7 +3261,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   };
   const limparComprados=()=>{
     if(!comprados.length)return;
-    _listaProtectedUntil=Date.now()+5000;
+
     const ids=comprados.map((i:any)=>i.id);
     pushUndo(`${comprados.length} comprado(s) removido(s)`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])],ids);
     ids.forEach(id=>_listaDeletados.add(id));
