@@ -526,21 +526,18 @@ const _origAdd=_listaDeletados.add.bind(_listaDeletados);
 _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
 // Merge: servidor vence. _listaDeletados impede restauração de itens excluídos localmente.
-// _pendingToggles: preserva estado local de itens toggled recentemente durante merge
-const _pendingToggles=new Map<string,{comprado:boolean,naoTem:boolean,ts:number}>();
+// _listaProtectedUntil: após mudança local na lista, ignora dados do servidor por 5s
+let _listaProtectedUntil=0;
 const mergeFromServer=(prev:any,updates:any)=>{
   const now=Date.now();
-  _pendingToggles.forEach((v,k)=>{if(now-v.ts>15000)_pendingToggles.delete(k);});
+  const listaProtected=now<_listaProtectedUntil;
+  const LISTA_FIELDS=["listaCompras","listaDeletedIds","produtosLista","listaCategorias","listaCatDeleted","pedidosLista","listaRuas","ruaCatMap"];
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
     const p=prev[emp]||{};
-    const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
     const byId=(sArr:any[])=>{
       return sArr.filter((i:any)=>!_listaDeletados.has(i.id));
-    };
-    const byIdLista=(sArr:any[])=>{
-      return sArr.filter((i:any)=>!serverDeleted.has(i.id));
     };
     const byIdDedup=(sArr:any[])=>{
       const merged=byId(sArr);
@@ -563,19 +560,24 @@ const mergeFromServer=(prev:any,updates:any)=>{
       normalizacoes: byId(s.normalizacoes||[]),
       movEstoque:    byId(s.movEstoque||[]),
       usuarios:      byId(s.usuarios||[]),
-      listaCompras:  byIdLista(s.listaCompras||[]),
-      produtosLista: byIdDedup(s.produtosLista||[]),
-      pedidosLista:  byId(s.pedidosLista||[]),
-      pedidosProducao: byId(s.pedidosProducao||[]),
       produtosProducao: byId(s.produtosProducao||[]),
+      pedidosProducao: byId(s.pedidosProducao||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
     };
+    // Lista: se há mudança local recente, manter dados locais
+    if(listaProtected){
+      LISTA_FIELDS.forEach(f=>{if(p[f]!==undefined)next[emp][f]=p[f];});
+    }else{
+      const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
+      next[emp].listaCompras=(s.listaCompras||[]).filter((i:any)=>!serverDeleted.has(i.id));
+      next[emp].produtosLista=byIdDedup(s.produtosLista||[]);
+      next[emp].pedidosLista=byId(s.pedidosLista||[]);
+    }
   });
-  // Unificar dados da Lista entre empresas (compartilhadas)
+  // Unificar dados da Lista entre empresas (quando não protegido)
   const allEmps=Object.keys(next).filter(e=>next[e]&&typeof next[e]==="object"&&"listaCompras" in next[e]);
-  if(allEmps.length>1){
-    // Unificar listaCompras por id (mais recente vence)
+  if(allEmps.length>1&&!listaProtected){
     const listaById=new Map<string,any>();
     allEmps.forEach(e=>(next[e].listaCompras||[]).forEach((i:any)=>{
       const existing=listaById.get(i.id);
@@ -586,66 +588,36 @@ const mergeFromServer=(prev:any,updates:any)=>{
         listaById.set(i.id,it>=et?i:existing);
       }
     }));
-    const unifiedLista=[...listaById.values()];
-    // Unificar listaDeletedIds
     const unifiedDelIds=new Set<string>();
     allEmps.forEach(e=>(next[e].listaDeletedIds||[]).forEach((id:string)=>unifiedDelIds.add(id)));
     const unifiedDelArr=[...unifiedDelIds];
-    // Filtrar itens deletados
-    const filteredLista=unifiedLista.filter(i=>!unifiedDelIds.has(i.id));
-    // Unificar produtosLista por nome (dedup)
+    const finalLista=[...listaById.values()].filter(i=>!unifiedDelIds.has(i.id));
     const prodByName=new Map<string,any>();
     allEmps.forEach(e=>(next[e].produtosLista||[]).forEach((p:any)=>{
       const k=(p.nome||"").trim().toLowerCase();
       if(!prodByName.has(k))prodByName.set(k,p);
       else{const ex=prodByName.get(k);if(!ex.rua&&p.rua)prodByName.set(k,{...ex,rua:p.rua});if(!ex.cat&&p.cat)prodByName.set(k,{...ex,cat:p.cat});}
     }));
-    const unifiedProds=[...prodByName.values()];
-    // Unificar listaCategorias
     const catSet=new Set<string>();
     allEmps.forEach(e=>(next[e].listaCategorias||[]).forEach((c:string)=>catSet.add(c)));
-    const unifiedCats=[...catSet];
-    // Unificar listaCatDeleted
     const catDelSet=new Set<string>();
     allEmps.forEach(e=>(next[e].listaCatDeleted||[]).forEach((c:string)=>catDelSet.add(c)));
-    const unifiedCatDel=[...catDelSet];
-    // Unificar pedidosLista por id
     const pedById=new Map<string,any>();
     allEmps.forEach(e=>(next[e].pedidosLista||[]).forEach((p:any)=>{if(!pedById.has(p.id))pedById.set(p.id,p);}));
-    const unifiedPed=[...pedById.values()];
-    // Unificar listaRuas
     const seen=new Set<string>();
     const unified:string[]=[];
     allEmps.forEach(e=>(next[e].listaRuas||[]).forEach((r:string)=>{if(!seen.has(r)){seen.add(r);unified.push(r);}}));
     const unifiedMap:Record<string,string>={};
     allEmps.forEach(e=>Object.assign(unifiedMap,next[e].ruaCatMap||{}));
-    // Aplicar pendingToggles na lista unificada (após merge de ambas empresas)
-    const finalLista=filteredLista.map((i:any)=>{
-      const pending=_pendingToggles.get(i.id);
-      if(!pending)return i;
-      if(i.comprado===pending.comprado&&i.naoTem===pending.naoTem)return i;
-      return{...i,comprado:pending.comprado,naoTem:pending.naoTem};
-    });
-    // Aplicar a todas as empresas
     allEmps.forEach(e=>{
       next[e].listaCompras=finalLista;
       next[e].listaDeletedIds=unifiedDelArr;
-      next[e].produtosLista=unifiedProds;
-      next[e].listaCategorias=unifiedCats;
-      next[e].listaCatDeleted=unifiedCatDel;
-      next[e].pedidosLista=unifiedPed;
+      next[e].produtosLista=[...prodByName.values()];
+      next[e].listaCategorias=[...catSet];
+      next[e].listaCatDeleted=[...catDelSet];
+      next[e].pedidosLista=[...pedById.values()];
       next[e].listaRuas=unified;
       next[e].ruaCatMap={...unifiedMap};
-    });
-  }
-  // Aplicar pendingToggles mesmo quando só tem 1 empresa
-  if(allEmps.length===1&&_pendingToggles.size>0){
-    const e=allEmps[0];
-    next[e].listaCompras=(next[e].listaCompras||[]).map((i:any)=>{
-      const pending=_pendingToggles.get(i.id);
-      if(!pending)return i;
-      if(i.comprado===pending.comprado&&i.naoTem===pending.naoTem)return i;
-      return{...i,comprado:pending.comprado,naoTem:pending.naoTem};
     });
   }
   return migrateDb(next);
@@ -3245,6 +3217,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   const saveItem=()=>{
     if(!form.nome.trim())return;
+    _listaProtectedUntil=Date.now()+5000;
 
     if(editId){
       const editNome=form.nome.trim();
@@ -3306,7 +3279,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
     if(!item)return;
     const nowComprado=!item.comprado;
-    _pendingToggles.set(id,{comprado:nowComprado,naoTem:false,ts:Date.now()});
+    _listaProtectedUntil=Date.now()+5000;
     if(!item.comprado){
       pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
@@ -3322,7 +3295,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
     if(!item)return;
     const nowNaoTem=!item.naoTem;
-    _pendingToggles.set(id,{comprado:false,naoTem:nowNaoTem,ts:Date.now()});
+    _listaProtectedUntil=Date.now()+5000;
     if(!item.naoTem){
       pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
@@ -3333,6 +3306,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     });
   };
   const del=(id:string)=>{
+    _listaProtectedUntil=Date.now()+5000;
     const prevLista=[...(db.listaCompras||[])];
     const prevDeletedIds=[...(db.listaDeletedIds||[])];
     const item=prevLista.find((i:any)=>i.id===id);
@@ -3347,6 +3321,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   };
   const limparComprados=()=>{
     if(!comprados.length)return;
+    _listaProtectedUntil=Date.now()+5000;
     const ids=comprados.map((i:any)=>i.id);
     pushUndo(`${comprados.length} comprado(s) removido(s)`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])],ids);
     ids.forEach(id=>_listaDeletados.add(id));
