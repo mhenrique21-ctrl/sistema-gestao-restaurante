@@ -4491,6 +4491,19 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const [editPedId,setEditPedId]=useState<string|null>(null);
   const [editQtds,setEditQtds]=useState<Record<string,string>>({});
   const [editObs,setEditObs]=useState<Record<string,string>>({});
+  const [addToPedId,setAddToPedId]=useState<string|null>(null);
+  const [addToPedForm,setAddToPedForm]=useState({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
+  const [addToPedSugg,setAddToPedSugg]=useState(false);
+  const addToPedSuggestions=addToPedForm.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(addToPedForm.nome.toLowerCase())).slice(0,8):[];
+  const addItemToPedido=(pedId:string)=>{
+    const nome=addToPedForm.nome.trim();if(!nome)return alert("Produto obrigatório.");
+    const qtd=parseFloat(addToPedForm.qtd)||0;if(qtd<=0)return alert("Quantidade deve ser maior que 0.");
+    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:[...(p.itens||[]),{nome,quantidade:qtd,qtdAtual:addToPedForm.qtdAtual||"",unidade:addToPedForm.unidade,categoria:addToPedForm.cat||"",obs:addToPedForm.obs||""}]}:p)}));
+    setAddToPedForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
+  };
+  const delItemFromPedido=(pedId:string,idx:number)=>{
+    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:(p.itens||[]).filter((_:any,i:number)=>i!==idx)}:p)}));
+  };
   const salvarEdicaoPedido=(pedId:string)=>{
     setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>{
       if(p.id!==pedId)return p;
@@ -4614,6 +4627,8 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
                 else{const q:Record<string,string>={};const o:Record<string,string>={};(ped.itens||[]).forEach((it:any)=>{const k=`${ped.id}_${it.nome}`;q[k]=String(it.quantidade);o[k]=it.obs||"";});setEditQtds(q);setEditObs(o);setEditPedId(ped.id);}
               }} style={{background:"none",border:`1px solid ${isEdit?"#4ade8044":"#fbbf2444"}`,borderRadius:5,color:isEdit?"#4ade80":"#fbbf24",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{isEdit?"💾":"✏️"}</button>
               {isEdit&&<button onClick={()=>{setEditPedId(null);setEditQtds({});setEditObs({});}} style={{background:"none",border:"1px solid #88888844",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>✕</button>}
+              <button onClick={()=>setAddToPedId(addToPedId===ped.id?null:ped.id)} title="Adicionar produto"
+                style={{background:"none",border:`1px solid ${addToPedId===ped.id?"#4ade8044":"#4ade8044"}`,borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{addToPedId===ped.id?"✕":"➕"}</button>
               <button onClick={()=>{
                 if(!confirm("Excluir este pedido?"))return;
                 _listaDeletados.add(ped.id);
@@ -4634,8 +4649,51 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
               {it.obs&&!isEdit&&<span style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>({it.obs})</span>}
               {isEdit&&<input placeholder="Obs" value={editObs[key]||""} onChange={e=>setEditObs(o=>({...o,[key]:e.target.value}))}
                 className="inp" style={{width:80,marginBottom:0,fontSize:10,padding:"3px 5px"}}/>}
+              {isEdit&&<button onClick={()=>delItemFromPedido(ped.id,j)} title="Remover item" style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:12,padding:"0 2px",flexShrink:0}}>🗑️</button>}
             </div>;
           })}
+          {addToPedId===ped.id&&<div style={{marginTop:8,padding:"10px",background:"#0d1a0d",borderRadius:8,border:"1px solid #1a4a1a"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#4ade80",marginBottom:8}}>➕ Adicionar Produto ao Pedido</div>
+            <div style={{position:"relative",marginBottom:6}}>
+              <input placeholder="Nome do produto..." value={addToPedForm.nome}
+                onChange={e=>{setAddToPedForm(f=>({...f,nome:e.target.value}));setAddToPedSugg(true);}}
+                onFocus={()=>setAddToPedSugg(true)} onBlur={()=>setTimeout(()=>setAddToPedSugg(false),150)}
+                onKeyDown={e=>{if(e.key==="Enter"&&!addToPedSugg)addItemToPedido(ped.id);if(e.key==="Escape")setAddToPedSugg(false);}}
+                className="inp" style={{marginBottom:0,width:"100%"}}/>
+              {addToPedSugg&&addToPedSuggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:180,overflowY:"auto"}}>
+                {addToPedSuggestions.map((p:any)=>(
+                  <div key={p.id} onMouseDown={()=>{setAddToPedForm(f=>({...f,nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"}));setAddToPedSugg(false);}}
+                    style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                    <span style={{fontSize:14}}>{prodCatIcon(p.cat||"")}</span>
+                    <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
+                    {p.cat&&<span style={{fontSize:10,color:"#c084fc",background:"#c084fc18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+                  </div>
+                ))}
+              </div>}
+            </div>
+            <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+              <input type="number" min="0.1" step="0.1" placeholder="Qtd" value={addToPedForm.qtd}
+                onChange={e=>setAddToPedForm(f=>({...f,qtd:e.target.value}))}
+                onKeyDown={e=>{if(e.key==="Enter")addItemToPedido(ped.id);}}
+                className="inp" style={{width:60,marginBottom:0,textAlign:"center"}}/>
+              <input type="number" min="0" step="0.1" placeholder="Atual" value={addToPedForm.qtdAtual}
+                onChange={e=>setAddToPedForm(f=>({...f,qtdAtual:e.target.value}))}
+                className="inp" style={{width:60,marginBottom:0,textAlign:"center"}}/>
+              <select value={addToPedForm.unidade} onChange={e=>setAddToPedForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{width:55,marginBottom:0}}>
+                {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+              <select value={addToPedForm.cat} onChange={e=>setAddToPedForm(f=>({...f,cat:e.target.value}))} className="inp" style={{flex:1,marginBottom:0,minWidth:80}}>
+                <option value="">Categoria</option>
+                {cats.map(c=><option key={c} value={c}>{prodCatIcon(c)} {c}</option>)}
+              </select>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input placeholder="Observações..." value={addToPedForm.obs} onChange={e=>setAddToPedForm(f=>({...f,obs:e.target.value}))}
+                onKeyDown={e=>{if(e.key==="Enter")addItemToPedido(ped.id);}}
+                className="inp" style={{flex:1,marginBottom:0,fontSize:12}}/>
+              <button onClick={()=>addItemToPedido(ped.id)} className="btn" style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:12,fontWeight:700,flexShrink:0}}>✅ Adicionar</button>
+            </div>
+          </div>}
         </div>;
       })}
     </div>}
