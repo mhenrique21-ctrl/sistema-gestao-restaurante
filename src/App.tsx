@@ -658,7 +658,7 @@ export default function App() {
     syncTimer.current=setTimeout(async()=>{
       try{
         await Promise.all(changed.map(emp=>
-          fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp]),keepalive:true})
+          fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
         ));
         setSyncStatus("ok");
       }catch{setSyncStatus("erro");}finally{
@@ -672,16 +672,20 @@ export default function App() {
   const setDbAndSave=(fn:(d:any)=>any)=>{
     directSaveRef.current=true;
     const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
+    let bodyToSave="";
     setState(prev=>{
       const next={...prev,[empresa]:fn(prev[empresa])};
       saveSeqRef.current++;
       clearTimeout(syncTimer.current);
       syncTimer.current=null;
-      setSyncStatus("sync");
-      fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true})
-        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
+      bodyToSave=JSON.stringify(next[empresa]);
       return next;
     });
+    setSyncStatus("sync");
+    fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
+      .then(r=>{if(!r.ok)throw new Error(r.status+"");setSyncStatus("ok");})
+      .catch(()=>setSyncStatus("erro"))
+      .finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
   };
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao";
