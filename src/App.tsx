@@ -2659,8 +2659,9 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           if(!confirm(`⚠️ Apagar TODO o histórico de compras da ${empresa}?\n\n${(db.compras||[]).length} registro(s) serão removidos permanentemente.\n\nDigite "CONFIRMAR" para continuar.`))return;
           const confirmacao=window.prompt('Digite CONFIRMAR para apagar todo o histórico de compras:');
           if(confirmacao!=="CONFIRMAR")return alert("Cancelado. Nenhum dado foi removido.");
-          setDb((d:any)=>({...d,compras:[]}));
-          alert("✅ Histórico de compras apagado.");
+          const compraGrupos=new Set((db.compras||[]).map(c=>c.grupoId).filter(Boolean));
+          (setDbAndSave||setDb)((d:any)=>({...d,compras:[],contas:(d.contas||[]).filter((c:any)=>!compraGrupos.has(c.grupoId))}));
+          alert("✅ Histórico de compras e lançamentos financeiros apagados.");
         }} style={{background:"#2a1015",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
       </div>
       <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar fornecedor ou produto..." value={buscaHist} onChange={e=>setBuscaHist(e.target.value)} className="inp" style={{paddingRight:buscaHist?36:14}}/>{buscaHist&&<button onClick={()=>setBuscaHist("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
@@ -2730,7 +2731,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
                   <input type="date" value={notaData} onChange={e=>setNotaData(e.target.value)}
                     className="inp" style={{flex:1,minWidth:120,fontSize:12,padding:"6px 10px"}}/>
                   {hChanged&&<button className="btn" onClick={()=>{
-                    setDb(d=>({...d,compras:d.compras.map(c=>(c.grupoId||c.id)===nota.grupoId?{...c,fornecedor:notaForn,data:notaData}:c)}));
+                    (setDbAndSave||setDb)(d=>({...d,compras:d.compras.map(c=>(c.grupoId||c.id)===nota.grupoId?{...c,fornecedor:notaForn,data:notaData}:c),contas:(d.contas||[]).map(c=>c.grupoId===nota.grupoId?{...c,descricao:c.descricao.replace(/Compra.*?–\s*[^(]*/,`Compra – ${notaForn} `),vencimento:notaData}:c)}));
                   }} style={{background:"#7c8fff",color:"#fff",padding:"6px 10px",fontSize:12}}>💾</button>}
                 </div>
 
@@ -2760,7 +2761,12 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
                         </div>
                         <div className="row">
                           <button className="btn" onClick={()=>{
-                            setDb(d=>({...d,compras:d.compras.map(c=>c.id===editItemId?{...c,...editItemForm,valor:parseMoney(editItemForm.valor),valorUnitario:parseMoney(editItemForm.valorUnitario),quantidade:parseFloat(editItemForm.quantidade)||0}:c)}));
+                            const gid=nota.grupoId;
+                            (setDbAndSave||setDb)(d=>{
+                              const compras=d.compras.map(c=>c.id===editItemId?{...c,...editItemForm,valor:parseMoney(editItemForm.valor),valorUnitario:parseMoney(editItemForm.valorUnitario),quantidade:parseFloat(editItemForm.quantidade)||0}:c);
+                              const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);
+                              return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c)};
+                            });
                             setEditItemId(null);
                           }} style={{background:"#7c8fff",color:"#fff",padding:"8px",flex:1,fontSize:13}}>💾 Salvar</button>
                           <button className="btn" onClick={()=>setEditItemId(null)} style={{background:"var(--border)",color:"#888",padding:"8px",fontSize:13}}>Cancelar</button>
@@ -2775,7 +2781,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
                         </div>
                         <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"#60a5fa",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
-                        <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;_listaDeletados.add(item.id);setDb(d=>({...d,compras:d.compras.filter(c=>c.id!==item.id)}));}}
+                        <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;_listaDeletados.add(item.id);const gid=nota.grupoId;(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c)};});}}
                           style={{background:"none",border:"none",color:"#ff5c7a55",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
                       </div>
                     )}
@@ -2796,14 +2802,13 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
                     <button className="btn" onClick={()=>{
                       const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
                       if(!confirm(`Transferir compra #${num} para ${outra}?`))return;
-                      if(setState)setState((prev:any)=>{
-                        const dest=prev[outra];
-                        const novoGrupoId=uid();
-                        const novosItens=itensVivos.map(it=>({...it,id:uid(),grupoId:novoGrupoId}));
-                        const contaOrig=(prev[empresa].contas||[]).find((c:any)=>c.grupoId===nota.grupoId);
-                        const novaConta=contaOrig?{...contaOrig,id:uid(),grupoId:novoGrupoId}:null;
-                        return{...prev,[outra]:{...dest,compras:[...novosItens,...(dest.compras||[])],contas:novaConta?[novaConta,...(dest.contas||[])]:dest.contas}};
-                      });
+                      const novoGrupoId=uid();
+                      const novosItens=itensVivos.map(it=>({...it,id:uid(),grupoId:novoGrupoId}));
+                      const contaOrig=(db.contas||[]).find((c:any)=>c.grupoId===nota.grupoId);
+                      const novaConta=contaOrig?{...contaOrig,id:uid(),grupoId:novoGrupoId}:null;
+                      const destBody=JSON.stringify({...(state||{})[outra],compras:[...novosItens,...((state||{})[outra]?.compras||[])],contas:novaConta?[novaConta,...((state||{})[outra]?.contas||[])]:(state||{})[outra]?.contas||[]});
+                      if(setState)setState((prev:any)=>({...prev,[outra]:{...prev[outra],compras:[...novosItens,...(prev[outra]?.compras||[])],contas:novaConta?[novaConta,...(prev[outra]?.contas||[])]:prev[outra]?.contas||[]}}));
+                      fetch(`/api/dados/${outra}`,{method:"POST",headers:{"Content-Type":"application/json"},body:destBody}).catch(()=>{});
                       alert(`✅ Compra transferida para ${outra}`);
                     }} style={{background:"#1a1a30",color:"#a78bfa",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={()=>{
