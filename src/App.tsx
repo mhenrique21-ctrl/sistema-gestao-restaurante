@@ -621,6 +621,7 @@ export default function App() {
   const fromPollRef = useRef(false);
   const saveSeqRef = useRef(0);
   const directSaveRef = useRef(false);
+  const directSaveEndRef = useRef(0);
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -638,12 +639,13 @@ export default function App() {
     if(!login)return;
     const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
     const poll=()=>{
-      if(syncTimer.current||directSaveRef.current)return;
+      if(syncTimer.current||directSaveRef.current||Date.now()-directSaveEndRef.current<3000)return;
       const seq=saveSeqRef.current;
+      const ts=Date.now();
       Promise.all(emps.map(emp=>
-        fetch(`/api/dados/${emp}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
+        fetch(`/api/dados/${emp}?_=${ts}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
       )).then(results=>{
-        if(syncTimer.current||directSaveRef.current||saveSeqRef.current!==seq)return;
+        if(syncTimer.current||directSaveRef.current||saveSeqRef.current!==seq||Date.now()-directSaveEndRef.current<3000)return;
         const updates:any={};
         results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
         if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
@@ -690,7 +692,7 @@ export default function App() {
       syncTimer.current=null;
       setSyncStatus("sync");
       fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true})
-        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{directSaveRef.current=false;});
+        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();});
       return next;
     });
   };

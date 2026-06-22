@@ -968,10 +968,12 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`,
     try {
       const data = fs.readFileSync(file, 'utf-8');
       res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.writeHead(200);
       res.end(data);
     } catch {
       res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
       res.writeHead(200);
       res.end('null');
     }
