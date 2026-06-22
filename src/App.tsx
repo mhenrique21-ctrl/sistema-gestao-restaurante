@@ -1675,7 +1675,7 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     if(xmlIaRef.current)xmlIaRef.current.value="";
   };
 
-  const redimensionarImagem=(dataUrl:string,maxPx=2400,quality=0.92):Promise<string>=>{
+  const redimensionarImagem=(dataUrl:string,maxPx=1600,quality=0.80):Promise<string>=>{
     return new Promise(resolve=>{
       const img=new Image();
       img.onload=()=>{
@@ -1687,7 +1687,14 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
         const canvas=document.createElement("canvas");
         canvas.width=w;canvas.height=h;
         canvas.getContext("2d")!.drawImage(img,0,0,w,h);
-        resolve(canvas.toDataURL("image/jpeg",quality));
+        let result=canvas.toDataURL("image/jpeg",quality);
+        if(result.length>700000){result=canvas.toDataURL("image/jpeg",0.60);}
+        if(result.length>700000){
+          const s=0.7;canvas.width=Math.round(w*s);canvas.height=Math.round(h*s);
+          canvas.getContext("2d")!.drawImage(img,0,0,canvas.width,canvas.height);
+          result=canvas.toDataURL("image/jpeg",0.60);
+        }
+        resolve(result);
       };
       img.onerror=()=>resolve(dataUrl);
       img.src=dataUrl;
