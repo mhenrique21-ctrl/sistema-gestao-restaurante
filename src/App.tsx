@@ -6423,43 +6423,87 @@ function RH({db,setDb,empresa}){
     const totBonif  =encs.reduce((s,e)=>s+(e.bonificacao||0),0);
     const totComis  =encs.reduce((s,e)=>s+(e.comissao||0),0);
     const totSalFam =encs.reduce((s,e)=>s+(e.salarioFamilia||0),0);
-    const aRec      =Math.max(func.salario+totBonif+totComis+totSalFam-totAdt-totCons-totEnc,0);
-    const html=gerarRelatorioHTML(`Holerite – ${func.nome}`,empresa,`
-      <div class="summary-grid">
-        <div class="summary-card"><div class="val">${fmtMoney(func.salario)}</div><div class="lbl">Salário Bruto</div></div>
-        <div class="summary-card"><div class="val" style="color:#166534">${fmtMoney(aRec)}</div><div class="lbl">A Receber</div></div>
-        <div class="summary-card"><div class="val" style="color:#991b1b">${fmtMoney(totFalt)}</div><div class="lbl">Desc. Faltas</div></div>
-        <div class="summary-card"><div class="val" style="color:#92400e">${fmtMoney(totAdt+totCons)}</div><div class="lbl">Adiant.+Cons.</div></div>
-        ${totBonif+totComis+totSalFam>0?`<div class="summary-card"><div class="val" style="color:#166534">+${fmtMoney(totBonif+totComis+totSalFam)}</div><div class="lbl">Acréscimos</div></div>`:""}
-      </div>
-      <div class="section"><h2>Dados</h2><table>
-        <tr><td>Nome</td><td>${func.nome}</td></tr><tr><td>Função</td><td>${func.funcao||"—"}</td></tr>
-        <tr><td>CPF</td><td>${func.cpf||"—"}</td></tr><tr><td>Contato</td><td>${func.contato||"—"}</td></tr>
-        <tr><td>Salário</td><td>${fmtMoney(func.salario)}</td></tr><tr><td>Mês Ref.</td><td>${monthLabel(mes)}</td></tr>
-      </table></div>
-      ${faltas.length?`<div class="section"><h2>Faltas</h2><table><tr><th>Data</th><th>Dias</th><th>Motivo</th><th>Desconto</th></tr>
-        ${faltas.map(f=>`<tr><td>${fmtDate(f.data)}</td><td>${f.dias}</td><td>${f.motivo||"—"}</td><td class="red">-${fmtMoney(f.desconto)}</td></tr>`).join("")}
-        <tr class="total-row"><td colspan="3">Total</td><td>-${fmtMoney(totFalt)}</td></tr></table></div>`:""}
-      ${adts.length?`<div class="section"><h2>Adiantamentos</h2><table><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr>
-        ${adts.map(a=>`<tr><td>${fmtDate(a.data)}</td><td>${a.descricao||"—"}</td><td class="yellow">-${fmtMoney(parseMoney(a.valor))}</td></tr>`).join("")}
-        <tr class="total-row"><td colspan="2">Total</td><td>-${fmtMoney(totAdt)}</td></tr></table></div>`:""}
-      ${cons.length?`<div class="section"><h2>Consumações</h2><table><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr>
-        ${cons.map(c=>`<tr><td>${fmtDate(c.data)}</td><td>${c.descricao||"—"}</td><td class="yellow">-${fmtMoney(parseMoney(c.valor))}</td></tr>`).join("")}
-        <tr class="total-row"><td colspan="2">Total</td><td>-${fmtMoney(totCons)}</td></tr></table></div>`:""}
-      ${encs.length?`<div class="section"><h2>Encargos (VT + FGTS + INSS)</h2><table><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr>
-        ${encs.map(e=>`<tr><td>${fmtDate(e.data)}</td><td>${e.descricao||"—"}</td><td class="red">-${fmtMoney(parseMoney(e.valor))}</td></tr>`).join("")}
-        <tr class="total-row"><td colspan="2">Total</td><td>-${fmtMoney(totEnc)}</td></tr></table></div>`:""}
-      <div class="section"><h2>Fechamento</h2><table>
-        <tr><td>Salário Bruto</td><td><strong>${fmtMoney(func.salario)}</strong></td></tr>
-        <tr><td>Faltas (informativo)</td><td class="red">${fmtMoney(totFalt)}</td></tr>
-        <tr><td>(-) Adiantamentos</td><td class="yellow">-${fmtMoney(totAdt)}</td></tr>
-        <tr><td>(-) Consumações</td><td class="yellow">-${fmtMoney(totCons)}</td></tr>
-        ${totBonif>0?`<tr><td>(+) Bonificação</td><td class="green">+${fmtMoney(totBonif)}</td></tr>`:""}
-        ${totComis>0?`<tr><td>(+) Comissão</td><td class="green">+${fmtMoney(totComis)}</td></tr>`:""}
-        ${totSalFam>0?`<tr><td>(+) Salário Família</td><td class="green">+${fmtMoney(totSalFam)}</td></tr>`:""}
-        ${totEnc>0?`<tr><td>(-) Encargos (VT+FGTS+INSS)</td><td class="red">-${fmtMoney(totEnc)}</td></tr>`:""}
-        <tr class="total-row"><td><strong>A Receber</strong></td><td><strong class="green">${fmtMoney(aRec)}</strong></td></tr>
-      </table></div>`);
+    const totDesc   =totAdt+totCons+totEnc;
+    const totAcresc =totBonif+totComis+totSalFam;
+    const aRec      =Math.max(func.salario+totAcresc-totDesc,0);
+    const detalhesDesc:string[]=[];
+    faltas.forEach(f=>detalhesDesc.push(`<tr><td>Falta ${fmtDate(f.data)} (${f.dias}d)${f.motivo?" – "+f.motivo:""}</td><td class="vr">-${fmtMoney(f.desconto)}</td></tr>`));
+    adts.forEach(a=>detalhesDesc.push(`<tr><td>Adiantamento ${fmtDate(a.data)}${a.descricao?" – "+a.descricao:""}</td><td class="vr">-${fmtMoney(parseMoney(a.valor))}</td></tr>`));
+    cons.forEach(c=>detalhesDesc.push(`<tr><td>Consumação ${fmtDate(c.data)}${c.descricao?" – "+c.descricao:""}</td><td class="vr">-${fmtMoney(parseMoney(c.valor))}</td></tr>`));
+    encs.forEach(e=>detalhesDesc.push(`<tr><td>Encargo ${fmtDate(e.data)}${e.descricao?" – "+e.descricao:""}</td><td class="vr">-${fmtMoney(e.valor||0)}</td></tr>`));
+    const detalhesAcresc:string[]=[];
+    if(totBonif>0)detalhesAcresc.push(`<tr><td>Bonificação</td><td class="vr green">+${fmtMoney(totBonif)}</td></tr>`);
+    if(totComis>0)detalhesAcresc.push(`<tr><td>Comissão</td><td class="vr green">+${fmtMoney(totComis)}</td></tr>`);
+    if(totSalFam>0)detalhesAcresc.push(`<tr><td>Salário Família</td><td class="vr green">+${fmtMoney(totSalFam)}</td></tr>`);
+    const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Holerite – ${func.nome}</title>
+<style>
+@page{size:A4;margin:12mm 14mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#1a1a2e;padding:0}
+.page{max-width:720px;margin:0 auto}
+.bar{display:flex;gap:6px;margin-bottom:10px}
+.bar button{padding:8px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
+.hdr{background:#1a1d35;color:#fff;padding:14px 18px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.hdr h1{font-size:16px;font-weight:700}.hdr .sub{font-size:10px;opacity:.7;margin-top:2px}
+.hdr .val-box{text-align:right}.hdr .val-box .big{font-size:22px;font-weight:800;color:#4ade80}.hdr .val-box .sm{font-size:10px;opacity:.7}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.box{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px}
+.box h3{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;border-bottom:1px solid #f0f0f0;padding-bottom:4px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:3px 0;font-size:11px;vertical-align:top}
+th{text-align:left;font-weight:600;color:#64748b;border-bottom:1px solid #e2e8f0;padding-bottom:4px}
+.vr{text-align:right;white-space:nowrap;font-weight:600}
+.green{color:#166534}.red{color:#991b1b}.yellow{color:#92400e}
+.sep{border-top:2px solid #1a1d35;margin-top:4px;padding-top:4px}
+.total td{font-weight:800;font-size:12px}
+.sig{display:flex;justify-content:space-between;margin-top:24px;padding-top:6px}
+.sig div{text-align:center;width:42%;border-top:1px solid #999;padding-top:4px;font-size:10px;color:#555}
+.ft{text-align:center;margin-top:12px;font-size:9px;color:#aaa}
+@media print{.bar{display:none!important}body{padding:0}.page{max-width:none}}
+@media screen{body{padding:12px;background:#f0f2f5}}
+</style></head><body>
+<div class="page">
+<div class="bar">
+  <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
+  <button onclick="window.print()" style="background:#1a1d35;color:#fff">🖨️ Imprimir</button>
+</div>
+<div class="hdr">
+  <div><h1>HOLERITE</h1><div class="sub">${empresa} · ${monthLabel(mes)}</div></div>
+  <div class="val-box"><div class="big">${fmtMoney(aRec)}</div><div class="sm">LÍQUIDO A RECEBER</div></div>
+</div>
+<div class="row2">
+  <div class="box"><h3>Funcionário</h3><table>
+    <tr><td><strong>${func.nome}</strong></td></tr>
+    <tr><td>${func.funcao||"—"}</td></tr>
+    <tr><td>CPF: ${func.cpf||"—"}</td></tr>
+    ${func.contato?`<tr><td>Tel: ${func.contato}</td></tr>`:""}
+  </table></div>
+  <div class="box"><h3>Resumo</h3><table>
+    <tr><td>Salário Bruto</td><td class="vr">${fmtMoney(func.salario)}</td></tr>
+    ${totAcresc>0?`<tr><td>Acréscimos</td><td class="vr green">+${fmtMoney(totAcresc)}</td></tr>`:""}
+    ${totDesc>0?`<tr><td>Descontos</td><td class="vr red">-${fmtMoney(totDesc)}</td></tr>`:""}
+    ${totFalt>0?`<tr><td>Faltas (informativo)</td><td class="vr" style="color:#888">${fmtMoney(totFalt)}</td></tr>`:""}
+    <tr class="sep total"><td>Líquido</td><td class="vr green">${fmtMoney(aRec)}</td></tr>
+  </table></div>
+</div>
+${detalhesDesc.length||detalhesAcresc.length?`<div class="box" style="margin-bottom:10px"><h3>Detalhamento</h3><table>
+${detalhesAcresc.join("")}
+${detalhesDesc.join("")}
+<tr class="sep total"><td>Total Descontos</td><td class="vr red">-${fmtMoney(totDesc)}</td></tr>
+</table></div>`:""}
+<div class="box"><h3>Fechamento</h3><table>
+  <tr><td>Salário Bruto</td><td class="vr"><strong>${fmtMoney(func.salario)}</strong></td></tr>
+  ${totBonif>0?`<tr><td>(+) Bonificação</td><td class="vr green">+${fmtMoney(totBonif)}</td></tr>`:""}
+  ${totComis>0?`<tr><td>(+) Comissão</td><td class="vr green">+${fmtMoney(totComis)}</td></tr>`:""}
+  ${totSalFam>0?`<tr><td>(+) Salário Família</td><td class="vr green">+${fmtMoney(totSalFam)}</td></tr>`:""}
+  ${totAdt>0?`<tr><td>(−) Adiantamentos</td><td class="vr red">-${fmtMoney(totAdt)}</td></tr>`:""}
+  ${totCons>0?`<tr><td>(−) Consumações</td><td class="vr red">-${fmtMoney(totCons)}</td></tr>`:""}
+  ${totEnc>0?`<tr><td>(−) Encargos (VT+FGTS+INSS)</td><td class="vr red">-${fmtMoney(totEnc)}</td></tr>`:""}
+  <tr class="sep total"><td>VALOR LÍQUIDO A RECEBER</td><td class="vr green">${fmtMoney(aRec)}</td></tr>
+</table></div>
+<div class="sig"><div>Empregador</div><div>Funcionário</div></div>
+<div class="ft">${empresa} · Gerado em ${new Date().toLocaleString("pt-BR")} · App Gestão</div>
+</div></body></html>`;
     abrirRelatorio(html);
   };
 
