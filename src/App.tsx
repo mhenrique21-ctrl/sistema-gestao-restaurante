@@ -526,7 +526,12 @@ const _origAdd=_listaDeletados.add.bind(_listaDeletados);
 _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
 // Merge: servidor vence. _listaDeletados impede restauração de itens excluídos localmente.
+// _pendingToggles: preserva estado local de itens toggled recentemente durante merge
+const _pendingToggles=new Map<string,{comprado:boolean,naoTem:boolean,ts:number}>();
 const mergeFromServer=(prev:any,updates:any)=>{
+  // Limpa toggles expirados (>8s)
+  const now=Date.now();
+  _pendingToggles.forEach((v,k)=>{if(now-v.ts>8000)_pendingToggles.delete(k);});
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
@@ -536,7 +541,14 @@ const mergeFromServer=(prev:any,updates:any)=>{
       return sArr.filter((i:any)=>!_listaDeletados.has(i.id));
     };
     const byIdLista=(sArr:any[])=>{
-      return sArr.filter((i:any)=>!serverDeleted.has(i.id));
+      return sArr.filter((i:any)=>!serverDeleted.has(i.id)).map((i:any)=>{
+        const pending=_pendingToggles.get(i.id);
+        if(pending){
+          if(i.comprado===pending.comprado&&i.naoTem===pending.naoTem)_pendingToggles.delete(i.id);
+          else return{...i,comprado:pending.comprado,naoTem:pending.naoTem};
+        }
+        return i;
+      });
     };
     const byIdDedup=(sArr:any[])=>{
       const merged=byId(sArr);
@@ -3230,13 +3242,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const toggle=(id:string)=>{
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
     if(!item)return;
+    const nowComprado=!item.comprado;
+    _pendingToggles.set(id,{comprado:nowComprado,naoTem:false,ts:Date.now()});
     if(!item.comprado){
       pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
     (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
-      const nowComprado=!it.comprado;
       const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
       return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,ordem:nowComprado?maxOrdem+1:i.ordem}:i)};
     });
@@ -3244,6 +3257,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const toggleNaoTem=(id:string)=>{
     const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
     if(!item)return;
+    const nowNaoTem=!item.naoTem;
+    _pendingToggles.set(id,{comprado:false,naoTem:nowNaoTem,ts:Date.now()});
     if(!item.naoTem){
       pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
