@@ -620,6 +620,8 @@ export default function App() {
   const prevState = useRef<any>(null);
   const fromPollRef = useRef(false);
   const saveSeqRef = useRef(0);
+  const flushNow = useRef(false);
+  const flushSync=()=>{flushNow.current=true;};
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -665,6 +667,8 @@ export default function App() {
     clearTimeout(syncTimer.current);
     setSyncStatus("sync");
     saveSeqRef.current++;
+    const delay=flushNow.current?0:100;
+    flushNow.current=false;
     syncTimer.current=setTimeout(async()=>{
       try{
         await Promise.all(changed.map(emp=>
@@ -674,7 +678,7 @@ export default function App() {
       }catch{setSyncStatus("erro");}finally{
         syncTimer.current=null;
       }
-    },100);
+    },delay);
   },[state]);
 
   const db    = state[empresa];
@@ -870,12 +874,12 @@ export default function App() {
         {isOp
           ? (tab==="producao"
             ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout}/>
-            : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login}/>)
+            : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} flushSync={flushSync}/>)
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} flushSync={flushSync}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
@@ -1698,20 +1702,22 @@ function Compras({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:str
     }
   };
 
-  const PROMPT_CUPOM=`Extraia TODOS os dados deste cupom/nota fiscal brasileira.
+  const PROMPT_CUPOM=`Extraia TODOS os dados deste cupom fiscal / nota fiscal brasileira. Leia com atenção máxima cada linha de produto.
 
-Retorne SOMENTE o JSON abaixo, sem texto extra, sem markdown:
-{"fornecedor":{"nome":"nome da loja/empresa","cnpj":"00.000.000/0000-00","endereco":"endereço completo"},"itens":[{"nome":"nome genérico do produto (sem marca)","categoria":"carnes|hortifruti|laticínios|grãos|farinhas|massas|temperos|proteína|bebidas|polpas|mercearia básica|cafés e complementos|chocolates|latas caixas e temperos|molhos|material de limpeza|descartáveis|embalagens|insumos|outros","unidade":"kg|g|L|ml|un|cx|pc","quantidade":1,"valorUnitario":0.00,"valorTotal":0.00}],"totalCompra":0.00,"data":"YYYY-MM-DD","formaPagamento":"dinheiro|cartão débito|cartão crédito|pix|boleto","dataVencimento":"YYYY-MM-DD"}
+Retorne SOMENTE JSON válido (sem markdown, sem texto extra):
+{"fornecedor":{"nome":"","cnpj":"00.000.000/0000-00","endereco":""},"itens":[{"nome":"nome genérico sem marca","categoria":"","unidade":"kg|g|L|ml|un|cx|pc|sc|bd","quantidade":1,"valorUnitario":0.00,"valorTotal":0.00}],"totalCompra":0.00,"data":"YYYY-MM-DD","formaPagamento":"dinheiro|cartão débito|cartão crédito|pix|boleto","dataVencimento":"YYYY-MM-DD"}
 
-REGRAS:
-- Inclua TODOS os itens visíveis, sem exceção
-- Nome do produto: tipo genérico (ex: "queijo muçarela", não "Queijo Polenghi")
-- quantidade: número real (ex: 2.5 para 2,5 kg)
-- valorUnitario e valorTotal em reais como número decimal
-- data: data da emissão no formato YYYY-MM-DD
-- formaPagamento: identifique a forma de pagamento (dinheiro, cartão débito, cartão crédito, pix, boleto). Se houver "CREDITO"/"CRÉDITO" é "cartão crédito", "DEBITO"/"DÉBITO" é "cartão débito", "PIX" é "pix", "DINHEIRO" é "dinheiro", "BOLETO"/"DUPLICATA" é "boleto". Se não encontrar, use "dinheiro"
-- dataVencimento: se boleto ou duplicata, extraia a data de vencimento (YYYY-MM-DD). Se não houver, use a mesma data de emissão
-- Se não conseguir ler algum campo, use 0 ou string vazia`;
+REGRAS IMPORTANTES:
+1. Leia TODOS os itens do cupom, linha por linha, sem pular nenhum
+2. Nome do produto: use nome genérico SEM marca (ex: "queijo muçarela" não "Queijo Polenghi", "farinha de trigo" não "Farinha Dona Benta")
+3. Quando aparecer "2,500 KG x 15,90" → quantidade=2.5, unidade="kg", valorUnitario=15.90
+4. Ignore linhas de TOTAL, SUBTOTAL, TROCO, DESCONTO — essas NÃO são itens
+5. Ignore códigos de barras (sequências longas de números sem nome de produto)
+6. Categorias: carnes | hortifruti | laticínios | grãos | farinhas | massas | temperos | proteína | bebidas | polpas | mercearia básica | cafés e complementos | chocolates | latas caixas e temperos | molhos | material de limpeza | descartáveis | embalagens | insumos | outros
+7. Exemplos de categorização: açúcar/sal/óleo/vinagre/margarina → "mercearia básica"; café/chá → "cafés e complementos"; frango/carne/peixe/linguiça/bacon/presunto → "carnes"; queijo/leite/manteiga/iogurte/requeijão → "laticínios"; arroz/feijão → "grãos"; macarrão/lasanha → "massas"; ketchup/mostarda/maionese/azeite → "molhos"; cerveja/refrigerante/suco/água → "bebidas"; enlatados/extrato/caldo → "latas caixas e temperos"
+8. Forma de pagamento: "CREDITO"/"CRÉDITO" → "cartão crédito", "DEBITO"/"DÉBITO" → "cartão débito", "PIX" → "pix", "BOLETO"/"DUPLICATA" → "boleto". Se não encontrar → "dinheiro"
+9. Se não conseguir ler algum campo, use 0 ou string vazia — nunca invente valores
+10. Verifique que a soma dos valorTotal de todos os itens é compatível com o totalCompra`;
 
   const extrairJSON=(text:string)=>{
     // tenta extrair bloco JSON da resposta
@@ -2979,7 +2985,7 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false,rua:""};
 
-function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,flushSync}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,flushSync?:()=>void}){
   // Cada empresa tem dados independentes — setBothDb removido
   const setBothDb=setDb;
   // Cor em tempo real: busca no db.usuarios pelo nome do login (não depende da sessão)
@@ -3169,7 +3175,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!item.comprado){
       pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
-
+    flushSync?.();
     setDb((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
@@ -3184,7 +3190,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!item.naoTem){
       pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
-
+    flushSync?.();
     setDb((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
       return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:!it.naoTem,comprado:false}:i)};

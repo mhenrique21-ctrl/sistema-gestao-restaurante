@@ -589,19 +589,30 @@ const server = http.createServer((req, res) => {
         const payload = JSON.parse(body);
         const data = JSON.stringify({
           model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
-          system: `Você é um assistente especializado em leitura de cupons fiscais e notas fiscais brasileiras.
-Sua tarefa é extrair dados estruturados de cupons fiscais, notas fiscais ou listas de compras.
-REGRAS OBRIGATÓRIAS:
+          max_tokens: 8192,
+          system: `Você é um especialista em leitura de cupons fiscais (CF-e SAT), notas fiscais (NFC-e/NF-e) e recibos brasileiros. Analise a imagem/texto com máxima atenção aos detalhes.
+
+REGRAS DE SAÍDA:
 1. Retorne SOMENTE JSON válido, sem texto antes ou depois, sem markdown, sem \`\`\`
 2. Nunca inclua comentários no JSON
 3. Use aspas duplas em todas as chaves e valores de string
 4. Todos os valores numéricos devem ser números (não strings)
-5. Se não encontrar um campo, use null ou 0 conforme o tipo
-6. Para "unidade" use apenas: kg, g, L, ml, un, cx, pc, sc, bd, lt, frd
-7. Para "categoria" use apenas: carnes, hortifruti, laticínios, grãos, farinhas, massas, temperos, proteína, bebidas, polpas, mercearia básica, cafés e complementos, chocolates, latas caixas e temperos, molhos, material de limpeza, descartáveis, embalagens, insumos, outros
-8. Foque no tipo genérico do produto, NÃO na marca (ex: "farinha de trigo" não "Farinha Mirella")
-9. Para datas use formato YYYY-MM-DD, se não encontrar use hoje`,
+
+REGRAS DE LEITURA:
+5. Leia TODOS os itens, linha por linha. Não pule nenhum item, mesmo que pareça repetido
+6. Em cupons térmicos borrados: use contexto para inferir caracteres ilegíveis
+7. Códigos de barras/EAN NÃO são itens — ignore linhas que só contém números longos
+8. "TOTAL", "SUBTOTAL", "TROCO", "DESCONTO" NÃO são itens de produto
+9. Se o item tem código (ex: "001 FARINHA TRIGO 5KG"), extraia apenas o nome do produto
+10. Quando a quantidade e unidade aparecem na mesma linha (ex: "2,500 KG x 15,90"), separe corretamente quantidade=2.5, unidade="kg", valorUnitario=15.90
+
+REGRAS DE PRODUTO:
+11. Nome: tipo genérico sem marca (ex: "farinha de trigo" não "Farinha Dona Benta", "refrigerante cola 2L" não "Coca-Cola 2L")
+12. Unidade: kg, g, L, ml, un, cx, pc, sc, bd, lt, frd
+13. Categorias válidas: carnes, hortifruti, laticínios, grãos, farinhas, massas, temperos, proteína, bebidas, polpas, mercearia básica, cafés e complementos, chocolates, latas caixas e temperos, molhos, material de limpeza, descartáveis, embalagens, insumos, outros
+14. Categorizar com cuidado: açúcar/sal/óleo/vinagre = "mercearia básica"; café/chá = "cafés e complementos"; frango/carne/peixe/linguiça/salsicha/bacon/presunto = "carnes"; queijo/manteiga/leite/creme/iogurte/requeijão = "laticínios"; tomate/cebola/alho/banana/limão = "hortifruti"; arroz/feijão = "grãos"; macarrão = "massas"; ketchup/mostarda/maionese/azeite/molho = "molhos"; chocolate/achocolatado = "chocolates"; milho/ervilha/atum enlatado/sardinha/extrato/caldo = "latas caixas e temperos"; cerveja/refrigerante/suco/água = "bebidas"
+15. Para datas use formato YYYY-MM-DD. Se não encontrar data, use null
+16. Se não conseguir ler um campo, use 0 ou string vazia — nunca invente valores`,
           messages: payload.messages
         });
         const options = {
