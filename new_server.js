@@ -10,16 +10,18 @@ import webPush from 'web-push';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env manually (fallback if dotenv not installed)
-try { await import('dotenv/config'); } catch {
-  const envFile = path.join(__dirname, '.env');
-  if (fs.existsSync(envFile)) {
-    fs.readFileSync(envFile, 'utf-8').split('\n').forEach(line => {
-      const m = line.match(/^\s*([^#=]+?)\s*=\s*(.*?)\s*$/);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
-    });
-  }
+// Load .env: read file directly from script directory, override empty vars
+const _envFile = path.join(__dirname, '.env');
+if (fs.existsSync(_envFile)) {
+  fs.readFileSync(_envFile, 'utf-8').split('\n').forEach(line => {
+    const idx = line.indexOf('=');
+    if (idx < 1 || line.trimStart().startsWith('#')) return;
+    const key = line.slice(0, idx).trim();
+    const val = line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, '');
+    if (val) process.env[key] = val;
+  });
 }
+try { await import('dotenv/config'); } catch {}
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';

@@ -17,7 +17,6 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
         PORT: 3000,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
       },
       error_file: '/var/log/pm2/app-gestao-error.log',
       out_file: '/var/log/pm2/app-gestao-out.log',
