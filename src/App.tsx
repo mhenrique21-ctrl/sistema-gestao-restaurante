@@ -620,8 +620,6 @@ export default function App() {
   const prevState = useRef<any>(null);
   const fromPollRef = useRef(false);
   const saveSeqRef = useRef(0);
-  const flushNow = useRef(false);
-  const flushSync=()=>{flushNow.current=true;};
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -667,8 +665,6 @@ export default function App() {
     clearTimeout(syncTimer.current);
     setSyncStatus("sync");
     saveSeqRef.current++;
-    const delay=flushNow.current?0:100;
-    flushNow.current=false;
     syncTimer.current=setTimeout(async()=>{
       try{
         await Promise.all(changed.map(emp=>
@@ -678,11 +674,23 @@ export default function App() {
       }catch{setSyncStatus("erro");}finally{
         syncTimer.current=null;
       }
-    },delay);
+    },100);
   },[state]);
 
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
+  const setDbAndSave=(fn:(d:any)=>any)=>{
+    setState(prev=>{
+      const next={...prev,[empresa]:fn(prev[empresa])};
+      saveSeqRef.current++;
+      clearTimeout(syncTimer.current);
+      setSyncStatus("sync");
+      fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true})
+        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{syncTimer.current=null;});
+      syncTimer.current=-1 as any;
+      return next;
+    });
+  };
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao";
   const isAdmin=login?.role==="admin";
@@ -874,12 +882,12 @@ export default function App() {
         {isOp
           ? (tab==="producao"
             ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout}/>
-            : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} flushSync={flushSync}/>)
+            : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} setDbAndSave={setDbAndSave}/>)
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} flushSync={flushSync}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
@@ -2985,7 +2993,7 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false,rua:""};
 
-function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,flushSync}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,flushSync?:()=>void}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
   // Cada empresa tem dados independentes — setBothDb removido
   const setBothDb=setDb;
   // Cor em tempo real: busca no db.usuarios pelo nome do login (não depende da sessão)
@@ -3175,8 +3183,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,flushSync}:
     if(!item.comprado){
       pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
-    flushSync?.();
-    setDb((d:any)=>{
+    (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
       const nowComprado=!it.comprado;
@@ -3190,8 +3197,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,flushSync}:
     if(!item.naoTem){
       pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
-    flushSync?.();
-    setDb((d:any)=>{
+    (setDbAndSave||setDb)((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
       return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:!it.naoTem,comprado:false}:i)};
     });
