@@ -591,6 +591,11 @@ const server = http.createServer((req, res) => {
         if (!msgs.length || msgs[msgs.length - 1].role !== 'assistant') {
           msgs.push({ role: 'assistant', content: '{' });
         }
+        if (!API_KEY) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: 'Chave da API não configurada no servidor. Configure ANTHROPIC_API_KEY no .env da VPS.' }));
+          return;
+        }
         const data = JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 8192,

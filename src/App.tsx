@@ -1778,7 +1778,8 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
       body:JSON.stringify({messages:[{role:"user",content:userContent}]})});
     if(!res.ok){
       const err=await res.json().catch(()=>({}));
-      throw new Error(`Erro ${res.status}: ${err.error||res.statusText}`);
+      const errMsg=typeof err.error==="object"?err.error?.message||JSON.stringify(err.error):err.error||res.statusText;
+      throw new Error(`Erro ${res.status}: ${errMsg}`);
     }
     const data=await res.json();
     if(data.error)throw new Error(data.error);
