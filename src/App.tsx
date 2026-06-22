@@ -528,10 +528,10 @@ _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeleta
 // Merge: servidor vence. _listaDeletados impede restauração de itens excluídos localmente.
 // _listaProtectedUntil: após mudança local na lista, ignora dados do servidor por 5s
 let _listaProtectedUntil=0;
+const LISTA_FIELDS=["listaCompras","listaDeletedIds","produtosLista","listaCategorias","listaCatDeleted","pedidosLista","listaRuas","ruaCatMap"];
 const mergeFromServer=(prev:any,updates:any)=>{
   const now=Date.now();
   const listaProtected=now<_listaProtectedUntil;
-  const LISTA_FIELDS=["listaCompras","listaDeletedIds","produtosLista","listaCategorias","listaCatDeleted","pedidosLista","listaRuas","ruaCatMap"];
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
@@ -565,7 +565,6 @@ const mergeFromServer=(prev:any,updates:any)=>{
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
     };
-    // Lista: se há mudança local recente, manter dados locais
     if(listaProtected){
       LISTA_FIELDS.forEach(f=>{if(p[f]!==undefined)next[emp][f]=p[f];});
     }else{
@@ -575,51 +574,6 @@ const mergeFromServer=(prev:any,updates:any)=>{
       next[emp].pedidosLista=byId(s.pedidosLista||[]);
     }
   });
-  // Unificar dados da Lista entre empresas (quando não protegido)
-  const allEmps=Object.keys(next).filter(e=>next[e]&&typeof next[e]==="object"&&"listaCompras" in next[e]);
-  if(allEmps.length>1&&!listaProtected){
-    const listaById=new Map<string,any>();
-    allEmps.forEach(e=>(next[e].listaCompras||[]).forEach((i:any)=>{
-      const existing=listaById.get(i.id);
-      if(!existing)listaById.set(i.id,i);
-      else{
-        const et=existing.updatedAt||existing.criadoEm||0;
-        const it=i.updatedAt||i.criadoEm||0;
-        listaById.set(i.id,it>=et?i:existing);
-      }
-    }));
-    const unifiedDelIds=new Set<string>();
-    allEmps.forEach(e=>(next[e].listaDeletedIds||[]).forEach((id:string)=>unifiedDelIds.add(id)));
-    const unifiedDelArr=[...unifiedDelIds];
-    const finalLista=[...listaById.values()].filter(i=>!unifiedDelIds.has(i.id));
-    const prodByName=new Map<string,any>();
-    allEmps.forEach(e=>(next[e].produtosLista||[]).forEach((p:any)=>{
-      const k=(p.nome||"").trim().toLowerCase();
-      if(!prodByName.has(k))prodByName.set(k,p);
-      else{const ex=prodByName.get(k);if(!ex.rua&&p.rua)prodByName.set(k,{...ex,rua:p.rua});if(!ex.cat&&p.cat)prodByName.set(k,{...ex,cat:p.cat});}
-    }));
-    const catSet=new Set<string>();
-    allEmps.forEach(e=>(next[e].listaCategorias||[]).forEach((c:string)=>catSet.add(c)));
-    const catDelSet=new Set<string>();
-    allEmps.forEach(e=>(next[e].listaCatDeleted||[]).forEach((c:string)=>catDelSet.add(c)));
-    const pedById=new Map<string,any>();
-    allEmps.forEach(e=>(next[e].pedidosLista||[]).forEach((p:any)=>{if(!pedById.has(p.id))pedById.set(p.id,p);}));
-    const seen=new Set<string>();
-    const unified:string[]=[];
-    allEmps.forEach(e=>(next[e].listaRuas||[]).forEach((r:string)=>{if(!seen.has(r)){seen.add(r);unified.push(r);}}));
-    const unifiedMap:Record<string,string>={};
-    allEmps.forEach(e=>Object.assign(unifiedMap,next[e].ruaCatMap||{}));
-    allEmps.forEach(e=>{
-      next[e].listaCompras=finalLista;
-      next[e].listaDeletedIds=unifiedDelArr;
-      next[e].produtosLista=[...prodByName.values()];
-      next[e].listaCategorias=[...catSet];
-      next[e].listaCatDeleted=[...catDelSet];
-      next[e].pedidosLista=[...pedById.values()];
-      next[e].listaRuas=unified;
-      next[e].ruaCatMap={...unifiedMap};
-    });
-  }
   return migrateDb(next);
 };
 
@@ -714,27 +668,12 @@ export default function App() {
   },[state]);
 
   const db    = state[empresa];
-  const _listaFields=["listaCompras","listaDeletedIds","produtosLista","listaCategorias","listaCatDeleted","pedidosLista","listaRuas","ruaCatMap"];
-  const _syncLista=(next:any)=>{
-    const other=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
-    if(!next[other])return next;
-    const src=next[empresa];
-    const changed=_listaFields.some(f=>src[f]!==next[other][f]);
-    if(!changed)return next;
-    const oCopy={...next[other]};
-    _listaFields.forEach(f=>{if(src[f]!==undefined)oCopy[f]=src[f];});
-    return{...next,[other]:oCopy};
-  };
-  const setDb = (fn)=>setState(prev=>{
-    const next={...prev,[empresa]:fn(prev[empresa])};
-    return _syncLista(next);
-  });
+  const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
   const setDbAndSave=(fn:(d:any)=>any)=>{
     directSaveRef.current=true;
     const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
     setState(prev=>{
-      let next={...prev,[empresa]:fn(prev[empresa])};
-      next=_syncLista(next);
+      const next={...prev,[empresa]:fn(prev[empresa])};
       saveSeqRef.current++;
       clearTimeout(syncTimer.current);
       syncTimer.current=null;
