@@ -2521,7 +2521,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
               const isFakeItem=!nfe.tipoDoc&&(nfe.itens||[]).length===1&&(nfe.itens[0]?.nome||"").startsWith("NF-e ");
               const isResumo=nfe.tipoDoc==="resumo"||isFakeItem;
               const canBuscar=nfe.chNFe&&nfe.tipoDoc!=="completo";
-              const semItens=isResumo&&!(nfe.itens||[]).filter((it:any)=>!it.nome?.startsWith("NF-e ")).length;
+              const semItens=false;
               return <>
               <div className="muted" style={{fontSize:12,marginBottom:4}}>
                 {nfe.nNF?`NF-e #${nfe.nNF} · `:""}

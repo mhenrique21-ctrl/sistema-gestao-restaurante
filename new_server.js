@@ -567,12 +567,21 @@ async function sefazSync(emp) {
         try { await sefazManifestar(emp, resumo.chNFe); } catch (me) {
           console.log(`[SEFAZ ${emp}] Manifestação ${resumo.chNFe.slice(-8)}: ${me.message} (continuando...)`);
         }
-        await delay(2000);
-        const completa = await sefazFetchByChave(emp, resumo.chNFe);
-        const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
-        if (idx >= 0) {
-          result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo' };
-          console.log(`[SEFAZ ${emp}] ✅ NF-e ${resumo.chNFe.slice(-8)} completada (${(completa.itens||[]).length} itens)`);
+        for (let tentativa = 1; tentativa <= 3; tentativa++) {
+          await delay(tentativa === 1 ? 3000 : 5000);
+          try {
+            const completa = await sefazFetchByChave(emp, resumo.chNFe);
+            if ((completa.itens || []).length > 0) {
+              const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
+              if (idx >= 0) {
+                result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo' };
+                console.log(`[SEFAZ ${emp}] ✅ NF-e ${resumo.chNFe.slice(-8)} completada (${(completa.itens||[]).length} itens, tentativa ${tentativa})`);
+              }
+              break;
+            }
+          } catch (e2) {
+            console.log(`[SEFAZ ${emp}] Tentativa ${tentativa}/3 NF-e ${resumo.chNFe.slice(-8)}: ${e2.message}`);
+          }
         }
       } catch (e) {
         console.log(`[SEFAZ ${emp}] ⚠️ Falha ao buscar NF-e ${resumo.chNFe.slice(-8)}: ${e.message}`);
@@ -837,8 +846,18 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`,
         try { manifestResult = await sefazManifestar(empresa, chNFe); } catch (me) {
           console.log(`[SEFAZ] Manifestação falhou: ${me.message}`);
         }
-        await delay(2000);
-        const result = await sefazFetchByChave(empresa, chNFe);
+        let result = null;
+        for (let t = 1; t <= 3; t++) {
+          await delay(t === 1 ? 3000 : 5000);
+          try {
+            result = await sefazFetchByChave(empresa, chNFe);
+            if ((result.itens || []).length > 0) break;
+          } catch (e2) {
+            if (t === 3) throw e2;
+            console.log(`[SEFAZ] Tentativa ${t}/3: ${e2.message}`);
+          }
+        }
+        if (!result) throw new Error('Não foi possível obter a NF-e completa');
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end(JSON.stringify({ ...result, manifestacao: manifestResult }));
