@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { flushSync } from "react-dom";
 
 // ===================== STORAGE =====================
 const STORAGE_KEY = "gestao_app_v4";
@@ -689,13 +690,15 @@ export default function App() {
     directSaveRef.current=true;
     const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
     let bodyToSave="";
-    setState(prev=>{
-      const next={...prev,[empresa]:fn(prev[empresa])};
-      saveSeqRef.current++;
-      clearTimeout(syncTimer.current);
-      syncTimer.current=null;
-      bodyToSave=JSON.stringify(next[empresa]);
-      return next;
+    flushSync(()=>{
+      setState(prev=>{
+        const next={...prev,[empresa]:fn(prev[empresa])};
+        saveSeqRef.current++;
+        clearTimeout(syncTimer.current);
+        syncTimer.current=null;
+        bodyToSave=JSON.stringify(next[empresa]);
+        return next;
+      });
     });
     setSyncStatus("sync");
     fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
@@ -902,7 +905,7 @@ export default function App() {
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
-              {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
+              {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
@@ -1518,15 +1521,18 @@ const checkDuplicataCompra=(db:any, fornecedor:string, total:number, data:string
 
 // ===================== COMPRAS (multi-produto + IA + financeiro) =====================
 const reconciliarLista=(d:any,nomesComprados:string[])=>{
+  try{
   if(!(d.listaCompras||[]).length)return d;
-  const norms=nomesComprados.map(n=>n.toLowerCase().trim());
+  const norms=nomesComprados.map(n=>(n||"").toLowerCase().trim()).filter(Boolean);
+  if(!norms.length)return d;
   const novaLista=(d.listaCompras||[]).map((item:any)=>{
-    if(item.comprado)return item;
+    if(item.comprado||!item.nome)return item;
     const iNorm=item.nome.toLowerCase().trim();
-    if(norms.some(n=>iNorm===n||iNorm.includes(n)||n.includes(iNorm)))return{...item,comprado:true};
+    if(norms.some(n=>iNorm===n||iNorm.includes(n)||n.includes(iNorm)))return{...item,comprado:true,updatedAt:Date.now()};
     return item;
   });
   return{...d,listaCompras:novaLista};
+  }catch{return d;}
 };
 
 function Compras({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:any,empresa:string,state?:any,setState?:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
@@ -5397,7 +5403,7 @@ function baixarXmlNFe(xmlNFe:string,nNF:string,fornecedor:string){
 }
 
 // ===================== CONTAS =====================
-function Contas({db,setDb}){
+function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
   const fPagOpts=["dinheiro","pix","cartão débito","cartão crédito","boleto","transferência","outros"];
   const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes",diasSemana:[1,2,3,4,5],anexo:null as any};
   const [subTab,setSubTab]=useState("lista");
@@ -5509,13 +5515,13 @@ function Contas({db,setDb}){
         vencimento:gerarVenc(form.vencimento,i,form.periodo,form.diasSemana||[]),
         grupoRecorr:gRecorr,parcela:i+1,totalParcelas:n,periodo:form.periodo,diasSemana:form.diasSemana||[],...base,criadoEm:now,
       }));
-      if(editGrupoRecorr){setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[]).filter((c:any)=>c.grupoRecorr!==editGrupoRecorr)]}));}
-      else{setDb((d:any)=>({...d,contas:[...novas,...(d.contas||[])]}));}
+      if(editGrupoRecorr){(setDbAndSave||setDb)((d:any)=>({...d,contas:[...novas,...(d.contas||[]).filter((c:any)=>c.grupoRecorr!==editGrupoRecorr)]}));}
+      else{(setDbAndSave||setDb)((d:any)=>({...d,contas:[...novas,...(d.contas||[])]}));}
       setEditGrupoRecorr(null);
     }else{
       const c={id:editId||uid(),descricao:form.descricao,vencimento:form.vencimento,...base};
-      if(editId){setDb((d:any)=>({...d,contas:(d.contas||[]).map((x:any)=>x.id===editId?{...c,criadoEm:x.criadoEm||now,atualizadoEm:now}:x)}));setEditId(null);}
-      else{setDb((d:any)=>({...d,contas:[{...c,criadoEm:now},...(d.contas||[])]}));}
+      if(editId){(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).map((x:any)=>x.id===editId?{...c,criadoEm:x.criadoEm||now,atualizadoEm:now}:x)}));setEditId(null);}
+      else{(setDbAndSave||setDb)((d:any)=>({...d,contas:[{...c,criadoEm:now},...(d.contas||[])]}));}
     }
     setForm(emptyForm);setSubTab("lista");
   };
@@ -5533,10 +5539,10 @@ function Contas({db,setDb}){
     setForm({...emptyForm,...first,descricao:descBase,valor:String(parseMoney(first.valor)).replace(".",","),recorrente:true,parcelas:String(items.length),periodo:first.periodo||"mes",diasSemana:first.diasSemana||[1,2,3,4,5]});
     setSubTab("novo");
   };
-  const del=(id:string)=>{_listaDeletados.add(id);setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));};
-  const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;const ids=(db.contas||[]).filter((c:any)=>c.grupoRecorr===gid).map((c:any)=>c.id);ids.forEach(id=>_listaDeletados.add(id));setDb((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
-  const pagarGrupo=(gid:string)=>setDb((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.grupoRecorr===gid?{...c,status:"pago"}:c)}));
-  const toggle=(id:string)=>setDb((d:any)=>{
+  const del=(id:string)=>{_listaDeletados.add(id);(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));};
+  const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;const ids=(db.contas||[]).filter((c:any)=>c.grupoRecorr===gid).map((c:any)=>c.id);ids.forEach(id=>_listaDeletados.add(id));(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
+  const pagarGrupo=(gid:string)=>(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.grupoRecorr===gid?{...c,status:"pago"}:c)}));
+  const toggle=(id:string)=>(setDbAndSave||setDb)((d:any)=>{
     const conta=(d.contas||[]).find((c:any)=>c.id===id);
     const novoStatus=conta?.status==="pago"?"pendente":"pago";
     const contas=(d.contas||[]).map((c:any)=>c.id===id?{...c,status:novoStatus}:c);
