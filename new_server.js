@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import http from 'http';
 import https from 'https';
 import fs from 'fs';
@@ -10,6 +9,18 @@ import { fileURLToPath } from 'url';
 import webPush from 'web-push';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Load .env manually (fallback if dotenv not installed)
+try { await import('dotenv/config'); } catch {
+  const envFile = path.join(__dirname, '.env');
+  if (fs.existsSync(envFile)) {
+    fs.readFileSync(envFile, 'utf-8').split('\n').forEach(line => {
+      const m = line.match(/^\s*([^#=]+?)\s*=\s*(.*?)\s*$/);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+    });
+  }
+}
+
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DIST = path.join(__dirname, 'dist');
