@@ -1281,6 +1281,24 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`,
           } catch {}
         }
         fs.writeFileSync(file, body);
+        // Sincronizar campos de lista entre empresas
+        const LISTA_FIELDS = ['listaCompras','listaDeletedIds','produtosLista','listaCategorias','listaCatDeleted','pedidosLista','listaRuas','ruaCatMap'];
+        try {
+          const otherEmp = emp === 'CONFRARIA' ? 'seama' : 'confraria';
+          const otherFile = path.join(DADOS_DIR, `${otherEmp}.json`);
+          if (fs.existsSync(otherFile)) {
+            const otherData = JSON.parse(fs.readFileSync(otherFile, 'utf-8'));
+            let changed = false;
+            for (const f of LISTA_FIELDS) {
+              if (incoming[f] !== undefined) {
+                const iJson = JSON.stringify(incoming[f]);
+                const oJson = JSON.stringify(otherData[f]);
+                if (iJson !== oJson) { otherData[f] = incoming[f]; changed = true; }
+              }
+            }
+            if (changed) fs.writeFileSync(otherFile, JSON.stringify(otherData));
+          }
+        } catch (syncErr) { console.warn('[Lista sync]', syncErr.message); }
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end('{"ok":true}');

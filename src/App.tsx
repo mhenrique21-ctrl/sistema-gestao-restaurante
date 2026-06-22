@@ -529,9 +529,8 @@ _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeleta
 // _pendingToggles: preserva estado local de itens toggled recentemente durante merge
 const _pendingToggles=new Map<string,{comprado:boolean,naoTem:boolean,ts:number}>();
 const mergeFromServer=(prev:any,updates:any)=>{
-  // Limpa toggles expirados (>8s)
   const now=Date.now();
-  _pendingToggles.forEach((v,k)=>{if(now-v.ts>8000)_pendingToggles.delete(k);});
+  _pendingToggles.forEach((v,k)=>{if(now-v.ts>15000)_pendingToggles.delete(k);});
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
     const s=updates[emp];
@@ -768,11 +767,8 @@ export default function App() {
       clearTimeout(syncTimer.current);
       syncTimer.current=null;
       setSyncStatus("sync");
-      const other=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
-      Promise.all([
-        fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true}),
-        fetch(`/api/dados/${other}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[other]),keepalive:true})
-      ]).then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
+      fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(next[empresa]),keepalive:true})
+        .then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("erro")).finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
       return next;
     });
   };
