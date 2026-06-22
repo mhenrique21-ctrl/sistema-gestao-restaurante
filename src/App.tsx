@@ -649,7 +649,7 @@ export default function App() {
       });
     };
     poll();
-    const interval=3000;
+    const interval=tab==="lista"?1500:3000;
     const t=setInterval(poll,interval);
     return()=>clearInterval(t);
   },[login,tab]);
@@ -668,13 +668,13 @@ export default function App() {
     syncTimer.current=setTimeout(async()=>{
       try{
         await Promise.all(changed.map(emp=>
-          fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
+          fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp]),keepalive:true})
         ));
         setSyncStatus("ok");
       }catch{setSyncStatus("erro");}finally{
         syncTimer.current=null;
       }
-    },200);
+    },100);
   },[state]);
 
   const db    = state[empresa];
@@ -877,7 +877,7 @@ export default function App() {
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
-              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa} setState={setState}/>}
+              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -3025,7 +3025,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const desfazer=()=>{
     if(!undoInfo)return;
     undoInfo.setIds.forEach(id=>_listaDeletados.delete(id));
-    applyBothLista((d:any)=>({...d,listaCompras:undoInfo.lista,listaDeletedIds:undoInfo.deletedIds}));
+    setDb((d:any)=>({...d,listaCompras:undoInfo.lista,listaDeletedIds:undoInfo.deletedIds}));
     setUndoInfo(null);clearTimeout(undoTimerRef.current);
   };
 
@@ -3078,10 +3078,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"produtosLista" in nx[e])nx[e]=fn(nx[e]);});return nx;});
     else setDb(fn);
   };
-  const applyBothLista=(fn:(d:any)=>any)=>{
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=fn(nx[e]);});return nx;});
-    else setDb(fn);
-  };
+
   const syncProdByName=(nome:string,updater:(p:any)=>any)=>{
     const nl=nome.trim().toLowerCase();
     applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===nl?updater(p):p)}));
@@ -3112,7 +3109,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
 
     if(editId){
       const editNome=form.nome.trim();
-      applyBothLista((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
+      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente}:i)}));
       if(pendingMpLinks!==null){
         syncProdByName(editNome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
       }
@@ -3129,14 +3126,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         const qtdExist=existente.quantidade||1;
         const msg=`"${nome}" já está na lista (${qtdExist} ${existente.unidade||"un"}).\n\nDeseja somar a quantidade? (+${qtdNova} → total ${qtdExist+qtdNova} ${existente.unidade||"un"})`;
         if(!confirm(msg))return;
-        applyBothLista((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova}:i)}));
+        setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova}:i)}));
         setForm(EMPTY_FORM_LISTA);
         setPendingMpLinks(null);
         return;
       }
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
       const newItem={id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString()};
-      applyBothLista((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
+      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
       const nl=nome.toLowerCase();
       if(pendingMpLinks!==null){
         const prodExiste=(db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl);
@@ -3173,7 +3170,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       pushUndo(`"${item.nome}" marcado como comprado`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
 
-    applyBothLista((d:any)=>{
+    setDb((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
       const nowComprado=!it.comprado;
@@ -3188,7 +3185,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
       pushUndo(`"${item.nome}" marcado como não tem`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     }
 
-    applyBothLista((d:any)=>{
+    setDb((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
       return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:!it.naoTem,comprado:false}:i)};
     });
@@ -3200,7 +3197,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     pushUndo(`"${item?.nome||"Produto"}" excluído`,prevLista,prevDeletedIds,[id]);
     _listaDeletados.add(id);
 
-    applyBothLista((d:any)=>({
+    setDb((d:any)=>({
       ...d,
       listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
       listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-500),
@@ -3212,7 +3209,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     pushUndo(`${comprados.length} comprado(s) removido(s)`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])],ids);
     ids.forEach(id=>_listaDeletados.add(id));
 
-    applyBothLista((d:any)=>({
+    setDb((d:any)=>({
       ...d,
       listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
       listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-500),
@@ -3226,7 +3223,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     todosIds.forEach(id=>_listaDeletados.add(id));
 
     const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||""})),criadoEm:new Date().toISOString()};
-    applyBothLista((d:any)=>({
+    setDb((d:any)=>({
       ...d,
       pedidosLista:[pedido,...(d.pedidosLista||[])],
       listaCompras:[],
@@ -3243,7 +3240,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
         todosIds.forEach(id=>_listaDeletados.add(id));
         const itensArq=[...comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||""})),...naoTemList.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",naoTem:true}))];
         const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
-        applyBothLista((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500)}));
+        setDb((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500)}));
         setAutoArchiveMsg("✅ Lista finalizada e arquivada automaticamente!");
         setTimeout(()=>setAutoArchiveMsg(""),4000);
       }
@@ -3253,7 +3250,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   },[lista.length,pendentes.length,comprados.length,naoTemList.length]);
 
   const moverItem=(id:string,dir:-1|1)=>{
-    applyBothLista((d:any)=>{
+    setDb((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const cat0=arr.find(i=>i.id===id)?.categoria||"";
       const catItens=arr.filter(i=>i.categoria===cat0&&!i.comprado).sort((a,b)=>(a.urgente?-1:b.urgente?1:0)||((a.ordem||0)-(b.ordem||0)));
@@ -3312,7 +3309,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
     if(!novo){setEditCat(null);return;}
     if(novo===old){setEditCat(null);return;}
     if(allCats.filter(c=>c!==old).includes(novo)){alert("Categoria já existe.");return;}
-    applyBothLista((d:any)=>{
+    setDb((d:any)=>{
       const cl:string[]=d.listaCategorias||[];
       const newCl=cl.includes(old)?cl.map(c=>c===old?novo:c):[...cl.filter(c=>c!==novo),novo];
       const ordem=(d.listaCatOrdem||[]).map((c:string)=>c===old?novo:c);
@@ -3470,7 +3467,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login}:{db:any,se
   const delPedido=(id:string)=>{
     if(!confirm("Excluir este pedido do histórico?"))return;
     _listaDeletados.add(id);
-    applyBothLista((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));
+    setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));
     if(expandedPedido===id)setExpandedPedido(null);
   };
 
@@ -4813,11 +4810,8 @@ const REGRAS_CAT:Record<string,{dias:number,perecivel:"alta"|"media"|"baixa",cmv
   "limpeza":   {dias:30, perecivel:"baixa", cmv:false, icon:"🧹"},
 };
 
-function EstoqueTab({db,setDb,empresa,setState}:{db:any,setDb:any,empresa:string,setState?:any}){
-  const applyBothLista=(fn:(d:any)=>any)=>{
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=fn(nx[e]);});return nx;});
-    else setDb(fn);
-  };
+function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
+
   const [sub,setSub]=useState("inventario");
   const [filtroEst,setFiltroEst]=useState("todos");
   const [ajusteModal,setAjusteModal]=useState<any>(null);
@@ -7236,7 +7230,7 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");a.href=url;a.download=`pedido_${ped.data}.csv`;a.click();URL.revokeObjectURL(url);
   };
-  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);applyBothLista((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
+  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
   const pedidos=(db.pedidosLista||[]);
 
   const rels=[
