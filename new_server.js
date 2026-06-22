@@ -600,10 +600,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const msgs = [...(payload.messages || [])];
-        if (!msgs.length || msgs[msgs.length - 1].role !== 'assistant') {
-          msgs.push({ role: 'assistant', content: '{' });
-        }
+        const msgs = [...(payload.messages || [])].filter(m => m.role !== 'assistant');
         if (!API_KEY) {
           res.writeHead(500);
           res.end(JSON.stringify({ error: 'Chave da API não configurada no servidor. Configure ANTHROPIC_API_KEY no .env da VPS.' }));

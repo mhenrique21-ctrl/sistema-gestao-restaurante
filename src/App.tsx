@@ -1767,8 +1767,6 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
 
   const extrairJSON=(text:string)=>{
     let cleaned=text.replace(/```json/g,"").replace(/```/g,"").trim();
-    // prefill: resposta pode começar sem { porque o server adicionou assistant:{
-    if(cleaned.length>0&&!cleaned.startsWith("{"))cleaned="{"+cleaned;
     // tenta direto
     try{return JSON.parse(cleaned);}catch{}
     // tenta encontrar o objeto JSON no texto
