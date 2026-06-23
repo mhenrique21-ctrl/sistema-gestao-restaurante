@@ -1086,6 +1086,7 @@ function Vendas({db,setDb,state}){
   const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:"",nfoodTaxa:"","99food":"",delivery:""});
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
+  const formRef=useRef<HTMLDivElement>(null);
   const [budgetRef,setBudgetRef]=useState(today());
   const [busca,setBusca]=useState("");
   const [periodoTipo,setPeriodoTipo]=useState<"semana"|"mes"|"trimestre"|"personalizado">("mes");
@@ -1187,11 +1188,11 @@ function Vendas({db,setDb,state}){
     "99food":v["99food"]?String(v["99food"].toFixed(2)).replace(".",","):"",
     nfoodTaxa:v.nfoodTaxa?String(v.nfoodTaxa):"",
     delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","): "",
-  });};
+  });setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,vendas:d.vendas.filter(v=>v.id!==id)}));};
   return <div>
     <div className="section-title">Lançar Vendas do Dia</div>
-    <div className="card" style={{marginBottom:14}}>
+    <div ref={formRef} className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
       {["maquininha","dinheiro"].map(m=>(
         <div key={m} style={{marginBottom:8}}>
@@ -3113,6 +3114,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [showProdMgmt,setShowProdMgmt]=useState(false);
   const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un",rua:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
+  const prodFormRef=useRef<HTMLDivElement>(null);
   const [showSugg,setShowSugg]=useState(false);
   const [showHistorico,setShowHistorico]=useState(false);
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
@@ -3463,7 +3465,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     }
     setProdForm({nome:"",cat:"",unidade:"un",rua:""});
   };
-  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un",rua:p.rua||""});};
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un",rua:p.rua||""});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delProd=(id:string)=>{
     if(!confirm("Excluir produto do catálogo?"))return;
     const prod=(db.produtosLista||[]).find((p:any)=>p.id===id);
@@ -4028,7 +4030,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     {/* Catálogo de produtos (admin only) */}
-    {isAdmin&&showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
+    {isAdmin&&showProdMgmt&&<div ref={prodFormRef} className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div className="section-title" style={{color:"#4ade80",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
         <button className="btn" onClick={removerDuplicatas} style={{background:"#2a1020",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
@@ -4506,6 +4508,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   // Product catalog management
   const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un"});
   const [editProdId,setEditProdId]=useState<string|null>(null);
+  const prodFormRef=useRef<HTMLDivElement>(null);
   const prodsCatalog:any[]=db.produtosProducao||[];
 
   const saveProd=()=>{
@@ -4519,7 +4522,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     }
     setProdForm({nome:"",cat:"",unidade:"un"});
   };
-  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"});};
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delProd=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).filter((p:any)=>p.id!==id)}));};
 
   // Category management
@@ -4700,7 +4703,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     </div>}
 
     {/* Product catalog */}
-    {showProdMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
+    {showProdMgmt&&<div ref={prodFormRef} className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
       <div className="section-title" style={{color:"#4ade80",margin:0,marginBottom:10}}>📦 Produtos de Produção <span style={{fontSize:11,color:"#555"}}>({prodsCatalog.length})</span></div>
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
@@ -5468,6 +5471,7 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
   const [form,setForm]=useState<any>(emptyForm);
   const [editId,setEditId]=useState<string|null>(null);
   const [editGrupoRecorr,setEditGrupoRecorr]=useState<string|null>(null);
+  const formRef=useRef<HTMLDivElement>(null);
   const [novacat,setNovacat]=useState("");
   const [filtro,setFiltro]=useState("todos");
   const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
@@ -5592,6 +5596,7 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
     const descBase=c.grupoRecorr?c.descricao.replace(/ \(\d+\/\d+\)$/,""):c.descricao;
     setForm({...emptyForm,...c,descricao:descBase,valor:String(parseMoney(c.valor)).replace(".",","),recorrente:false,parcelas:"1",anexo:c.anexo||null});
     setSubTab("novo");
+    setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);
   };
   const editGrupo=(gid:string,items:any[])=>{
     const first=items[0];
@@ -5599,6 +5604,7 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
     setEditId(null);setEditGrupoRecorr(gid);
     setForm({...emptyForm,...first,descricao:descBase,valor:String(parseMoney(first.valor)).replace(".",","),recorrente:true,parcelas:String(items.length),periodo:first.periodo||"mes",diasSemana:first.diasSemana||[1,2,3,4,5]});
     setSubTab("novo");
+    setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);
   };
   const del=(id:string)=>{_listaDeletados.add(id);(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));};
   const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;const ids=(db.contas||[]).filter((c:any)=>c.grupoRecorr===gid).map((c:any)=>c.id);ids.forEach(id=>_listaDeletados.add(id));(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
@@ -5885,7 +5891,7 @@ function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:a
 
     {subTab==="novo"&&<div>
       <div className="section-title">{editId||editGrupoRecorr?"Editar Conta":"Nova Conta a Pagar / Receber"}</div>
-      <div className="card">
+      <div ref={formRef} className="card">
         <input placeholder="Descrição *" value={form.descricao} onChange={e=>setForm((f:any)=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <input placeholder="Fornecedor / Credor" value={form.fornecedor} onChange={e=>setForm((f:any)=>({...f,fornecedor:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <div className="row" style={{marginBottom:8}}>
@@ -6051,6 +6057,7 @@ function FichaTecnica({db,setDb}){
   const [form,setForm]=useState({nome:"",insumos:[],porcoes:"1",cmv:"30"});
   const [novoIns,setNovoIns]=useState({nome:"",mp:"",precoTotal:"",qtdComprada:"",qtdUsada:"",unidade:"kg"});
   const [editId,setEditId]=useState(null);
+  const formRef=useRef<HTMLDivElement>(null);
   const [busca,setBusca]=useState("");
   const [editInsId,setEditInsId]=useState<string|null>(null);
   const [editInsForm,setEditInsForm]=useState({quantidade:"",unidade:"kg",valorUnd:""});
@@ -6102,7 +6109,7 @@ function FichaTecnica({db,setDb}){
     else{setDb(d=>({...d,fichasTecnicas:[{...ft,criadoEm:now},...(d.fichasTecnicas||[])]}));}
     setForm({nome:"",insumos:[],porcoes:"1",cmv:"30"});
   };
-  const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30)});setSubTab("novo");};
+  const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30)});setSubTab("novo");setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);};
   const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.filter(f=>f.id!==id)}));};
   const atualizar=()=>{
     setDb(d=>{
@@ -6223,7 +6230,7 @@ function FichaTecnica({db,setDb}){
       {!(db.fichasTecnicas||[]).filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
     </div>}
     {subTab==="novo"&&<div>
-      <div className="card" style={{marginBottom:10}}>
+      <div ref={formRef} className="card" style={{marginBottom:10}}>
         <input placeholder="Nome do produto" value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} className="inp" style={{marginBottom:10}}/>
         <div className="row">
           <div style={{flex:1}}>
@@ -6494,6 +6501,8 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
   const [relMes,setRelMes]=useState(currentMonth());
   const [fForm,setFForm]=useState({nome:"",funcao:"",salario:"",cpf:"",contato:""});
   const [fEdit,setFEdit]=useState(null);
+  const formRefRH=useRef<HTMLDivElement>(null);
+  const formRefEnc=useRef<HTMLDivElement>(null);
   const [faltaForm,setFaltaForm]=useState({funcionarioId:"",data:today(),dias:"",motivo:""});
   const [adtForm,setAdtForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [consForm,setConsForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
@@ -6511,7 +6520,7 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     else{sv(d=>({...d,funcionarios:[{...f,criadoEm:now},...d.funcionarios]}));}
     setFForm({nome:"",funcao:"",salario:"",cpf:"",contato:""});
   };
-  const editFunc=(f)=>{setFEdit(f.id);setFForm({...f,salario:String(f.salario.toFixed(2)).replace(".",",")});setSubTab("cadastro");};
+  const editFunc=(f)=>{setFEdit(f.id);setFForm({...f,salario:String(f.salario.toFixed(2)).replace(".",",")});setSubTab("cadastro");setTimeout(()=>formRefRH.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);};
   const delFunc=(id)=>{_listaDeletados.add(id);sv(d=>({...d,funcionarios:d.funcionarios.filter(f=>f.id!==id)}));};
 
   const saveFalta=()=>{
@@ -6594,7 +6603,7 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     bonificacao:e.bonificacao>0?String(e.bonificacao.toFixed(2)).replace(".",","):"",
     comissao:e.comissao>0?String(e.comissao.toFixed(2)).replace(".",","):"",
     salarioFamilia:e.salarioFamilia>0?String(e.salarioFamilia.toFixed(2)).replace(".",","):"",
-    descricao:e.descricao||""});};
+    descricao:e.descricao||""});setTimeout(()=>formRefEnc.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);};
   const delEnc=(id)=>{_listaDeletados.add(id);sv(d=>({...d,encargos:(d.encargos||[]).filter(e=>e.id!==id)}));};
   const lancarEncFin=(e:any)=>{
     const fn=funcs.find(f=>f.id===e.funcionarioId);
@@ -6783,7 +6792,7 @@ ${detalhesDesc.join("")}
 
     {subTab==="cadastro"&&<div>
       <div className="section-title">{fEdit?"Editar Funcionário":"Cadastrar Funcionário"}</div>
-      <div className="card">
+      <div ref={formRefRH} className="card">
         <input placeholder="Nome completo" value={fForm.nome} onChange={e=>setFForm(f=>({...f,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <input placeholder="Função / Cargo" value={fForm.funcao} onChange={e=>setFForm(f=>({...f,funcao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <MoneyInput value={fForm.salario} onChange={v=>setFForm(f=>({...f,salario:v}))} placeholder="Salário" className="inp"/>
@@ -6849,7 +6858,7 @@ ${detalhesDesc.join("")}
     </div>}
 
     {subTab==="encargos"&&<div>
-      <div className="card" style={{marginBottom:14}}>
+      <div ref={formRefEnc} className="card" style={{marginBottom:14}}>
         <div className="section-title">{encEdit?"Editar Encargos":"Registrar Encargos"}</div>
         <div style={{background:"#1a2030",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #252860"}}>
           <div style={{fontSize:12,color:"#7c8fff",fontWeight:700,marginBottom:2}}>ℹ️ Encargos do funcionário</div>
@@ -7755,6 +7764,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
   const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op"|"op_lista"|"op_producao",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0"};
   const [form,setForm]=useState(EMPTY);
   const [editId,setEditId]=useState<string|null>(null);
+  const formRef=useRef<HTMLDivElement>(null);
   const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
@@ -7795,11 +7805,12 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
   const startEdit=(u:any)=>{
     setForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0"});
     setEditId(u.id);
+    setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);
   };
 
   return <div>
     <div className="section-title">👥 Cadastro de Usuários</div>
-    <div className="card" style={{marginBottom:14}}>
+    <div ref={formRef} className="card" style={{marginBottom:14}}>
       <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>{editId?"✏️ Editar Usuário":"➕ Novo Usuário"}</div>
       <input placeholder="Nome do usuário" value={form.nome} onChange={e=>setF("nome",e.target.value)} className="inp" style={{marginBottom:8}}/>
       <input placeholder="Senha de acesso" value={form.senha} onChange={e=>setF("senha",e.target.value)} className="inp" style={{marginBottom:8}}/>
