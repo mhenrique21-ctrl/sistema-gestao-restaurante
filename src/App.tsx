@@ -287,6 +287,27 @@ const currentMonth = () => { const d=new Date(); return `${d.getFullYear()}-${St
 const fmtDate   = (d) => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR");}catch{return d;} };
 const monthLabel= (m) => { if(!m)return""; const [y,mo]=m.split("-"); return `${["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(mo)-1]}/${y}`; };
 
+const isMobile=typeof navigator!=="undefined"&&/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+const SORT_FNS:Record<string,(a:any,b:any)=>number>={
+  'nome-az':(a,b)=>(a.nome||a.descricao||'').localeCompare(b.nome||b.descricao||'','pt-BR'),
+  'nome-za':(a,b)=>(b.nome||b.descricao||'').localeCompare(a.nome||a.descricao||'','pt-BR'),
+  'data-desc':(a,b)=>{const d=(b.data||b.vencimento||'').localeCompare(a.data||a.vencimento||'');return d||((b.criadoEm||'').localeCompare(a.criadoEm||''));},
+  'data-asc':(a,b)=>{const d=(a.data||a.vencimento||'').localeCompare(b.data||b.vencimento||'');return d||((a.criadoEm||'').localeCompare(b.criadoEm||''));},
+  'valor-desc':(a,b)=>(parseMoney(b.valor??b.salario??0))-(parseMoney(a.valor??a.salario??0)),
+  'valor-asc':(a,b)=>(parseMoney(a.valor??a.salario??0))-(parseMoney(b.valor??b.salario??0)),
+};
+const sortList=(arr:any[],db:any,key:string,fallback:string)=>[...arr].sort(SORT_FNS[(db.config?.sortPrefs||{})[key]||fallback]||(()=>0));
+const setSortPref=(setDb:any,key:string,val:string)=>setDb((d:any)=>({...d,config:{...(d.config||{}),sortPrefs:{...((d.config||{}).sortPrefs||{}),[key]:val}}}));
+
+function SortCtrl({id,db,setDb,opts}:{id:string,db:any,setDb:any,opts:[string,string][]}){
+  const v=(db.config?.sortPrefs||{})[id]||opts[0][0];
+  return <select value={v} onChange={e=>setSortPref(setDb,id,e.target.value)}
+    style={{background:"var(--bg4)",color:"#aaa",border:"1px solid var(--border)",borderRadius:6,fontSize:10,padding:"4px 8px",cursor:"pointer"}}>
+    {opts.map(([k,l])=><option key={k} value={k}>{l}</option>)}
+  </select>;
+}
+
 function MoneyInput({value,onChange,placeholder,className,style}) {
   // natural decimal input: user types "15,90" and sees "15,90" — no auto-shift
   const handle=(e)=>{
@@ -1374,8 +1395,9 @@ function Vendas({db,setDb,state}){
       </div>
     </div>
 
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
       <div className="section-title" style={{margin:0}}>Histórico</div>
+      <SortCtrl id="vendas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["valor-desc","Maior valor"],["valor-asc","Menor valor"]]}/>
       <button className="btn" onClick={()=>{
         const rows=(db.vendas||[]).sort((a,b)=>a.data<b.data?1:-1).map(v=>`
           <tr>
@@ -1396,7 +1418,7 @@ function Vendas({db,setDb,state}){
           </table>`));
       }} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir Vendas</button>
     </div>
-    {(()=>{const q=busca.toLowerCase();const vendasFiltradas=(db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))).sort((a,b)=>{const d=a.data<b.data?1:a.data>b.data?-1:0;if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");});return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
+    {(()=>{const q=busca.toLowerCase();const sortKey=(db.config?.sortPrefs||{})['vendas']||'data-desc';const vendasFiltradas=sortList((db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))),db,'vendas','data-desc');return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
       const bDia=v.total*(budgetCmv/100);
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
       const sDia=bDia-cDia;
@@ -2664,7 +2686,10 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           alert("✅ Histórico de compras e lançamentos financeiros apagados.");
         }} style={{background:"#2a1015",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
       </div>
-      <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar fornecedor ou produto..." value={buscaHist} onChange={e=>setBuscaHist(e.target.value)} className="inp" style={{paddingRight:buscaHist?36:14}}/>{buscaHist&&<button onClick={()=>setBuscaHist("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+        <div style={{position:"relative",flex:1}}><input placeholder="🔍 Buscar fornecedor ou produto..." value={buscaHist} onChange={e=>setBuscaHist(e.target.value)} className="inp" style={{paddingRight:buscaHist?36:14,marginBottom:0}}/>{buscaHist&&<button onClick={()=>setBuscaHist("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
+        <SortCtrl id="comprasHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Fornecedor A-Z"],["valor-desc","Maior valor"]]}/>
+      </div>
       {(()=>{
         // Uma pasta por nota de compra (grupoId), com número sequencial
         const grupos:Record<string,any[]>={};
@@ -2681,7 +2706,9 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           nNF:itens[0]?.nNF||"",
           itens,
           total:itens.reduce((s,c)=>s+parseMoney(c.valor),0),
-        })).sort((a,b)=>{const d=a.data<b.data?1:a.data>b.data?-1:0;if(d!==0)return d;const aCriado=a.itens.reduce((m,c)=>c.criadoEm&&c.criadoEm<m?c.criadoEm:m,a.itens[0]?.criadoEm||"");const bCriado=b.itens.reduce((m,c)=>c.criadoEm&&c.criadoEm<m?c.criadoEm:m,b.itens[0]?.criadoEm||"");return(bCriado||"").localeCompare(aCriado||"");});
+        }));
+        const compSortKey=(db.config?.sortPrefs||{})['comprasHist']||'data-desc';
+        notas.sort(compSortKey==='data-asc'?(a,b)=>a.data.localeCompare(b.data)||(a.itens[0]?.criadoEm||'').localeCompare(b.itens[0]?.criadoEm||''):compSortKey==='nome-az'?(a,b)=>(a.fornecedor||'').localeCompare(b.fornecedor||'','pt-BR'):compSortKey==='valor-desc'?(a,b)=>b.total-a.total:(a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.itens[0]?.criadoEm||'').localeCompare(a.itens[0]?.criadoEm||'');});
         // número sequencial por data crescente (mais antigas = #001)
         const seq:Record<string,number>={};
         [...notas].reverse().forEach((n,i)=>{seq[n.grupoId]=i+1;});
@@ -2830,8 +2857,11 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     </div>}
 
     {subTab==="forn"&&<div>
-      <div className="section-title">Fornecedores</div>
-      {[...(db.fornecedores||[])].sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0).map(f=>(
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div className="section-title" style={{margin:0}}>Fornecedores</div>
+        <SortCtrl id="fornecedores" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/>
+      </div>
+      {sortList(db.fornecedores||[],db,'fornecedores','nome-az').map(f=>(
         <div key={f.id} className="list-item">
           {editFornId===f.id?(
             <div>
@@ -3671,9 +3701,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     {/* Histórico de pedidos salvos */}
     {isAdmin&&showHistorico&&<div className="card" style={{marginBottom:12,border:"1px solid #7c3a10"}}>
-      <div className="section-title" style={{color:"#fb923c",marginBottom:10}}>📂 Histórico de Listas Salvas</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div className="section-title" style={{color:"#fb923c",margin:0}}>📂 Histórico de Listas Salvas</div>
+        <SortCtrl id="listaHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
+      </div>
       {!(db.pedidosLista||[]).length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma lista salva ainda.</div>}
-      {[...(db.pedidosLista||[])].sort((a:any,b:any)=>(b.criadoEm||b.data||"").localeCompare(a.criadoEm||a.data||"")).map((p:any)=>{
+      {sortList(db.pedidosLista||[],db,'listaHist','data-desc').map((p:any)=>{
         const dataFmt=p.data?p.data.split("-").reverse().join("/"):"-";
         const expanded=expandedPedido===p.id;
         return <div key={p.id} style={{marginBottom:8,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
@@ -4534,9 +4567,10 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const gerarPedido=()=>{
     if(!itens.length)return alert("Adicione pelo menos 1 produto ao pedido.");
     const pedido={id:uid(),data:today(),itens:itens.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
-    setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
-    const txt=montarTextoWhats(pedido);
-    window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
+    setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])],itensProducaoPendentes:[]}));
+    if(isMobile&&confirm("Pedido gerado! Compartilhar via WhatsApp?"))
+      window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(pedido))}`,"_blank");
+    else if(!isMobile) alert("✅ Pedido gerado com sucesso!");
   };
 
   const montarTextoWhats=(ped:any)=>{
@@ -4677,9 +4711,10 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
         <button className="btn" onClick={saveProd} style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
         {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><SortCtrl id="prodCatalog" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/></div>
       <div style={{maxHeight:260,overflowY:"auto" as const}}>
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
-        {[...prodsCatalog].sort((a,b)=>(a.cat||"").localeCompare(b.cat||"")||(a.nome||"").localeCompare(b.nome||"","pt-BR")).map((p:any)=>(
+        {sortList(prodsCatalog,db,'prodCatalog','nome-az').map((p:any)=>(
           <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
             <span style={{fontSize:14}}>{prodCatIcon(p.cat||"")}</span>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
@@ -4694,16 +4729,19 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
 
     {/* Order history */}
     {showHist&&<div className="card" style={{marginBottom:12,border:"1px solid #5b21b6"}}>
-      <div className="section-title" style={{color:"#c084fc"}}>📂 Histórico de Pedidos</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div className="section-title" style={{color:"#c084fc",margin:0}}>📂 Histórico de Pedidos</div>
+        <SortCtrl id="prodHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
+      </div>
       {!(db.pedidosProducao||[]).length&&<div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:16}}>Nenhum pedido ainda.</div>}
-      {(db.pedidosProducao||[]).slice(0,30).map((ped:any)=>{
+      {sortList(db.pedidosProducao||[],db,'prodHist','data-desc').slice(0,30).map((ped:any)=>{
         const isEdit=editPedId===ped.id;
         const isCollapsed=collapsedPeds.has(ped.id)&&!isEdit;
         return <div key={ped.id} style={{background:"var(--bg4)",borderRadius:8,padding:"10px",marginBottom:8,border:`1px solid ${isEdit?"#c084fc":"#1e2235"}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCollapsed?0:6}}>
             <span onClick={()=>setCollapsedPeds(s=>{const n=new Set(s);if(n.has(ped.id))n.delete(ped.id);else n.add(ped.id);return n;})} style={{fontWeight:600,fontSize:12,color:"#c084fc",cursor:"pointer",flex:1}}>{isCollapsed?"▶":"▼"} {fmtDate(ped.data)} · {(ped.itens||[]).length} produto(s) · {ped.solicitante||"—"}</span>
             <div style={{display:"flex",gap:4}}>
-              <button onClick={()=>{window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>
+              {isMobile&&<button onClick={()=>{window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>}
               <button onClick={()=>imprimirPedido(ped)} style={{background:"none",border:"1px solid #60a5fa44",borderRadius:5,color:"#60a5fa",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
               <button onClick={()=>{
                 if(isEdit){salvarEdicaoPedido(ped.id);}
@@ -4959,9 +4997,8 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
 
     {/* ===== INVENTÁRIO ===== */}
     {sub==="inventario"&&(()=>{
-      const mpsAll=[...(db.materiasPrimas||[])]
-        .filter((m:any)=>mpIdsComMov.has(m.id)||(m.estoqueAtual||0)>0)
-        .sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+      const mpsAll=sortList([...(db.materiasPrimas||[])]
+        .filter((m:any)=>mpIdsComMov.has(m.id)||(m.estoqueAtual||0)>0),db,'estoque','nome-az');
       const totalVal=mpsAll.reduce((s:number,m:any)=>(m.estoqueAtual||0)>0?s+(m.estoqueAtual||0)*(m.ultimoValor||0):s,0);
       const baixo=mpsAll.filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
       const zerado=mpsAll.filter((m:any)=>(m.estoqueAtual||0)<=0);
@@ -5052,9 +5089,12 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             <div className="muted" style={{fontSize:10}}>Sem estoque</div>
           </div>
         </div>
-        <div style={{position:"relative",marginBottom:10}}>
-          <input placeholder="🔍 Buscar produto..." value={buscaEst} onChange={e=>setBuscaEst(e.target.value)} className="inp" style={{paddingRight:buscaEst?36:14}}/>
-          {buscaEst&&<button onClick={()=>setBuscaEst("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
+          <div style={{position:"relative",flex:1}}>
+            <input placeholder="🔍 Buscar produto..." value={buscaEst} onChange={e=>setBuscaEst(e.target.value)} className="inp" style={{paddingRight:buscaEst?36:14,marginBottom:0}}/>
+            {buscaEst&&<button onClick={()=>setBuscaEst("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+          </div>
+          <SortCtrl id="estoque" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"],["valor-desc","Maior valor"],["valor-asc","Menor valor"]]}/>
         </div>
         <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
           {[["todos","Todos"],["ok","✅ OK"],["baixo","⚠️ Baixo"],["zerado","🔴 Zerado"]].map(([k,l])=>(
@@ -5282,7 +5322,7 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
 
     {/* ===== MOVIMENTAÇÕES ===== */}
     {sub==="movimentacoes"&&(()=>{
-      const movsAll=[...movEstoque].sort((a:any,b:any)=>((b.criadoEm||b.data)||"").localeCompare((a.criadoEm||a.data)||""));
+      const movsAll=sortList(movEstoque,db,'estoqueMov','data-desc');
       const filtradas=movsAll.filter((mv:any)=>{
         if(filtroMov!=="todos"&&mv.tipo!==filtroMov)return false;
         if(buscaMov.trim()){const b=buscaMov.toLowerCase();return(mv.mpNome||"").toLowerCase().includes(b)||(mv.descricao||"").toLowerCase().includes(b);}
@@ -5306,9 +5346,12 @@ function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             <div className="muted" style={{fontSize:10}}>Total perdas</div>
           </div>
         </div>
-        <div style={{position:"relative",marginBottom:10}}>
-          <input placeholder="🔍 Buscar produto ou descrição..." value={buscaMov} onChange={e=>setBuscaMov(e.target.value)} className="inp" style={{paddingRight:buscaMov?36:14}}/>
-          {buscaMov&&<button onClick={()=>setBuscaMov("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
+          <div style={{position:"relative",flex:1}}>
+            <input placeholder="🔍 Buscar produto ou descrição..." value={buscaMov} onChange={e=>setBuscaMov(e.target.value)} className="inp" style={{paddingRight:buscaMov?36:14,marginBottom:0}}/>
+            {buscaMov&&<button onClick={()=>setBuscaMov("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+          </div>
+          <SortCtrl id="estoqueMov" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"]]}/>
         </div>
         <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
           {[["todos","Todos"],["entrada","▲ Entradas"],["saida","▼ Saídas"],["perda","🗑️ Perdas"],["ajuste","🔧 Ajustes"]].map(([k,l])=>(
@@ -6130,8 +6173,11 @@ function FichaTecnica({db,setDb}){
     </div>
     {subTab==="lista"&&<div>
       <button className="btn" onClick={atualizar} style={{background:"#1a2a1a",color:"#4ade80",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
-      <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar ficha técnica..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
-      {[...(db.fichasTecnicas||[])].filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||"")).map(f=>{
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+        <div style={{position:"relative",flex:1}}><input placeholder="🔍 Buscar ficha técnica..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14,marginBottom:0}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
+        <SortCtrl id="fichas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/>
+      </div>
+      {sortList([...(db.fichasTecnicas||[])].filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())),db,'fichas','data-desc').map(f=>{
         const por=f.porcoes||1; const cmv=f.cmv||30;
         const cp=f.custoPorcao??(f.custoTotal/por);
         const pp=f.precoPorcao??(cp/(cmv/100));
@@ -6450,7 +6496,7 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
   const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   const [encEdit,setEncEdit]=useState(null);
   const [buscaFunc,setBuscaFunc]=useState("");
-  const funcs=[...(db.funcionarios||[])].sort((a,b)=>a.nome?.localeCompare(b.nome,'pt-BR')??0);
+  const funcs=sortList(db.funcionarios||[],db,'rhFuncs','nome-az');
 
   const sv=(fn:(d:any)=>any)=>(setDbAndSave||setDb)(fn);
   const saveFunc=()=>{
@@ -6687,7 +6733,10 @@ ${detalhesDesc.join("")}
         <div className="section-title" style={{marginBottom:8}}>Mês de Referência</div>
         <input type="month" value={relMes} onChange={e=>setRelMes(e.target.value)} className="inp"/>
       </div>
-      <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar funcionário..." value={buscaFunc} onChange={e=>setBuscaFunc(e.target.value)} className="inp" style={{paddingRight:buscaFunc?36:14}}/>{buscaFunc&&<button onClick={()=>setBuscaFunc("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+        <div style={{position:"relative",flex:1}}><input placeholder="🔍 Buscar funcionário..." value={buscaFunc} onChange={e=>setBuscaFunc(e.target.value)} className="inp" style={{paddingRight:buscaFunc?36:14,marginBottom:0}}/>{buscaFunc&&<button onClick={()=>setBuscaFunc("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
+        <SortCtrl id="rhFuncs" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"],["valor-desc","Maior salário"],["valor-asc","Menor salário"]]}/>
+      </div>
       {funcs.filter(f=>!buscaFunc||f.nome?.toLowerCase().includes(buscaFunc.toLowerCase())||f.funcao?.toLowerCase().includes(buscaFunc.toLowerCase())).map(f=>{
         const totFalt=(db.faltas||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+x.desconto,0);
         const totAdt =(db.adiantamentos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
@@ -6757,7 +6806,8 @@ ${detalhesDesc.join("")}
         </div>}
         <button className="btn" onClick={saveFalta} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
-      {[...(db.faltas||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(f=>{const fn=funcs.find(x=>x.id===f.funcionarioId);return <div key={f.id} className="list-item">
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhFaltas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
+      {sortList(db.faltas||[],db,'rhFaltas','data-desc').map(f=>{const fn=funcs.find(x=>x.id===f.funcionarioId);return <div key={f.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#ff5c7a",fontWeight:700}}>-{fmtMoney(f.desconto)}</span></div>
         <div className="muted">{f.dias} dia(s) • {fmtDate(f.data)}</div>{f.motivo&&<div className="muted">{f.motivo}</div>}
         {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
@@ -6781,7 +6831,8 @@ ${detalhesDesc.join("")}
         <input placeholder="Descrição" value={adtForm.descricao} onChange={e=>setAdtForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <button className="btn" onClick={saveAdt} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
-      {[...(db.adiantamentos||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(a=>{const fn=funcs.find(f=>f.id===a.funcionarioId);return <div key={a.id} className="list-item">
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhAdts" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
+      {sortList(db.adiantamentos||[],db,'rhAdts','data-desc').map(a=>{const fn=funcs.find(f=>f.id===a.funcionarioId);return <div key={a.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#fbbf24",fontWeight:700}}>{fmtMoney(parseMoney(a.valor))}</span></div>
         <div className="muted">{fmtDate(a.data)}</div>{a.descricao&&<div className="muted">{a.descricao}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
@@ -6819,7 +6870,8 @@ ${detalhesDesc.join("")}
         <button className="btn" onClick={saveEnc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:4,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
         {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
-      {[...(db.encargos||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhEncs" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
+      {sortList(db.encargos||[],db,'rhEncs','data-desc').map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
           <span style={{fontWeight:700,fontSize:15}}>{fn?.nome||"—"}</span>
           <span style={{color:"#4ade80",fontWeight:700,fontSize:13}}>{fmtDate(e.data)}</span>
@@ -6853,7 +6905,8 @@ ${detalhesDesc.join("")}
         <input placeholder="Descrição" value={consForm.descricao} onChange={e=>setConsForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <button className="btn" onClick={saveCons} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
-      {[...(db.consumacoes||[])].sort((a,b)=>{const d=b.data.localeCompare(a.data);if(d!==0)return d;return(b.criadoEm||"").localeCompare(a.criadoEm||"");}).map(c=>{const fn=funcs.find(f=>f.id===c.funcionarioId);return <div key={c.id} className="list-item">
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhCons" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
+      {sortList(db.consumacoes||[],db,'rhCons','data-desc').map(c=>{const fn=funcs.find(f=>f.id===c.funcionarioId);return <div key={c.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span></div>
         <div className="muted">{fmtDate(c.data)}</div>{c.descricao&&<div className="muted">{c.descricao}</div>}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
