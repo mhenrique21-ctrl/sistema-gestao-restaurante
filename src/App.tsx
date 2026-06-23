@@ -7924,8 +7924,13 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
   // ---- Integrações ----
   const [whatsNum,setWhatsNum]=useState(db.config?.whatsappNumero||"");
   const [iaStatus,setIaStatus]=useState<"checking"|"ok"|"error"|"none">("checking");
+  const [iaStatusDetail,setIaStatusDetail]=useState("");
   useEffect(()=>{
-    fetch("/api/ia-status").then(r=>{if(r.ok)return r.json();throw new Error();}).then(d=>setIaStatus(d.configured?"ok":"none")).catch(()=>setIaStatus("none"));
+    fetch("/api/ia-status").then(r=>{if(r.ok)return r.json();throw new Error();}).then(d=>{
+      if(!d.configured){setIaStatus("none");setIaStatusDetail(d.error||"");}
+      else if(d.status==="ok"){setIaStatus("ok");setIaStatusDetail("");}
+      else{setIaStatus("error");setIaStatusDetail(d.error||`HTTP ${d.httpCode||"?"}`);}
+    }).catch(()=>{setIaStatus("none");setIaStatusDetail("Servidor offline");});
   },[]);
 
   return <div>
@@ -8259,10 +8264,10 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🤖 IA (Leitura de Cupom)</div>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          <div style={{fontSize:22}}>{iaStatus==="ok"?"✅":iaStatus==="checking"?"⏳":"❌"}</div>
+          <div style={{fontSize:22}}>{iaStatus==="ok"?"✅":iaStatus==="checking"?"⏳":iaStatus==="error"?"⚠️":"❌"}</div>
           <div>
-            <div style={{fontSize:13,fontWeight:600}}>{iaStatus==="ok"?"API configurada":iaStatus==="checking"?"Verificando...":"Não configurada"}</div>
-            <div className="muted" style={{fontSize:11}}>{iaStatus==="ok"?"A IA está pronta para extrair produtos de cupons fiscais.":"Configure a variável ANTHROPIC_API_KEY no .env do servidor."}</div>
+            <div style={{fontSize:13,fontWeight:600}}>{iaStatus==="ok"?"API funcionando":iaStatus==="checking"?"Testando conexão com a API...":iaStatus==="error"?"API com problema":"Não configurada"}</div>
+            <div className="muted" style={{fontSize:11}}>{iaStatus==="ok"?"A IA está pronta para extrair produtos de cupons fiscais.":iaStatus==="error"?iaStatusDetail||"Erro ao conectar com a API.":"Configure a variável ANTHROPIC_API_KEY no .env do servidor."}</div>
           </div>
         </div>
         {iaStatus!=="ok"&&<div style={{background:"#1a1a2a",borderRadius:8,padding:"10px",border:"1px solid #2a2a4a"}}>

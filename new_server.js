@@ -689,6 +689,9 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           apiReq.end();
         });
 
+        const imgSize = JSON.stringify(msgs).length;
+        console.log(`[IA] Recebida requisição de scan — payload: ${(imgSize/1024).toFixed(0)}KB, msgs: ${msgs.length}`);
+
         const data = JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 8192,
@@ -766,11 +769,57 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     return;
   }
 
-  // IA status — check if API key is configured
+  // IA status — test API key with a real call
   if (req.method === 'GET' && urlPath === '/api/ia-status') {
     res.setHeader('Content-Type', 'application/json');
-    res.writeHead(200);
-    res.end(JSON.stringify({ configured: !!API_KEY }));
+    if (!API_KEY) {
+      res.writeHead(200);
+      res.end(JSON.stringify({ configured: false, error: 'ANTHROPIC_API_KEY não configurada no .env' }));
+      return;
+    }
+    const testData = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 50,
+      messages: [{ role: 'user', content: 'Responda apenas: OK' }]
+    });
+    const testReq = https.request({
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Length': Buffer.byteLength(testData)
+      }
+    }, apiRes => {
+      let result = '';
+      apiRes.on('data', chunk => result += chunk);
+      apiRes.on('end', () => {
+        if (apiRes.statusCode === 200) {
+          res.writeHead(200);
+          res.end(JSON.stringify({ configured: true, status: 'ok', model: 'claude-sonnet-4-6' }));
+        } else {
+          let errDetail = '';
+          try { errDetail = JSON.parse(result)?.error?.message || result.slice(0, 200); } catch { errDetail = result.slice(0, 200); }
+          console.log(`[IA-TEST] Falha: HTTP ${apiRes.statusCode} — ${errDetail}`);
+          res.writeHead(200);
+          res.end(JSON.stringify({ configured: true, status: 'error', httpCode: apiRes.statusCode, error: errDetail }));
+        }
+      });
+    });
+    testReq.on('error', err => {
+      console.log(`[IA-TEST] Erro de rede: ${err.message}`);
+      res.writeHead(200);
+      res.end(JSON.stringify({ configured: true, status: 'network_error', error: err.message }));
+    });
+    testReq.setTimeout(15000, () => {
+      testReq.destroy();
+      res.writeHead(200);
+      res.end(JSON.stringify({ configured: true, status: 'timeout', error: 'Timeout ao conectar com api.anthropic.com' }));
+    });
+    testReq.write(testData);
+    testReq.end();
     return;
   }
 
