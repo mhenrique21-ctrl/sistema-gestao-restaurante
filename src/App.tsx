@@ -907,7 +907,7 @@ export default function App() {
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
+              {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
             </>
         }
@@ -7663,7 +7663,7 @@ function BackupsPanel({empresaAtual,state,setState}:{empresaAtual:string,state:a
 }
 
 // ===================== GESTÃO (wrapper) =====================
-function Gestao({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:string,state:any,setState:any}){
+function Gestao({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:any,empresa:string,state:any,setState:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
   const [sub,setSub]=useState("rh");
   return <div>
     <div style={{marginBottom:14}}>
