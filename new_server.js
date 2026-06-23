@@ -197,6 +197,7 @@ function parseNFeXml(rawXml) {
   // chNFe: from infNFe Id attribute (NFe + 44 digits) or explicit tag
   const chNFeAttr = (xml.match(/Id="NFe(\d{44})"/) || [])[1] || '';
   const chNFe = chNFeAttr || g('chNFe') || '';
+  const modelo = chNFe.length >= 22 ? chNFe.substring(20, 22) : '55';
   // nNF: direct tag first, fallback to chNFe positions 25-34
   let nNF = g('nNF') || '';
   if (!nNF && chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
@@ -210,7 +211,7 @@ function parseNFeXml(rawXml) {
   // Vencimento: <cobr> > <dup> > <dVenc>
   const dupBlock = xml.match(/<dup>[\s\S]*?<\/dup>/)?.[0] || '';
   const dVenc = getTag(dupBlock, 'dVenc') || '';
-  return { fornecedor, itens, totalCompra: total, data, nNF, chNFe, formaPag, dVenc, rawXml: rawXml };
+  return { fornecedor, itens, totalCompra: total, data, nNF, chNFe, modelo, formaPag, dVenc, rawXml: rawXml };
 }
 
 function buildChaveEnvelope(cnpj, uf, chNFe) {
@@ -522,13 +523,14 @@ function sefazDistDFe(emp) {
                 const rawDt  = getTag(cleanRes, 'dhEmi') || getTag(cleanRes, 'dEmi') || '';
                 const data   = rawDt.substring(0, 10);
                 let nNF = '';
+                const modelo = chNFe.length >= 22 ? chNFe.substring(20, 22) : '55';
                 if (chNFe.length === 44) nNF = String(parseInt(chNFe.substring(25, 34), 10) || '');
                 if (vNF > 0) {
                   nfes.push({
                     fornecedor: { nome: xNome, cnpj: cnpjDoc, endereco: '' },
                     itens: [],
                     totalCompra: vNF,
-                    data, nNF, chNFe, nsu, tipoDoc: 'resumo',
+                    data, nNF, chNFe, modelo, nsu, tipoDoc: 'resumo',
                   });
                 }
               }
@@ -560,12 +562,18 @@ async function sefazSync(emp) {
   const result = await sefazDistDFe(emp);
   const resumos = (result.nfes || []).filter(n => n.tipoDoc === 'resumo' && n.chNFe && n.chNFe.length === 44);
   if (resumos.length > 0) {
-    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — manifestando e buscando NF-e completa...`);
+    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — buscando documentos completos...`);
     for (const resumo of resumos) {
+      const isNFCe = resumo.chNFe.length >= 22 && resumo.chNFe.substring(20, 22) === '65';
+      const tipoLabel = isNFCe ? 'NFC-e' : 'NF-e';
       try {
         await delay(1000);
-        try { await sefazManifestar(emp, resumo.chNFe); } catch (me) {
-          console.log(`[SEFAZ ${emp}] Manifestação ${resumo.chNFe.slice(-8)}: ${me.message} (continuando...)`);
+        if (!isNFCe) {
+          try { await sefazManifestar(emp, resumo.chNFe); } catch (me) {
+            console.log(`[SEFAZ ${emp}] Manifestação ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${me.message} (continuando...)`);
+          }
+        } else {
+          console.log(`[SEFAZ ${emp}] ${tipoLabel} ${resumo.chNFe.slice(-8)} — pulando manifestação (não se aplica a NFC-e)`);
         }
         for (let tentativa = 1; tentativa <= 3; tentativa++) {
           await delay(tentativa === 1 ? 3000 : 5000);
@@ -574,17 +582,17 @@ async function sefazSync(emp) {
             if ((completa.itens || []).length > 0) {
               const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
               if (idx >= 0) {
-                result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo' };
-                console.log(`[SEFAZ ${emp}] ✅ NF-e ${resumo.chNFe.slice(-8)} completada (${(completa.itens||[]).length} itens, tentativa ${tentativa})`);
+                result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo', modelo: isNFCe ? '65' : (completa.modelo || '55') };
+                console.log(`[SEFAZ ${emp}] ✅ ${tipoLabel} ${resumo.chNFe.slice(-8)} completada (${(completa.itens||[]).length} itens, tentativa ${tentativa})`);
               }
               break;
             }
           } catch (e2) {
-            console.log(`[SEFAZ ${emp}] Tentativa ${tentativa}/3 NF-e ${resumo.chNFe.slice(-8)}: ${e2.message}`);
+            console.log(`[SEFAZ ${emp}] Tentativa ${tentativa}/3 ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${e2.message}`);
           }
         }
       } catch (e) {
-        console.log(`[SEFAZ ${emp}] ⚠️ Falha ao buscar NF-e ${resumo.chNFe.slice(-8)}: ${e.message}`);
+        console.log(`[SEFAZ ${emp}] ⚠️ Falha ao buscar ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${e.message}`);
       }
     }
   }
@@ -842,9 +850,14 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`,
         const { empresa, chNFe } = JSON.parse(body);
         if (!['CONFRARIA', 'SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Empresa inválida' })); return; }
         if (!chNFe || chNFe.length !== 44) { res.writeHead(400); res.end(JSON.stringify({ error: 'chNFe inválida' })); return; }
+        const isNFCe = chNFe.substring(20, 22) === '65';
         let manifestResult = null;
-        try { manifestResult = await sefazManifestar(empresa, chNFe); } catch (me) {
-          console.log(`[SEFAZ] Manifestação falhou: ${me.message}`);
+        if (!isNFCe) {
+          try { manifestResult = await sefazManifestar(empresa, chNFe); } catch (me) {
+            console.log(`[SEFAZ] Manifestação falhou: ${me.message}`);
+          }
+        } else {
+          console.log(`[SEFAZ] NFC-e detectada — pulando manifestação`);
         }
         let result = null;
         for (let t = 1; t <= 3; t++) {

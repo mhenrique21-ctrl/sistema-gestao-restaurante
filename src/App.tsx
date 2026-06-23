@@ -1511,6 +1511,7 @@ function parseNFe(xmlString) {
   // chNFe: from infNFe Id attribute (NFe + 44 digits) or explicit tag
   const chNFeAttr=(xmlString.match(/Id="NFe(\d{44})"/)??[])[1]||"";
   const chNFe=chNFeAttr||g("chNFe")||"";
+  const modelo=chNFe.length>=22?chNFe.substring(20,22):"55";
   // nNF: direct tag or extract from chNFe positions 25-34
   let nNF=g("nNF")||"";
   if(!nNF&&chNFe.length===44)nNF=String(parseInt(chNFe.substring(25,34),10)||"");
@@ -1522,7 +1523,7 @@ function parseNFe(xmlString) {
   // Vencimento: <cobr> > <dup> > <dVenc>
   const dup=doc.querySelector("dup");
   const dVenc=dup?ga(dup,"dVenc"):"";
-  return{fornecedor,itens,totalCompra:total,data,nNF,chNFe,formaPag,dVenc};
+  return{fornecedor,itens,totalCompra:total,data,nNF,chNFe,modelo,formaPag,dVenc};
 }
 
 // ===================== HELPERS =====================
@@ -1985,7 +1986,8 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
-      const desc=`NF-e ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
+      const tipoNF=(nfeResult.modelo||"55")==="65"?"NFC-e":"NF-e";
+      const desc=`${tipoNF} ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
       const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfeResult.totalCompra||0,vencimento:nfeVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,
         nNF:nfeResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
         chNFe:nfeResult.chNFe||"",
@@ -2182,7 +2184,8 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
       const fpNfe=(nfe.formaPag&&formasPag.includes(nfe.formaPag))?nfe.formaPag:sefazFormaPag;
       const vencNfe=nfe.dVenc||sefazVenc;
       const statusFin=["dinheiro","pix","cartão débito"].includes(fpNfe)?"pago":"pendente";
-      const desc=`NF-e ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${fpNfe})`;
+      const tipoNF=(nfe.modelo||"55")==="65"?"NFC-e":"NF-e";
+      const desc=`${tipoNF} ${nfe.nNF?`#${nfe.nNF} – `:""}${forn?.nome||"Fornecedor"} (${fpNfe})`;
       const contaFin:any={id:uid(),descricao:desc,categoria:"Alimentação",valor:nfe.totalCompra||0,vencimento:vencNfe,status:statusFin,tipo:"saida",origem:"compra",grupoId,
         nNF:nfe.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
         chNFe:nfe.chNFe||"",
@@ -2560,8 +2563,9 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
               const semItens=false;
               return <>
               <div className="muted" style={{fontSize:12,marginBottom:4}}>
-                {nfe.nNF?`NF-e #${nfe.nNF} · `:""}
+                {nfe.nNF?`${(nfe.modelo||"55")==="65"?"NFC-e":"NF-e"} #${nfe.nNF} · `:""}
                 {fmtDate(nfe.data)} · {isFakeItem?0:(nfe.itens||[]).length} produto(s)
+                {(nfe.modelo||"55")==="65"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:9,marginLeft:4,padding:"1px 5px"}}>NFC-e</span>}
                 {isResumo&&fetchingChave===nfe.chNFe&&<span style={{color:"#7c8fff",marginLeft:6}}>⏳ buscando completa...</span>}
                 {isResumo&&fetchingChave!==nfe.chNFe&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ resumo</span>}
               </div>
@@ -2636,7 +2640,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
             <span style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(nfeResult.totalCompra)}</span>
           </div>
           <div className="muted" style={{fontSize:12,marginBottom:4}}>
-            {nfeResult.nNF?`NF-e #${nfeResult.nNF} · `:""}
+            {nfeResult.nNF?`${(nfeResult.modelo||"55")==="65"?"NFC-e":"NF-e"} #${nfeResult.nNF} · `:""}
             {fmtDate(nfeResult.data)} · {(nfeResult.itens||[]).length} produto(s)
           </div>
           {(nfeResult.formaPag||nfeResult.dVenc)&&<div style={{fontSize:11,marginBottom:8,display:"flex",gap:8,flexWrap:"wrap" as const}}>
