@@ -760,6 +760,7 @@ export default function App() {
     {id:"fluxo",label:"Fluxo",icon:"💵"},
     {id:"gestao",label:"Gestão",icon:"⚙️"},
     {id:"usuarios",label:"Usuários",icon:"👥"},
+    {id:"config",label:"Configurações",icon:"🔧"},
   ];
   const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):allTabs.filter(t=>t.id==="producao")):allTabs;
 
@@ -930,6 +931,7 @@ export default function App() {
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
+              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout}/>}
             </>
         }
       </div>
@@ -7892,6 +7894,437 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
       </div>
     ))}
     {!usuarios.length&&<EmptyState msg="Nenhum usuário cadastrado."/>}
+  </div>;
+}
+
+// ===================== CONFIGURAÇÕES =====================
+function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout}:
+  {db:any,setDb:any,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void}){
+
+  const [subTab,setSubTab]=useState("empresa");
+  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"]];
+
+  // Shared helpers
+  const setConfig=(key:string,val:any)=>setDb((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
+
+  // ---- Empresa/Geral ----
+  const [nomeEmpresa,setNomeEmpresa]=useState(db.config?.nomeEmpresa||empresa);
+
+  // ---- Financeiro ----
+  const [novaCatFin,setNovaCatFin]=useState("");
+  const categoriasFin:string[]=db.categorias||[];
+
+  // ---- Compras ----
+  const catsBase=["carnes","hortifruti","laticínios","grãos","temperos","proteína","insumos","bebidas","embalagens","descartáveis","material de limpeza","limpeza"];
+  const catsExtra:string[]=db.config?.categoriasExtra||[];
+  const [novaCatCompra,setNovaCatCompra]=useState("");
+  const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
+  const [normEdit,setNormEdit]=useState<string|null>(null);
+
+  // ---- SEFAZ ----
+  const [sefazConfig,setSefazConfig]=useState<Record<string,boolean>>({});
+  const [sefazNSU,setSefazNSU]=useState<number|null>(null);
+  const [sefazNsuInput,setSefazNsuInput]=useState("");
+  const [sefazShowNsuEdit,setSefazShowNsuEdit]=useState(false);
+  const [autoSyncInterval,setAutoSyncInterval]=useState(db.config?.autoSyncInterval||65);
+
+  useEffect(()=>{
+    fetch("/api/nfe-config").then(r=>r.json()).then(cfg=>setSefazConfig(cfg)).catch(()=>{});
+    fetch(`/api/nsu-status?empresa=${empresa}`).then(r=>r.json()).then(d=>{setSefazNSU(d.nsu??0);setSefazNsuInput(String(d.nsu??0));}).catch(()=>{});
+  },[empresa]);
+
+  // ---- Usuários ----
+  const usuarios:any[]=state.CONFRARIA?.usuarios||[];
+  const [userForm,setUserForm]=useState({nome:"",senha:"",role:"op" as string,empresa:"CONFRARIA",corTexto:"#e8eaf0"});
+  const [editUserId,setEditUserId]=useState<string|null>(null);
+  const formRefUser=useRef<HTMLDivElement>(null);
+  const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
+  const setBothUsers=(fn:(arr:any[])=>any[])=>{
+    setState((s:any)=>{const next={...s};["CONFRARIA","SEAMA"].forEach(emp=>{next[emp]={...next[emp],usuarios:fn(next[emp]?.usuarios||[])};});return next;});
+  };
+  const saveUser=()=>{
+    const nome=userForm.nome.trim();const senha=userForm.senha.trim();
+    if(!nome)return alert("Informe o nome.");if(!senha)return alert("Informe a senha.");
+    if(!editUserId&&usuarios.some((u:any)=>u.senha===senha))return alert("Senha já em uso.");
+    if(editUserId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editUserId))return alert("Senha já em uso.");
+    if(editUserId){setBothUsers(arr=>arr.map((u:any)=>u.id===editUserId?{...u,nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0"}:u));setEditUserId(null);}
+    else{setBothUsers(arr=>[...arr,{id:uid(),nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0"}]);}
+    setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0"});
+  };
+  const startEditUser=(u:any)=>{setUserForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0"});setEditUserId(u.id);setTimeout(()=>formRefUser.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+  const delUser=(id:string,nome:string)=>{if(!confirm(`Excluir "${nome}"?`))return;_listaDeletados.add(id);setBothUsers(arr=>arr.filter((u:any)=>u.id!==id));};
+
+  // ---- Integrações ----
+  const [whatsNum,setWhatsNum]=useState(db.config?.whatsappNumero||"");
+  const [iaStatus,setIaStatus]=useState<"checking"|"ok"|"error"|"none">("checking");
+  useEffect(()=>{
+    fetch("/api/ia-status").then(r=>{if(r.ok)return r.json();throw new Error();}).then(d=>setIaStatus(d.configured?"ok":"none")).catch(()=>setIaStatus("none"));
+  },[]);
+
+  return <div>
+    <div className="section-title" style={{fontSize:16,marginBottom:12}}>🔧 Configurações</div>
+    <div style={{display:"flex",gap:4,marginBottom:14,overflowX:"auto",paddingBottom:4,WebkitOverflowScrolling:"touch" as any}}>
+      {subTabs.map(([id,label])=>(
+        <button key={id} onClick={()=>setSubTab(id)}
+          style={{padding:"8px 12px",background:subTab===id?"#7c8fff":"var(--bg4)",color:subTab===id?"#fff":"#888",border:subTab===id?"1px solid #7c8fff":"1px solid var(--border)",borderRadius:20,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",fontWeight:subTab===id?700:400}}>
+          {label}
+        </button>
+      ))}
+    </div>
+
+    {/* ===== EMPRESA / GERAL ===== */}
+    {subTab==="empresa"&&<div>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🏢 Dados da Empresa</div>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Nome de exibição</label>
+        <input value={nomeEmpresa} onChange={e=>setNomeEmpresa(e.target.value)} className="inp" style={{marginBottom:8}}/>
+        <button className="btn" onClick={()=>{setConfig("nomeEmpresa",nomeEmpresa.trim());alert("✅ Nome salvo!");}}
+          style={{background:"#7c8fff",color:"#fff",padding:"10px",width:"100%",fontSize:13}}>💾 Salvar</button>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🎨 Aparência</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:13}}>Tema</span>
+          <button onClick={toggleTheme} className="btn"
+            style={{background:"var(--bg4)",border:"1px solid var(--border)",padding:"8px 16px",fontSize:13}}>
+            {theme==="dark"?"☀️ Modo Claro":"🌙 Modo Escuro"}
+          </button>
+        </div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:6}}>Layout do Menu</div>
+        <div style={{display:"flex",gap:8}}>
+          {([["bottom","▼ Inferior"],["top","▲ Superior"],["fab","⊕ Flutuante"]] as [typeof menuLayout,string][]).map(([k,label])=>(
+            <button key={k} onClick={()=>changeMenuLayout(k)} className="btn"
+              style={{flex:1,background:menuLayout===k?"#7c8fff22":"var(--bg4)",border:menuLayout===k?"1px solid #7c8fff":"1px solid var(--border)",color:menuLayout===k?"#7c8fff":"var(--text2)",padding:"10px",fontSize:12,fontWeight:menuLayout===k?700:400}}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📊 Empresa Ativa</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Empresa selecionada atualmente: <strong style={{color:"#4ade80"}}>{empresa}</strong></div>
+        <div className="muted" style={{fontSize:11}}>Para trocar de empresa, use o seletor no topo da tela.</div>
+      </div>
+    </div>}
+
+    {/* ===== FINANCEIRO ===== */}
+    {subTab==="financeiro"&&<div>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📊 Meta CMV</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:6}}>Percentual alvo de Custo de Mercadoria Vendida. Usado no cálculo do budget de compras e nos indicadores do Dashboard.</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input type="number" min="1" max="100" step="1" value={db.config?.budgetCmv??30}
+            onChange={e=>setConfig("budgetCmv",parseFloat(e.target.value)||30)}
+            className="inp" style={{width:80,textAlign:"center",marginBottom:0}}/>
+          <span style={{fontSize:13,color:"var(--text2)"}}>%</span>
+          <span className="muted" style={{fontSize:11}}>(padrão: 30%)</span>
+        </div>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🏷️ Alíquota Simples Nacional</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:6}}>Usado no cálculo do DRE e Fluxo de Caixa.</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input type="number" min="0" max="100" step="0.5" value={db.config?.snAliquota??6}
+            onChange={e=>setConfig("snAliquota",parseFloat(e.target.value)||6)}
+            className="inp" style={{width:80,textAlign:"center",marginBottom:0}}/>
+          <span style={{fontSize:13,color:"var(--text2)"}}>%</span>
+          <span className="muted" style={{fontSize:11}}>(padrão: 6%)</span>
+        </div>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📂 Categorias Financeiras</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Categorias usadas nas contas a pagar/receber.</div>
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
+          <input value={novaCatFin} onChange={e=>setNovaCatFin(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}
+            onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...d.categorias,n]}));setNovaCatFin("");}}}/>
+          <button className="btn" onClick={()=>{const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...d.categorias,n]}));setNovaCatFin("");}}
+            style={{background:"#7c8fff",color:"#fff",padding:"8px 14px",fontSize:13}}>+</button>
+        </div>
+        <div style={{maxHeight:240,overflowY:"auto"}}>
+          {[...categoriasFin].sort((a,b)=>a.localeCompare(b,"pt-BR")).map(c=>(
+            <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+              <span style={{fontSize:12}}>{c}</span>
+              <button onClick={()=>{if(!confirm(`Excluir categoria "${c}"?`))return;setDb((d:any)=>({...d,categorias:(d.categorias||[]).filter((x:string)=>x!==c)}));}}
+                style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:13}}>🗑️</button>
+            </div>
+          ))}
+        </div>
+        <div className="muted" style={{fontSize:11,marginTop:6}}>{categoriasFin.length} categoria(s)</div>
+      </div>
+    </div>}
+
+    {/* ===== COMPRAS / ESTOQUE ===== */}
+    {subTab==="compras"&&<div>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🏷️ Categorias de Compras</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Categorias base são fixas. Adicione categorias extras personalizadas.</div>
+        <div style={{marginBottom:8}}>
+          <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Fixas</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {catsBase.map(c=><span key={c} className="tag" style={{background:"var(--bg4)",color:"var(--text2)",fontSize:11}}>{c}</span>)}
+          </div>
+        </div>
+        <div style={{fontSize:11,color:"#4ade80",fontWeight:700,marginBottom:4,marginTop:8,textTransform:"uppercase",letterSpacing:1}}>Personalizadas</div>
+        <div style={{display:"flex",gap:6,marginBottom:6}}>
+          <input value={novaCatCompra} onChange={e=>setNovaCatCompra(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}
+            onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatCompra.trim().toLowerCase();if(!n||[...catsBase,...catsExtra].includes(n))return;setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));setNovaCatCompra("");}}}/>
+          <button className="btn" onClick={()=>{const n=novaCatCompra.trim().toLowerCase();if(!n||[...catsBase,...catsExtra].includes(n))return;setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));setNovaCatCompra("");}}
+            style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,fontWeight:700}}>+</button>
+        </div>
+        {catsExtra.map(c=>(
+          <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
+            <span style={{fontSize:12}}>{c.charAt(0).toUpperCase()+c.slice(1)}</span>
+            <button onClick={()=>setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:(d.config?.categoriasExtra||[]).filter((x:string)=>x!==c)}}))}
+              style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:13}}>🗑️</button>
+          </div>
+        ))}
+        {!catsExtra.length&&<div className="muted" style={{fontSize:11,marginTop:4}}>Nenhuma categoria personalizada.</div>}
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🔄 Normalização de Nomes</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Substitui nomes de produtos automaticamente ao importar compras. Ex: "FARINHA DONA BENTA" → "Farinha de Trigo".</div>
+        <input value={normForm.nomePadrao} onChange={e=>setNormForm(f=>({...f,nomePadrao:e.target.value}))} placeholder="Nome padrão (ex: Farinha de Trigo)" className="inp" style={{marginBottom:6}}/>
+        <input value={normForm.termos} onChange={e=>setNormForm(f=>({...f,termos:e.target.value}))} placeholder="Termos (separados por vírgula)" className="inp" style={{marginBottom:6}}/>
+        <div className="muted" style={{fontSize:11,marginBottom:8}}>Se um produto da NF-e contiver algum dos termos, será renomeado para o nome padrão.</div>
+        <div style={{display:"flex",gap:6}}>
+          <button className="btn" onClick={()=>{
+            const np=normForm.nomePadrao.trim();if(!np)return alert("Informe o nome padrão.");
+            const termos=normForm.termos.split(",").map(t=>t.trim()).filter(Boolean);
+            setDb((d:any)=>{
+              const norms=[...(d.normalizacoes||[])];
+              if(normEdit){const idx=norms.findIndex((n:any)=>n.id===normEdit);if(idx>=0)norms[idx]={...norms[idx],nomePadrao:np,termos};}
+              else{norms.push({id:uid(),nomePadrao:np,termos});}
+              return{...d,normalizacoes:norms};
+            });
+            setNormForm({nomePadrao:"",termos:""});setNormEdit(null);
+          }} style={{background:"#7c8fff",color:"#fff",padding:"10px",flex:1,fontSize:13}}>
+            {normEdit?"💾 Atualizar":"➕ Salvar"}
+          </button>
+          {normEdit&&<button className="btn" onClick={()=>{setNormEdit(null);setNormForm({nomePadrao:"",termos:""});}}
+            style={{background:"var(--border)",color:"#888",padding:"10px",fontSize:13}}>Cancelar</button>}
+        </div>
+      </div>
+      {(db.normalizacoes||[]).length>0&&<div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Regras cadastradas ({(db.normalizacoes||[]).length})</div>
+        {(db.normalizacoes||[]).map((n:any)=>(
+          <div key={n.id} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:12,color:"#60a5fa",marginBottom:2}}>→ {n.nomePadrao}</div>
+              <div className="muted" style={{fontSize:11}}>{(n.termos||[]).length?(n.termos as string[]).join(" • "):"(nome exato)"}</div>
+            </div>
+            <div style={{display:"flex",gap:4,flexShrink:0}}>
+              <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
+                style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+              <button onClick={()=>{if(confirm("Excluir?")){_listaDeletados.add(n.id);setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
+                style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+            </div>
+          </div>
+        ))}
+      </div>}
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📦 Estoque</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Resumo geral do estoque.</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:100,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center"}}>
+            <div style={{color:"#60a5fa",fontWeight:700,fontSize:16}}>{(db.materiasPrimas||[]).length}</div>
+            <div className="muted" style={{fontSize:10}}>Matérias-primas</div>
+          </div>
+          <div style={{flex:1,minWidth:100,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center"}}>
+            <div style={{color:"#f59e0b",fontWeight:700,fontSize:16}}>{(db.materiasPrimas||[]).filter((m:any)=>m.estoqueMinimo>0&&(m.estoqueAtual||0)<=m.estoqueMinimo).length}</div>
+            <div className="muted" style={{fontSize:10}}>Abaixo do mínimo</div>
+          </div>
+          <div style={{flex:1,minWidth:100,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center"}}>
+            <div style={{color:"#4ade80",fontWeight:700,fontSize:16}}>{(db.fornecedores||[]).length}</div>
+            <div className="muted" style={{fontSize:10}}>Fornecedores</div>
+          </div>
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== NF-e / SEFAZ ===== */}
+    {subTab==="sefaz"&&<div>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📄 Certificado Digital</div>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          {["CONFRARIA","SEAMA"].map(emp=>(
+            <div key={emp} style={{flex:1,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center",border:`1px solid ${sefazConfig[emp]?"#1a3a20":"#2a1520"}`}}>
+              <div style={{fontSize:12,fontWeight:700,marginBottom:4}}>{emp}</div>
+              <div style={{fontSize:20}}>{sefazConfig[emp]?"✅":"❌"}</div>
+              <div style={{fontSize:11,color:sefazConfig[emp]?"#4ade80":"#ff5c7a"}}>{sefazConfig[emp]?"Configurado":"Não encontrado"}</div>
+            </div>
+          ))}
+        </div>
+        <div className="muted" style={{fontSize:11}}>Os certificados .pfx ficam no servidor em <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>certs/</code>. Configure via SCP na VPS.</div>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🔢 NSU (Número Sequencial Único)</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>O NSU controla a posição da última consulta ao SEFAZ. NF-es com NSU menor que o atual não serão retornadas.</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{fontSize:13}}>NSU atual ({empresa}):</span>
+          <span style={{fontWeight:700,color:"#60a5fa",fontSize:15}}>{sefazNSU??"-"}</span>
+        </div>
+        {!sefazShowNsuEdit?
+          <button className="btn" onClick={()=>setSefazShowNsuEdit(true)}
+            style={{background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",padding:"8px 14px",fontSize:12}}>✏️ Editar NSU</button>
+          :<div style={{display:"flex",gap:6}}>
+            <input type="number" value={sefazNsuInput} onChange={e=>setSefazNsuInput(e.target.value)} className="inp" style={{flex:1,marginBottom:0}}/>
+            <button className="btn" onClick={()=>{
+              fetch(`/api/nsu-status?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nsu:parseInt(sefazNsuInput)||0})})
+                .then(r=>r.json()).then(()=>{setSefazNSU(parseInt(sefazNsuInput)||0);setSefazShowNsuEdit(false);alert("✅ NSU atualizado!");}).catch(e=>alert("Erro: "+e.message));
+            }} style={{background:"#7c8fff",color:"#fff",padding:"8px 14px",fontSize:13}}>💾</button>
+            <button className="btn" onClick={()=>setSefazShowNsuEdit(false)}
+              style={{background:"var(--border)",color:"#888",padding:"8px 12px",fontSize:13}}>✕</button>
+          </div>
+        }
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>⏱️ Auto-Sync</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Intervalo de sincronização automática com o SEFAZ (em minutos). O servidor consulta NF-es novas neste intervalo.</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input type="number" min="30" max="240" step="5" value={autoSyncInterval}
+            onChange={e=>setAutoSyncInterval(parseInt(e.target.value)||65)}
+            className="inp" style={{width:80,textAlign:"center",marginBottom:0}}/>
+          <span style={{fontSize:12,color:"var(--text2)"}}>minutos</span>
+        </div>
+        <button className="btn" onClick={()=>{
+          setConfig("autoSyncInterval",autoSyncInterval);
+          alert("✅ Intervalo salvo!");
+        }} style={{background:"#7c8fff",color:"#fff",padding:"10px",width:"100%",marginTop:8,fontSize:13}}>💾 Salvar Intervalo</button>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🔧 Manutenção</div>
+        <button className="btn" onClick={()=>{
+          if(!confirm("Limpar o cache de NF-es e forçar re-download na próxima sync?"))return;
+          fetch("/api/nfe-cache/clear",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})}).then(()=>alert("✅ Cache limpo!")).catch(e=>alert("Erro: "+e.message));
+        }} style={{background:"#2a1520",color:"#ff5c7a",border:"1px solid #3a1a2a",padding:"10px",width:"100%",fontSize:12,marginBottom:6}}>
+          🗑️ Limpar Cache SEFAZ ({empresa})
+        </button>
+        <div className="muted" style={{fontSize:11}}>Remove NF-es em cache. Na próxima sincronização, todas serão buscadas novamente a partir do NSU atual.</div>
+      </div>
+    </div>}
+
+    {/* ===== USUÁRIOS / SEGURANÇA ===== */}
+    {subTab==="usuarios"&&<div>
+      <div ref={formRefUser} className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>{editUserId?"✏️ Editar Usuário":"➕ Novo Usuário"}</div>
+        <input placeholder="Nome do usuário" value={userForm.nome} onChange={e=>setUserForm(f=>({...f,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <input placeholder="Senha de acesso" value={userForm.senha} onChange={e=>setUserForm(f=>({...f,senha:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="inp" style={{marginBottom:8}}>
+          <option value="admin">Administrador — acesso completo</option>
+          <option value="op">Lista + Produção</option>
+          <option value="op_lista">Somente Lista</option>
+          <option value="op_producao">Somente Produção</option>
+        </select>
+        {userForm.role!=="admin"&&<select value={userForm.empresa} onChange={e=>setUserForm(f=>({...f,empresa:e.target.value}))} className="inp" style={{marginBottom:8}}>
+          <option value="CONFRARIA">Empresa: CONFRARIA</option>
+          <option value="SEAMA">Empresa: SEAMA</option>
+        </select>}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:"var(--bg4)",borderRadius:10,padding:"8px 14px",border:"1.5px solid var(--border)"}}>
+          <span style={{fontSize:12,color:"var(--text2)",flex:1}}>Cor do texto</span>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {["#e8eaf0","#7c8fff","#4ade80","#f59e0b","#ff9aa8","#60a5fa","#c084fc","#34d399","#fb923c","#f472b6"].map(c=>(
+              <button key={c} onClick={()=>setUserForm(f=>({...f,corTexto:c}))}
+                style={{width:18,height:18,borderRadius:"50%",background:c,border:userForm.corTexto===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0}}/>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn" onClick={saveUser} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"10px",fontSize:13}}>
+            {editUserId?"💾 Salvar Alterações":"➕ Criar Usuário"}
+          </button>
+          {editUserId&&<button className="btn" onClick={()=>{setEditUserId(null);setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0"});}}
+            style={{background:"var(--border)",color:"#888",padding:"10px",fontSize:13}}>Cancelar</button>}
+        </div>
+      </div>
+
+      <div style={{fontSize:11,color:"var(--text2)",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:0.8}}>
+        {usuarios.length} usuário{usuarios.length!==1?"s":""} cadastrado{usuarios.length!==1?"s":""}
+      </div>
+      {usuarios.map((u:any)=>(
+        <div key={u.id} className="card" style={{marginBottom:8,border:`1px solid ${({admin:"#3a2a60",op:"#1a3a3a",op_lista:"#1a3a1a",op_producao:"#3a2a1a"})[u.role as string]||"#1a3a1a"}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{fontSize:22}}>{({admin:"🔐",op:"🛒",op_lista:"📋",op_producao:"🏭"})[u.role as string]||"👤"}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:u.corTexto||"inherit"}}>{u.nome}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                <span className="tag" style={{background:({admin:"#3a2a6044",op:"#1a3a3a44",op_lista:"#1a3a1a44",op_producao:"#3a2a1a44"})[u.role as string]||"#1a3a1a44",color:({admin:"#a78bfa",op:"#60a5fa",op_lista:"#4ade80",op_producao:"#f59e0b"})[u.role as string]||"#4ade80"}}>
+                  {({admin:"Admin",op:"Lista+Prod",op_lista:"Lista",op_producao:"Produção"})[u.role as string]||"Op"}
+                </span>
+                {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)"}}>{u.empresa}</span>}
+                <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))}
+                  style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
+                  {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver"}
+                </button>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:4,flexShrink:0}}>
+              <button onClick={()=>startEditUser(u)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+              <button onClick={()=>delUser(u.id,u.nome)} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+            </div>
+          </div>
+        </div>
+      ))}
+      {!usuarios.length&&<EmptyState msg="Nenhum usuário cadastrado."/>}
+    </div>}
+
+    {/* ===== INTEGRAÇÕES ===== */}
+    {subTab==="integracoes"&&<div>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📱 WhatsApp</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Número padrão para compartilhamento de pedidos via WhatsApp.</div>
+        <div style={{display:"flex",gap:6}}>
+          <input value={whatsNum} onChange={e=>setWhatsNum(e.target.value)} placeholder="5511999999999" className="inp" style={{flex:1,marginBottom:0}}/>
+          <button className="btn" onClick={()=>{setConfig("whatsappNumero",whatsNum.trim());alert("✅ Número salvo!");}}
+            style={{background:"#25d366",color:"#fff",padding:"8px 14px",fontSize:13}}>💾</button>
+        </div>
+        <div className="muted" style={{fontSize:11,marginTop:4}}>Formato: código do país + DDD + número (sem espaços ou traços)</div>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🤖 IA (Leitura de Cupom)</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+          <div style={{fontSize:22}}>{iaStatus==="ok"?"✅":iaStatus==="checking"?"⏳":"❌"}</div>
+          <div>
+            <div style={{fontSize:13,fontWeight:600}}>{iaStatus==="ok"?"API configurada":iaStatus==="checking"?"Verificando...":"Não configurada"}</div>
+            <div className="muted" style={{fontSize:11}}>{iaStatus==="ok"?"A IA está pronta para extrair produtos de cupons fiscais.":"Configure a variável ANTHROPIC_API_KEY no .env do servidor."}</div>
+          </div>
+        </div>
+        {iaStatus!=="ok"&&<div style={{background:"#1a1a2a",borderRadius:8,padding:"10px",border:"1px solid #2a2a4a"}}>
+          <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:4}}>Como configurar:</div>
+          <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
+            1. Acesse o .env na VPS<br/>
+            2. Adicione: <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>ANTHROPIC_API_KEY=sk-ant-...</code><br/>
+            3. Reinicie: <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>pm2 restart app-gestao</code>
+          </div>
+        </div>}
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🔔 Notificações Push</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Notificações de contas a vencer são configuradas na aba Financeiro. Para ativar, acesse a aba Financeiro e clique em "Ativar Notificações".</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>📋</span>
+          <span className="muted" style={{fontSize:12}}>Financeiro → sub-aba Lista → seção Notificações</span>
+        </div>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🖥️ Servidor</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Informações do servidor e deploy.</div>
+        <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px",fontFamily:"monospace",fontSize:11,color:"#888",lineHeight:1.8}}>
+          <div>Deploy: <code>cd /var/www/app-gestao && git pull && npm run build && pm2 restart app-gestao</code></div>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 

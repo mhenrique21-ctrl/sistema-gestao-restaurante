@@ -708,6 +708,14 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`,
     return;
   }
 
+  // IA status — check if API key is configured
+  if (req.method === 'GET' && urlPath === '/api/ia-status') {
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ configured: !!API_KEY }));
+    return;
+  }
+
   // NF-e config — which companies have certificates
   if (req.method === 'GET' && urlPath === '/api/nfe-config') {
     const config = {};
