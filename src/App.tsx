@@ -251,7 +251,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
   config:{snAliquota:6,budgetCmv:30},
@@ -4501,7 +4501,11 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const [form,setForm]=useState({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
   const [editId,setEditId]=useState<string|null>(null);
   const [showSugg,setShowSugg]=useState(false);
-  const [itens,setItens]=useState<any[]>([]);
+  const itens:any[]=db.itensProducaoPendentes||[];
+  const setItens=(fn:any)=>{
+    if(typeof fn==="function"){setDb((d:any)=>({...d,itensProducaoPendentes:fn(d.itensProducaoPendentes||[])}));}
+    else{setDb((d:any)=>({...d,itensProducaoPendentes:fn}));}
+  };
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
 
   const suggestions=form.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(form.nome.toLowerCase())).slice(0,8):[];
@@ -4532,7 +4536,6 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     const pedido={id:uid(),data:today(),itens:itens.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     const txt=montarTextoWhats(pedido);
-    setItens([]);
     window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank");
   };
 
@@ -4868,7 +4871,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
           📋 Gerar Pedido ({itens.length})
         </button>
         <button onClick={()=>imprimirPedido()} className="btn" style={{background:"#1a1040",color:"#c084fc",border:"1px solid #5b21b6",padding:"13px 16px",fontSize:13}}>🖨️</button>
-        <button onClick={()=>setItens([])} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
+        <button onClick={()=>{if(confirm("Limpar todos os itens da lista?"))setItens([]);}} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
       </div>
     </>}
   </div>;
