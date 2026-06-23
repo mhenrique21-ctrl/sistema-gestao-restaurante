@@ -1926,6 +1926,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
   const [nfeVenc,setNfeVenc]=useState(today());
   const [nfeError,setNfeError]=useState("");
   const nfeRef=useRef();
+  const nfeManualRef=useRef<HTMLDivElement>(null);
   const [nfeXml,setNfeXml]=useState("");
 
   const handleNFe=(e)=>{
@@ -2143,6 +2144,20 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
       setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
     }catch(e:any){alert("❌ Erro ao buscar NF-e completa: "+e.message);}
     finally{setFetchingChave(null);}
+  };
+
+  const carregarNaImportacao=(nfe:any)=>{
+    if(!nfe.rawXml)return alert("XML não disponível para esta NF-e.");
+    setNfeXml(nfe.rawXml);
+    try{
+      const parsed=parseNFe(nfe.rawXml);
+      setNfeResult(parsed);
+      if(parsed.formaPag&&formasPag.includes(parsed.formaPag))setNfeFormaPag(parsed.formaPag);
+      if(parsed.dVenc)setNfeVenc(parsed.dVenc);
+      else if(parsed.data)setNfeVenc(parsed.data);
+      setNfeError("");
+    }catch(err:any){setNfeError("Erro ao ler XML: "+err.message);setNfeResult(null);}
+    setTimeout(()=>nfeManualRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);
   };
 
   const importarNFeSefaz=(nfe:any,all=false)=>{
@@ -2603,6 +2618,10 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
                 style={{background:"#1a2030",color:"#4ade80",border:"1px solid #1a3a20",padding:"8px 12px",fontSize:12}}>
                 ⬇️ XML
               </button>}
+              {nfe.rawXml&&<button className="btn" onClick={()=>carregarNaImportacao(nfe)}
+                style={{background:"#1a2040",color:"#a78bfa",border:"1px solid #2a2a60",padding:"8px 12px",fontSize:12}}>
+                📄 Inserir XML
+              </button>}
               <button className="btn" onClick={()=>importarNFeSefaz(nfe)}
                 disabled={semItens}
                 style={{background:semItens?"#1a1a2a":"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13,flex:1,opacity:semItens?0.4:1}}>
@@ -2625,7 +2644,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
       </div>}
 
       {/* -- Upload manual de XML -- */}
-      <div className="card" style={{marginBottom:14,border:"1px solid #2a3260"}}>
+      <div ref={nfeManualRef} className="card" style={{marginBottom:14,border:"1px solid #2a3260"}}>
         <div className="section-title" style={{marginBottom:8}}>📎 Importar XML manualmente</div>
         <div style={{fontSize:12,color:"#888",marginBottom:8}}>Selecione um arquivo XML de NF-e para importar diretamente.</div>
         <input ref={nfeRef} type="file" accept=".xml,text/xml,application/xml" onChange={handleNFe}
