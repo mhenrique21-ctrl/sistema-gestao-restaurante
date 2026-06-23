@@ -1715,7 +1715,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:an
     if(xmlIaRef.current)xmlIaRef.current.value="";
   };
 
-  const redimensionarImagem=(dataUrl:string,maxPx=1600,quality=0.80):Promise<string>=>{
+  const redimensionarImagem=(dataUrl:string,maxPx=1200,quality=0.70):Promise<string>=>{
     return new Promise(resolve=>{
       const img=new Image();
       img.onload=()=>{
@@ -1728,11 +1728,16 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:an
         canvas.width=w;canvas.height=h;
         canvas.getContext("2d")!.drawImage(img,0,0,w,h);
         let result=canvas.toDataURL("image/jpeg",quality);
-        if(result.length>700000){result=canvas.toDataURL("image/jpeg",0.60);}
-        if(result.length>700000){
-          const s=0.7;canvas.width=Math.round(w*s);canvas.height=Math.round(h*s);
+        if(result.length>500000){result=canvas.toDataURL("image/jpeg",0.50);}
+        if(result.length>500000){
+          const s=0.65;canvas.width=Math.round(w*s);canvas.height=Math.round(h*s);
           canvas.getContext("2d")!.drawImage(img,0,0,canvas.width,canvas.height);
-          result=canvas.toDataURL("image/jpeg",0.60);
+          result=canvas.toDataURL("image/jpeg",0.50);
+        }
+        if(result.length>500000){
+          const s=0.5;canvas.width=Math.round(w*s);canvas.height=Math.round(h*s);
+          canvas.getContext("2d")!.drawImage(img,0,0,canvas.width,canvas.height);
+          result=canvas.toDataURL("image/jpeg",0.40);
         }
         resolve(result);
       };
@@ -1760,58 +1765,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:an
     }
   };
 
-  const PROMPT_CUPOM=`Analise esta imagem de cupom fiscal brasileiro e extraia todos os dados.
-
-IMPORTANTE: Retorne APENAS um JSON válido, sem nenhum texto antes ou depois, sem markdown.
-
-O JSON deve ter este formato exato:
-{
-  "fornecedor": {"nome": "nome da loja", "cnpj": "00.000.000/0000-00", "endereco": "endereço"},
-  "itens": [
-    {"nome": "produto genérico", "categoria": "categoria", "unidade": "un", "quantidade": 1, "valorUnitario": 10.00, "valorTotal": 10.00}
-  ],
-  "totalCompra": 100.00,
-  "data": "2026-01-15",
-  "formaPagamento": "dinheiro",
-  "dataVencimento": "2026-01-15"
-}
-
-INSTRUÇÕES DE LEITURA:
-- Leia CADA LINHA do cupom com cuidado. Não pule nenhum item.
-- O formato típico de cada linha é: "[código] NOME DO PRODUTO [quantidade] x [valor] = [total]"
-- Exemplo: "001 ACUCAR CRISTAL 5KG 1 UN x 18,90 (R$) 18,90" → nome="açúcar cristal 5kg", quantidade=1, unidade="un", valorUnitario=18.90, valorTotal=18.90
-- Exemplo: "FILÉ FRANGO  2,500 KG x 15,90 39,75" → nome="filé de frango", quantidade=2.5, unidade="kg", valorUnitario=15.90, valorTotal=39.75
-- NÃO inclua linhas de TOTAL, SUBTOTAL, TROCO, DESCONTO ou CÓDIGO DE BARRAS como itens
-- Use nomes genéricos SEM marca: "farinha de trigo" (não "Farinha Dona Benta"), "queijo muçarela" (não "Queijo Polenghi")
-
-CATEGORIAS (use exatamente uma destas):
-carnes, hortifruti, laticínios, grãos, farinhas, massas, temperos, proteína, bebidas, polpas, mercearia básica, cafés e complementos, chocolates, latas caixas e temperos, molhos, material de limpeza, descartáveis, embalagens, insumos, outros
-
-GUIA DE CATEGORIAS:
-- carnes: carne, frango, peixe, linguiça, salsicha, bacon, presunto, peito de peru, costela, alcatra, filé
-- hortifruti: tomate, cebola, alho, batata, banana, limão, laranja, alface, cenoura, verduras, frutas
-- laticínios: queijo, leite, manteiga, creme de leite, iogurte, requeijão, nata
-- grãos: arroz, feijão, lentilha, grão de bico, ervilha seca
-- farinhas: farinha de trigo, farinha de mandioca, farinha de rosca, amido, fubá, polvilho
-- mercearia básica: açúcar, sal, óleo, vinagre, margarina, fermento, corante, essência
-- bebidas: cerveja, refrigerante, suco, água, vinho, energético
-- molhos: ketchup, mostarda, maionese, azeite, shoyu, molho de tomate
-- latas caixas e temperos: milho em lata, ervilha em lata, atum, sardinha, extrato de tomate, caldo em cubo
-- cafés e complementos: café, chá, achocolatado, leite condensado, creme de avelã
-- material de limpeza: detergente, desinfetante, sabão, esponja, água sanitária, álcool
-- descartáveis: copo descartável, prato descartável, guardanapo, papel toalha, sacola, embalagem
-
-FORMA DE PAGAMENTO — OBRIGATÓRIO extrair do cupom:
-- Procure seções: "FORMA PGTO", "PAGAMENTO", "F.PAGTO", "FORMA DE PAGAMENTO"
-- CREDITO/CRÉDITO/CRED → "cartão crédito", DEBITO/DÉBITO/DEB → "cartão débito", PIX/QR CODE → "pix", BOLETO/FATURA → "boleto", DINHEIRO/ESPECIE → "dinheiro", FIADO/PRAZO → "fiado"
-- Se não encontrar, use "dinheiro"
-
-DATA — OBRIGATÓRIO extrair do cupom:
-- Procure data de emissão (topo ou rodapé). Formatos: "22/06/2026", "22/06/26"
-- Converta para YYYY-MM-DD. Ano com 2 dígitos → prefixe "20"
-- dataVencimento: mesma data; se boleto/fiado/crédito, procure data de vencimento
-
-Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
+  const PROMPT_CUPOM=`Analise esta imagem de cupom fiscal brasileiro e extraia todos os dados. Retorne APENAS um JSON válido, sem texto extra, sem markdown. Extraia TODOS os itens, data, forma de pagamento e dados do fornecedor.`;
 
   const extrairJSON=(text:string)=>{
     let cleaned=text.replace(/```json/g,"").replace(/```/g,"").trim();
@@ -1829,45 +1783,58 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     throw new Error("JSON inválido retornado pela IA.\n\nResposta: "+text.slice(0,500));
   };
 
-  const chamarIA=async(userContent:any,tentativa=1):Promise<any>=>{
-    const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({messages:[{role:"user",content:userContent}]})});
-    if(!res.ok){
-      const err=await res.json().catch(()=>({}));
-      const errMsg=typeof err.error==="object"?err.error?.message||JSON.stringify(err.error):err.error||res.statusText;
-      throw new Error(`Erro ${res.status}: ${errMsg}`);
-    }
-    const data=await res.json();
-    if(data.error)throw new Error(data.error);
-    const text=(data.content||[]).map((b:any)=>b.text||"").join("").trim();
-    if(!text)throw new Error("IA retornou resposta vazia.");
-    return extrairJSON(text);
+  const [iaAttempt,setIaAttempt]=useState(0);
+
+  const chamarIA=async(userContent:any):Promise<any>=>{
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),100000);
+    try{
+      const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({messages:[{role:"user",content:userContent}]}),signal:controller.signal});
+      if(!res.ok){
+        const err=await res.json().catch(()=>({}));
+        const errMsg=typeof err.error==="object"?err.error?.message||JSON.stringify(err.error):err.error||res.statusText;
+        throw new Error(errMsg);
+      }
+      const data=await res.json();
+      if(data.error)throw new Error(data.error);
+      const text=(data.content||[]).map((b:any)=>b.text||"").join("").trim();
+      if(!text)throw new Error("IA retornou resposta vazia.");
+      return extrairJSON(text);
+    }finally{clearTimeout(timeout);}
   };
 
   const processarIA=async()=>{
     if(!iaText.trim()&&!imgBase64)return alert("Adicione uma imagem ou texto do cupom.");
-    setIaLoading(true);setIaResult(null);
+    setIaLoading(true);setIaResult(null);setIaAttempt(1);
     let lastErr="";
+    const userContent=imgBase64
+      ?[{type:"image",source:{type:"base64",media_type:imgBase64.mediaType,data:imgBase64.data}},
+        {type:"text",text:PROMPT_CUPOM}]
+      :`${PROMPT_CUPOM}\n\nTexto do cupom:\n${iaText}`;
     for(let t=1;t<=3;t++){
+      setIaAttempt(t);
       try{
-        const userContent=imgBase64
-          ?[{type:"image",source:{type:"base64",media_type:imgBase64.mediaType,data:imgBase64.data}},
-            {type:"text",text:PROMPT_CUPOM}]
-          :`${PROMPT_CUPOM}\n\nTexto do cupom:\n${iaText}`;
-        const result=await chamarIA(userContent,t);
+        const result=await chamarIA(userContent);
         setIaResult(result);
         if(result.formaPagamento&&formasPag.includes(result.formaPagamento))setIaFormaPag(result.formaPagamento);
         if(result.dataVencimento)setIaVenc(result.dataVencimento);
         else if(result.data)setIaVenc(result.data);
-        setIaLoading(false);
+        setIaLoading(false);setIaAttempt(0);
         return;
       }catch(e:any){
         lastErr=e.message||String(e);
-        if(t<3){await new Promise(r=>setTimeout(r,1500*t));}
+        if(e.name==="AbortError")lastErr="Tempo limite excedido. Verifique sua conexão.";
+        if(lastErr.includes("Chave da API inválida")||lastErr.includes("não configurada")){
+          setIaLoading(false);setIaAttempt(0);
+          alert(`❌ ${lastErr}`);
+          return;
+        }
+        if(t<3){await new Promise(r=>setTimeout(r,2000*t));}
       }
     }
-    setIaLoading(false);
-    alert(`❌ Falha após 3 tentativas.\n\n${lastErr}\n\nDica: verifique se a imagem está nítida e bem iluminada, ou tente copiar o texto do cupom manualmente.`);
+    setIaLoading(false);setIaAttempt(0);
+    alert(`❌ Falha após 3 tentativas.\n\n${lastErr}\n\nDicas:\n• Verifique se a imagem está nítida e bem iluminada\n• Tente tirar a foto mais de perto\n• Ou copie o texto do cupom manualmente no campo abaixo`);
   };
 
   const [iaFormaPag,setIaFormaPag]=useState("dinheiro");
@@ -2442,7 +2409,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
       {!imgBase64&&<textarea value={iaText} onChange={e=>setIaText(e.target.value)} placeholder="Ou cole o texto do cupom aqui..." className="inp" style={{marginBottom:8}}/>}
       {!iaResult&&<button className="btn" onClick={processarIA} disabled={iaLoading||!!nfeXml}
         style={{background:iaLoading?"var(--border2)":"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15,marginBottom:14}}>
-        {iaLoading?"⏳ Processando com IA...":"🤖 Processar com IA"}
+        {iaLoading?`⏳ Processando com IA...${iaAttempt>1?` (tentativa ${iaAttempt}/3)`:""}`:"🤖 Processar com IA"}
       </button>}
       {iaResult&&<div className="card" style={{marginBottom:12}}>
         <div className="section-title">Resultado da Leitura</div>

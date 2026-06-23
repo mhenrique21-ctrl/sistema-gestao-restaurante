@@ -614,7 +614,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && urlPath === '/api/scan') {
     let body = '';
     req.on('data', chunk => { body += chunk; if (body.length > 30 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({error:'Imagem muito grande. Reduza o tamanho antes de enviar.'})); req.destroy(); } });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const payload = JSON.parse(body);
         const msgs = [...(payload.messages || [])].filter(m => m.role !== 'assistant');
@@ -623,12 +623,10 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ error: 'Chave da API não configurada no servidor. Configure ANTHROPIC_API_KEY no .env da VPS.' }));
           return;
         }
-        const data = JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 8192,
-          system: `Você é um OCR especialista em cupons fiscais brasileiros (CF-e SAT, NFC-e, NF-e). Sua ÚNICA tarefa é ler a imagem/texto e retornar um JSON com os dados extraídos.
 
-FORMATO DE SAÍDA OBRIGATÓRIO — retorne SOMENTE este JSON, sem texto extra:
+        const SYSTEM_PROMPT = `Você é um OCR especialista em cupons fiscais brasileiros (CF-e SAT, NFC-e, NF-e). Sua ÚNICA tarefa é ler a imagem/texto e retornar um JSON com os dados extraídos.
+
+FORMATO DE SAÍDA OBRIGATÓRIO — retorne SOMENTE este JSON, sem texto extra, sem markdown:
 {
   "fornecedor": {"nome": "...", "cnpj": "...", "endereco": "..."},
   "itens": [{"nome": "...", "categoria": "...", "unidade": "un", "quantidade": 1, "valorUnitario": 10.00, "valorTotal": 10.00}],
@@ -666,43 +664,103 @@ FORMA DE PAGAMENTO — OBRIGATÓRIO extrair:
 - Se não encontrar info de pagamento, use "dinheiro"
 - dataVencimento: use a data de emissão; se for boleto/fiado/crédito, procure data de vencimento
 
-Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`,
+Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
+
+        const callAnthropic = (bodyData) => new Promise((resolve, reject) => {
+          const options = {
+            hostname: 'api.anthropic.com',
+            path: '/v1/messages',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': API_KEY,
+              'anthropic-version': '2023-06-01',
+              'Content-Length': Buffer.byteLength(bodyData)
+            }
+          };
+          const apiReq = https.request(options, apiRes => {
+            let result = '';
+            apiRes.on('data', chunk => result += chunk);
+            apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: result }));
+          });
+          apiReq.on('error', err => reject(err));
+          apiReq.setTimeout(90000, () => { apiReq.destroy(); reject(new Error('TIMEOUT')); });
+          apiReq.write(bodyData);
+          apiReq.end();
+        });
+
+        const data = JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 8192,
+          system: SYSTEM_PROMPT,
           messages: msgs
         });
-        const options = {
-          hostname: 'api.anthropic.com',
-          path: '/v1/messages',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': API_KEY,
-            'anthropic-version': '2023-06-01',
-            'Content-Length': Buffer.byteLength(data)
+
+        const MAX_RETRIES = 3;
+        const RETRY_CODES = [429, 500, 502, 503, 529];
+        let lastStatus = 0;
+        let lastBody = '';
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const resp = await callAnthropic(data);
+            lastStatus = resp.status;
+            lastBody = resp.body;
+
+            if (resp.status === 200) {
+              res.setHeader('Content-Type', 'application/json');
+              res.writeHead(200);
+              res.end(resp.body);
+              return;
+            }
+
+            if (!RETRY_CODES.includes(resp.status) || attempt === MAX_RETRIES) break;
+
+            let retryAfter = 2000 * attempt;
+            try {
+              const parsed = JSON.parse(resp.body);
+              if (parsed?.error?.type === 'rate_limit_error') {
+                retryAfter = Math.max(retryAfter, 5000);
+              }
+            } catch {}
+            console.log(`[IA] Tentativa ${attempt}/${MAX_RETRIES} falhou (HTTP ${resp.status}), retry em ${retryAfter}ms`);
+            await new Promise(r => setTimeout(r, retryAfter));
+          } catch (netErr) {
+            lastStatus = netErr.message === 'TIMEOUT' ? 504 : 500;
+            lastBody = JSON.stringify({ error: netErr.message === 'TIMEOUT' ? 'Timeout: a IA demorou demais para responder (90s).' : `Erro de rede: ${netErr.message}` });
+            if (attempt === MAX_RETRIES) break;
+            console.log(`[IA] Tentativa ${attempt}/${MAX_RETRIES} erro de rede: ${netErr.message}, retry em ${2000 * attempt}ms`);
+            await new Promise(r => setTimeout(r, 2000 * attempt));
           }
-        };
-        const apiReq = https.request(options, apiRes => {
-          let result = '';
-          apiRes.on('data', chunk => result += chunk);
-          apiRes.on('end', () => {
-            res.setHeader('Content-Type', 'application/json');
-            res.writeHead(apiRes.statusCode);
-            res.end(result);
-          });
-        });
-        apiReq.on('error', err => {
-          res.writeHead(500);
-          res.end(JSON.stringify({ error: err.message }));
-        });
-        apiReq.setTimeout(60000, () => {
-          apiReq.destroy();
-          res.writeHead(504);
-          res.end(JSON.stringify({ error: 'Timeout: a IA demorou demais para responder.' }));
-        });
-        apiReq.write(data);
-        apiReq.end();
+        }
+
+        res.setHeader('Content-Type', 'application/json');
+        let errMsg = '';
+        try {
+          const parsed = JSON.parse(lastBody);
+          const errObj = parsed?.error;
+          if (errObj) {
+            const errType = errObj.type || '';
+            const errText = errObj.message || JSON.stringify(errObj);
+            if (errType === 'authentication_error') errMsg = 'Chave da API inválida ou expirada. Verifique ANTHROPIC_API_KEY no .env da VPS.';
+            else if (errType === 'rate_limit_error') errMsg = 'Limite de requisições excedido. Aguarde alguns minutos e tente novamente.';
+            else if (errType === 'overloaded_error' || lastStatus === 529) errMsg = 'Servidor da IA sobrecarregado. Tente novamente em alguns minutos.';
+            else if (errType === 'invalid_request_error') errMsg = `Requisição inválida: ${errText}`;
+            else errMsg = errText;
+          }
+        } catch {}
+        if (!errMsg) {
+          if (lastStatus === 504) errMsg = 'Timeout: a IA demorou demais para responder.';
+          else if (lastStatus === 401) errMsg = 'Chave da API inválida. Verifique ANTHROPIC_API_KEY no .env da VPS.';
+          else errMsg = `Erro do servidor da IA (HTTP ${lastStatus}). Tente novamente.`;
+        }
+        console.log(`[IA] Falha final: HTTP ${lastStatus} — ${errMsg}`);
+        res.writeHead(lastStatus >= 400 ? lastStatus : 500);
+        res.end(JSON.stringify({ error: errMsg }));
       } catch (e) {
+        console.log(`[IA] Erro ao processar requisição: ${e.message}`);
         res.writeHead(400);
-        res.end(JSON.stringify({ error: e.message }));
+        res.end(JSON.stringify({ error: `Erro ao processar requisição: ${e.message}` }));
       }
     });
     return;
