@@ -4522,7 +4522,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     }
     setForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
-  const editItem=(it:any)=>{setEditId(it.id);setForm({nome:it.nome,qtd:String(it.quantidade),qtdAtual:it.qtdAtual||"",unidade:it.unidade||"un",cat:it.cat||"",obs:it.obs||""});};
+  const editItem=(it:any)=>{setEditId(it.id);setForm({nome:it.nome,qtd:String(it.quantidade),qtdAtual:it.qtdAtual||"",unidade:it.unidade||"un",cat:it.cat||"",obs:it.obs||""});setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delItem=(id:string)=>setItens(prev=>prev.filter(it=>it.id!==id));
   const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});};
 
@@ -4574,6 +4574,8 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const [addToPedId,setAddToPedId]=useState<string|null>(null);
   const [addToPedForm,setAddToPedForm]=useState({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
   const [addToPedSugg,setAddToPedSugg]=useState(false);
+  const [collapsedPeds,setCollapsedPeds]=useState<Set<string>>(new Set());
+  const formRef=useRef<HTMLDivElement>(null);
   const addToPedSuggestions=addToPedForm.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(addToPedForm.nome.toLowerCase())).slice(0,8):[];
   const addItemToPedido=(pedId:string)=>{
     const nome=addToPedForm.nome.trim();if(!nome)return alert("Produto obrigatório.");
@@ -4696,9 +4698,10 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
       {!(db.pedidosProducao||[]).length&&<div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:16}}>Nenhum pedido ainda.</div>}
       {(db.pedidosProducao||[]).slice(0,30).map((ped:any)=>{
         const isEdit=editPedId===ped.id;
+        const isCollapsed=collapsedPeds.has(ped.id)&&!isEdit;
         return <div key={ped.id} style={{background:"var(--bg4)",borderRadius:8,padding:"10px",marginBottom:8,border:`1px solid ${isEdit?"#c084fc":"#1e2235"}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-            <span style={{fontWeight:600,fontSize:12,color:"#c084fc"}}>{fmtDate(ped.data)} · {(ped.itens||[]).length} produto(s) · {ped.solicitante||"—"}</span>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCollapsed?0:6}}>
+            <span onClick={()=>setCollapsedPeds(s=>{const n=new Set(s);if(n.has(ped.id))n.delete(ped.id);else n.add(ped.id);return n;})} style={{fontWeight:600,fontSize:12,color:"#c084fc",cursor:"pointer",flex:1}}>{isCollapsed?"▶":"▼"} {fmtDate(ped.data)} · {(ped.itens||[]).length} produto(s) · {ped.solicitante||"—"}</span>
             <div style={{display:"flex",gap:4}}>
               <button onClick={()=>{window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>
               <button onClick={()=>imprimirPedido(ped)} style={{background:"none",border:"1px solid #60a5fa44",borderRadius:5,color:"#60a5fa",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
@@ -4716,7 +4719,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
               }} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:5,color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
             </div>
           </div>
-          {(ped.itens||[]).map((it:any,j:number)=>{
+          {!isCollapsed&&<>{(ped.itens||[]).map((it:any,j:number)=>{
             const key=`${ped.id}_${it.nome}`;
             return <div key={j} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:j<(ped.itens||[]).length-1?"1px solid var(--border)":"none"}}>
               <span style={{fontSize:12,flex:1}}>{prodCatIcon(it.categoria)} {it.nome}</span>
@@ -4773,13 +4776,13 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
                 className="inp" style={{flex:1,marginBottom:0,fontSize:12}}/>
               <button onClick={()=>addItemToPedido(ped.id)} className="btn" style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:12,fontWeight:700,flexShrink:0}}>✅ Adicionar</button>
             </div>
-          </div>}
+          </div>}</>}
         </div>;
       })}
     </div>}
 
     {/* Form — add item to order (Lista-style) */}
-    <div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#5b21b644"}`}}>
+    <div ref={formRef} className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#5b21b644"}`}}>
       <div className="section-title" style={{color:editId?"#fbbf24":"#c084fc",marginBottom:10}}>{editId?"✏️ Editar Item":"➕ Novo Item"}</div>
       <div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *</div>
