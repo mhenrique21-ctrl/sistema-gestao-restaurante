@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retaguarda — Confraria</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0f172a; color: #f1f5f9; min-height: 100vh; }
+
+  #header { background: #1e293b; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; }
+  #header h1 { font-size: 1.3rem; font-weight: 800; }
+  .ws-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; display: inline-block; margin-right: 6px; }
+  .ws-dot.on { background: #10b981; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  #stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 24px; }
+  .stat { background: #1e293b; border-radius: 12px; padding: 14px; border: 1px solid #334155; }
+  .stat .val { font-size: 2rem; font-weight: 800; }
+  .stat .lbl { font-size: .75rem; color: #64748b; margin-top: 2px; }
+
+  #cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 0 24px 24px; }
+  .col-header { padding: 10px 14px; border-radius: 10px 10px 0 0; font-weight: 800; font-size: .9rem; display: flex; align-items: center; justify-content: space-between; }
+  .col-body { background: #1e293b; border-radius: 0 0 10px 10px; min-height: 200px; padding: 10px; display: flex; flex-direction: column; gap: 8px; border: 1px solid #334155; border-top: none; }
+
+  .order-card { background: #0f172a; border-radius: 10px; padding: 12px; border-left: 4px solid #334155; animation: in .25s ease; }
+  @keyframes in { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+  .order-card.bebidas { border-left-color: #2563eb; }
+  .order-card.comida_quente { border-left-color: #dc2626; }
+  .order-card.montagem { border-left-color: #7c3aed; }
+  .order-card .num { font-weight: 800; font-size: .9rem; }
+  .order-card .meta { font-size: .72rem; color: #64748b; margin: 2px 0 6px; }
+  .order-card ul { list-style: none; }
+  .order-card ul li { font-size: .8rem; color: #cbd5e1; padding: 2px 0; }
+  .order-card ul li small { color: #64748b; display: block; }
+  .timer-badge { float: right; font-size: .7rem; font-weight: 700; padding: 1px 6px; background: #334155; border-radius: 999px; }
+  .timer-badge.warn { background: #dc2626; }
+  .btn-status { margin-top: 8px; width: 100%; padding: 6px; background: #334155; border: none; color: #f1f5f9; border-radius: 7px; font-size: .78rem; font-weight: 600; cursor: pointer; }
+  .btn-status:hover { background: #475569; }
+
+  #log { padding: 0 24px 24px; }
+  #log h2 { font-size: .85rem; color: #64748b; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
+  #log-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  #log-table th { text-align: left; padding: 6px 10px; color: #64748b; border-bottom: 1px solid #334155; font-weight: 600; }
+  #log-table td { padding: 8px 10px; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+  #log-table tr:hover td { background: #1e293b; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+  .pill.aguardando_pagamento { background:#fef3c7;color:#92400e }
+  .pill.pago,.pill.confirmado { background:#dbeafe;color:#1e40af }
+  .pill.em_preparo { background:#fed7aa;color:#9a3412 }
+  .pill.pronto { background:#d1fae5;color:#065f46 }
+  .pill.saiu_para_entrega { background:#ede9fe;color:#5b21b6 }
+  .pill.entregue { background:#f0fdf4;color:#166534 }
+  .pill.cancelado { background:#fee2e2;color:#991b1b }
+
+  #clock { font-size: .85rem; color: #64748b; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>☕ Confraria — Retaguarda</h1>
+    <div id="clock"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span id="ws-status"><span class="ws-dot" id="ws-dot"></span> Offline</span>
+    <button onclick="loadOrders()" style="background:#334155;border:none;color:#f1f5f9;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:.8rem;">🔄 Atualizar</button>
+  </div>
+</div>
+
+<div id="stats">
+  <div class="stat"><div class="val" id="s-total">0</div><div class="lbl">Pedidos hoje</div></div>
+  <div class="stat"><div class="val" id="s-preparo">0</div><div class="lbl">Em preparo</div></div>
+  <div class="stat"><div class="val" id="s-faturamento">R$ 0</div><div class="lbl">Faturamento hoje</div></div>
+  <div class="stat"><div class="val" id="s-cancelados">0</div><div class="lbl">Cancelados</div></div>
+</div>
+
+<div id="cols">
+  <div>
+    <div class="col-header" style="background:#1d4ed8">☕ Bebidas <span id="cnt-bebidas" style="background:#1e3a8a;border-radius:999px;padding:2px 8px;font-size:.75rem">0</span></div>
+    <div class="col-body" id="col-bebidas"></div>
+  </div>
+  <div>
+    <div class="col-header" style="background:#b91c1c">🔥 Comida Quente <span id="cnt-comida_quente" style="background:#7f1d1d;border-radius:999px;padding:2px 8px;font-size:.75rem">0</span></div>
+    <div class="col-body" id="col-comida_quente"></div>
+  </div>
+  <div>
+    <div class="col-header" style="background:#6d28d9">🎂 Montagem <span id="cnt-montagem" style="background:#4c1d95;border-radius:999px;padding:2px 8px;font-size:.75rem">0</span></div>
+    <div class="col-body" id="col-montagem"></div>
+  </div>
+</div>
+
+<div id="log">
+  <h2>📋 Todos os pedidos de hoje</h2>
+  <table id="log-table">
+    <thead><tr><th>#</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Status</th><th>Horário</th><th>Ação</th></tr></thead>
+    <tbody id="log-body"></tbody>
+  </table>
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('kitchen_token') || prompt('Token JWT admin:');
+if (TOKEN) localStorage.setItem('kitchen_token', TOKEN);
+
+let stationOrders = { bebidas: {}, comida_quente: {}, montagem: {} };
+let ws;
+
+connect();
+loadOrders();
+loadDashboard();
+setInterval(() => { updateTimers(); updateClock(); }, 1000);
+setInterval(() => { loadOrders(); loadDashboard(); }, 30000);
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws?token=${TOKEN}&station=retaguarda`);
+  ws.onopen = () => {
+    document.getElementById('ws-dot').className = 'ws-dot on';
+    document.getElementById('ws-status').innerHTML = '<span class="ws-dot on"></span> Online';
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-dot').className = 'ws-dot';
+    document.getElementById('ws-status').innerHTML = '<span class="ws-dot"></span> Offline';
+    setTimeout(connect, 3000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'station_order' && msg.event === 'new_order') {
+      stationOrders[msg.station] = stationOrders[msg.station] || {};
+      stationOrders[msg.station][msg.order.id] = { order: msg.order, items: msg.items, arrivedAt: Date.now() };
+      renderStation(msg.station);
+      playBeep();
+    }
+    if (msg.type === 'order_update') {
+      if (msg.event === 'new_order') { loadOrders(); loadDashboard(); }
+      if (msg.event === 'status_update') { loadOrders(); loadDashboard(); }
+    }
+  };
+}
+
+async function loadOrders() {
+  try {
+    const res = await fetch('/api/orders?date=' + new Date().toISOString().slice(0,10), { headers: { Authorization: 'Bearer ' + TOKEN } });
+    const orders = await res.json();
+    renderLog(Array.isArray(orders) ? orders : []);
+  } catch(e) { console.error(e); }
+}
+
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/dashboard', { headers: { Authorization: 'Bearer ' + TOKEN } });
+    const d = await res.json();
+    if (!d.summary) return;
+    document.getElementById('s-total').textContent = d.summary.total_orders || 0;
+    document.getElementById('s-faturamento').textContent = 'R$ ' + parseFloat(d.summary.revenue || 0).toFixed(2).replace('.',',');
+    document.getElementById('s-cancelados').textContent = d.summary.cancelled || 0;
+    const preparo = (d.by_status || []).find(s => s.status === 'em_preparo');
+    document.getElementById('s-preparo').textContent = preparo?.count || 0;
+  } catch(e) {}
+}
+
+function renderStation(station) {
+  const col = document.getElementById('col-' + station);
+  const cnt = document.getElementById('cnt-' + station);
+  const entries = Object.values(stationOrders[station] || {});
+  cnt.textContent = entries.length;
+  if (!entries.length) { col.innerHTML = '<div style="color:#475569;font-size:.8rem;text-align:center;padding:20px">Sem pedidos</div>'; return; }
+  col.innerHTML = entries.map(({ order, items, arrivedAt }) => {
+    const m = Math.floor((Date.now() - arrivedAt) / 60000);
+    return `
+    <div class="order-card ${station}" id="rc-${order.id}">
+      <span class="timer-badge ${m>=10?'warn':''}" id="rt-${order.id}">${m}min</span>
+      <div class="num">#${(order.id||'').slice(-6).toUpperCase()}</div>
+      <div class="meta">${order.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Delivery'}</div>
+      <ul>${items.map(i=>`<li>${i.quantity}× ${i.product_name}${i.notes?`<small>↳ ${i.notes}</small>`:''}</li>`).join('')}</ul>
+      <button class="btn-status" onclick="markDone('${order.id}','${station}')">✅ Marcar pronto</button>
+    </div>`;
+  }).join('');
+}
+
+function markDone(id, station) {
+  fetch(`/api/orders/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify({ status: 'pronto' }),
+  }).then(() => {
+    delete stationOrders[station][id];
+    renderStation(station);
+    loadOrders();
+  });
+}
+
+async function updateStatus(id, status) {
+  await fetch(`/api/orders/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify({ status }),
+  });
+  loadOrders(); loadDashboard();
+}
+
+function renderLog(orders) {
+  const NEXT = { aguardando_pagamento:'confirmado', confirmado:'em_preparo', em_preparo:'pronto', pronto:'saiu_para_entrega', saiu_para_entrega:'entregue' };
+  const LABELS = { aguardando_pagamento:'✅ Confirmar', confirmado:'🍳 Iniciar', em_preparo:'✅ Pronto', pronto:'🛵 Saiu', saiu_para_entrega:'🏠 Entregue' };
+  const body = document.getElementById('log-body');
+  body.innerHTML = orders.slice(0,50).map(o => {
+    const next = NEXT[o.status];
+    const btn = next ? `<button onclick="updateStatus('${o.id}','${next}')" style="background:#334155;border:none;color:#f1f5f9;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:.75rem;white-space:nowrap">${LABELS[o.status]||''}</button>` : '';
+    return `<tr>
+      <td style="font-weight:700;font-family:monospace">#${o.id.slice(-6).toUpperCase()}</td>
+      <td>${o.customer_name||'-'}</td>
+      <td>${o.item_count} item(s)</td>
+      <td style="font-weight:700">R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</td>
+      <td>${o.payment_method||'-'}</td>
+      <td><span class="pill ${o.status}">${o.status.replace(/_/g,' ')}</span></td>
+      <td style="color:#64748b">${new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td>${btn}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateTimers() {
+  ['bebidas','comida_quente','montagem'].forEach(s => {
+    Object.values(stationOrders[s]||{}).forEach(({ order, arrivedAt }) => {
+      const el = document.getElementById('rt-' + order.id);
+      if (!el) return;
+      const m = Math.floor((Date.now() - arrivedAt) / 60000);
+      el.textContent = m + 'min';
+      el.className = 'timer-badge ' + (m >= 10 ? 'warn' : '');
+    });
+  });
+}
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('pt-BR');
+}
+
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 660;
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(); osc.stop(ctx.currentTime + 0.3);
+  } catch {}
+}
+</script>
+</body>
+</html>
