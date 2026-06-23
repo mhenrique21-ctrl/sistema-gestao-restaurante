@@ -3142,7 +3142,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [showRuaMgmt,setShowRuaMgmt]=useState(false);
   const [novaRua,setNovaRua]=useState("");
   const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
-  const [vistaRua,setVistaRua]=useState(false);
+  const [vistaRua,setVistaRua]=useState(true);
   const [showEstimativa,setShowEstimativa]=useState(false);
   const [estConcItem,setEstConcItem]=useState<string|null>(null);
   const [catConcItem,setCatConcItem]=useState<string|null>(null);
