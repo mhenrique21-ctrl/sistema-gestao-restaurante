@@ -624,6 +624,8 @@ export default function App() {
     try{return JSON.parse(sessionStorage.getItem("app_login")||"null");}catch{return null;}
   });
   const [tab,setTab]       = useState("dashboard");
+  const [pendingSub,setPendingSub]=useState<string|null>(null);
+  const [expandedMenu,setExpandedMenu]=useState<string|null>(null);
   const [empresa,setEmpresa] = useState(()=>{
     try{const l=JSON.parse(sessionStorage.getItem("app_login")||"null");return l?.empresa||"CONFRARIA";}catch{return "CONFRARIA";}
   });
@@ -749,20 +751,54 @@ export default function App() {
 
   if(!login)return <LoginScreen onLogin={doLogin} usuarios={state.CONFRARIA?.usuarios||[]}/>;
 
-  const allTabs=[
+  const menuStructure:{id:string,label:string,icon:string,children?:{id:string,label:string,icon:string,sub?:string}[]}[]=[
     {id:"dashboard",label:"Dashboard",icon:"📊"},
     {id:"vendas",label:"Vendas",icon:"💰"},
-    {id:"compras",label:"Compras",icon:"🏪"},
-    {id:"lista",label:"Lista",icon:"🛒"},
-    {id:"producao",label:"Produção",icon:"🏭"},
-    {id:"contas",label:"Financeiro",icon:"📋"},
-    {id:"estoque",label:"Estoque",icon:"📦"},
-    {id:"fluxo",label:"Fluxo",icon:"💵"},
-    {id:"gestao",label:"Gestão",icon:"⚙️"},
-    {id:"usuarios",label:"Usuários",icon:"👥"},
+    {id:"compras",label:"Compras",icon:"🏪",children:[
+      {id:"compras-ent",label:"Entradas",icon:"📥",sub:"novo"},
+      {id:"compras-ia",label:"Cupom IA",icon:"🤖",sub:"ia"},
+      {id:"compras-nfe",label:"NF-e",icon:"📄",sub:"nfe"},
+      {id:"compras-hist",label:"Histórico",icon:"📋",sub:"lista"},
+      {id:"compras-forn",label:"Fornecedores",icon:"🏭",sub:"forn"},
+      {id:"compras-prod",label:"Produtos",icon:"📦",sub:"produtos"},
+    ]},
+    {id:"lista",label:"Lista",icon:"🛒",children:[
+      {id:"lista-prod",label:"Produtos",icon:"📋",sub:"produtos"},
+      {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias"},
+      {id:"lista-rua",label:"Ruas",icon:"🛣️",sub:"ruas"},
+      {id:"lista-est",label:"Estimativa",icon:"📊",sub:"estimativa"},
+    ]},
+    {id:"producao",label:"Produção",icon:"🏭",children:[
+      {id:"prod-novo",label:"Novo Pedido",icon:"➕",sub:"novo"},
+      {id:"prod-ped",label:"Pedidos",icon:"📋",sub:"pedidos"},
+      {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos"},
+      {id:"prod-cat",label:"Categorias",icon:"🏷️",sub:"categorias"},
+    ]},
+    {id:"contas",label:"Financeiro",icon:"📋",children:[
+      {id:"fin-contas",label:"Contas",icon:"📋",sub:"lista"},
+      {id:"fin-novo",label:"+ Novo",icon:"➕",sub:"novo"},
+      {id:"fin-cat",label:"Categorias",icon:"🏷️",sub:"config"},
+    ]},
+    {id:"estoque",label:"Estoque",icon:"📦",children:[
+      {id:"est-inv",label:"Inventário",icon:"📦",sub:"inventario"},
+      {id:"est-ana",label:"Análise",icon:"📊",sub:"analise"},
+      {id:"est-mov",label:"Movimentações",icon:"📋",sub:"movimentacoes"},
+    ]},
+    {id:"fluxo",label:"Fluxo de Caixa",icon:"💵"},
+    {id:"gestao",label:"Gestão",icon:"⚙️",children:[
+      {id:"gest-rh",label:"RH",icon:"👥",sub:"rh"},
+      {id:"gest-ficha",label:"Fichas",icon:"📝",sub:"ficha"},
+      {id:"gest-dre",label:"DRE",icon:"📈",sub:"dre"},
+      {id:"gest-rel",label:"Relatórios",icon:"📄",sub:"relatorios"},
+      {id:"gest-vs",label:"Versus",icon:"⚖️",sub:"versus"},
+      {id:"gest-bkp",label:"Backups",icon:"💾",sub:"backups"},
+    ]},
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
+  const allTabs=menuStructure.map(m=>({id:m.id,label:m.label,icon:m.icon}));
   const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):allTabs.filter(t=>t.id==="producao")):allTabs;
+  const menuFiltered=isOp?menuStructure.filter(m=>tabs.some(t=>t.id===m.id)):menuStructure;
+  const navTo=(t:string,s?:string)=>{setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
 
   return (
     <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14}}>
@@ -815,19 +851,35 @@ export default function App() {
             👤 <span style={{color:loginCorTexto,fontWeight:700}}>{login.label}</span>
           </div>}
         </div>
-        <div style={{flex:1}}>
+        <div style={{flex:1,overflowY:"auto"}}>
           {(()=>{
             const estoqueBaixo=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
             const atrasadas=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
-            return tabs.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{background:tab===t.id?"var(--bg4)":"none",border:"none",borderLeft:tab===t.id?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:tab===t.id?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:tab===t.id?700:400,transition:"all .15s"}}>
-                <span style={{fontSize:17}}>{t.icon}</span>
-                <span>{t.label}</span>
-                {t.id==="estoque"&&estoqueBaixo>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:4}}>{estoqueBaixo}</span>}
-                {t.id==="contas"&&atrasadas>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:4}}>{atrasadas}</span>}
-              </button>
-            ));
+            const badge=(id:string)=>id==="estoque"&&estoqueBaixo>0?<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{estoqueBaixo}</span>
+              :id==="contas"&&atrasadas>0?<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{atrasadas}</span>:null;
+            return menuFiltered.map(m=>{
+              const hasKids=!!m.children?.length;
+              const isOpen=expandedMenu===m.id;
+              const isActive=tab===m.id;
+              return <div key={m.id}>
+                <button onClick={()=>{if(hasKids){setExpandedMenu(isOpen?null:m.id);if(!isActive)navTo(m.id,m.children![0].sub);}else navTo(m.id);}}
+                  style={{background:isActive?"var(--bg4)":"none",border:"none",borderLeft:isActive?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:isActive?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:isActive?700:400,transition:"all .15s"}}>
+                  <span style={{fontSize:17}}>{m.icon}</span>
+                  <span>{m.label}</span>
+                  {badge(m.id)}
+                  {hasKids&&<span style={{marginLeft:badge(m.id)?"4px":"auto",fontSize:10,color:"#4a5080",transition:"transform .2s",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>▼</span>}
+                </button>
+                {hasKids&&isOpen&&<div style={{background:"var(--bg4)",borderLeft:"3px solid #2a2f50"}}>
+                  {m.children!.map(c=>(
+                    <button key={c.id} onClick={()=>navTo(m.id,c.sub)}
+                      style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,color:tab===m.id&&pendingSub===null?"#5a6080":"#4a5080",padding:"8px 18px 8px 36px",width:"100%",fontSize:12,fontWeight:400,transition:"all .15s"}}>
+                      <span style={{fontSize:13}}>{c.icon}</span>
+                      <span>{c.label}</span>
+                    </button>
+                  ))}
+                </div>}
+              </div>;
+            });
           })()}
         </div>
         <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
@@ -883,24 +935,27 @@ export default function App() {
         </div>}
 
         {/* TOP TABS (when menuLayout=top) */}
-        {!isOp&&menuLayout==="top"&&<div className="top-tabs-mobile" style={{display:"flex",gap:4,marginTop:8,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any}}>
+        {!isOp&&menuLayout==="top"&&<>
+          <div className="top-tabs-mobile" style={{display:"flex",gap:4,marginTop:8,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any}}>
           <style>{`.top-tabs-mobile::-webkit-scrollbar{display:none}`}</style>
-          {(()=>{
-            const estoqueBaixoTop=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
-            const atrasadasTop=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
-            const listaTop=(db.listaCompras||[]).filter((i:any)=>!i.comprado).length;
-            return tabs.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{flexShrink:0,display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:20,fontSize:11,fontWeight:tab===t.id?700:500,
-                  background:tab===t.id?"#7c8fff":"var(--bg4)",color:tab===t.id?"#fff":"var(--text2)",border:"none",cursor:"pointer",position:"relative",whiteSpace:"nowrap"}}>
-                <span style={{fontSize:14}}>{t.icon}</span>{t.label}
-                {t.id==="estoque"&&estoqueBaixoTop>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoTop}</span>}
-                {t.id==="contas"&&atrasadasTop>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasTop}</span>}
-                {t.id==="lista"&&listaTop>0&&<span style={{background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{listaTop}</span>}
+          {menuFiltered.map(m=>(
+            <button key={m.id} onClick={()=>{if(m.children?.length){setExpandedMenu(expandedMenu===m.id?null:m.id);if(tab!==m.id)navTo(m.id,m.children[0].sub);}else{navTo(m.id);setExpandedMenu(null);}}}
+              style={{flexShrink:0,display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:20,fontSize:11,fontWeight:tab===m.id?700:500,
+                background:tab===m.id?"#7c8fff":"var(--bg4)",color:tab===m.id?"#fff":"var(--text2)",border:"none",cursor:"pointer",position:"relative",whiteSpace:"nowrap"}}>
+              <span style={{fontSize:14}}>{m.icon}</span>{m.label}
+              {m.children?.length?<span style={{fontSize:8,marginLeft:2}}>▼</span>:null}
+            </button>
+          ))}
+          </div>
+          {expandedMenu&&menuFiltered.find(m=>m.id===expandedMenu)?.children&&<div style={{display:"flex",gap:3,padding:"4px 0",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any}}>
+            {menuFiltered.find(m=>m.id===expandedMenu)!.children!.map(c=>(
+              <button key={c.id} onClick={()=>{navTo(expandedMenu,c.sub);setExpandedMenu(null);}}
+                style={{flexShrink:0,padding:"4px 10px",borderRadius:16,fontSize:10,fontWeight:500,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",whiteSpace:"nowrap"}}>
+                {c.icon} {c.label}
               </button>
-            ));
-          })()}
-        </div>}
+            ))}
+          </div>}
+        </>}
       </div>
 
       {/* OPERATOR TABS (mobile, when operator has multiple tabs) */}
@@ -923,13 +978,13 @@ export default function App() {
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
-              {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave}/>}
+              {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
-              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa}/>}
-              {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave}/>}
+              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave}/>}
+              {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout}/>}
             </>
@@ -937,46 +992,69 @@ export default function App() {
       </div>
 
       {/* BOTTOM NAV (menuLayout=bottom, hidden for operators) */}
-      {!isOp&&menuLayout==="bottom"&&<div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
+      {!isOp&&menuLayout==="bottom"&&<>
+        {expandedMenu&&<div onClick={()=>setExpandedMenu(null)} style={{position:"fixed",inset:0,zIndex:89}}/>}
+        {expandedMenu&&menuFiltered.find(m=>m.id===expandedMenu)?.children&&<div style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg3)",borderTop:"1px solid var(--border2)",borderRadius:"16px 16px 0 0",padding:"10px 8px 6px",zIndex:91,boxShadow:"0 -4px 20px #0006"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#7c8fff",padding:"0 8px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>{menuFiltered.find(m=>m.id===expandedMenu)?.icon} {menuFiltered.find(m=>m.id===expandedMenu)?.label}</span>
+            <button onClick={()=>setExpandedMenu(null)} style={{background:"none",border:"none",color:"#666",fontSize:16,cursor:"pointer",padding:"0 4px"}}>✕</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>
+            {menuFiltered.find(m=>m.id===expandedMenu)!.children!.map(c=>(
+              <button key={c.id} onClick={()=>{navTo(expandedMenu,c.sub);setExpandedMenu(null);}}
+                style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 6px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,color:"var(--text)"}}>
+                <span style={{fontSize:18}}>{c.icon}</span>
+                <span style={{fontSize:10,fontWeight:600}}>{c.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>}
+        <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #1e2235",display:"flex",padding:"6px 2px",zIndex:90}}>
         {(()=>{
           const estoqueBaixoNav=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
           const atrasadasNav=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
           const listaNav=(db.listaCompras||[]).filter((i:any)=>!i.comprado).length;
-          return tabs.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)}
+          return menuFiltered.map(m=>(
+            <button key={m.id} onClick={()=>{if(m.children?.length){if(tab===m.id&&expandedMenu===m.id){setExpandedMenu(null);}else{setExpandedMenu(m.id);if(tab!==m.id)navTo(m.id,m.children[0].sub);}}else{navTo(m.id);setExpandedMenu(null);}}}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                color:tab===t.id?"#7c8fff":"var(--text3)",padding:"4px 1px",transition:"color .15s",position:"relative"}}>
-              <span style={{fontSize:17}}>{t.icon}</span>
-              <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{t.label}</span>
-              {t.id==="estoque"&&estoqueBaixoNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoNav}</span>}
-              {t.id==="contas"&&atrasadasNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasNav}</span>}
-              {t.id==="lista"&&listaNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{listaNav}</span>}
+                color:tab===m.id?"#7c8fff":"var(--text3)",padding:"4px 1px",transition:"color .15s",position:"relative"}}>
+              <span style={{fontSize:17}}>{m.icon}</span>
+              <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{m.label}</span>
+              {m.id==="estoque"&&estoqueBaixoNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoNav}</span>}
+              {m.id==="contas"&&atrasadasNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasNav}</span>}
+              {m.id==="lista"&&listaNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{listaNav}</span>}
             </button>
           ));
         })()}
-      </div>}
+        </div>
+      </>}
 
       {/* FAB MENU (menuLayout=fab, hidden for operators) */}
       {!isOp&&menuLayout==="fab"&&<>
-        {fabOpen&&<div onClick={()=>setFabOpen(false)} style={{position:"fixed",inset:0,background:"#00000066",zIndex:91}}/>}
+        {fabOpen&&<div onClick={()=>{setFabOpen(false);setExpandedMenu(null);}} style={{position:"fixed",inset:0,background:"#00000066",zIndex:91}}/>}
         <div className="fab-menu-container" style={{position:"fixed",bottom:20,right:16,zIndex:92,maxWidth:480,pointerEvents:"none"}}>
         <div style={{pointerEvents:"auto",marginLeft:"auto",width:"fit-content"}}>
-          {fabOpen&&<div style={{position:"absolute",bottom:60,right:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:16,padding:6,minWidth:180,boxShadow:"0 8px 32px #000a"}}>
-            {(()=>{
-              const estoqueBaixoFab=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
-              const atrasadasFab=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
-              const listaFab=(db.listaCompras||[]).filter((i:any)=>!i.comprado).length;
-              return tabs.map(t=>(
-                <button key={t.id} onClick={()=>{setTab(t.id);setFabOpen(false);}}
+          {fabOpen&&<div style={{position:"absolute",bottom:60,right:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:16,padding:6,minWidth:200,maxHeight:"70vh",overflowY:"auto",boxShadow:"0 8px 32px #000a"}}>
+            {menuFiltered.map(m=>{
+              const hasKids=!!m.children?.length;
+              const fabExpanded=expandedMenu===m.id;
+              return <div key={m.id}>
+                <button onClick={()=>{if(hasKids){setExpandedMenu(fabExpanded?null:m.id);}else{navTo(m.id);setFabOpen(false);setExpandedMenu(null);}}}
                   style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:10,border:"none",cursor:"pointer",
-                    background:tab===t.id?"#7c8fff22":"none",color:tab===t.id?"#7c8fff":"var(--text)",fontSize:13,fontWeight:tab===t.id?700:400,textAlign:"left",position:"relative"}}>
-                  <span style={{fontSize:18}}>{t.icon}</span><span>{t.label}</span>
-                  {t.id==="estoque"&&estoqueBaixoFab>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px",marginLeft:"auto"}}>{estoqueBaixoFab}</span>}
-                  {t.id==="contas"&&atrasadasFab>0&&<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px",marginLeft:"auto"}}>{atrasadasFab}</span>}
-                  {t.id==="lista"&&listaFab>0&&<span style={{background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px",marginLeft:"auto"}}>{listaFab}</span>}
+                    background:tab===m.id?"#7c8fff22":"none",color:tab===m.id?"#7c8fff":"var(--text)",fontSize:13,fontWeight:tab===m.id?700:400,textAlign:"left"}}>
+                  <span style={{fontSize:18}}>{m.icon}</span><span style={{flex:1}}>{m.label}</span>
+                  {hasKids&&<span style={{fontSize:9,color:"#4a5080",transition:"transform .2s",transform:fabExpanded?"rotate(180deg)":"none"}}>▼</span>}
                 </button>
-              ));
-            })()}
+                {hasKids&&fabExpanded&&<div style={{paddingLeft:16,borderLeft:"2px solid #2a2f50",marginLeft:20,marginBottom:4}}>
+                  {m.children!.map(c=>(
+                    <button key={c.id} onClick={()=>{navTo(m.id,c.sub);setFabOpen(false);setExpandedMenu(null);}}
+                      style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",borderRadius:8,border:"none",cursor:"pointer",background:"none",color:"var(--text2)",fontSize:12,textAlign:"left"}}>
+                      <span style={{fontSize:14}}>{c.icon}</span><span>{c.label}</span>
+                    </button>
+                  ))}
+                </div>}
+              </div>;
+            })}
           </div>}
           <button onClick={()=>setFabOpen(v=>!v)}
             style={{width:52,height:52,borderRadius:"50%",background:fabOpen?"#ff5c7a":"linear-gradient(135deg,#7c8fff,#5b6fff)",border:"none",cursor:"pointer",
@@ -1561,8 +1639,9 @@ const reconciliarLista=(d:any,nomesComprados:string[])=>{
   }catch{return d;}
 };
 
-function Compras({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:any,empresa:string,state?:any,setState?:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
-  const [subTab,setSubTab]=useState("novo");
+function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,state?:any,setState?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+  const [subTab,setSubTab]=useState(pendingSub||"novo");
+  useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
 
   // ---- Carrinho (entrada manual multi-produto) ----
   const [fornecedor,setFornecedor]=useState("");
@@ -4929,9 +5008,10 @@ const REGRAS_CAT:Record<string,{dias:number,perecivel:"alta"|"media"|"baixa",cmv
   "limpeza":   {dias:30, perecivel:"baixa", cmv:false, icon:"🧹"},
 };
 
-function EstoqueTab({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
+function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
 
-  const [sub,setSub]=useState("inventario");
+  const [sub,setSub]=useState(pendingSub||"inventario");
+  useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   const [filtroEst,setFiltroEst]=useState("todos");
   const [ajusteModal,setAjusteModal]=useState<any>(null);
   const [verHistEst,setVerHistEst]=useState<string|null>(null);
@@ -5452,10 +5532,11 @@ function baixarXmlNFe(xmlNFe:string,nNF:string,fornecedor:string){
 }
 
 // ===================== CONTAS =====================
-function Contas({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
+function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const fPagOpts=["dinheiro","pix","cartão débito","cartão crédito","boleto","transferência","outros"];
   const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes",diasSemana:[1,2,3,4,5],anexo:null as any};
-  const [subTab,setSubTab]=useState("lista");
+  const [subTab,setSubTab]=useState(pendingSub||"lista");
+  useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   const [form,setForm]=useState<any>(emptyForm);
   const [editId,setEditId]=useState<string|null>(null);
   const [editGrupoRecorr,setEditGrupoRecorr]=useState<string|null>(null);
@@ -7723,8 +7804,9 @@ function BackupsPanel({empresaAtual,state,setState}:{empresaAtual:string,state:a
 }
 
 // ===================== GESTÃO (wrapper) =====================
-function Gestao({db,setDb,empresa,state,setState,setDbAndSave}:{db:any,setDb:any,empresa:string,state:any,setState:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
-  const [sub,setSub]=useState("rh");
+function Gestao({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,state:any,setState:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+  const [sub,setSub]=useState(pendingSub||"rh");
+  useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   return <div>
     <div style={{marginBottom:14}}>
       <div className="section-title" style={{marginBottom:10}}>⚙️ Área Administrativa</div>
