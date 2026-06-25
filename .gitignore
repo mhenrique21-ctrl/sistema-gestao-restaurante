@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dados.json
+*.local
+.env
+certs/
+*.pfx
+*.p12
