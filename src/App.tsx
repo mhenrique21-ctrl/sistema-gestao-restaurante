@@ -5007,6 +5007,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
         <button onClick={gerarPedido} className="btn" style={{flex:1,background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"#fff",padding:"13px",fontSize:14,fontWeight:700}}>
           📋 Gerar Pedido ({marcados.size})
         </button>
+        <button onClick={()=>{if(!itensMarcados.length)return alert("Marque pelo menos 1 produto.");const ped={data:today(),itens:itensMarcados.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||""};window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} className="btn" style={{background:"#0a200a",color:"#25d366",border:"1px solid #25d36644",padding:"13px 16px",fontSize:13}} title="WhatsApp">📲</button>
         <button onClick={()=>imprimirPedido()} className="btn" style={{background:"#1a1040",color:"#c084fc",border:"1px solid #5b21b6",padding:"13px 16px",fontSize:13}}>🖨️</button>
         <button onClick={()=>{if(confirm("Limpar todos os itens da lista?")){setItens([]);setMarcados(new Set());}}} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
       </div>
