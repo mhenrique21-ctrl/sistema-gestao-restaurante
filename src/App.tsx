@@ -974,14 +974,14 @@ export default function App() {
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
           ? (tab==="producao"
-            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout}/>
+            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} setDbAndSave={setDbAndSave}/>)
           : <>
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
+              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -4546,7 +4546,7 @@ const EMOJI_PALETTE=["🎂","🥧","🍮","🍗","🥖","🥟","🥐","👩‍�
 let _dbIconesProd:Record<string,string>={};
 const prodCatIcon=(c:string)=>_dbIconesProd[c]||ICON_PROD[c]||"📦";
 
-function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,onLogout?:()=>void}){
+function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const isAdmin=login?.role==="admin";
   _dbIconesProd=db.iconesProducao||{};
   const [iconPicker,setIconPicker]=useState<string|null>(null);
@@ -4558,10 +4558,15 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   }
   const cats:string[]=(db.categoriasProducao||[]).length?db.categoriasProducao:CATS_PRODUCAO_DEFAULT;
 
-  // Sub-panels
-  const [showProdMgmt,setShowProdMgmt]=useState(false);
-  const [showCatMgmt,setShowCatMgmt]=useState(false);
-  const [showHist,setShowHist]=useState(false);
+  // Sub-panels via subTab (menu-driven)
+  const [subTab,setSubTab]=useState(pendingSub||"novo");
+  useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
+  const showProdMgmt=subTab==="produtos";
+  const setShowProdMgmt=(v:boolean)=>setSubTab(v?"produtos":"novo");
+  const showCatMgmt=subTab==="categorias";
+  const setShowCatMgmt=(v:boolean)=>setSubTab(v?"categorias":"novo");
+  const showHist=subTab==="pedidos";
+  const setShowHist=(v:boolean)=>setSubTab(v?"pedidos":"novo");
 
   // Product catalog management
   const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un"});
@@ -4596,7 +4601,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
 
   // Order form (Lista-style)
-  const [form,setForm]=useState({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
+  const [form,setForm]=useState({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   const [editId,setEditId]=useState<string|null>(null);
   const [showSugg,setShowSugg]=useState(false);
   const itens:any[]=db.itensProducaoPendentes||[];
@@ -4605,6 +4610,11 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     else{setDb((d:any)=>({...d,itensProducaoPendentes:fn}));}
   };
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
+
+  const [marcados,setMarcados]=useState<Set<string>>(new Set());
+  const toggleMarcado=(id:string)=>setMarcados(s=>{const n=new Set(s);if(n.has(id))n.delete(id);else n.add(id);return n;});
+  const marcarTodos=()=>setMarcados(new Set(itens.map((i:any)=>i.id)));
+  const desmarcarTodos=()=>setMarcados(new Set());
 
   const suggestions=form.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(form.nome.toLowerCase())).slice(0,8):[];
   const selectSugg=(p:any)=>{setForm(f=>({...f,nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"}));setShowSugg(false);};
@@ -4616,23 +4626,28 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
       setItens(prev=>prev.map(it=>it.id===editId?{...it,nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}:it));
       setEditId(null);
     }else{
-      setItens(prev=>[...prev,{id:uid(),nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}]);
+      const newId=uid();
+      setItens(prev=>[...prev,{id:newId,nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}]);
+      setMarcados(s=>{const n=new Set(s);n.add(newId);return n;});
     }
-    setForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
+    setForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
   const editItem=(it:any)=>{setEditId(it.id);setForm({nome:it.nome,qtd:String(it.quantidade),qtdAtual:it.qtdAtual||"",unidade:it.unidade||"un",cat:it.cat||"",obs:it.obs||""});setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delItem=(id:string)=>setItens(prev=>prev.filter(it=>it.id!==id));
-  const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});};
+  const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});};
 
   // Group items by category
   const porCat:Record<string,any[]>={};
   itens.forEach(it=>{const c=it.cat||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(it);});
 
-  // Generate order
+  // Generate order (only marked items)
+  const itensMarcados=itens.filter((it:any)=>marcados.has(it.id));
   const gerarPedido=()=>{
-    if(!itens.length)return alert("Adicione pelo menos 1 produto ao pedido.");
-    const pedido={id:uid(),data:today(),itens:itens.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
-    setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])],itensProducaoPendentes:[]}));
+    if(!itensMarcados.length)return alert("Marque pelo menos 1 produto para gerar o pedido.");
+    const pedido={id:uid(),data:today(),itens:itensMarcados.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    const restantes=itens.filter((it:any)=>!marcados.has(it.id));
+    setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])],itensProducaoPendentes:restantes}));
+    setMarcados(new Set());
     if(isMobile&&confirm("Pedido gerado! Compartilhar via WhatsApp?"))
       window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(pedido))}`,"_blank");
     else if(!isMobile) alert("✅ Pedido gerado com sucesso!");
@@ -4651,8 +4666,8 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   };
 
   const imprimirPedido=(pedido?:any)=>{
-    const lista=pedido?pedido.itens:itens;
-    if(!lista.length)return alert("Nenhum produto no pedido.");
+    const lista=pedido?pedido.itens:itensMarcados;
+    if(!lista.length)return alert(pedido?"Nenhum produto no pedido.":"Marque pelo menos 1 produto para imprimir.");
     const pc:Record<string,any[]>={};
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
@@ -4671,7 +4686,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
   const [editQtds,setEditQtds]=useState<Record<string,string>>({});
   const [editObs,setEditObs]=useState<Record<string,string>>({});
   const [addToPedId,setAddToPedId]=useState<string|null>(null);
-  const [addToPedForm,setAddToPedForm]=useState({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
+  const [addToPedForm,setAddToPedForm]=useState({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   const [addToPedSugg,setAddToPedSugg]=useState(false);
   const [collapsedPeds,setCollapsedPeds]=useState<Set<string>>(new Set());
   const formRef=useRef<HTMLDivElement>(null);
@@ -4680,7 +4695,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     const nome=addToPedForm.nome.trim();if(!nome)return alert("Produto obrigatório.");
     const qtd=parseFloat(addToPedForm.qtd)||0;if(qtd<=0)return alert("Quantidade deve ser maior que 0.");
     setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:[...(p.itens||[]),{nome,quantidade:qtd,qtdAtual:addToPedForm.qtdAtual||"",unidade:addToPedForm.unidade,categoria:addToPedForm.cat||"",obs:addToPedForm.obs||""}]}:p)}));
-    setAddToPedForm({nome:"",qtd:"1",qtdAtual:"",unidade:"un",cat:"",obs:""});
+    setAddToPedForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
   const delItemFromPedido=(pedId:string,idx:number)=>{
     setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:(p.itens||[]).filter((_:any,i:number)=>i!==idx)}:p)}));
@@ -4699,17 +4714,12 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     setEditPedId(null);setEditQtds({});setEditObs({});
   };
 
-  const closeAll=()=>{setShowProdMgmt(false);setShowCatMgmt(false);setShowHist(false);};
-
   return <div>
     {/* Header */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🏭 Produção</div>
       {itens.length>0&&<span style={{background:"#c084fc22",color:"#c084fc",border:"1px solid #c084fc44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itens.length} item(ns)</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-        <button className="btn" onClick={()=>{setShowHist(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);}} style={{background:showHist?"#1a1040":"#120a20",color:"#c084fc",border:"1px solid #5b21b6",padding:"6px 12px",fontSize:12}}>📂 Pedidos{(db.pedidosProducao||[]).length>0?` (${(db.pedidosProducao||[]).length})`:""}</button>
-        <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHist(false);}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
-        {isAdmin&&<button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHist(false);}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
@@ -4885,7 +4895,7 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
     </div>}
 
     {/* Form — add item to order (Lista-style) */}
-    <div ref={formRef} className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#5b21b644"}`}}>
+    {subTab==="novo"&&<><div ref={formRef} className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#5b21b644"}`}}>
       <div className="section-title" style={{color:editId?"#fbbf24":"#c084fc",marginBottom:10}}>{editId?"✏️ Editar Item":"➕ Novo Item"}</div>
       <div style={{marginBottom:10}}>
         <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *</div>
@@ -4949,23 +4959,29 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
 
     {/* Current order items grouped by category */}
     {itens.length>0&&<>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap" as const}}>
         <div className="section-title" style={{marginBottom:0,color:"#c084fc"}}>📋 Pedido Atual</div>
         <span style={{fontSize:11,color:"#888"}}>{itens.length} produto(s)</span>
+        {marcados.size>0&&<span style={{fontSize:11,color:"#4ade80",background:"#4ade8018",borderRadius:4,padding:"1px 6px"}}>{marcados.size} marcado(s)</span>}
+        <div style={{marginLeft:"auto",display:"flex",gap:4}}>
+          <button onClick={marcarTodos} style={{background:"none",border:"1px solid #4ade8044",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:10,padding:"3px 8px"}}>Marcar todos</button>
+          <button onClick={desmarcarTodos} style={{background:"none",border:"1px solid #ff5c7a44",borderRadius:5,color:"#ff5c7a",cursor:"pointer",fontSize:10,padding:"3px 8px"}}>Desmarcar</button>
+        </div>
       </div>
       {Object.entries(porCat).sort(([a],[b])=>a.localeCompare(b)).map(([cat,its])=>(
         <div key={cat} style={{marginBottom:8}}>
           <div style={{fontSize:12,fontWeight:700,color:"#c084fc",textTransform:"uppercase" as const,letterSpacing:.5,padding:"6px 0 4px",borderBottom:"1px solid #5b21b644",marginBottom:4}}>{prodCatIcon(cat)} {cat} <span style={{color:"#666",fontWeight:400}}>({its.length})</span></div>
           {its.map((it:any)=>(
-            <div key={it.id} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
+            <div key={it.id} onClick={()=>toggleMarcado(it.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:"1px solid var(--border)",cursor:"pointer",opacity:marcados.has(it.id)?1:0.5,background:marcados.has(it.id)?"#c084fc08":"transparent",borderRadius:4}}>
+              <span style={{fontSize:16,flexShrink:0,width:22,textAlign:"center" as const}}>{marcados.has(it.id)?"✅":"⬜"}</span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:600}}>{it.nome}</div>
                 {it.obs&&<div style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>{it.obs}</div>}
               </div>
               {it.qtdAtual&&<span style={{fontSize:10,color:"#888",flexShrink:0}}>atual: {it.qtdAtual}</span>}
               <span style={{fontSize:12,fontWeight:700,color:"#c084fc",flexShrink:0}}>{it.quantidade} {it.unidade}</span>
-              <button onClick={()=>editItem(it)} style={{background:"none",border:"none",cursor:"pointer",color:"#fbbf24",fontSize:13,padding:"0 3px"}}>✏️</button>
-              <button onClick={()=>delItem(it.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+              <button onClick={(e)=>{e.stopPropagation();editItem(it);}} style={{background:"none",border:"none",cursor:"pointer",color:"#fbbf24",fontSize:13,padding:"0 3px"}}>✏️</button>
+              <button onClick={(e)=>{e.stopPropagation();delItem(it.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
             </div>
           ))}
         </div>
@@ -4974,11 +4990,12 @@ function ProducaoPanel({db,setDb,login,onLogout}:{db:any,setDb:any,login?:any,on
       {/* Sticky action bar */}
       <div style={{position:"sticky",bottom:80,display:"flex",gap:6,padding:"10px 0",background:"var(--bg)",zIndex:50}}>
         <button onClick={gerarPedido} className="btn" style={{flex:1,background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"#fff",padding:"13px",fontSize:14,fontWeight:700}}>
-          📋 Gerar Pedido ({itens.length})
+          📋 Gerar Pedido ({marcados.size})
         </button>
         <button onClick={()=>imprimirPedido()} className="btn" style={{background:"#1a1040",color:"#c084fc",border:"1px solid #5b21b6",padding:"13px 16px",fontSize:13}}>🖨️</button>
-        <button onClick={()=>{if(confirm("Limpar todos os itens da lista?"))setItens([]);}} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
+        <button onClick={()=>{if(confirm("Limpar todos os itens da lista?")){setItens([]);setMarcados(new Set());}}} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
       </div>
+    </>}
     </>}
   </div>;
 }
