@@ -308,6 +308,10 @@ function SortCtrl({id,db,setDb,opts}:{id:string,db:any,setDb:any,opts:[string,st
   </select>;
 }
 
+function BackBar({label,onClick}:{label:string,onClick:()=>void}){
+  return <div style={{marginBottom:10}}><button onClick={onClick} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,color:"#7c8fff",cursor:"pointer",fontSize:13,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:15}}>←</span> {label}</button></div>;
+}
+
 function MoneyInput({value,onChange,placeholder,className,style}) {
   // natural decimal input: user types "15,90" and sees "15,90" — no auto-shift
   const handle=(e)=>{
@@ -2458,6 +2462,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
     {/* ===== CUPOM IA ===== */}
     {subTab==="ia"&&<div>
+      <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       <div className="section-title">Importar Cupom / Nota Fiscal com IA</div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
         <div className="camera-zone" onClick={()=>fileRef.current.click()} style={{flex:1,marginBottom:0}}>
@@ -2521,6 +2526,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
     {/* ===== NF-e XML + SEFAZ ===== */}
     {subTab==="nfe"&&<div>
+      <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
 
       {/* -- Banner auto-sync -- */}
       {sefazConfig[empresa]&&<div style={{background:"linear-gradient(135deg,#0a1a10,#0d2010)",border:"1px solid #14532d",borderRadius:12,padding:"10px 14px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -2739,6 +2745,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     </div>}
 
     {subTab==="lista"&&<div>
+      <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div className="section-title" style={{margin:0}}>Histórico de Compras</div>
         {(db.compras||[]).length>0&&<button className="btn" onClick={()=>{
@@ -2921,6 +2928,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     </div>}
 
     {subTab==="forn"&&<div>
+      <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div className="section-title" style={{margin:0}}>Fornecedores</div>
         <SortCtrl id="fornecedores" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/>
@@ -2957,6 +2965,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     </div>}
 
     {subTab==="produtos"&&<div>
+      <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       {/* Sub-tabs */}
       <div style={{display:"flex",gap:5,marginBottom:14}}>
         {[["catalogo","📦 Catálogo"],["substituicoes","🔄 Substituições"]].map(([k,l])=>(
@@ -3797,6 +3806,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     {/* Estimativa de custo (admin only) */}
+    {isAdmin&&showEstimativa&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
     {isAdmin&&showEstimativa&&(()=>{
       const itensPend=pendentes.length?pendentes:lista.filter((i:any)=>!i.comprado);
       const linhas=itensPend.map((item:any)=>{
@@ -3980,6 +3990,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     {/* Gerenciar ruas (admin only) */}
+    {isAdmin&&showRuaMgmt&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
     {isAdmin&&showRuaMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #065f46"}}>
       <div className="section-title" style={{color:"#34d399"}}>🛤️ Ruas — Ordem de compra</div>
       <div style={{fontSize:11,color:"#888",marginBottom:10}}>Defina as ruas do mercado e associe categorias. Produtos dessas categorias herdarão a rua automaticamente.</div>
@@ -4087,6 +4098,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     {/* Catálogo de produtos (admin only) */}
+    {isAdmin&&showProdMgmt&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
     {isAdmin&&showProdMgmt&&<div ref={prodFormRef} className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div className="section-title" style={{color:"#4ade80",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
@@ -4725,6 +4737,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     </div>
 
     {/* Category management (admin) */}
+    {showCatMgmt&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
       <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Categorias de Produção</div>
       <div style={{marginBottom:10}}>
@@ -4771,6 +4784,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     </div>}
 
     {/* Product catalog */}
+    {showProdMgmt&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showProdMgmt&&<div ref={prodFormRef} className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
       <div className="section-title" style={{color:"#4ade80",margin:0,marginBottom:10}}>📦 Produtos de Produção <span style={{fontSize:11,color:"#555"}}>({prodsCatalog.length})</span></div>
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
@@ -4803,6 +4817,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     </div>}
 
     {/* Order history */}
+    {showHist&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showHist&&<div className="card" style={{marginBottom:12,border:"1px solid #5b21b6"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         <div className="section-title" style={{color:"#c084fc",margin:0}}>📂 Histórico de Pedidos</div>
@@ -5236,6 +5251,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
     })()}
 
     {/* ===== ANÁLISE ===== */}
+    {sub==="analise"&&<BackBar label="Inventário" onClick={()=>setSub("inventario")}/>}
     {sub==="analise"&&(()=>{
       const hoje2=new Date();
       const cutoffStr=new Date(hoje2.getTime()-periodoAnl*86400000).toISOString().slice(0,10);
@@ -5395,6 +5411,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
     })()}
 
     {/* ===== MOVIMENTAÇÕES ===== */}
+    {sub==="movimentacoes"&&<BackBar label="Inventário" onClick={()=>setSub("inventario")}/>}
     {sub==="movimentacoes"&&(()=>{
       const movsAll=sortList(movEstoque,db,'estoqueMov','data-desc');
       const filtradas=movsAll.filter((mv:any)=>{
@@ -5952,6 +5969,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
     </div>}
 
     {subTab==="novo"&&<div>
+      <BackBar label="Contas" onClick={()=>setSubTab("lista")}/>
       <div className="section-title">{editId||editGrupoRecorr?"Editar Conta":"Nova Conta a Pagar / Receber"}</div>
       <div ref={formRef} className="card">
         <input placeholder="Descrição *" value={form.descricao} onChange={e=>setForm((f:any)=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
@@ -6061,6 +6079,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
     </div>}
 
     {subTab==="config"&&<div>
+      <BackBar label="Contas" onClick={()=>setSubTab("lista")}/>
       <div className="section-title">Categorias</div>
       <div className="card" style={{marginBottom:12}}>
         <div className="row">
@@ -7802,11 +7821,11 @@ function Gestao({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPend
   useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   return <div>
     {sub==="rh"         && <RH db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave}/>}
-    {sub==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
-    {sub==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
-    {sub==="relatorios" && <Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/>}
-    {sub==="versus"     && <Comparativo state={state}/>}
-    {sub==="backups"    && <BackupsPanel empresaAtual={empresa} state={state} setState={setState}/>}
+    {sub==="ficha"      && <><BackBar label="RH" onClick={()=>setSub("rh")}/><FichaTecnica db={db} setDb={setDb}/></>}
+    {sub==="dre"        && <><BackBar label="RH" onClick={()=>setSub("rh")}/><DREComp db={db} setDb={setDb} empresa={empresa}/></>}
+    {sub==="relatorios" && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/></>}
+    {sub==="versus"     && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Comparativo state={state}/></>}
+    {sub==="backups"    && <><BackBar label="RH" onClick={()=>setSub("rh")}/><BackupsPanel empresaAtual={empresa} state={state} setState={setState}/></>}
   </div>;
 }
 
