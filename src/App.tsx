@@ -4671,7 +4671,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
     Object.entries(pc).forEach(([cat,its])=>{
       txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
-      its.forEach((it:any)=>{txt+=`• ${it.nome} | *${it.quantidade}${it.unidade||"un"}*${it.qtdAtual?` | atual:${it.qtdAtual}`:""}${it.obs?` | ${it.obs}`:""}\n`;});
+      its.forEach((it:any)=>{txt+=`• ${it.nome}${it.quantidade?` | *${it.quantidade}${it.unidade||"un"}*`:""}${it.qtdAtual?` | atual:${it.qtdAtual}`:""}${it.obs?` | ${it.obs}`:""}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
@@ -4685,7 +4685,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
     const sections=Object.entries(pc).map(([cat,its])=>`
       <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${prodCatIcon(cat)} ${cat}</td></tr>
-      ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.qtdAtual||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade} ${it.unidade||"un"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
+      ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.qtdAtual||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade?`${it.quantidade} ${it.unidade||"un"}`:"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
     `).join("");
     const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR");
     const solicitante=pedido?.solicitante||login?.label||"—";
