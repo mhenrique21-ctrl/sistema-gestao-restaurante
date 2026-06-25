@@ -3296,7 +3296,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   const saveItem=()=>{
     if(!form.nome.trim())return;
-
+    if(!isAdmin){
+      const nomeLC=form.nome.trim().toLowerCase();
+      const existeNoCatalogo=prodsCatalog.some((p:any)=>p.nome.toLowerCase()===nomeLC);
+      if(!existeNoCatalogo)return alert("Produto não cadastrado. Selecione um produto do catálogo.");
+    }
 
     if(editId){
       const editNome=form.nome.trim();
@@ -3511,8 +3515,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   const prodsCatalog:any[]=db.produtosLista||[];
   const suggestions:any[]=form.nome.length>=1
-    ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.toLowerCase())).slice(0,8)
-    :[];
+    ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.toLowerCase())).slice(0,isAdmin?8:20)
+    :(!isAdmin&&showSugg?prodsCatalog.slice(0,20):[]);
   const selectSugg=(p:any)=>{
     setForm(f=>({...f,nome:p.nome,cat:p.cat||f.cat,unidade:p.unidade||f.unidade,rua:p.rua||getRuaDaCat(p.cat||"")||f.rua}));
     setShowSugg(false);
@@ -4249,10 +4253,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div className="section-title" style={{color:editId?"#fbbf24":"#7c8fff",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
       {/* Produto + urgente */}
       <div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *</div>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *{!isAdmin&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>(selecione do catálogo)</span>}</div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <div style={{flex:1,position:"relative"}}>
-            <input id="lista-nome-inp" placeholder="Ex: Frango, Cebola, Detergente..." value={form.nome}
+            <input id="lista-nome-inp" placeholder={isAdmin?"Ex: Frango, Cebola, Detergente...":"🔍 Buscar produto cadastrado..."} value={form.nome}
               onChange={e=>{setF("nome",e.target.value);setShowSugg(true);}}
               onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!showSugg)saveItem();if(e.key==="Escape")setShowSugg(false);}}
               onFocus={()=>setShowSugg(true)}
