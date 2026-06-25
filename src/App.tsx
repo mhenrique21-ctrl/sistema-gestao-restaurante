@@ -763,10 +763,11 @@ export default function App() {
       {id:"compras-prod",label:"Produtos",icon:"📦",sub:"produtos"},
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
-      {id:"lista-prod",label:"Produtos",icon:"📋",sub:"produtos"},
+      {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
+      {id:"lista-prod",label:"Produtos",icon:"📦",sub:"produtos"},
       {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias"},
       {id:"lista-rua",label:"Ruas",icon:"🛣️",sub:"ruas"},
-      {id:"lista-est",label:"Estimativa",icon:"📊",sub:"estimativa"},
+      {id:"lista-est",label:"Estimativa",icon:"💰",sub:"estimativa"},
     ]},
     {id:"producao",label:"Produção",icon:"🏭",children:[
       {id:"prod-novo",label:"Novo Pedido",icon:"➕",sub:"novo"},
@@ -979,7 +980,7 @@ export default function App() {
               {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -3153,9 +3154,10 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
 const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false,rua:""};
 
-function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
-  // Cor em tempo real: busca no db.usuarios pelo nome do login (não depende da sessão)
+  const [subTab,setSubTab]=useState(pendingSub||"nova");
+  useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   const usuarioAtual=login?.label?(db.usuarios||[]).find((u:any)=>u.nome===login.label):null;
   const corUsuarioAtual:string=usuarioAtual?.corTexto||login?.corTexto||"#e8eaf0";
   const getCorPorNome=(nome:string):string=>{
@@ -3166,21 +3168,25 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [form,setForm]=useState(EMPTY_FORM_LISTA);
   const [editId,setEditId]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
-  const [showCatMgmt,setShowCatMgmt]=useState(false);
+  const showCatMgmt=subTab==="categorias";
+  const setShowCatMgmt=(v:boolean)=>setSubTab(v?"categorias":"nova");
   const [novaCat,setNovaCat]=useState("");
   const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
-  const [showProdMgmt,setShowProdMgmt]=useState(false);
+  const showProdMgmt=subTab==="produtos";
+  const setShowProdMgmt=(v:boolean)=>setSubTab(v?"produtos":"nova");
   const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un",rua:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
   const prodFormRef=useRef<HTMLDivElement>(null);
   const [showSugg,setShowSugg]=useState(false);
-  const [showHistorico,setShowHistorico]=useState(false);
+  const showHistorico=false;
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
-  const [showRuaMgmt,setShowRuaMgmt]=useState(false);
+  const showRuaMgmt=subTab==="ruas";
+  const setShowRuaMgmt=(v:boolean)=>setSubTab(v?"ruas":"nova");
   const [novaRua,setNovaRua]=useState("");
   const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
   const [vistaRua,setVistaRua]=useState(true);
-  const [showEstimativa,setShowEstimativa]=useState(false);
+  const showEstimativa=subTab==="estimativa";
+  const setShowEstimativa=(v:boolean)=>setSubTab(v?"estimativa":"nova");
   const [estConcItem,setEstConcItem]=useState<string|null>(null);
   const [catConcItem,setCatConcItem]=useState<string|null>(null);
   const [concBusca,setConcBusca]=useState("");
@@ -3752,13 +3758,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       {naoTemList.length>0&&<span style={{background:"#fbbf2422",color:"#fbbf24",border:"1px solid #fbbf2444",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>🚫 {naoTemList.length}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#0d1520",color:"#60a5fa",border:"1px solid #1e3a5f",padding:"6px 12px",fontSize:12}}>🖨️</button>}
-        {isAdmin&&<>
-          <button className="btn" onClick={()=>{setShowProdMgmt(v=>!v);setShowCatMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);setShowEstimativa(false);cancelEdit();}} style={{background:showProdMgmt?"#0a2010":"#0d1a0d",color:"#4ade80",border:"1px solid #1a4a1a",padding:"6px 12px",fontSize:12}}>📦 Produtos</button>
-          <button className="btn" onClick={()=>{setShowCatMgmt(v=>!v);setShowProdMgmt(false);setShowHistorico(false);setShowRuaMgmt(false);setShowEstimativa(false);cancelEdit();}} style={{background:showCatMgmt?"#2a1a4a":"#1a0f2e",color:"#a78bfa",border:"1px solid #3a2a60",padding:"6px 12px",fontSize:12}}>🏷️ Categorias</button>
-          <button className="btn" onClick={()=>{setShowRuaMgmt(v=>!v);setShowProdMgmt(false);setShowCatMgmt(false);setShowHistorico(false);setShowEstimativa(false);cancelEdit();}} style={{background:showRuaMgmt?"#1a2a1a":"#0d150d",color:"#34d399",border:"1px solid #065f46",padding:"6px 12px",fontSize:12}}>🛤️ Ruas</button>
-          <button className="btn" onClick={()=>{setShowHistorico(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);setShowEstimativa(false);cancelEdit();}} style={{background:showHistorico?"#1a120a":"#120d06",color:"#fb923c",border:"1px solid #7c3a10",padding:"6px 12px",fontSize:12}}>📂 Histórico{(db.pedidosLista||[]).length>0?` (${(db.pedidosLista||[]).length})`:""}</button>
-          <button className="btn" onClick={()=>{setShowEstimativa(v=>!v);setShowCatMgmt(false);setShowProdMgmt(false);setShowRuaMgmt(false);setShowHistorico(false);cancelEdit();}} style={{background:showEstimativa?"#1a1a08":"#15130a",color:"#fbbf24",border:"1px solid #78600a",padding:"6px 12px",fontSize:12}}>💰 Estimativa</button>
-        </>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
@@ -4227,8 +4226,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       </div>
     </div>}
 
-    {/* Form cadastro de produto — sempre visível */}
-    <div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#2a3260"}`}}>
+    {/* Form cadastro de produto */}
+    {subTab==="nova"&&<><div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#2a3260"}`}}>
       <div className="section-title" style={{color:editId?"#fbbf24":"#7c8fff",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
       {/* Produto + urgente */}
       <div style={{marginBottom:10}}>
@@ -4527,6 +4526,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         </div>
       ))}
     </div>}
+    </>}
 
     {autoArchiveMsg&&<div style={{position:"fixed",top:80,left:"50%",transform:"translateX(-50%)",background:"#0a2a10",border:"1px solid #4ade80",borderRadius:12,padding:"12px 20px",zIndex:200,boxShadow:"0 4px 20px #0008",fontSize:14,color:"#4ade80",fontWeight:700}}>
       {autoArchiveMsg}
