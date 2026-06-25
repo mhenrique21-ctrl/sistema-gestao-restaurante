@@ -4652,12 +4652,11 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   const porCat:Record<string,any[]>={};
   itens.forEach(it=>{const c=it.cat||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(it);});
 
-  // Generate order (only marked items with qty > 0)
+  // Generate order (only marked items)
   const itensMarcados=itens.filter((it:any)=>marcados.has(it.id));
-  const itensParaSaida=itensMarcados.filter((it:any)=>(it.quantidade||0)>0);
   const gerarPedido=()=>{
-    if(!itensParaSaida.length)return alert("Marque pelo menos 1 produto com quantidade preenchida.");
-    const pedido={id:uid(),data:today(),itens:itensParaSaida.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    if(!itensMarcados.length)return alert("Marque pelo menos 1 produto.");
+    const pedido={id:uid(),data:today(),itens:itensMarcados.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     const restantes=itens.filter((it:any)=>!marcados.has(it.id));
     setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])],itensProducaoPendentes:restantes}));
     setMarcados(new Set());
@@ -4679,9 +4678,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   };
 
   const imprimirPedido=(pedido?:any)=>{
-    const listaRaw=pedido?pedido.itens:itensParaSaida;
-    const lista=listaRaw.filter((it:any)=>(it.quantidade||0)>0);
-    if(!lista.length)return alert(pedido?"Nenhum produto com quantidade no pedido.":"Marque pelo menos 1 produto com quantidade preenchida.");
+    const lista=pedido?pedido.itens:itensMarcados;
+    if(!lista.length)return alert(pedido?"Nenhum produto no pedido.":"Marque pelo menos 1 produto.");
     const pc:Record<string,any[]>={};
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
@@ -5009,7 +5007,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
         <button onClick={gerarPedido} className="btn" style={{flex:1,background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"#fff",padding:"13px",fontSize:14,fontWeight:700}}>
           📋 Gerar Pedido ({marcados.size})
         </button>
-        <button onClick={()=>{if(!itensParaSaida.length)return alert("Marque pelo menos 1 produto com quantidade.");const ped={data:today(),itens:itensParaSaida.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||""};window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} className="btn" style={{background:"#0a200a",color:"#25d366",border:"1px solid #25d36644",padding:"13px 16px",fontSize:13}} title="WhatsApp">📲</button>
+        <button onClick={()=>{if(!itensMarcados.length)return alert("Marque pelo menos 1 produto.");const ped={data:today(),itens:itensMarcados.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||""};window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} className="btn" style={{background:"#0a200a",color:"#25d366",border:"1px solid #25d36644",padding:"13px 16px",fontSize:13}} title="WhatsApp">📲</button>
         <button onClick={()=>imprimirPedido()} className="btn" style={{background:"#1a1040",color:"#c084fc",border:"1px solid #5b21b6",padding:"13px 16px",fontSize:13}}>🖨️</button>
         <button onClick={()=>{if(confirm("Limpar todos os itens da lista?")){setItens([]);setMarcados(new Set());}}} className="btn" style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"13px 16px",fontSize:13}}>✕</button>
       </div>
