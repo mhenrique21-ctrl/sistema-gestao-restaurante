@@ -2274,15 +2274,6 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   };
 
   return <div>
-    <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["novo","🧾 Entrada"],["ia","🤖 Cupom IA"],["nfe","📄 NF-e"],["lista","📦 Histórico"],["forn","🏪 Fornecedores"],["produtos","🗃️ Produtos"]].map(([k,l])=>(
-        <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 11px",position:"relative"}}>
-          {l}
-          {k==="nfe"&&sefazList.length>0&&subTab!=="nfe"&&<span style={{position:"absolute",top:-4,right:-4,background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{sefazList.length}</span>}
-          {k==="estoque"&&(()=>{const n=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;return n>0?<span style={{position:"absolute",top:-4,right:-4,background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{n}</span>:null;})()}
-        </button>
-      ))}
-    </div>
 
     {/* ===== NOVA ENTRADA (multi-produto) ===== */}
     {subTab==="novo"&&<div>
@@ -5060,15 +5051,6 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
       <div className="section-title" style={{marginBottom:0}}>📦 Controle de Estoque</div>
       <span style={{background:"#7c8fff22",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{empresa}</span>
     </div>
-    <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap" as const}}>
-      {([["inventario","📦 Inventário"],["analise","📊 Análise"],["movimentacoes","📋 Movimentações"]] as const).map(([k,l])=>(
-        <button key={k} onClick={()=>setSub(k)} className="pill"
-          style={{background:sub===k?"#7c8fff":"var(--bg4)",color:sub===k?"#fff":"#777",fontSize:12,padding:"8px 14px",position:"relative"}}>
-          {l}
-          {k==="inventario"&&alertBadge>0&&<span style={{marginLeft:5,background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{alertBadge}</span>}
-        </button>
-      ))}
-    </div>
 
     {/* ===== INVENTÁRIO ===== */}
     {sub==="inventario"&&(()=>{
@@ -5801,12 +5783,6 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
         </div>
       </div>;
     })()}
-    <div style={{display:"flex",gap:6,marginBottom:14}}>
-      {[["lista","📋 Contas"],["novo","➕ Novo"],["config","⚙️ Categorias"]].map(([k,l])=>(
-        <button key={k} onClick={()=>setSubTab(k)} className="pill"
-          style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
-      ))}
-    </div>
 
     {subTab==="lista"&&<div>
       {/* Month tabs */}
@@ -7808,17 +7784,6 @@ function Gestao({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPend
   const [sub,setSub]=useState(pendingSub||"rh");
   useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   return <div>
-    <div style={{marginBottom:14}}>
-      <div className="section-title" style={{marginBottom:10}}>⚙️ Área Administrativa</div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-        {([["rh","👥 RH"],["ficha","📝 Fichas"],["dre","📈 DRE"],["relatorios","📄 Relatórios"],["versus","⚖️ Versus"],["backups","💾 Backups"]] as const).map(([k,l])=>(
-          <button key={k} onClick={()=>setSub(k)} className="pill"
-            style={{background:sub===k?"#7c8fff":"var(--bg4)",color:sub===k?"#fff":"#777",fontSize:12,padding:"8px 14px"}}>
-            {l}
-          </button>
-        ))}
-      </div>
-    </div>
     {sub==="rh"         && <RH db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave}/>}
     {sub==="ficha"      && <FichaTecnica db={db} setDb={setDb}/>}
     {sub==="dre"        && <DREComp db={db} setDb={setDb} empresa={empresa}/>}
