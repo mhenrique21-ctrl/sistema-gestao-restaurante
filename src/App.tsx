@@ -4621,7 +4621,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
 
   const addItem=()=>{
     const nome=form.nome.trim();if(!nome)return alert("Produto obrigatório.");
-    const qtd=parseFloat(form.qtd)||0;if(qtd<=0)return alert("Quantidade deve ser maior que 0.");
+    const qtd=parseFloat(form.qtd)||0;
     if(editId){
       setItens(prev=>prev.map(it=>it.id===editId?{...it,nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}:it));
       setEditId(null);
@@ -4693,7 +4693,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   const addToPedSuggestions=addToPedForm.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(addToPedForm.nome.toLowerCase())).slice(0,8):[];
   const addItemToPedido=(pedId:string)=>{
     const nome=addToPedForm.nome.trim();if(!nome)return alert("Produto obrigatório.");
-    const qtd=parseFloat(addToPedForm.qtd)||0;if(qtd<=0)return alert("Quantidade deve ser maior que 0.");
+    const qtd=parseFloat(addToPedForm.qtd)||0;
     setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:[...(p.itens||[]),{nome,quantidade:qtd,qtdAtual:addToPedForm.qtdAtual||"",unidade:addToPedForm.unidade,categoria:addToPedForm.cat||"",obs:addToPedForm.obs||""}]}:p)}));
     setAddToPedForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
@@ -4921,8 +4921,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
       </div>
       <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap" as const}}>
         <div style={{flex:"1 1 70px"}}>
-          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Quantidade *</div>
-          <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)}
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Quantidade</div>
+          <input type="number" min="0" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)}
             onKeyDown={e=>{if(e.key==="Enter")addItem();}}
             className="inp" style={{marginBottom:0}}/>
         </div>
