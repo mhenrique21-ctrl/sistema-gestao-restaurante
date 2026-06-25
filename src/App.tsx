@@ -3186,6 +3186,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un",rua:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
   const prodFormRef=useRef<HTMLDivElement>(null);
+  const [buscaCatalogo,setBuscaCatalogo]=useState("");
   const [showSugg,setShowSugg]=useState(false);
   const showHistorico=false;
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
@@ -4167,10 +4168,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           {!editProdId&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>Salve o produto primeiro para vincular</div>}
         </div>;
       })()}
+      {/* Busca no catálogo */}
+      <div style={{position:"relative",marginBottom:8}}>
+        <input placeholder="🔍 Buscar produto no catálogo..." value={buscaCatalogo} onChange={e=>setBuscaCatalogo(e.target.value)} className="inp" style={{marginBottom:0,paddingRight:buscaCatalogo?36:14}}/>
+        {buscaCatalogo&&<button onClick={()=>setBuscaCatalogo("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+      </div>
       {/* Lista do catálogo */}
       <div style={{maxHeight:350,overflowY:"auto" as const}}>
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
-        {[...prodsCatalog].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>{
+        {(()=>{const bc=buscaCatalogo.trim().toLowerCase();return [...prodsCatalog].filter(p=>!bc||p.nome.toLowerCase().includes(bc)||(p.cat||"").toLowerCase().includes(bc)||(p.rua||"").toLowerCase().includes(bc)).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));})().map((p:any)=>{
           const mp=getMpByName(p.nome,p.id);
           const pVids=getProdVinculados(p);
           const isLinked=pVids.length>0;
