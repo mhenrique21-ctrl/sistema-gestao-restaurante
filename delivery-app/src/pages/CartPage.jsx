@@ -1,15 +1,11 @@
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../store/cart'
-import { useAuth } from '../store/auth'
 
 export default function CartPage() {
   const { items, updateQty, removeItem, clear } = useCart()
-  const { customer } = useAuth()
   const navigate = useNavigate()
 
   const subtotal = items.reduce((s, i) => s + i.product.price * i.qty, 0)
-  const deliveryFee = 5.00
-  const total = subtotal + deliveryFee
 
   if (items.length === 0) {
     return (
@@ -83,13 +79,13 @@ export default function CartPage() {
               <span>Subtotal</span>
               <span>{subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
             </div>
-            <div className="flex justify-between text-gray-600">
+            <div className="flex justify-between text-gray-400 text-xs">
               <span>Taxa de entrega</span>
-              <span>{deliveryFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              <span>Calculada no checkout</span>
             </div>
             <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-100">
-              <span>Total</span>
-              <span className="text-violet-600">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              <span>Subtotal</span>
+              <span className="text-violet-600">{subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
             </div>
           </div>
         </div>
@@ -102,7 +98,7 @@ export default function CartPage() {
           className="w-full bg-violet-600 text-white rounded-2xl py-4 font-bold text-base press active:bg-violet-700 flex items-center justify-between px-5"
         >
           <span>Finalizar pedido</span>
-          <span>{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+          <span>{subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
         </button>
       </div>
     </div>
