@@ -1,10 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
+const ws = require('ws');
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY,
-  { auth: { persistSession: false } }
+  {
+    auth: { persistSession: false },
+    realtime: { transport: ws },
+  }
 );
 
 // Wrapper que imita pg.Pool usando a REST API do Supabase
