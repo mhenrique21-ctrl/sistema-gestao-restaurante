@@ -305,7 +305,13 @@ function openModal(title, body, cb) {
   modalCallback = cb;
 }
 function closeModal() { document.getElementById('modal').classList.remove('open'); modalCallback = null; }
-function confirmModal() { modalCallback?.(); }
+async function confirmModal() {
+  try {
+    await modalCallback?.();
+  } catch(e) {
+    toast('❌ ' + (e.message || 'Erro ao salvar'), true);
+  }
+}
 
 // ── Dashboard ─────────────────────────────────────────────────────
 async function pageDashboard() {

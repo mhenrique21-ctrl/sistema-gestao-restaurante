@@ -20,7 +20,7 @@ const pool = {
     // Substitui $1, $2... pelos valores na query SQL
     let finalSql = sql;
     params.forEach((val, i) => {
-      const escaped = val === null ? 'NULL' :
+      const escaped = (val === null || val === undefined) ? 'NULL' :
         typeof val === 'boolean' ? (val ? 'TRUE' : 'FALSE') :
         typeof val === 'number' ? val :
         `'${String(val).replace(/'/g, "''")}'`;
