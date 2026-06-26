@@ -6,6 +6,77 @@ const stripeService = require('../services/stripe');
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
 
+// POST /api/orders/guest — pedido sem autenticação (app cliente)
+router.post('/guest', async (req, res) => {
+  const { name, phone, delivery_type, delivery_address,
+          payment_method, notes, delivery_fee = 0, items } = req.body;
+
+  if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
+  if (!items?.length) return res.status(400).json({ error: 'Carrinho vazio' });
+  if (!payment_method) return res.status(400).json({ error: 'Forma de pagamento é obrigatória' });
+
+  try {
+    const custResult = await pool.query(
+      `INSERT INTO customers (name, phone) VALUES ($1, $2)
+       ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id, name, phone`,
+      [name, phone.replace(/\D/g, '')]
+    );
+    const customer = custResult.rows[0];
+
+    const adminResult = await pool.query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
+    const adminId = adminResult.rows[0]?.id;
+
+    let subtotal = 0;
+    const resolvedItems = [];
+    for (const item of items) {
+      const prod = await pool.query(
+        `SELECT id, name, price, available FROM products WHERE id = $1`,
+        [item.product_id]
+      );
+      if (!prod.rows[0]) throw { status: 400, message: 'Produto não encontrado' };
+      if (!prod.rows[0].available) throw { status: 400, message: `"${prod.rows[0].name}" indisponível` };
+      const unitPrice = parseFloat(prod.rows[0].price);
+      const itemSub = unitPrice * item.quantity;
+      subtotal += itemSub;
+      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSub, product_name: prod.rows[0].name });
+    }
+
+    const total = subtotal + parseFloat(delivery_fee);
+
+    const orderResult = await pool.query(
+      `INSERT INTO orders (customer_id, user_id, delivery_type, delivery_address, subtotal,
+        delivery_fee, discount, total, payment_method, notes, status)
+       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,'aguardando_pagamento') RETURNING *`,
+      [customer.id, adminId, delivery_type || 'delivery',
+       delivery_address ? JSON.stringify(delivery_address) : null,
+       subtotal, parseFloat(delivery_fee), total, payment_method, notes || null]
+    );
+    const order = orderResult.rows[0];
+
+    for (const item of resolvedItems) {
+      await pool.query(
+        `INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal, notes)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [order.id, item.product_id, item.quantity, item.unit_price, item.subtotal, item.notes || null]
+      );
+    }
+
+    await pool.query(
+      `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'aguardando_pagamento',$2)`,
+      [order.id, adminId]
+    );
+
+    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length } });
+
+    res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('[orders/guest]', err.message);
+    res.status(500).json({ error: 'Erro ao criar pedido' });
+  }
+});
+
 router.use(authMiddleware);
 
 // GET /api/orders — listar pedidos (com filtros)

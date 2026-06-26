@@ -35,6 +35,7 @@ export const api = {
   updateCustomer: (id, data) => request('PATCH', `/customers/${id}`, data),
 
   // Orders
+  guestOrder: (data) => request('POST', '/orders/guest', data),
   createOrder: (data) => request('POST', '/orders', data),
   getOrder: (id) => request('GET', `/orders/${id}`),
   getOrders: (params = '') => request('GET', `/orders${params}`),

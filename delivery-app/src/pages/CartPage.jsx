@@ -98,10 +98,10 @@ export default function CartPage() {
       {/* CTA */}
       <div className="p-4 bg-white border-t border-gray-100 safe-bottom">
         <button
-          onClick={() => navigate(customer ? '/checkout' : '/login')}
+          onClick={() => navigate('/checkout')}
           className="w-full bg-violet-600 text-white rounded-2xl py-4 font-bold text-base press active:bg-violet-700 flex items-center justify-between px-5"
         >
-          <span>{customer ? 'Finalizar pedido' : 'Entrar para continuar'}</span>
+          <span>Finalizar pedido</span>
           <span>{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
         </button>
       </div>

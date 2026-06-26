@@ -1,59 +1,79 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../store/cart'
-import { useAuth } from '../store/auth'
 import { api } from '../api'
 
 const PAYMENT_METHODS = [
-  { id: 'pix', label: 'PIX', icon: '⚡', desc: 'Instantâneo e sem taxas' },
-  { id: 'dinheiro', label: 'Dinheiro', icon: '💵', desc: 'Pague na entrega' },
-  { id: 'cartao_credito', label: 'Crédito', icon: '💳', desc: 'Máquina na entrega' },
-  { id: 'cartao_debito', label: 'Débito', icon: '🏦', desc: 'Máquina na entrega' },
+  { id: 'pix',            label: 'PIX',             icon: '⚡', desc: 'Chave: confrariacafe@pix.com' },
+  { id: 'dinheiro',       label: 'Dinheiro',         icon: '💵', desc: 'Pague na entrega / retirada' },
+  { id: 'cartao_credito', label: 'Cartão de Crédito',icon: '💳', desc: 'Maquininha na entrega' },
+  { id: 'cartao_debito',  label: 'Cartão de Débito', icon: '🏦', desc: 'Maquininha na entrega' },
 ]
+
+const BAIRROS = {
+  'CENTRAL':     [{ n:'Santa Rita',taxa:7},{ n:'Central',taxa:6},{ n:'Trem',taxa:7},{ n:'Jesus de Nazaré',taxa:8},{ n:'Perpétuo Socorro',taxa:8}],
+  'OESTE':       [{ n:'Alvorada',taxa:10},{ n:'Nova Esperança',taxa:9},{ n:'Cabralzinho',taxa:15},{ n:'Irmãos Platon',taxa:17},{ n:'Goiabal',taxa:17},{ n:'Marabaixo 1 e 2',taxa:17},{ n:'Parque Novo Mundo',taxa:20},{ n:'Parque das Nações',taxa:20},{ n:'Resd. Jardim América',taxa:22},{ n:'Resd. Jardim Europa',taxa:22},{ n:'Resd. Cidade Jardim',taxa:22},{ n:'Resd. Amazonas',taxa:24}],
+  'ZONA SUL':    [{ n:'Buritizal',taxa:10},{ n:'Novo Buritizal',taxa:11},{ n:'Muca',taxa:10},{ n:'Beirol',taxa:8},{ n:'Santa Inês',taxa:8},{ n:'Araxá',taxa:9},{ n:'Congós',taxa:12},{ n:'Pedrinhas',taxa:12},{ n:'Jardim Equatorial',taxa:10},{ n:'Jardim Marco Zero',taxa:12},{ n:'Universidade',taxa:16},{ n:'Zerão',taxa:16},{ n:'Cond. Parque Felicitá',taxa:17},{ n:'Cond. Portal do Sol',taxa:19},{ n:'Cond. Manari',taxa:19},{ n:'Cond. Arboretto',taxa:19},{ n:'Cond. Villa Tropical',taxa:19},{ n:'Chefe Clodoaldo',taxa:19},{ n:'Cond. Verana',taxa:20},{ n:'Fazendinha',taxa:23}],
+  'ZONA NORTE':  [{ n:'Cidade Nova',taxa:10},{ n:'Julião Ramos',taxa:7},{ n:'Laguinho',taxa:8},{ n:'Pacoval',taxa:10},{ n:'São Lázaro',taxa:12},{ n:'Pantanal',taxa:14},{ n:'Renascer',taxa:12},{ n:'Vit. do Renascer',taxa:12},{ n:'Infraero 1',taxa:13},{ n:'Infraero 2',taxa:18},{ n:'Sol Nascente',taxa:20},{ n:'Ipê',taxa:20},{ n:'Açaí',taxa:18},{ n:'Boné Azul',taxa:17},{ n:'Novo Horizonte',taxa:19},{ n:'Jardim Felidade',taxa:16},{ n:'Jardim Felidade 2',taxa:18},{ n:'Brasil Novo',taxa:20},{ n:'Cond. Terra Nova',taxa:23},{ n:'Macapaba',taxa:20},{ n:'Morada das Palmeiras',taxa:18},{ n:'Resid. Bella Vista',taxa:23},{ n:'Amazonas',taxa:25},{ n:'Resid. Bouganville',taxa:12}],
+}
+
+function getTaxa(bairro) {
+  for (const lista of Object.values(BAIRROS)) {
+    const found = lista.find(b => b.n === bairro)
+    if (found) return found.taxa
+  }
+  return 0
+}
 
 export default function CheckoutPage() {
   const navigate = useNavigate()
   const { items, clear } = useCart()
-  const { customer } = useAuth()
+
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [payment, setPayment] = useState('pix')
   const [deliveryType, setDeliveryType] = useState('delivery')
-  const [address, setAddress] = useState({ street: '', number: '', complement: '', neighborhood: '' })
+  const [street, setStreet] = useState('')
+  const [number, setNumber] = useState('')
+  const [neighborhood, setNeighborhood] = useState('')
+  const [complement, setComplement] = useState('')
   const [notes, setNotes] = useState('')
+  const [troco, setTroco] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pixData, setPixData] = useState(null)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(null)
 
   const subtotal = items.reduce((s, i) => s + i.product.price * i.qty, 0)
-  const deliveryFee = deliveryType === 'delivery' ? 5.00 : 0
+  const deliveryFee = deliveryType === 'delivery' ? getTaxa(neighborhood) : 0
   const total = subtotal + deliveryFee
 
   async function handleSubmit() {
-    if (deliveryType === 'delivery' && !address.street) {
-      setError('Informe o endereço de entrega')
-      return
-    }
     setError('')
+    if (!name.trim()) return setError('Informe seu nome')
+    if (!phone.trim()) return setError('Informe seu WhatsApp')
+    if (deliveryType === 'delivery' && !neighborhood) return setError('Selecione o bairro de entrega')
+    if (deliveryType === 'delivery' && !street.trim()) return setError('Informe a rua de entrega')
+
     setLoading(true)
     try {
-      const order = await api.createOrder({
-        customer_id: customer.id,
+      const order = await api.guestOrder({
+        name: name.trim(),
+        phone: phone.replace(/\D/g, ''),
         delivery_type: deliveryType,
-        delivery_address: deliveryType === 'delivery' ? address : null,
+        delivery_address: deliveryType === 'delivery'
+          ? { street, number, neighborhood, complement }
+          : null,
         payment_method: payment,
         delivery_fee: deliveryFee,
-        notes,
-        items: items.map((i) => ({
+        notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : ''].filter(Boolean).join(' | ') || null,
+        items: items.map(i => ({
           product_id: i.product.id,
           quantity: i.qty,
-          notes: [...i.extras, i.notes].filter(Boolean).join(', '),
+          notes: [...(i.extras || []), i.notes].filter(Boolean).join(', ') || null,
         })),
       })
       clear()
-      if (payment === 'pix' && order.pix) {
-        setPixData({ ...order.pix, order_id: order.id })
-      } else {
-        navigate(`/order/${order.id}`)
-      }
+      setSuccess(order)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -61,42 +81,49 @@ export default function CheckoutPage() {
     }
   }
 
-  // PIX screen
-  if (pixData) {
+  // Tela de confirmação
+  if (success) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50 pb-24">
-        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-lg text-center">
-          <div className="text-5xl mb-3">⚡</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Pague via PIX</h2>
-          <p className="text-gray-400 text-sm mb-4">
-            Total: <strong className="text-violet-600">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+      <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
+        <div className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-lg text-center">
+          <div className="text-6xl mb-4">🎉</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Pedido enviado!</h2>
+          <p className="text-gray-500 text-sm mb-4">
+            Recebemos seu pedido <strong className="text-violet-600">#{success.id?.slice(-6).toUpperCase()}</strong>
           </p>
 
-          {pixData.qrCode ? (
-            <>
-              <div className="bg-gray-50 rounded-2xl p-4 mb-4 pix-qr">
-                <img src={pixData.qrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pixData.qrCode)}`}
-                     alt="QR Code PIX" className="w-48 h-48 mx-auto" />
-              </div>
-              <button
-                onClick={() => { navigator.clipboard.writeText(pixData.qrCode); alert('Código copiado!') }}
-                className="w-full bg-violet-50 text-violet-600 rounded-xl py-3 font-semibold text-sm mb-3 press"
-              >
-                📋 Copiar código PIX
-              </button>
-            </>
-          ) : (
-            <div className="bg-yellow-50 text-yellow-700 rounded-xl p-3 text-sm mb-4">
-              Configure as chaves Stripe para gerar QR Code PIX automático
+          <div className="bg-gray-50 rounded-2xl p-4 text-left space-y-2 mb-6 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Pagamento</span>
+              <span className="font-semibold">{PAYMENT_METHODS.find(m => m.id === success.payment_method)?.label}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Total</span>
+              <span className="font-bold text-violet-600">
+                {parseFloat(success.total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Tipo</span>
+              <span className="font-semibold">{success.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</span>
+            </div>
+          </div>
+
+          {success.payment_method === 'pix' && (
+            <div className="bg-violet-50 rounded-2xl p-4 mb-6 text-sm text-violet-700">
+              <p className="font-bold mb-1">⚡ Pague o PIX para confirmar</p>
+              <p>Chave PIX: <strong>confrariacafe@pix.com</strong></p>
+              <p className="mt-1 text-xs text-violet-500">Valor: {parseFloat(success.total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
             </div>
           )}
 
-          <p className="text-xs text-gray-400 mb-4">Após o pagamento, seu pedido é confirmado automaticamente</p>
+          <p className="text-xs text-gray-400 mb-5">Entraremos em contato pelo WhatsApp informado para confirmar o pedido.</p>
+
           <button
-            onClick={() => navigate(`/order/${pixData.order_id}`)}
-            className="w-full bg-violet-600 text-white rounded-xl py-3 font-semibold press"
+            onClick={() => navigate('/')}
+            className="w-full bg-violet-600 text-white rounded-2xl py-3 font-bold press"
           >
-            Acompanhar pedido →
+            Voltar ao cardápio
           </button>
         </div>
       </div>
@@ -104,7 +131,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       <div className="bg-white safe-top px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/cart')} className="text-gray-400 text-xl press">←</button>
@@ -112,17 +139,43 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-32">
+      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-36">
+
+        {/* Seus dados */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+          <h3 className="font-semibold text-gray-900 mb-3">👤 Seus dados</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="text-xs text-gray-500 font-medium">Nome completo *</label>
+              <input
+                value={name} onChange={e => setName(e.target.value)}
+                placeholder="João Silva"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-medium">WhatsApp *</label>
+              <input
+                type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                placeholder="(96) 99999-0000"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+              />
+            </div>
+          </div>
+        </div>
 
         {/* Entrega ou Retirada */}
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-3">Como quer receber?</h3>
+          <h3 className="font-semibold text-gray-900 mb-3">🚀 Como quer receber?</h3>
           <div className="grid grid-cols-2 gap-2">
-            {[{ id: 'delivery', label: '🛵 Entrega', desc: 'Taxa R$ 5,00' }, { id: 'retirada', label: '🏪 Retirada', desc: 'Sem taxa' }].map((opt) => (
+            {[
+              { id: 'delivery', label: '🛵 Entrega', desc: 'Taxa por bairro' },
+              { id: 'retirada', label: '🏪 Retirada', desc: 'Sem taxa' },
+            ].map(opt => (
               <button
                 key={opt.id}
                 onClick={() => setDeliveryType(opt.id)}
-                className={`p-3 rounded-xl border-2 text-left transition-all press ${deliveryType === opt.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100'}`}
+                className={`p-3 rounded-xl border-2 text-left transition-all press ${deliveryType === opt.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100 bg-white'}`}
               >
                 <p className="font-medium text-sm text-gray-900">{opt.label}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
@@ -136,22 +189,53 @@ export default function CheckoutPage() {
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
             <h3 className="font-semibold text-gray-900 mb-3">📍 Endereço de entrega</h3>
             <div className="space-y-2">
-              {[
-                { key: 'street', label: 'Rua', placeholder: 'Rua das Flores' },
-                { key: 'number', label: 'Número', placeholder: '123' },
-                { key: 'complement', label: 'Complemento', placeholder: 'Apto 42 (opcional)' },
-                { key: 'neighborhood', label: 'Bairro', placeholder: 'Centro' },
-              ].map(({ key, label, placeholder }) => (
-                <div key={key}>
-                  <label className="text-xs text-gray-500 font-medium">{label}</label>
+              <div>
+                <label className="text-xs text-gray-500 font-medium">Bairro *</label>
+                <select
+                  value={neighborhood} onChange={e => setNeighborhood(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400 bg-white"
+                >
+                  <option value="">— Selecione o bairro —</option>
+                  {Object.entries(BAIRROS).map(([zona, bairros]) => (
+                    <optgroup key={zona} label={`── ${zona} ──`}>
+                      {bairros.map(b => (
+                        <option key={b.n} value={b.n}>{b.n} — R$ {b.taxa.toFixed(2).replace('.', ',')}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                {neighborhood && (
+                  <p className="text-xs text-violet-600 font-semibold mt-1">
+                    🛵 Taxa de entrega: R$ {getTaxa(neighborhood).toFixed(2).replace('.', ',')}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium">Rua / Avenida *</label>
+                <input
+                  value={street} onChange={e => setStreet(e.target.value)}
+                  placeholder="Av. Duque de Caxias"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Número</label>
                   <input
-                    value={address[key]}
-                    onChange={(e) => setAddress((a) => ({ ...a, [key]: e.target.value }))}
-                    placeholder={placeholder}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                    value={number} onChange={e => setNumber(e.target.value)}
+                    placeholder="123"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
                   />
                 </div>
-              ))}
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Complemento</label>
+                  <input
+                    value={complement} onChange={e => setComplement(e.target.value)}
+                    placeholder="Apto 12"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -160,32 +244,42 @@ export default function CheckoutPage() {
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
           <h3 className="font-semibold text-gray-900 mb-3">💳 Forma de pagamento</h3>
           <div className="space-y-2">
-            {PAYMENT_METHODS.map((m) => (
+            {PAYMENT_METHODS.map(m => (
               <button
                 key={m.id}
                 onClick={() => setPayment(m.id)}
-                className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all press ${payment === m.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100'}`}
+                className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all press ${payment === m.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100 bg-white'}`}
               >
                 <span className="text-2xl">{m.icon}</span>
-                <div className="text-left">
+                <div className="text-left flex-1">
                   <p className="font-medium text-sm text-gray-900">{m.label}</p>
                   <p className="text-xs text-gray-400">{m.desc}</p>
                 </div>
-                <div className={`ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center ${payment === m.id ? 'border-violet-600' : 'border-gray-200'}`}>
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${payment === m.id ? 'border-violet-600' : 'border-gray-200'}`}>
                   {payment === m.id && <div className="w-2.5 h-2.5 bg-violet-600 rounded-full" />}
                 </div>
               </button>
             ))}
           </div>
+
+          {payment === 'dinheiro' && (
+            <div className="mt-3">
+              <label className="text-xs text-gray-500 font-medium">Troco para quanto? (opcional)</label>
+              <input
+                type="number" value={troco} onChange={e => setTroco(e.target.value)}
+                placeholder="Ex: 50"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+              />
+            </div>
+          )}
         </div>
 
         {/* Observação */}
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-2">📝 Observação do pedido</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">📝 Observações</h3>
           <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Alguma instrução especial para a entrega?"
+            value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="Alguma instrução especial?"
             rows={2}
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-violet-400 resize-none"
           />
@@ -193,12 +287,27 @@ export default function CheckoutPage() {
 
         {/* Resumo */}
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></div>
-            <div className="flex justify-between text-gray-600"><span>Taxa de entrega</span><span>{deliveryFee === 0 ? 'Grátis' : deliveryFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></div>
-            <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-100">
-              <span>Total</span>
-              <span className="text-violet-600">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+          <h3 className="font-semibold text-gray-900 mb-3">🧾 Resumo</h3>
+          <div className="space-y-1.5 text-sm">
+            {items.map(i => (
+              <div key={i.key} className="flex justify-between text-gray-600">
+                <span>{i.qty}x {i.product.name}</span>
+                <span>{(i.product.price * i.qty).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
+            ))}
+            <div className="border-t border-gray-100 pt-2 mt-2">
+              <div className="flex justify-between text-gray-500">
+                <span>Subtotal</span>
+                <span>{subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
+              <div className="flex justify-between text-gray-500">
+                <span>Taxa de entrega</span>
+                <span>{deliveryFee === 0 ? 'Grátis' : deliveryFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
+              <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-100 mt-1">
+                <span>Total</span>
+                <span className="text-violet-600 text-base">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -206,14 +315,13 @@ export default function CheckoutPage() {
         {error && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-xl">{error}</p>}
       </div>
 
-      <div className="p-4 bg-white border-t border-gray-100 safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 safe-bottom">
         <button
           onClick={handleSubmit}
           disabled={loading}
           className="w-full bg-violet-600 text-white rounded-2xl py-4 font-bold text-base press active:bg-violet-700 disabled:opacity-60 flex items-center justify-center gap-2"
         >
-          {loading ? <span className="animate-spin">⏳</span> : null}
-          {loading ? 'Processando...' : `Confirmar pedido · ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}
+          {loading ? '⏳ Enviando...' : `✅ Confirmar pedido · ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}
         </button>
       </div>
     </div>
