@@ -629,42 +629,150 @@ function modalNovoUsuario() {
 }
 
 // ── Pedidos ───────────────────────────────────────────────────────
+const STATUS_LABEL = {
+  aguardando_pagamento:'⏳ Aguardando',
+  pago:'💳 Pago',
+  confirmado:'📋 Confirmado',
+  em_preparo:'🍳 Em preparo',
+  pronto:'✅ Pronto',
+  saiu_para_entrega:'🛵 A caminho',
+  entregue:'🏠 Entregue',
+  cancelado:'❌ Cancelado'
+};
+const STATUS_NEXT = {
+  pago:'confirmado',
+  confirmado:'em_preparo',
+  em_preparo:'pronto',
+  pronto:'saiu_para_entrega',
+  saiu_para_entrega:'entregue'
+};
+const STATUS_COLOR = {
+  aguardando_pagamento:'#92400e',
+  pago:'#1e40af',
+  confirmado:'#5b21b6',
+  em_preparo:'#92400e',
+  pronto:'#065f46',
+  saiu_para_entrega:'#0369a1',
+  entregue:'#374151',
+  cancelado:'#991b1b'
+};
+let pedidosFiltro = 'todos';
+let pedidosTimer = null;
+
 async function pagePedidos() {
-  const orders = await api('GET', '/orders?limit=100');
-  const STATUS = { aguardando_pagamento:'⏳ Aguardando', pago:'💳 Pago', confirmado:'📋 Confirmado', em_preparo:'🍳 Em preparo', pronto:'✅ Pronto', saiu_para_entrega:'🛵 A caminho', entregue:'🏠 Entregue', cancelado:'❌ Cancelado' };
-  const NEXT = { confirmado:'em_preparo', em_preparo:'pronto', pronto:'saiu_para_entrega', saiu_para_entrega:'entregue' };
+  clearInterval(pedidosTimer);
   document.getElementById('content').innerHTML = `
-    <div class="card">
-      <h3>Pedidos recentes (${orders.length})</h3>
-      <table>
-        <tr><th>#</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Tipo</th><th>Status</th><th>Hora</th><th>Ação</th></tr>
-        ${orders.map(o => `
-          <tr>
-            <td style="font-family:monospace;font-weight:700">${o.id.slice(-6).toUpperCase()}</td>
-            <td>${o.customer_name||'-'}</td>
-            <td style="color:#64748b">${o.item_count} item(s)</td>
-            <td class="price">R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</td>
-            <td style="color:#64748b">${o.payment_method||'-'}</td>
-            <td>${o.delivery_type === 'retirada' ? '🏪' : '🛵'}</td>
-            <td>${STATUS[o.status]||o.status}</td>
-            <td style="color:#64748b">${new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>
-            <td style="display:flex;gap:4px">
-              ${NEXT[o.status] ? `<button class="btn btn-success btn-sm" onclick="avancarStatus('${o.id}','${NEXT[o.status]}')">▶</button>` : ''}
-              ${o.status !== 'cancelado' && o.status !== 'entregue' ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedido('${o.id}')">✕</button>` : ''}
-            </td>
-          </tr>`).join('')}
-      </table>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1">
+        ${['todos','aguardando_pagamento','pago','confirmado','em_preparo','pronto','saiu_para_entrega','entregue','cancelado'].map(s => `
+          <button class="btn btn-sm" id="filtro-${s}" onclick="filtrarPedidos('${s}')"
+            style="background:${s==='todos'?'#7c3aed':'#1e293b'};color:${s==='todos'?'#fff':'#94a3b8'};border:1px solid #334155">
+            ${s==='todos'?'Todos':STATUS_LABEL[s]||s}
+          </button>`).join('')}
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="carregarPedidos()">🔄 Atualizar</button>
+    </div>
+    <div id="pedidos-lista"><p style="color:#64748b">Carregando...</p></div>`;
+  await carregarPedidos();
+  pedidosTimer = setInterval(carregarPedidos, 30000);
+}
+
+async function carregarPedidos() {
+  try {
+    const qs = pedidosFiltro !== 'todos' ? `?status=${pedidosFiltro}&limit=100` : '?limit=100';
+    const orders = await api('GET', '/orders' + qs);
+    renderPedidos(orders);
+  } catch(e) { toast('Erro ao carregar pedidos: ' + e.message, true); }
+}
+
+function filtrarPedidos(filtro) {
+  pedidosFiltro = filtro;
+  document.querySelectorAll('[id^="filtro-"]').forEach(b => {
+    const isActive = b.id === 'filtro-' + filtro;
+    b.style.background = isActive ? '#7c3aed' : '#1e293b';
+    b.style.color = isActive ? '#fff' : '#94a3b8';
+  });
+  carregarPedidos();
+}
+
+function renderPedidos(orders) {
+  if (!orders.length) {
+    document.getElementById('pedidos-lista').innerHTML = `<div class="card" style="text-align:center;color:#64748b;padding:40px">Nenhum pedido encontrado</div>`;
+    return;
+  }
+  document.getElementById('pedidos-lista').innerHTML = orders.map(o => {
+    const cor = STATUS_COLOR[o.status] || '#334155';
+    const prox = STATUS_NEXT[o.status];
+    const hora = new Date(o.created_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+    const data = new Date(o.created_at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit'});
+    return `
+    <div style="background:#1e293b;border:1px solid #334155;border-left:4px solid ${cor};border-radius:12px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-family:monospace;font-weight:800;font-size:1.1rem">#${o.id.slice(-6).toUpperCase()}</span>
+          <span style="background:${cor};color:#fff;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:700">${STATUS_LABEL[o.status]||o.status}</span>
+          <span style="color:#64748b;font-size:.78rem">${data} às ${hora}</span>
+          <span style="font-size:.85rem">${o.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-weight:800;color:#a78bfa;font-size:1.05rem">R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</span>
+          <span style="color:#64748b;font-size:.78rem">${o.payment_method||'-'}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;margin-top:10px;font-size:.82rem;flex-wrap:wrap">
+        <div><span style="color:#64748b">Cliente: </span><strong>${o.customer_name||'—'}</strong></div>
+        ${o.customer_phone ? `<div>📱 ${o.customer_phone}</div>` : ''}
+        ${o.delivery_address ? `<div style="color:#94a3b8">📍 ${o.delivery_address}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
+        ${prox ? `<button class="btn btn-success btn-sm" onclick="avancarStatus('${o.id}','${prox}')">▶ ${STATUS_LABEL[prox]}</button>` : ''}
+        ${o.status !== 'cancelado' && o.status !== 'entregue' ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedido('${o.id}')">✕ Cancelar</button>` : ''}
+      </div>
     </div>`;
+  }).join('');
+}
+
+async function verPedido(id) {
+  const o = await api('GET', '/orders/' + id);
+  const items = o.items || [];
+  openModal(`Pedido #${id.slice(-6).toUpperCase()}`, `
+    <div style="font-size:.85rem;display:grid;gap:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><span style="color:#64748b">Cliente:</span> <strong>${o.customer_name||'—'}</strong></div>
+        <div><span style="color:#64748b">WhatsApp:</span> ${o.customer_phone||'—'}</div>
+        <div><span style="color:#64748b">Tipo:</span> ${o.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</div>
+        <div><span style="color:#64748b">Pagamento:</span> ${o.payment_method||'—'}</div>
+        ${o.delivery_address ? `<div style="grid-column:1/-1"><span style="color:#64748b">Endereço:</span> ${o.delivery_address}</div>` : ''}
+      </div>
+      <hr style="border-color:#334155">
+      <strong>Itens do pedido</strong>
+      ${items.map(i => `
+        <div style="display:flex;justify-content:space-between;padding:8px;background:#0f172a;border-radius:8px">
+          <div>
+            <span style="font-weight:700">${i.quantity}x</span> ${i.product_name||i.name||'—'}
+            ${i.notes ? `<div style="color:#64748b;font-size:.75rem">${i.notes}</div>` : ''}
+          </div>
+          <span class="price">R$ ${parseFloat((i.unit_price||i.price||0)*i.quantity).toFixed(2).replace('.',',')}</span>
+        </div>`).join('') || '<p style="color:#475569">Sem itens registrados</p>'}
+      <hr style="border-color:#334155">
+      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1rem">
+        <span>Total</span>
+        <span class="price">R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</span>
+      </div>
+      ${o.notes ? `<div style="background:#0f172a;border-radius:8px;padding:8px;color:#94a3b8"><strong>Obs:</strong> ${o.notes}</div>` : ''}
+    </div>`, null);
+  document.getElementById('modal-confirm').style.display = 'none';
 }
 
 async function avancarStatus(id, status) {
   await api('PATCH', '/orders/' + id + '/status', { status });
-  toast('Status atualizado!'); pagePedidos();
+  toast('Status atualizado!'); carregarPedidos();
 }
 async function cancelarPedido(id) {
   if (!confirm('Cancelar este pedido?')) return;
   await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado' });
-  toast('Pedido cancelado'); pagePedidos();
+  toast('Pedido cancelado'); carregarPedidos();
 }
 
 // ── Impressoras ───────────────────────────────────────────────────
