@@ -162,6 +162,112 @@ function logout() {
   location.reload();
 }
 
+// ── Catálogo de Bairros e Taxas de Entrega ────────────────────────
+const BAIRROS = {
+  'CENTRAL': [
+    { nome: 'Santa Rita',       taxa: 7  },
+    { nome: 'Central',          taxa: 6  },
+    { nome: 'Trem',             taxa: 7  },
+    { nome: 'Jesus de Nazaré',  taxa: 8  },
+    { nome: 'Perpétuo Socorro', taxa: 8  },
+  ],
+  'OESTE': [
+    { nome: 'Alvorada',              taxa: 10 },
+    { nome: 'Nova Esperança',        taxa: 9  },
+    { nome: 'Cabralzinho',           taxa: 15 },
+    { nome: 'Irmãos Platon',         taxa: 17 },
+    { nome: 'Goiabal',               taxa: 17 },
+    { nome: 'Marabaixo 1 e 2',       taxa: 17 },
+    { nome: 'Parque Novo Mundo',     taxa: 20 },
+    { nome: 'Parque das Nações',     taxa: 20 },
+    { nome: 'Resd. Jardim América',  taxa: 22 },
+    { nome: 'Resd. Jardim Europa',   taxa: 22 },
+    { nome: 'Resd. Cidade Jardim',   taxa: 22 },
+    { nome: 'Resd. Amazonas',        taxa: 24 },
+  ],
+  'ZONA SUL': [
+    { nome: 'Buritizal',             taxa: 10 },
+    { nome: 'Novo Buritizal',        taxa: 11 },
+    { nome: 'Muca',                  taxa: 10 },
+    { nome: 'Beirol',                taxa: 8  },
+    { nome: 'Santa Inês',            taxa: 8  },
+    { nome: 'Araxá',                 taxa: 9  },
+    { nome: 'Congós',                taxa: 12 },
+    { nome: 'Pedrinhas',             taxa: 12 },
+    { nome: 'Jardim Equatorial',     taxa: 10 },
+    { nome: 'Jardim Marco Zero',     taxa: 12 },
+    { nome: 'Universidade',          taxa: 16 },
+    { nome: 'Zerão',                 taxa: 16 },
+    { nome: 'Cond. Parque Felicitá', taxa: 17 },
+    { nome: 'Cond. Portal do Sol',   taxa: 19 },
+    { nome: 'Cond. Manari',          taxa: 19 },
+    { nome: 'Cond. Arboretto',       taxa: 19 },
+    { nome: 'Cond. Villa Tropical',  taxa: 19 },
+    { nome: 'Chefe Clodoaldo',       taxa: 19 },
+    { nome: 'Cond. Verana',          taxa: 20 },
+    { nome: 'Fazendinha',            taxa: 23 },
+  ],
+  'ZONA NORTE': [
+    { nome: 'Cidade Nova',           taxa: 10 },
+    { nome: 'Julião Ramos',          taxa: 7  },
+    { nome: 'Laguinho',              taxa: 8  },
+    { nome: 'Pacoval',               taxa: 10 },
+    { nome: 'São Lázaro',            taxa: 12 },
+    { nome: 'Pantanal',              taxa: 14 },
+    { nome: 'Renascer',              taxa: 12 },
+    { nome: 'Vit. do Renascer',      taxa: 12 },
+    { nome: 'Infraero 1',            taxa: 13 },
+    { nome: 'Infraero 2',            taxa: 18 },
+    { nome: 'Sol Nascente',          taxa: 20 },
+    { nome: 'Ipê',                   taxa: 20 },
+    { nome: 'Açaí',                  taxa: 18 },
+    { nome: 'Boné Azul',             taxa: 17 },
+    { nome: 'Novo Horizonte',        taxa: 19 },
+    { nome: 'Jardim Felidade',       taxa: 16 },
+    { nome: 'Jardim Felidade 2',     taxa: 18 },
+    { nome: 'Brasil Novo',           taxa: 20 },
+    { nome: 'Cond. Terra Nova',      taxa: 23 },
+    { nome: 'Macapaba',              taxa: 20 },
+    { nome: 'Morada das Palmeiras',  taxa: 18 },
+    { nome: 'Resid. Bella Vista',    taxa: 23 },
+    { nome: 'Amazonas',              taxa: 25 },
+    { nome: 'Resid. Bouganville',    taxa: 12 },
+  ],
+};
+
+function getTaxaEntrega(bairro) {
+  for (const zona of Object.values(BAIRROS)) {
+    const found = zona.find(b => b.nome === bairro);
+    if (found) return found.taxa;
+  }
+  return null;
+}
+
+function bairroSelectOptions(selected) {
+  return Object.entries(BAIRROS).map(([zona, bairros]) => `
+    <optgroup label="── ${zona} ──">
+      ${bairros.map(b => `<option value="${b.nome}" ${b.nome === selected ? 'selected' : ''}>
+        ${b.nome} — R$ ${b.taxa.toFixed(2).replace('.',',')}
+      </option>`).join('')}
+    </optgroup>`).join('');
+}
+
+function atualizarTaxaEntrega() {
+  const sel = document.getElementById('cf-neigh');
+  const badge = document.getElementById('taxa-badge');
+  if (!sel || !badge) return;
+  const taxa = getTaxaEntrega(sel.value);
+  if (taxa !== null) {
+    badge.textContent = '🛵 Taxa: R$ ' + taxa.toFixed(2).replace('.',',');
+    badge.style.display = 'inline-block';
+    badge.style.background = '#064e3b';
+    badge.style.color = '#6ee7b7';
+  } else {
+    badge.textContent = '';
+    badge.style.display = 'none';
+  }
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────
 ;(function wsConnect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -383,7 +489,11 @@ async function buscarClientes(q) {
           <tr>
             <td style="font-weight:600">${c.name}</td>
             <td>${c.phone ? '📱 ' + c.phone : '-'}</td>
-            <td style="color:#94a3b8;font-size:.78rem">${[c.address_street, c.address_number, c.address_neighborhood, c.address_city].filter(Boolean).join(', ') || '-'}</td>
+            <td style="font-size:.78rem">
+              ${c.address_neighborhood ? `<span style="color:#f1f5f9">${c.address_neighborhood}</span>` : ''}
+              ${c.address_neighborhood && getTaxaEntrega(c.address_neighborhood) !== null ? `<span style="background:#064e3b;color:#6ee7b7;border-radius:999px;padding:1px 7px;font-size:.7rem;font-weight:700;margin-left:4px">🛵 R$ ${getTaxaEntrega(c.address_neighborhood).toFixed(2).replace('.',',')}</span>` : ''}
+              ${c.address_street ? `<div style="color:#64748b;margin-top:2px">${[c.address_street, c.address_number, c.address_city].filter(Boolean).join(', ')}</div>` : ''}
+            </td>
             <td style="display:flex;gap:6px">
               <button class="btn btn-secondary btn-sm" onclick="verCliente('${c.id}')">👁</button>
               <button class="btn btn-secondary btn-sm" onclick="modalEditarCliente('${c.id}')">✏️</button>
@@ -437,14 +547,28 @@ function clienteForm(c) {
         <div><label>Rua</label><input id="cf-street" value="${c.address_street||''}" placeholder="Rua / Av." /></div>
         <div><label>Número</label><input id="cf-number" value="${c.address_number||''}" placeholder="Nº" /></div>
       </div>
-      <div class="form-grid cols-2">
-        <div><label>Bairro</label><input id="cf-neigh" value="${c.address_neighborhood||''}" placeholder="Bairro" /></div>
-        <div><label>Cidade</label><input id="cf-city" value="${c.address_city||''}" placeholder="Cidade" /></div>
+      <div>
+        <label>Bairro <span id="taxa-badge" style="display:none;padding:2px 10px;border-radius:999px;font-size:.75rem;font-weight:700;margin-left:8px"></span></label>
+        <select id="cf-neigh" onchange="atualizarTaxaEntrega()" style="width:100%">
+          <option value="">— Selecione o bairro —</option>
+          ${bairroSelectOptions(c.address_neighborhood||'')}
+        </select>
       </div>
+      <div><label>Complemento</label><input id="cf-city" value="${c.address_city||''}" placeholder="Apto, bloco, ponto de referência..." /></div>
     </div>`;
 }
 function getClienteForm() {
-  return { name: v('cf-name'), phone: v('cf-phone'), address_street: v('cf-street')||undefined, address_number: v('cf-number')||undefined, address_neighborhood: v('cf-neigh')||undefined, address_city: v('cf-city')||undefined };
+  const bairro = document.getElementById('cf-neigh')?.value || '';
+  const taxa = getTaxaEntrega(bairro);
+  return {
+    name: v('cf-name'),
+    phone: v('cf-phone'),
+    address_street: v('cf-street')||undefined,
+    address_number: v('cf-number')||undefined,
+    address_neighborhood: bairro||undefined,
+    address_city: v('cf-city')||undefined,
+    notes: taxa !== null ? `Taxa de entrega: R$ ${taxa.toFixed(2)}` : undefined,
+  };
 }
 
 // ── Usuários ──────────────────────────────────────────────────────
