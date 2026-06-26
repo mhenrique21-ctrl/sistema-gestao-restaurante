@@ -378,13 +378,12 @@ async function buscarClientes(q) {
     <div class="card">
       <h3>Clientes (${clientes.length})</h3>
       <table>
-        <tr><th>Nome</th><th>Telefone</th><th>E-mail</th><th>Cidade</th><th>Ações</th></tr>
+        <tr><th>Nome</th><th>WhatsApp</th><th>Endereço</th><th>Ações</th></tr>
         ${clientes.map(c => `
           <tr>
             <td style="font-weight:600">${c.name}</td>
-            <td>${c.phone}</td>
-            <td style="color:#64748b">${c.email || '-'}</td>
-            <td style="color:#64748b">${c.address_city || '-'}</td>
+            <td>${c.phone ? '📱 ' + c.phone : '-'}</td>
+            <td style="color:#94a3b8;font-size:.78rem">${[c.address_street, c.address_number, c.address_neighborhood, c.address_city].filter(Boolean).join(', ') || '-'}</td>
             <td style="display:flex;gap:6px">
               <button class="btn btn-secondary btn-sm" onclick="verCliente('${c.id}')">👁</button>
               <button class="btn btn-secondary btn-sm" onclick="modalEditarCliente('${c.id}')">✏️</button>
@@ -398,10 +397,8 @@ async function verCliente(id) {
   const c = await api('GET', '/customers/' + id);
   openModal('Cliente: ' + c.name, `
     <div style="display:grid;gap:8px;font-size:.85rem">
-      <div><strong>Telefone:</strong> ${c.phone}</div>
-      <div><strong>E-mail:</strong> ${c.email || '-'}</div>
+      <div><strong>WhatsApp:</strong> 📱 ${c.phone || '-'}</div>
       <div><strong>Endereço:</strong> ${[c.address_street, c.address_number, c.address_neighborhood, c.address_city].filter(Boolean).join(', ') || '-'}</div>
-      <div><strong>Observações:</strong> ${c.notes || '-'}</div>
       <hr style="border-color:#334155;margin:8px 0">
       <strong>Últimos pedidos</strong>
       ${(c.recent_orders||[]).length === 0 ? '<p style="color:#475569">Nenhum pedido</p>' :
@@ -434,25 +431,20 @@ async function modalEditarCliente(id) {
 function clienteForm(c) {
   return `
     <div class="form-grid">
+      <div><label>Nome *</label><input id="cf-name" value="${c.name||''}" placeholder="Nome completo" /></div>
+      <div><label>WhatsApp *</label><input id="cf-phone" value="${c.phone||''}" placeholder="Ex: 11999990000" /></div>
       <div class="form-grid cols-2">
-        <div><label>Nome</label><input id="cf-name" value="${c.name||''}" /></div>
-        <div><label>Telefone</label><input id="cf-phone" value="${c.phone||''}" /></div>
-      </div>
-      <div><label>E-mail</label><input id="cf-email" value="${c.email||''}" /></div>
-      <div class="form-grid cols-2">
-        <div><label>Rua</label><input id="cf-street" value="${c.address_street||''}" /></div>
-        <div><label>Número</label><input id="cf-number" value="${c.address_number||''}" /></div>
+        <div><label>Rua</label><input id="cf-street" value="${c.address_street||''}" placeholder="Rua / Av." /></div>
+        <div><label>Número</label><input id="cf-number" value="${c.address_number||''}" placeholder="Nº" /></div>
       </div>
       <div class="form-grid cols-2">
-        <div><label>Bairro</label><input id="cf-neigh" value="${c.address_neighborhood||''}" /></div>
-        <div><label>Cidade</label><input id="cf-city" value="${c.address_city||'São Paulo'}" /></div>
+        <div><label>Bairro</label><input id="cf-neigh" value="${c.address_neighborhood||''}" placeholder="Bairro" /></div>
+        <div><label>Cidade</label><input id="cf-city" value="${c.address_city||''}" placeholder="Cidade" /></div>
       </div>
-      <div><label>CEP</label><input id="cf-zip" value="${c.address_zip||''}" /></div>
-      <div><label>Observações</label><textarea id="cf-notes">${c.notes||''}</textarea></div>
     </div>`;
 }
 function getClienteForm() {
-  return { name: v('cf-name'), phone: v('cf-phone'), email: v('cf-email')||undefined, address_street: v('cf-street'), address_number: v('cf-number'), address_neighborhood: v('cf-neigh'), address_city: v('cf-city'), address_zip: v('cf-zip'), notes: v('cf-notes')||undefined };
+  return { name: v('cf-name'), phone: v('cf-phone'), address_street: v('cf-street')||undefined, address_number: v('cf-number')||undefined, address_neighborhood: v('cf-neigh')||undefined, address_city: v('cf-city')||undefined };
 }
 
 // ── Usuários ──────────────────────────────────────────────────────
