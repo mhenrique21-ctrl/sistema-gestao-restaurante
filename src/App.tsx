@@ -2117,11 +2117,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           setFetchingChave(resumo.chNFe);
           const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:resumo.chNFe})});
           const data=await res.json();
-          if(res.ok&&!data.error&&(data.itens||[]).length>0){
+          if(res.ok&&!data.error&&!data.pendente&&(data.itens||[]).length>0){
             setSefazList(l=>l.map(n=>n.nsu===resumo.nsu?{...n,...data,tipoDoc:"completo"}:n));
           }
         }catch{}
         setFetchingChave(null);
+        await new Promise(r=>setTimeout(r,3000));
       }
       autoFetchingRef.current=false;
     })();
@@ -2195,7 +2196,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
       const data=await res.json();
       if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
-      setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
+      if(data.pendente){
+        alert("⏳ "+data.message);
+      }else if((data.itens||[]).length>0){
+        setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
+      }else{
+        alert("⏳ SEFAZ retornou a NF-e sem produtos. A manifestação foi enviada — tente buscar novamente em 5-10 minutos.");
+      }
     }catch(e:any){alert("❌ Erro ao buscar NF-e completa: "+e.message);}
     finally{setFetchingChave(null);}
   };
@@ -2630,7 +2637,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 {fmtDate(nfe.data)} · {isFakeItem?0:(nfe.itens||[]).length} produto(s)
                 {(nfe.modelo||"55")==="65"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:9,marginLeft:4,padding:"1px 5px"}}>NFC-e</span>}
                 {isResumo&&fetchingChave===nfe.chNFe&&<span style={{color:"#7c8fff",marginLeft:6}}>⏳ buscando completa...</span>}
-                {isResumo&&fetchingChave!==nfe.chNFe&&<span style={{color:"#f59e0b",marginLeft:6}}>⚠️ resumo</span>}
+                {isResumo&&fetchingChave!==nfe.chNFe&&<span style={{color:"#f59e0b",marginLeft:6}} title="Clique em 'Buscar produtos' para tentar obter a NF-e completa">⚠️ resumo — clique para buscar</span>}
               </div>
               {(nfe.formaPag||nfe.dVenc)&&<div style={{fontSize:11,marginBottom:6,display:"flex",gap:8,flexWrap:"wrap" as const}}>
                 {nfe.formaPag&&<span style={{background:"#1a2040",border:"1px solid #2a3a6a",borderRadius:5,padding:"2px 8px",color:"#7c8fff"}}>💳 {nfe.formaPag}</span>}
@@ -2659,7 +2666,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               {canBuscar&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)}
                 disabled={fetchingChave===nfe.chNFe}
                 style={{background:"#1a2235",color:"#7c8fff",border:"1px solid #2a3a6a",padding:"8px 12px",fontSize:12,flex:1}}>
-                {fetchingChave===nfe.chNFe?"⏳ Buscando completa...":"🔍 Buscar produtos"}
+                {fetchingChave===nfe.chNFe?"⏳ Manifestando e buscando...":"🔍 Buscar produtos (SEFAZ)"}
               </button>}
               {nfe.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfe.rawXml,nfe.nNF||"",nfe.fornecedor?.nome||"")}
                 style={{background:"#1a2030",color:"#4ade80",border:"1px solid #1a3a20",padding:"8px 12px",fontSize:12}}>
