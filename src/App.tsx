@@ -768,6 +768,7 @@ export default function App() {
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
       {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
+      {id:"lista-arq",label:"Arquivo",icon:"📂",sub:"arquivo"},
       {id:"lista-prod",label:"Produtos",icon:"📦",sub:"produtos"},
       {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias"},
       {id:"lista-rua",label:"Ruas",icon:"🛣️",sub:"ruas"},
@@ -3189,7 +3190,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [buscaCatalogo,setBuscaCatalogo]=useState("");
   const [filtroCatCatalogo,setFiltroCatCatalogo]=useState("");
   const [showSugg,setShowSugg]=useState(false);
-  const showHistorico=false;
+  const showHistorico=subTab==="arquivo";
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
   const showRuaMgmt=subTab==="ruas";
   const setShowRuaMgmt=(v:boolean)=>setSubTab(v?"ruas":"nova");
@@ -3778,12 +3779,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>
 
     {/* Histórico de pedidos salvos */}
-    {isAdmin&&showHistorico&&<div className="card" style={{marginBottom:12,border:"1px solid #7c3a10"}}>
+    {showHistorico&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
+    {showHistorico&&<div className="card" style={{marginBottom:12,border:"1px solid #7c3a10"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div className="section-title" style={{color:"#fb923c",margin:0}}>📂 Histórico de Listas Salvas</div>
+        <div className="section-title" style={{color:"#fb923c",margin:0}}>📂 Listas Arquivadas <span style={{fontSize:11,color:"#555"}}>({(db.pedidosLista||[]).length})</span></div>
         <SortCtrl id="listaHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
       </div>
-      {!(db.pedidosLista||[]).length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma lista salva ainda.</div>}
+      {!(db.pedidosLista||[]).length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma lista arquivada ainda.</div>}
       {sortList(db.pedidosLista||[],db,'listaHist','data-desc').map((p:any)=>{
         const dataFmt=p.data?p.data.split("-").reverse().join("/"):"-";
         const expanded=expandedPedido===p.id;
@@ -3793,7 +3795,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             <span style={{flex:1,fontSize:13,fontWeight:700}}>{dataFmt}{p.autoArquivado?<span style={{fontSize:9,color:"#fbbf24",marginLeft:6}}>auto</span>:""}</span>
             <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
             <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
-            <button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>
+            {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>}
             <span style={{fontSize:11,color:"#555"}}>{expanded?"▲":"▼"}</span>
           </div>
           {expanded&&<div style={{padding:"8px 12px"}}>
