@@ -583,67 +583,46 @@ async function sefazSync(emp) {
   const result = await sefazDistDFe(emp);
   const resumos = (result.nfes || []).filter(n => n.tipoDoc === 'resumo' && n.chNFe && n.chNFe.length === 44);
   if (resumos.length > 0) {
-    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — manifestando e buscando documentos completos...`);
-    const manifestados = [];
+    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — manifestando...`);
     for (const resumo of resumos) {
       const isNFCe = resumo.chNFe.length >= 22 && resumo.chNFe.substring(20, 22) === '65';
       const tipoLabel = isNFCe ? 'NFC-e' : 'NF-e';
       if (!isNFCe) {
         try {
-          await delay(1500);
+          await delay(1000);
           await sefazManifestar(emp, resumo.chNFe);
-          manifestados.push(resumo);
           console.log(`[SEFAZ ${emp}] ✅ Manifestação ${tipoLabel} ${resumo.chNFe.slice(-8)} enviada`);
         } catch (me) {
           if ((me.message || '').includes('573')) {
-            manifestados.push(resumo);
-            console.log(`[SEFAZ ${emp}] Manifestação ${tipoLabel} ${resumo.chNFe.slice(-8)}: já manifestada (573)`);
+            console.log(`[SEFAZ ${emp}] ${tipoLabel} ${resumo.chNFe.slice(-8)}: já manifestada (573)`);
           } else {
             console.log(`[SEFAZ ${emp}] Manifestação ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${me.message}`);
           }
         }
-      } else {
-        manifestados.push(resumo);
-        console.log(`[SEFAZ ${emp}] ${tipoLabel} ${resumo.chNFe.slice(-8)} — NFC-e (sem manifestação)`);
       }
     }
-    if (manifestados.length > 0) {
-      console.log(`[SEFAZ ${emp}] Aguardando 8s após manifestação para SEFAZ disponibilizar NF-es completas...`);
-      await delay(8000);
-      const retryDelays = [0, 8000, 15000];
-      for (let tentativa = 0; tentativa < retryDelays.length; tentativa++) {
-        if (tentativa > 0) {
-          console.log(`[SEFAZ ${emp}] Aguardando ${retryDelays[tentativa]/1000}s antes da tentativa ${tentativa+1}...`);
-          await delay(retryDelays[tentativa]);
-        }
-        const pendentes = manifestados.filter(r => {
-          const idx = result.nfes.findIndex(n => n.nsu === r.nsu);
-          return idx >= 0 && result.nfes[idx].tipoDoc === 'resumo';
-        });
-        if (pendentes.length === 0) break;
-        console.log(`[SEFAZ ${emp}] Tentativa ${tentativa+1}/${retryDelays.length}: buscando ${pendentes.length} NF-e(s) completa(s)...`);
-        for (const resumo of pendentes) {
-          const isNFCe = resumo.chNFe.substring(20, 22) === '65';
-          const tipoLabel = isNFCe ? 'NFC-e' : 'NF-e';
-          try {
-            await delay(2000);
-            const completa = await sefazFetchByChave(emp, resumo.chNFe);
-            if ((completa.itens || []).length > 0) {
-              const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
-              if (idx >= 0) {
-                result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo', modelo: isNFCe ? '65' : (completa.modelo || '55') };
-                console.log(`[SEFAZ ${emp}] ✅ ${tipoLabel} ${resumo.chNFe.slice(-8)} completada (${completa.itens.length} itens)`);
-              }
-            }
-          } catch (e2) {
-            console.log(`[SEFAZ ${emp}] Tentativa ${tentativa+1} ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${e2.message}`);
+    console.log(`[SEFAZ ${emp}] Aguardando 5s para buscar NF-es completas...`);
+    await delay(5000);
+    for (const resumo of resumos) {
+      const isNFCe = resumo.chNFe.substring(20, 22) === '65';
+      const tipoLabel = isNFCe ? 'NFC-e' : 'NF-e';
+      try {
+        const completa = await sefazFetchByChave(emp, resumo.chNFe);
+        if ((completa.itens || []).length > 0) {
+          const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
+          if (idx >= 0) {
+            result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo', modelo: isNFCe ? '65' : (completa.modelo || '55') };
+            console.log(`[SEFAZ ${emp}] ✅ ${tipoLabel} ${resumo.chNFe.slice(-8)} completada (${completa.itens.length} itens)`);
           }
         }
+      } catch (e2) {
+        console.log(`[SEFAZ ${emp}] ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${e2.message}`);
       }
-      const aindaResumo = result.nfes.filter(n => n.tipoDoc === 'resumo').length;
-      if (aindaResumo > 0) {
-        console.log(`[SEFAZ ${emp}] ⚠️ ${aindaResumo} NF-e(s) ainda em resumo. Use "Buscar produtos" manualmente após alguns minutos.`);
-      }
+      await delay(1000);
+    }
+    const aindaResumo = result.nfes.filter(n => n.tipoDoc === 'resumo').length;
+    if (aindaResumo > 0) {
+      console.log(`[SEFAZ ${emp}] ⚠️ ${aindaResumo} NF-e(s) ainda em resumo. Use "Buscar produtos" individualmente.`);
     }
   }
   return result;
@@ -1033,7 +1012,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         } else {
           console.log(`[SEFAZ] NFC-e detectada — pulando manifestação`);
         }
-        const retryDelays = jaManifestada ? [5000, 8000, 12000, 18000] : [8000, 10000, 15000, 20000, 25000];
+        const retryDelays = jaManifestada ? [3000, 6000, 10000] : [5000, 8000, 12000];
         let result = null;
         let lastErr = null;
         for (let t = 0; t < retryDelays.length; t++) {

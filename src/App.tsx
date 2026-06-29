@@ -2116,6 +2116,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         try{
           setFetchingChave(resumo.chNFe);
           const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:resumo.chNFe})});
+          const ct=res.headers.get("content-type")||"";
+          if(!ct.includes("application/json"))continue;
           const data=await res.json();
           if(res.ok&&!data.error&&!data.pendente&&(data.itens||[]).length>0){
             setSefazList(l=>l.map(n=>n.nsu===resumo.nsu?{...n,...data,tipoDoc:"completo"}:n));
@@ -2194,6 +2196,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setFetchingChave(nfe.chNFe);
     try{
       const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
+      const ct=res.headers.get("content-type")||"";
+      if(!ct.includes("application/json")){
+        throw new Error("Tempo de resposta excedido. A manifestação foi enviada ao SEFAZ. Tente buscar novamente em 5-10 minutos.");
+      }
       const data=await res.json();
       if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
       if(data.pendente){
@@ -2203,7 +2209,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       }else{
         alert("⏳ SEFAZ retornou a NF-e sem produtos. A manifestação foi enviada — tente buscar novamente em 5-10 minutos.");
       }
-    }catch(e:any){alert("❌ Erro ao buscar NF-e completa: "+e.message);}
+    }catch(e:any){alert("⏳ "+e.message);}
     finally{setFetchingChave(null);}
   };
 
