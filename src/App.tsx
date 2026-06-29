@@ -776,7 +776,7 @@ export default function App() {
     ]},
     {id:"producao",label:"Produção",icon:"🏭",children:[
       {id:"prod-novo",label:"Novo Pedido",icon:"➕",sub:"novo"},
-      {id:"prod-ped",label:"Pedidos",icon:"📋",sub:"pedidos"},
+      {id:"prod-arq",label:"Arquivo",icon:"📂",sub:"pedidos"},
       {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos"},
       {id:"prod-cat",label:"Categorias",icon:"🏷️",sub:"categorias"},
     ]},
@@ -4839,7 +4839,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     {showHist&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showHist&&<div className="card" style={{marginBottom:12,border:"1px solid #5b21b6"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <div className="section-title" style={{color:"#c084fc",margin:0}}>📂 Histórico de Pedidos</div>
+        <div className="section-title" style={{color:"#c084fc",margin:0}}>📂 Pedidos Arquivados <span style={{fontSize:11,color:"#555"}}>({(db.pedidosProducao||[]).length})</span></div>
         <SortCtrl id="prodHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
       </div>
       {!(db.pedidosProducao||[]).length&&<div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:16}}>Nenhum pedido ainda.</div>}
