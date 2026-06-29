@@ -24,7 +24,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white safe-top px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-3">
@@ -34,7 +34,7 @@ export default function CartPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-4">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-28">
         {/* Items */}
         <div className="px-4 pt-4 space-y-3">
           {items.map((item) => (
@@ -92,7 +92,7 @@ export default function CartPage() {
       </div>
 
       {/* CTA */}
-      <div className="p-4 bg-white border-t border-gray-100 safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 safe-bottom">
         <button
           onClick={() => navigate('/checkout')}
           className="w-full bg-violet-600 text-white rounded-2xl py-4 font-bold text-base press active:bg-violet-700 flex items-center justify-between px-5"
