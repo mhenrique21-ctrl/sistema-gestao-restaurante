@@ -1074,34 +1074,163 @@ export default function App() {
 }
 
 // ===================== DASHBOARD =====================
-function Dashboard({db}) {
-  const vendas   =(db.vendas||[]).reduce((s,v)=>s+(v.total||0),0);
-  const compras  =(db.compras||[]).reduce((s,c)=>s+parseMoney(c.valor||0),0);
-  const cmv      =vendas>0?(compras/vendas)*100:0;
-  const pagas    =(db.contas||[]).filter(c=>c.status==="pago").reduce((s,c)=>s+parseMoney(c.valor),0);
-  const pendentes=(db.contas||[]).filter(c=>c.status==="pendente").reduce((s,c)=>s+parseMoney(c.valor),0);
-  const cmvColor =cmv<=30?"#4ade80":cmv<=40?"#fbbf24":"#ff5c7a";
-  const modais   =["maquininha","dinheiro","ifood","99food","delivery"];
-  const vendasMod=modais.map(m=>({label:m,v:(db.vendas||[]).reduce((s,d)=>s+(parseFloat(d[m])||0),0)}));
-  const maxV     =Math.max(...vendasMod.map(x=>x.v),1);
+function Dashboard({db}:{db:any}) {
+  const [periodo,setPeriodo]=useState<"semana"|"mes"|"custom">("mes");
+  const [customIni,setCustomIni]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return d.toISOString().split("T")[0];});
+  const [customFim,setCustomFim]=useState(today());
+
+  const getRange=()=>{
+    const hj=new Date();
+    if(periodo==="semana"){
+      const dow=hj.getDay();
+      const seg=new Date(hj);seg.setDate(hj.getDate()-(dow===0?6:dow-1));
+      return {ini:seg.toISOString().split("T")[0],fim:today()};
+    }
+    if(periodo==="custom")return {ini:customIni,fim:customFim};
+    return {ini:`${hj.getFullYear()}-${String(hj.getMonth()+1).padStart(2,"0")}-01`,fim:today()};
+  };
+  const {ini,fim}=getRange();
+
+  const todasVendas=(db.vendas||[]) as any[];
+  const vendasPeriodo=todasVendas.filter(v=>v.data>=ini&&v.data<=fim);
+  const totalVendas=vendasPeriodo.reduce((s,v)=>s+(v.total||0),0);
+
+  const comprasPeriodo=(db.compras||[]).filter((c:any)=>(c.data||"")>=ini&&(c.data||"")<=fim);
+  const totalCompras=comprasPeriodo.reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
+  const cmv=totalVendas>0?(totalCompras/totalVendas)*100:0;
+  const cmvColor=cmv<=30?"#4ade80":cmv<=40?"#fbbf24":"#ff5c7a";
+
+  const contasPeriodo=(db.contas||[]).filter((c:any)=>(c.vencimento||"")>=ini&&(c.vencimento||"")<=fim);
+  const pagasPeriodo=contasPeriodo.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  const pendentesPeriodo=contasPeriodo.filter((c:any)=>c.status==="pendente").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+
+  const vendasDiarias=(() => {
+    const map:{[k:string]:number}={};
+    vendasPeriodo.forEach(v=>{map[v.data]=(map[v.data]||0)+(v.total||0);});
+    const d=new Date(ini+"T12:00:00");
+    const end=new Date(fim+"T12:00:00");
+    const dias:{data:string,total:number}[]=[];
+    while(d<=end){const k=d.toISOString().split("T")[0];dias.push({data:k,total:map[k]||0});d.setDate(d.getDate()+1);}
+    return dias;
+  })();
+  const maxDia=Math.max(...vendasDiarias.map(d=>d.total),1);
+
+  const modais=["maquininha","dinheiro","ifood","99food","delivery"];
+  const vendasMod=modais.map(m=>({label:m,v:vendasPeriodo.reduce((s:number,d:any)=>s+(parseFloat(d[m])||0),0)}));
+  const maxV=Math.max(...vendasMod.map(x=>x.v),1);
+
+  const hj=today();
+  const contasHoje=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento===hj);
+  const contasAtrasadas=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento<hj);
+  const totalHoje=contasHoje.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  const totalAtrasadas=contasAtrasadas.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+
+  const periodoLabel=periodo==="semana"?"Esta Semana":periodo==="mes"?"Este Mês":`${fmtDate(customIni)} — ${fmtDate(customFim)}`;
+  const btnStyle=(p:string)=>({padding:"6px 14px",fontSize:12,fontWeight:periodo===p?700:400,
+    background:periodo===p?"#7c8fff":"transparent",color:periodo===p?"#fff":"#888",
+    border:periodo===p?"none":"1px solid #2a3260",borderRadius:8,cursor:"pointer" as const});
 
   return <div>
+    {/* Contas a Pagar Hoje */}
+    {(contasHoje.length>0||contasAtrasadas.length>0)&&<div className="card" style={{marginBottom:14,border:`1px solid ${contasAtrasadas.length>0?"#5a2020":"#2a3260"}`,background:contasAtrasadas.length>0?"linear-gradient(135deg,#1a0f0f,#0f1220)":"var(--bg3)"}}>
+      <div className="section-title" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span>{contasAtrasadas.length>0?"Contas Vencidas / Hoje":"Contas a Pagar Hoje"}</span>
+        <span style={{fontSize:14,fontWeight:700,color:contasAtrasadas.length>0?"#ff5c7a":"#fbbf24"}}>{fmtMoney(totalHoje+totalAtrasadas)}</span>
+      </div>
+      {contasAtrasadas.length>0&&<>
+        <div style={{fontSize:11,color:"#ff5c7a",fontWeight:600,marginBottom:6,marginTop:4}}>VENCIDAS ({contasAtrasadas.length})</div>
+        {contasAtrasadas.slice(0,5).map((c:any,i:number)=>(
+          <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1e1020",fontSize:12}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
+              <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""} · Venc: {fmtDate(c.vencimento)}</div>
+            </div>
+            <span style={{fontWeight:700,color:"#ff5c7a",marginLeft:8,whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+          </div>
+        ))}
+        {contasAtrasadas.length>5&&<div className="muted" style={{fontSize:10,marginTop:4,textAlign:"center"}}>+{contasAtrasadas.length-5} conta(s) vencida(s)</div>}
+      </>}
+      {contasHoje.length>0&&<>
+        <div style={{fontSize:11,color:"#fbbf24",fontWeight:600,marginBottom:6,marginTop:contasAtrasadas.length>0?10:4}}>HOJE ({contasHoje.length})</div>
+        {contasHoje.map((c:any,i:number)=>(
+          <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1e2235",fontSize:12}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
+              <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""}</div>
+            </div>
+            <span style={{fontWeight:700,color:"#fbbf24",marginLeft:8,whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+          </div>
+        ))}
+      </>}
+    </div>}
+    {contasHoje.length===0&&contasAtrasadas.length===0&&<div className="card" style={{marginBottom:14,textAlign:"center",padding:"12px",border:"1px solid #1a3a20"}}>
+      <span style={{color:"#4ade80",fontSize:13}}>Nenhuma conta pendente para hoje</span>
+    </div>}
+
+    {/* Seletor de Período */}
+    <div className="card" style={{marginBottom:14}}>
+      <div style={{display:"flex",gap:6,marginBottom:periodo==="custom"?10:0,flexWrap:"wrap" as const}}>
+        <button onClick={()=>setPeriodo("semana")} style={btnStyle("semana")}>Semana</button>
+        <button onClick={()=>setPeriodo("mes")} style={btnStyle("mes")}>Mês</button>
+        <button onClick={()=>setPeriodo("custom")} style={btnStyle("custom")}>Período</button>
+        <div style={{flex:1}}/>
+        <span className="muted" style={{fontSize:11,alignSelf:"center"}}>{periodoLabel}</span>
+      </div>
+      {periodo==="custom"&&<div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <input type="date" value={customIni} onChange={e=>setCustomIni(e.target.value)} className="inp" style={{flex:1}}/>
+        <span className="muted">até</span>
+        <input type="date" value={customFim} onChange={e=>setCustomFim(e.target.value)} className="inp" style={{flex:1}}/>
+      </div>}
+    </div>
+
+    {/* KPIs do período */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+      <StatCard label="Vendas" value={fmtMoney(totalVendas)} color="#4ade80" icon="💰"/>
+      <StatCard label="Compras" value={fmtMoney(totalCompras)} color="#60a5fa" icon="🛒"/>
+      <StatCard label="Contas Pagas" value={fmtMoney(pagasPeriodo)} color="#a78bfa" icon="✅"/>
+      <StatCard label="A Pagar" value={fmtMoney(pendentesPeriodo)} color="#ff5c7a" icon="⏰"/>
+    </div>
+
+    {/* CMV Gauge */}
     <div className="card" style={{background:"linear-gradient(135deg,#161c35,#0f1220)",border:"1px solid #2a3260",marginBottom:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <div className="muted" style={{marginBottom:4}}>CMV Atual</div>
-          <div style={{fontSize:44,fontFamily:"'Syne',sans-serif",fontWeight:800,color:cmvColor,lineHeight:1}}>{fmtPct(cmv)}</div>
+          <div className="muted" style={{marginBottom:4}}>CMV no Período</div>
+          <div style={{fontSize:40,fontFamily:"'Syne',sans-serif",fontWeight:800,color:cmvColor,lineHeight:1}}>{fmtPct(cmv)}</div>
           <div className="muted" style={{marginTop:4}}>Meta: ≤30%</div>
         </div>
         <GaugeSVG value={cmv} color={cmvColor}/>
       </div>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-      <StatCard label="Vendas Totais"  value={fmtMoney(vendas)}    color="#4ade80" icon="💰"/>
-      <StatCard label="Compras Totais" value={fmtMoney(compras)}   color="#60a5fa" icon="🛒"/>
-      <StatCard label="Contas Pagas"   value={fmtMoney(pagas)}     color="#a78bfa" icon="✅"/>
-      <StatCard label="A Pagar"        value={fmtMoney(pendentes)} color="#ff5c7a" icon="⏰"/>
+
+    {/* Gráfico de Vendas Diárias */}
+    <div className="card" style={{marginBottom:14}}>
+      <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
+        <span>Vendas Diárias</span>
+        <span style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{fmtMoney(totalVendas)}</span>
+      </div>
+      {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
+      {vendasDiarias.length>0&&<div style={{display:"flex",alignItems:"flex-end",gap:vendasDiarias.length>15?1:vendasDiarias.length>7?2:4,height:120,marginTop:8}}>
+        {vendasDiarias.map((d,i)=>{
+          const pct=maxDia>0?(d.total/maxDia)*100:0;
+          const dt=new Date(d.data+"T12:00:00");
+          const lbl=vendasDiarias.length<=14?`${dt.getDate()}/${dt.getMonth()+1}`:`${dt.getDate()}`;
+          const dow=dt.getDay();
+          const isHoje=d.data===hj;
+          return <div key={i} style={{flex:1,display:"flex",flexDirection:"column" as const,alignItems:"center",minWidth:0}}>
+            {d.total>0&&vendasDiarias.length<=14&&<div style={{fontSize:8,color:"#888",marginBottom:2,whiteSpace:"nowrap" as const}}>{fmtMoney(d.total).replace("R$ ","")}</div>}
+            <div style={{width:"100%",borderRadius:"3px 3px 0 0",minHeight:2,
+              height:`${Math.max(pct,2)}%`,
+              background:isHoje?"#7c8fff":d.total>0?(dow===0||dow===6?"#4a5a8f":"#4ade80"):"#1e2235",
+              transition:"height .3s",opacity:d.total>0?1:0.3}}/>
+            <div style={{fontSize:vendasDiarias.length>20?7:8,color:isHoje?"#7c8fff":dow===0||dow===6?"#666":"#555",marginTop:2,
+              fontWeight:isHoje?700:400}}>{lbl}</div>
+          </div>;
+        })}
+      </div>}
     </div>
+
+    {/* Vendas por Modalidade */}
     <div className="card" style={{marginBottom:14}}>
       <div className="section-title">Vendas por Modalidade</div>
       {vendasMod.map(({label,v})=>(
@@ -1116,18 +1245,22 @@ function Dashboard({db}) {
         </div>
       ))}
     </div>
+
+    {/* Resultado */}
     <div className="card" style={{marginBottom:14}}>
       <div className="section-title">Resultado</div>
-      <IRow label="Vendas - Compras"   value={fmtMoney(vendas-compras)}  positive={vendas>=compras}/>
-      <IRow label="Despesas Pendentes" value={fmtMoney(pendentes)}       positive={false}/>
-      <IRow label="Funcionários"       value={`${(db.funcionarios||[]).length}`} neutral/>
+      <IRow label="Vendas - Compras" value={fmtMoney(totalVendas-totalCompras)} positive={totalVendas>=totalCompras}/>
+      <IRow label="Despesas Pendentes" value={fmtMoney(pendentesPeriodo)} positive={false}/>
+      <IRow label="Funcionários" value={`${(db.funcionarios||[]).length}`} neutral/>
     </div>
+
+    {/* Indicadores */}
     {(()=>{
       const sn=(db.config?.snAliquota||6)/100;
-      const imposto=vendas*sn;
-      const despFixas=pagas;
-      const mcVal=vendas-compras-imposto;
-      const mcPct=vendas>0?(mcVal/vendas)*100:0;
+      const imposto=totalVendas*sn;
+      const despFixas=pagasPeriodo;
+      const mcVal=totalVendas-totalCompras-imposto;
+      const mcPct=totalVendas>0?(mcVal/totalVendas)*100:0;
       const pe=mcPct>0?(despFixas)/(mcPct/100):0;
       const colMC=mcVal>=0?"#4ade80":"#ff5c7a";
       return <>
@@ -1145,13 +1278,13 @@ function Dashboard({db}) {
             <div className="muted" style={{fontSize:10,marginTop:2}}>Sobra p/ Fixas</div>
           </div>
         </div>
-        {vendas>0&&<div className="card">
+        {totalVendas>0&&<div className="card">
           <div className="section-title">Por R$ 100 vendidos</div>
           {[
-            {label:"CMV",val:(compras/vendas)*100,color:"#ff5c7a"},
+            {label:"CMV",val:(totalCompras/totalVendas)*100,color:"#ff5c7a"},
             {label:`Simples Nacional (${db.config?.snAliquota||6}%)`,val:sn*100,color:"#f59e0b"},
-            {label:"Despesas Pagas",val:(pagas/vendas)*100,color:"#a78bfa"},
-            {label:"Margem",val:mcPct-(pagas/vendas)*100,color:mcPct-(pagas/vendas)*100>=0?"#4ade80":"#ff5c7a"},
+            {label:"Despesas Pagas",val:(pagasPeriodo/totalVendas)*100,color:"#a78bfa"},
+            {label:"Margem",val:mcPct-(pagasPeriodo/totalVendas)*100,color:mcPct-(pagasPeriodo/totalVendas)*100>=0?"#4ade80":"#ff5c7a"},
           ].map(({label,val,color})=>(
             <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
               <span className="muted" style={{fontSize:12}}>{label}</span>
