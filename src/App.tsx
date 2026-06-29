@@ -982,7 +982,7 @@ export default function App() {
             ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} setDbAndSave={setDbAndSave}/>)
           : <>
-              {tab==="dashboard"  && <Dashboard db={db} empresa={empresa}/>}
+              {tab==="dashboard"  && <Dashboard db={db} setDb={setDb} empresa={empresa} onNavigate={setTab} setPendingSub={setPendingSub}/>}
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -1074,7 +1074,7 @@ export default function App() {
 }
 
 // ===================== DASHBOARD =====================
-function Dashboard({db}:{db:any}) {
+function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa?:string,onNavigate:(t:string)=>void,setPendingSub:(v:string|null)=>void}) {
   const [periodo,setPeriodo]=useState<"semana"|"mes"|"custom">("mes");
   const [customIni,setCustomIni]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return d.toISOString().split("T")[0];});
   const [customFim,setCustomFim]=useState(today());
@@ -1124,6 +1124,12 @@ function Dashboard({db}:{db:any}) {
   const contasAtrasadas=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento<hj);
   const totalHoje=contasHoje.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const totalAtrasadas=contasAtrasadas.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  const contasDash=[...contasAtrasadas,...contasHoje];
+
+  const marcarPago=(id:string)=>{
+    setDb((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.id===id?{...c,status:"pago",atualizadoEm:new Date().toISOString()}:c)}));
+  };
+  const irParaFinanceiro=()=>{setPendingSub("contas");onNavigate("financeiro");};
 
   const periodoLabel=periodo==="semana"?"Esta Semana":periodo==="mes"?"Este Mês":`${fmtDate(customIni)} — ${fmtDate(customFim)}`;
   const btnStyle=(p:string)=>({padding:"6px 14px",fontSize:12,fontWeight:periodo===p?700:400,
@@ -1131,41 +1137,44 @@ function Dashboard({db}:{db:any}) {
     border:periodo===p?"none":"1px solid #2a3260",borderRadius:8,cursor:"pointer" as const});
 
   return <div>
-    {/* Contas a Pagar Hoje */}
-    {(contasHoje.length>0||contasAtrasadas.length>0)&&<div className="card" style={{marginBottom:14,border:`1px solid ${contasAtrasadas.length>0?"#5a2020":"#2a3260"}`,background:contasAtrasadas.length>0?"linear-gradient(135deg,#1a0f0f,#0f1220)":"var(--bg3)"}}>
-      <div className="section-title" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span>{contasAtrasadas.length>0?"Contas Vencidas / Hoje":"Contas a Pagar Hoje"}</span>
-        <span style={{fontSize:14,fontWeight:700,color:contasAtrasadas.length>0?"#ff5c7a":"#fbbf24"}}>{fmtMoney(totalHoje+totalAtrasadas)}</span>
+    {/* Contas a Pagar — Hoje / Vencidas */}
+    <div className="card" style={{marginBottom:14,border:`1px solid ${contasAtrasadas.length>0?"#5a2020":"#2a3260"}`,
+      background:contasAtrasadas.length>0?"linear-gradient(135deg,#1a0f0f,#0f1220)":"var(--bg3)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div className="section-title" style={{margin:0}}>Contas a Pagar</div>
+        <button onClick={irParaFinanceiro} style={{background:"none",border:"1px solid #2a3260",borderRadius:8,color:"#7c8fff",
+          fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todas</button>
       </div>
-      {contasAtrasadas.length>0&&<>
-        <div style={{fontSize:11,color:"#ff5c7a",fontWeight:600,marginBottom:6,marginTop:4}}>VENCIDAS ({contasAtrasadas.length})</div>
-        {contasAtrasadas.slice(0,5).map((c:any,i:number)=>(
-          <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1e1020",fontSize:12}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
-              <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""} · Venc: {fmtDate(c.vencimento)}</div>
-            </div>
-            <span style={{fontWeight:700,color:"#ff5c7a",marginLeft:8,whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+      {contasDash.length===0&&<div style={{textAlign:"center",padding:"10px 0"}}>
+        <span style={{color:"#4ade80",fontSize:13}}>Nenhuma conta pendente para hoje</span>
+      </div>}
+      {contasAtrasadas.length>0&&<div style={{fontSize:11,color:"#ff5c7a",fontWeight:600,marginBottom:4}}>VENCIDAS ({contasAtrasadas.length}) — {fmtMoney(totalAtrasadas)}</div>}
+      {contasAtrasadas.map((c:any,i:number)=>(
+        <div key={c.id||i} style={{display:"flex",alignItems:"center",padding:"7px 0",borderBottom:"1px solid #1e1020",fontSize:12,gap:8}}>
+          <button onClick={()=>marcarPago(c.id)} title="Marcar como pago"
+            style={{background:"none",border:"1px solid #3a2030",borderRadius:6,color:"#4ade80",fontSize:14,
+              padding:"2px 6px",cursor:"pointer",flexShrink:0}}>&#10003;</button>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
+            <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""} · Venc: {fmtDate(c.vencimento)}</div>
           </div>
-        ))}
-        {contasAtrasadas.length>5&&<div className="muted" style={{fontSize:10,marginTop:4,textAlign:"center"}}>+{contasAtrasadas.length-5} conta(s) vencida(s)</div>}
-      </>}
-      {contasHoje.length>0&&<>
-        <div style={{fontSize:11,color:"#fbbf24",fontWeight:600,marginBottom:6,marginTop:contasAtrasadas.length>0?10:4}}>HOJE ({contasHoje.length})</div>
-        {contasHoje.map((c:any,i:number)=>(
-          <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1e2235",fontSize:12}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
-              <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""}</div>
-            </div>
-            <span style={{fontWeight:700,color:"#fbbf24",marginLeft:8,whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+          <span style={{fontWeight:700,color:"#ff5c7a",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+        </div>
+      ))}
+      {contasHoje.length>0&&<div style={{fontSize:11,color:"#fbbf24",fontWeight:600,marginBottom:4,marginTop:contasAtrasadas.length>0?10:0}}>HOJE ({contasHoje.length}) — {fmtMoney(totalHoje)}</div>}
+      {contasHoje.map((c:any,i:number)=>(
+        <div key={c.id||i} style={{display:"flex",alignItems:"center",padding:"7px 0",borderBottom:"1px solid #1e2235",fontSize:12,gap:8}}>
+          <button onClick={()=>marcarPago(c.id)} title="Marcar como pago"
+            style={{background:"none",border:"1px solid #1a2a3a",borderRadius:6,color:"#4ade80",fontSize:14,
+              padding:"2px 6px",cursor:"pointer",flexShrink:0}}>&#10003;</button>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
+            <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""}</div>
           </div>
-        ))}
-      </>}
-    </div>}
-    {contasHoje.length===0&&contasAtrasadas.length===0&&<div className="card" style={{marginBottom:14,textAlign:"center",padding:"12px",border:"1px solid #1a3a20"}}>
-      <span style={{color:"#4ade80",fontSize:13}}>Nenhuma conta pendente para hoje</span>
-    </div>}
+          <span style={{fontWeight:700,color:"#fbbf24",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+        </div>
+      ))}
+    </div>
 
     {/* Seletor de Período */}
     <div className="card" style={{marginBottom:14}}>
@@ -1210,24 +1219,35 @@ function Dashboard({db}:{db:any}) {
         <span style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{fmtMoney(totalVendas)}</span>
       </div>
       {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
-      {vendasDiarias.length>0&&<div style={{display:"flex",alignItems:"flex-end",gap:vendasDiarias.length>15?1:vendasDiarias.length>7?2:4,height:120,marginTop:8}}>
-        {vendasDiarias.map((d,i)=>{
-          const pct=maxDia>0?(d.total/maxDia)*100:0;
-          const dt=new Date(d.data+"T12:00:00");
-          const lbl=vendasDiarias.length<=14?`${dt.getDate()}/${dt.getMonth()+1}`:`${dt.getDate()}`;
-          const dow=dt.getDay();
-          const isHoje=d.data===hj;
-          return <div key={i} style={{flex:1,display:"flex",flexDirection:"column" as const,alignItems:"center",minWidth:0}}>
-            {d.total>0&&vendasDiarias.length<=14&&<div style={{fontSize:8,color:"#888",marginBottom:2,whiteSpace:"nowrap" as const}}>{fmtMoney(d.total).replace("R$ ","")}</div>}
-            <div style={{width:"100%",borderRadius:"3px 3px 0 0",minHeight:2,
-              height:`${Math.max(pct,2)}%`,
-              background:isHoje?"#7c8fff":d.total>0?(dow===0||dow===6?"#4a5a8f":"#4ade80"):"#1e2235",
-              transition:"height .3s",opacity:d.total>0?1:0.3}}/>
-            <div style={{fontSize:vendasDiarias.length>20?7:8,color:isHoje?"#7c8fff":dow===0||dow===6?"#666":"#555",marginTop:2,
-              fontWeight:isHoje?700:400}}>{lbl}</div>
-          </div>;
-        })}
-      </div>}
+      {vendasDiarias.length>0&&(()=>{
+        const W=360,H=140,pT=12,pB=22,pL=4,pR=4,cW=W-pL-pR,cH=H-pT-pB;
+        const pts=vendasDiarias.map((d,i)=>{
+          const x=pL+(vendasDiarias.length===1?cW/2:i*(cW/(vendasDiarias.length-1)));
+          const y=pT+cH*(1-d.total/maxDia);
+          return {x,y,d};
+        });
+        const linePath=pts.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(" ");
+        const areaPath=linePath+` L${pts[pts.length-1].x},${pT+cH} L${pts[0].x},${pT+cH} Z`;
+        const step=Math.max(1,Math.ceil(vendasDiarias.length/12));
+        return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",marginTop:6}}>
+          {[0.25,0.5,0.75,1].map(f=>{
+            const y=pT+cH*(1-f);
+            return <g key={f}><line x1={pL} y1={y} x2={W-pR} y2={y} stroke="#1e2235" strokeWidth={0.5}/>
+              <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
+          })}
+          <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#1e2235" strokeWidth={0.5}/>
+          <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4ade80" stopOpacity={0.3}/><stop offset="100%" stopColor="#4ade80" stopOpacity={0.02}/></linearGradient></defs>
+          <path d={areaPath} fill="url(#dashVgr)"/>
+          <path d={linePath} fill="none" stroke="#4ade80" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
+          {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
+            {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?"#7c8fff":"#4ade80"} stroke="#0f1220" strokeWidth={1}/>}
+            {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
+            {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?"#7c8fff":"#555"} fontSize={7} fontWeight={isH?700:400}>
+              {dt.getDate()}/{dt.getMonth()+1}
+            </text>}
+          </g>;})}
+        </svg>;
+      })()}
     </div>
 
     {/* Vendas por Modalidade */}
