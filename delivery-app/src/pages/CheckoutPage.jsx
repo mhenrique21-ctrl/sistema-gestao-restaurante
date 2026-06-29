@@ -139,7 +139,7 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-36">
+      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-48">
 
         {/* Seus dados */}
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
