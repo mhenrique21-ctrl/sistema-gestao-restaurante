@@ -3550,6 +3550,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:nowNaoTem,comprado:false,updatedAt:ts}:i)};
     });
   };
+  const setQtd=(id:string,novaQtd:number)=>{
+    if(!(novaQtd>0))return;
+    const ts=Date.now();
+    (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidade:novaQtd,updatedAt:ts}:i)}));
+  };
   const del=(id:string)=>{
 
     const prevLista=[...(db.listaCompras||[])];
@@ -4611,7 +4616,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 {isAdmin&&(item.rua||getRuaProd(item.nome))&&<span style={{fontSize:9,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {item.rua||getRuaProd(item.nome)}</span>}
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
-                <span style={{fontSize:12,color:"#7c8fff",fontWeight:700}}>{item.quantidade} {item.unidade}</span>
+                <div style={{display:"flex",alignItems:"center",gap:2}} onClick={(e:any)=>e.stopPropagation()}>
+                  <button onClick={()=>setQtd(item.id,Math.max(0.1,parseFloat(((item.quantidade||0)-1).toFixed(2))))}
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>−</button>
+                  <input type="number" min="0.1" step="0.1" value={item.quantidade}
+                    onChange={(e:any)=>{const v=parseFloat(e.target.value);if(!isNaN(v))setQtd(item.id,v);}}
+                    style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,color:"#7c8fff",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:5,padding:"2px 1px"}}/>
+                  <button onClick={()=>setQtd(item.id,parseFloat(((item.quantidade||0)+1).toFixed(2)))}
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
+                  <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
+                </div>
                 {estoqueRef!=null&&<span style={{fontSize:10,color:estoqueRef===0?"#ff5c7a":estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>
                   📦 {estoqueRef} {item.unidade}
                 </span>}
@@ -4664,7 +4678,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 <span style={{fontSize:10,color:"#a78bfa",background:"#a78bfa18",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
-                <span style={{fontSize:12,color:"#7c8fff",fontWeight:700}}>{item.quantidade} {item.unidade}</span>
+                <div style={{display:"flex",alignItems:"center",gap:2}} onClick={(e:any)=>e.stopPropagation()}>
+                  <button onClick={()=>setQtd(item.id,Math.max(0.1,parseFloat(((item.quantidade||0)-1).toFixed(2))))}
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>−</button>
+                  <input type="number" min="0.1" step="0.1" value={item.quantidade}
+                    onChange={(e:any)=>{const v=parseFloat(e.target.value);if(!isNaN(v))setQtd(item.id,v);}}
+                    style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,color:"#7c8fff",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:5,padding:"2px 1px"}}/>
+                  <button onClick={()=>setQtd(item.id,parseFloat(((item.quantidade||0)+1).toFixed(2)))}
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
+                  <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
+                </div>
                 {estoqueRef!=null&&<span style={{fontSize:10,color:estoqueRef===0?"#ff5c7a":estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 {estoqueRef} {item.unidade}</span>}
               </div>
               {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
