@@ -937,6 +937,7 @@ export default function App() {
               </>}
             </div>}
             {isOp&&<span style={{fontSize:11,color:"#5a6080",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"4px 10px"}}>{empresa}</span>}
+            <NotifBell db={db} onNavigate={setTab} setPendingSub={setPendingSub}/>
             <button onClick={doLogout} title="Sair" style={{background:"none",border:"1px solid #3a1515",borderRadius:8,cursor:"pointer",color:"#ff7a7a",fontSize:13,padding:"4px 8px",lineHeight:1}}>🔒</button>
           </div>
         </div>
@@ -9204,3 +9205,72 @@ function AnotacoesPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
 }
 
 function EmptyState({msg}){return <div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}><div style={{fontSize:32,marginBottom:6}}>📭</div><div style={{fontSize:13}}>{msg}</div></div>;}
+function NotifBell({db,onNavigate,setPendingSub}:{db:any,onNavigate:(t:string)=>void,setPendingSub?:(v:string|null)=>void}){
+  const [open,setOpen]=useState(false);
+  const hj=today();
+
+  const encAtras=(db.encomendas||[]).filter((e:any)=>!["entregue","cancelado"].includes(e.status)&&e.dataEntrega&&e.dataEntrega<hj);
+  const encHoje=(db.encomendas||[]).filter((e:any)=>!["entregue","cancelado"].includes(e.status)&&e.dataEntrega===hj);
+  const encProntas=(db.encomendas||[]).filter((e:any)=>e.status==="pronto");
+  const contasAtras=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento&&c.vencimento<hj);
+  const contasHoje=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento===hj);
+  const estoqueBaixo=(db.materiasPrimas||[]).filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
+
+  const total=encAtras.length+encHoje.length+encProntas.length+contasAtras.length+contasHoje.length+estoqueBaixo.length;
+
+  const ir=(tab:string,sub?:string)=>{setOpen(false);onNavigate(tab);if(sub&&setPendingSub)setPendingSub(sub);};
+
+  type Grp={cor:string,bg:string,titulo:string,itens:{label:string,sub?:string,tab:string}[]};
+  const grupos:Grp[]=[];
+  if(encAtras.length>0)grupos.push({cor:"#ff5c7a",bg:"#ff5c7a18",titulo:`Encomendas atrasadas (${encAtras.length})`,
+    itens:encAtras.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${fmtDate(e.dataEntrega)}`,tab:"agenda",sub:"encomendas"}))});
+  if(encProntas.length>0)grupos.push({cor:"#4ade80",bg:"#4ade8018",titulo:`Prontas para entrega (${encProntas.length})`,
+    itens:encProntas.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${fmtDate(e.dataEntrega)}`,tab:"agenda",sub:"encomendas"}))});
+  if(encHoje.length>0)grupos.push({cor:"#fbbf24",bg:"#fbbf2418",titulo:`Encomendas para hoje (${encHoje.length})`,
+    itens:encHoje.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${e.horaEntrega||"sem hora"}`,tab:"agenda",sub:"encomendas"}))});
+  if(contasAtras.length>0)grupos.push({cor:"#f97316",bg:"#f9731618",titulo:`Contas atrasadas (${contasAtras.length})`,
+    itens:contasAtras.slice(0,5).map((c:any)=>({label:`${c.descricao||c.categoria||"Conta"} — ${fmtDate(c.vencimento)}`,tab:"financeiro"}))});
+  if(contasHoje.length>0)grupos.push({cor:"#7c8fff",bg:"#7c8fff18",titulo:`Contas vencem hoje (${contasHoje.length})`,
+    itens:contasHoje.slice(0,5).map((c:any)=>({label:`${c.descricao||c.categoria||"Conta"} — ${fmtMoney(parseMoney(c.valor))}`,tab:"financeiro"}))});
+  if(estoqueBaixo.length>0)grupos.push({cor:"#f59e0b",bg:"#f59e0b18",titulo:`Estoque baixo (${estoqueBaixo.length})`,
+    itens:estoqueBaixo.slice(0,5).map((m:any)=>({label:`${m.nome} — ${m.estoqueAtual||0} ${m.unidade||"un"} (min: ${m.estoqueMinimo})`,tab:"estoque"}))});
+
+  return <div style={{position:"relative" as const}}>
+    <button onClick={()=>setOpen(v=>!v)}
+      style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:16,padding:"4px 8px",lineHeight:1,position:"relative" as const}}
+      title="Notificacoes">
+      🔔
+      {total>0&&<span style={{position:"absolute" as const,top:-4,right:-4,background:"#ff5c7a",color:"#fff",borderRadius:10,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{total>99?"99+":total}</span>}
+    </button>
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:299}}/>
+      <div style={{position:"absolute" as const,right:0,top:"110%",background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:14,padding:0,zIndex:300,width:300,maxHeight:420,overflowY:"auto" as const,boxShadow:"0 8px 32px #0009"}}>
+        <div style={{padding:"10px 14px 8px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontWeight:800,fontSize:13}}>Notificacoes</span>
+          {total===0&&<span style={{fontSize:11,color:"var(--text3)"}}>Nenhuma pendencia</span>}
+          {total>0&&<span style={{fontSize:10,background:"#ff5c7a",color:"#fff",borderRadius:10,padding:"1px 7px",fontWeight:700}}>{total} itens</span>}
+        </div>
+        {total===0&&<div style={{padding:"28px 16px",textAlign:"center" as const,color:"var(--text3)"}}>
+          <div style={{fontSize:28,marginBottom:6}}>✅</div>
+          <div style={{fontSize:12}}>Tudo em dia!</div>
+        </div>}
+        {grupos.map((g,gi)=>(
+          <div key={gi} style={{borderBottom:"1px solid var(--border)"}}>
+            <div style={{padding:"8px 14px 4px",fontSize:10,fontWeight:800,color:g.cor,background:g.bg,textTransform:"uppercase" as const,letterSpacing:0.5}}>{g.titulo}</div>
+            {g.itens.map((item,ii)=>(
+              <button key={ii} onClick={()=>ir(item.tab,item.sub)}
+                style={{display:"block",width:"100%",textAlign:"left" as const,background:"none",border:"none",borderBottom:"1px solid var(--border)",padding:"7px 14px",cursor:"pointer",fontSize:11,color:"var(--text)",lineHeight:1.4}}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        ))}
+        <div style={{padding:"8px 14px",textAlign:"center" as const,fontSize:10,color:"var(--text3)"}}>
+          Atualizado em tempo real
+        </div>
+      </div>
+    </>}
+  </div>;
+}
+
+
