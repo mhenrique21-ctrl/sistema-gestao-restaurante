@@ -8632,7 +8632,8 @@ const ENC_STATUS:{[k:string]:{label:string,color:string,bg:string}}={
 const ENC_EMPTY={cliente:"",telefone:"",dataEntrega:today(),horaEntrega:"",itens:"",valor:"",status:"pendente",obs:""};
 
 function encWhatsAppMsg(e:any,empresa:string):string{
-  const prods=(e.produtos||[]).map((p:any)=>`• ${p.qtd}x ${p.nome}${p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}`).join("\n");
+  const prods=(e.produtos||[]).map((p:any)=>{const rawP=(p.preco||"").replace(/[^\d,]/g,"").replace(",",".");const vP=rawP&&parseFloat(rawP)>0?` — ${fmtMoney(parseFloat(rawP))}`:"";const un=p.unidade&&p.unidade!=="un"?` (${p.unidade})`:"";
+    return `• ${p.qtd}x ${p.nome}${un}${vP}`;}).join("\n");
   const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
   let msg=`📦 *ENCOMENDA — ${empresa}*\n━━━━━━━━━━\n`;
   msg+=`👤 *Cliente:* ${e.cliente}\n`;
@@ -8650,7 +8651,7 @@ function abrirWhatsApp(e:any,empresa:string){window.open(`https://wa.me/?text=${
 
 function imprimirEncomenda(e:any,empresa:string){
   const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
-  const prodsHtml=(e.produtos||[]).map((p:any)=>`<tr><td style="padding:5px 8px;border:1px solid #ddd;">${p.qtd}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.nome}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.unidade||"un"}</td></tr>`).join("");
+  const prodsHtml=(e.produtos||[]).map((p:any)=>{const rawP=(p.preco||"").replace(/[^\d,]/g,"").replace(",",".");const vP=rawP&&parseFloat(rawP)>0?fmtMoney(parseFloat(rawP)):"—";return `<tr><td style="padding:5px 8px;border:1px solid #ddd;">${p.qtd}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.nome}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.unidade||"un"}</td><td style="padding:5px 8px;border:1px solid #ddd;">${vP}</td></tr>`;}).join("");
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Encomenda - ${e.cliente}</title>
 <style>*{box-sizing:border-box;}body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;color:#111;font-size:14px;padding:0 16px;}
 .header{border-bottom:3px solid #333;padding-bottom:12px;margin-bottom:16px;}.header h1{margin:0;font-size:22px;}.header p{margin:4px 0 0;color:#555;font-size:13px;}
@@ -8667,7 +8668,7 @@ table{width:100%;border-collapse:collapse;margin:12px 0;}th{background:#f5f5f5;p
   <div class="field"><div class="lbl">Data de Entrega</div><div class="val">${fmtDate(e.dataEntrega)}${e.horaEntrega?` às ${e.horaEntrega}`:""}</div></div>
   ${(()=>{const pi=fmtPag(e);return pi?`<div class="field"><div class="lbl">Pagamento</div><div class="val" style="color:#1a7a3a;">${pi}</div></div>`:"<div></div>"})()}
 </div>
-${prodsHtml?`<div class="field" style="margin-bottom:8px;"><div class="lbl">Produtos</div></div><table><thead><tr><th>Qtd</th><th>Produto</th><th>Un</th></tr></thead><tbody>${prodsHtml}</tbody></table>`:""}
+${prodsHtml?`<div class="field" style="margin-bottom:8px;"><div class="lbl">Produtos</div></div><table><thead><tr><th>Qtd</th><th>Produto</th><th>Un</th><th>Valor</th></tr></thead><tbody>${prodsHtml}</tbody></table>`:""}
 ${e.itens?`<div class="field" style="margin:12px 0;"><div class="lbl">Descricao</div><div class="val" style="font-style:italic;">${e.itens}</div></div>`:""}
 ${e.obs?`<div class="field"><div class="lbl">Observacoes</div><div class="val" style="font-style:italic;">${e.obs}</div></div>`:""}
 <button class="no-print" onclick="window.print()" style="margin:16px 0;padding:8px 24px;font-size:14px;cursor:pointer;">Imprimir</button>
@@ -8708,7 +8709,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [prodsSel,setProdsSel]=useState<any[]>([]);
   const [buscaProd,setBuscaProd]=useState("");
   const [showNovoProd,setShowNovoProd]=useState(false);
-  const [novoProdForm,setNovoProdForm]=useState({nome:"",cat:"",unidade:"un"});
+  const [novoProdForm,setNovoProdForm]=useState({nome:"",cat:"",unidade:"un",preco:""});
   const [encRecemSalva,setEncRecemSalva]=useState<any>(null);
   const [encFinalizada,setEncFinalizada]=useState<any>(null);
   const [editId,setEditId]=useState<string|null>(null);
@@ -8751,19 +8752,20 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     if(!p)return;
     const existe=prodsSel.findIndex((x:any)=>x.id===p.id);
     if(existe>=0){setProdsSel(ps=>ps.map((x:any,i:number)=>i===existe?{...x,qtd:parseFloat(((x.qtd||1)+1).toFixed(1))}:x));}
-    else{setProdsSel(ps=>[...ps,{id:p.id,nome:p.nome,unidade:p.unidade||"un",qtd:1}]);}
+    else{setProdsSel(ps=>[...ps,{id:p.id,nome:p.nome,unidade:p.unidade||"un",qtd:1,preco:p.preco||""}]);}
     setBuscaProd("");
   };
   const remProd=(id:string)=>setProdsSel(ps=>ps.filter((x:any)=>x.id!==id));
   const updateQtd=(id:string,qtd:number)=>setProdsSel(ps=>ps.map((x:any)=>x.id===id?{...x,qtd}:x));
+  const updatePreco=(id:string,preco:string)=>setProdsSel(ps=>ps.map((x:any)=>x.id===id?{...x,preco}:x));
 
   const salvarNovoProd=()=>{
     const nome=novoProdForm.nome.trim();
     if(!nome)return;
-    const newProd={id:uid(),nome,cat:novoProdForm.cat,unidade:novoProdForm.unidade};
+    const newProd={id:uid(),nome,cat:novoProdForm.cat,unidade:novoProdForm.unidade,preco:novoProdForm.preco};
     sv(d=>({...d,produtosProducao:[...(d.produtosProducao||[]),newProd]}));
-    setProdsSel(ps=>[...ps,{id:newProd.id,nome:newProd.nome,unidade:newProd.unidade,qtd:1}]);
-    setNovoProdForm({nome:"",cat:"",unidade:"un"});setShowNovoProd(false);
+    setProdsSel(ps=>[...ps,{id:newProd.id,nome:newProd.nome,unidade:newProd.unidade,qtd:1,preco:newProd.preco||""}]);
+    setNovoProdForm({nome:"",cat:"",unidade:"un",preco:""});setShowNovoProd(false);
   };
 
   const hoje=today();
@@ -8795,7 +8797,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           </div>
           {(e.produtos||[]).length>0&&<div style={{marginTop:5}}>
             {(e.produtos||[]).map((p:any,i:number)=>(
-              <div key={i} style={{fontSize:11,color:"var(--text2)"}}>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</div>
+              <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}><span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>{p.preco&&parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")!)>0&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")))}</span>}</div>
             ))}
           </div>}
           {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.4,fontStyle:"italic" as const}}>{e.itens}</div>}
@@ -8904,6 +8906,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
               <select className="inp" style={{width:72,marginBottom:0}} value={novoProdForm.unidade} onChange={e=>setNovoProdForm(f=>({...f,unidade:e.target.value}))}>
                 {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
               </select>
+              <MoneyInput value={novoProdForm.preco} onChange={v=>setNovoProdForm(f=>({...f,preco:v}))} placeholder="Preco" style={{marginBottom:0,width:88}}/>
               <button className="btn" onClick={salvarNovoProd} style={{flexShrink:0,padding:"4px 12px",fontSize:12}}>Salvar</button>
             </div>
           </div>}
@@ -8916,6 +8919,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
                   <span style={{fontSize:12,fontWeight:700,color:"#7c8fff",minWidth:22,textAlign:"center" as const}}>{p.qtd}</span>
                   <button onClick={()=>updateQtd(p.id,parseFloat(((p.qtd||1)+0.5).toFixed(1)))} style={{width:20,height:20,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg3)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                 </div>
+                <MoneyInput value={p.preco||""} onChange={v=>updatePreco(p.id,v)} placeholder="R$" style={{marginBottom:0,width:78,fontSize:11,padding:"3px 6px"}}/>
                 <button onClick={()=>remProd(p.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,lineHeight:1,padding:"0 2px"}}>×</button>
               </div>
             ))}
@@ -9030,7 +9034,7 @@ function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             <div style={{fontSize:11,color:"var(--text2)",marginTop:3}}>📅 {fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}</div>
             {(e.produtos||[]).length>0&&<div style={{marginTop:4}}>
               {(e.produtos||[]).map((p:any,i:number)=>(
-                <div key={i} style={{fontSize:11,color:"var(--text2)"}}>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</div>
+                <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}><span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>{p.preco&&parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")!)>0&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")))}</span>}</div>
               ))}
             </div>}
             {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,fontStyle:"italic" as const,lineHeight:1.4}}>{e.itens}</div>}
