@@ -804,7 +804,7 @@ export default function App() {
       {id:"gest-vs",label:"Versus",icon:"⚖️",sub:"versus"},
       {id:"gest-bkp",label:"Backups",icon:"💾",sub:"backups"},
     ]},
-    {id:"agenda",label:"Agenda",icon:"📅",children:[
+    {id:"agenda",label:"Encomenda",icon:"📦",children:[
       {id:"agenda-enc",label:"Encomendas",icon:"📦",sub:"encomendas"},
       {id:"agenda-cad",label:"Cadastradas",icon:"📋",sub:"cadastradas"},
       {id:"agenda-ann",label:"Anotações",icon:"📝",sub:"anotacoes"},
@@ -8826,7 +8826,7 @@ function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:a
   const nCad=enc.filter((e:any)=>e.status==="entregue"||e.status==="cancelado").length;
 
   return <div style={{padding:"0 0 24px 0"}}>
-    <div style={{padding:"12px 16px 0",fontWeight:800,fontSize:17,letterSpacing:0.2}}>Agenda</div>
+    <div style={{padding:"12px 16px 0",fontWeight:800,fontSize:17,letterSpacing:0.2}}>Encomendas</div>
     <div style={{display:"flex",gap:6,padding:"10px 14px 0",overflowX:"auto",scrollbarWidth:"none" as any}}>
       {([["encomendas","📦 Encomendas"],["cadastradas","📋 Cadastradas"],["clientes","👤 Clientes"],["anotacoes","📝 Anotacoes"]] as [string,string][]).map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)}
