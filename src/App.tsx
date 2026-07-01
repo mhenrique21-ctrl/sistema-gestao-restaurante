@@ -8766,7 +8766,23 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       setEditId(null);setEncRecemSalva(null);
     }else{
       const novaEnc={id:uid(),...form,valor:val,produtos:prodsSel,criadoEm:now};
-      sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])]}));
+      // Gera pedido de producao automaticamente se houver produtos
+      const itensPed=prodsSel.map((p:any)=>({
+        nome:p.nome,
+        quantidade:String(p.qtd||1),
+        qtdAtual:"",
+        unidade:p.unidade||"un",
+        categoria:(db.produtosProducao||[]).find((x:any)=>x.id===p.id)?.cat||"",
+        obs:form.itens||"",
+      }));
+      if(itensPed.length>0){
+        const pedido={id:uid(),data:form.dataEntrega||today(),itens:itensPed,
+          solicitante:`Encomenda — ${form.cliente}`,origem:"encomenda",encId:novaEnc.id,
+          criadoEm:now};
+        sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])],pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
+      }else{
+        sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])]}));
+      }
       setEncRecemSalva(novaEnc);
     }
     setForm({...ENC_EMPTY});setProdsSel([]);setBuscaProd("");setShowForm(false);
@@ -8880,7 +8896,8 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
 
     {/* Banner pos-cadastro */}
     {encRecemSalva&&<div className="card" style={{marginBottom:14,border:"1px solid #25d36644",background:"linear-gradient(135deg,#041a0a,#0a1a10)"}}>
-      <div style={{fontWeight:700,fontSize:13,marginBottom:6,color:"#4ade80"}}>Encomenda cadastrada!</div>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:"#4ade80"}}>Encomenda cadastrada!</div>
+      {(encRecemSalva.produtos||[]).length>0&&<div style={{fontSize:11,color:"#a3e635",marginBottom:6}}>🏭 Pedido de producao gerado automaticamente</div>}
       <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Deseja compartilhar os detalhes com o cliente?</div>
       <div style={{display:"flex",gap:8}}>
         <button className="btn" style={{flex:1,background:"#25d366",border:"none"}} onClick={()=>{abrirWhatsApp(encRecemSalva,empresa);setEncRecemSalva(null);}}>📱 WhatsApp</button>
