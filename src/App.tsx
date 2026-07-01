@@ -8960,7 +8960,22 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <textarea className="inp" placeholder="Detalhes extras, preferencias..." value={form.itens} onChange={e=>setF("itens",e.target.value)} rows={2} style={{marginBottom:0,resize:"vertical" as const}}/>
         </div>
         <div>
-          <label className="label">Valor Total</label>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+            <label className="label" style={{margin:0}}>Valor Total</label>
+            {prodsSel.length>0&&(()=>{
+              const tot=prodsSel.reduce((s:number,p:any)=>{
+                const rawP=String(p.preco||"").replace(/[^\d,]/g,"").replace(",",".");
+                const vP=parseFloat(rawP)||0;
+                return s+(vP*(parseFloat(String(p.qtd||1))||1));
+              },0);
+              if(tot<=0)return null;
+              const fmt=(tot*100).toFixed(0).replace(/(\d+)(\d{2})$/,"$1,$2").replace(/\B(?=(\d{3})+(?!\d))/g,".");
+              return <button type="button" onClick={()=>setF("valor",`R$ ${fmt}`)}
+                style={{fontSize:10,padding:"2px 8px",borderRadius:8,border:"1px solid #4ade8044",background:"#4ade8018",color:"#4ade80",cursor:"pointer"}}>
+                + Usar total dos produtos ({fmtMoney(tot)})
+              </button>;
+            })()}
+          </div>
           <MoneyInput value={form.valor} onChange={v=>setF("valor",v)} placeholder="R$ 0,00" style={{marginBottom:0}}/>
         </div>
         <div>
