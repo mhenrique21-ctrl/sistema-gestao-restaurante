@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 ];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
-  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[],
+  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[],
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
@@ -439,6 +439,7 @@ const migrateDb=(m:any)=>{
     if(!m[e].encargos)m[e].encargos=[];
     if(!m[e].encomendas)m[e].encomendas=[];
     if(!m[e].anotacoes)m[e].anotacoes=[];
+    if(!m[e].clientesEncomenda)m[e].clientesEncomenda=[];
     if(!m[e].normalizacoes)m[e].normalizacoes=[];
     if(!m[e].iconesProducao)m[e].iconesProducao={};
     if(!m[e].movEstoque)m[e].movEstoque=[];
@@ -8716,6 +8717,102 @@ ${e.obs?`<div class="field"><div class="lbl">Observacoes</div><div class="val" s
   if(w){w.document.write(html);w.document.close();w.focus();w.print();}
 }
 
+
+function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
+  const sv=(fn:(d:any)=>any)=>setDb(fn);
+  const clientes:any[]=db.clientesEncomenda||[];
+  const encomendas:any[]=db.encomendas||[];
+  const [editId,setEditId]=useState<string|null>(null);
+  const [form,setForm]=useState({nome:"",telefone:"",obs:""});
+  const [showForm,setShowForm]=useState(false);
+  const [busca,setBusca]=useState("");
+  const [viewId,setViewId]=useState<string|null>(null);
+  const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
+  const save=()=>{
+    if(!form.nome.trim())return;
+    const now=new Date().toISOString();
+    if(editId){
+      sv(d=>({...d,clientesEncomenda:(d.clientesEncomenda||[]).map((cx:any)=>cx.id===editId?{...cx,nome:form.nome.trim(),telefone:form.telefone,obs:form.obs,atualizadoEm:now}:cx)}));
+      setEditId(null);
+    }else{
+      const nl=form.nome.trim().toLowerCase();
+      if((db.clientesEncomenda||[]).some((cx:any)=>(cx.nome||"").toLowerCase()===nl))return;
+      sv(d=>({...d,clientesEncomenda:[...(d.clientesEncomenda||[]),{id:uid(),nome:form.nome.trim(),telefone:form.telefone||"",obs:form.obs||"",criadoEm:now}]}));
+    }
+    setForm({nome:"",telefone:"",obs:""});setShowForm(false);
+  };
+  const del=(id:string)=>sv(d=>({...d,clientesEncomenda:(d.clientesEncomenda||[]).filter((cx:any)=>cx.id!==id)}));
+  const startEdit=(cli:any)=>{setForm({nome:cli.nome||"",telefone:cli.telefone||"",obs:cli.obs||""});setEditId(cli.id);setShowForm(true);setViewId(null);};
+  const filtrados=busca.trim()?clientes.filter((cx:any)=>(cx.nome||"").toLowerCase().includes(busca.toLowerCase())||(cx.telefone||"").includes(busca)):clientes;
+  const sorted=[...filtrados].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  const btnA={background:"none",borderRadius:6,cursor:"pointer",fontSize:12,padding:"3px 6px"} as const;
+  if(viewId){
+    const cli=clientes.find((x:any)=>x.id===viewId);
+    if(!cli){setViewId(null);return null;}
+    const pedCli=[...encomendas.filter((e:any)=>(e.cliente||"").toLowerCase()===(cli.nome||"").toLowerCase())].sort((a:any,b:any)=>b.dataEntrega>a.dataEntrega?1:-1);
+    return <div style={{padding:"12px 14px"}}>
+      <button onClick={()=>setViewId(null)} style={{background:"none",border:"none",color:"#7c8fff",cursor:"pointer",fontSize:12,marginBottom:10,padding:0}}>&#8592; Voltar</button>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:2}}>{cli.nome}</div>
+      {cli.telefone&&<div style={{fontSize:12,color:"#7c8fff",marginBottom:6}}>📞 {cli.telefone}</div>}
+      {cli.obs&&<div style={{fontSize:11,color:"var(--text2)",marginBottom:8,fontStyle:"italic" as const}}>{cli.obs}</div>}
+      <div style={{fontSize:11,color:"var(--text2)",marginBottom:12,fontWeight:600}}>{pedCli.length} encomenda(s) no histórico</div>
+      {pedCli.length===0&&<div style={{color:"var(--text2)",fontSize:12,textAlign:"center" as const,padding:16}}>Nenhuma encomenda para este cliente.</div>}
+      {pedCli.map((e:any)=>{
+        const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
+        return <div key={e.id} style={{background:"var(--bg3)",borderRadius:10,padding:"10px 12px",marginBottom:8,border:"1px solid var(--border)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+            <div style={{fontWeight:600,fontSize:12}}>{fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}</div>
+            <span style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,borderRadius:8,padding:"2px 7px"}}>{st.label}</span>
+          </div>
+          {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,color:"#4ade80",fontWeight:700}}>{fmtMoney(parseFloat(e.valor))}</div>}
+          {(e.produtos||[]).length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3}}>{(e.produtos||[]).map((p:any)=>p.qtd+"x "+p.nome).join(", ")}</div>}
+          {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,fontStyle:"italic" as const}}>{e.itens}</div>}
+        </div>;
+      })}
+    </div>;
+  }
+  return <div style={{padding:"12px 14px"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      <div style={{fontWeight:700,fontSize:13}}>👤 Clientes ({clientes.length})</div>
+      <button onClick={()=>{setForm({nome:"",telefone:"",obs:""});setEditId(null);setShowForm(v=>!v);}} className="btn" style={{fontSize:11,padding:"4px 12px"}}>{showForm&&!editId?"Fechar":"+ Adicionar"}</button>
+    </div>
+    {showForm&&<div className="card" style={{marginBottom:12}}>
+      <div style={{fontWeight:700,marginBottom:8,fontSize:12}}>{editId?"Editar Cliente":"Novo Cliente"}</div>
+      <input className="inp" placeholder="Nome *" value={form.nome} onChange={e=>setF("nome",e.target.value)} style={{marginBottom:6}}/>
+      <input className="inp" placeholder="Telefone" value={form.telefone} onChange={e=>setF("telefone",e.target.value)} style={{marginBottom:6}}/>
+      <input className="inp" placeholder="Observação" value={form.obs} onChange={e=>setF("obs",e.target.value)} style={{marginBottom:8}}/>
+      <div style={{display:"flex",gap:6}}>
+        <button className="btn" style={{flex:1}} onClick={save}>Salvar</button>
+        <button className="btn-sec" onClick={()=>{setShowForm(false);setEditId(null);}}>Cancelar</button>
+      </div>
+    </div>}
+    <input className="inp" placeholder="🔍 Buscar cliente..." value={busca} onChange={e=>setBusca(e.target.value)} style={{marginBottom:10}}/>
+    {sorted.length===0&&<div style={{color:"var(--text2)",fontSize:12,textAlign:"center" as const,padding:"20px 10px"}}>
+      {busca?"Nenhum cliente encontrado.":"Nenhum cliente cadastrado. Os clientes são salvos automaticamente ao criar encomendas."}
+    </div>}
+    {sorted.map((cx:any)=>{
+      const nEnc=encomendas.filter((e:any)=>(e.cliente||"").toLowerCase()===(cx.nome||"").toLowerCase()).length;
+      const waRaw=String(cx.telefone||"").replace(/[^\d]/g,"");
+      const waNum=waRaw?(waRaw.startsWith("55")?waRaw:"55"+waRaw):"";
+      return <div key={cx.id} style={{background:"var(--bg3)",borderRadius:10,padding:"10px 12px",marginBottom:8,border:"1px solid var(--border)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+          <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>setViewId(cx.id)}>
+            <div style={{fontWeight:700,fontSize:13}}>{cx.nome}</div>
+            {cx.telefone&&<div style={{fontSize:11,color:"#7c8fff",marginTop:2}}>📞 {cx.telefone}</div>}
+            {cx.obs&&<div style={{fontSize:11,color:"var(--text2)",marginTop:2,fontStyle:"italic" as const}}>{cx.obs}</div>}
+            <div style={{fontSize:10,color:"var(--text2)",marginTop:4}}>{nEnc} encomenda(s)</div>
+          </div>
+          <div style={{display:"flex",gap:3,flexShrink:0}}>
+            {waNum&&<button onClick={(ev)=>{ev.stopPropagation();window.open("https://wa.me/"+waNum,"_blank");}} title="WhatsApp" style={{...btnA,border:"1px solid #25d36644",color:"#25d366"}}>📱</button>}
+            <button onClick={(ev)=>{ev.stopPropagation();startEdit(cx);}} style={{...btnA,border:"1px solid var(--border2)",color:"#7c8fff"}}>✏️</button>
+            <button onClick={(ev)=>{ev.stopPropagation();del(cx.id);}} style={{...btnA,border:"1px solid #ff5c7a22",color:"#ff5c7a",fontSize:14}}>×</button>
+          </div>
+        </div>
+      </div>;
+    })}
+  </div>;
+}
+
 function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const [subTab,setSubTab]=useState(pendingSub||"encomendas");
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -8726,7 +8823,7 @@ function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:a
   return <div style={{padding:"0 0 24px 0"}}>
     <div style={{padding:"12px 16px 0",fontWeight:800,fontSize:17,letterSpacing:0.2}}>Agenda</div>
     <div style={{display:"flex",gap:6,padding:"10px 14px 0",overflowX:"auto",scrollbarWidth:"none" as any}}>
-      {([["encomendas","📦 Encomendas"],["cadastradas","📋 Cadastradas"],["anotacoes","📝 Anotacoes"]] as [string,string][]).map(([k,l])=>(
+      {([["encomendas","📦 Encomendas"],["cadastradas","📋 Cadastradas"],["clientes","👤 Clientes"],["anotacoes","📝 Anotacoes"]] as [string,string][]).map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)}
           style={{flexShrink:0,padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:subTab===k?700:500,position:"relative" as const,
             background:subTab===k?"#7c8fff":"var(--bg3)",color:subTab===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
@@ -8737,6 +8834,7 @@ function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:a
     </div>
     {subTab==="encomendas"&&<EncomendasPanel db={db} setDb={setDb} empresa={empresa}/>}
     {subTab==="cadastradas"&&<CadastradasPanel db={db} setDb={setDb} empresa={empresa}/>}
+    {subTab==="clientes"&&<ClientesEncPanel db={db} setDb={setDb} empresa={empresa}/>}
     {subTab==="anotacoes"&&<AnotacoesPanel db={db} setDb={setDb} empresa={empresa}/>}
   </div>;
 }
@@ -8754,6 +8852,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [showForm,setShowForm]=useState(false);
 
   const sv=(fn:(d:any)=>any)=>setDb(fn);
+  const upsertCliente=(arr:any[],nome:string,telefone:string,ts:string):any[]=>{const nl=nome.trim().toLowerCase();const idx=arr.findIndex((cx:any)=>(cx.nome||"").toLowerCase()===nl);if(idx>=0){const upd=[...arr];if(telefone&&!upd[idx].telefone)upd[idx]={...upd[idx],telefone};return upd;}return[...arr,{id:uid(),nome:nome.trim(),telefone:telefone||"",obs:"",criadoEm:ts}];};
   const enc:any[]=(db.encomendas||[]);
   const prodsCatalog:any[]=(db.produtosProducao||[]);
   const cats:string[]=(db.categoriasProducao||[]);
@@ -8780,9 +8879,9 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         const pedido={id:uid(),data:form.dataEntrega||today(),itens:itensPed,
           solicitante:`Encomenda — ${form.cliente}`,origem:"encomenda",encId:novaEnc.id,
           criadoEm:now};
-        sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])],pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
+        sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])],pedidosProducao:[pedido,...(d.pedidosProducao||[])],clientesEncomenda:upsertCliente(d.clientesEncomenda||[],form.cliente,form.telefone,now)}));
       }else{
-        sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])]}));
+        sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])],clientesEncomenda:upsertCliente(d.clientesEncomenda||[],form.cliente,form.telefone,now)}));
       }
       setEncRecemSalva(novaEnc);
     }
