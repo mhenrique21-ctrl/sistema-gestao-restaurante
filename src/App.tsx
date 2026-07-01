@@ -739,7 +739,7 @@ export default function App() {
       .finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
   };
 
-  const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao";
+  const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao"||login?.role==="op_enc";
   const isAdmin=login?.role==="admin";
   // Cor em tempo real do usuário logado (ignora sessão desatualizada)
   const loginCorTexto=(()=>{if(!login?.label)return"#e8eaf0";const u=(state.CONFRARIA?.usuarios||[]).find((u:any)=>u.nome===login.label);return u?.corTexto||login?.corTexto||"#e8eaf0";})();
@@ -750,6 +750,7 @@ export default function App() {
     if(info.empresa)setEmpresa(info.empresa);
     if(info.role==="op"||info.role==="op_lista")setTab("lista");
     if(info.role==="op_producao")setTab("producao");
+    if(info.role==="op_enc")setTab("agenda");
   };
   const doLogout=()=>{
     sessionStorage.removeItem("app_login");
@@ -812,7 +813,7 @@ export default function App() {
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
   const allTabs=menuStructure.map(m=>({id:m.id,label:m.label,icon:m.icon}));
-  const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):allTabs.filter(t=>t.id==="producao")):allTabs;
+  const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"||t.id==="agenda"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):login?.role==="op_enc"?allTabs.filter(t=>t.id==="agenda"):allTabs.filter(t=>t.id==="producao")):allTabs;
   const menuFiltered=isOp?menuStructure.filter(m=>tabs.some(t=>t.id===m.id)):menuStructure;
   const navTo=(t:string,s?:string)=>{setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
 
@@ -8136,9 +8137,10 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
       <input placeholder="Senha de acesso" value={form.senha} onChange={e=>setF("senha",e.target.value)} className="inp" style={{marginBottom:8}}/>
       <select value={form.role} onChange={e=>setF("role",e.target.value)} className="inp" style={{marginBottom:8}}>
         <option value="admin">Administrador — acesso completo</option>
-        <option value="op">Lista + Produção</option>
+        <option value="op">Lista + Produção + Encomendas</option>
         <option value="op_lista">Somente Lista</option>
         <option value="op_producao">Somente Produção</option>
+        <option value="op_enc">Somente Encomendas</option>
       </select>
       {form.role!=="admin"&&<select value={form.empresa} onChange={e=>setF("empresa",e.target.value)} className="inp" style={{marginBottom:8}}>
         <option value="CONFRARIA">Empresa: CONFRARIA</option>
@@ -8524,9 +8526,10 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         <input placeholder="Senha de acesso" value={userForm.senha} onChange={e=>setUserForm(f=>({...f,senha:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="inp" style={{marginBottom:8}}>
           <option value="admin">Administrador — acesso completo</option>
-          <option value="op">Lista + Produção</option>
+          <option value="op">Lista + Produção + Encomendas</option>
           <option value="op_lista">Somente Lista</option>
           <option value="op_producao">Somente Produção</option>
+          <option value="op_enc">Somente Encomendas</option>
         </select>
         {userForm.role!=="admin"&&<select value={userForm.empresa} onChange={e=>setUserForm(f=>({...f,empresa:e.target.value}))} className="inp" style={{marginBottom:8}}>
           <option value="CONFRARIA">Empresa: CONFRARIA</option>
