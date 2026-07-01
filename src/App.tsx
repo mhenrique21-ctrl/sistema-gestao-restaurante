@@ -8715,7 +8715,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [filtroStatus,setFiltroStatus]=useState("todos");
   const [showForm,setShowForm]=useState(false);
 
-  const sv=(fn:(d:any)=>any)=>setDb((s:any)=>{const d={...s};d[empresa]=fn(d[empresa]||{});return d;});
+  const sv=(fn:(d:any)=>any)=>setDb(fn);
   const enc:any[]=(db.encomendas||[]);
   const prodsCatalog:any[]=(db.produtosProducao||[]);
   const cats:string[]=(db.categoriasProducao||[]);
@@ -8971,7 +8971,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
 
 function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [busca,setBusca]=useState("");
-  const sv=(fn:(d:any)=>any)=>setDb((s:any)=>{const d={...s};d[empresa]=fn(d[empresa]||{});return d;});
+  const sv=(fn:(d:any)=>any)=>setDb(fn);
   const enc:any[]=(db.encomendas||[]);
   const todas=enc.filter((e:any)=>e.status==="entregue"||e.status==="cancelado");
   const filtradas=busca.trim()
@@ -9024,7 +9024,7 @@ function AnotacoesPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [editId,setEditId]=useState<string|null>(null);
   const [showForm,setShowForm]=useState(false);
 
-  const sv=(fn:(d:any)=>any)=>setDb((s:any)=>{const d={...s};d[empresa]=fn(d[empresa]||{});return d;});
+  const sv=(fn:(d:any)=>any)=>setDb(fn);
   const anotacoes:any[]=(db.anotacoes||[]);
 
   const save=()=>{
