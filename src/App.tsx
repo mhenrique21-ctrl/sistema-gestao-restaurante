@@ -8654,7 +8654,22 @@ function encWhatsAppMsg(e:any,empresa:string):string{
   msg+=`🔖 *Status:* ${st.label}\n`;
   if(prods)msg+=`━━━━━━━━━━\n📋 *Produtos:*\n${prods}\n`;
   if(e.itens)msg+=`━━━━━━━━━━\n📝 *Descricao:*\n${e.itens}\n`;
-  if(e.valor&&parseFloat(e.valor)>0)msg+=`💰 *Valor:* ${fmtMoney(parseFloat(e.valor))}\n`;
+  // pagamento
+  const vTot=e.valor&&parseFloat(String(e.valor))>0?parseFloat(String(e.valor)):0;
+  const rawEnt2=String(e.valorEntrada||"").replace(/[^\d,]/g,"").replace(",",".");
+  const vEnt2=parseFloat(rawEnt2)||0;
+  const fp2=e.formaPag?PAG_LABEL[e.formaPag]||e.formaPag:"";
+  if(vTot>0||fp2){
+    msg+=`━━━━━━━━━━\n💳 *Pagamento:*\n`;
+    if(fp2)msg+=`   Forma: ${fp2}\n`;
+    if(e.tipoPag==="entrada"&&vEnt2>0&&vTot>0){
+      msg+=`   Entrada: ${fmtMoney(vEnt2)}\n`;
+      msg+=`   Restante: ${fmtMoney(Math.max(0,vTot-vEnt2))}\n`;
+      msg+=`   Total: ${fmtMoney(vTot)}\n`;
+    }else if(vTot>0){
+      msg+=`   Total: ${fmtMoney(vTot)}\n`;
+    }
+  }
   if(e.obs)msg+=`🗒 *Obs:* ${e.obs}\n`;
   msg+=`━━━━━━━━━━\n_Encomenda via Sistema ${empresa}_`;
   return msg;
