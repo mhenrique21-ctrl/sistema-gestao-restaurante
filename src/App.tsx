@@ -937,7 +937,6 @@ export default function App() {
               </>}
             </div>}
             {isOp&&<span style={{fontSize:11,color:"#5a6080",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"4px 10px"}}>{empresa}</span>}
-            <NotifBell db={db} onNavigate={setTab} setPendingSub={setPendingSub}/>
             <button onClick={doLogout} title="Sair" style={{background:"none",border:"1px solid #3a1515",borderRadius:8,cursor:"pointer",color:"#ff7a7a",fontSize:13,padding:"4px 8px",lineHeight:1}}>🔒</button>
           </div>
         </div>
@@ -983,6 +982,10 @@ export default function App() {
         ))}
       </div>}
 
+      {/* NOTIF BELL FIXO */}
+      <div style={{position:"fixed",right:16,top:70,zIndex:400}}>
+        <NotifBell db={db} onNavigate={setTab} setPendingSub={setPendingSub}/>
+      </div>
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
