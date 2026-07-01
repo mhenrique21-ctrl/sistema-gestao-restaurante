@@ -9341,15 +9341,17 @@ function EmptyState({msg}){return <div style={{textAlign:"center",padding:"32px 
 function NotifBell({db,onNavigate,setPendingSub}:{db:any,onNavigate:(t:string)=>void,setPendingSub?:(v:string|null)=>void}){
   const [open,setOpen]=useState(false);
   const hj=today();
+  const amanha=new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(new Date(Date.now()+864e5));
 
   const encAtras=(db.encomendas||[]).filter((e:any)=>!["entregue","cancelado"].includes(e.status)&&e.dataEntrega&&e.dataEntrega<hj);
   const encHoje=(db.encomendas||[]).filter((e:any)=>!["entregue","cancelado"].includes(e.status)&&e.dataEntrega===hj);
+  const encAmanha=(db.encomendas||[]).filter((e:any)=>!["entregue","cancelado"].includes(e.status)&&e.dataEntrega===amanha);
   const encProntas=(db.encomendas||[]).filter((e:any)=>e.status==="pronto");
   const contasAtras=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento&&c.vencimento<hj);
   const contasHoje=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento===hj);
   const estoqueBaixo=(db.materiasPrimas||[]).filter((m:any)=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0));
 
-  const total=encAtras.length+encHoje.length+encProntas.length+contasAtras.length+contasHoje.length+estoqueBaixo.length;
+  const total=encAtras.length+encHoje.length+encAmanha.length+encProntas.length+contasAtras.length+contasHoje.length+estoqueBaixo.length;
 
   const ir=(tab:string,sub?:string)=>{setOpen(false);onNavigate(tab);if(sub&&setPendingSub)setPendingSub(sub);};
 
@@ -9359,6 +9361,8 @@ function NotifBell({db,onNavigate,setPendingSub}:{db:any,onNavigate:(t:string)=>
     itens:encAtras.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${fmtDate(e.dataEntrega)}`,tab:"agenda",sub:"encomendas"}))});
   if(encProntas.length>0)grupos.push({cor:"#4ade80",bg:"#4ade8018",titulo:`Prontas para entrega (${encProntas.length})`,
     itens:encProntas.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${fmtDate(e.dataEntrega)}`,tab:"agenda",sub:"encomendas"}))});
+  if(encAmanha.length>0)grupos.push({cor:"#a78bfa",bg:"#a78bfa18",titulo:`Encomendas amanhã (${encAmanha.length})`,
+    itens:encAmanha.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${e.horaEntrega||"sem hora"}`,tab:"agenda",sub:"encomendas"}))});
   if(encHoje.length>0)grupos.push({cor:"#fbbf24",bg:"#fbbf2418",titulo:`Encomendas para hoje (${encHoje.length})`,
     itens:encHoje.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${e.horaEntrega||"sem hora"}`,tab:"agenda",sub:"encomendas"}))});
   if(contasAtras.length>0)grupos.push({cor:"#f97316",bg:"#f9731618",titulo:`Contas atrasadas (${contasAtras.length})`,
