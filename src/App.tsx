@@ -8629,8 +8629,20 @@ const ENC_STATUS:{[k:string]:{label:string,color:string,bg:string}}={
   entregue:   {label:"Entregue",   color:"#34d399",bg:"#34d39918"},
   cancelado:  {label:"Cancelado",  color:"#ff5c7a",bg:"#ff5c7a18"},
 };
-const ENC_EMPTY={cliente:"",telefone:"",dataEntrega:today(),horaEntrega:"",itens:"",valor:"",status:"pendente",obs:""};
+const ENC_EMPTY={cliente:"",telefone:"",dataEntrega:today(),horaEntrega:"",itens:"",valor:"",status:"pendente",obs:"",formaPag:"",tipoPag:"total",valorEntrada:""};
 
+const PAG_LABEL:{[k:string]:string}={pix:"Pix",dinheiro:"Dinheiro",cartao_credito:"Cartao Credito",cartao_debito:"Cartao Debito",transferencia:"Transferencia",outro:"Outro"};
+function fmtPag(e:any):string{
+  try{
+    const fp=e.formaPag?PAG_LABEL[e.formaPag]||e.formaPag:"";
+    const vTotal=e.valor&&parseFloat(String(e.valor))>0?fmtMoney(parseFloat(String(e.valor))):"";
+    const rawEnt=String(e.valorEntrada||"").replace(/[^\d,]/g,"").replace(",",".");
+    const vEnt=rawEnt&&parseFloat(rawEnt)>0?fmtMoney(parseFloat(rawEnt)):"";
+    if(!fp&&!vTotal)return "";
+    if(e.tipoPag==="entrada"&&vEnt&&vTotal)return (fp?fp+" · ":"")+`Entrada: ${vEnt} / Total: ${vTotal}`;
+    return (fp?fp+" · ":"")+vTotal;
+  }catch{return "";}
+}
 function encWhatsAppMsg(e:any,empresa:string):string{
   const prods=(e.produtos||[]).map((p:any)=>{const rawP=(p.preco||"").replace(/[^\d,]/g,"").replace(",",".");const vP=rawP&&parseFloat(rawP)>0?` — ${fmtMoney(parseFloat(rawP))}`:"";const un=p.unidade&&p.unidade!=="un"?` (${p.unidade})`:"";
     return `• ${p.qtd}x ${p.nome}${un}${vP}`;}).join("\n");
