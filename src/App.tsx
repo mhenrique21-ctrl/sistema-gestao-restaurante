@@ -253,7 +253,7 @@ const mkDb = () => ({
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[],
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
-  categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
+  categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
   config:{snAliquota:6,budgetCmv:30},
 });
 const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
@@ -525,6 +525,7 @@ const migrateDb=(m:any)=>{
     }
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
+    if(!m[e].categorias?.includes("Encomenda"))m[e].categorias=[...(m[e].categorias||[]),"Encomenda"];
   });
   if(!m.CONFRARIA?.produtosSyncV1||!m.SEAMA?.produtosSyncV1){
     const allProds=new Map<string,any>();
@@ -8895,7 +8896,19 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const del=(id:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).filter((e:any)=>e.id!==id)}));
   const setStatus=(id:string,status:string)=>{
     const found=enc.find((e:any)=>e.id===id);
-    sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===id?{...e,status,atualizadoEm:new Date().toISOString()}:e)}));
+    const now=new Date().toISOString();
+    sv(d=>{
+      const novasEnc=(d.encomendas||[]).map((e:any)=>e.id===id?{...e,status,atualizadoEm:now}:e);
+      if(status==="entregue"&&found){
+        const val=parseFloat(String(found.valor||""))||0;
+        const jaExiste=(d.contas||[]).some((c:any)=>c.encId===id);
+        if(val>0&&!jaExiste){
+          const conta={id:uid(),descricao:`Encomenda – ${found.cliente}`,categoria:"Encomenda",valor:val,vencimento:found.dataEntrega||today(),status:"pago",tipo:"entrada",origem:"encomenda",encId:id,formaPag:found.formaPag||"",criadoEm:now};
+          return {...d,encomendas:novasEnc,contas:[conta,...(d.contas||[])]};
+        }
+      }
+      return {...d,encomendas:novasEnc};
+    });
     if(status==="entregue"&&found){setEncFinalizada({...found,status:"entregue"});}
   };
 
