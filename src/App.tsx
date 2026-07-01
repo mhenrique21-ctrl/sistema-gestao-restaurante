@@ -8665,7 +8665,7 @@ table{width:100%;border-collapse:collapse;margin:12px 0;}th{background:#f5f5f5;p
   <div class="field"><div class="lbl">Cliente</div><div class="val">${e.cliente}</div></div>
   ${e.telefone?`<div class="field"><div class="lbl">Telefone</div><div class="val">${e.telefone}</div></div>`:"<div></div>"}
   <div class="field"><div class="lbl">Data de Entrega</div><div class="val">${fmtDate(e.dataEntrega)}${e.horaEntrega?` às ${e.horaEntrega}`:""}</div></div>
-  ${e.valor&&parseFloat(e.valor)>0?`<div class="field"><div class="lbl">Valor</div><div class="val" style="color:#1a7a3a;">${fmtMoney(parseFloat(e.valor))}</div></div>`:"<div></div>"}
+  ${(()=>{const pi=fmtPag(e);return pi?`<div class="field"><div class="lbl">Pagamento</div><div class="val" style="color:#1a7a3a;">${pi}</div></div>`:"<div></div>"})()}
 </div>
 ${prodsHtml?`<div class="field" style="margin-bottom:8px;"><div class="lbl">Produtos</div></div><table><thead><tr><th>Qtd</th><th>Produto</th><th>Un</th></tr></thead><tbody>${prodsHtml}</tbody></table>`:""}
 ${e.itens?`<div class="field" style="margin:12px 0;"><div class="lbl">Descricao</div><div class="val" style="font-style:italic;">${e.itens}</div></div>`:""}
@@ -8800,6 +8800,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           </div>}
           {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.4,fontStyle:"italic" as const}}>{e.itens}</div>}
           {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
+          {fmtPag(e)&&<div style={{fontSize:11,color:"#a3e635",marginTop:2}}>{fmtPag(e)}</div>}
           {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
         </div>
         <div style={{display:"flex",flexDirection:"column" as const,gap:4,alignItems:"flex-end",flexShrink:0}}>
@@ -8939,10 +8940,39 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <textarea className="inp" placeholder="Detalhes extras, preferencias..." value={form.itens} onChange={e=>setF("itens",e.target.value)} rows={2} style={{marginBottom:0,resize:"vertical" as const}}/>
         </div>
         <div>
-          <label className="label">Valor</label>
+          <label className="label">Valor Total</label>
           <MoneyInput value={form.valor} onChange={v=>setF("valor",v)} placeholder="R$ 0,00" style={{marginBottom:0}}/>
         </div>
         <div>
+          <label className="label">Forma de Pagamento</label>
+          <select className="inp" value={form.formaPag} onChange={e=>setF("formaPag",e.target.value)} style={{marginBottom:0}}>
+            <option value="">Selecionar...</option>
+            <option value="pix">Pix</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao_credito">Cartao Credito</option>
+            <option value="cartao_debito">Cartao Debito</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div style={{gridColumn:"1/-1"}}>
+          <label className="label">Tipo de Pagamento</label>
+          <div style={{display:"flex",gap:8}}>
+            {(["total","entrada"] as const).map(t=>(
+              <button key={t} onClick={()=>setF("tipoPag",t)}
+                style={{flex:1,padding:"7px 0",borderRadius:8,border:`1px solid ${form.tipoPag===t?"#7c8fff":"var(--border)"}`,
+                  background:form.tipoPag===t?"#7c8fff22":"var(--bg3)",color:form.tipoPag===t?"#7c8fff":"var(--text2)",
+                  cursor:"pointer",fontSize:12,fontWeight:form.tipoPag===t?700:500}}>
+                {t==="total"?"Pagamento Total":"Entrada + Restante"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {form.tipoPag==="entrada"&&<div style={{gridColumn:"1/-1"}}>
+          <label className="label">Valor de Entrada</label>
+          <MoneyInput value={form.valorEntrada} onChange={v=>setF("valorEntrada",v)} placeholder="R$ 0,00" style={{marginBottom:0}}/>
+        </div>}
+        <div style={{gridColumn:"1/-1"}}>
           <label className="label">Observacoes</label>
           <input className="inp" placeholder="Obs..." value={form.obs} onChange={e=>setF("obs",e.target.value)} style={{marginBottom:0}}/>
         </div>
@@ -9005,6 +9035,7 @@ function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             </div>}
             {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,fontStyle:"italic" as const,lineHeight:1.4}}>{e.itens}</div>}
             {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
+            {fmtPag(e)&&<div style={{fontSize:11,color:"#a3e635",marginTop:2}}>{fmtPag(e)}</div>}
             {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
             <div style={{fontSize:9,color:"#444",marginTop:4}}>{e.atualizadoEm?`Finalizado em ${new Date(e.atualizadoEm).toLocaleDateString("pt-BR")}`:""}</div>
           </div>
