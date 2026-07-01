@@ -8796,9 +8796,13 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             📅 {fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}
           </div>
           {(e.produtos||[]).length>0&&<div style={{marginTop:5}}>
-            {(e.produtos||[]).map((p:any,i:number)=>(
-              <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}><span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>{p.preco&&parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")!)>0&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")))}</span>}</div>
-            ))}
+            {(e.produtos||[]).map((p:any,i:number)=>{
+              const vP2=p.preco?parseFloat(String(p.preco).replace(/[^\d,]/g,"").replace(",",".")):0;
+              return <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}>
+                <span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>
+                {vP2>0&&!isNaN(vP2)&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(vP2)}</span>}
+              </div>;
+            })}
           </div>}
           {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.4,fontStyle:"italic" as const}}>{e.itens}</div>}
           {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
@@ -9009,20 +9013,32 @@ function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const enc:any[]=(db.encomendas||[]);
   const todas=enc.filter((e:any)=>e.status==="entregue"||e.status==="cancelado");
   const filtradas=busca.trim()
-    ?todas.filter((e:any)=>e.cliente?.toLowerCase().includes(busca.toLowerCase()))
+    ?todas.filter((e:any)=>(e.cliente||"").toLowerCase().includes(busca.toLowerCase()))
     :todas;
-  const sorted=[...filtradas].sort((a:any,b:any)=>((b.atualizadoEm||b.criadoEm||"")>(a.atualizadoEm||a.criadoEm||""))?1:-1);
+  const sorted=[...filtradas].sort((a:any,b:any)=>{
+    const da=a.atualizadoEm||a.criadoEm||"";
+    const db2=b.atualizadoEm||b.criadoEm||"";
+    return da>db2?-1:da<db2?1:0;
+  });
   const del=(id:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).filter((e:any)=>e.id!==id)}));
   const btnAcao={background:"none",borderRadius:6,cursor:"pointer",fontSize:12,padding:"3px 5px"} as const;
 
+  const parsePreco=(preco:any):number=>{
+    if(!preco)return 0;
+    const s=String(preco).replace(/[^\d,]/g,"").replace(",",".");
+    const n=parseFloat(s);
+    return isNaN(n)?0:n;
+  };
+
   return <div style={{padding:"12px 14px"}}>
-    <input className="inp" placeholder="Buscar por cliente..." value={busca} onChange={e=>setBusca(e.target.value)} style={{marginBottom:12}}/>
+    <input className="inp" placeholder="Buscar por cliente..." value={busca} onChange={ev=>setBusca(ev.target.value)} style={{marginBottom:12}}/>
     {sorted.length===0&&<div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}>
       <div style={{fontSize:32,marginBottom:6}}>📋</div>
       <div style={{fontSize:13}}>Nenhuma encomenda finalizada ainda.<br/>Marque uma encomenda como "Entregue" para ela aparecer aqui.</div>
     </div>}
     {sorted.map((e:any)=>{
       const st=ENC_STATUS[e.status]||ENC_STATUS.entregue;
+      const pagInfo=fmtPag(e);
       return <div key={e.id} style={{background:"var(--bg3)",borderRadius:12,border:"1px solid var(--border)",padding:"12px 14px",marginBottom:8,opacity:e.status==="cancelado"?0.7:1}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
           <div style={{flex:1,minWidth:0}}>
@@ -9033,13 +9049,17 @@ function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             {e.telefone&&<div style={{fontSize:11,color:"#7c8fff",marginTop:2}}>📞 {e.telefone}</div>}
             <div style={{fontSize:11,color:"var(--text2)",marginTop:3}}>📅 {fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}</div>
             {(e.produtos||[]).length>0&&<div style={{marginTop:4}}>
-              {(e.produtos||[]).map((p:any,i:number)=>(
-                <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}><span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>{p.preco&&parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")!)>0&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(parseFloat((p.preco||"").replace(/[^\d,]/g,"").replace(",",".")))}</span>}</div>
-              ))}
+              {(e.produtos||[]).map((p:any,i:number)=>{
+                const vP=parsePreco(p.preco);
+                return <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}>
+                  <span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>
+                  {vP>0&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(vP)}</span>}
+                </div>;
+              })}
             </div>}
             {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,fontStyle:"italic" as const,lineHeight:1.4}}>{e.itens}</div>}
-            {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
-            {fmtPag(e)&&<div style={{fontSize:11,color:"#a3e635",marginTop:2}}>{fmtPag(e)}</div>}
+            {parsePreco(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parsePreco(e.valor))}</div>}
+            {pagInfo&&<div style={{fontSize:11,color:"#a3e635",marginTop:2}}>{pagInfo}</div>}
             {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
             <div style={{fontSize:9,color:"#444",marginTop:4}}>{e.atualizadoEm?`Finalizado em ${new Date(e.atualizadoEm).toLocaleDateString("pt-BR")}`:""}</div>
           </div>
