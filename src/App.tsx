@@ -259,9 +259,10 @@ const mkDb = () => ({
 const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
 
 // ===================== UTILS =====================
-const fmtMoney  = (v) => (parseFloat(v)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const fmtMoney  = (v) => (parseFloat(v)||0).toLocaleString("pt-BR",{timeZone:TZ,style:"currency",currency:"BRL"});
 const fmtPct    = (v) => `${(parseFloat(v)||0).toFixed(1)}%`;
-const today     = () => new Date().toISOString().split("T")[0];
+const TZ        = "America/Sao_Paulo";
+const today     = () => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(new Date());
 const uid       = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
 const normalizarNome=(nome:string,norms:any[])=>{
   if(!nome||!norms?.length)return nome;
@@ -283,8 +284,8 @@ const parseMoney= (s) => {
   else{normalized=clean.replace(/,/g,"");}
   return parseFloat(normalized)||0;
 };
-const currentMonth = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; };
-const fmtDate   = (d) => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR");}catch{return d;} };
+const currentMonth = () => today().slice(0,7);
+const fmtDate   = (d) => { try{return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{timeZone:TZ});}catch{return d;} };
 const monthLabel= (m) => { if(!m)return""; const [y,mo]=m.split("-"); return `${["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][parseInt(mo)-1]}/${y}`; };
 
 const isMobile=typeof navigator!=="undefined"&&/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -356,7 +357,7 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
     <button onclick="window.print()" style="background:#2d3a6b;color:#fff">🖨️ Imprimir / Salvar PDF</button>
   </div>
   <div class="header"><h1>${titulo} — ${empresa}</h1>
-  <p>Gerado em ${new Date().toLocaleString("pt-BR")} | ${new Date().toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</p></div>
+  <p>Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} | ${new Date().toLocaleDateString("pt-BR",{timeZone:TZ,month:"long",year:"numeric"})}</p></div>
   ${conteudo}
   <div class="footer">App Gestão • ${empresa}</div>
   </body></html>`;
@@ -1398,7 +1399,7 @@ function Vendas({db,setDb,state}){
     if(periodoTipo==="semana")return`Semana (${fmtDate(pIni)} – ${fmtDate(pFim)})`;
     if(periodoTipo==="trimestre"){const meses=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];const q=Math.floor(new Date().getMonth()/3);return`${q+1}º Trimestre (${meses[q*3]} – ${meses[q*3+2]})/${new Date().getFullYear()}`;}
     if(periodoTipo==="personalizado")return`${fmtDate(pIni)} – ${fmtDate(pFim)}`;
-    const d=new Date();return`${d.toLocaleString("pt-BR",{month:"long"})}/${d.getFullYear()}`;
+    const d=new Date();return`${d.toLocaleString("pt-BR",{timeZone:TZ,month:"long"})}/${d.getFullYear()}`;
   })();
 
   const vendasMes=(db.vendas||[]).filter(v=>v.data>=pIni&&v.data<=pFim).reduce((s,v)=>s+v.total,0);
@@ -1720,7 +1721,7 @@ function Vendas({db,setDb,state}){
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>del(v.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
-        {v.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(v.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+        {v.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(v.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;
     })}{!vendasFiltradas.length&&<EmptyState msg="Nenhum registro de venda"/>}</>;})()}
   </div>;
@@ -2276,7 +2277,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         setSefazList(d.nfes);
         if(d.ultNSU!=null){setSefazNSU(d.ultNSU);setSefazNsuInput(String(d.ultNSU));}
       }
-      setCacheTs(d.timestamp?new Date(d.timestamp).toLocaleString("pt-BR"):null);
+      setCacheTs(d.timestamp?new Date(d.timestamp).toLocaleString("pt-BR",{timeZone:TZ}):null);
     }catch{}
     setCacheLoading(false);
   };
@@ -2359,7 +2360,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       });
       setSefazList(filtradas);
       if(data.ultNSU){setSefazNSU(data.ultNSU);setSefazNsuInput(String(data.ultNSU));}
-      const ts=new Date().toLocaleString("pt-BR");
+      const ts=new Date().toLocaleString("pt-BR",{timeZone:TZ});
       setSefazLastSync(ts);
       localStorage.setItem(`sefaz_last_sync_${empresa}`,ts);
       if(!filtradas.length)setSefazError(todas.length?`Nenhuma NF-e no período ${sefazDataIni} a ${sefazDataFim}.`:`Nenhuma NF-e encontrada (NSU ${data.ultNSU??0}).`);
@@ -3915,7 +3916,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         </tr>
         ${rows}
       </table>
-      <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+      <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
     </body></html>`);
     w.document.close();
   };
@@ -3937,7 +3938,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#777">${i.estoqueQtd!=null&&i.estoqueQtd!==""?i.estoqueQtd+" "+( i.unidade||"un"):""}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
       </tr>`).join("")}`).join("");
-    const dataHoje=new Date().toLocaleDateString("pt-BR");
+    const dataHoje=new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
     w.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8"/>
       <title>Lista de Compras — ${dataHoje}</title>
@@ -3964,7 +3965,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>Qtd Ref. Estoque</th><th>Observação</th></tr>
         ${rows}
       </table>
-      <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+      <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
     </body></html>`);
     w.document.close();
   };
@@ -4037,7 +4038,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const cats=[...new Set(linhas.map(l=>l.categoria||"outros"))].sort();
       const imprimirEstimativa=()=>{
         const w=window.open("","_blank","width=900,height=700");if(!w)return;
-        const dataHoje=new Date().toLocaleDateString("pt-BR");
+        const dataHoje=new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
         const rows=cats.map(cat=>{
           const cl=linhas.filter(l=>(l.categoria||"outros")===cat);
           const ct=cl.filter(l=>l.temPreco).reduce((s,l)=>s+l.subtotal,0);
@@ -4058,7 +4059,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <table><tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:right">Preço Un.</th><th style="text-align:right">Subtotal</th></tr>${rows}
           <tr><td colspan="3" style="padding:12px 10px;text-align:right;font-weight:700;font-size:15px;border-top:2px solid #222">TOTAL ESTIMADO</td><td style="padding:12px 10px;text-align:right;font-weight:700;font-size:17px;color:#16a34a;border-top:2px solid #222">${fmtMoney(totalEstimado)}</td></tr></table>
           ${semPreco.length>0?`<div style="margin-top:12px;font-size:11px;color:#999">* Itens sem preço cadastrado: ${semPreco.map(l=>l.nome).join(", ")}</div>`:""}
-          <div style="margin-top:20px;font-size:11px;color:#aaa">Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+          <div style="margin-top:20px;font-size:11px;color:#aaa">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
         </body></html>`);
         w.document.close();
       };
@@ -4928,9 +4929,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
       <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${prodCatIcon(cat)} ${cat}</td></tr>
       ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.qtdAtual||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade?`${it.quantidade} ${it.unidade||"un"}`:"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
     `).join("");
-    const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR");
+    const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
     const solicitante=pedido?.solicitante||login?.label||"—";
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.no-print-bar{display:flex;gap:8px;margin-bottom:16px}.no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.no-print-bar{display:none}}</style></head><body><div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:#5b21b6;color:#fff">🖨️ Imprimir</button></div><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><table><tr><th>Produto</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")}</div></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#3b0764;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.no-print-bar{display:flex;gap:8px;margin-bottom:16px}.no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.no-print-bar{display:none}}</style></head><body><div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:#5b21b6;color:#fff">🖨️ Imprimir</button></div><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><table><tr><th>Produto</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div></body></html>`);
     w.document.close();
   };
 
@@ -5764,7 +5765,7 @@ function imprimirNFe(conta:any,itens:any[]){
       <div class="row">
         <div class="field"><div class="lbl">Emitente / Fornecedor</div><div class="val">${conta.fornecedorNome||conta.fornecedor||"—"}</div></div>
         ${conta.fornecedorCnpj?`<div class="field"><div class="lbl">CNPJ</div><div class="val">${conta.fornecedorCnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,"$1.$2.$3/$4-$5")}</div></div>`:""}
-        <div class="field"><div class="lbl">Data</div><div class="val">${conta.vencimento?new Date(conta.vencimento+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</div></div>
+        <div class="field"><div class="lbl">Data</div><div class="val">${conta.vencimento?new Date(conta.vencimento+"T12:00:00").toLocaleDateString("pt-BR",{timeZone:TZ}):"—"}</div></div>
         <div class="field"><div class="lbl">Total da NF-e</div><div class="val" style="color:#1a6f2a">${fmt(conta.valor||0)}</div></div>
         <div class="field"><div class="lbl">Status</div><div class="val">${conta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div></div>
       </div>
@@ -5774,7 +5775,7 @@ function imprimirNFe(conta:any,itens:any[]){
       <tbody>${rows||"<tr><td colspan='5' style='text-align:center;padding:20px;color:#888'>Nenhum item registrado</td></tr>"}</tbody>
       <tfoot><tr><td colspan="4">Total Geral:</td><td>${fmt(total)}</td></tr></tfoot>
     </table>
-    <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")} · Sistema de Gestão</div>
+    <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} · Sistema de Gestão</div>
   </body></html>`;
   win.document.write(html);win.document.close();
 }
@@ -6547,7 +6548,7 @@ function FichaTecnica({db,setDb}){
             <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"#1a1a30",color:"#7c8fff",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
             <button className="btn" onClick={()=>del(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
-          {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+          {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
         </div>;
       })}
       {!(db.fichasTecnicas||[]).filter(f=>!busca||f.nome?.toLowerCase().includes(busca.toLowerCase())).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
@@ -7051,7 +7052,7 @@ ${detalhesDesc.join("")}
   <tr class="sep total"><td>VALOR LÍQUIDO A RECEBER</td><td class="vr green">${fmtMoney(aRec)}</td></tr>
 </table></div>
 <div class="sig"><div>Empregador</div><div>Funcionário</div></div>
-<div class="ft">${empresa} · Gerado em ${new Date().toLocaleString("pt-BR")} · App Gestão</div>
+<div class="ft">${empresa} · Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} · App Gestão</div>
 </div></body></html>`;
     abrirRelatorio(html);
   };
@@ -7107,7 +7108,7 @@ ${detalhesDesc.join("")}
             <button className="btn" onClick={()=>editFunc(f)} style={{background:"var(--border)",color:"#888",padding:"7px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>delFunc(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️</button>
           </div>
-          {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+          {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
         </div>;
       })}
       {!funcs.filter(f=>!buscaFunc||f.nome?.toLowerCase().includes(buscaFunc.toLowerCase())||f.funcao?.toLowerCase().includes(buscaFunc.toLowerCase())).length&&<EmptyState msg="Nenhum funcionário cadastrado"/>}
@@ -7146,7 +7147,7 @@ ${detalhesDesc.join("")}
       {sortList(db.faltas||[],db,'rhFaltas','data-desc').map(f=>{const fn=funcs.find(x=>x.id===f.funcionarioId);return <div key={f.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#ff5c7a",fontWeight:700}}>-{fmtMoney(f.desconto)}</span></div>
         <div className="muted">{f.dias} dia(s) • {fmtDate(f.data)}</div>{f.motivo&&<div className="muted">{f.motivo}</div>}
-        {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+        {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.faltas||[]).length&&<EmptyState msg="Nenhuma falta registrada"/>}
     </div>}
@@ -7175,7 +7176,7 @@ ${detalhesDesc.join("")}
           <span className="tag" style={{background:"#2a2010",color:"#fbbf24",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
           <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
-        {a.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(a.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+        {a.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(a.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.adiantamentos||[]).length&&<EmptyState msg="Nenhum adiantamento registrado"/>}
     </div>}
@@ -7224,7 +7225,7 @@ ${detalhesDesc.join("")}
           <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
-        {e.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(e.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+        {e.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(e.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.encargos||[]).length&&<EmptyState msg="Nenhum encargo registrado"/>}
     </div>}
@@ -7248,7 +7249,7 @@ ${detalhesDesc.join("")}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
           <button className="btn" onClick={()=>lancarConsFin(c)} style={{background:"#1a2510",color:"#4ade80",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
         </div>
-        {c.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(c.criadoEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+        {c.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(c.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.consumacoes||[]).length&&<EmptyState msg="Nenhuma consumação registrada"/>}
     </div>}
@@ -7906,7 +7907,7 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
   };
   useEffect(()=>{carregar();},[emp]);
 
-  const fmtTs=(f:string)=>{const ts=parseInt(f.replace("backup_","").replace("safety_","").replace(".json",""));if(!ts||isNaN(ts))return f;return new Date(ts).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});};
+  const fmtTs=(f:string)=>{const ts=parseInt(f.replace("backup_","").replace("safety_","").replace(".json",""));if(!ts||isNaN(ts))return f;return new Date(ts).toLocaleString("pt-BR",{timeZone:TZ,day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});};
 
   const exportarJSON=()=>{
     const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
@@ -8708,7 +8709,7 @@ ${prodsHtml?`<div class="field" style="margin-bottom:8px;"><div class="lbl">Prod
 ${e.itens?`<div class="field" style="margin:12px 0;"><div class="lbl">Descricao</div><div class="val" style="font-style:italic;">${e.itens}</div></div>`:""}
 ${e.obs?`<div class="field"><div class="lbl">Observacoes</div><div class="val" style="font-style:italic;">${e.obs}</div></div>`:""}
 <button class="no-print" onclick="window.print()" style="margin:16px 0;padding:8px 24px;font-size:14px;cursor:pointer;">Imprimir</button>
-<div class="footer">Pedido em: ${e.criadoEm?new Date(e.criadoEm).toLocaleDateString("pt-BR"):""}</div>
+<div class="footer">Pedido em: ${e.criadoEm?new Date(e.criadoEm).toLocaleDateString("pt-BR",{timeZone:TZ}):""}</div>
 <div class="assinatura">Ciente: ___________________________ &nbsp;&nbsp; Data: ___/___/______</div>
 </body></html>`;
   const w=window.open("","_blank");
@@ -9129,7 +9130,7 @@ function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             {parsePreco(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parsePreco(e.valor))}</div>}
             {pagInfo&&<div style={{fontSize:11,color:"#a3e635",marginTop:2}}>{pagInfo}</div>}
             {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
-            <div style={{fontSize:9,color:"#444",marginTop:4}}>{e.atualizadoEm?`Finalizado em ${new Date(e.atualizadoEm).toLocaleDateString("pt-BR")}`:""}</div>
+            <div style={{fontSize:9,color:"#444",marginTop:4}}>{e.atualizadoEm?`Finalizado em ${new Date(e.atualizadoEm).toLocaleDateString("pt-BR",{timeZone:TZ})}`:""}</div>
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
             <button onClick={()=>abrirWhatsApp(e,empresa)} title="WhatsApp" style={{...btnAcao,border:"1px solid #25d36644",color:"#25d366"}}>📱</button>
