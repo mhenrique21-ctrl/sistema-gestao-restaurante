@@ -2384,21 +2384,25 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(!nfe.chNFe||nfe.chNFe.length!==44){alert("Chave de acesso não disponível para esta NF-e.");return;}
     setFetchingChave(nfe.chNFe);
     try{
-      const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
+      // Se já foi manifestada anteriormente, busca direto sem re-manifestar (mais rápido)
+      const endpoint=nfe.jaManifestada?"/api/nfe-fetch-chave":"/api/nfe-manifestar";
+      const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
       const ct=res.headers.get("content-type")||"";
       if(!ct.includes("application/json")){
-        throw new Error("Tempo de resposta excedido. A manifestação foi enviada ao SEFAZ. Tente buscar novamente em 5-10 minutos.");
+        // Timeout: marcar como manifestada para próxima tentativa usar fetch direto
+        setSefazList(l=>l.map((n,j)=>j===i?{...n,jaManifestada:true}:n));
+        throw new Error("Tempo de resposta excedido. Manifestação enviada — aguarde alguns minutos e tente novamente.");
       }
       const data=await res.json();
       if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
-      if(data.pendente){
-        alert("⏳ "+data.message);
+      if(data.pendente||(data.itens||[]).length===0){
+        // Marcar como manifestada e manter em resumo para retry fácil
+        setSefazList(l=>l.map((n,j)=>j===i?{...n,jaManifestada:true}:n));
+        alert("⏳ "+(data.message||"SEFAZ ainda processando. Aguarde alguns minutos e clique em 'Buscar' novamente."));
       }else if((data.itens||[]).length>0){
-        setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
-      }else{
-        alert("⏳ SEFAZ retornou a NF-e sem produtos. A manifestação foi enviada — tente buscar novamente em 5-10 minutos.");
+        setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo",jaManifestada:false}:n));
       }
-    }catch(e:any){alert("⏳ "+e.message);}
+    }catch(e:any){alert("⚠️ "+e.message);}
     finally{setFetchingChave(null);}
   };
 
@@ -2817,7 +2821,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         {sefazList.map((nfe,i)=>(
           <div key={nfe.nsu||i} style={{padding:"10px",background:"var(--bg4)",borderRadius:12,border:"1px solid #1e2235",marginBottom:8}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-              <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{nfe.fornecedor?.nome||"Fornecedor"}</span>
+              <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{(nfe.fornecedor?.nome||"Fornecedor").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")}</span>
               <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(nfe.totalCompra)}</span>
             </div>
             {(()=>{
@@ -2832,7 +2836,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 {fmtDate(nfe.data)} · {isFakeItem?0:(nfe.itens||[]).length} produto(s)
                 {(nfe.modelo||"55")==="65"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:9,marginLeft:4,padding:"1px 5px"}}>NFC-e</span>}
                 {isResumo&&fetchingChave===nfe.chNFe&&<span style={{color:"#7c8fff",marginLeft:6}}>⏳ buscando completa...</span>}
-                {isResumo&&fetchingChave!==nfe.chNFe&&<span style={{color:"#f59e0b",marginLeft:6}} title="Clique em 'Buscar produtos' para tentar obter a NF-e completa">⚠️ resumo — clique para buscar</span>}
+                {isResumo&&fetchingChave!==nfe.chNFe&&<span style={{color:nfe.jaManifestada?"#a78bfa":"#f59e0b",marginLeft:6}} title="Clique em 'Buscar' para tentar obter a NF-e completa">{nfe.jaManifestada?"⟳ aguardando SEFAZ — clique para buscar":"⚠️ resumo — clique para buscar"}</span>}
               </div>
               {(nfe.formaPag||nfe.dVenc)&&<div style={{fontSize:11,marginBottom:6,display:"flex",gap:8,flexWrap:"wrap" as const}}>
                 {nfe.formaPag&&<span style={{background:"#1a2040",border:"1px solid #2a3a6a",borderRadius:5,padding:"2px 8px",color:"#7c8fff"}}>💳 {nfe.formaPag}</span>}
@@ -2861,7 +2865,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               {canBuscar&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)}
                 disabled={fetchingChave===nfe.chNFe}
                 style={{background:"#1a2235",color:"#7c8fff",border:"1px solid #2a3a6a",padding:"8px 12px",fontSize:12,flex:1}}>
-                {fetchingChave===nfe.chNFe?"⏳ Manifestando e buscando...":"🔍 Buscar produtos (SEFAZ)"}
+                {fetchingChave===nfe.chNFe?(nfe.jaManifestada?"⏳ Buscando XML...":"⏳ Manifestando e buscando..."):(nfe.jaManifestada?"⟳ Tentar buscar XML novamente":"🔍 Buscar produtos (SEFAZ)")}
               </button>}
               {nfe.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfe.rawXml,nfe.nNF||"",nfe.fornecedor?.nome||"")}
                 style={{background:"#1a2030",color:"#4ade80",border:"1px solid #1a3a20",padding:"8px 12px",fontSize:12}}>

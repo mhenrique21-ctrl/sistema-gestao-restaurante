@@ -146,9 +146,12 @@ function saveNsu(emp, nsu) {
   fs.writeFileSync(f, JSON.stringify(m));
 }
 
+function decodeXmlEntities(s) {
+  return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCharCode(parseInt(h,16)));
+}
 function getTag(xml, tag) {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
-  return m ? m[1].trim() : '';
+  return m ? decodeXmlEntities(m[1].trim()) : '';
 }
 
 function getAllTags(xml, tag) {
@@ -1012,31 +1015,28 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         } else {
           console.log(`[SEFAZ] NFC-e detectada — pulando manifestação`);
         }
-        const retryDelays = jaManifestada ? [3000, 6000, 10000] : [5000, 8000, 12000];
+        // Única tentativa após breve espera (evita timeout HTTP do browser)
+        const waitMs = jaManifestada ? 2000 : 3000;
+        console.log(`[SEFAZ] Aguardando ${waitMs/1000}s antes de buscar XML...`);
+        await delay(waitMs);
         let result = null;
-        let lastErr = null;
-        for (let t = 0; t < retryDelays.length; t++) {
-          console.log(`[SEFAZ] Aguardando ${retryDelays[t]/1000}s antes da tentativa ${t+1}/${retryDelays.length}...`);
-          await delay(retryDelays[t]);
-          try {
-            result = await sefazFetchByChave(empresa, chNFe);
-            if ((result.itens || []).length > 0) {
-              console.log(`[SEFAZ] ✅ NF-e ...${chNFe.slice(-8)} completa obtida (${result.itens.length} itens, tentativa ${t+1})`);
-              break;
-            }
+        try {
+          result = await sefazFetchByChave(empresa, chNFe);
+          if ((result.itens || []).length > 0) {
+            console.log(`[SEFAZ] ✅ NF-e ...${chNFe.slice(-8)} completa (${result.itens.length} itens)`);
+          } else {
             result = null;
-          } catch (e2) {
-            lastErr = e2;
-            console.log(`[SEFAZ] Tentativa ${t+1}/${retryDelays.length}: ${e2.message}`);
           }
+        } catch (e2) {
+          console.log(`[SEFAZ] Busca após manifestação: ${e2.message}`);
         }
         if (!result || (result.itens || []).length === 0) {
           const msg = jaManifestada
-            ? 'NF-e já manifestada mas SEFAZ ainda não disponibilizou o XML completo. Tente novamente em 5-10 minutos.'
-            : 'Manifestação enviada ao SEFAZ. O XML completo pode demorar alguns minutos para ficar disponível. Tente novamente em 5-10 minutos.';
+            ? 'NF-e já manifestada. SEFAZ ainda não disponibilizou o XML completo — tente novamente em alguns minutos.'
+            : 'Manifestação enviada. O XML completo pode levar minutos para ficar disponível — tente novamente em breve.';
           res.setHeader('Content-Type', 'application/json');
           res.writeHead(200);
-          res.end(JSON.stringify({ itens: [], tipoDoc: 'resumo', pendente: true, message: msg, manifestacao: manifestResult }));
+          res.end(JSON.stringify({ itens: [], tipoDoc: 'resumo', pendente: true, jaManifestada: true, message: msg, manifestacao: manifestResult }));
           return;
         }
         res.setHeader('Content-Type', 'application/json');
