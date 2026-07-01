@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 ];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
-  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[],
+  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[],
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
@@ -437,6 +437,7 @@ const migrateDb=(m:any)=>{
     if(!m[e].consumacoes)m[e].consumacoes=[];
     if(!m[e].encargos)m[e].encargos=[];
     if(!m[e].encomendas)m[e].encomendas=[];
+    if(!m[e].anotacoes)m[e].anotacoes=[];
     if(!m[e].normalizacoes)m[e].normalizacoes=[];
     if(!m[e].iconesProducao)m[e].iconesProducao={};
     if(!m[e].movEstoque)m[e].movEstoque=[];
@@ -802,6 +803,7 @@ export default function App() {
     ]},
     {id:"agenda",label:"Agenda",icon:"📅",children:[
       {id:"agenda-enc",label:"Encomendas",icon:"📦",sub:"encomendas"},
+      {id:"agenda-ann",label:"Anotações",icon:"📝",sub:"anotacoes"},
     ]},
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
@@ -1135,6 +1137,8 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
     setDb((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.id===id?{...c,status:"pago",atualizadoEm:new Date().toISOString()}:c)}));
   };
   const irParaFinanceiro=()=>{setPendingSub("contas");onNavigate("financeiro");};
+  const irParaAgenda=()=>{setPendingSub("anotacoes");onNavigate("agenda");};
+  const anotLembrete=(db.anotacoes||[]).filter((a:any)=>a.urgente||!a.dataLembrete||a.dataLembrete<=hj).sort((a:any,b:any)=>a.urgente&&!b.urgente?-1:1);
 
   const periodoLabel=periodo==="semana"?"Esta Semana":periodo==="mes"?"Este Mês":`${fmtDate(customIni)} — ${fmtDate(customFim)}`;
   const btnStyle=(p:string)=>({padding:"6px 14px",fontSize:12,fontWeight:periodo===p?700:400,
@@ -1182,6 +1186,25 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
     </div>
 
     {/* Seletor de Período */}
+    {/* Lembretes (Agenda > Anotacoes) */}
+    {anotLembrete.length>0&&<div className="card" style={{marginBottom:14,border:"1px solid #1a3020",background:"var(--bg3)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <div className="section-title" style={{margin:0}}>Lembretes</div>
+        <button onClick={irParaAgenda} style={{background:"none",border:"1px solid #2a3260",borderRadius:8,color:"#7c8fff",fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todos</button>
+      </div>
+      {anotLembrete.map((a:any)=>{
+        const venceu=a.dataLembrete&&a.dataLembrete<hj;
+        const hjNote=a.dataLembrete===hj;
+        return <div key={a.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)",fontSize:12,display:"flex",gap:8,alignItems:"flex-start"}}>
+          {a.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:6,padding:"1px 5px",fontWeight:800,flexShrink:0,marginTop:2}}>!</span>}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{a.texto}</div>
+            {a.dataLembrete&&<div style={{fontSize:10,color:venceu?"#ff5c7a":hjNote?"#fbbf24":"#555",marginTop:1}}>{venceu?"Venceu em":hjNote?"Hoje —":""} {fmtDate(a.dataLembrete)}</div>}
+          </div>
+        </div>;
+      })}
+    </div>}
+
     <div className="card" style={{marginBottom:14}}>
       <div style={{display:"flex",gap:6,marginBottom:periodo==="custom"?10:0,flexWrap:"wrap" as const}}>
         <button onClick={()=>setPeriodo("semana")} style={btnStyle("semana")}>Semana</button>
@@ -8612,47 +8635,80 @@ function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:a
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
 
   return <div style={{padding:"0 0 24px 0"}}>
-    <div style={{padding:"12px 16px 0",fontWeight:800,fontSize:17,letterSpacing:0.2}}>📅 Agenda</div>
+    <div style={{padding:"12px 16px 0",fontWeight:800,fontSize:17,letterSpacing:0.2}}>Agenda</div>
     <div style={{display:"flex",gap:6,padding:"10px 14px 0",overflowX:"auto",scrollbarWidth:"none" as any}}>
-      {([["encomendas","📦 Encomendas"]] as [string,string][]).map(([k,l])=>(
+      {([["encomendas","Encomendas"],["anotacoes","Anotacoes"]] as [string,string][]).map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)}
           style={{flexShrink:0,padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:subTab===k?700:500,
             background:subTab===k?"#7c8fff":"var(--bg3)",color:subTab===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
-          {l}
+          {k==="encomendas"?"📦 Encomendas":"📝 Anotações"}
         </button>
       ))}
     </div>
     {subTab==="encomendas"&&<EncomendasPanel db={db} setDb={setDb} empresa={empresa}/>}
+    {subTab==="anotacoes"&&<AnotacoesPanel db={db} setDb={setDb} empresa={empresa}/>}
   </div>;
 }
 
 function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [form,setForm]=useState({...ENC_EMPTY});
+  const [prodsSel,setProdsSel]=useState<any[]>([]);
+  const [prodAdicionar,setProdAdicionar]=useState({id:"",qtd:"1"});
   const [editId,setEditId]=useState<string|null>(null);
   const [filtroStatus,setFiltroStatus]=useState("todos");
   const [showForm,setShowForm]=useState(false);
 
   const sv=(fn:(d:any)=>any)=>setDb((s:any)=>{const d={...s};d[empresa]=fn(d[empresa]||{});return d;});
   const enc:any[]=(db.encomendas||[]);
+  const prodsCatalog:any[]=(db.produtosProducao||[]);
 
   const save=()=>{
     const now=new Date().toISOString();
     const val=form.valor.replace(/[^\d,]/g,"").replace(",",".");
     if(!form.cliente.trim()||!form.dataEntrega)return;
     if(editId){
-      sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===editId?{...e,...form,valor:val,atualizadoEm:now}:e)}));
+      sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===editId?{...e,...form,valor:val,produtos:prodsSel,atualizadoEm:now}:e)}));
       setEditId(null);
     }else{
-      sv(d=>({...d,encomendas:[{id:uid(),...form,valor:val,criadoEm:now},...(d.encomendas||[])]}));
+      sv(d=>({...d,encomendas:[{id:uid(),...form,valor:val,produtos:prodsSel,criadoEm:now},...(d.encomendas||[])]}));
     }
-    setForm({...ENC_EMPTY});setShowForm(false);
+    setForm({...ENC_EMPTY});setProdsSel([]);setShowForm(false);
   };
   const startEdit=(e:any)=>{
     setForm({cliente:e.cliente||"",telefone:e.telefone||"",dataEntrega:e.dataEntrega||today(),horaEntrega:e.horaEntrega||"",itens:e.itens||"",valor:e.valor?fmtMoney(parseFloat(e.valor)):"",status:e.status||"pendente",obs:e.obs||""});
+    setProdsSel(e.produtos||[]);
     setEditId(e.id);setShowForm(true);
   };
   const del=(id:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).filter((e:any)=>e.id!==id)}));
   const setStatus=(id:string,status:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===id?{...e,status,atualizadoEm:new Date().toISOString()}:e)}));
+
+  const addProd=()=>{
+    const p=prodsCatalog.find((x:any)=>x.id===prodAdicionar.id);
+    if(!p)return;
+    const qtd=parseFloat(prodAdicionar.qtd)||1;
+    const existe=prodsSel.findIndex((x:any)=>x.id===p.id);
+    if(existe>=0){setProdsSel(ps=>ps.map((x:any,i:number)=>i===existe?{...x,qtd}:x));}
+    else{setProdsSel(ps=>[...ps,{id:p.id,nome:p.nome,unidade:p.unidade||"un",qtd}]);}
+    setProdAdicionar({id:"",qtd:"1"});
+  };
+  const remProd=(id:string)=>setProdsSel(ps=>ps.filter((x:any)=>x.id!==id));
+
+  const compartilharWhatsApp=(e:any)=>{
+    const prods=(e.produtos||[]).map((p:any)=>`• ${p.qtd}x ${p.nome}${p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}`).join("\n");
+    const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
+    let msg=`📦 *ENCOMENDA — ${empresa}*\n`;
+    msg+=`━━━━━━━━━━\n`;
+    msg+=`👤 *Cliente:* ${e.cliente}\n`;
+    if(e.telefone)msg+=`📞 *Telefone:* ${e.telefone}\n`;
+    msg+=`📅 *Entrega:* ${fmtDate(e.dataEntrega)}${e.horaEntrega?` às ${e.horaEntrega}`:""}\n`;
+    msg+=`🔖 *Status:* ${st.label}\n`;
+    if(prods){msg+=`━━━━━━━━━━\n📋 *Produtos:*\n${prods}\n`;}
+    if(e.itens){msg+=`━━━━━━━━━━\n📝 *Descricao:*\n${e.itens}\n`;}
+    if(e.valor&&parseFloat(e.valor)>0)msg+=`💰 *Valor:* ${fmtMoney(parseFloat(e.valor))}\n`;
+    if(e.obs)msg+=`🗒 *Obs:* ${e.obs}\n`;
+    msg+=`━━━━━━━━━━\n_Encomenda via Sistema ${empresa}_`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,"_blank");
+  };
 
   const hoje=today();
   const lista=[...enc].sort((a:any,b:any)=>a.dataEntrega>b.dataEntrega?1:-1);
@@ -8677,13 +8733,20 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <div style={{fontSize:11,color:atras?"#ff9aa8":"var(--text2)",marginTop:3}}>
             📅 {fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}
           </div>
-          {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.4}}>{e.itens}</div>}
+          {(e.produtos||[]).length>0&&<div style={{marginTop:5}}>
+            {(e.produtos||[]).map((p:any,i:number)=>(
+              <div key={i} style={{fontSize:11,color:"var(--text2)"}}>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</div>
+            ))}
+          </div>}
+          {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.4,fontStyle:"italic" as const}}>{e.itens}</div>}
           {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
           {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
         </div>
         <div style={{display:"flex",flexDirection:"column" as const,gap:4,alignItems:"flex-end",flexShrink:0}}>
           <span style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,borderRadius:10,padding:"2px 8px"}}>{st.label}</span>
           <div style={{display:"flex",gap:3,marginTop:4}}>
+            <button onClick={()=>compartilharWhatsApp(e)} title="Compartilhar no WhatsApp"
+              style={{background:"none",border:"1px solid #25d36644",borderRadius:6,color:"#25d366",cursor:"pointer",fontSize:13,padding:"3px 6px"}}>📱</button>
             <button onClick={()=>startEdit(e)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px"}}>✏️</button>
             <button onClick={()=>del(e.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>×</button>
           </div>
@@ -8701,7 +8764,6 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   };
 
   return <div style={{padding:"12px 14px"}}>
-    {/* Filtros */}
     <div style={{display:"flex",gap:5,overflowX:"auto",scrollbarWidth:"none" as any,marginBottom:12}}>
       {[["todos","Todas"],["pendente","Pendente"],["confirmado","Confirmado"],["pronto","Pronto"],["entregue","Entregue"],["cancelado","Cancelado"]].map(([k,l])=>(
         <button key={k} onClick={()=>setFiltroStatus(k)}
@@ -8712,15 +8774,11 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       ))}
     </div>
 
-    {/* Botão nova encomenda */}
-    {!showForm&&<button onClick={()=>{setForm({...ENC_EMPTY});setEditId(null);setShowForm(true);}}
-      className="btn" style={{width:"100%",marginBottom:14}}>
-      ＋ Nova Encomenda
-    </button>}
+    {!showForm&&<button onClick={()=>{setForm({...ENC_EMPTY});setProdsSel([]);setEditId(null);setShowForm(true);}}
+      className="btn" style={{width:"100%",marginBottom:14}}>+ Nova Encomenda</button>}
 
-    {/* Formulário */}
     {showForm&&<div className="card" style={{marginBottom:14}}>
-      <div style={{fontWeight:700,marginBottom:10,fontSize:13}}>{editId?"✏️ Editar Encomenda":"📦 Nova Encomenda"}</div>
+      <div style={{fontWeight:700,marginBottom:10,fontSize:13}}>{editId?"Editar Encomenda":"Nova Encomenda"}</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
         <div style={{gridColumn:"1/-1"}}>
           <label className="label">Cliente *</label>
@@ -8745,46 +8803,145 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <input className="inp" type="time" value={form.horaEntrega} onChange={e=>setF("horaEntrega",e.target.value)} style={{marginBottom:0}}/>
         </div>
         <div style={{gridColumn:"1/-1"}}>
-          <label className="label">Itens / Descrição</label>
-          <textarea className="inp" placeholder="Ex: 2x torta de morango, 1x bolo de chocolate..." value={form.itens} onChange={e=>setF("itens",e.target.value)} rows={2} style={{marginBottom:0,resize:"vertical" as const}}/>
+          <label className="label">Produtos do Cardapio</label>
+          {prodsSel.length>0&&<div style={{marginBottom:6,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>
+            {prodsSel.map((p:any)=>(
+              <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",fontSize:12}}>
+                <span style={{flex:1}}>{p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>
+                <button onClick={()=>remProd(p.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,lineHeight:1,padding:"0 2px"}}>×</button>
+              </div>
+            ))}
+          </div>}
+          {prodsCatalog.length>0?<div style={{display:"flex",gap:5}}>
+            <select className="inp" style={{flex:1,marginBottom:0}} value={prodAdicionar.id} onChange={e=>setProdAdicionar(p=>({...p,id:e.target.value}))}>
+              <option value="">Selecione produto...</option>
+              {prodsCatalog.map((p:any)=><option key={p.id} value={p.id}>{p.nome}{p.cat?` — ${p.cat}`:""}</option>)}
+            </select>
+            <input type="number" min="0.5" step="0.5" value={prodAdicionar.qtd} onChange={e=>setProdAdicionar(p=>({...p,qtd:e.target.value}))}
+              className="inp" style={{width:52,marginBottom:0,textAlign:"center" as const}}/>
+            <button className="btn-sec" onClick={addProd} style={{flexShrink:0,padding:"4px 10px",fontSize:12}}>+ Add</button>
+          </div>:<div style={{fontSize:11,color:"var(--text3)",padding:"4px 0"}}>Cadastre produtos em Producao para selecioná-los aqui.</div>}
+        </div>
+        <div style={{gridColumn:"1/-1"}}>
+          <label className="label">Descricao adicional</label>
+          <textarea className="inp" placeholder="Detalhes extras, preferências..." value={form.itens} onChange={e=>setF("itens",e.target.value)} rows={2} style={{marginBottom:0,resize:"vertical" as const}}/>
         </div>
         <div>
           <label className="label">Valor</label>
           <MoneyInput value={form.valor} onChange={v=>setF("valor",v)} placeholder="R$ 0,00" style={{marginBottom:0}}/>
         </div>
         <div>
-          <label className="label">Observações</label>
+          <label className="label">Observacoes</label>
           <input className="inp" placeholder="Obs..." value={form.obs} onChange={e=>setF("obs",e.target.value)} style={{marginBottom:0}}/>
         </div>
       </div>
       <div style={{display:"flex",gap:8}}>
         <button className="btn" onClick={save} style={{flex:1}}>{editId?"Salvar":"Cadastrar"}</button>
-        <button className="btn-sec" onClick={()=>{setShowForm(false);setEditId(null);setForm({...ENC_EMPTY});}} style={{flex:1}}>Cancelar</button>
+        <button className="btn-sec" onClick={()=>{setShowForm(false);setEditId(null);setForm({...ENC_EMPTY});setProdsSel([]);}} style={{flex:1}}>Cancelar</button>
       </div>
     </div>}
 
-    {/* Listas */}
     {enc.length===0&&!showForm&&<div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}>
       <div style={{fontSize:32,marginBottom:6}}>📦</div>
       <div style={{fontSize:13}}>Nenhuma encomenda cadastrada</div>
     </div>}
 
     {atrasadas.length>0&&<>
-      <div style={{fontSize:11,fontWeight:800,color:"#ff5c7a",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6}}>⚠️ Atrasadas ({atrasadas.length})</div>
+      <div style={{fontSize:11,fontWeight:800,color:"#ff5c7a",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6}}>Atrasadas ({atrasadas.length})</div>
       {atrasadas.map((e:any)=><EncCard key={e.id} e={e}/>)}
     </>}
-
     {proximas.length>0&&<>
-      <div style={{fontSize:11,fontWeight:800,color:"#7c8fff",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6,marginTop:atrasadas.length>0?12:0}}>📋 Próximas ({proximas.length})</div>
+      <div style={{fontSize:11,fontWeight:800,color:"#7c8fff",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6,marginTop:atrasadas.length>0?12:0}}>Proximas ({proximas.length})</div>
       {proximas.map((e:any)=><EncCard key={e.id} e={e}/>)}
     </>}
-
     {concluidas.length>0&&<details style={{marginTop:12}}>
       <summary style={{fontSize:11,fontWeight:700,color:"var(--text2)",cursor:"pointer",userSelect:"none" as const,marginBottom:6}}>
-        Concluídas / Canceladas ({concluidas.length})
+        Concluidas / Canceladas ({concluidas.length})
       </summary>
       {concluidas.map((e:any)=><EncCard key={e.id} e={e}/>)}
     </details>}
+  </div>;
+}
+
+function AnotacoesPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
+  const [form,setForm]=useState({texto:"",dataLembrete:"",urgente:false});
+  const [editId,setEditId]=useState<string|null>(null);
+  const [showForm,setShowForm]=useState(false);
+
+  const sv=(fn:(d:any)=>any)=>setDb((s:any)=>{const d={...s};d[empresa]=fn(d[empresa]||{});return d;});
+  const anotacoes:any[]=(db.anotacoes||[]);
+
+  const save=()=>{
+    if(!form.texto.trim())return;
+    const now=new Date().toISOString();
+    if(editId){sv(d=>({...d,anotacoes:(d.anotacoes||[]).map((a:any)=>a.id===editId?{...a,...form,atualizadoEm:now}:a)}));setEditId(null);}
+    else{sv(d=>({...d,anotacoes:[{id:uid(),...form,criadoEm:now},...(d.anotacoes||[])]}));}
+    setForm({texto:"",dataLembrete:"",urgente:false});setShowForm(false);
+  };
+  const del=(id:string)=>sv(d=>({...d,anotacoes:(d.anotacoes||[]).filter((a:any)=>a.id!==id)}));
+  const startEdit=(a:any)=>{setForm({texto:a.texto||"",dataLembrete:a.dataLembrete||"",urgente:!!a.urgente});setEditId(a.id);setShowForm(true);};
+
+  const hoje=today();
+  const sorted=[...anotacoes].sort((a:any,b:any)=>{
+    if(!!a.urgente!==!!b.urgente)return a.urgente?-1:1;
+    if(a.dataLembrete&&b.dataLembrete)return a.dataLembrete<b.dataLembrete?-1:1;
+    if(a.dataLembrete)return -1;if(b.dataLembrete)return 1;
+    return (b.criadoEm||"").localeCompare(a.criadoEm||"");
+  });
+
+  return <div style={{padding:"12px 14px"}}>
+    {!showForm&&<button onClick={()=>{setForm({texto:"",dataLembrete:"",urgente:false});setEditId(null);setShowForm(true);}}
+      className="btn" style={{width:"100%",marginBottom:14}}>+ Nova Anotacao</button>}
+
+    {showForm&&<div className="card" style={{marginBottom:14}}>
+      <div style={{fontWeight:700,marginBottom:8,fontSize:13}}>{editId?"Editar Anotacao":"Nova Anotacao"}</div>
+      <label className="label">Texto / Lembrete</label>
+      <textarea className="inp" placeholder="Ex: Pagar fornecedor X até dia 10, lembrar de ligar para cliente..." value={form.texto}
+        onChange={e=>setForm(f=>({...f,texto:e.target.value}))} rows={3} style={{marginBottom:8,resize:"vertical" as const}}/>
+      <div style={{display:"flex",gap:8,alignItems:"flex-end",marginBottom:8}}>
+        <div style={{flex:1}}>
+          <label className="label">Data lembrete (opcional)</label>
+          <input className="inp" type="date" value={form.dataLembrete} onChange={e=>setForm(f=>({...f,dataLembrete:e.target.value}))} style={{marginBottom:0}}/>
+        </div>
+        <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:3,paddingBottom:4}}>
+          <span style={{fontSize:10,color:"var(--text2)",fontWeight:600}}>Urgente</span>
+          <button onClick={()=>setForm(f=>({...f,urgente:!f.urgente}))}
+            style={{width:40,height:22,borderRadius:11,border:"none",cursor:"pointer",background:form.urgente?"#ff5c7a":"var(--border2)",transition:"all .2s",position:"relative" as const}}>
+            <div style={{width:16,height:16,borderRadius:8,background:"#fff",position:"absolute" as const,top:3,left:form.urgente?21:3,transition:"left .2s"}}/>
+          </button>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" onClick={save} style={{flex:1}}>{editId?"Salvar":"Criar"}</button>
+        <button className="btn-sec" onClick={()=>{setShowForm(false);setEditId(null);setForm({texto:"",dataLembrete:"",urgente:false});}} style={{flex:1}}>Cancelar</button>
+      </div>
+    </div>}
+
+    {anotacoes.length===0&&!showForm&&<div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}>
+      <div style={{fontSize:32,marginBottom:6}}>📝</div>
+      <div style={{fontSize:13}}>Use anotacoes para lembretes de contas a pagar e recados.</div>
+    </div>}
+
+    {sorted.map((a:any)=>{
+      const venceu=a.dataLembrete&&a.dataLembrete<hoje;
+      const hjNote=a.dataLembrete===hoje;
+      return <div key={a.id} style={{background:a.urgente?"#1a0808":"var(--bg3)",borderRadius:10,
+        border:`1px solid ${venceu?"#ff5c7a44":a.urgente?"#ff5c7a22":"var(--border)"}`,padding:"10px 12px",marginBottom:8}}>
+        <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+          <div style={{flex:1,minWidth:0}}>
+            {a.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800,marginBottom:4,display:"inline-block"}}>URGENTE</span>}
+            <div style={{fontSize:13,lineHeight:1.4,whiteSpace:"pre-wrap" as const}}>{a.texto}</div>
+            {a.dataLembrete&&<div style={{fontSize:10,marginTop:4,fontWeight:600,color:venceu?"#ff5c7a":hjNote?"#fbbf24":"var(--text2)"}}>
+              {venceu?"Venceu em":hjNote?"Hoje —":""} {fmtDate(a.dataLembrete)}
+            </div>}
+          </div>
+          <div style={{display:"flex",gap:3,flexShrink:0}}>
+            <button onClick={()=>startEdit(a)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px"}}>✏️</button>
+            <button onClick={()=>del(a.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>×</button>
+          </div>
+        </div>
+      </div>;
+    })}
   </div>;
 }
 
