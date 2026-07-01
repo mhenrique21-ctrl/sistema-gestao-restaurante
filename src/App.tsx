@@ -8659,7 +8659,12 @@ function encWhatsAppMsg(e:any,empresa:string):string{
   msg+=`━━━━━━━━━━\n_Encomenda via Sistema ${empresa}_`;
   return msg;
 }
-function abrirWhatsApp(e:any,empresa:string){window.open(`https://wa.me/?text=${encodeURIComponent(encWhatsAppMsg(e,empresa))}`,"_blank");}
+function abrirWhatsApp(e:any,empresa:string){
+  const tel=String(e.telefone||"").replace(/[^\d]/g,"");
+  const num=tel?(tel.startsWith("55")?tel:"55"+tel):"";
+  const url=`https://wa.me/${num}?text=${encodeURIComponent(encWhatsAppMsg(e,empresa))}`;
+  window.open(url,"_blank");
+}
 
 function imprimirEncomenda(e:any,empresa:string){
   const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
