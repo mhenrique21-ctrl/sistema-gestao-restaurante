@@ -8653,7 +8653,10 @@ function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:a
 function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const [form,setForm]=useState({...ENC_EMPTY});
   const [prodsSel,setProdsSel]=useState<any[]>([]);
-  const [prodAdicionar,setProdAdicionar]=useState({id:"",qtd:"1"});
+  const [buscaProd,setBuscaProd]=useState("");
+  const [showNovoProd,setShowNovoProd]=useState(false);
+  const [novoProdForm,setNovoProdForm]=useState({nome:"",cat:"",unidade:"un"});
+  const [encRecemSalva,setEncRecemSalva]=useState<any>(null);
   const [editId,setEditId]=useState<string|null>(null);
   const [filtroStatus,setFiltroStatus]=useState("todos");
   const [showForm,setShowForm]=useState(false);
@@ -8661,6 +8664,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const sv=(fn:(d:any)=>any)=>setDb((s:any)=>{const d={...s};d[empresa]=fn(d[empresa]||{});return d;});
   const enc:any[]=(db.encomendas||[]);
   const prodsCatalog:any[]=(db.produtosProducao||[]);
+  const cats:string[]=(db.categoriasProducao||[]);
 
   const save=()=>{
     const now=new Date().toISOString();
@@ -8668,30 +8672,41 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     if(!form.cliente.trim()||!form.dataEntrega)return;
     if(editId){
       sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===editId?{...e,...form,valor:val,produtos:prodsSel,atualizadoEm:now}:e)}));
-      setEditId(null);
+      setEditId(null);setEncRecemSalva(null);
     }else{
-      sv(d=>({...d,encomendas:[{id:uid(),...form,valor:val,produtos:prodsSel,criadoEm:now},...(d.encomendas||[])]}));
+      const novaEnc={id:uid(),...form,valor:val,produtos:prodsSel,criadoEm:now};
+      sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])]}));
+      setEncRecemSalva(novaEnc);
     }
-    setForm({...ENC_EMPTY});setProdsSel([]);setShowForm(false);
+    setForm({...ENC_EMPTY});setProdsSel([]);setBuscaProd("");setShowForm(false);
   };
+
   const startEdit=(e:any)=>{
     setForm({cliente:e.cliente||"",telefone:e.telefone||"",dataEntrega:e.dataEntrega||today(),horaEntrega:e.horaEntrega||"",itens:e.itens||"",valor:e.valor?fmtMoney(parseFloat(e.valor)):"",status:e.status||"pendente",obs:e.obs||""});
-    setProdsSel(e.produtos||[]);
-    setEditId(e.id);setShowForm(true);
+    setProdsSel(e.produtos||[]);setEditId(e.id);setShowForm(true);setEncRecemSalva(null);
   };
   const del=(id:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).filter((e:any)=>e.id!==id)}));
   const setStatus=(id:string,status:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===id?{...e,status,atualizadoEm:new Date().toISOString()}:e)}));
 
-  const addProd=()=>{
-    const p=prodsCatalog.find((x:any)=>x.id===prodAdicionar.id);
+  const addProdPorId=(id:string)=>{
+    const p=prodsCatalog.find((x:any)=>x.id===id);
     if(!p)return;
-    const qtd=parseFloat(prodAdicionar.qtd)||1;
     const existe=prodsSel.findIndex((x:any)=>x.id===p.id);
-    if(existe>=0){setProdsSel(ps=>ps.map((x:any,i:number)=>i===existe?{...x,qtd}:x));}
-    else{setProdsSel(ps=>[...ps,{id:p.id,nome:p.nome,unidade:p.unidade||"un",qtd}]);}
-    setProdAdicionar({id:"",qtd:"1"});
+    if(existe>=0){setProdsSel(ps=>ps.map((x:any,i:number)=>i===existe?{...x,qtd:parseFloat(((x.qtd||1)+1).toFixed(1))}:x));}
+    else{setProdsSel(ps=>[...ps,{id:p.id,nome:p.nome,unidade:p.unidade||"un",qtd:1}]);}
+    setBuscaProd("");
   };
   const remProd=(id:string)=>setProdsSel(ps=>ps.filter((x:any)=>x.id!==id));
+  const updateQtd=(id:string,qtd:number)=>setProdsSel(ps=>ps.map((x:any)=>x.id===id?{...x,qtd}:x));
+
+  const salvarNovoProd=()=>{
+    const nome=novoProdForm.nome.trim();
+    if(!nome)return;
+    const newProd={id:uid(),nome,cat:novoProdForm.cat,unidade:novoProdForm.unidade};
+    sv(d=>({...d,produtosProducao:[...(d.produtosProducao||[]),newProd]}));
+    setProdsSel(ps=>[...ps,{id:newProd.id,nome:newProd.nome,unidade:newProd.unidade,qtd:1}]);
+    setNovoProdForm({nome:"",cat:"",unidade:"un"});setShowNovoProd(false);
+  };
 
   const compartilharWhatsApp=(e:any)=>{
     const prods=(e.produtos||[]).map((p:any)=>`• ${p.qtd}x ${p.nome}${p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}`).join("\n");
@@ -8710,6 +8725,42 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,"_blank");
   };
 
+  const imprimirEncomenda=(e:any)=>{
+    const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
+    const prodsHtml=(e.produtos||[]).map((p:any)=>`<tr><td style="padding:5px 8px;border:1px solid #ddd;">${p.qtd}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.nome}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.unidade||"un"}</td></tr>`).join("");
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Encomenda - ${e.cliente}</title>
+<style>
+  *{box-sizing:border-box;}body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;color:#111;font-size:14px;padding:0 16px;}
+  .header{border-bottom:3px solid #333;padding-bottom:12px;margin-bottom:16px;}
+  .header h1{margin:0;font-size:22px;}.header p{margin:4px 0 0;color:#555;font-size:13px;}
+  .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid #aaa;margin-left:8px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+  .field .lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px;}
+  .field .val{font-size:14px;font-weight:600;}
+  table{width:100%;border-collapse:collapse;margin:12px 0;}
+  th{background:#f5f5f5;padding:6px 8px;text-align:left;border:1px solid #ddd;font-size:12px;font-weight:700;}
+  .footer{margin-top:24px;padding-top:12px;border-top:1px solid #ccc;font-size:11px;color:#888;}
+  .assinatura{margin-top:32px;padding-top:40px;border-top:1px dashed #ccc;text-align:center;font-size:11px;color:#666;}
+  @media print{body{margin:0;}.no-print{display:none;}}
+</style></head><body>
+<div class="header"><h1>ENCOMENDA <span class="badge">${st.label}</span></h1><p>${empresa}</p></div>
+<div class="grid">
+  <div class="field"><div class="lbl">Cliente</div><div class="val">${e.cliente}</div></div>
+  ${e.telefone?`<div class="field"><div class="lbl">Telefone</div><div class="val">${e.telefone}</div></div>`:"<div></div>"}
+  <div class="field"><div class="lbl">Data de Entrega</div><div class="val">${fmtDate(e.dataEntrega)}${e.horaEntrega?` às ${e.horaEntrega}`:""}</div></div>
+  ${e.valor&&parseFloat(e.valor)>0?`<div class="field"><div class="lbl">Valor</div><div class="val" style="color:#1a7a3a;">${fmtMoney(parseFloat(e.valor))}</div></div>`:"<div></div>"}
+</div>
+${prodsHtml?`<div class="field" style="margin-bottom:8px;"><div class="lbl">Produtos</div></div><table><thead><tr><th>Qtd</th><th>Produto</th><th>Un</th></tr></thead><tbody>${prodsHtml}</tbody></table>`:""}
+${e.itens?`<div class="field" style="margin:12px 0;"><div class="lbl">Descricao</div><div class="val" style="font-style:italic;">${e.itens}</div></div>`:""}
+${e.obs?`<div class="field"><div class="lbl">Observacoes</div><div class="val" style="font-style:italic;">${e.obs}</div></div>`:""}
+<button class="no-print" onclick="window.print()" style="margin:16px 0;padding:8px 24px;font-size:14px;cursor:pointer;">Imprimir</button>
+<div class="footer">Pedido em: ${e.criadoEm?new Date(e.criadoEm).toLocaleDateString("pt-BR"):""}</div>
+<div class="assinatura">Ciente: ___________________________ &nbsp;&nbsp;&nbsp; Data: ___/___/______</div>
+</body></html>`;
+    const w=window.open("","_blank");
+    if(w){w.document.write(html);w.document.close();w.focus();w.print();}
+  };
+
   const hoje=today();
   const lista=[...enc].sort((a:any,b:any)=>a.dataEntrega>b.dataEntrega?1:-1);
   const filtrada=filtroStatus==="todos"?lista:lista.filter((e:any)=>e.status===filtroStatus);
@@ -8718,6 +8769,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const concluidas=filtrada.filter((e:any)=>e.status==="entregue"||e.status==="cancelado");
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
+  const prodsFiltrados=buscaProd.trim().length>0?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(buscaProd.toLowerCase())).slice(0,8):[];
 
   const EncCard=({e}:{e:any})=>{
     const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
@@ -8745,10 +8797,12 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         <div style={{display:"flex",flexDirection:"column" as const,gap:4,alignItems:"flex-end",flexShrink:0}}>
           <span style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,borderRadius:10,padding:"2px 8px"}}>{st.label}</span>
           <div style={{display:"flex",gap:3,marginTop:4}}>
-            <button onClick={()=>compartilharWhatsApp(e)} title="Compartilhar no WhatsApp"
-              style={{background:"none",border:"1px solid #25d36644",borderRadius:6,color:"#25d366",cursor:"pointer",fontSize:13,padding:"3px 6px"}}>📱</button>
-            <button onClick={()=>startEdit(e)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px"}}>✏️</button>
-            <button onClick={()=>del(e.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>×</button>
+            <button onClick={()=>compartilharWhatsApp(e)} title="WhatsApp"
+              style={{background:"none",border:"1px solid #25d36644",borderRadius:6,color:"#25d366",cursor:"pointer",fontSize:13,padding:"3px 5px"}}>📱</button>
+            <button onClick={()=>imprimirEncomenda(e)} title="Imprimir"
+              style={{background:"none",border:"1px solid #a78bfa44",borderRadius:6,color:"#a78bfa",cursor:"pointer",fontSize:12,padding:"3px 5px"}}>🖨️</button>
+            <button onClick={()=>startEdit(e)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 5px"}}>✏️</button>
+            <button onClick={()=>del(e.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:12,padding:"3px 5px"}}>×</button>
           </div>
         </div>
       </div>
@@ -8764,6 +8818,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   };
 
   return <div style={{padding:"12px 14px"}}>
+    {/* Filtro de status */}
     <div style={{display:"flex",gap:5,overflowX:"auto",scrollbarWidth:"none" as any,marginBottom:12}}>
       {[["todos","Todas"],["pendente","Pendente"],["confirmado","Confirmado"],["pronto","Pronto"],["entregue","Entregue"],["cancelado","Cancelado"]].map(([k,l])=>(
         <button key={k} onClick={()=>setFiltroStatus(k)}
@@ -8774,9 +8829,22 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       ))}
     </div>
 
-    {!showForm&&<button onClick={()=>{setForm({...ENC_EMPTY});setProdsSel([]);setEditId(null);setShowForm(true);}}
+    {/* Banner pós-cadastro — compartilhar no WhatsApp */}
+    {encRecemSalva&&<div className="card" style={{marginBottom:14,border:"1px solid #25d36644",background:"linear-gradient(135deg,#041a0a,#0a1a10)"}}>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:6,color:"#4ade80"}}>Encomenda cadastrada!</div>
+      <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Deseja compartilhar os detalhes com o cliente no WhatsApp?</div>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" style={{flex:1,background:"#25d366",border:"none"}} onClick={()=>{compartilharWhatsApp(encRecemSalva);setEncRecemSalva(null);}}>
+          📱 Compartilhar no WhatsApp
+        </button>
+        <button className="btn-sec" style={{flex:1}} onClick={()=>setEncRecemSalva(null)}>Fechar</button>
+      </div>
+    </div>}
+
+    {!showForm&&<button onClick={()=>{setForm({...ENC_EMPTY});setProdsSel([]);setEditId(null);setShowForm(true);setEncRecemSalva(null);}}
       className="btn" style={{width:"100%",marginBottom:14}}>+ Nova Encomenda</button>}
 
+    {/* Formulário */}
     {showForm&&<div className="card" style={{marginBottom:14}}>
       <div style={{fontWeight:700,marginBottom:10,fontSize:13}}>{editId?"Editar Encomenda":"Nova Encomenda"}</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
@@ -8802,29 +8870,74 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <label className="label">Hora</label>
           <input className="inp" type="time" value={form.horaEntrega} onChange={e=>setF("horaEntrega",e.target.value)} style={{marginBottom:0}}/>
         </div>
+
+        {/* Seletor de produtos com busca */}
         <div style={{gridColumn:"1/-1"}}>
-          <label className="label">Produtos do Cardapio</label>
-          {prodsSel.length>0&&<div style={{marginBottom:6,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <label className="label" style={{margin:0}}>Produtos do Cardapio</label>
+            <button onClick={()=>setShowNovoProd(v=>!v)}
+              style={{fontSize:10,padding:"2px 8px",borderRadius:8,border:"1px solid #7c8fff44",background:"#7c8fff18",color:"#7c8fff",cursor:"pointer"}}>
+              {showNovoProd?"Fechar":"+ Cadastrar produto"}
+            </button>
+          </div>
+
+          {/* Mini-form cadastro produto (sincronizado com Producao) */}
+          {showNovoProd&&<div style={{background:"var(--bg4)",borderRadius:8,padding:10,marginBottom:8,border:"1px solid #7c8fff33"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#7c8fff",marginBottom:6}}>Novo produto (aparece em Producao)</div>
+            <input className="inp" placeholder="Nome *" value={novoProdForm.nome}
+              onChange={e=>setNovoProdForm(f=>({...f,nome:e.target.value}))} style={{marginBottom:6}}/>
+            <div style={{display:"flex",gap:6}}>
+              <select className="inp" style={{flex:1,marginBottom:0}} value={novoProdForm.cat} onChange={e=>setNovoProdForm(f=>({...f,cat:e.target.value}))}>
+                <option value="">Categoria</option>
+                {cats.map((c:string)=><option key={c} value={c}>{c}</option>)}
+              </select>
+              <select className="inp" style={{width:72,marginBottom:0}} value={novoProdForm.unidade} onChange={e=>setNovoProdForm(f=>({...f,unidade:e.target.value}))}>
+                {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+              <button className="btn" onClick={salvarNovoProd} style={{flexShrink:0,padding:"4px 12px",fontSize:12}}>Salvar</button>
+            </div>
+          </div>}
+
+          {/* Produtos já adicionados com stepper */}
+          {prodsSel.length>0&&<div style={{marginBottom:8,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>
             {prodsSel.map((p:any)=>(
-              <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",fontSize:12}}>
-                <span style={{flex:1}}>{p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>
+              <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",fontSize:12}}>
+                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}{p.unidade&&p.unidade!=="un"?<span style={{fontSize:10,color:"#888"}}> {p.unidade}</span>:null}</span>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <button onClick={()=>updateQtd(p.id,Math.max(0.5,parseFloat(((p.qtd||1)-0.5).toFixed(1))))}
+                    style={{width:20,height:20,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg3)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>-</button>
+                  <span style={{fontSize:12,fontWeight:700,color:"#7c8fff",minWidth:22,textAlign:"center" as const}}>{p.qtd}</span>
+                  <button onClick={()=>updateQtd(p.id,parseFloat(((p.qtd||1)+0.5).toFixed(1)))}
+                    style={{width:20,height:20,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg3)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
+                </div>
                 <button onClick={()=>remProd(p.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,lineHeight:1,padding:"0 2px"}}>×</button>
               </div>
             ))}
           </div>}
-          {prodsCatalog.length>0?<div style={{display:"flex",gap:5}}>
-            <select className="inp" style={{flex:1,marginBottom:0}} value={prodAdicionar.id} onChange={e=>setProdAdicionar(p=>({...p,id:e.target.value}))}>
-              <option value="">Selecione produto...</option>
-              {prodsCatalog.map((p:any)=><option key={p.id} value={p.id}>{p.nome}{p.cat?` — ${p.cat}`:""}</option>)}
-            </select>
-            <input type="number" min="0.5" step="0.5" value={prodAdicionar.qtd} onChange={e=>setProdAdicionar(p=>({...p,qtd:e.target.value}))}
-              className="inp" style={{width:52,marginBottom:0,textAlign:"center" as const}}/>
-            <button className="btn-sec" onClick={addProd} style={{flexShrink:0,padding:"4px 10px",fontSize:12}}>+ Add</button>
-          </div>:<div style={{fontSize:11,color:"var(--text3)",padding:"4px 0"}}>Cadastre produtos em Producao para selecioná-los aqui.</div>}
+
+          {/* Campo de busca */}
+          <div style={{position:"relative" as const}}>
+            <input className="inp" value={buscaProd} onChange={e=>setBuscaProd(e.target.value)}
+              placeholder={prodsCatalog.length>0?"Buscar produto para adicionar...":"Cadastre um produto acima"}
+              style={{marginBottom:0,paddingRight:buscaProd?"32px":"12px"}}
+              disabled={prodsCatalog.length===0}/>
+            {buscaProd&&<button onClick={()=>setBuscaProd("")}
+              style={{position:"absolute" as const,right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14,lineHeight:1}}>×</button>}
+            {prodsFiltrados.length>0&&<div style={{position:"absolute" as const,top:"calc(100% + 2px)",left:0,right:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:8,zIndex:50,maxHeight:180,overflowY:"auto" as const,boxShadow:"0 4px 16px #0007"}}>
+              {prodsFiltrados.map((p:any)=>(
+                <div key={p.id} onClick={()=>addProdPorId(p.id)}
+                  style={{padding:"9px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span>{p.nome}</span>
+                  {p.cat&&<span style={{fontSize:10,color:"#888"}}>{p.cat}</span>}
+                </div>
+              ))}
+            </div>}
+          </div>
         </div>
+
         <div style={{gridColumn:"1/-1"}}>
           <label className="label">Descricao adicional</label>
-          <textarea className="inp" placeholder="Detalhes extras, preferências..." value={form.itens} onChange={e=>setF("itens",e.target.value)} rows={2} style={{marginBottom:0,resize:"vertical" as const}}/>
+          <textarea className="inp" placeholder="Detalhes extras, preferencias de decoracao..." value={form.itens} onChange={e=>setF("itens",e.target.value)} rows={2} style={{marginBottom:0,resize:"vertical" as const}}/>
         </div>
         <div>
           <label className="label">Valor</label>
@@ -8837,11 +8950,11 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       </div>
       <div style={{display:"flex",gap:8}}>
         <button className="btn" onClick={save} style={{flex:1}}>{editId?"Salvar":"Cadastrar"}</button>
-        <button className="btn-sec" onClick={()=>{setShowForm(false);setEditId(null);setForm({...ENC_EMPTY});setProdsSel([]);}} style={{flex:1}}>Cancelar</button>
+        <button className="btn-sec" onClick={()=>{setShowForm(false);setEditId(null);setForm({...ENC_EMPTY});setProdsSel([]);setBuscaProd("");setShowNovoProd(false);}} style={{flex:1}}>Cancelar</button>
       </div>
     </div>}
 
-    {enc.length===0&&!showForm&&<div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}>
+    {enc.length===0&&!showForm&&!encRecemSalva&&<div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}>
       <div style={{fontSize:32,marginBottom:6}}>📦</div>
       <div style={{fontSize:13}}>Nenhuma encomenda cadastrada</div>
     </div>}
