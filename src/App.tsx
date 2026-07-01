@@ -250,7 +250,7 @@ const PRODS_SEED_V6=[
 ];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
-  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[],
+  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[],
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Outros"],
@@ -436,6 +436,7 @@ const migrateDb=(m:any)=>{
     if(!m[e])m[e]=mkDb();
     if(!m[e].consumacoes)m[e].consumacoes=[];
     if(!m[e].encargos)m[e].encargos=[];
+    if(!m[e].encomendas)m[e].encomendas=[];
     if(!m[e].normalizacoes)m[e].normalizacoes=[];
     if(!m[e].iconesProducao)m[e].iconesProducao={};
     if(!m[e].movEstoque)m[e].movEstoque=[];
@@ -799,6 +800,9 @@ export default function App() {
       {id:"gest-vs",label:"Versus",icon:"⚖️",sub:"versus"},
       {id:"gest-bkp",label:"Backups",icon:"💾",sub:"backups"},
     ]},
+    {id:"agenda",label:"Agenda",icon:"📅",children:[
+      {id:"agenda-enc",label:"Encomendas",icon:"📦",sub:"encomendas"},
+    ]},
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
   const allTabs=menuStructure.map(m=>({id:m.id,label:m.label,icon:m.icon}));
@@ -992,6 +996,7 @@ export default function App() {
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
+              {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout}/>}
             </>
         }
@@ -8589,6 +8594,197 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         </div>
       </div>
     </div>}
+  </div>;
+}
+
+// ===================== AGENDA PANEL =====================
+const ENC_STATUS:{[k:string]:{label:string,color:string,bg:string}}={
+  pendente:   {label:"Pendente",   color:"#fbbf24",bg:"#fbbf2418"},
+  confirmado: {label:"Confirmado", color:"#7c8fff",bg:"#7c8fff18"},
+  pronto:     {label:"Pronto",     color:"#4ade80",bg:"#4ade8018"},
+  entregue:   {label:"Entregue",   color:"#34d399",bg:"#34d39918"},
+  cancelado:  {label:"Cancelado",  color:"#ff5c7a",bg:"#ff5c7a18"},
+};
+const ENC_EMPTY={cliente:"",telefone:"",dataEntrega:today(),horaEntrega:"",itens:"",valor:"",status:"pendente",obs:""};
+
+function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+  const [subTab,setSubTab]=useState(pendingSub||"encomendas");
+  useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
+
+  return <div style={{padding:"0 0 24px 0"}}>
+    <div style={{padding:"12px 16px 0",fontWeight:800,fontSize:17,letterSpacing:0.2}}>📅 Agenda</div>
+    <div style={{display:"flex",gap:6,padding:"10px 14px 0",overflowX:"auto",scrollbarWidth:"none" as any}}>
+      {([["encomendas","📦 Encomendas"]] as [string,string][]).map(([k,l])=>(
+        <button key={k} onClick={()=>setSubTab(k)}
+          style={{flexShrink:0,padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:subTab===k?700:500,
+            background:subTab===k?"#7c8fff":"var(--bg3)",color:subTab===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
+          {l}
+        </button>
+      ))}
+    </div>
+    {subTab==="encomendas"&&<EncomendasPanel db={db} setDb={setDb} empresa={empresa}/>}
+  </div>;
+}
+
+function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
+  const [form,setForm]=useState({...ENC_EMPTY});
+  const [editId,setEditId]=useState<string|null>(null);
+  const [filtroStatus,setFiltroStatus]=useState("todos");
+  const [showForm,setShowForm]=useState(false);
+
+  const sv=(fn:(d:any)=>any)=>setDb((s:any)=>{const d={...s};d[empresa]=fn(d[empresa]||{});return d;});
+  const enc:any[]=(db.encomendas||[]);
+
+  const save=()=>{
+    const now=new Date().toISOString();
+    const val=form.valor.replace(/[^\d,]/g,"").replace(",",".");
+    if(!form.cliente.trim()||!form.dataEntrega)return;
+    if(editId){
+      sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===editId?{...e,...form,valor:val,atualizadoEm:now}:e)}));
+      setEditId(null);
+    }else{
+      sv(d=>({...d,encomendas:[{id:uid(),...form,valor:val,criadoEm:now},...(d.encomendas||[])]}));
+    }
+    setForm({...ENC_EMPTY});setShowForm(false);
+  };
+  const startEdit=(e:any)=>{
+    setForm({cliente:e.cliente||"",telefone:e.telefone||"",dataEntrega:e.dataEntrega||today(),horaEntrega:e.horaEntrega||"",itens:e.itens||"",valor:e.valor?fmtMoney(parseFloat(e.valor)):"",status:e.status||"pendente",obs:e.obs||""});
+    setEditId(e.id);setShowForm(true);
+  };
+  const del=(id:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).filter((e:any)=>e.id!==id)}));
+  const setStatus=(id:string,status:string)=>sv(d=>({...d,encomendas:(d.encomendas||[]).map((e:any)=>e.id===id?{...e,status,atualizadoEm:new Date().toISOString()}:e)}));
+
+  const hoje=today();
+  const lista=[...enc].sort((a:any,b:any)=>a.dataEntrega>b.dataEntrega?1:-1);
+  const filtrada=filtroStatus==="todos"?lista:lista.filter((e:any)=>e.status===filtroStatus);
+  const atrasadas=filtrada.filter((e:any)=>e.dataEntrega<hoje&&e.status!=="entregue"&&e.status!=="cancelado");
+  const proximas=filtrada.filter((e:any)=>e.dataEntrega>=hoje&&e.status!=="entregue"&&e.status!=="cancelado");
+  const concluidas=filtrada.filter((e:any)=>e.status==="entregue"||e.status==="cancelado");
+
+  const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
+
+  const EncCard=({e}:{e:any})=>{
+    const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
+    const atras=e.dataEntrega<hoje&&e.status!=="entregue"&&e.status!=="cancelado";
+    return <div style={{background:"var(--bg3)",borderRadius:12,border:`1px solid ${atras?"#ff5c7a44":"var(--border)"}`,padding:"12px 14px",marginBottom:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
+            <span style={{fontWeight:700,fontSize:14}}>{e.cliente}</span>
+            {atras&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>ATRASADO</span>}
+          </div>
+          {e.telefone&&<div style={{fontSize:11,color:"#7c8fff",marginTop:2}}>📞 {e.telefone}</div>}
+          <div style={{fontSize:11,color:atras?"#ff9aa8":"var(--text2)",marginTop:3}}>
+            📅 {fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}
+          </div>
+          {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.4}}>{e.itens}</div>}
+          {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
+          {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
+        </div>
+        <div style={{display:"flex",flexDirection:"column" as const,gap:4,alignItems:"flex-end",flexShrink:0}}>
+          <span style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,borderRadius:10,padding:"2px 8px"}}>{st.label}</span>
+          <div style={{display:"flex",gap:3,marginTop:4}}>
+            <button onClick={()=>startEdit(e)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px"}}>✏️</button>
+            <button onClick={()=>del(e.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>×</button>
+          </div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap" as const}}>
+        {Object.entries(ENC_STATUS).filter(([k])=>k!==e.status).map(([k,s])=>(
+          <button key={k} onClick={()=>setStatus(e.id,k)}
+            style={{fontSize:9,padding:"2px 7px",borderRadius:8,border:`1px solid ${s.color}44`,background:s.bg,color:s.color,cursor:"pointer",fontWeight:600}}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </div>;
+  };
+
+  return <div style={{padding:"12px 14px"}}>
+    {/* Filtros */}
+    <div style={{display:"flex",gap:5,overflowX:"auto",scrollbarWidth:"none" as any,marginBottom:12}}>
+      {[["todos","Todas"],["pendente","Pendente"],["confirmado","Confirmado"],["pronto","Pronto"],["entregue","Entregue"],["cancelado","Cancelado"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setFiltroStatus(k)}
+          style={{flexShrink:0,padding:"4px 10px",borderRadius:16,fontSize:10,fontWeight:filtroStatus===k?700:500,
+            background:filtroStatus===k?"#7c8fff":"var(--bg4)",color:filtroStatus===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
+          {l}
+        </button>
+      ))}
+    </div>
+
+    {/* Botão nova encomenda */}
+    {!showForm&&<button onClick={()=>{setForm({...ENC_EMPTY});setEditId(null);setShowForm(true);}}
+      className="btn" style={{width:"100%",marginBottom:14}}>
+      ＋ Nova Encomenda
+    </button>}
+
+    {/* Formulário */}
+    {showForm&&<div className="card" style={{marginBottom:14}}>
+      <div style={{fontWeight:700,marginBottom:10,fontSize:13}}>{editId?"✏️ Editar Encomenda":"📦 Nova Encomenda"}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+        <div style={{gridColumn:"1/-1"}}>
+          <label className="label">Cliente *</label>
+          <input className="inp" placeholder="Nome do cliente" value={form.cliente} onChange={e=>setF("cliente",e.target.value)} style={{marginBottom:0}}/>
+        </div>
+        <div>
+          <label className="label">Telefone</label>
+          <input className="inp" placeholder="(00) 00000-0000" value={form.telefone} onChange={e=>setF("telefone",e.target.value)} style={{marginBottom:0}}/>
+        </div>
+        <div>
+          <label className="label">Status</label>
+          <select className="inp" value={form.status} onChange={e=>setF("status",e.target.value)} style={{marginBottom:0}}>
+            {Object.entries(ENC_STATUS).map(([k,s])=><option key={k} value={k}>{s.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Data de Entrega *</label>
+          <input className="inp" type="date" value={form.dataEntrega} onChange={e=>setF("dataEntrega",e.target.value)} style={{marginBottom:0}}/>
+        </div>
+        <div>
+          <label className="label">Hora</label>
+          <input className="inp" type="time" value={form.horaEntrega} onChange={e=>setF("horaEntrega",e.target.value)} style={{marginBottom:0}}/>
+        </div>
+        <div style={{gridColumn:"1/-1"}}>
+          <label className="label">Itens / Descrição</label>
+          <textarea className="inp" placeholder="Ex: 2x torta de morango, 1x bolo de chocolate..." value={form.itens} onChange={e=>setF("itens",e.target.value)} rows={2} style={{marginBottom:0,resize:"vertical" as const}}/>
+        </div>
+        <div>
+          <label className="label">Valor</label>
+          <MoneyInput value={form.valor} onChange={v=>setF("valor",v)} placeholder="R$ 0,00" style={{marginBottom:0}}/>
+        </div>
+        <div>
+          <label className="label">Observações</label>
+          <input className="inp" placeholder="Obs..." value={form.obs} onChange={e=>setF("obs",e.target.value)} style={{marginBottom:0}}/>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" onClick={save} style={{flex:1}}>{editId?"Salvar":"Cadastrar"}</button>
+        <button className="btn-sec" onClick={()=>{setShowForm(false);setEditId(null);setForm({...ENC_EMPTY});}} style={{flex:1}}>Cancelar</button>
+      </div>
+    </div>}
+
+    {/* Listas */}
+    {enc.length===0&&!showForm&&<div style={{textAlign:"center",padding:"32px 16px",color:"var(--text3)"}}>
+      <div style={{fontSize:32,marginBottom:6}}>📦</div>
+      <div style={{fontSize:13}}>Nenhuma encomenda cadastrada</div>
+    </div>}
+
+    {atrasadas.length>0&&<>
+      <div style={{fontSize:11,fontWeight:800,color:"#ff5c7a",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6}}>⚠️ Atrasadas ({atrasadas.length})</div>
+      {atrasadas.map((e:any)=><EncCard key={e.id} e={e}/>)}
+    </>}
+
+    {proximas.length>0&&<>
+      <div style={{fontSize:11,fontWeight:800,color:"#7c8fff",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6,marginTop:atrasadas.length>0?12:0}}>📋 Próximas ({proximas.length})</div>
+      {proximas.map((e:any)=><EncCard key={e.id} e={e}/>)}
+    </>}
+
+    {concluidas.length>0&&<details style={{marginTop:12}}>
+      <summary style={{fontSize:11,fontWeight:700,color:"var(--text2)",cursor:"pointer",userSelect:"none" as const,marginBottom:6}}>
+        Concluídas / Canceladas ({concluidas.length})
+      </summary>
+      {concluidas.map((e:any)=><EncCard key={e.id} e={e}/>)}
+    </details>}
   </div>;
 }
 
