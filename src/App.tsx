@@ -998,7 +998,7 @@ export default function App() {
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} setDbAndSave={setDbAndSave}/>)
           : <>
               {tab==="dashboard"  && <Dashboard db={db} setDb={setDb} empresa={empresa} onNavigate={setTab} setPendingSub={setPendingSub}/>}
-              {tab==="vendas"     && <Vendas db={db} setDb={setDb} state={state}/>}
+              {tab==="vendas"     && <Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -1358,7 +1358,7 @@ function StatCard({label,value,color,icon}){return <div className="card" style={
 function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2235"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"var(--text)":positive?"#4ade80":"#ff5c7a"}}>{value}</span></div>;}
 
 // ===================== VENDAS =====================
-function Vendas({db,setDb,state}){
+function Vendas({db,setDb,setDbAndSave,state}){
   const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:"",nfoodTaxa:"","99food":"",delivery:""});
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
@@ -1452,8 +1452,8 @@ function Vendas({db,setDb,state}){
       ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
       "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
       delivery:parseMoney(form.delivery||0)};
-    if(editId){setDb(d=>({...d,vendas:d.vendas.map(v=>v.id===editId?{...reg,criadoEm:v.criadoEm||now,atualizadoEm:now}:v)}));setEditId(null);}
-    else{setDb(d=>({...d,vendas:[{...reg,criadoEm:now},...d.vendas]}));}
+    if(editId){setDbAndSave(d=>({...d,vendas:(d.vendas||[]).map(v=>v.id===editId?{...reg,criadoEm:v.criadoEm||now,atualizadoEm:now}:v)}));setEditId(null);}
+    else{setDbAndSave(d=>({...d,vendas:[{...reg,criadoEm:now},...(d.vendas||[])]}));}
     setForm(emptyForm());
   };
   const edit=(v)=>{setEditId(v.id);setForm({data:v.data,
@@ -1465,7 +1465,7 @@ function Vendas({db,setDb,state}){
     nfoodTaxa:v.nfoodTaxa?String(v.nfoodTaxa):"",
     delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","): "",
   });setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
-  const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,vendas:d.vendas.filter(v=>v.id!==id)}));};
+  const del=(id)=>{_listaDeletados.add(id);setDbAndSave(d=>({...d,vendas:(d.vendas||[]).filter(v=>v.id!==id)}));};
   const iaRelRef=useRef<HTMLInputElement>(null);
   const iaRelCamRef=useRef<HTMLInputElement>(null);
   const [iaRelLoading,setIaRelLoading]=useState(false);
