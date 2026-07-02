@@ -404,9 +404,9 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
   const signature = signXmlInfEvento(infEventoXml, privateKeyPem, certPem);
   const eventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">${infEventoXml}${signature}</evento>`;
   const envEvento = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>1</idLote>${eventoXml}</envEvento>`;
-  // SOAP 1.1 binding (text/xml + SOAPAction header)
+  // SOAP 1.2 binding — same pattern as NFeDistribuicaoDFe que funciona
   const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
-  return `<?xml version="1.0" encoding="utf-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><soapenv:Header>${cabec}</soapenv:Header><soapenv:Body><nfeRecepcaoEvento xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${envEvento}</nfeDadosMsg></nfeRecepcaoEvento></soapenv:Body></soapenv:Envelope>`;
+  return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header>${cabec}</soap12:Header><soap12:Body><nfeRecepcaoEventoNF xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${envEvento}</nfeDadosMsg></nfeRecepcaoEventoNF></soap12:Body></soap12:Envelope>`;
 }
 
 function sefazManifestar(emp, chNFe) {
@@ -430,7 +430,7 @@ function sefazManifestar(emp, chNFe) {
       hostname: 'www.nfe.fazenda.gov.br',
       path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       method: 'POST',
-      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'Content-Length': bodyBuf.length },
+      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
       ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
     };
     console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
@@ -1601,7 +1601,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           hostname: 'www.nfe.fazenda.gov.br',
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
-          headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'Content-Length': bodyBuf.length },
+          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
           ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
         };
         const apiReq = https.request(opts, apiRes => {
