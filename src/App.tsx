@@ -1511,11 +1511,18 @@ function Vendas({db,setDb,state}){
     <div ref={formRef} className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
       <div style={{marginBottom:10}}>
-        <input ref={iaRelRef} type="file" accept="image/*" capture="environment" onChange={onRelFile} style={{display:"none"}}/>
-        <button className="btn" type="button" onClick={()=>iaRelRef.current?.click()}
-          style={{width:"100%",background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          📷 Ler Relatório da Maquininha (IA)
-        </button>
+        <input ref={iaRelRef} type="file" accept="image/*" onChange={onRelFile} style={{display:"none"}}/>
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn" type="button" onClick={()=>{if(iaRelRef.current){iaRelRef.current.removeAttribute("capture");iaRelRef.current.click();}}}
+            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            🖼️ Galeria
+          </button>
+          <button className="btn" type="button" onClick={()=>{if(iaRelRef.current){iaRelRef.current.setAttribute("capture","environment");iaRelRef.current.click();}}}
+            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            📷 Câmera
+          </button>
+        </div>
+        <div style={{textAlign:"center",fontSize:11,color:"var(--text2)",marginTop:4}}>Ler Relatório da Maquininha (IA)</div>
         {iaRelPreview&&<div style={{marginTop:8,textAlign:"center"}}>
           <img src={iaRelPreview} style={{maxHeight:180,maxWidth:"100%",borderRadius:8,objectFit:"contain",border:"1px solid var(--border2)"}} alt="relatório"/>
           <button className="btn" type="button" onClick={processarRelatorio} disabled={iaRelLoading}
