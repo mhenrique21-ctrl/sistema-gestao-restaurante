@@ -2376,6 +2376,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [sefazShowNsuEdit,setSefazShowNsuEdit]=useState(false);
   const [cacheTs,setCacheTs]=useState<string|null>(null);
   const [cacheLoading,setCacheLoading]=useState(false);
+  const [xmlDlChave,setXmlDlChave]=useState("");
+  const [xmlDlLoading,setXmlDlLoading]=useState(false);
+  const [xmlDlMsg,setXmlDlMsg]=useState("");
+  const [xmlDlOk,setXmlDlOk]=useState(false);
 
   const fetchNSU=()=>fetch(`/api/nsu-status?empresa=${empresa}`).then(r=>r.json()).then(d=>{setSefazNSU(d.nsu??0);setSefazNsuInput(String(d.nsu??0));}).catch(()=>{});
 
@@ -2442,6 +2446,26 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   useEffect(()=>{
     setSefazLastSync(localStorage.getItem(`sefaz_last_sync_${empresa}`)||"");
   },[empresa]);
+
+  const baixarXmlPorChave=async()=>{
+    const chave=xmlDlChave.replace(/\D/g,'');
+    if(chave.length!==44){setXmlDlMsg("Chave deve ter exatamente 44 dígitos.");return;}
+    setXmlDlLoading(true);setXmlDlMsg("");setXmlDlOk(false);
+    try{
+      const r=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:chave})});
+      const data=await r.json();
+      if(data.error){setXmlDlMsg("Erro: "+data.error);return;}
+      if(data.rawXml){
+        baixarXmlNFe(data.rawXml,data.nNF||"",data.fornecedor?.nome||"");
+        setXmlDlOk(true);setXmlDlMsg("✅ XML baixado com sucesso!");
+      }else if(data.pendente){
+        setXmlDlMsg(data.message||"XML ainda não disponível no SEFAZ. Tente novamente em alguns minutos.");
+      }else{
+        setXmlDlMsg("SEFAZ não retornou o XML desta NF-e. Verifique a chave e tente novamente.");
+      }
+    }catch(e:any){setXmlDlMsg("Erro de conexão: "+e.message);}
+    finally{setXmlDlLoading(false);}
+  };
 
   const limparCacheESincronizar=async()=>{
     if(!confirm("⚠️ Isso vai limpar todas as NF-es pendentes do cache e buscar dados frescos do SEFAZ.\n\nNF-es já importadas não são afetadas.\n\nContinuar?"))return;
@@ -2856,6 +2880,38 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           {cacheLoading?"⟳":"↺"} Recarregar
         </button>
       </div>}
+
+      {/* -- Download XML por Chave de Acesso -- */}
+      <div className="card" style={{marginBottom:14,border:"1px solid #1a3a6e"}}>
+        <div className="section-title" style={{marginBottom:6}}>📥 Baixar XML por Chave de Acesso</div>
+        <div style={{fontSize:11,color:"#888",marginBottom:10}}>
+          Informe a chave de acesso (44 dígitos) para buscar e baixar o XML da NF-e diretamente do SEFAZ.
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <label style={{fontSize:11,color:"#888",display:"block",marginBottom:4}}>Chave de acesso</label>
+            <input
+              value={xmlDlChave}
+              onChange={e=>setXmlDlChave(e.target.value.replace(/\D/g,'').slice(0,44))}
+              placeholder="44 dígitos"
+              maxLength={44}
+              style={{width:"100%",boxSizing:"border-box",fontFamily:"monospace",fontSize:12,padding:"8px 10px",borderRadius:8,border:"1px solid #333",background:"#0d1117",color:"#e0e0e0"}}
+            />
+            <div style={{fontSize:10,color:xmlDlChave.replace(/\D/g,'').length===44?"#4ade80":"#555",marginTop:3}}>
+              {xmlDlChave.replace(/\D/g,'').length}/44 dígitos
+            </div>
+          </div>
+          <button
+            onClick={baixarXmlPorChave}
+            disabled={xmlDlLoading||xmlDlChave.replace(/\D/g,'').length!==44}
+            style={{background:xmlDlLoading||xmlDlChave.replace(/\D/g,'').length!==44?"#1a1a2e":"#0a2050",border:"1px solid #2a4a9e",color:xmlDlLoading||xmlDlChave.replace(/\D/g,'').length!==44?"#555":"#7ab3ff",borderRadius:8,padding:"9px 16px",fontSize:13,cursor:xmlDlLoading||xmlDlChave.replace(/\D/g,'').length!==44?"not-allowed":"pointer",flexShrink:0,fontWeight:600,whiteSpace:"nowrap",marginBottom:20}}>
+            {xmlDlLoading?"⏳ Buscando...":"⬇️ Baixar XML"}
+          </button>
+        </div>
+        {xmlDlMsg&&<div style={{marginTop:4,fontSize:12,color:xmlDlOk?"#4ade80":"#ff9f43",padding:"7px 10px",background:"#0d1117",borderRadius:6,border:`1px solid ${xmlDlOk?"#14532d":"#7a4f00"}`}}>
+          {xmlDlMsg}
+        </div>}
+      </div>
 
       {/* -- SEFAZ manual (avançado) -- */}
       <div className="card" style={{marginBottom:14,border:"1px solid #2a3260"}}>
