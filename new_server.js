@@ -381,9 +381,10 @@ function getX509CertBase64(certPem) {
   return certs[0].replace(/-----BEGIN CERTIFICATE-----/,'').replace(/-----END CERTIFICATE-----/,'').replace(/\s/g,'');
 }
 
+let _signDebug = {};
 function signXmlInfEvento(infEventoXml, privateKeyPem, certPem) {
-  // Regular C14N in document context: infEvento is inside evento (xmlns=nfe),
-  // so the xmlns declaration is redundant and NOT output in canonical form.
+  // Regular C14N in document context: infEvento inherits xmlns from envEvento via evento,
+  // so the xmlns declaration (if present) is redundant and NOT output in canonical form.
   const c14n = infEventoXml
     .replace(/\r?\n/g,'').replace(/>\s+</g,'><')
     .replace(/ xmlns="http:\/\/www\.portalfiscal\.inf\.br\/nfe"/g, '')
@@ -392,16 +393,14 @@ function signXmlInfEvento(infEventoXml, privateKeyPem, certPem) {
   const refUri = idMatch ? `#${idMatch[1]}` : '';
   const digest = crypto.createHash('sha256').update(c14n, 'utf8').digest('base64');
   const c14nAlg = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
-  // signedInfoXml goes into the final <Signature> element (with xmlns for standalone validity)
-  const signedInfoXml = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="${c14nAlg}"/><SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="${c14nAlg}"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
-  // C14N of SignedInfo in document context: Signature parent already declares xmlns=xmldsig,
-  // so SignedInfo's xmlns is redundant and NOT output in canonical form → strip for signing.
-  const signedInfoC14n = signedInfoXml.replace(/^<SignedInfo xmlns="[^"]*"/, '<SignedInfo');
+  // SignedInfo WITHOUT xmlns — matches PHP/Java output (xmlns inherited from Signature parent)
+  const signedInfoC14n = `<SignedInfo><CanonicalizationMethod Algorithm="${c14nAlg}"/><SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="${c14nAlg}"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
   const signer = crypto.createSign('RSA-SHA256');
   signer.update(signedInfoC14n, 'utf8');
   const signatureValue = signer.sign(privateKeyPem, 'base64');
   const x509 = getX509CertBase64(certPem);
-  return `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfoXml}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${x509}</X509Certificate></X509Data></KeyInfo></Signature>`;
+  _signDebug = { c14nInfEvento: c14n.slice(0,200), signedInfoC14n: signedInfoC14n.slice(0,200), digestValue: digest };
+  return `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfoC14n}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${x509}</X509Certificate></X509Data></KeyInfo></Signature>`;
 }
 
 function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
@@ -410,11 +409,11 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
   const evId = `ID${tpEvento}${chNFe}0${nSeqEvento}`;
   const dhEvento = new Date().toISOString().replace(/\.\d{3}Z/, '-03:00');
   const cOrgao = '91';
-  const infEventoXml = `<infEvento Id="${evId}" xmlns="http://www.portalfiscal.inf.br/nfe"><cOrgao>${cOrgao}</cOrgao><tpAmb>1</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciencia da Operacao</descEvento></detEvento></infEvento>`;
+  // No xmlns on infEvento/evento — they inherit from envEvento (avoids redundant declarations)
+  const infEventoXml = `<infEvento Id="${evId}"><cOrgao>${cOrgao}</cOrgao><tpAmb>1</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciencia da Operacao</descEvento></detEvento></infEvento>`;
   const signature = signXmlInfEvento(infEventoXml, privateKeyPem, certPem);
-  const eventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">${infEventoXml}${signature}</evento>`;
+  const eventoXml = `<evento versao="1.00">${infEventoXml}${signature}</evento>`;
   const envEvento = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>1</idLote>${eventoXml}</envEvento>`;
-  // SOAP 1.2 binding — same pattern as NFeDistribuicaoDFe que funciona
   const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
   return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header>${cabec}</soap12:Header><soap12:Body><nfeRecepcaoEventoNF xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${envEvento}</nfeDadosMsg></nfeRecepcaoEventoNF></soap12:Body></soap12:Envelope>`;
 }
@@ -1625,7 +1624,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
             const dhReg = getTag(stripped,'dhRegEvento') || getTag(stripped,'dhEvento');
             res.setHeader('Content-Type','application/json');
             res.writeHead(200);
-            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, rawSnippet: rawXml.slice(0,2000), sentSoapSnippet: soapBody.slice(0,600) }));
+            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, signDebug: _signDebug, rawSnippet: rawXml.slice(0,2000), sentSoapSnippet: soapBody.slice(0,600) }));
           });
         });
         apiReq.on('error', e => { res.writeHead(500); res.end(JSON.stringify({error:e.message})); });
