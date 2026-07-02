@@ -1527,11 +1527,10 @@ function Vendas({db,setDb,setDbAndSave,state}){
     }
     if(totalMaq>0)setForm(f=>({...f,
       maquininha:(parseMoney(f.maquininha||0)+totalMaq).toFixed(2).replace(".",","),
-      ...(dataUlt?{data:dataUlt}:{})
     }));
     const ok=pendentes.length-erros;
     setIaRelMsg(erros===0
-      ?`✅ ${ok} relatório(s) processado(s) — Total somado: R$ ${totalMaq.toFixed(2).replace(".",",")} | Déb: R$ ${totalDeb.toFixed(2).replace(".",",")} | Créd: R$ ${totalCred.toFixed(2).replace(".",",")} | Pix: R$ ${totalPix.toFixed(2).replace(".",",")}`
+      ?`✅ ${ok} relatório(s) — Total: R$ ${totalMaq.toFixed(2).replace(".",",")} | Déb: R$ ${totalDeb.toFixed(2).replace(".",",")} | Créd: R$ ${totalCred.toFixed(2).replace(".",",")} | Pix: R$ ${totalPix.toFixed(2).replace(".",",")}${dataUlt?` (ref. ${dataUlt.split("-").reverse().join("/")})`:""}\n⚠️ Data mantida como digitada no formulário.`
       :`⚠️ ${ok} ok / ${erros} com erro — Somado: R$ ${totalMaq.toFixed(2).replace(".",",")}`);
     setIaRelLoading(false);
   };
