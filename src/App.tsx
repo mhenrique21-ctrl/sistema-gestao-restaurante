@@ -1467,74 +1467,117 @@ function Vendas({db,setDb,state}){
   });setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,vendas:d.vendas.filter(v=>v.id!==id)}));};
   const iaRelRef=useRef<HTMLInputElement>(null);
+  const iaRelCamRef=useRef<HTMLInputElement>(null);
   const [iaRelLoading,setIaRelLoading]=useState(false);
-  const [iaRelPreview,setIaRelPreview]=useState<string|null>(null);
-  const [iaRelBase64,setIaRelBase64]=useState<{data:string,mediaType:string}|null>(null);
+  const [iaRelImages,setIaRelImages]=useState<any[]>([]);
   const [iaRelMsg,setIaRelMsg]=useState("");
   const redimRelImg=(dataUrl:string,maxPx=1200,q=0.70):Promise<string>=>new Promise(r=>{const i=new Image();i.onload=()=>{let w=i.width,h=i.height;if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d")!.drawImage(i,0,0,w,h);let res=c.toDataURL("image/jpeg",q);if(res.length>500000)res=c.toDataURL("image/jpeg",0.50);r(res);};i.onerror=()=>r(dataUrl);i.src=dataUrl;});
-  const onRelFile=async(e:any)=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=async()=>{const orig=rd.result as string;const resized=await redimRelImg(orig);setIaRelBase64({data:resized.split(",")[1],mediaType:"image/jpeg"});setIaRelPreview(resized);setIaRelMsg("");};rd.readAsDataURL(f);if(iaRelRef.current)iaRelRef.current.value="";};
+  const addRelFiles=async(files:FileList|null)=>{
+    if(!files||files.length===0)return;
+    const novos:any[]=[];
+    for(let i=0;i<files.length;i++){
+      const f=files[i];
+      await new Promise<void>(res=>{
+        const rd=new FileReader();
+        rd.onload=async()=>{
+          const resized=await redimRelImg(rd.result as string);
+          novos.push({id:uid(),preview:resized,base64:resized.split(",")[1],mediaType:"image/jpeg",status:"pending"});
+          res();
+        };
+        rd.readAsDataURL(f);
+      });
+    }
+    setIaRelImages(imgs=>[...imgs,...novos]);
+    setIaRelMsg("");
+  };
   const PROMPT_REL=`Analise este relatório/extrato de maquininha de cartão e extraia os totais. Retorne APENAS um JSON válido, sem texto extra, sem markdown:\n{"data":"YYYY-MM-DD","maquininha":0.00,"debito":0.00,"credito_avista":0.00,"credito_parcelado":0.00,"pix":0.00}\nOnde "maquininha" é o TOTAL GERAL de todas as transações aprovadas (débito+crédito+pix). Use a data do relatório no formato YYYY-MM-DD. Se não encontrar algum campo use 0.`;
-  const processarRelatorio=async()=>{
-    if(!iaRelBase64)return;
+  const processarRelatorios=async()=>{
+    const pendentes=iaRelImages.filter(img=>img.status==="pending");
+    if(pendentes.length===0)return;
     setIaRelLoading(true);setIaRelMsg("");
-    try{
-      const ctrl=new AbortController();
-      const t=setTimeout(()=>ctrl.abort(),100000);
-      const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:iaRelBase64.mediaType,data:iaRelBase64.data}},
-          {type:"text",text:PROMPT_REL}
-        ]}]}),signal:ctrl.signal});
-      clearTimeout(t);
-      if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);
-      const dt=await res.json();
-      const txt=(dt.content||[]).map((b:any)=>b.text||"").join("").trim();
-      let parsed:any;
-      try{let c=txt.replace(/```json/g,"").replace(/```/g,"").trim();parsed=JSON.parse(c);}
-      catch{const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("JSON inválido retornado pela IA");}
-      const maq=parseFloat(String(parsed.maquininha||parsed.total||parsed.total_geral||0))||0;
-      const deb=parseFloat(String(parsed.debito||0))||0;
-      const cred=parseFloat(String((parsed.credito_avista||0)))+parseFloat(String(parsed.credito_parcelado||0));
-      const pix=parseFloat(String(parsed.pix||0))||0;
-      if(maq>0)setForm(f=>({...f,
-        maquininha:maq.toFixed(2).replace(".",","),
-        ...(parsed.data&&/^\d{4}-\d{2}-\d{2}$/.test(parsed.data)?{data:parsed.data}:{})
-      }));
-      setIaRelMsg(`✅ Total: R$ ${maq.toFixed(2).replace(".",",")} — Débito: R$ ${deb.toFixed(2).replace(".",",")} | Crédito: R$ ${cred.toFixed(2).replace(".",",")} | Pix: R$ ${pix.toFixed(2).replace(".",",")}`);
-      setIaRelPreview(null);setIaRelBase64(null);
-    }catch(e:any){
-      setIaRelMsg("❌ "+(e.message||"Erro ao processar relatório"));
-    }finally{setIaRelLoading(false);}
+    let totalMaq=0,totalDeb=0,totalCred=0,totalPix=0,dataUlt="",erros=0;
+    for(const img of pendentes){
+      setIaRelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"processing"}:x));
+      try{
+        const ctrl=new AbortController();
+        const t=setTimeout(()=>ctrl.abort(),100000);
+        const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({messages:[{role:"user",content:[
+            {type:"image",source:{type:"base64",media_type:img.mediaType,data:img.base64}},
+            {type:"text",text:PROMPT_REL}
+          ]}]}),signal:ctrl.signal});
+        clearTimeout(t);
+        if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);
+        const dt=await res.json();
+        const txt=(dt.content||[]).map((b:any)=>b.text||"").join("").trim();
+        let parsed:any;
+        try{let c=txt.replace(/```json/g,"").replace(/```/g,"").trim();parsed=JSON.parse(c);}
+        catch{const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("JSON inválido");}
+        const maq=parseFloat(String(parsed.maquininha||parsed.total||parsed.total_geral||0))||0;
+        const deb=parseFloat(String(parsed.debito||0))||0;
+        const cred=parseFloat(String(parsed.credito_avista||0))+parseFloat(String(parsed.credito_parcelado||0));
+        const pix=parseFloat(String(parsed.pix||0))||0;
+        totalMaq+=maq;totalDeb+=deb;totalCred+=cred;totalPix+=pix;
+        if(parsed.data&&/^\d{4}-\d{2}-\d{2}$/.test(parsed.data))dataUlt=parsed.data;
+        setIaRelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"ok",maq,deb,cred,pix}:x));
+      }catch(e:any){
+        erros++;
+        setIaRelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"err",err:e.message}:x));
+      }
+    }
+    if(totalMaq>0)setForm(f=>({...f,
+      maquininha:(parseMoney(f.maquininha||0)+totalMaq).toFixed(2).replace(".",","),
+      ...(dataUlt?{data:dataUlt}:{})
+    }));
+    const ok=pendentes.length-erros;
+    setIaRelMsg(erros===0
+      ?`✅ ${ok} relatório(s) processado(s) — Total somado: R$ ${totalMaq.toFixed(2).replace(".",",")} | Déb: R$ ${totalDeb.toFixed(2).replace(".",",")} | Créd: R$ ${totalCred.toFixed(2).replace(".",",")} | Pix: R$ ${totalPix.toFixed(2).replace(".",",")}`
+      :`⚠️ ${ok} ok / ${erros} com erro — Somado: R$ ${totalMaq.toFixed(2).replace(".",",")}`);
+    setIaRelLoading(false);
   };
   return <div>
     <div className="section-title">Lançar Vendas do Dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
       <div style={{marginBottom:10}}>
-        <input ref={iaRelRef} type="file" accept="image/*" onChange={onRelFile} style={{display:"none"}}/>
-        <div style={{display:"flex",gap:8}}>
-          <button className="btn" type="button" onClick={()=>{if(iaRelRef.current){iaRelRef.current.removeAttribute("capture");iaRelRef.current.click();}}}
+        <input ref={iaRelRef} type="file" accept="image/*" multiple onChange={e=>{addRelFiles(e.target.files);if(iaRelRef.current)iaRelRef.current.value="";}} style={{display:"none"}}/>
+        <input ref={iaRelCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addRelFiles(e.target.files);if(iaRelCamRef.current)iaRelCamRef.current.value="";}} style={{display:"none"}}/>
+        <div style={{fontSize:11,fontWeight:600,color:"var(--text2)",marginBottom:6,textAlign:"center",letterSpacing:1}}>📊 RELATÓRIO DA MAQUININHA (IA)</div>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <button className="btn" type="button" onClick={()=>iaRelRef.current?.click()}
             style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             🖼️ Galeria
           </button>
-          <button className="btn" type="button" onClick={()=>{if(iaRelRef.current){iaRelRef.current.setAttribute("capture","environment");iaRelRef.current.click();}}}
+          <button className="btn" type="button" onClick={()=>iaRelCamRef.current?.click()}
             style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             📷 Câmera
           </button>
         </div>
-        <div style={{textAlign:"center",fontSize:11,color:"var(--text2)",marginTop:4}}>Ler Relatório da Maquininha (IA)</div>
-        {iaRelPreview&&<div style={{marginTop:8,textAlign:"center"}}>
-          <img src={iaRelPreview} style={{maxHeight:180,maxWidth:"100%",borderRadius:8,objectFit:"contain",border:"1px solid var(--border2)"}} alt="relatório"/>
-          <button className="btn" type="button" onClick={processarRelatorio} disabled={iaRelLoading}
-            style={{marginTop:8,width:"100%",background:iaRelLoading?"var(--bg3)":"#7c8fff",color:"#fff",fontSize:13,padding:"10px",borderRadius:10}}>
-            {iaRelLoading?"⏳ Processando...":"🤖 Extrair Valores"}
-          </button>
-          <button className="btn" type="button" onClick={()=>{setIaRelPreview(null);setIaRelBase64(null);setIaRelMsg("");}}
-            style={{marginTop:4,width:"100%",background:"transparent",color:"#888",fontSize:12,padding:"6px"}}>
-            Cancelar
-          </button>
+        {iaRelImages.length>0&&<div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>
+            {iaRelImages.map((img,i)=>(
+              <div key={img.id} style={{position:"relative",borderRadius:8,overflow:"hidden",border:`1.5px solid ${img.status==="ok"?"#4ade80":img.status==="err"?"#f87171":img.status==="processing"?"#7c8fff":"var(--border2)"}`,background:"var(--bg3)"}}>
+                <img src={img.preview} style={{width:"100%",height:80,objectFit:"cover",display:"block"}} alt={`rel ${i+1}`}/>
+                <div style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,0.7)",borderRadius:999,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:10}}
+                  onClick={()=>setIaRelImages(imgs=>imgs.filter(x=>x.id!==img.id))}>✕</div>
+                <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:img.status==="ok"?"#4ade80":img.status==="err"?"#f87171":img.status==="processing"?"#a0a8ff":"#888"}}>
+                  {img.status==="ok"?`R$ ${(img.maq||0).toFixed(2).replace(".",",")}`:img.status==="err"?"erro":img.status==="processing"?"…":`Rel. ${i+1}`}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="btn" type="button" onClick={processarRelatorios} disabled={iaRelLoading||iaRelImages.every(x=>x.status!=="pending")}
+              style={{flex:1,background:iaRelLoading?"var(--bg3)":"#7c8fff",color:"#fff",fontSize:13,padding:"10px",borderRadius:10}}>
+              {iaRelLoading?"⏳ Processando...":"🤖 Extrair e Somar"}
+            </button>
+            <button className="btn" type="button" onClick={()=>{setIaRelImages([]);setIaRelMsg("");}}
+              style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"10px 14px",borderRadius:10}}>
+              Limpar
+            </button>
+          </div>
         </div>}
-        {iaRelMsg&&<div style={{marginTop:6,fontSize:12,color:iaRelMsg.startsWith("✅")?"#4ade80":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaRelMsg}</div>}
+        {iaRelMsg&&<div style={{marginTop:6,fontSize:12,color:iaRelMsg.startsWith("✅")?"#4ade80":iaRelMsg.startsWith("⚠")?"#fbbf24":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaRelMsg}</div>}
       </div>
       {["maquininha","dinheiro"].map(m=>(
         <div key={m} style={{marginBottom:8}}>
