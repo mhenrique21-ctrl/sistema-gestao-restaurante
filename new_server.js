@@ -1558,6 +1558,52 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     return;
   }
 
+  if (req.method === 'POST' && urlPath === '/api/nfe-manifest-debug') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { empresa, chNFe } = JSON.parse(body);
+        if (!['CONFRARIA','SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({error:'Empresa inválida'})); return; }
+        const pem = ensurePemFiles(empresa);
+        if (!pem) { res.writeHead(503); res.end(JSON.stringify({error:'Certificado PEM não disponível'})); return; }
+        const cnpj = (process.env[`CNPJ_${empresa}`]||'').replace(/\D/g,'');
+        const uf   = process.env[`UF_${empresa}`] || '35';
+        if (!cnpj) { res.writeHead(400); res.end(JSON.stringify({error:`CNPJ_${empresa} não configurado`})); return; }
+        const privateKeyPem = fs.readFileSync(pem.keyPath, 'utf-8');
+        const certPem = fs.readFileSync(pem.certPath, 'utf-8');
+        const soapBody = buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem);
+        const bodyBuf = Buffer.from(soapBody, 'utf-8');
+        const tlsOpts = { key: fs.readFileSync(pem.keyPath), cert: fs.readFileSync(pem.certPath) };
+        const opts = {
+          hostname: 'www.nfe.fazenda.gov.br',
+          path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'Content-Length': bodyBuf.length },
+          ...tlsOpts, rejectUnauthorized: true, timeout: 30000,
+        };
+        const apiReq = https.request(opts, apiRes => {
+          const chunks = [];
+          apiRes.on('data', c => chunks.push(c));
+          apiRes.on('end', () => {
+            const rawXml = Buffer.concat(chunks).toString('utf-8');
+            const stripped = rawXml.replace(/<(\/?)([a-zA-Z0-9]+):/g,'<$1');
+            const cStat = getTag(stripped,'cStat');
+            const xMotivo = getTag(stripped,'xMotivo');
+            const dhReg = getTag(stripped,'dhRegEvento') || getTag(stripped,'dhEvento');
+            res.setHeader('Content-Type','application/json');
+            res.writeHead(200);
+            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, rawSnippet: rawXml.slice(0,600) }));
+          });
+        });
+        apiReq.on('error', e => { res.writeHead(500); res.end(JSON.stringify({error:e.message})); });
+        apiReq.on('timeout', () => { apiReq.destroy(); res.writeHead(504); res.end(JSON.stringify({error:'timeout'})); });
+        apiReq.write(bodyBuf); apiReq.end();
+      } catch(e) { res.writeHead(500); res.end(JSON.stringify({error:e.message})); }
+    });
+    return;
+  }
+
   // Health check
   if (urlPath === '/health') {
     res.setHeader('Content-Type', 'application/json');
