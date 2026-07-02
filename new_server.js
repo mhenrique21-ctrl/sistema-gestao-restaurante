@@ -383,18 +383,15 @@ function getX509CertBase64(certPem) {
 
 let _signDebug = {};
 function signXmlInfEvento(infEventoXml, privateKeyPem, certPem) {
-  // Regular C14N in document context: infEvento inherits xmlns from envEvento via evento,
-  // so the xmlns declaration (if present) is redundant and NOT output in canonical form.
+  // infEvento carries xmlns explicitly (not inherited from parent envEvento).
+  // C14N includes the xmlns because it IS the declaration owner, not a redundant copy.
   const c14n = infEventoXml
     .replace(/\r?\n/g,'').replace(/>\s+</g,'><')
-    .replace(/ xmlns="http:\/\/www\.portalfiscal\.inf\.br\/nfe"/g, '')
     .trim();
   const idMatch = infEventoXml.match(/Id="([^"]+)"/);
   const refUri = idMatch ? `#${idMatch[1]}` : '';
   const digest = crypto.createHash('sha1').update(c14n, 'utf8').digest('base64');
   const c14nAlg = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
-  // SignedInfo WITHOUT xmlns — matches PHP/Java output (xmlns inherited from Signature parent)
-  // Using SHA-1: testing if SEFAZ NFeRecepcaoEvento4 drops RSA-SHA256 via CryptoConfig null
   const signedInfoC14n = `<SignedInfo><CanonicalizationMethod Algorithm="${c14nAlg}"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="${c14nAlg}"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
   const signer = crypto.createSign('RSA-SHA1');
   signer.update(signedInfoC14n, 'utf8');
@@ -410,11 +407,14 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
   const evId = `ID${tpEvento}${chNFe}0${nSeqEvento}`;
   const dhEvento = new Date().toISOString().replace(/\.\d{3}Z/, '-03:00');
   const cOrgao = '91';
-  // No xmlns on infEvento/evento — they inherit from envEvento (avoids redundant declarations)
-  const infEventoXml = `<infEvento Id="${evId}"><cOrgao>${cOrgao}</cOrgao><tpAmb>1</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciencia da Operacao</descEvento></detEvento></infEvento>`;
+  // xmlns on infEvento (not on envEvento) — matches PHP NFePHP style:
+  // infEvento owns its namespace declaration so C14N includes it in digest computation.
+  // descEvento must use exact accented form that SEFAZ expects.
+  const infEventoXml = `<infEvento xmlns="http://www.portalfiscal.inf.br/nfe" Id="${evId}"><cOrgao>${cOrgao}</cOrgao><tpAmb>1</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciência da Operação</descEvento></detEvento></infEvento>`;
   const signature = signXmlInfEvento(infEventoXml, privateKeyPem, certPem);
   const eventoXml = `<evento versao="1.00">${infEventoXml}${signature}</evento>`;
-  const envEvento = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>1</idLote>${eventoXml}</envEvento>`;
+  // envEvento without default xmlns: infEvento owns the namespace declaration
+  const envEvento = `<envEvento versao="1.00"><idLote>1</idLote>${eventoXml}</envEvento>`;
   const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
   return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header>${cabec}</soap12:Header><soap12:Body><nfeRecepcaoEventoNF xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${envEvento}</nfeDadosMsg></nfeRecepcaoEventoNF></soap12:Body></soap12:Envelope>`;
 }
