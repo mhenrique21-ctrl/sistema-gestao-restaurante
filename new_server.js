@@ -429,7 +429,7 @@ function sefazManifestar(emp, chNFe) {
       path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       method: 'POST',
       headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'Content-Length': bodyBuf.length },
-      ...tlsOpts, rejectUnauthorized: true, timeout: 30000,
+      ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
     };
     console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
     const apiReq = https.request(options, apiRes => {
@@ -1600,7 +1600,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
           headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'Content-Length': bodyBuf.length },
-          ...tlsOpts, rejectUnauthorized: true, timeout: 30000,
+          ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
         };
         const apiReq = https.request(opts, apiRes => {
           const chunks = [];
