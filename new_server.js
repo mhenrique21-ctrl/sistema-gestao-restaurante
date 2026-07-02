@@ -430,7 +430,7 @@ function sefazManifestar(emp, chNFe) {
       hostname: 'www.nfe.fazenda.gov.br',
       path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       method: 'POST',
-      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsd1/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'Content-Length': bodyBuf.length },
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'Content-Length': bodyBuf.length },
       ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
     };
     console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
@@ -1601,7 +1601,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           hostname: 'www.nfe.fazenda.gov.br',
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
-          headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsd1/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'Content-Length': bodyBuf.length },
+          headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'Content-Length': bodyBuf.length },
           ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
         };
         const apiReq = https.request(opts, apiRes => {
