@@ -382,13 +382,23 @@ function getX509CertBase64(certPem) {
 }
 
 function signXmlInfEvento(infEventoXml, privateKeyPem, certPem) {
-  const c14n = infEventoXml.replace(/\r?\n/g,'').replace(/>\s+</g,'><').trim();
+  // Regular C14N in document context: infEvento is inside evento (xmlns=nfe),
+  // so the xmlns declaration is redundant and NOT output in canonical form.
+  const c14n = infEventoXml
+    .replace(/\r?\n/g,'').replace(/>\s+</g,'><')
+    .replace(/ xmlns="http:\/\/www\.portalfiscal\.inf\.br\/nfe"/g, '')
+    .trim();
   const idMatch = infEventoXml.match(/Id="([^"]+)"/);
   const refUri = idMatch ? `#${idMatch[1]}` : '';
   const digest = crypto.createHash('sha256').update(c14n, 'utf8').digest('base64');
-  const signedInfoXml = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
+  const c14nAlg = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+  // signedInfoXml goes into the final <Signature> element (with xmlns for standalone validity)
+  const signedInfoXml = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="${c14nAlg}"/><SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="${c14nAlg}"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
+  // C14N of SignedInfo in document context: Signature parent already declares xmlns=xmldsig,
+  // so SignedInfo's xmlns is redundant and NOT output in canonical form → strip for signing.
+  const signedInfoC14n = signedInfoXml.replace(/^<SignedInfo xmlns="[^"]*"/, '<SignedInfo');
   const signer = crypto.createSign('RSA-SHA256');
-  signer.update(signedInfoXml);
+  signer.update(signedInfoC14n, 'utf8');
   const signatureValue = signer.sign(privateKeyPem, 'base64');
   const x509 = getX509CertBase64(certPem);
   return `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfoXml}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${x509}</X509Certificate></X509Data></KeyInfo></Signature>`;
@@ -1615,7 +1625,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
             const dhReg = getTag(stripped,'dhRegEvento') || getTag(stripped,'dhEvento');
             res.setHeader('Content-Type','application/json');
             res.writeHead(200);
-            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, rawSnippet: rawXml.slice(0,800), sentSoapSnippet: soapBody.slice(0,500) }));
+            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, rawSnippet: rawXml.slice(0,2000), sentSoapSnippet: soapBody.slice(0,600) }));
           });
         });
         apiReq.on('error', e => { res.writeHead(500); res.end(JSON.stringify({error:e.message})); });
