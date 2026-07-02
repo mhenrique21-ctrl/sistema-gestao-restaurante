@@ -612,7 +612,21 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const st=server.updatedAt||0;
       merged.push(st>lt?server:local);
     });
-    next[emp].listaCompras=merged;
+    // Dedup pendentes por nome: operadores diferentes podem ter adicionado o mesmo item simultaneamente
+    const _nameMap=new Map<string,any>();
+    const _outros:any[]=[];
+    merged.forEach((item:any)=>{
+      if(item.comprado||item.naoTem){_outros.push(item);return;}
+      const key=(item.nome||'').trim().toLowerCase();
+      if(_nameMap.has(key)){
+        const ex=_nameMap.get(key);
+        const winner=(item.updatedAt||0)>=(ex.updatedAt||0)?item:ex;
+        _nameMap.set(key,{...winner,quantidade:(ex.quantidade||1)+(item.quantidade||1)});
+      }else{
+        _nameMap.set(key,{...item});
+      }
+    });
+    next[emp].listaCompras=[..._outros,..._nameMap.values()];
     // listaDeletedIds: unir local e servidor
     next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-500);
     // listaCategorias, listaRuas, ruaCatMap: unir
