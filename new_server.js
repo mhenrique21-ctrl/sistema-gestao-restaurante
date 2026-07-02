@@ -1502,6 +1502,62 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     return;
   }
 
+  // NF-e diagnóstico: retorna cStat bruto do SEFAZ sem processar
+  if (req.method === 'POST' && urlPath === '/api/nfe-debug') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { empresa, chNFe } = JSON.parse(body);
+        if (!['CONFRARIA','SEAMA'].includes(empresa)) { res.writeHead(400); res.end('{}'); return; }
+        const pfxPath  = path.join(CERTS_DIR, `${empresa.toLowerCase()}.pfx`);
+        const keyPath  = path.join(CERTS_DIR, `${empresa.toLowerCase()}_key.pem`);
+        const certPath = path.join(CERTS_DIR, `${empresa.toLowerCase()}_cert.pem`);
+        const hasPem = fs.existsSync(keyPath) && fs.existsSync(certPath);
+        const hasPfx = fs.existsSync(pfxPath);
+        if (!hasPem && !hasPfx) { res.writeHead(503); res.end(JSON.stringify({error:'Certificado não encontrado'})); return; }
+        const passphrase = process.env[`CERT_${empresa}_PASS`] || '';
+        const cnpj = (process.env[`CNPJ_${empresa}`]||'').replace(/\D/g,'');
+        const uf   = process.env[`UF_${empresa}`] || '35';
+        const tlsOpts = hasPem ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) } : { pfx: fs.readFileSync(pfxPath), passphrase };
+        const soapBody = buildChaveEnvelope(cnpj, uf, chNFe);
+        const bodyBuf  = Buffer.from(soapBody, 'utf-8');
+        const opts = { hostname:'www1.nfe.fazenda.gov.br', path:'/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx', method:'POST',
+          headers:{'Content-Type':'application/soap+xml; charset=utf-8','Content-Length':bodyBuf.length,'SOAPAction':''},
+          ...tlsOpts, rejectUnauthorized:true, timeout:30000 };
+        const apiReq = https.request(opts, apiRes => {
+          const chunks = [];
+          apiRes.on('data', c => chunks.push(c));
+          apiRes.on('end', () => {
+            const rawXml = Buffer.concat(chunks).toString('utf-8');
+            const stripped = rawXml.replace(/<(\/?)([a-zA-Z0-9]+):/g,'<$1');
+            const cStat = getTag(stripped,'cStat');
+            const xMotivo = getTag(stripped,'xMotivo');
+            const dhResp = getTag(stripped,'dhResp');
+            const docCount = (rawXml.match(/<docZip/g)||[]).length;
+            const docTypes = [];
+            const docZipRe = /<docZip[^>]*>([\s\S]*?)<\/docZip>/g;
+            let m;
+            while((m=docZipRe.exec(stripped))!==null){
+              try{const d=zlib.gunzipSync(Buffer.from(m[1].trim(),'base64')).toString('utf-8');
+                if(d.includes('<infNFe')||d.includes('<procNFe'))docTypes.push('procNFe');
+                else if(d.includes('<resNFe'))docTypes.push('resNFe');
+                else docTypes.push('outro:'+d.slice(0,60));
+              }catch(e){docTypes.push('gunzip_err:'+e.message);}
+            }
+            res.setHeader('Content-Type','application/json');
+            res.writeHead(200);
+            res.end(JSON.stringify({cStat,xMotivo,dhResp,docCount,docTypes,cnpj,uf,chNFe}));
+          });
+        });
+        apiReq.on('error',e=>{res.writeHead(500);res.end(JSON.stringify({error:e.message}));});
+        apiReq.on('timeout',()=>{apiReq.destroy();res.writeHead(504);res.end(JSON.stringify({error:'timeout'}));});
+        apiReq.write(bodyBuf); apiReq.end();
+      } catch(e){res.writeHead(500);res.end(JSON.stringify({error:e.message}));}
+    });
+    return;
+  }
+
   // Health check
   if (urlPath === '/health') {
     res.setHeader('Content-Type', 'application/json');
