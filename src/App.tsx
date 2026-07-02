@@ -8265,14 +8265,25 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             {theme==="dark"?"☀️ Modo Claro":"🌙 Modo Escuro"}
           </button>
         </div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:6}}>Layout do Menu</div>
-        <div style={{display:"flex",gap:8}}>
-          {([["bottom","▼ Inferior"],["top","▲ Superior"],["fab","⊕ Flutuante"]] as [typeof menuLayout,string][]).map(([k,label])=>(
+        <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>📍 Posição das Abas no Menu</div>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          {([
+            ["bottom","▼ Inferior","Barra fixa na base da tela"],
+            ["top","▲ Superior","Abas abaixo do cabeçalho"],
+            ["fab","⊕ Flutuante","Botão redondo no canto"],
+          ] as [typeof menuLayout,string,string][]).map(([k,label,desc])=>(
             <button key={k} onClick={()=>changeMenuLayout(k)} className="btn"
-              style={{flex:1,background:menuLayout===k?"#7c8fff22":"var(--bg4)",border:menuLayout===k?"1px solid #7c8fff":"1px solid var(--border)",color:menuLayout===k?"#7c8fff":"var(--text2)",padding:"10px",fontSize:12,fontWeight:menuLayout===k?700:400}}>
-              {label}
+              style={{flex:1,background:menuLayout===k?"#7c8fff22":"var(--bg4)",border:menuLayout===k?"2px solid #7c8fff":"1px solid var(--border)",color:menuLayout===k?"#7c8fff":"var(--text2)",padding:"10px 6px",fontSize:11,fontWeight:menuLayout===k?700:400,display:"flex",flexDirection:"column" as const,alignItems:"center",gap:4}}>
+              <span style={{fontSize:15}}>{label.split(" ")[0]}</span>
+              <span>{label.split(" ").slice(1).join(" ")}</span>
+              {menuLayout===k&&<span style={{fontSize:9,color:"#7c8fff"}}>● ativo</span>}
             </button>
           ))}
+        </div>
+        <div style={{fontSize:10,color:"#555"}}>
+          {menuLayout==="bottom"&&"▼ Inferior — barra de navegação fixa na base da tela (padrão mobile)"}
+          {menuLayout==="top"&&"▲ Superior — abas exibidas logo abaixo do cabeçalho"}
+          {menuLayout==="fab"&&"⊕ Flutuante — botão redondo no canto abre o menu completo"}
         </div>
       </div>
 
