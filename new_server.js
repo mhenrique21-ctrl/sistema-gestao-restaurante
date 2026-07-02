@@ -185,9 +185,16 @@ function parseNFeXml(rawXml) {
     cnpj:     getTag(emitXml, 'CNPJ'),
     endereco: [getTag(endXml,'xLgr'),getTag(endXml,'nro'),getTag(endXml,'xBairro'),getTag(endXml,'xMun'),getTag(endXml,'UF')].filter(Boolean).join(', '),
   };
-  const dets = getAllTags(xml, 'det');
+  let dets = getAllTags(xml, 'det');
+  // Fallback: try with exec loop if match() returned nothing (large XML edge case)
+  if (!dets.length) {
+    const detRe = /<det[^>]*>[\s\S]*?<\/det>/g;
+    let dm;
+    while ((dm = detRe.exec(xml)) !== null) dets.push(dm[0]);
+  }
   const itens = dets.map(det => {
-    const prod = det.match(/<prod>[\s\S]*?<\/prod>/)?.[0] || '';
+    // Try <prod>...</prod> first, then look for xProd directly in det
+    const prod = det.match(/<prod>[\s\S]*?<\/prod>/)?.[0] || det;
     const nome      = getTag(prod, 'xProd');
     const qtd       = parseFloat(getTag(prod, 'qCom')) || 1;
     const vUnit     = parseFloat(getTag(prod, 'vUnCom')) || 0;
@@ -195,6 +202,9 @@ function parseNFeXml(rawXml) {
     const uCom      = getTag(prod, 'uCom') || 'un';
     return { nome, categoria: categorize(nome), unidade: normalizeUnit(uCom), quantidade: qtd, valorUnitario: vUnit, valorTotal: vTotal };
   }).filter(i => i.nome);
+  if (!itens.length && dets.length) {
+    console.log(`[parseNFeXml] ⚠️ ${dets.length} det(s) encontrados mas 0 itens extraídos — possível problema de namespace. XML início: ${rawXml.slice(0,300)}`);
+  }
   const totalBlock = xml.match(/<ICMSTot>[\s\S]*?<\/ICMSTot>/)?.[0] || '';
   const total = parseFloat(totalBlock ? getTag(totalBlock, 'vNF') : g('vNF')) || itens.reduce((s, i) => s + i.valorTotal, 0);
   // chNFe: from infNFe Id attribute (NFe + 44 digits) or explicit tag
@@ -295,6 +305,9 @@ function sefazFetchByChave(emp, chNFe) {
                   console.log(`[SEFAZ ${emp}] ✅ NF-e completa ...${chNFe.slice(-8)}: ${parsed.itens.length} itens`);
                   return resolve({ ...parsed, tipoDoc: 'completo' });
                 }
+                // Full NF-e XML found but 0 items — parsing may have failed; resolve to avoid silent drop
+                console.log(`[SEFAZ ${emp}] ⚠️ NF-e completa encontrada mas 0 itens extraídos ...${chNFe.slice(-8)}`);
+                return resolve({ ...parsed, tipoDoc: 'completo', itens: [] });
               }
               if (decompressed.includes('<resNFe')) {
                 const cleanRes = decompressed.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g, '').replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
@@ -1060,7 +1073,23 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         const { empresa, chNFe } = JSON.parse(body);
         if (!['CONFRARIA', 'SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Empresa inválida' })); return; }
         if (!chNFe || chNFe.length !== 44) { res.writeHead(400); res.end(JSON.stringify({ error: 'chNFe inválida' })); return; }
-        const result = await sefazFetchByChave(empresa, chNFe);
+        let result;
+        try {
+          result = await sefazFetchByChave(empresa, chNFe);
+        } catch (sefazErr) {
+          // SEFAZ still returning only resumo — inform frontend to retry later
+          const msg = sefazErr.message || 'Erro ao buscar NF-e';
+          const isResumo = msg.includes('resumo') || msg.includes('137') || msg.includes('não encontrada');
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            itens: [], tipoDoc: 'resumo', pendente: true, jaManifestada: true,
+            message: isResumo
+              ? 'NF-e ainda não disponível no SEFAZ. Aguarde 5–10 minutos e tente novamente.'
+              : msg,
+          }));
+          return;
+        }
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end(JSON.stringify(result));
