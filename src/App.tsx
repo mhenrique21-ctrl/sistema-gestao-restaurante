@@ -773,17 +773,17 @@ export default function App() {
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
       {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
-      {id:"lista-arq",label:"Arquivo",icon:"📂",sub:"arquivo"},
-      {id:"lista-prod",label:"Produtos",icon:"📦",sub:"produtos"},
-      {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias"},
-      {id:"lista-rua",label:"Ruas",icon:"🛣️",sub:"ruas"},
-      {id:"lista-est",label:"Estimativa",icon:"💰",sub:"estimativa"},
+      {id:"lista-arq",label:"Arquivo",icon:"📂",sub:"arquivo",adminOnly:true},
+      {id:"lista-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
+      {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
+      {id:"lista-rua",label:"Ruas",icon:"🛣️",sub:"ruas",adminOnly:true},
+      {id:"lista-est",label:"Estimativa",icon:"💰",sub:"estimativa",adminOnly:true},
     ]},
     {id:"producao",label:"Produção",icon:"🏭",children:[
       {id:"prod-novo",label:"Novo Pedido",icon:"➕",sub:"novo"},
-      {id:"prod-arq",label:"Arquivo",icon:"📂",sub:"pedidos"},
-      {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos"},
-      {id:"prod-cat",label:"Categorias",icon:"🏷️",sub:"categorias"},
+      {id:"prod-arq",label:"Arquivo",icon:"📂",sub:"pedidos",adminOnly:true},
+      {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
+      {id:"prod-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
     ]},
     {id:"contas",label:"Financeiro",icon:"📋",children:[
       {id:"fin-contas",label:"Contas",icon:"📋",sub:"lista"},
@@ -806,8 +806,8 @@ export default function App() {
     ]},
     {id:"agenda",label:"Encomenda",icon:"📦",children:[
       {id:"agenda-enc",label:"Encomendas",icon:"📦",sub:"encomendas"},
-      {id:"agenda-cad",label:"Cadastradas",icon:"📋",sub:"cadastradas"},
-      {id:"agenda-ann",label:"Anotações",icon:"📝",sub:"anotacoes"},
+      {id:"agenda-cad",label:"Cadastradas",icon:"📋",sub:"cadastradas",adminOnly:true},
+      {id:"agenda-ann",label:"Anotações",icon:"📝",sub:"anotacoes",adminOnly:true},
     ]},
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
@@ -886,7 +886,7 @@ export default function App() {
                   {hasKids&&<span style={{marginLeft:badge(m.id)?"4px":"auto",fontSize:10,color:"#4a5080",transition:"transform .2s",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>▼</span>}
                 </button>
                 {hasKids&&isOpen&&<div style={{background:"var(--bg4)",borderLeft:"3px solid #2a2f50"}}>
-                  {m.children!.map(c=>(
+                  {m.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
                     <button key={c.id} onClick={()=>navTo(m.id,c.sub)}
                       style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,color:tab===m.id&&pendingSub===null?"#5a6080":"#4a5080",padding:"8px 18px 8px 36px",width:"100%",fontSize:12,fontWeight:400,transition:"all .15s"}}>
                       <span style={{fontSize:13}}>{c.icon}</span>
@@ -964,7 +964,7 @@ export default function App() {
           ))}
           </div>
           {expandedMenu&&menuFiltered.find(m=>m.id===expandedMenu)?.children&&<div style={{display:"flex",gap:3,padding:"4px 0",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any}}>
-            {menuFiltered.find(m=>m.id===expandedMenu)!.children!.map(c=>(
+            {menuFiltered.find(m=>m.id===expandedMenu)!.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
               <button key={c.id} onClick={()=>{navTo(expandedMenu,c.sub);setExpandedMenu(null);}}
                 style={{flexShrink:0,padding:"4px 10px",borderRadius:16,fontSize:10,fontWeight:500,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",whiteSpace:"nowrap"}}>
                 {c.icon} {c.label}
@@ -985,15 +985,17 @@ export default function App() {
         ))}
       </div>}
 
-      {/* NOTIF BELL FIXO */}
-      <div style={{position:"fixed",right:16,top:70,zIndex:400}}>
+      {/* NOTIF BELL FIXO — apenas admin */}
+      {isAdmin&&<div style={{position:"fixed",right:16,top:70,zIndex:400}}>
         <NotifBell db={db} onNavigate={setTab} setPendingSub={setPendingSub}/>
-      </div>
+      </div>}
       {/* CONTENT */}
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
           ? (tab==="producao"
             ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
+            : tab==="agenda"
+            ? <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={false} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} setDbAndSave={setDbAndSave}/>)
           : <>
               {tab==="dashboard"  && <Dashboard db={db} setDb={setDb} empresa={empresa} onNavigate={setTab} setPendingSub={setPendingSub}/>}
@@ -1006,7 +1008,7 @@ export default function App() {
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
-              {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout}/>}
             </>
         }
@@ -1021,7 +1023,7 @@ export default function App() {
             <button onClick={()=>setExpandedMenu(null)} style={{background:"none",border:"none",color:"#666",fontSize:16,cursor:"pointer",padding:"0 4px"}}>✕</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>
-            {menuFiltered.find(m=>m.id===expandedMenu)!.children!.map(c=>(
+            {menuFiltered.find(m=>m.id===expandedMenu)!.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
               <button key={c.id} onClick={()=>{navTo(expandedMenu,c.sub);setExpandedMenu(null);}}
                 style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 6px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,color:"var(--text)"}}>
                 <span style={{fontSize:18}}>{c.icon}</span>
@@ -1067,7 +1069,7 @@ export default function App() {
                   {hasKids&&<span style={{fontSize:9,color:"#4a5080",transition:"transform .2s",transform:fabExpanded?"rotate(180deg)":"none"}}>▼</span>}
                 </button>
                 {hasKids&&fabExpanded&&<div style={{paddingLeft:16,borderLeft:"2px solid #2a2f50",marginLeft:20,marginBottom:4}}>
-                  {m.children!.map(c=>(
+                  {m.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
                     <button key={c.id} onClick={()=>{navTo(m.id,c.sub);setFabOpen(false);setExpandedMenu(null);}}
                       style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",borderRadius:8,border:"none",cursor:"pointer",background:"none",color:"var(--text2)",fontSize:12,textAlign:"left"}}>
                       <span style={{fontSize:14}}>{c.icon}</span><span>{c.label}</span>
@@ -8722,17 +8724,19 @@ function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   </div>;
 }
 
-function AgendaPanel({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function AgendaPanel({db,setDb,empresa,isAdmin,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,isAdmin?:boolean,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const [subTab,setSubTab]=useState(pendingSub||"encomendas");
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
 
   const enc:any[]=db.encomendas||[];
   const nCad=enc.filter((e:any)=>e.status==="entregue"||e.status==="cancelado").length;
 
+  const agendaTabs:[string,string][]=[["encomendas","📦 Encomendas"],["cadastradas","📋 Cadastradas"],["clientes","👤 Clientes"],["anotacoes","📝 Anotações"]];
+
   return <div style={{padding:"0 0 24px 0"}}>
     <div style={{padding:"12px 16px 0",fontWeight:800,fontSize:17,letterSpacing:0.2}}>Encomendas</div>
     <div style={{display:"flex",gap:6,padding:"10px 14px 0",overflowX:"auto",scrollbarWidth:"none" as any}}>
-      {([["encomendas","📦 Encomendas"],["cadastradas","📋 Cadastradas"],["clientes","👤 Clientes"],["anotacoes","📝 Anotacoes"]] as [string,string][]).map(([k,l])=>(
+      {agendaTabs.filter(([k])=>isAdmin||k==="encomendas").map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)}
           style={{flexShrink:0,padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:subTab===k?700:500,position:"relative" as const,
             background:subTab===k?"#7c8fff":"var(--bg3)",color:subTab===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
