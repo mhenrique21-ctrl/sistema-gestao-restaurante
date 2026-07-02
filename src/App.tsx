@@ -612,21 +612,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const st=server.updatedAt||0;
       merged.push(st>lt?server:local);
     });
-    // Dedup pendentes por nome: operadores diferentes podem ter adicionado o mesmo item simultaneamente
-    const _nameMap=new Map<string,any>();
-    const _outros:any[]=[];
-    merged.forEach((item:any)=>{
-      if(item.comprado||item.naoTem){_outros.push(item);return;}
-      const key=(item.nome||'').trim().toLowerCase();
-      if(_nameMap.has(key)){
-        const ex=_nameMap.get(key);
-        const winner=(item.updatedAt||0)>=(ex.updatedAt||0)?item:ex;
-        _nameMap.set(key,{...winner,quantidade:(ex.quantidade||1)+(item.quantidade||1)});
-      }else{
-        _nameMap.set(key,{...item});
-      }
-    });
-    next[emp].listaCompras=[..._outros,..._nameMap.values()];
+    next[emp].listaCompras=merged;
     // listaDeletedIds: unir local e servidor
     next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-500);
     // listaCategorias, listaRuas, ruaCatMap: unir
@@ -3450,17 +3436,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const nome=form.nome.trim();
       const cat=form.cat||"outros";
       const qtdNova=parseFloat(form.qtd)||1;
-      // Verificar duplicata na lista de pendentes (não comprados)
-      const existente=(db.listaCompras||[]).find((i:any)=>!i.comprado&&i.nome.trim().toLowerCase()===nome.toLowerCase());
-      if(existente){
-        const qtdExist=existente.quantidade||1;
-        const msg=`"${nome}" já está na lista (${qtdExist} ${existente.unidade||"un"}).\n\nDeseja somar a quantidade? (+${qtdNova} → total ${qtdExist+qtdNova} ${existente.unidade||"un"})`;
-        if(!confirm(msg))return;
-        setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===existente.id?{...i,quantidade:qtdExist+qtdNova,updatedAt:Date.now()}:i)}));
-        setForm(EMPTY_FORM_LISTA);
-        setPendingMpLinks(null);
-        return;
-      }
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
       const newItem={id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
       setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
