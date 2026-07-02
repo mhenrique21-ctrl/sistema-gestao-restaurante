@@ -1466,10 +1466,69 @@ function Vendas({db,setDb,state}){
     delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","): "",
   });setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,vendas:d.vendas.filter(v=>v.id!==id)}));};
+  const iaRelRef=useRef<HTMLInputElement>(null);
+  const [iaRelLoading,setIaRelLoading]=useState(false);
+  const [iaRelPreview,setIaRelPreview]=useState<string|null>(null);
+  const [iaRelBase64,setIaRelBase64]=useState<{data:string,mediaType:string}|null>(null);
+  const [iaRelMsg,setIaRelMsg]=useState("");
+  const redimRelImg=(dataUrl:string,maxPx=1200,q=0.70):Promise<string>=>new Promise(r=>{const i=new Image();i.onload=()=>{let w=i.width,h=i.height;if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d")!.drawImage(i,0,0,w,h);let res=c.toDataURL("image/jpeg",q);if(res.length>500000)res=c.toDataURL("image/jpeg",0.50);r(res);};i.onerror=()=>r(dataUrl);i.src=dataUrl;});
+  const onRelFile=async(e:any)=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=async()=>{const orig=rd.result as string;const resized=await redimRelImg(orig);setIaRelBase64({data:resized.split(",")[1],mediaType:"image/jpeg"});setIaRelPreview(resized);setIaRelMsg("");};rd.readAsDataURL(f);if(iaRelRef.current)iaRelRef.current.value="";};
+  const PROMPT_REL=`Analise este relatório/extrato de maquininha de cartão e extraia os totais. Retorne APENAS um JSON válido, sem texto extra, sem markdown:\n{"data":"YYYY-MM-DD","maquininha":0.00,"debito":0.00,"credito_avista":0.00,"credito_parcelado":0.00,"pix":0.00}\nOnde "maquininha" é o TOTAL GERAL de todas as transações aprovadas (débito+crédito+pix). Use a data do relatório no formato YYYY-MM-DD. Se não encontrar algum campo use 0.`;
+  const processarRelatorio=async()=>{
+    if(!iaRelBase64)return;
+    setIaRelLoading(true);setIaRelMsg("");
+    try{
+      const ctrl=new AbortController();
+      const t=setTimeout(()=>ctrl.abort(),100000);
+      const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({messages:[{role:"user",content:[
+          {type:"image",source:{type:"base64",media_type:iaRelBase64.mediaType,data:iaRelBase64.data}},
+          {type:"text",text:PROMPT_REL}
+        ]}]}),signal:ctrl.signal});
+      clearTimeout(t);
+      if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);
+      const dt=await res.json();
+      const txt=(dt.content||[]).map((b:any)=>b.text||"").join("").trim();
+      let parsed:any;
+      try{let c=txt.replace(/```json/g,"").replace(/```/g,"").trim();parsed=JSON.parse(c);}
+      catch{const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("JSON inválido retornado pela IA");}
+      const maq=parseFloat(String(parsed.maquininha||parsed.total||parsed.total_geral||0))||0;
+      const deb=parseFloat(String(parsed.debito||0))||0;
+      const cred=parseFloat(String((parsed.credito_avista||0)))+parseFloat(String(parsed.credito_parcelado||0));
+      const pix=parseFloat(String(parsed.pix||0))||0;
+      if(maq>0)setForm(f=>({...f,
+        maquininha:maq.toFixed(2).replace(".",","),
+        ...(parsed.data&&/^\d{4}-\d{2}-\d{2}$/.test(parsed.data)?{data:parsed.data}:{})
+      }));
+      setIaRelMsg(`✅ Total: R$ ${maq.toFixed(2).replace(".",",")} — Débito: R$ ${deb.toFixed(2).replace(".",",")} | Crédito: R$ ${cred.toFixed(2).replace(".",",")} | Pix: R$ ${pix.toFixed(2).replace(".",",")}`);
+      setIaRelPreview(null);setIaRelBase64(null);
+    }catch(e:any){
+      setIaRelMsg("❌ "+(e.message||"Erro ao processar relatório"));
+    }finally{setIaRelLoading(false);}
+  };
   return <div>
     <div className="section-title">Lançar Vendas do Dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
+      <div style={{marginBottom:10}}>
+        <input ref={iaRelRef} type="file" accept="image/*" capture="environment" onChange={onRelFile} style={{display:"none"}}/>
+        <button className="btn" type="button" onClick={()=>iaRelRef.current?.click()}
+          style={{width:"100%",background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          📷 Ler Relatório da Maquininha (IA)
+        </button>
+        {iaRelPreview&&<div style={{marginTop:8,textAlign:"center"}}>
+          <img src={iaRelPreview} style={{maxHeight:180,maxWidth:"100%",borderRadius:8,objectFit:"contain",border:"1px solid var(--border2)"}} alt="relatório"/>
+          <button className="btn" type="button" onClick={processarRelatorio} disabled={iaRelLoading}
+            style={{marginTop:8,width:"100%",background:iaRelLoading?"var(--bg3)":"#7c8fff",color:"#fff",fontSize:13,padding:"10px",borderRadius:10}}>
+            {iaRelLoading?"⏳ Processando...":"🤖 Extrair Valores"}
+          </button>
+          <button className="btn" type="button" onClick={()=>{setIaRelPreview(null);setIaRelBase64(null);setIaRelMsg("");}}
+            style={{marginTop:4,width:"100%",background:"transparent",color:"#888",fontSize:12,padding:"6px"}}>
+            Cancelar
+          </button>
+        </div>}
+        {iaRelMsg&&<div style={{marginTop:6,fontSize:12,color:iaRelMsg.startsWith("✅")?"#4ade80":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaRelMsg}</div>}
+      </div>
       {["maquininha","dinheiro"].map(m=>(
         <div key={m} style={{marginBottom:8}}>
           <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block",textTransform:"capitalize"}}>{m}</label>
