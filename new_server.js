@@ -404,11 +404,9 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
   const signature = signXmlInfEvento(infEventoXml, privateKeyPem, certPem);
   const eventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">${infEventoXml}${signature}</evento>`;
   const envEvento = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>1</idLote>${eventoXml}</envEvento>`;
-  const wsaNs = 'xmlns:wsa="http://www.w3.org/2005/08/addressing"';
-  const actionUrl = 'http://www.portalfiscal.inf.br/nfe/wsd1/NFeRecepcaoEvento4/nfeRecepcaoEventoNF';
-  const toUrl = 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx';
-  const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg><wsa:Action ${wsaNs}>${actionUrl}</wsa:Action><wsa:To ${wsaNs}>${toUrl}</wsa:To>`;
-  return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header>${cabec}</soap12:Header><soap12:Body><nfeRecepcaoEvento xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${envEvento}</nfeDadosMsg></nfeRecepcaoEvento></soap12:Body></soap12:Envelope>`;
+  // SOAP 1.1 binding (text/xml + SOAPAction header)
+  const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
+  return `<?xml version="1.0" encoding="utf-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><soapenv:Header>${cabec}</soapenv:Header><soapenv:Body><nfeRecepcaoEvento xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${envEvento}</nfeDadosMsg></nfeRecepcaoEvento></soapenv:Body></soapenv:Envelope>`;
 }
 
 function sefazManifestar(emp, chNFe) {
@@ -432,7 +430,7 @@ function sefazManifestar(emp, chNFe) {
       hostname: 'www.nfe.fazenda.gov.br',
       path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       method: 'POST',
-      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsd1/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'Content-Length': bodyBuf.length },
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsd1/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'Content-Length': bodyBuf.length },
       ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
     };
     console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
@@ -1603,7 +1601,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           hostname: 'www.nfe.fazenda.gov.br',
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
-          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsd1/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'Content-Length': bodyBuf.length },
+          headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"http://www.portalfiscal.inf.br/nfe/wsd1/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'Content-Length': bodyBuf.length },
           ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
         };
         const apiReq = https.request(opts, apiRes => {
@@ -1617,7 +1615,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
             const dhReg = getTag(stripped,'dhRegEvento') || getTag(stripped,'dhEvento');
             res.setHeader('Content-Type','application/json');
             res.writeHead(200);
-            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, rawSnippet: rawXml.slice(0,600) }));
+            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, rawSnippet: rawXml.slice(0,800), sentSoapSnippet: soapBody.slice(0,500) }));
           });
         });
         apiReq.on('error', e => { res.writeHead(500); res.end(JSON.stringify({error:e.message})); });
