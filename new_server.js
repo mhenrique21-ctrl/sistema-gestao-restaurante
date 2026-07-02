@@ -146,6 +146,26 @@ function saveNsu(emp, nsu) {
   fs.writeFileSync(f, JSON.stringify(m));
 }
 
+function setRateLimit(emp, minutes) {
+  const f = path.join(CERTS_DIR, 'nsu.json');
+  const m = getNsuMap();
+  m[`rateLimitUntil_${emp}`] = Date.now() + minutes * 60 * 1000;
+  fs.mkdirSync(CERTS_DIR, { recursive: true });
+  fs.writeFileSync(f, JSON.stringify(m));
+}
+
+function isRateLimited(emp) {
+  const m = getNsuMap();
+  const until = m[`rateLimitUntil_${emp}`];
+  if (!until) return false;
+  if (Date.now() < until) {
+    const minLeft = Math.ceil((until - Date.now()) / 60000);
+    console.log(`[AutoSync] ${emp}: rate limit ativo por mais ${minLeft}min — pulando.`);
+    return true;
+  }
+  return false;
+}
+
 function decodeXmlEntities(s) {
   return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCharCode(parseInt(h,16)));
 }
@@ -1658,6 +1678,7 @@ async function autoSyncSEFAZ() {
     const key  = cnpj || emp;
     if (processed.has(key)) { console.log(`[AutoSync] ${emp}: mesmo CNPJ de empresa anterior, pulando.`); continue; }
     processed.add(key);
+    if (isRateLimited(emp)) continue;
     console.log(`[AutoSync] Iniciando sync SEFAZ para ${emp} (CNPJ key: ${key})...`);
     try {
       const result = await sefazSync(emp);
@@ -1709,7 +1730,8 @@ async function autoSyncSEFAZ() {
       }
     } catch (e) {
       if (e.message && e.message.includes('656')) {
-        console.log(`[AutoSync] ${emp}: rate limit SEFAZ (656). Tentará novamente no próximo ciclo.`);
+        setRateLimit(emp, 70);
+        console.log(`[AutoSync] ${emp}: rate limit SEFAZ (656). Bloqueado por 70min.`);
       } else {
         console.error(`[AutoSync] ${emp}: erro — ${e.message}`);
       }
