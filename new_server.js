@@ -391,11 +391,12 @@ function signXmlInfEvento(infEventoXml, privateKeyPem, certPem) {
     .trim();
   const idMatch = infEventoXml.match(/Id="([^"]+)"/);
   const refUri = idMatch ? `#${idMatch[1]}` : '';
-  const digest = crypto.createHash('sha256').update(c14n, 'utf8').digest('base64');
+  const digest = crypto.createHash('sha1').update(c14n, 'utf8').digest('base64');
   const c14nAlg = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
   // SignedInfo WITHOUT xmlns — matches PHP/Java output (xmlns inherited from Signature parent)
-  const signedInfoC14n = `<SignedInfo><CanonicalizationMethod Algorithm="${c14nAlg}"/><SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="${c14nAlg}"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
-  const signer = crypto.createSign('RSA-SHA256');
+  // Using SHA-1: testing if SEFAZ NFeRecepcaoEvento4 drops RSA-SHA256 via CryptoConfig null
+  const signedInfoC14n = `<SignedInfo><CanonicalizationMethod Algorithm="${c14nAlg}"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="${refUri}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="${c14nAlg}"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>${digest}</DigestValue></Reference></SignedInfo>`;
+  const signer = crypto.createSign('RSA-SHA1');
   signer.update(signedInfoC14n, 'utf8');
   const signatureValue = signer.sign(privateKeyPem, 'base64');
   const x509 = getX509CertBase64(certPem);
