@@ -387,7 +387,9 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
   const tpEvento = '210210';
   const nSeqEvento = '1';
   const evId = `ID${tpEvento}${chNFe}0${nSeqEvento}`;
-  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z/, '-03:00');
+  // UTC-3 (horário de Brasília): subtrair 3h para exibir hora local correta
+  const _d = new Date();
+  const dhEvento = new Date(_d.getTime() - 3 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, '-03:00');
 
   // Build unsigned envEvento with the full document structure
   const infEventoXml = `<infEvento Id="${evId}"><cOrgao>91</cOrgao><tpAmb>1</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciência da Operação</descEvento></detEvento></infEvento>`;
