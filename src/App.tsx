@@ -643,6 +643,9 @@ export default function App() {
   const [menuPickerOpen,setMenuPickerOpen]=useState(false);
   const [fabOpen,setFabOpen]=useState(false);
   const changeMenuLayout=(l:"bottom"|"top"|"fab")=>{setMenuLayout(l);localStorage.setItem("app_menu_layout",l);setMenuPickerOpen(false);setFabOpen(false);};
+  const DEFAULT_MENU_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","config"];
+  const [menuOrder,setMenuOrder]=useState<string[]>(()=>{try{const s=localStorage.getItem("app_menu_order");if(s)return JSON.parse(s);}catch{}return DEFAULT_MENU_ORDER;});
+  const changeMenuOrder=(order:string[])=>{setMenuOrder(order);localStorage.setItem("app_menu_order",JSON.stringify(order));};
   const [syncStatus,setSyncStatus] = useState<"idle"|"sync"|"ok"|"erro">("idle");
 
   const toggleTheme=()=>{
@@ -812,9 +815,10 @@ export default function App() {
     ]},
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
-  const allTabs=menuStructure.map(m=>({id:m.id,label:m.label,icon:m.icon}));
+  const orderedStructure=[...menuStructure].sort((a,b)=>{const ai=menuOrder.indexOf(a.id);const bi=menuOrder.indexOf(b.id);return(ai<0?999:ai)-(bi<0?999:bi);});
+  const allTabs=orderedStructure.map(m=>({id:m.id,label:m.label,icon:m.icon}));
   const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"||t.id==="agenda"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):login?.role==="op_enc"?allTabs.filter(t=>t.id==="agenda"):allTabs.filter(t=>t.id==="producao")):allTabs;
-  const menuFiltered=isOp?menuStructure.filter(m=>tabs.some(t=>t.id===m.id)):menuStructure;
+  const menuFiltered=isOp?orderedStructure.filter(m=>tabs.some(t=>t.id===m.id)):orderedStructure;
   const navTo=(t:string,s?:string)=>{setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
 
   return (
@@ -1010,7 +1014,7 @@ export default function App() {
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout}/>}
+              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder}/>}
             </>
         }
       </div>
@@ -8167,8 +8171,8 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
 }
 
 // ===================== CONFIGURAÇÕES =====================
-function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout}:
-  {db:any,setDb:any,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void}){
+function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder}:
+  {db:any,setDb:any,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
   const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"]];
@@ -8286,6 +8290,38 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
           {menuLayout==="fab"&&"⊕ Flutuante — botão redondo no canto abre o menu completo"}
         </div>
       </div>
+
+      <div className="card" style={{marginBottom:12}}>{(()=>{
+        const TAB_INFO:{[id:string]:{label:string,icon:string}}={
+          dashboard:{label:"Dashboard",icon:"📊"},vendas:{label:"Vendas",icon:"💰"},
+          compras:{label:"Compras",icon:"🏪"},lista:{label:"Lista",icon:"🛒"},
+          producao:{label:"Produção",icon:"🏭"},contas:{label:"Financeiro",icon:"📋"},
+          estoque:{label:"Estoque",icon:"📦"},fluxo:{label:"Fluxo de Caixa",icon:"💵"},
+          gestao:{label:"Gestão",icon:"⚙️"},agenda:{label:"Encomenda",icon:"📦"},
+          config:{label:"Configurações",icon:"🔧"},
+        };
+        const DEFAULT_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","config"];
+        const order=menuOrder.length===DEFAULT_ORDER.length?menuOrder:DEFAULT_ORDER;
+        const move=(i:number,dir:-1|1)=>{const o=[...order];const ni=i+dir;if(ni<0||ni>=o.length)return;[o[i],o[ni]]=[o[ni],o[i]];changeMenuOrder(o);};
+        return(<>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🔢 Sequência das Abas</div>
+          <div style={{fontSize:11,color:"var(--text2)",marginBottom:8}}>Use as setas para reordenar as abas do menu.</div>
+          {order.map((id,i)=>{const info=TAB_INFO[id];if(!info)return null;return(
+            <div key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"var(--bg4)",borderRadius:8,marginBottom:4,border:"1px solid var(--border)"}}>
+              <span style={{fontSize:14}}>{info.icon}</span>
+              <span style={{flex:1,fontSize:13,color:"var(--text)"}}>{info.label}</span>
+              <button onClick={()=>move(i,-1)} className="btn" disabled={i===0}
+                style={{padding:"4px 10px",fontSize:12,opacity:i===0?0.25:1,minWidth:32,lineHeight:1}}>▲</button>
+              <button onClick={()=>move(i,1)} className="btn" disabled={i===order.length-1}
+                style={{padding:"4px 10px",fontSize:12,opacity:i===order.length-1?0.25:1,minWidth:32,lineHeight:1}}>▼</button>
+            </div>
+          );})}
+          <button onClick={()=>changeMenuOrder(DEFAULT_ORDER)} className="btn"
+            style={{width:"100%",marginTop:6,background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:11,padding:"8px"}}>
+            🔄 Restaurar ordem padrão
+          </button>
+        </>);
+      })()}</div>
 
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📊 Empresa Ativa</div>
