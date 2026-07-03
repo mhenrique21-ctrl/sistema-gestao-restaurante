@@ -4926,14 +4926,17 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   // Catalog quick-fill (new Novo Pedido flow)
   const [qtdsCatalog,setQtdsCatalog]=useState<Record<string,string>>({});
   const [qtdsAtual,setQtdsAtual]=useState<Record<string,string>>({});
-  const preenchidos=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0).length;
-
-  const _itensFilled=(catalog:any[])=>catalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0).map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id]),qtdAtual:qtdsAtual[p.id]||"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
+  // itens com Pedido > 0 (para arquivar) ou qualquer campo preenchido (para compartilhar)
+  const preenchidos=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0||parseFloat(qtdsAtual[p.id]||"0")>0).length;
+  const _itensFilled=(catalog:any[])=>catalog
+    .filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0||parseFloat(qtdsAtual[p.id]||"0")>0)
+    .map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id])||0,qtdAtual:qtdsAtual[p.id]||"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
 
   const gerarPedidoCatalog=()=>{
-    const itensFilled=_itensFilled(prodsCatalog);
-    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade no campo 'Pedido'.");
-    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    const itensPed=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0)
+      .map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id]),qtdAtual:qtdsAtual[p.id]||"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
+    if(!itensPed.length)return alert("Preencha pelo menos 1 quantidade no campo 'Pedido'.");
+    const pedido={id:uid(),data:today(),itens:itensPed,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     setQtdsCatalog({});setQtdsAtual({});
     if(confirm("✅ Pedido gerado! Compartilhar via WhatsApp?"))
@@ -4941,7 +4944,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   };
   const compartilharWhatsAppRapido=()=>{
     const itensFilled=_itensFilled(prodsCatalog);
-    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade no campo 'Pedido'.");
+    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade (Atual ou Pedido).");
     const ped={data:today(),itens:itensFilled,solicitante:login?.label||""};
     window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");
   };
@@ -4969,7 +4972,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
     Object.entries(pc).forEach(([cat,its])=>{
       txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
-      its.forEach((it:any)=>{txt+=`• ${it.nome}${it.quantidade?` | *${it.quantidade}${it.unidade||"un"}*`:""}${it.qtdAtual?` | atual:${it.qtdAtual}`:""}${it.obs?` | ${it.obs}`:""}\n`;});
+      its.forEach((it:any)=>{txt+=`• ${it.nome}\n  🟡 Atual: ${it.qtdAtual||"—"} ${it.unidade||"un"} | 🟣 Pedido: *${it.quantidade||"—"} ${it.unidade||"un"}*${it.obs?` | ${it.obs}`:""}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
@@ -5217,16 +5220,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
             {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"#7c3aed",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
           </div>
         : <>
-            {/* Cabeçalho das colunas */}
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 6px 6px",marginBottom:2}}>
-              <div style={{flex:1,fontSize:10,color:"#666",fontWeight:600,textTransform:"uppercase" as const,letterSpacing:.3}}>Produto</div>
-              <div style={{width:64,textAlign:"center" as const,fontSize:10,color:"#f59e0b",fontWeight:700}}>Atual</div>
-              <div style={{width:64,textAlign:"center" as const,fontSize:10,color:"#c084fc",fontWeight:700}}>Pedido</div>
-              <div style={{width:26}}/>
-            </div>
-
             {/* Lista por categoria */}
             {(()=>{
+              const catHeader=(label:string,icon:string,bg:string,color:string)=>(
+                <div style={{fontSize:12,fontWeight:700,color,textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:bg,borderRadius:8,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
+                  <span>{icon}</span><span style={{flex:1}}>{label}</span>
+                  <span style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginRight:4,width:64,textAlign:"center" as const}}>Atual</span>
+                  <span style={{fontSize:10,color:"#c084fc",fontWeight:700,width:64,textAlign:"center" as const}}>Pedido</span>
+                  <span style={{width:26}}/>
+                </div>
+              );
               const renderItem=(p:any)=>{
                 const vAtual=qtdsAtual[p.id]||"";
                 const vPed=qtdsCatalog[p.id]||"";
@@ -5247,14 +5250,12 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
               return <>
                 {cats.filter(cat=>prodsCatalog.some((p:any)=>p.cat===cat)).map(cat=>(
                   <div key={cat} style={{marginBottom:10}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#c084fc",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#c084fc14",borderRadius:8,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
-                      <span>{prodCatIcon(cat)}</span><span>{cat}</span>
-                    </div>
+                    {catHeader(cat,prodCatIcon(cat),"#c084fc14","#c084fc")}
                     {prodsCatalog.filter((p:any)=>p.cat===cat).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                   </div>
                 ))}
                 {prodsCatalog.filter((p:any)=>!p.cat).length>0&&<div style={{marginBottom:10}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#88888814",borderRadius:8,marginBottom:2}}>📦 OUTROS</div>
+                  {catHeader("OUTROS","📦","#88888814","#888")}
                   {prodsCatalog.filter((p:any)=>!p.cat).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                 </div>}
               </>;
