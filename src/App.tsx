@@ -2385,6 +2385,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [xmlDlChave,setXmlDlChave]=useState("");
   const [xmlDlLoading,setXmlDlLoading]=useState(false);
   const [xmlDlMsg,setXmlDlMsg]=useState("");
+  const [chaveConsultaInput,setChaveConsultaInput]=useState("");
+  const [chaveConsultaLoading,setChaveConsultaLoading]=useState(false);
+  const [chaveConsultaResult,setChaveConsultaResult]=useState<any>(null);
+  const [chaveConsultaError,setChaveConsultaError]=useState("");
   const [xmlDlOk,setXmlDlOk]=useState(false);
 
   const fetchNSU=()=>fetch(`/api/nsu-status?empresa=${empresa}`).then(r=>r.json()).then(d=>{setSefazNSU(d.nsu??0);setSefazNsuInput(String(d.nsu??0));}).catch(()=>{});
@@ -2538,6 +2542,21 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       }
     }catch(e:any){alert("⚠️ "+e.message);}
     finally{setFetchingChave(null);}
+  };
+
+  const consultarPorChave=async()=>{
+    const chave=chaveConsultaInput.replace(/\D/g,'');
+    if(chave.length!==44)return;
+    setChaveConsultaLoading(true);setChaveConsultaError("");setChaveConsultaResult(null);
+    try{
+      const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:chave})});
+      const ct=res.headers.get("content-type")||"";
+      if(!ct.includes("application/json"))throw new Error("Tempo de resposta excedido. Aguarde e tente novamente.");
+      const data=await res.json();
+      if(!res.ok||data.error)throw new Error(data.error||`Erro HTTP ${res.status}`);
+      setChaveConsultaResult(data);
+    }catch(e:any){setChaveConsultaError(e.message||"Erro ao consultar SEFAZ");}
+    setChaveConsultaLoading(false);
   };
 
   const carregarNaImportacao=(nfe:any)=>{
@@ -2882,6 +2901,38 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         </div>
         {!waitOk&&<div style={{fontSize:11,color:"#f59e0b",marginTop:6}}>⏳ Limite SEFAZ atingido. Aguarde {Math.ceil(waitMs/60000)} min.</div>}
         {sefazLastSync&&<div style={{fontSize:10,color:"#555",marginTop:4}}>Última sync: {sefazLastSync} · NSU: {sefazNSU??0}</div>}
+      </div>
+
+      {/* Consulta manual por chave de acesso */}
+      <div style={{background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:13,color:"var(--acc)",marginBottom:6}}>🔑 Consultar por Chave de Acesso</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:8}}>Cole a chave de 44 dígitos para buscar a NF-e diretamente no SEFAZ usando o certificado A1.</div>
+        <input value={chaveConsultaInput} onChange={e=>{const v=e.target.value.replace(/\D/g,'').slice(0,44);setChaveConsultaInput(v);setChaveConsultaError("");setChaveConsultaResult(null);}}
+          className="inp" placeholder="44 dígitos da chave de acesso" maxLength={44}
+          style={{marginBottom:4,fontFamily:"monospace",fontSize:12,letterSpacing:"0.5px"}}/>
+        <div style={{fontSize:10,color:chaveConsultaInput.length===44?"#4ade80":"#6b7280",marginBottom:8}}>
+          {chaveConsultaInput.length}/44 dígitos{chaveConsultaInput.length===44?" ✅":""}
+        </div>
+        <button className="btn" onClick={consultarPorChave} disabled={chaveConsultaInput.length!==44||chaveConsultaLoading}
+          style={{background:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#7c8fff":"var(--border2)",color:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#fff":"#888",width:"100%",padding:"10px",fontSize:13,fontWeight:700}}>
+          {chaveConsultaLoading?"⏳ Consultando SEFAZ…":"🔍 Buscar NF-e no SEFAZ"}
+        </button>
+        {chaveConsultaError&&<div style={{fontSize:12,color:"#f87171",marginTop:8,padding:"8px 10px",background:"#1a0a0a",borderRadius:6,border:"1px solid #7f1d1d"}}>{chaveConsultaError}</div>}
+        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length>0&&<div style={{marginTop:10,background:"var(--bg4)",borderRadius:8,padding:"10px 12px",border:"1px solid #4ade8033"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#4ade80",marginBottom:2}}>{chaveConsultaResult.fornecedor?.nome||"Fornecedor"}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginBottom:6}}>
+            {chaveConsultaResult.data?fmtDate(chaveConsultaResult.data):""} · {(chaveConsultaResult.itens||[]).length} produto(s) · {fmtMoney(chaveConsultaResult.totalCompra||0)}
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="btn" onClick={()=>{importarNFeSefaz(chaveConsultaResult);setChaveConsultaResult(null);setChaveConsultaInput("");}}
+              style={{flex:1,background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",padding:"8px",fontSize:12,fontWeight:700}}>📥 Importar NF-e</button>
+            {chaveConsultaResult.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(chaveConsultaResult.rawXml,chaveConsultaResult.nNF||"",chaveConsultaResult.fornecedor?.nome||"")}
+              style={{background:"var(--border)",color:"#aaa",padding:"8px 12px",fontSize:12}}>⬇ XML</button>}
+          </div>
+        </div>}
+        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length===0&&!chaveConsultaError&&<div style={{fontSize:12,color:"#f59e0b",marginTop:8,padding:"8px 10px",background:"#1a0a0000",borderRadius:6}}>
+          ⏳ SEFAZ processando — manifestação enviada. Aguarde alguns minutos e tente novamente.
+        </div>}
       </div>
 
       {sefazError&&<div style={{background:"#1a0a0a",border:"1px solid #7f1d1d",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12,color:"#f87171"}}>{sefazError}</div>}
