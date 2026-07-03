@@ -2957,6 +2957,15 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   {nfe.data?fmtDate(nfe.data):""}{nfe.nNF?` · NF #${nfe.nNF}`:""} · {isResumo?<span style={{color:"#f59e0b"}}>aguardando XML…</span>:<span style={{color:"#4ade80"}}>{(nfe.itens||[]).length} produto(s)</span>}
                 </div>
                 {nfe.totalCompra>0&&<div style={{fontSize:12,fontWeight:700,color:"#fff",marginTop:2}}>{fmtMoney(nfe.totalCompra)}</div>}
+                {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}>
+                  <span style={{fontSize:9,fontFamily:"monospace",color:"#3b4a6b",letterSpacing:"0.5px",wordBreak:"break-all" as const,flex:1}}>
+                    {(nfe.chNFe as string).replace(/(.{4})/g,"$1 ").trim()}
+                  </span>
+                  <button onClick={()=>copiarChave(nfe.chNFe)} title="Copiar chave"
+                    style={{background:"none",border:"1px solid #3b4a6b",borderRadius:4,color:"#3b4a6b",cursor:"pointer",padding:"2px 5px",fontSize:9,flexShrink:0,whiteSpace:"nowrap" as const}}>
+                    📋 copiar
+                  </button>
+                </div>}
               </div>
               <div style={{display:"flex",gap:5,flexShrink:0}}>
                 {isResumo&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)} disabled={isLoading}
