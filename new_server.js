@@ -1163,6 +1163,80 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     return;
   }
 
+  // NF-e: baixar nota rápido — tenta fetch direto, manifesta só se necessário
+  if (req.method === 'POST' && urlPath === '/api/nfe-baixar') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { empresa, chNFe } = JSON.parse(body);
+        if (!['CONFRARIA', 'SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Empresa inválida' })); return; }
+        const ch = (chNFe || '').replace(/\D/g, '');
+        if (ch.length !== 44) { res.writeHead(400); res.end(JSON.stringify({ error: 'Chave de acesso inválida (44 dígitos)' })); return; }
+        const isNFCe = ch.substring(20, 22) === '65';
+
+        // --- Caminho rápido: tenta buscar sem manifestar (funciona se já manifestada) ---
+        try {
+          const fast = await sefazFetchByChave(empresa, ch);
+          if ((fast.itens || []).length > 0) {
+            console.log(`[SEFAZ] ⚡ Baixar rápido OK (caminho direto) ...${ch.slice(-8)}`);
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(200);
+            res.end(JSON.stringify({ ...fast, rápido: true }));
+            return;
+          }
+        } catch (_) { /* não disponível ainda — vai manifestar */ }
+
+        // --- Caminho completo: manifesta e tenta novamente ---
+        let manifestOk = isNFCe;
+        if (!isNFCe) {
+          try {
+            await sefazManifestar(empresa, ch);
+            manifestOk = true;
+            console.log(`[SEFAZ] ⚡ Manifestação OK ...${ch.slice(-8)}`);
+          } catch (me) {
+            if ((me.message || '').includes('573')) manifestOk = true; // já manifestada
+            else console.log(`[SEFAZ] ⚡ Manifestação: ${me.message}`);
+          }
+        }
+
+        await delay(2000);
+
+        try {
+          const result = await sefazFetchByChave(empresa, ch);
+          if ((result.itens || []).length > 0) {
+            console.log(`[SEFAZ] ⚡ Baixar rápido OK (após manifestação) ...${ch.slice(-8)}`);
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(200);
+            res.end(JSON.stringify(result));
+            return;
+          }
+          // Ainda só resumo
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            itens: [], tipoDoc: 'resumo', pendente: true,
+            message: manifestOk
+              ? 'Manifestação enviada. SEFAZ ainda processando — tente novamente em 1–2 minutos.'
+              : 'Não foi possível manifestar. Verifique o certificado e tente novamente.',
+          }));
+        } catch (e2) {
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            itens: [], tipoDoc: 'resumo', pendente: true,
+            message: e2.message || 'SEFAZ não retornou o XML completo. Tente novamente.',
+          }));
+        }
+      } catch (e) {
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // NF-e: buscar XML completo por chave de acesso
   if (req.method === 'POST' && urlPath === '/api/nfe-fetch-chave') {
     let body = '';

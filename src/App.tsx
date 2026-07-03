@@ -2527,8 +2527,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(!nfe.chNFe||nfe.chNFe.length!==44){alert("Chave de acesso não disponível para esta NF-e.");return;}
     setFetchingChave(nfe.chNFe);
     try{
-      // Sempre tenta manifestar primeiro — o servidor trata cStat 573 (já manifestada) graciosamente
-      const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
+      const res=await fetch("/api/nfe-baixar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
       const ct=res.headers.get("content-type")||"";
       if(!ct.includes("application/json")){
         throw new Error("Tempo de resposta excedido. Aguarde alguns minutos e tente novamente.");
@@ -2549,7 +2548,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(chave.length!==44)return;
     setChaveConsultaLoading(true);setChaveConsultaError("");setChaveConsultaResult(null);
     try{
-      const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:chave})});
+      const res=await fetch("/api/nfe-baixar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:chave})});
       const ct=res.headers.get("content-type")||"";
       if(!ct.includes("application/json"))throw new Error("Tempo de resposta excedido. Aguarde e tente novamente.");
       const data=await res.json();
@@ -2903,19 +2902,19 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         {sefazLastSync&&<div style={{fontSize:10,color:"#555",marginTop:4}}>Última sync: {sefazLastSync} · NSU: {sefazNSU??0}</div>}
       </div>
 
-      {/* Consulta manual por chave de acesso */}
-      <div style={{background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
-        <div style={{fontWeight:700,fontSize:13,color:"var(--acc)",marginBottom:6}}>🔑 Consultar por Chave de Acesso</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:8}}>Cole a chave de 44 dígitos para buscar a NF-e diretamente no SEFAZ usando o certificado A1.</div>
+      {/* Baixar nota rápido por chave */}
+      <div style={{background:"linear-gradient(135deg,#0a0f1a,#0d1530)",border:"2px solid #f59e0b44",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:14,color:"#f59e0b",marginBottom:4}}>⚡ Baixar Nota Rápido</div>
+        <div style={{fontSize:11,color:"#9ca3af",marginBottom:8}}>Cole a chave de 44 dígitos — tenta baixar o XML direto. Se não disponível, manifesta e aguarda.</div>
         <input value={chaveConsultaInput} onChange={e=>{const v=e.target.value.replace(/\D/g,'').slice(0,44);setChaveConsultaInput(v);setChaveConsultaError("");setChaveConsultaResult(null);}}
-          className="inp" placeholder="44 dígitos da chave de acesso" maxLength={44}
+          className="inp" placeholder="Cole aqui os 44 dígitos da chave de acesso" maxLength={44}
           style={{marginBottom:4,fontFamily:"monospace",fontSize:12,letterSpacing:"0.5px"}}/>
         <div style={{fontSize:10,color:chaveConsultaInput.length===44?"#4ade80":"#6b7280",marginBottom:8}}>
           {chaveConsultaInput.length}/44 dígitos{chaveConsultaInput.length===44?" ✅":""}
         </div>
         <button className="btn" onClick={consultarPorChave} disabled={chaveConsultaInput.length!==44||chaveConsultaLoading}
-          style={{background:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#7c8fff":"var(--border2)",color:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#fff":"#888",width:"100%",padding:"10px",fontSize:13,fontWeight:700}}>
-          {chaveConsultaLoading?"⏳ Consultando SEFAZ…":"🔍 Buscar NF-e no SEFAZ"}
+          style={{background:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#f59e0b":"var(--border2)",color:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#000":"#888",width:"100%",padding:"12px",fontSize:14,fontWeight:700}}>
+          {chaveConsultaLoading?"⏳ Baixando NF-e…":"⚡ Baixar Nota"}
         </button>
         {chaveConsultaError&&<div style={{fontSize:12,color:"#f87171",marginTop:8,padding:"8px 10px",background:"#1a0a0a",borderRadius:6,border:"1px solid #7f1d1d"}}>{chaveConsultaError}</div>}
         {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length>0&&<div style={{marginTop:10,background:"var(--bg4)",borderRadius:8,padding:"10px 12px",border:"1px solid #4ade8033"}}>
@@ -2930,8 +2929,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               style={{background:"var(--border)",color:"#aaa",padding:"8px 12px",fontSize:12}}>⬇ XML</button>}
           </div>
         </div>}
-        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length===0&&!chaveConsultaError&&<div style={{fontSize:12,color:"#f59e0b",marginTop:8,padding:"8px 10px",background:"#1a0a0000",borderRadius:6}}>
-          ⏳ SEFAZ processando — manifestação enviada. Aguarde alguns minutos e tente novamente.
+        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length===0&&!chaveConsultaError&&<div style={{fontSize:12,color:"#f59e0b",marginTop:8,padding:"8px 10px",background:"#1a1000",borderRadius:6,border:"1px solid #f59e0b33"}}>
+          ⏳ SEFAZ ainda processando a nota. Aguarde alguns minutos e tente novamente.
         </div>}
       </div>
 
@@ -2969,8 +2968,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               </div>
               <div style={{display:"flex",gap:5,flexShrink:0}}>
                 {isResumo&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)} disabled={isLoading}
-                  style={{background:isLoading?"var(--border2)":"#f59e0b22",color:isLoading?"#888":"#f59e0b",border:"1px solid #f59e0b44",padding:"6px 10px",fontSize:11}}>
-                  {isLoading?"⏳":"🔍"} Buscar
+                  style={{background:isLoading?"var(--border2)":"#f59e0b",color:isLoading?"#888":"#000",border:"none",padding:"6px 12px",fontSize:12,fontWeight:700}}>
+                  {isLoading?"⏳ Baixando…":"⚡ Baixar"}
                 </button>}
                 {temItens&&<button className="btn" onClick={()=>importarNFeSefaz(nfe)}
                   style={{background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",padding:"6px 10px",fontSize:11}}>📥 Importar</button>}
