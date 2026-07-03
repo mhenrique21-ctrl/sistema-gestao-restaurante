@@ -384,41 +384,106 @@ function getX509CertBase64(certPem) {
 
 let _signDebug = {};
 function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
-  const tpEvento = '210210';
+  const tpEvento   = '210210';
   const nSeqEvento = '1';
-  const evId = `ID${tpEvento}${chNFe}0${nSeqEvento}`;
-  // UTC-3 (horário de Brasília): subtrair 3h para exibir hora local correta
+  const evId       = `ID${tpEvento}${chNFe}0${nSeqEvento}`;
+
+  // Hora de Brasília (UTC-3)
   const _d = new Date();
-  const dhEvento = new Date(_d.getTime() - 3 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, '-03:00');
+  const dhEvento = new Date(_d.getTime() - 3 * 3600 * 1000)
+    .toISOString().replace(/\.\d{3}Z$/, '-03:00');
 
-  // Build unsigned envEvento with the full document structure
-  const infEventoXml = `<infEvento Id="${evId}"><cOrgao>91</cOrgao><tpAmb>1</tpAmb><CNPJ>${cnpj}</CNPJ><chNFe>${chNFe}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>${nSeqEvento}</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Ciência da Operação</descEvento></detEvento></infEvento>`;
-  const unsignedEnvEvento = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>1</idLote><evento versao="1.00">${infEventoXml}</evento></envEvento>`;
+  // infEvento em forma canônica C14N:
+  //  – namespace herdado de envEvento explicitado (exigido pelo C14N do elemento isolado)
+  //  – ordem canônica de atributos: namespace (xmlns) antes de atributos regulares (Id)
+  const infEventoC14n =
+    `<infEvento xmlns="http://www.portalfiscal.inf.br/nfe" Id="${evId}">` +
+    `<cOrgao>91</cOrgao>` +
+    `<tpAmb>1</tpAmb>` +
+    `<CNPJ>${cnpj}</CNPJ>` +
+    `<chNFe>${chNFe}</chNFe>` +
+    `<dhEvento>${dhEvento}</dhEvento>` +
+    `<tpEvento>${tpEvento}</tpEvento>` +
+    `<nSeqEvento>${nSeqEvento}</nSeqEvento>` +
+    `<verEvento>1.00</verEvento>` +
+    `<detEvento versao="1.00"><descEvento>Ciência da Operação</descEvento></detEvento>` +
+    `</infEvento>`;
 
-  // Sign using xml-crypto — proper XMLDSig with real DOMParser C14N
-  const x509 = getX509CertBase64(certPem);
-  const sig = new SignedXml({ privateKey: privateKeyPem });
-  sig.signatureAlgorithm = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1';
-  sig.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
-  sig.addReference({
-    xpath: `//*[@Id="${evId}"]`,
-    transforms: [
-      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
-    ],
-    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
-    uri: `#${evId}`,
-  });
-  sig.getKeyInfo = () => `<X509Data><X509Certificate>${x509}</X509Certificate></X509Data>`;
-  sig.computeSignature(unsignedEnvEvento, {
-    location: { reference: `//*[@Id="${evId}"]`, action: 'after' },
-  });
+  // infEvento sem xmlns para uso dentro de envEvento (namespace herdado)
+  const infEventoInDoc = infEventoC14n.replace(
+    ` xmlns="http://www.portalfiscal.inf.br/nfe"`, ''
+  );
 
-  const signedEnvEvento = sig.getSignedXml();
-  _signDebug = { method: 'xml-crypto', evId, digestValue: sig.references?.[0]?.digestValue || '' };
+  // DigestValue = Base64(SHA1(C14N(infEvento)))
+  const digestValue = crypto.createHash('sha1')
+    .update(Buffer.from(infEventoC14n, 'utf8'))
+    .digest('base64');
+
+  // SignedInfo em forma canônica (sem self-closing, xmlns na raiz)
+  const signedInfo =
+    `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">` +
+    `<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315">` +
+    `</CanonicalizationMethod>` +
+    `<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1">` +
+    `</SignatureMethod>` +
+    `<Reference URI="#${evId}">` +
+    `<Transforms>` +
+    `<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature">` +
+    `</Transform>` +
+    `<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315">` +
+    `</Transform>` +
+    `</Transforms>` +
+    `<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1">` +
+    `</DigestMethod>` +
+    `<DigestValue>${digestValue}</DigestValue>` +
+    `</Reference>` +
+    `</SignedInfo>`;
+
+  // SignatureValue = Base64(RSA-SHA1(SignedInfo))
+  const signer = crypto.createSign('SHA1');
+  signer.update(Buffer.from(signedInfo, 'utf8'));
+  const signatureValue = signer.sign(privateKeyPem, 'base64');
+
+  // Certificado X.509 em base64 (primeiro certificado do PEM)
+  const certMatches = certPem.match(
+    /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g
+  ) || [];
+  const certBase64 = certMatches.length > 0
+    ? certMatches[0]
+        .replace(/-----BEGIN CERTIFICATE-----/g, '')
+        .replace(/-----END CERTIFICATE-----/g, '')
+        .replace(/\s/g, '')
+    : '';
+
+  const signature =
+    `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">` +
+    signedInfo +
+    `<SignatureValue>${signatureValue}</SignatureValue>` +
+    `<KeyInfo><X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data></KeyInfo>` +
+    `</Signature>`;
+
+  const envEvento =
+    `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">` +
+    `<idLote>1</idLote>` +
+    `<evento versao="1.00">${infEventoInDoc}${signature}</evento>` +
+    `</envEvento>`;
+
+  _signDebug = { method: 'manual-crypto', evId, digestValue };
 
   const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
-  return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header>${cabec}</soap12:Header><soap12:Body><nfeRecepcaoEventoNF xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><nfeDadosMsg>${signedEnvEvento}</nfeDadosMsg></nfeRecepcaoEventoNF></soap12:Body></soap12:Envelope>`;
+  return (
+    `<?xml version="1.0" encoding="utf-8"?>` +
+    `<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
+    `xmlns:xsd="http://www.w3.org/2001/XMLSchema" ` +
+    `xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">` +
+    `<soap12:Header>${cabec}</soap12:Header>` +
+    `<soap12:Body>` +
+    `<nfeRecepcaoEventoNF xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">` +
+    `<nfeDadosMsg>${envEvento}</nfeDadosMsg>` +
+    `</nfeRecepcaoEventoNF>` +
+    `</soap12:Body>` +
+    `</soap12:Envelope>`
+  );
 }
 
 function sefazManifestar(emp, chNFe) {

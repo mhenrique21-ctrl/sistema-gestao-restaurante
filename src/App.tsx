@@ -2523,23 +2523,18 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(!nfe.chNFe||nfe.chNFe.length!==44){alert("Chave de acesso não disponível para esta NF-e.");return;}
     setFetchingChave(nfe.chNFe);
     try{
-      // Se já foi manifestada anteriormente, busca direto sem re-manifestar (mais rápido)
-      const endpoint=nfe.jaManifestada?"/api/nfe-fetch-chave":"/api/nfe-manifestar";
-      const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
+      // Sempre tenta manifestar primeiro — o servidor trata cStat 573 (já manifestada) graciosamente
+      const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
       const ct=res.headers.get("content-type")||"";
       if(!ct.includes("application/json")){
-        // Timeout: marcar como manifestada para próxima tentativa usar fetch direto
-        setSefazList(l=>l.map((n,j)=>j===i?{...n,jaManifestada:true}:n));
-        throw new Error("Tempo de resposta excedido. Manifestação enviada — aguarde alguns minutos e tente novamente.");
+        throw new Error("Tempo de resposta excedido. Aguarde alguns minutos e tente novamente.");
       }
       const data=await res.json();
       if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
       if(data.pendente||(data.itens||[]).length===0){
-        // Marcar como manifestada e manter em resumo para retry fácil
-        setSefazList(l=>l.map((n,j)=>j===i?{...n,jaManifestada:true}:n));
         alert("⏳ "+(data.message||"SEFAZ ainda processando. Aguarde alguns minutos e clique em 'Buscar' novamente."));
       }else if((data.itens||[]).length>0){
-        setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo",jaManifestada:false}:n));
+        setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
       }
     }catch(e:any){alert("⚠️ "+e.message);}
     finally{setFetchingChave(null);}
