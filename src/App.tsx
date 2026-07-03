@@ -5248,12 +5248,12 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
                     <div style={{fontSize:12,fontWeight:700,color:"#c084fc",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#c084fc14",borderRadius:8,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
                       <span>{prodCatIcon(cat)}</span><span>{cat}</span>
                     </div>
-                    {prodsCatalog.filter((p:any)=>p.cat===cat).map(renderItem)}
+                    {prodsCatalog.filter((p:any)=>p.cat===cat).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                   </div>
                 ))}
                 {prodsCatalog.filter((p:any)=>!p.cat).length>0&&<div style={{marginBottom:10}}>
                   <div style={{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#88888814",borderRadius:8,marginBottom:2}}>📦 OUTROS</div>
-                  {prodsCatalog.filter((p:any)=>!p.cat).map(renderItem)}
+                  {prodsCatalog.filter((p:any)=>!p.cat).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                 </div>}
               </>;
             })()}
