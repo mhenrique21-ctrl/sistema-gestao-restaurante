@@ -4970,9 +4970,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     const pc:Record<string,any[]>={};
     (ped.itens||[]).forEach((it:any)=>{const c=it.categoria||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
+    let n=1;
     Object.entries(pc).forEach(([cat,its])=>{
       txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
-      its.forEach((it:any)=>{const partes=[];if(it.qtdAtual&&parseFloat(it.qtdAtual)>0)partes.push(`Atual: ${it.qtdAtual} ${it.unidade||"un"}`);if(it.quantidade>0)partes.push(`Pedido: *${it.quantidade} ${it.unidade||"un"}*`);if(it.obs)partes.push(it.obs);txt+=`• ${it.nome}\n  ${partes.join(" | ")}\n`;});
+      its.forEach((it:any)=>{const partes=[];if(it.qtdAtual&&parseFloat(it.qtdAtual)>0)partes.push(`Atual: ${it.qtdAtual} ${it.unidade||"un"}`);if(it.quantidade>0)partes.push(`Pedido: *${it.quantidade} ${it.unidade||"un"}*`);if(it.obs)partes.push(it.obs);txt+=`${n++}. ${it.nome}\n  ${partes.join(" | ")}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
