@@ -5220,7 +5220,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
             {/* Cabeçalho das colunas */}
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 6px 6px",marginBottom:2}}>
               <div style={{flex:1,fontSize:10,color:"#666",fontWeight:600,textTransform:"uppercase" as const,letterSpacing:.3}}>Produto</div>
-              <div style={{width:64,textAlign:"center" as const,fontSize:10,color:"#888",fontWeight:600}}>Atual</div>
+              <div style={{width:64,textAlign:"center" as const,fontSize:10,color:"#f59e0b",fontWeight:700}}>Atual</div>
               <div style={{width:64,textAlign:"center" as const,fontSize:10,color:"#c084fc",fontWeight:700}}>Pedido</div>
               <div style={{width:26}}/>
             </div>
@@ -5231,14 +5231,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
                 const vAtual=qtdsAtual[p.id]||"";
                 const vPed=qtdsCatalog[p.id]||"";
                 const filled=parseFloat(vPed)>0;
+                const filledAtual=parseFloat(vAtual)>0;
                 const inputBase:any={type:"number",inputMode:"numeric",min:"0",step:"1",placeholder:"0",onFocus:(e:any)=>e.currentTarget.select()};
-                const inputStyle=(active:boolean):any=>({width:64,textAlign:"center" as const,padding:"9px 4px",background:"var(--bg4)",border:active?"2px solid #c084fc":"1px solid var(--border2)",borderRadius:8,color:active?"#c084fc":"var(--text)",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"});
-                return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 6px",borderBottom:"1px solid var(--border)",background:filled?"#c084fc06":"transparent"}}>
+                const styleAtual:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filledAtual?"#f59e0b12":"var(--bg4)",border:filledAtual?"2px solid #f59e0b":"1px solid #f59e0b44",borderRadius:8,color:filledAtual?"#f59e0b":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
+                const stylePed:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filled?"#c084fc12":"var(--bg4)",border:filled?"2px solid #c084fc":"1px solid #c084fc44",borderRadius:8,color:filled?"#c084fc":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
+                return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 6px",borderBottom:"1px solid var(--border)",background:filled?"#c084fc06":filledAtual?"#f59e0b04":"transparent"}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:filled?700:500,color:filled?"var(--text)":"var(--text2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
+                    <div style={{fontSize:13,fontWeight:(filled||filledAtual)?600:500,color:(filled||filledAtual)?"var(--text)":"var(--text2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
                   </div>
-                  <input {...inputBase} value={vAtual} onChange={(e:any)=>setQtdsAtual(q=>({...q,[p.id]:e.target.value}))} style={inputStyle(false)}/>
-                  <input {...inputBase} value={vPed} onChange={(e:any)=>setQtdsCatalog(q=>({...q,[p.id]:e.target.value}))} style={inputStyle(filled)}/>
+                  <input {...inputBase} value={vAtual} onChange={(e:any)=>setQtdsAtual(q=>({...q,[p.id]:e.target.value}))} style={styleAtual}/>
+                  <input {...inputBase} value={vPed} onChange={(e:any)=>setQtdsCatalog(q=>({...q,[p.id]:e.target.value}))} style={stylePed}/>
                   <span style={{fontSize:10,color:"#666",width:26,flexShrink:0,textAlign:"left" as const}}>{p.unidade||"un"}</span>
                 </div>;
               };
