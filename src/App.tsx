@@ -4925,20 +4925,23 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
 
   // Catalog quick-fill (new Novo Pedido flow)
   const [qtdsCatalog,setQtdsCatalog]=useState<Record<string,string>>({});
+  const [qtdsAtual,setQtdsAtual]=useState<Record<string,string>>({});
   const preenchidos=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0).length;
 
+  const _itensFilled=(catalog:any[])=>catalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0).map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id]),qtdAtual:qtdsAtual[p.id]||"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
+
   const gerarPedidoCatalog=()=>{
-    const itensFilled=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0).map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id]),qtdAtual:"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
-    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade.");
+    const itensFilled=_itensFilled(prodsCatalog);
+    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade no campo 'Pedido'.");
     const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
-    setQtdsCatalog({});
+    setQtdsCatalog({});setQtdsAtual({});
     if(confirm("✅ Pedido gerado! Compartilhar via WhatsApp?"))
       window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(pedido))}`,"_blank");
   };
   const compartilharWhatsAppRapido=()=>{
-    const itensFilled=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0).map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id]),qtdAtual:"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
-    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade.");
+    const itensFilled=_itensFilled(prodsCatalog);
+    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade no campo 'Pedido'.");
     const ped={data:today(),itens:itensFilled,solicitante:login?.label||""};
     window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");
   };
@@ -5214,84 +5217,65 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
             {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"#7c3aed",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
           </div>
         : <>
-            {/* Contagem de preenchidos */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,padding:"0 2px"}}>
-              <div style={{fontSize:12,color:preenchidos>0?"#c084fc":"#555",fontWeight:preenchidos>0?700:400}}>
-                {preenchidos>0?`${preenchidos} produto(s) preenchido(s)`:"Preencha as quantidades abaixo"}
-              </div>
-              {preenchidos>0&&<button onClick={()=>setQtdsCatalog({})} style={{background:"none",border:"1px solid #3a1515",borderRadius:5,color:"#ff7a7a",cursor:"pointer",fontSize:10,padding:"3px 8px"}}>✕ Zerar</button>}
+            {/* Cabeçalho das colunas */}
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 6px 6px",marginBottom:2}}>
+              <div style={{flex:1,fontSize:10,color:"#666",fontWeight:600,textTransform:"uppercase" as const,letterSpacing:.3}}>Produto</div>
+              <div style={{width:64,textAlign:"center" as const,fontSize:10,color:"#888",fontWeight:600}}>Atual</div>
+              <div style={{width:64,textAlign:"center" as const,fontSize:10,color:"#c084fc",fontWeight:700}}>Pedido</div>
+              <div style={{width:26}}/>
             </div>
 
             {/* Lista por categoria */}
-            {cats.filter(cat=>prodsCatalog.some((p:any)=>p.cat===cat)).map(cat=>(
-              <div key={cat} style={{marginBottom:14}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#c084fc",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#c084fc14",borderRadius:8,marginBottom:4,display:"flex",alignItems:"center",gap:6}}>
-                  <span>{prodCatIcon(cat)}</span><span>{cat}</span>
-                </div>
-                {prodsCatalog.filter((p:any)=>p.cat===cat).map((p:any)=>{
-                  const v=qtdsCatalog[p.id]||"";
-                  const filled=parseFloat(v)>0;
-                  return <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 6px",borderBottom:"1px solid var(--border)",background:filled?"#c084fc08":"transparent",transition:"background .15s"}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:filled?700:500,color:filled?"var(--text)":"var(--text2)"}}>{p.nome}</div>
-                    </div>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="0"
-                      step="1"
-                      placeholder="0"
-                      value={v}
-                      onChange={e=>setQtdsCatalog(q=>({...q,[p.id]:e.target.value}))}
-                      onFocus={e=>e.currentTarget.select()}
-                      style={{width:68,textAlign:"center" as const,padding:"9px 6px",background:"var(--bg4)",border:filled?"2px solid #c084fc":"1px solid var(--border2)",borderRadius:8,color:filled?"#c084fc":"var(--text)",fontSize:16,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"} as any}
-                    />
-                    <span style={{fontSize:11,color:"#888",width:22,flexShrink:0,textAlign:"left" as const}}>{p.unidade||"un"}</span>
-                  </div>;
-                })}
-              </div>
-            ))}
-
-            {/* Produtos sem categoria */}
-            {prodsCatalog.filter((p:any)=>!p.cat).length>0&&<div style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#88888814",borderRadius:8,marginBottom:4}}>📦 OUTROS</div>
-              {prodsCatalog.filter((p:any)=>!p.cat).map((p:any)=>{
-                const v=qtdsCatalog[p.id]||"";
-                const filled=parseFloat(v)>0;
-                return <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 6px",borderBottom:"1px solid var(--border)",background:filled?"#c084fc08":"transparent"}}>
+            {(()=>{
+              const renderItem=(p:any)=>{
+                const vAtual=qtdsAtual[p.id]||"";
+                const vPed=qtdsCatalog[p.id]||"";
+                const filled=parseFloat(vPed)>0;
+                const inputBase:any={type:"number",inputMode:"numeric",min:"0",step:"1",placeholder:"0",onFocus:(e:any)=>e.currentTarget.select()};
+                const inputStyle=(active:boolean):any=>({width:64,textAlign:"center" as const,padding:"9px 4px",background:"var(--bg4)",border:active?"2px solid #c084fc":"1px solid var(--border2)",borderRadius:8,color:active?"#c084fc":"var(--text)",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"});
+                return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 6px",borderBottom:"1px solid var(--border)",background:filled?"#c084fc06":"transparent"}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:filled?700:500,color:filled?"var(--text)":"var(--text2)"}}>{p.nome}</div>
+                    <div style={{fontSize:13,fontWeight:filled?700:500,color:filled?"var(--text)":"var(--text2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
                   </div>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    step="1"
-                    placeholder="0"
-                    value={v}
-                    onChange={e=>setQtdsCatalog(q=>({...q,[p.id]:e.target.value}))}
-                    onFocus={e=>e.currentTarget.select()}
-                    style={{width:68,textAlign:"center" as const,padding:"9px 6px",background:"var(--bg4)",border:filled?"2px solid #c084fc":"1px solid var(--border2)",borderRadius:8,color:filled?"#c084fc":"var(--text)",fontSize:16,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"} as any}
-                  />
-                  <span style={{fontSize:11,color:"#888",width:22,flexShrink:0}}>{p.unidade||"un"}</span>
+                  <input {...inputBase} value={vAtual} onChange={(e:any)=>setQtdsAtual(q=>({...q,[p.id]:e.target.value}))} style={inputStyle(false)}/>
+                  <input {...inputBase} value={vPed} onChange={(e:any)=>setQtdsCatalog(q=>({...q,[p.id]:e.target.value}))} style={inputStyle(filled)}/>
+                  <span style={{fontSize:10,color:"#666",width:26,flexShrink:0,textAlign:"left" as const}}>{p.unidade||"un"}</span>
                 </div>;
-              })}
-            </div>}
+              };
+              return <>
+                {cats.filter(cat=>prodsCatalog.some((p:any)=>p.cat===cat)).map(cat=>(
+                  <div key={cat} style={{marginBottom:10}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#c084fc",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#c084fc14",borderRadius:8,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
+                      <span>{prodCatIcon(cat)}</span><span>{cat}</span>
+                    </div>
+                    {prodsCatalog.filter((p:any)=>p.cat===cat).map(renderItem)}
+                  </div>
+                ))}
+                {prodsCatalog.filter((p:any)=>!p.cat).length>0&&<div style={{marginBottom:10}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#888",textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:"#88888814",borderRadius:8,marginBottom:2}}>📦 OUTROS</div>
+                  {prodsCatalog.filter((p:any)=>!p.cat).map(renderItem)}
+                </div>}
+              </>;
+            })()}
 
-            {/* Barra de ação fixa */}
-            <div style={{position:"sticky" as const,bottom:80,display:"flex",gap:6,padding:"10px 0",background:"var(--bg)",zIndex:50}}>
+            {/* Botões ao final da lista */}
+            <div style={{display:"flex",gap:6,marginTop:16,marginBottom:24}}>
               <button onClick={gerarPedidoCatalog} className="btn" disabled={preenchidos===0}
-                style={{flex:1,background:preenchidos>0?"linear-gradient(135deg,#7c3aed,#5b21b6)":"var(--border2)",color:preenchidos>0?"#fff":"#888",padding:"13px",fontSize:14,fontWeight:700}}>
+                style={{flex:1,background:preenchidos>0?"linear-gradient(135deg,#7c3aed,#5b21b6)":"var(--border2)",color:preenchidos>0?"#fff":"#888",padding:"14px",fontSize:14,fontWeight:700}}>
                 📋 Gerar Pedido{preenchidos>0?` (${preenchidos})`:""}
               </button>
               <button onClick={compartilharWhatsAppRapido} disabled={preenchidos===0} className="btn"
-                style={{background:preenchidos>0?"#0a200a":"var(--border2)",color:preenchidos>0?"#25d366":"#555",border:preenchidos>0?"1px solid #25d36644":"1px solid var(--border2)",padding:"13px 16px",fontSize:13}} title="Compartilhar no WhatsApp">
+                style={{background:preenchidos>0?"#0a200a":"var(--border2)",color:preenchidos>0?"#25d366":"#555",border:preenchidos>0?"1px solid #25d36644":"1px solid var(--border2)",padding:"14px 16px",fontSize:14}} title="WhatsApp">
                 📲
               </button>
-              <button onClick={()=>imprimirPedido({itens:prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0).map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id]),qtdAtual:"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""})),solicitante:login?.label||"",data:today()})} disabled={preenchidos===0} className="btn"
-                style={{background:preenchidos>0?"#1a1040":"var(--border2)",color:preenchidos>0?"#c084fc":"#555",border:preenchidos>0?"1px solid #5b21b6":"1px solid var(--border2)",padding:"13px 16px",fontSize:13}}>
+              <button onClick={()=>imprimirPedido({itens:_itensFilled(prodsCatalog),solicitante:login?.label||"",data:today()})} disabled={preenchidos===0} className="btn"
+                style={{background:preenchidos>0?"#1a1040":"var(--border2)",color:preenchidos>0?"#c084fc":"#555",border:preenchidos>0?"1px solid #5b21b6":"1px solid var(--border2)",padding:"14px 16px",fontSize:14}}>
                 🖨️
               </button>
+              {preenchidos>0&&<button onClick={()=>{setQtdsCatalog({});setQtdsAtual({});}} className="btn"
+                style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"14px 14px",fontSize:14}} title="Zerar tudo">
+                ✕
+              </button>}
             </div>
           </>
       }
