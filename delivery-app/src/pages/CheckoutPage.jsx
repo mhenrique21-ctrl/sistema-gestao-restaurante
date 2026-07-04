@@ -79,10 +79,67 @@ export default function CheckoutPage() {
   const [neighborhoods, setNeighborhoods] = useState([])
   const [settings, setSettings] = useState({ store_whatsapp_number: '', pix_key: '', store_name: '' })
 
+  // Lookup de cliente por telefone
+  const [foundCustomer, setFoundCustomer] = useState(null)
+  const [savedAddresses, setSavedAddresses] = useState([])
+  const [selectedAddressId, setSelectedAddressId] = useState(null)
+  const [addingNewAddress, setAddingNewAddress] = useState(false)
+  const [lookingUp, setLookingUp] = useState(false)
+
   useEffect(() => {
     api.neighborhoods().then(setNeighborhoods).catch(() => setNeighborhoods([]))
     api.settings().then(setSettings).catch(() => {})
   }, [])
+
+  async function lookupByPhone(phoneVal) {
+    const digits = phoneVal.replace(/\D/g, '')
+    if (digits.length < 8) { setFoundCustomer(null); setSavedAddresses([]); return }
+    setLookingUp(true)
+    try {
+      const BASE = import.meta.env.VITE_API_URL || ''
+      const r = await fetch(`${BASE}/api/delivery/lookup?phone=${digits}`)
+      const data = await r.json()
+      if (!data) { setFoundCustomer(null); setSavedAddresses([]); return }
+      setFoundCustomer(data.customer)
+      setSavedAddresses(data.addresses || [])
+      // preenche nome automaticamente
+      const parts = (data.customer.name || '').split(' ')
+      setFirstName(parts[0] || '')
+      setLastName(parts.slice(1).join(' ') || '')
+      // seleciona primeiro endereço se delivery
+      if (data.addresses && data.addresses.length > 0) {
+        const first = data.addresses[0]
+        setSelectedAddressId(first.id)
+        setStreet(first.street || '')
+        setNumber(first.number || '')
+        setNeighborhood(first.neighborhood || '')
+        setComplement(first.complement || '')
+        setAddingNewAddress(false)
+      }
+    } catch (_) {
+      setFoundCustomer(null)
+    } finally {
+      setLookingUp(false)
+    }
+  }
+
+  function applyAddress(addr) {
+    setSelectedAddressId(addr.id)
+    setStreet(addr.street || '')
+    setNumber(addr.number || '')
+    setNeighborhood(addr.neighborhood || '')
+    setComplement(addr.complement || '')
+    setAddingNewAddress(false)
+  }
+
+  function startNewAddress() {
+    setSelectedAddressId(null)
+    setStreet('')
+    setNumber('')
+    setNeighborhood('')
+    setComplement('')
+    setAddingNewAddress(true)
+  }
 
   const bairrosPorZona = useMemo(() => {
     const groups = {}
@@ -149,6 +206,15 @@ export default function CheckoutPage() {
         })),
       })
       clear()
+      // Salva endereço se for novo (cliente identificado e endereço novo)
+      if (deliveryType === 'delivery' && foundCustomer && (addingNewAddress || !selectedAddressId)) {
+        const BASE = import.meta.env.VITE_API_URL || ''
+        fetch(`${BASE}/api/delivery/save-address`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: foundCustomer.id, street, number, neighborhood, complement }),
+        }).catch(() => {})
+      }
       setSuccess(order)
       sendToWhatsApp(order)
     } catch (err) {
@@ -256,11 +322,19 @@ export default function CheckoutPage() {
             </div>
             <div>
               <label className="text-xs text-gray-500 font-medium">WhatsApp *</label>
-              <input
-                type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                placeholder="(96) 99999-0000"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-              />
+              <div className="relative">
+                <input
+                  type="tel" value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  onBlur={e => lookupByPhone(e.target.value)}
+                  placeholder="(96) 99999-0000"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                />
+                {lookingUp && <span className="absolute right-3 top-3 text-xs text-gray-400">🔍</span>}
+              </div>
+              {foundCustomer && (
+                <p className="text-xs text-emerald-600 mt-1 font-medium">✅ Cliente encontrado: {foundCustomer.name}</p>
+              )}
             </div>
           </div>
         </div>
@@ -289,9 +363,91 @@ export default function CheckoutPage() {
         {deliveryType === 'delivery' && (
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
             <h3 className="font-semibold text-gray-900 mb-3">📍 Endereço de entrega</h3>
-            <div className="space-y-2">
-              <div>
-                <label className="text-xs text-gray-500 font-medium">Bairro *</label>
+
+            {/* Endereços salvos do cliente */}
+            {savedAddresses.length > 0 && !addingNewAddress && (
+              <div className="mb-3 space-y-2">
+                <p className="text-xs text-gray-500 font-medium mb-1">Endereços salvos:</p>
+                {savedAddresses.map(addr => (
+                  <button
+                    key={addr.id}
+                    onClick={() => applyAddress(addr)}
+                    className={`w-full text-left p-3 rounded-xl border-2 transition-all press ${selectedAddressId === addr.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100 bg-gray-50'}`}
+                  >
+                    <p className="text-sm font-semibold text-gray-800">{addr.street}{addr.number ? `, ${addr.number}` : ''}</p>
+                    <p className="text-xs text-gray-500">{[addr.neighborhood, addr.complement].filter(Boolean).join(' · ')}</p>
+                  </button>
+                ))}
+                <button
+                  onClick={startNewAddress}
+                  className="w-full text-center text-sm text-violet-600 font-semibold py-2 border-2 border-dashed border-violet-200 rounded-xl press"
+                >
+                  ➕ Usar outro endereço
+                </button>
+              </div>
+            )}
+
+            {/* Formulário de endereço (novo ou sem histórico) */}
+            {(savedAddresses.length === 0 || addingNewAddress) && (
+              <div className="space-y-2">
+                {addingNewAddress && (
+                  <button onClick={() => { setAddingNewAddress(false); if (savedAddresses[0]) applyAddress(savedAddresses[0]) }}
+                    className="text-xs text-gray-400 mb-1 press">← Voltar aos endereços salvos</button>
+                )}
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Bairro *</label>
+                  <select
+                    value={neighborhood} onChange={e => setNeighborhood(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400 bg-white"
+                  >
+                    <option value="">— Selecione o bairro —</option>
+                    {Object.entries(bairrosPorZona).map(([zona, bairros]) => (
+                      <optgroup key={zona} label={`── ${zona} ──`}>
+                        {bairros.map(b => (
+                          <option key={b.id} value={b.name}>{b.name} — R$ {b.delivery_fee.toFixed(2).replace('.', ',')}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  {neighborhood && (
+                    <p className="text-xs text-violet-600 font-semibold mt-1">
+                      🛵 Taxa de entrega: R$ {getTaxa(neighborhood).toFixed(2).replace('.', ',')}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Rua / Avenida *</label>
+                  <input
+                    value={street} onChange={e => setStreet(e.target.value)}
+                    placeholder="Av. Duque de Caxias"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium">Número</label>
+                    <input
+                      value={number} onChange={e => setNumber(e.target.value)}
+                      placeholder="123"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium">Complemento</label>
+                    <input
+                      value={complement} onChange={e => setComplement(e.target.value)}
+                      placeholder="Apto 12"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Bairro selecionado (quando endereço salvo não tem bairro nos neighborhoods) */}
+            {savedAddresses.length > 0 && !addingNewAddress && (
+              <div className="mt-3">
+                <label className="text-xs text-gray-500 font-medium">Bairro (para calcular taxa) *</label>
                 <select
                   value={neighborhood} onChange={e => setNeighborhood(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400 bg-white"
@@ -311,33 +467,7 @@ export default function CheckoutPage() {
                   </p>
                 )}
               </div>
-              <div>
-                <label className="text-xs text-gray-500 font-medium">Rua / Avenida *</label>
-                <input
-                  value={street} onChange={e => setStreet(e.target.value)}
-                  placeholder="Av. Duque de Caxias"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-500 font-medium">Número</label>
-                  <input
-                    value={number} onChange={e => setNumber(e.target.value)}
-                    placeholder="123"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 font-medium">Complemento</label>
-                  <input
-                    value={complement} onChange={e => setComplement(e.target.value)}
-                    placeholder="Apto 12"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                  />
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
