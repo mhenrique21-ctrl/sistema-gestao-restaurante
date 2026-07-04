@@ -95,16 +95,16 @@ textarea { resize: vertical; min-height: 70px; }
     <p>Painel Administrativo</p>
   </div>
   <nav>
-    <button class="nav-btn active" onclick="showPage('dashboard')">📊 Dashboard</button>
-    <button class="nav-btn" onclick="showPage('produtos')">🍽 Produtos</button>
-    <button class="nav-btn" onclick="showPage('categorias')">📂 Categorias</button>
-    <button class="nav-btn" onclick="showPage('clientes')">👥 Clientes</button>
-    <button class="nav-btn" onclick="showPage('usuarios')">🔐 Usuários</button>
-    <button class="nav-btn" onclick="showPage('pedidos')">📋 Pedidos</button>
-    <button class="nav-btn" onclick="showPage('bairros')">📍 Bairros</button>
-    <button class="nav-btn" onclick="showPage('configuracoes')">⚙️ Configurações</button>
-    <button class="nav-btn" onclick="showPage('pagamentos')">💳 Pagamentos</button>
-    <button class="nav-btn" onclick="showPage('impressoras')">🖨 Impressoras</button>
+    <button class="nav-btn active" onclick="showPage('dashboard',this)">📊 Dashboard</button>
+    <button class="nav-btn" onclick="showPage('produtos',this)">🍽 Produtos</button>
+    <button class="nav-btn" onclick="showPage('categorias',this)">📂 Categorias</button>
+    <button class="nav-btn" onclick="showPage('clientes',this)">👥 Clientes</button>
+    <button class="nav-btn" onclick="showPage('usuarios',this)">🔐 Usuários</button>
+    <button class="nav-btn" onclick="showPage('pedidos',this)">📋 Pedidos</button>
+    <button class="nav-btn" onclick="showPage('bairros',this)">📍 Bairros</button>
+    <button class="nav-btn" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
+    <button class="nav-btn" onclick="showPage('pagamentos',this)">💳 Pagamentos</button>
+    <button class="nav-btn" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
 </div>
@@ -265,10 +265,10 @@ function atualizarTaxaEntrega() {
 let currentPage = 'dashboard';
 let modalCallback = null;
 
-function showPage(page) {
+function showPage(page, btn) {
   currentPage = page;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  event?.target?.classList?.add('active');
+  if (btn) btn.classList.add('active');
   const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', impressoras:'Impressoras' };
   document.getElementById('page-title').textContent = titles[page] || page;
   const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, impressoras: pageImpressoras };
