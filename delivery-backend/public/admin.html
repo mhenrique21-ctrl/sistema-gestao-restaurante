@@ -293,8 +293,14 @@ async function confirmModal() {
 // ── Dashboard ─────────────────────────────────────────────────────
 async function pageDashboard() {
   document.getElementById('content').innerHTML = '<p style="color:#64748b">Carregando...</p>';
-  const d = await api('GET', '/dashboard');
-  const s = d.summary;
+  let d;
+  try {
+    d = await api('GET', '/dashboard');
+  } catch(e) {
+    document.getElementById('content').innerHTML = `<div class="card"><p style="color:#ef4444">❌ Erro ao carregar dashboard: ${e.message}</p><button class="btn btn-primary" onclick="pageDashboard()">Tentar novamente</button></div>`;
+    return;
+  }
+  const s = d.summary || {};
   document.getElementById('content').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
       ${stat('📦', 'Pedidos hoje', s.total_orders)}
