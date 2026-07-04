@@ -59,7 +59,7 @@ export default function ProductModal({ product, onClose }) {
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
-        className="relative bg-white w-full max-w-md rounded-t-3xl p-6 pb-8 safe-bottom animate-slide-up max-h-[90vh] overflow-y-auto no-scrollbar"
+        className="relative bg-white w-full max-w-md rounded-t-3xl p-6 pb-24 animate-slide-up max-h-[90vh] overflow-y-auto no-scrollbar"
         onClick={(e) => e.stopPropagation()}
         style={{ animation: 'slideUp 0.25s ease-out' }}
       >
