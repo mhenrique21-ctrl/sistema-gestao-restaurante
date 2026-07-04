@@ -373,23 +373,40 @@ async function pageProdutos() {
   renderProdutos();
 }
 
-function renderProdutos(filter = '') {
-  const list = filter ? produtos.filter(p => p.name.toLowerCase().includes(filter.toLowerCase())) : produtos;
+let _prodFilter = '', _prodStatus = 'todos';
+function renderProdutos(filter, status) {
+  if (filter !== undefined) _prodFilter = filter;
+  if (status !== undefined) _prodStatus = status;
+  let list = produtos;
+  if (_prodFilter) list = list.filter(p => p.name.toLowerCase().includes(_prodFilter.toLowerCase()));
+  if (_prodStatus === 'ativos') list = list.filter(p => p.available);
+  if (_prodStatus === 'inativos') list = list.filter(p => !p.available);
+  const inativos = produtos.filter(p => !p.available).length;
   document.getElementById('content').innerHTML = `
     <div class="search-bar">
-      <input placeholder="Buscar produto..." oninput="renderProdutos(this.value)" />
+      <input placeholder="Buscar produto..." value="${_prodFilter}" oninput="renderProdutos(this.value)" />
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm ${_prodStatus==='todos'?'btn-primary':'btn-secondary'}" onclick="renderProdutos(undefined,'todos')">Todos</button>
+        <button class="btn btn-sm ${_prodStatus==='ativos'?'btn-primary':'btn-secondary'}" onclick="renderProdutos(undefined,'ativos')">✅ Ativos</button>
+        <button class="btn btn-sm ${_prodStatus==='inativos'?'btn-danger':'btn-secondary'}" onclick="renderProdutos(undefined,'inativos')">🚫 Indisponíveis${inativos>0?' ('+inativos+')':''}</button>
+      </div>
       <button class="btn btn-primary" onclick="modalNovoProduto()">+ Novo produto</button>
     </div>
     <div class="card">
       <h3>Produtos (${list.length})</h3>
       <table>
-        <tr><th>Nome</th><th>Categoria</th><th>Preço</th><th>Disponível</th><th>Ações</th></tr>
+        <tr><th>Nome</th><th>Categoria</th><th>Preço</th><th>Status</th><th>Ações</th></tr>
         ${list.map(p => `
-          <tr>
+          <tr style="${!p.available ? 'opacity:0.6' : ''}">
             <td>${p.name}</td>
             <td><span class="badge badge-blue">${p.category_name}</span></td>
             <td class="price">R$ ${parseFloat(p.price).toFixed(2).replace('.',',')}</td>
-            <td><button class="toggle ${p.available ? 'on' : ''}" onclick="toggleDisponivel('${p.id}', ${p.available})" title="${p.available ? 'Disponível' : 'Indisponível'}"></button></td>
+            <td>
+              <button onclick="toggleDisponivel('${p.id}', ${p.available})"
+                style="padding:4px 10px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:${p.available ? '#d1fae5' : '#fee2e2'};color:${p.available ? '#065f46' : '#991b1b'}">
+                ${p.available ? '✅ Disponível' : '🚫 Indisponível'}
+              </button>
+            </td>
             <td style="display:flex;gap:6px">
               <button class="btn btn-secondary btn-sm" onclick="modalEditarProduto('${p.id}')" title="Editar">✏️</button>
               <button class="btn btn-secondary btn-sm" onclick="modalAdicionaisProduto('${p.id}')" title="Adicionais">🧩</button>

@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useCart } from '../store/cart'
+import { useNavigate } from 'react-router-dom'
 
 export default function ProductModal({ product, onClose }) {
+  const navigate = useNavigate()
   const addItem = useCart((s) => s.addItem)
   const [qty, setQty] = useState(1)
   const [selected, setSelected] = useState({}) // { [groupId]: optionId[] }
   const [notes, setNotes] = useState('')
+  const [added, setAdded] = useState(false)
 
   const groups = product.addon_groups || []
 
@@ -46,7 +49,7 @@ export default function ProductModal({ product, onClose }) {
   function handleAdd() {
     if (!canAdd) return
     addItem(product, qty, selectedAddons, notes)
-    onClose()
+    setAdded(true)
   }
 
   const unitPrice = (product.promo_price ?? product.price) + selectedAddons.reduce((s, a) => s + a.price, 0)
@@ -143,21 +146,39 @@ export default function ProductModal({ product, onClose }) {
         </div>
 
         {/* Qty + Add */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-2 py-1">
-            <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="w-8 h-8 flex items-center justify-center text-xl text-gray-600 press">−</button>
-            <span className="w-6 text-center font-bold text-gray-900">{qty}</span>
-            <button onClick={() => setQty((q) => q + 1)} className="w-8 h-8 flex items-center justify-center text-xl text-violet-600 press">+</button>
+        {added ? (
+          <div className="space-y-3">
+            <p className="text-center text-emerald-600 font-semibold text-sm">✅ Item adicionado ao carrinho!</p>
+            <button
+              onClick={() => { onClose(); navigate('/checkout') }}
+              className="w-full bg-violet-600 text-white rounded-xl py-3 font-bold text-sm press active:bg-violet-700"
+            >
+              🛒 Finalizar Pedido
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full border border-gray-200 text-gray-700 rounded-xl py-3 font-semibold text-sm press active:bg-gray-50"
+            >
+              Continuar Comprando
+            </button>
           </div>
-          <button
-            onClick={handleAdd}
-            disabled={!canAdd}
-            className="flex-1 bg-violet-600 text-white rounded-xl py-3 font-semibold text-sm flex items-center justify-between px-4 press active:bg-violet-700 disabled:opacity-40"
-          >
-            <span>{canAdd ? 'Adicionar ao carrinho' : 'Escolha as opções obrigatórias'}</span>
-            <span>{total}</span>
-          </button>
-        </div>
+        ) : (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-2 py-1">
+              <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="w-8 h-8 flex items-center justify-center text-xl text-gray-600 press">−</button>
+              <span className="w-6 text-center font-bold text-gray-900">{qty}</span>
+              <button onClick={() => setQty((q) => q + 1)} className="w-8 h-8 flex items-center justify-center text-xl text-violet-600 press">+</button>
+            </div>
+            <button
+              onClick={handleAdd}
+              disabled={!canAdd}
+              className="flex-1 bg-violet-600 text-white rounded-xl py-3 font-semibold text-sm flex items-center justify-between px-4 press active:bg-violet-700 disabled:opacity-40"
+            >
+              <span>{canAdd ? 'Adicionar ao carrinho' : 'Escolha as opções obrigatórias'}</span>
+              <span>{total}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <style>{`
