@@ -707,15 +707,47 @@ function renderUsuarios(users) {
   document.getElementById('usr-table').innerHTML = `
     <h3>Usuários do sistema</h3>
     <table>
-      <tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th></tr>
+      <tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Ações</th></tr>
       ${users.map(u => `
         <tr>
           <td style="font-weight:600">${u.name}</td>
           <td>${u.email}</td>
           <td><span class="badge badge-blue">${u.role}</span></td>
           <td><span class="badge ${u.active ? 'badge-green' : 'badge-red'}">${u.active ? 'Ativo' : 'Inativo'}</span></td>
+          <td>
+            <button class="btn btn-sm" onclick='modalEditarUsuario(${JSON.stringify(u)})'>✏️ Editar</button>
+            <button class="btn btn-sm btn-danger" onclick="toggleUsuario('${u.id}',${u.active})" style="margin-left:4px">${u.active ? 'Desativar' : 'Ativar'}</button>
+          </td>
         </tr>`).join('')}
     </table>`;
+}
+
+function modalEditarUsuario(u) {
+  openModal('Editar Usuário', `
+    <div class="form-grid">
+      <div><label>Nome</label><input id="eu-name" value="${u.name}" /></div>
+      <div><label>Perfil</label>
+        <select id="eu-role">
+          <option value="atendente" ${u.role==='atendente'?'selected':''}>Atendente</option>
+          <option value="cozinha" ${u.role==='cozinha'?'selected':''}>Cozinha</option>
+          <option value="entregador" ${u.role==='entregador'?'selected':''}>Entregador</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+        </select>
+      </div>
+      <div><label>Nova senha <small style="color:#94a3b8">(deixe em branco para não alterar)</small></label><input id="eu-pass" type="password" /></div>
+    </div>`, async () => {
+    const body = { name: v('eu-name'), role: v('eu-role') };
+    const pass = v('eu-pass');
+    if (pass) body.password = pass;
+    await api('PATCH', \`/users/\${u.id}\`, body);
+    toast('Usuário atualizado!'); closeModal(); pageUsuarios();
+  });
+}
+
+async function toggleUsuario(id, active) {
+  if (!confirm(active ? 'Desativar este usuário?' : 'Ativar este usuário?')) return;
+  await api('PATCH', \`/users/\${id}\`, { active: !active });
+  toast(active ? 'Usuário desativado' : 'Usuário ativado'); pageUsuarios();
 }
 
 function modalNovoUsuario() {

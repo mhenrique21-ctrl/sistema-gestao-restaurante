@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
+const bcrypt = require('bcryptjs');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 router.use(authMiddleware, requireRole('admin'));
@@ -16,13 +17,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// PATCH /api/users/:id — ativar/desativar ou trocar role
+// PATCH /api/users/:id — editar nome, role, active, senha
 router.patch('/:id', async (req, res) => {
   const fields = ['role', 'active', 'name'];
   const updates = [], values = [];
   let idx = 1;
   for (const f of fields) {
     if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
+  }
+  if (req.body.password) {
+    const hash = await bcrypt.hash(req.body.password, 10);
+    updates.push(`password_hash = $${idx++}`);
+    values.push(hash);
   }
   if (!updates.length) return res.status(400).json({ error: 'Nenhum campo' });
   values.push(req.params.id);
