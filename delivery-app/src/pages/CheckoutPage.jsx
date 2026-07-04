@@ -325,9 +325,17 @@ export default function CheckoutPage() {
               <div className="relative">
                 <input
                   type="tel" value={phone}
-                  onChange={e => setPhone(e.target.value)}
+                  onChange={e => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 11)
+                    let masked = digits
+                    if (digits.length > 2) masked = `(${digits.slice(0,2)}) ${digits.slice(2)}`
+                    if (digits.length > 7) masked = `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`
+                    setPhone(masked)
+                    if (digits.length >= 10) lookupByPhone(digits)
+                  }}
                   onBlur={e => lookupByPhone(e.target.value)}
                   placeholder="(96) 99999-0000"
+                  maxLength={15}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
                 />
                 {lookingUp && <span className="absolute right-3 top-3 text-xs text-gray-400">🔍</span>}
