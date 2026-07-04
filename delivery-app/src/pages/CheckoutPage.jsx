@@ -51,6 +51,8 @@ function buildWhatsAppMessage({ order, items, deliveryType, address, payment, to
   lines.push(sep)
 
   lines.push(`💰 *Total: ${brl(total)}*`)
+  lines.push('')
+  lines.push('_Confraria Café — obrigado pelo pedido! ☕_')
 
   return lines.join('\n')
 }
