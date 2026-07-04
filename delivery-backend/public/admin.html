@@ -1070,6 +1070,7 @@ function renderPedidos(orders) {
         <div><span style="color:var(--muted)">Cliente: </span><strong style="color:var(--text)">${o.customer_name||'—'}</strong></div>
         ${o.customer_phone ? `<div style="color:var(--muted)">📱 <span style="color:var(--text)">${o.customer_phone}</span></div>` : ''}
         ${addr ? `<div style="color:var(--muted)">📍 <span style="color:var(--text)">${addr}</span></div>` : ''}
+        ${o.delivery_fee > 0 ? `<div style="color:var(--muted)">🛵 Taxa: <span style="color:#f59e0b;font-weight:700">R$ ${parseFloat(o.delivery_fee).toFixed(2).replace('.',',')}</span></div>` : (o.delivery_type === 'retirada' ? '' : `<div style="color:#10b981;font-size:.8rem;font-weight:600">🛵 Sem taxa</div>`)}
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
