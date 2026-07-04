@@ -1,0 +1,27 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "delivery-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "delivery-app"],
+      "port": 5173,
+      "autoPort": false
+    },
+    {
+      "name": "delivery-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "delivery-backend"],
+      "port": 4000,
+      "autoPort": false
+    },
+    {
+      "name": "erp-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["new_server.js"],
+      "port": 3000,
+      "autoPort": false,
+      "cwd": "."
+    }
+  ]
+}

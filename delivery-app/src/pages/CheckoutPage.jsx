@@ -14,26 +14,44 @@ function onlyDigits(v) {
   return (v || '').replace(/\D/g, '')
 }
 
-function buildWhatsAppMessage({ order, items, deliveryType, address, payment, total, deliveryFee, storeName }) {
+function buildWhatsAppMessage({ order, items, deliveryType, address, payment, total, deliveryFee, storeName, customerName, customerPhone }) {
+  const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const sep = '─────────────────────'
   const lines = []
-  lines.push(`🛍️ *Novo pedido${storeName ? ` — ${storeName}` : ''}*`)
-  lines.push(`Pedido #${order.id?.slice(-6).toUpperCase()}`)
-  lines.push('')
+
+  lines.push(`☕ *${storeName || 'Novo Pedido'}*`)
+  lines.push(`🧾 *Pedido #${order.order_number}*`)
+  lines.push(sep)
+
+  lines.push(`👤 *Cliente:* ${customerName}`)
+  if (customerPhone) lines.push(`📱 *WhatsApp:* ${customerPhone}`)
+  lines.push(sep)
+
+  lines.push('🛒 *Itens do Pedido:*')
   for (const i of items) {
-    lines.push(`${i.qty}x ${i.product.name} — ${itemLineTotal(i).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`)
-    for (const a of i.addons || []) lines.push(`   + ${a.name}`)
-    if (i.notes) lines.push(`   obs: ${i.notes}`)
+    lines.push(`  • *${i.qty}x* ${i.product.name}  →  ${brl(itemLineTotal(i))}`)
+    for (const a of i.addons || []) lines.push(`      ➕ ${a.name}`)
+    if (i.notes) lines.push(`      📝 _${i.notes}_`)
   }
-  lines.push('')
+  lines.push(sep)
+
   if (deliveryType === 'retirada') {
-    lines.push('🏪 Retirada no local')
+    lines.push('🏪 *Retirada no local*')
   } else {
-    lines.push(`🛵 Entrega: ${address.street}, ${address.number || 's/n'} — ${address.neighborhood}`)
-    if (address.complement) lines.push(`   Complemento: ${address.complement}`)
-    lines.push(`   Taxa de entrega: ${deliveryFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`)
+    lines.push('🛵 *Endereço de Entrega:*')
+    lines.push(`  📍 ${address.street}, ${address.number || 's/n'}`)
+    lines.push(`  🏘️ ${address.neighborhood}`)
+    if (address.complement) lines.push(`  🏠 ${address.complement}`)
+    lines.push(`  🚚 Taxa de entrega: ${brl(deliveryFee)}`)
   }
-  lines.push(`💳 Pagamento: ${PAYMENT_METHODS.find((m) => m.id === payment)?.label}`)
-  lines.push(`💰 Total: *${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}*`)
+  lines.push(sep)
+
+  const payLabel = PAYMENT_METHODS.find((m) => m.id === payment)?.label || payment
+  lines.push(`💳 *Pagamento:* ${payLabel}`)
+  lines.push(sep)
+
+  lines.push(`💰 *Total: ${brl(total)}*`)
+
   return lines.join('\n')
 }
 
@@ -94,6 +112,8 @@ export default function CheckoutPage() {
       total,
       deliveryFee,
       storeName: settings.store_name,
+      customerName: `${firstName} ${lastName}`.trim(),
+      customerPhone: phone,
     })
     window.open(`https://wa.me/${storeNumber}?text=${encodeURIComponent(message)}`, '_blank')
     return true

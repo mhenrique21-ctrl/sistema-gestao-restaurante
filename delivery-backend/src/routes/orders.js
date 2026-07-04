@@ -346,7 +346,9 @@ router.patch('/:id/status', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `UPDATE orders SET status = $1 WHERE id = $2 RETURNING *`,
+      `UPDATE orders SET status = $1 WHERE id = $2
+       RETURNING *, (SELECT name FROM customers WHERE id = customer_id) AS customer_name,
+                    (SELECT phone FROM customers WHERE id = customer_id) AS customer_phone`,
       [status, req.params.id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
@@ -358,7 +360,34 @@ router.patch('/:id/status', async (req, res) => {
 
     broadcastOrderUpdate({ event: 'status_update', order_id: req.params.id, status });
 
-    res.json(result.rows[0]);
+    const order = result.rows[0];
+    let whatsapp_link = null;
+
+    const NOTIFY_STATUSES = ['em_preparo', 'saiu_para_entrega', 'cancelado'];
+    if (NOTIFY_STATUSES.includes(status)) {
+      const customerPhone = (order.customer_phone || '').replace(/\D/g, '');
+      const orderNum = order.order_number;
+      const firstName = order.customer_name?.split(' ')[0] || '';
+
+      if (customerPhone) {
+        let msg = '';
+        if (status === 'em_preparo') {
+          msg = `👨‍🍳 *Pedido #${orderNum} em preparo!*\n\nOlá ${firstName}! Seu pedido está sendo preparado com carinho. Em breve estará pronto! ☕`;
+        } else if (status === 'saiu_para_entrega') {
+          const isRetirada = order.delivery_type === 'retirada';
+          if (isRetirada) {
+            msg = `✅ *Pedido #${orderNum} pronto para retirada!*\n\nOlá ${firstName}! Seu pedido está pronto, pode vir buscar! 🏪`;
+          } else {
+            msg = `🛵 *Pedido #${orderNum} saiu para entrega!*\n\nOlá ${firstName}! Seu pedido saiu e está a caminho. Logo chegará aí! 🎉`;
+          }
+        } else if (status === 'cancelado') {
+          msg = `❌ *Pedido #${orderNum} cancelado*\n\nOlá ${firstName}! Infelizmente seu pedido foi cancelado. Entre em contato conosco para mais informações. 😔`;
+        }
+        if (msg) whatsapp_link = `https://wa.me/55${customerPhone}?text=${encodeURIComponent(msg)}`;
+      }
+    }
+
+    res.json({ ...order, whatsapp_link });
   } catch (err) {
     console.error('[orders/:id/status]', err.message);
     res.status(500).json({ error: 'Erro interno' });

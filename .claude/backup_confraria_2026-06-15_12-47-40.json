@@ -1,0 +1,6058 @@
+{
+  "contas": [
+    {
+      "id": "xgyj3j5mp1mqelwq5l",
+      "descricao": "COMISSÃO (1/2)",
+      "vencimento": "2026-06-19",
+      "grupoRecorr": "0vuwgguuizgmqelwq5l",
+      "parcela": 1,
+      "totalParcelas": 2,
+      "periodo": "semana",
+      "diasSemana": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "categoria": "Comissão",
+      "valor": 200,
+      "status": "pendente",
+      "tipo": "saida",
+      "formaPag": "pix",
+      "fornecedor": "COMISSÃO",
+      "criadoEm": "2026-06-15T02:41:16.137Z"
+    },
+    {
+      "id": "aaex0srnsgpmqelwq5l",
+      "descricao": "COMISSÃO (2/2)",
+      "vencimento": "2026-06-26",
+      "grupoRecorr": "0vuwgguuizgmqelwq5l",
+      "parcela": 2,
+      "totalParcelas": 2,
+      "periodo": "semana",
+      "diasSemana": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "categoria": "Comissão",
+      "valor": 200,
+      "status": "pendente",
+      "tipo": "saida",
+      "formaPag": "pix",
+      "fornecedor": "COMISSÃO",
+      "criadoEm": "2026-06-15T02:41:16.137Z"
+    }
+  ],
+  "vendas": [],
+  "compras": [
+    {
+      "id": "w41dbsvs7hbmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "ABOBORA JACARE KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1.05,
+      "valor": 4.18,
+      "valorUnitario": 3.980952,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "b0z2gpn0i56mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Alface",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 8.38,
+      "valorUnitario": 4.19,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "byjgwt6ftapmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "ARROZ CATARINAO PARB 1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.55,
+      "valorUnitario": 3.55,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "1jkumh8j2lumqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BANANA PRATA KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1.135,
+      "valor": 5.43,
+      "valorUnitario": 4.784141,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "ufzlr4z5rucmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BEB GASEIF H2OH 500ML LIMONETO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 59.4,
+      "valorUnitario": 4.95,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "9b40p3ctoysmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BEB LACTEA NESCAU PRONTO 180ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 27,
+      "valor": 69.93,
+      "valorUnitario": 2.59,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "u4959kah6kmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CALDO MAGGI 152G CARNE",
+      "categoria": "proteína",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 10.78,
+      "valorUnitario": 5.39,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "nwqjy9s71dmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Pimentinha",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 6,
+      "valor": 16.74,
+      "valorUnitario": 2.79,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "v2ax90biv5mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CHIC TRIDENT BAG 32G MENTA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 29.7,
+      "valorUnitario": 9.9,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "96uzfo66ttrmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CHIC TRIDENT BAG 32G MOR",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 6,
+      "valor": 59.4,
+      "valorUnitario": 9.9,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "czmogb8vjnpmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CHOC GRAN DORI CONFEITARTE 400G TIJOLINHO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 9.69,
+      "valorUnitario": 9.69,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "2lfchdq3bbdmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CR CULINARIO EMBARE TP 200G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 28.68,
+      "valorUnitario": 2.39,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "5wktwvh87clmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "DROPS HALLS 21X10 MELANCIA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 28.9,
+      "valorUnitario": 28.9,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "xhkda92ptomqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "DROPS HALLS 21X10 MORANGO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 28.9,
+      "valorUnitario": 28.9,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "urpsx7882smqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "DROPS HALLS BAG 84G EXTRA FORTE",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 10.18,
+      "valorUnitario": 5.09,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "bapiuu4gs6mmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "EXTRATO TOM QUERO SACHET 1,02KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 12.9,
+      "valorUnitario": 12.9,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "4j9170jqxf3mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "FLOCAO DONA CLARA 500G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 7.47,
+      "valorUnitario": 2.49,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "izek2jfgetmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "GOMA TAPIOCA PRONTA TAPOKA 1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 21.87,
+      "valorUnitario": 7.29,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "9k24z1wk47qmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "HAMB AURORA FAROESTE 672G CHURRASCO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 5,
+      "valor": 96,
+      "valorUnitario": 19.2,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "4uuf4n48v97mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Leite Condesado cx",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 23.8,
+      "valorUnitario": 5.95,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "molcf133kommqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Leite Condesado cx",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 19.56,
+      "valorUnitario": 4.89,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "ri76vhfq4u9mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LEITE DE COCO SABOR NORDESTE 200ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 5,
+      "valor": 19.45,
+      "valorUnitario": 3.89,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "9xm3r5bdwk7mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LEITE LV INT CAMPONESA 1L",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 86.28,
+      "valorUnitario": 7.19,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "6jx9dev17unmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LING T CALAB DEF AURORA FC",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1.272,
+      "valor": 35.35,
+      "valorUnitario": 27.790881,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "is9fcqiz9eqmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MAC BRANDINI ECONOMICO 500G PARAFUSO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.59,
+      "valorUnitario": 3.59,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "sq3ok5jftzmmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Chocolate 32%",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 3.98,
+      "valorUnitario": 1.99,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "hfkfctq6wggmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MAC RICOSA SEMOLA 500G PADRE NOSSO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 4.8,
+      "valorUnitario": 4.8,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "pxa78dfjv5lmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Pão de Forma",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1.715,
+      "valor": 11.98,
+      "valorUnitario": 6.985423,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "mck4pf9mc5hmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MARG QUALY 500G C/SAL",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 20.5,
+      "valorUnitario": 10.25,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "j6gbv42dzijmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Ovo 30und",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 55.5,
+      "valorUnitario": 18.5,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "jsq3xinvz5mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "QJ T PARM RAL CANTO DE MINAS 40G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 10.58,
+      "valorUnitario": 5.29,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "v6k9g9067xmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REFRIG COCA COLA MULTIPACK 6X350ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 38.98,
+      "valorUnitario": 19.49,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "yp7j22m0crmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Açucar",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 18,
+      "valor": 44.82,
+      "valorUnitario": 2.49,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "63bcxgn8dvlmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REQ CULINARIO CANTO DE MINAS 1,8KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 62.58,
+      "valorUnitario": 31.29,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "gvf99jit8e6mqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "SELETA DE LEGUMES PREDILECTA POUCH 170G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 8.7,
+      "valorUnitario": 4.35,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "jug9sw9jchjmqbr3i4l",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "TOMATE ITALIANO KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.445,
+      "valor": 5.55,
+      "valorUnitario": 12.47191,
+      "data": "2026-06-11",
+      "origem": "sefaz",
+      "nNF": "145175",
+      "grupoId": "q1l7bbbg3llmqbr3i4l"
+    },
+    {
+      "id": "zf5nn5sc89mqbqkvk3",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Manteiga comum",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 18.5,
+      "valorUnitario": 18.5,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "00uxp24k9wr1pmqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Manteiga comum",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 18.5,
+      "valorUnitario": 18.5,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "gph4ocy5banmqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Margarina",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 0.95,
+      "valor": 14.15,
+      "valorUnitario": 14.89,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "9juea55owumqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Margarina",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 0.93,
+      "valor": 13.86,
+      "valorUnitario": 14.9,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "8184hj9xzllmqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Presunto",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 0.71,
+      "valor": 13.42,
+      "valorUnitario": 18.9,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "krd67x7578nmqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Presunto",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 0.732,
+      "valor": 13.83,
+      "valorUnitario": 18.89,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "mcx4z4ggvdmqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Presunto",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 0.924,
+      "valor": 17.46,
+      "valorUnitario": 18.9,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "xr8ln20g3tdmqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Queijo",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 0.81,
+      "valor": 30.7,
+      "valorUnitario": 37.9,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "b7fpu2wcm4smqbqkvk4",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Queijo",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 0.794,
+      "valor": 30.09,
+      "valorUnitario": 37.9,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "afuqxodmoqdmqbqkvk3"
+    },
+    {
+      "id": "zzifpw76whfmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Açúcar Refinado Mascavo",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 15.99,
+      "valorUnitario": 15.99,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "ni3fyx4dz8mqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Embalagem Envelope",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 59.34,
+      "valorUnitario": 59.34,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "k6j3l3dfrgkmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Delícia de Peru Pezer",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 2.068,
+      "valor": 45.29,
+      "valorUnitario": 21.9,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "vbmnfenv1bhmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Mussarela Natural",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 2.072,
+      "valor": 95.1,
+      "valorUnitario": 45.9,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "3kqy2y77s4zmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Mussarela Natural",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1.108,
+      "valor": 50.86,
+      "valorUnitario": 45.9,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "s1c4hxm9vqmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Salsicha",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 37.9,
+      "valorUnitario": 37.9,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "46pkyyj41pkmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Farinha de Trigo",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 5,
+      "valor": 104.5,
+      "valorUnitario": 20.9,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "y6xzjacpzgdmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Água Mineral 500ml",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 72,
+      "valor": 71.28,
+      "valorUnitario": 0.99,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "7hshz67in3dmqbqf7q3",
+      "fornecedor": "ATACADAO S.A.",
+      "nomeProduto": "Catchup",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 5.49,
+      "valorUnitario": 5.49,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "32i7zfyqhv4mqbqf7q3"
+    },
+    {
+      "id": "fkrk21ryav9mqbqccww",
+      "fornecedor": "ORCAMENTO",
+      "nomeProduto": "COLHER REFEIÇÃO CRISTAL STRAW",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 6.4,
+      "valorUnitario": 3.2,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "bu9m3607l9rmqbqccww"
+    },
+    {
+      "id": "3bibhyzd0gvmqbqccww",
+      "fornecedor": "ORCAMENTO",
+      "nomeProduto": "FACA REFEIÇÃO BRANCA STRAW",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.2,
+      "valorUnitario": 3.2,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "bu9m3607l9rmqbqccww"
+    },
+    {
+      "id": "hwp10gdx5mmqbqccww",
+      "fornecedor": "ORCAMENTO",
+      "nomeProduto": "GARFO REFEIÇÃO CRISTAL STRAW",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 5.5,
+      "valorUnitario": 2.75,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "bu9m3607l9rmqbqccww"
+    },
+    {
+      "id": "dx68r3z37s9mqbqccww",
+      "fornecedor": "ORCAMENTO",
+      "nomeProduto": "MEXEDOR GRANDE 11CM STRAW CRISTAL",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 12.6,
+      "valorUnitario": 12.6,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "bu9m3607l9rmqbqccww"
+    },
+    {
+      "id": "xwsmj6upra8mqbqbc4a",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A",
+      "nomeProduto": "Chicória (Hortaliça)",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1000,
+      "valor": 28.9,
+      "valorUnitario": 28.9,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "wvfbuf0m85mqbqbc4a"
+    },
+    {
+      "id": "0wyx2uvhhymqbqbc4a",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A",
+      "nomeProduto": "Chicória (Hortaliça)",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1000,
+      "valor": 8.75,
+      "valorUnitario": 8.75,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "wvfbuf0m85mqbqbc4a"
+    },
+    {
+      "id": "vxfnj62v3ymqbqbc4a",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A",
+      "nomeProduto": "Chicória (Hortaliça)",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1000,
+      "valor": 8.79,
+      "valorUnitario": 8.79,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "wvfbuf0m85mqbqbc4a"
+    },
+    {
+      "id": "ah9gspc7f8vmqbqbc4a",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A",
+      "nomeProduto": "Creme Culinário",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 14000,
+      "valor": 33.46,
+      "valorUnitario": 2.39,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "wvfbuf0m85mqbqbc4a"
+    },
+    {
+      "id": "t7osthr5nplmqbq8rfz",
+      "fornecedor": "ATACADAO AMAPA - COMERCIAL NORTE LTDA",
+      "nomeProduto": "MARGARINA FOLHADA",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 2,
+      "valor": 37.69,
+      "valorUnitario": 37.69,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "5co3otnop2dmqbq8rfz"
+    },
+    {
+      "id": "ddmfjdavahnmqbq8rfz",
+      "fornecedor": "ATACADAO AMAPA - COMERCIAL NORTE LTDA",
+      "nomeProduto": "MARGARINA FOLHADA",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 2,
+      "valor": 37.69,
+      "valorUnitario": 37.69,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "5co3otnop2dmqbq8rfz"
+    },
+    {
+      "id": "n4uzedzpjxmqbq8rfz",
+      "fornecedor": "ATACADAO AMAPA - COMERCIAL NORTE LTDA",
+      "nomeProduto": "FERMENTO SECO INSTANTANEO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 16.49,
+      "valorUnitario": 16.49,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "5co3otnop2dmqbq8rfz"
+    },
+    {
+      "id": "xy123b2fmeomqbq8rfz",
+      "fornecedor": "ATACADAO AMAPA - COMERCIAL NORTE LTDA",
+      "nomeProduto": "FERMENTO SECO INSTANTANEO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 16.49,
+      "valorUnitario": 16.49,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "5co3otnop2dmqbq8rfz"
+    },
+    {
+      "id": "5j8kvp20z0amqbq8rfz",
+      "fornecedor": "ATACADAO AMAPA - COMERCIAL NORTE LTDA",
+      "nomeProduto": "FERMENTO SECO INSTANTANEO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 16.49,
+      "valorUnitario": 16.49,
+      "data": "2026-06-12",
+      "origem": "ia",
+      "grupoId": "5co3otnop2dmqbq8rfz"
+    },
+    {
+      "id": "dkl1nnmemwfmqbq52i0",
+      "fornecedor": "LIDER CENTRO - LIDER INDUSTRIA E COMERCIO LTDA",
+      "nomeProduto": "POTE PP 250ML COM TAMPA",
+      "categoria": "descart������������veis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 7.9,
+      "valorUnitario": 7.9,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "k80px8ylb2smqbq52i0"
+    },
+    {
+      "id": "8e0jkkxgkvomqbq52i0",
+      "fornecedor": "LIDER CENTRO - LIDER INDUSTRIA E COMERCIO LTDA",
+      "nomeProduto": "POTE PP 250ML COM TAMPA",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 7.9,
+      "valorUnitario": 7.9,
+      "data": "2026-06-11",
+      "origem": "ia",
+      "grupoId": "k80px8ylb2smqbq52i0"
+    },
+    {
+      "id": "hcl9ylr676jmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "ABOBORA JACARE KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1.395,
+      "valor": 5.56,
+      "valorUnitario": 3.985663,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "bpskbkptvsamqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "ACHOC PO NESCAU 2,01KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 59.9,
+      "valorUnitario": 59.9,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "y86ijiwzhlcmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "ACUCAR TRITURADO ITAMARATI ESP 1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 12.36,
+      "valorUnitario": 3.09,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "z90holj3w2gmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BEB LACTEA 3 CORACOES WHEY 250ML CL 15G PROTEINA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 6,
+      "valor": 29.4,
+      "valorUnitario": 4.9,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "h8awfc8z8gkmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BEB LACTEA PIRACANJUBA WHEY FRUT VE 250ML 23G PROT",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 35.16,
+      "valorUnitario": 8.79,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "aimrhil7o4tmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CHEIRO VERDE COENTRO/CEBOLINHA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 11,
+      "valor": 29.59,
+      "valorUnitario": 2.69,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "kozomekqibmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "COB CULIN MILK OURO 1,8KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 18.29,
+      "valorUnitario": 18.29,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "xphpqhgcmmlmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "DET LIQ YPE 5L CLEAR",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 25.9,
+      "valorUnitario": 25.9,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "uyxyn8wlxjrmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "FARINHA TRIGO D MARIA PASTEL 5KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 5,
+      "valor": 95.95,
+      "valorUnitario": 19.19,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "8xxev2rbcjqmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "FARINHA TRIGO MIRELLA PASTEL 5KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 5,
+      "valor": 126.45,
+      "valorUnitario": 25.29,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "jjcqkwr1toomqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "HAMB AURORA FAROESTE 672G CHURRASCO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 57.6,
+      "valorUnitario": 19.2,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "9ftliq4oh7umqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LAVA ROUPA PO ASSIM SC 400G ROSA TRI ECONOMICO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.45,
+      "valorUnitario": 3.45,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "qfqulhoxy0fmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LEITE CONDENSADO MOCOCA TP 395G SEMI DESN",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 8,
+      "valor": 49.52,
+      "valorUnitario": 6.19,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "2c4wsxecmmsmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LEITE LV INT PARMALAT 1L",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 62.28,
+      "valorUnitario": 5.19,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "klhtn1m94pmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MAC RICOSA SEMOLA 500G CONCHA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 4.79,
+      "valorUnitario": 4.79,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "u3v19qffmqmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MAC RICOSA SEMOLA 500G PADRE NOSSO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 4.8,
+      "valorUnitario": 4.8,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "xjn3u701vsjmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MARG QUALY 500G S/SAL",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 32.7,
+      "valorUnitario": 10.9,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "vi0ponbqx2fmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REQ CULINARIO CANTO DE MINAS 400G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 12.8,
+      "valorUnitario": 12.8,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "5ck4s0leo2kmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REQ CULINARIO CANTO DE MINAS 400G CHEDDAR",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 12.8,
+      "valorUnitario": 12.8,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "02ysa3uxbtqmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "SALS HOT DOG CONG FRIMESA 2KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 26.39,
+      "valorUnitario": 26.39,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "iyjqke48gxqmqaatwmt",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "TOMATE GRAPE BJ 180G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 6.09,
+      "valorUnitario": 6.09,
+      "data": "2026-05-11",
+      "origem": "sefaz",
+      "nNF": "142568",
+      "grupoId": "b3ys6ymg6ulmqaatwmt"
+    },
+    {
+      "id": "0ty7nl2vo7b9mqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "ABOBORA MORANGA PD",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.77,
+      "valor": 4.88,
+      "valorUnitario": 6.337662,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "6kezj4ovy2mqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CAR BOV RESF MAFRINORTE PALETA C/ OSSO FC",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.686,
+      "valor": 20.23,
+      "valorUnitario": 29.489796,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "pho2ov5859cmqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "FLOCAO DONA CLARA 500G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 7.47,
+      "valorUnitario": 2.49,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "hk43d8o60nmqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LEITE DE COCO SABOR NORDESTE 200ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 11.67,
+      "valorUnitario": 3.89,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "ctv77l9mfckmqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LEITE LV INT CAMPONESA 1L",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 86.28,
+      "valorUnitario": 7.19,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "9byza7or4d9mqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MARG QUALY 500G C/SAL",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 21.8,
+      "valorUnitario": 10.9,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "o2obah6itt8mqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Ovo 30und",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 18.5,
+      "valorUnitario": 18.5,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "sry2lhxyf2mqaao2vo",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "P FGO CONG COPACOL FILE PEITO BJ1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 6,
+      "valor": 92.94,
+      "valorUnitario": 15.49,
+      "data": "2026-06-08",
+      "origem": "sefaz",
+      "nNF": "144810",
+      "grupoId": "4m5x41cm934mqaao2vo"
+    },
+    {
+      "id": "mjtqxtxy06mq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "ABACATE KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.93,
+      "valor": 5.57,
+      "valorUnitario": 5.989247,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "0ie8q6lnxqeumq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Açucar",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 8.97,
+      "valorUnitario": 2.99,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "zep8h44m8lsmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BEB GASEIF H2OH 500ML LIMAO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 19.8,
+      "valorUnitario": 4.95,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "sdjbcewoqulmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BEB GASEIF H2OH 500ML LIMONETO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 9.9,
+      "valorUnitario": 4.95,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "t36ey6n9vcmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "BEB LACTEA NESCAU PRONTO 180ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 6,
+      "valor": 15.54,
+      "valorUnitario": 2.59,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "pdwwy69ks7nmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CAR BOV RESF MAFRINORTE ACEM C/OSSO FC",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1.098,
+      "valor": 32.39,
+      "valorUnitario": 29.499089,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "hdglwpvbszmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Pimentinha",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 5,
+      "valor": 13.95,
+      "valorUnitario": 2.79,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "jf05ist3t1fmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CHICORIA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 1.99,
+      "valorUnitario": 1.99,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "u6k5j7jmwxmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "COMINHO PO KITANO 60G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 7.99,
+      "valorUnitario": 7.99,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "f5rs4rxlljsmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "COUVE MANTEIGA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 7.47,
+      "valorUnitario": 2.49,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "ywuravga0umq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "CR CULINARIO EMBARE TP 200G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 6,
+      "valor": 14.34,
+      "valorUnitario": 2.39,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "utb8zx8ew4mq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Trigo",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 60.87,
+      "valorUnitario": 20.29,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "kl2wlisdm3emq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "HAMB BOV/AVES SEARA 36X56G TEXAS BURGER",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 48.9,
+      "valorUnitario": 48.9,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "601obk025obmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "LIMP BRILUX PERF 500ML TERNURA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 5.09,
+      "valorUnitario": 5.09,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "whl90e1h2hpmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MACA NACIONAL GALA KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.735,
+      "valor": 8.07,
+      "valorUnitario": 10.979592,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "gthmd17blrdmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MAMAO PAPAYA KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.775,
+      "valor": 6.34,
+      "valorUnitario": 8.180645,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "idwiw4qucc8mq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "MARG QUALY 500G S/SAL",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 10.9,
+      "valorUnitario": 10.9,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "jhx5qbfzm4mq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Ovo 30und",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 3,
+      "valor": 55.47,
+      "valorUnitario": 18.49,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "vx82ixqs9qmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Pimentinha",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.165,
+      "valor": 3.95,
+      "valorUnitario": 23.939394,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "s76q4q80ogmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "QJ T PARM RAL CANTO DE MINAS 40G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 10.58,
+      "valorUnitario": 5.29,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "zjywluqyw3fmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REFRIG ANTARCTICA 1L GUARANA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 9.5,
+      "valorUnitario": 4.75,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "8ewh5cizo2imq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REFRIG ANTARCTICA 350ML GUARANA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 32.28,
+      "valorUnitario": 2.69,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "jzre3eo35bmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REFRIG COCA COLA 1L",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 25.96,
+      "valorUnitario": 6.49,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "9n6ddv62tykmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REFRIG COCA COLA LT 220ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 18,
+      "valor": 44.82,
+      "valorUnitario": 2.49,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "prid7epbcdjmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REFRIG COCA COLA MULTIPACK 6X350ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 38.98,
+      "valorUnitario": 19.49,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "zapdeegc4vemq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Açucar",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 43.08,
+      "valorUnitario": 3.59,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "2xh1u1mg174mq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "Açucar",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 18,
+      "valor": 44.82,
+      "valorUnitario": 2.49,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "yzh2o2yo94mq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "REQ CULINARIO CANTO DE MINAS 1,8KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 31.29,
+      "valorUnitario": 31.29,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "jaiod0po5gmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "SAL MOIDO TIMBIRAS IODADO 1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 1.39,
+      "valorUnitario": 1.39,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "txx1y1e0t9fmq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "TEMPERO SAZON 40G NORDESTE",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 4.59,
+      "valorUnitario": 4.59,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "hv9686zrpoamq9hrrl2",
+      "fornecedor": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "nomeProduto": "TOMATE SALADA KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 0.525,
+      "valor": 6.55,
+      "valorUnitario": 12.47619,
+      "data": "2026-06-10",
+      "origem": "sefaz",
+      "nNF": "145017",
+      "grupoId": "cdtmiz994rumq9hrrl2"
+    },
+    {
+      "id": "8m4gmhfbq9qmq8og2pe",
+      "fornecedor": "NETINHO POLPAS",
+      "nomeProduto": "POLPA MARACUJA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 6,
+      "valor": 120,
+      "valorUnitario": 20,
+      "data": "2026-06-08",
+      "origem": "ia",
+      "grupoId": "i72lee8161imq8og2pe"
+    },
+    {
+      "id": "favualyz5kgmq8og2pe",
+      "fornecedor": "NETINHO POLPAS",
+      "nomeProduto": "POLPA ACEROLA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 40,
+      "valorUnitario": 10,
+      "data": "2026-06-08",
+      "origem": "ia",
+      "grupoId": "i72lee8161imq8og2pe"
+    },
+    {
+      "id": "u0xskk2bi89mq84ssah",
+      "fornecedor": "Rio Jordão - Casa do Pescado",
+      "nomeProduto": "Pétalas de flores (premium)",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 37.26,
+      "valorUnitario": 37.26,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "nor1mt0v50pmq84ssah"
+    },
+    {
+      "id": "u0recnopspmq84ssah",
+      "fornecedor": "Rio Jordão - Casa do Pescado",
+      "nomeProduto": "Filme PVC para embalar",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 40.38,
+      "valorUnitario": 40.38,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "nor1mt0v50pmq84ssah"
+    },
+    {
+      "id": "lgepgrwgfqrmq84ssah",
+      "fornecedor": "Rio Jordão - Casa do Pescado",
+      "nomeProduto": "Barca grande para organização",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 5,
+      "valor": 21.05,
+      "valorUnitario": 4.21,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "nor1mt0v50pmq84ssah"
+    },
+    {
+      "id": "5kog4cpayecmq84ssah",
+      "fornecedor": "Rio Jordão - Casa do Pescado",
+      "nomeProduto": "Copo plástico 100 unidades com fundo",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 12.58,
+      "valorUnitario": 12.58,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "nor1mt0v50pmq84ssah"
+    },
+    {
+      "id": "o872us3jlaemq84ssah",
+      "fornecedor": "Rio Jordão - Casa do Pescado",
+      "nomeProduto": "Copo plástico 100 unidades com tampa",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 15.1,
+      "valorUnitario": 15.1,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "nor1mt0v50pmq84ssah"
+    },
+    {
+      "id": "k0h1zbmpuaomq84qs37",
+      "fornecedor": "LIDER CENTRO",
+      "nomeProduto": "CHOCOLATE BARRA 33G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 2.75,
+      "valorUnitario": 2.75,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "o5372ed6z1mq84qs37"
+    },
+    {
+      "id": "exykkwxa8gmq84qs37",
+      "fornecedor": "LIDER CENTRO",
+      "nomeProduto": "PRATO DESCARTAVEL 15CM RASO",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 15,
+      "valor": 16.5,
+      "valorUnitario": 1.1,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "o5372ed6z1mq84qs37"
+    },
+    {
+      "id": "jexj6g26onmq829vw0",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "PONTA PRESUNT/APRESUNT",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1.994,
+      "valor": 33.7,
+      "valorUnitario": 16.89,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "omgxbhnnm2emq829vw0"
+    },
+    {
+      "id": "ayc7jog00d5mq829vw0",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "QUEIJO MUSS. FATIADO",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1.016,
+      "valor": 45.62,
+      "valorUnitario": 44.9,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "omgxbhnnm2emq829vw0"
+    },
+    {
+      "id": "t7pqpq7qt9mq82947g",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "MANTEIGA COMUM",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 18.5,
+      "valorUnitario": 18.5,
+      "data": "2024-01-16",
+      "origem": "ia",
+      "grupoId": "6g0xqaamnkjmq82947g"
+    },
+    {
+      "id": "j7nhy1xmo88mq82947g",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "MARGARINA FOLHADA",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 2,
+      "valor": 41.9,
+      "valorUnitario": 20.95,
+      "data": "2024-01-16",
+      "origem": "ia",
+      "grupoId": "6g0xqaamnkjmq82947g"
+    },
+    {
+      "id": "ozb6u9pwivcmq82947g",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "MARGARINA FOLHADA",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 2,
+      "valor": 41.9,
+      "valorUnitario": 20.95,
+      "data": "2024-01-16",
+      "origem": "ia",
+      "grupoId": "6g0xqaamnkjmq82947g"
+    },
+    {
+      "id": "u8180izv69rmq82947g",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "MISTURA PARA PAO DE QUEIJO",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 15.95,
+      "valorUnitario": 15.95,
+      "data": "2024-01-16",
+      "origem": "ia",
+      "grupoId": "6g0xqaamnkjmq82947g"
+    },
+    {
+      "id": "r1b4vdacr7fmq82947g",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "MISTURA PARA PAO DE QUEIJO",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 15.95,
+      "valorUnitario": 15.95,
+      "data": "2024-01-16",
+      "origem": "ia",
+      "grupoId": "6g0xqaamnkjmq82947g"
+    },
+    {
+      "id": "vey8gypma3hmq82947g",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "QUEIJO MUSSARELA FATIADO",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1.028,
+      "valor": 46.16,
+      "valorUnitario": 44.9,
+      "data": "2024-01-16",
+      "origem": "ia",
+      "grupoId": "6g0xqaamnkjmq82947g"
+    },
+    {
+      "id": "k8ndz082axmq80ej4z",
+      "fornecedor": "ATACADAO S.A",
+      "nomeProduto": "AMACIE CRESPA",
+      "categoria": "material de limpeza",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 4.8,
+      "valorUnitario": 2.4,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "tcrsyi5im4omq80ej4z"
+    },
+    {
+      "id": "el24fkpcfyumq80ej4z",
+      "fornecedor": "ATACADAO S.A",
+      "nomeProduto": "AGUA BELAGUA PET",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 12,
+      "valor": 19.08,
+      "valorUnitario": 1.59,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "tcrsyi5im4omq80ej4z"
+    },
+    {
+      "id": "dzbx2nsulvkmq80ej4z",
+      "fornecedor": "ATACADAO S.A",
+      "nomeProduto": "AGUA H.A.DA AMAZONIA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 60,
+      "valor": 59.4,
+      "valorUnitario": 0.99,
+      "data": "2026-06-10",
+      "origem": "ia",
+      "grupoId": "tcrsyi5im4omq80ej4z"
+    },
+    {
+      "id": "1gtrvgd6dhomq7v9vtr",
+      "fornecedor": "Smb Store - TROMBA D'ÁGUA Atacado e Varejo",
+      "nomeProduto": "Descartável 500 ml atacado",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 10,
+      "valor": 100,
+      "valorUnitario": 10,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "g99f55vknscmq7v9vtq"
+    },
+    {
+      "id": "kpfdnfps1fpmq76kvo9",
+      "fornecedor": "Valdean",
+      "nomeProduto": "Pão de Forma",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 30,
+      "valorUnitario": 12,
+      "valor": 360,
+      "data": "2026-06-09",
+      "origem": "manual",
+      "grupoId": "jfke2ig7bnimq76kvo9"
+    },
+    {
+      "id": "67u5lt4c5kpmq76awpm",
+      "fornecedor": "Assai atacadao",
+      "nomeProduto": "Outros",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valorUnitario": 648.6,
+      "valor": 648.6,
+      "data": "2026-06-09",
+      "origem": "manual",
+      "grupoId": "d2izooyxq39mq76awpm"
+    },
+    {
+      "id": "q1p995rq7jgmq6n4gu3",
+      "fornecedor": "QUEIJO MINAS",
+      "nomeProduto": "Margarina Folhada",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 2,
+      "valor": 41.9,
+      "valorUnitario": 20.95,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "chb2fa9cwitmq6n4gu3"
+    },
+    {
+      "id": "k4obme0oqqmq6mqleh",
+      "fornecedor": "SÓ DESCARTÁVEIS",
+      "nomeProduto": "Chocolate em pó 50%",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 43.5,
+      "valorUnitario": 43.5,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "t6qst3c9fgmq6mqleh"
+    },
+    {
+      "id": "c6x2f4v3xlamq6mqleh",
+      "fornecedor": "SÓ DESCART����������������������������������������������������������������������������������������������VEIS",
+      "nomeProduto": "Copo térmico de isopor 300ml",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 38,
+      "valorUnitario": 9.5,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "t6qst3c9fgmq6mqleh"
+    },
+    {
+      "id": "ztf31jogpalmq6mqleh",
+      "fornecedor": "SÓ DESCARTÁVEIS",
+      "nomeProduto": "Tampa transparente para copo isopor 300",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 24,
+      "valorUnitario": 12,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "t6qst3c9fgmq6mqleh"
+    },
+    {
+      "id": "g8ila49z424mq6mqleh",
+      "fornecedor": "SÓ DESCARTÁVEIS",
+      "nomeProduto": "Saco para confeitar",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 7,
+      "valorUnitario": 7,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "t6qst3c9fgmq6mqleh"
+    },
+    {
+      "id": "rkh9tma1ngmq6mqleh",
+      "fornecedor": "SÓ DESCARTÁVEIS",
+      "nomeProduto": "Saco plástico 10x10",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 20,
+      "valorUnitario": 5,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "t6qst3c9fgmq6mqleh"
+    },
+    {
+      "id": "s8z5tumlckmmq6mbk8b",
+      "fornecedor": "AVENIDA PADRÊ JÚLIO MARIA",
+      "nomeProduto": "Pão de Chá",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 0.384,
+      "valor": 7.67,
+      "valorUnitario": 19.98,
+      "data": "2026-06-03",
+      "origem": "ia",
+      "grupoId": "b6n3rguae3wmq6mbk8b"
+    },
+    {
+      "id": "mn3f0i6ego8mq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Delice de Peru Fatiado",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1.014,
+      "valor": 27.28,
+      "valorUnitario": 26.9,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "dvp3qgnwzfemq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Maionese Sachê",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 19.9,
+      "valorUnitario": 19.9,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "lgdw0c628tmq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Manteiga Comum",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 37,
+      "valorUnitario": 18.5,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "w0ozm2t492bmq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Massa para Pastel",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 18.9,
+      "valorUnitario": 18.9,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "b75ifyeix9qmq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Mistura para Pão de Queijo",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 31.9,
+      "valorUnitario": 15.95,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "vavi6wpxbsemq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Ponta de Queijo",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1.216,
+      "valor": 46.09,
+      "valorUnitario": 37.9,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "trtinxzluxemq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Queijo Mussarela Leite Fatiado",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 0.99,
+      "valor": 44.45,
+      "valorUnitario": 44.9,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "zy73izi3p6fmq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Queijo Mussarela Leite Fatiado",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1.012,
+      "valor": 45.44,
+      "valorUnitario": 44.9,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "ey991m4nkqfmq6lswfw",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "Requeijão",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 29.9,
+      "valorUnitario": 29.9,
+      "data": "2024-09-13",
+      "origem": "ia",
+      "grupoId": "tq5zff2t1pmq6lswfw"
+    },
+    {
+      "id": "y0xcg5rwh8omq6lqx2y",
+      "fornecedor": "MARACA BURITIZAL",
+      "nomeProduto": "Salsicha Hot Dog",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 3,
+      "valor": 31.8,
+      "valorUnitario": 10.6,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "32ke5fbfvr9mq6lqx2y"
+    },
+    {
+      "id": "4slpwu2vfsqmq6lqx2y",
+      "fornecedor": "MARACA BURITIZAL",
+      "nomeProduto": "Linguiça Calabresa",
+      "categoria": "prote��na",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 46.9,
+      "valorUnitario": 46.9,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "32ke5fbfvr9mq6lqx2y"
+    },
+    {
+      "id": "vlqes21hemjmq6lqx2y",
+      "fornecedor": "MARACA BURITIZAL",
+      "nomeProduto": "Linguiça Calabresa",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 46.9,
+      "valorUnitario": 46.9,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "32ke5fbfvr9mq6lqx2y"
+    },
+    {
+      "id": "evy1ij2kcicmq6lpnif",
+      "fornecedor": "R & R CASA DO PESCADO LTDA",
+      "nomeProduto": "SACO LIXO FORTE/DAOGRAU 100L",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 49.2,
+      "valorUnitario": 49.2,
+      "data": "2026-06-09",
+      "origem": "ia",
+      "grupoId": "1jb22y9c6yjmq6lpnif"
+    },
+    {
+      "id": "mk4jqpnq3cjmq56y24y",
+      "fornecedor": "Netinho Polpas",
+      "nomeProduto": "Polpa de maracujá",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 6,
+      "valor": 120,
+      "valorUnitario": 20,
+      "data": "Não informada",
+      "origem": "ia"
+    },
+    {
+      "id": "miwtzfmzb4pmq56y24y",
+      "fornecedor": "Netinho Polpas",
+      "nomeProduto": "Polpa de acerola",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 4,
+      "valor": 40,
+      "valorUnitario": 10,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "refzxx6ffimq56mz0y",
+      "fornecedor": "SILVA LTDA",
+      "nomeProduto": "HAMBURGUER",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 0.442,
+      "valor": 8.83,
+      "valorUnitario": 19.98,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "0r88vadwzwrgmq56mz0y",
+      "fornecedor": "SILVA LTDA",
+      "nomeProduto": "HAMBURGUER",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "quantidade": 0.422,
+      "valor": 8.43,
+      "valorUnitario": 19.98,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "fx402ml0805mq55eu26",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "MANTEIGA COMUM",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 18.5,
+      "valorUnitario": 18.5,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "6uu3u5x5mn7mq55eu26",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "MARGARINA FOLHADA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 83,
+      "valorUnitario": 41.5,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "1mhqetz44ziimq55eu26",
+      "fornecedor": "QUEIJOS E FRIOS",
+      "nomeProduto": "MARGARINA PASTELLA",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 0.934,
+      "valor": 13.92,
+      "valorUnitario": 14.9,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "xqnsy1ih4tjmq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "FAR TRIGO 8 PRU PASI",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1.45,
+      "valor": 17.99,
+      "valorUnitario": 12.99,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "w68rv598m0rmq55ckev",
+      "fornecedor": "ATACAD��O S.A.",
+      "nomeProduto": "AÇÚCAR AMARATI",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 8.07,
+      "valorUnitario": 2.69,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "5wd5s8xeenimq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "MARG QUALY",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 23.97,
+      "valorUnitario": 23.97,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "dydc8mp3hi6mq55ckev",
+      "fornecedor": "ATACAD��O S.A.",
+      "nomeProduto": "REG NESCAU LV 9 PG 8",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1.2,
+      "valor": 18.98,
+      "valorUnitario": 15.81,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "5ypehdpemhvmq55ckev",
+      "fornecedor": "ATACAD���������O S.A.",
+      "nomeProduto": "ACHOC GOLD NESCAU",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "quantidade": 1,
+      "valor": 45.99,
+      "valorUnitario": 45.99,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "gdsgn5amq85mq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "AGUA SANTA APOLENA",
+      "categoria": "insumos",
+      "unidade": "L",
+      "quantidade": 20,
+      "valor": 2.19,
+      "valorUnitario": 2.19,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "hc7pjunawnemq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "AGUA M.A.DA AMAZÔNIA",
+      "categoria": "insumos",
+      "unidade": "L",
+      "quantidade": 48,
+      "valor": 47.52,
+      "valorUnitario": 0.99,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "ezuq838rtimq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "AGUA R.BELAGUA",
+      "categoria": "insumos",
+      "unidade": "L",
+      "quantidade": 20,
+      "valor": 1.99,
+      "valorUnitario": 1.99,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "a0gipwygf18mq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "AGUA R.BELAGUA PET",
+      "categoria": "insumos",
+      "unidade": "L",
+      "quantidade": 12,
+      "valor": 19.08,
+      "valorUnitario": 1.59,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "dwr6i5h4mhimq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "REF COCA COLA MINI",
+      "categoria": "insumos",
+      "unidade": "L",
+      "quantidade": 18,
+      "valor": 47.7,
+      "valorUnitario": 2.65,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "07bspc4cckdcmq55ckev",
+      "fornecedor": "ATACADÃO S.A.",
+      "nomeProduto": "REF COCA COLA ZERO MINI",
+      "categoria": "insumos",
+      "unidade": "L",
+      "quantidade": 3,
+      "valor": 44.1,
+      "valorUnitario": 14.7,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "dzcl5fdsr3smq55b2ps",
+      "fornecedor": "LÍDER BURITIZAL",
+      "nomeProduto": "Colher sobremesa",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 2.65,
+      "valorUnitario": 2.65,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "sukcw0jk3ubmq55b2ps",
+      "fornecedor": "LÍDER BURITIZAL",
+      "nomeProduto": "Prato descartável 15cm raso",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 10,
+      "valor": 11.5,
+      "valorUnitario": 1.15,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "dd7kt2q6q7imq55b2ps",
+      "fornecedor": "LÍDER BURITIZAL",
+      "nomeProduto": "Sacola lisa 25x35 2kg",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.65,
+      "valorUnitario": 3.65,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "msdl9chhcbmq55b2ps",
+      "fornecedor": "LÍDER BURITIZAL",
+      "nomeProduto": "Colher forte (G) branca",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 9.7,
+      "valorUnitario": 9.7,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "819ogtappuumq55b2ps",
+      "fornecedor": "LÍDER BURITIZAL",
+      "nomeProduto": "Colher leve (G) cristal",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.5,
+      "valorUnitario": 3.5,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "66ztzmjfls6mq55b2ps",
+      "fornecedor": "LÍDER BURITIZAL",
+      "nomeProduto": "Colher leve (G) cristal",
+      "categoria": "descart������veis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.5,
+      "valorUnitario": 3.5,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "d3r9bny7ismmq55b2ps",
+      "fornecedor": "LÍDER BURITIZAL",
+      "nomeProduto": "Colher leve (G) cristal",
+      "categoria": "descart��veis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 3.5,
+      "valorUnitario": 3.5,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "7zr855jmifomq55b2ps",
+      "fornecedor": "L��DER BURITIZAL",
+      "nomeProduto": "Bobina papel 57x018 48g",
+      "categoria": "insumos",
+      "unidade": "un",
+      "quantidade": 4,
+      "valor": 7.4,
+      "valorUnitario": 1.85,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "hidsfr5lfqvmq559lic",
+      "fornecedor": "VENDA DE MERCADORIAS",
+      "nomeProduto": "COPO 300ML COPOBRAS TRANSP PP",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 7.45,
+      "valorUnitario": 7.45,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "xsqak2172rqmq559lic",
+      "fornecedor": "VENDA DE MERCADORIAS",
+      "nomeProduto": "MEXEDOR GRANDE 11CM STRAWL CRISTAL",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 2,
+      "valor": 25.2,
+      "valorUnitario": 12.6,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "dsouki3d5lvmq559lic",
+      "fornecedor": "VENDA DE MERCADORIAS",
+      "nomeProduto": "PAPEL TOALHA INTERFOLHAS 20X20CM NOBRE",
+      "categoria": "material de limpeza",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 18.8,
+      "valorUnitario": 18.8,
+      "data": "2026-06-08",
+      "origem": "ia"
+    },
+    {
+      "id": "lc38qu5buopmq559lic",
+      "fornecedor": "VENDA DE MERCADORIAS",
+      "nomeProduto": "TAMPA COPO TRANSP PP",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "quantidade": 1,
+      "valor": 5.05,
+      "valorUnitario": 5.05,
+      "data": "2026-06-08",
+      "origem": "ia"
+    }
+  ],
+  "fornecedores": [
+    {
+      "id": "4828sf1rvk5mq559lic",
+      "nome": "VENDA DE MERCADORIAS",
+      "endereco": "AVENIDA FELIPE CAMARÃO 1508, AP - MACAPÁ - BURITIZAL, CEP: 68902-861"
+    },
+    {
+      "id": "7d4uofv1vdmq55b2ps",
+      "nome": "LÍDER BURITIZAL",
+      "endereco": "TREZE DE SETEMBRO, 2138, BURITIZAL, MACAPÁ AP"
+    },
+    {
+      "id": "tn3uzjpo9zrmq55ckev",
+      "nome": "ATACADÃO S.A.",
+      "endereco": "ROD ROD JUSCELINO KUBITSCHEK DE OL 0, UNIVERSIDADE, MACAPA, AP"
+    },
+    {
+      "id": "jwiv05tspumq55eu26",
+      "nome": "QUEIJOS E FRIOS",
+      "endereco": "AV 13 DE SETEMBRO, S/N BURITIZAL"
+    },
+    {
+      "id": "cm7obd1unzkmq56mz0y",
+      "nome": "SILVA LTDA",
+      "endereco": "AVENIDA PADRE JULIO MARIA LOMBARD, 2095, CENTRAL - MACAPA-AP"
+    },
+    {
+      "id": "5i5uh7y1f9mq56y24y",
+      "nome": "Netinho Polpas",
+      "endereco": "Não informado"
+    },
+    {
+      "id": "2cs21ctn8zqmq6lpnif",
+      "nome": "R & R CASA DO PESCADO LTDA",
+      "endereco": "AV ALMIRANTE BARROSO 1432 - SANTA RITA, CEP: 68900041 - MACAPA/AP"
+    },
+    {
+      "id": "xszc501coxmq6lqx2y",
+      "nome": "MARACA BURITIZAL",
+      "endereco": "RUA BAIRRO DE MAUÁ, 403-A, 403-A, BURITIZAL MACAPÁ-AP"
+    },
+    {
+      "id": "u7k00td0zwmq6mbk8b",
+      "nome": "AVENIDA PADRÊ JÚLIO MARIA",
+      "endereco": "AVENIDA PADRÊ JÚLIO MARIA, 2095, CENTRAL - MACAPÁ-AP"
+    },
+    {
+      "id": "frqk7p8qafrmq6mqleh",
+      "nome": "SÓ DESCARTÁVEIS",
+      "endereco": "Av Pedro Lazarino, 1705 Buritizal, Macapá - Amapá"
+    },
+    {
+      "id": "fiit6ohq0pamq6n4gu3",
+      "nome": "QUEIJO MINAS",
+      "endereco": "AV HENRIQUE GALUCIO, 413 CENTRO"
+    },
+    {
+      "id": "6hpyof71grgmq76awpm",
+      "nome": "Assai atacadao",
+      "endereco": ""
+    },
+    {
+      "id": "tcqqohclm6mq76kvoa",
+      "nome": "Valdean",
+      "endereco": ""
+    },
+    {
+      "id": "akw9rsrsm1mq80ej4z",
+      "nome": "ATACADAO S.A",
+      "endereco": "ROD ROD JUSCELINO KUBITSCHEK DE OL.O,UNIVERSIDADE,MACAPA,AP"
+    },
+    {
+      "id": "5xbet255ws4mq84qs37",
+      "nome": "LIDER CENTRO",
+      "endereco": "RUA TIRADENTES, 1363, CENTRO, MACAPA-AP"
+    },
+    {
+      "id": "67cehju54ivmq84ssah",
+      "nome": "Rio Jordão - Casa do Pescado",
+      "endereco": "Jovino Dinoa 1709 - Central, CEP: 68900000 - Macapá/AP"
+    },
+    {
+      "id": "g92g66vsflvmqaatocs",
+      "nome": "SENDAS DISTRIBUIDORA S/A LJ190",
+      "cnpj": "06057223039388",
+      "endereco": "AVENIDA STEPHAN HOUAT, S/N, JARDIM MARCO ZERO, MACAPA, AP"
+    },
+    {
+      "id": "3f2rw63l498mqbq52i0",
+      "nome": "LIDER CENTRO - LIDER INDUSTRIA E COMERCIO LTDA",
+      "endereco": "RUA TIRADENTES, 1363, CENTRO, MACAPA-AP"
+    },
+    {
+      "id": "s0cy8hxld7lmqbq8rfz",
+      "nome": "ATACADAO AMAPA - COMERCIAL NORTE LTDA",
+      "endereco": "AV 13 DE SETEMBRO, 2285, BURITIZAL, MACAPA-AP"
+    },
+    {
+      "id": "70ezb1lhvxvmqbqbc4a",
+      "nome": "SENDAS DISTRIBUIDORA S/A",
+      "endereco": "Av Stepian Houat, S/N - Jd Marco Zero - Macapa - AP"
+    },
+    {
+      "id": "wcxkm8wtxy8mqbqccww",
+      "nome": "ORCAMENTO",
+      "endereco": "AVENIDA FELIPE CAMARÃO 150H, AP - MACAPÁ - BURITIZAL, CEP: 68902-861"
+    },
+    {
+      "id": "b6vo8zbon0omqbqf7q3",
+      "nome": "ATACADAO S.A.",
+      "endereco": "R RIO JUCELINO KUBITSCHEK DE OL 0, UNIVERSIDADE, MACAPA, AP"
+    }
+  ],
+  "fichasTecnicas": [],
+  "materiasPrimas": [
+    {
+      "id": "f4597hoby1mq559lic",
+      "nome": "COPO 300ML COPOBRAS TRANSP PP",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 7.45
+    },
+    {
+      "id": "uss4a1m6oremq559lid",
+      "nome": "MEXEDOR GRANDE 11CM STRAWL CRISTAL",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 12.6
+    },
+    {
+      "id": "d9adwvsifb4mq559lid",
+      "nome": "PAPEL TOALHA INTERFOLHAS 20X20CM NOBRE",
+      "categoria": "material de limpeza",
+      "unidade": "un",
+      "ultimoValor": 18.8
+    },
+    {
+      "id": "k4bpoif35usmq559lid",
+      "nome": "TAMPA COPO TRANSP PP",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 5.05
+    },
+    {
+      "id": "l2rxcccse6mmq55b2ps",
+      "nome": "Colher sobremesa",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 2.65
+    },
+    {
+      "id": "z47ecru0vrmq55b2pt",
+      "nome": "Prato descartável 15cm raso",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 1.15
+    },
+    {
+      "id": "8d0ytllsxucmq55b2pt",
+      "nome": "Sacola lisa 25x35 2kg",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 3.65
+    },
+    {
+      "id": "io17ij8bfbmq55b2pt",
+      "nome": "Colher forte (G) branca",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 9.7
+    },
+    {
+      "id": "3e0ulxbp8bwmq55b2pt",
+      "nome": "Colher leve (G) cristal",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 3.5
+    },
+    {
+      "id": "n758qef78xmq55b2pt",
+      "nome": "Bobina papel 57x018 48g",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 1.85
+    },
+    {
+      "id": "xjdw64vimymq55ckev",
+      "nome": "FAR TRIGO 8 PRU PASI",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 12.99
+    },
+    {
+      "id": "vy90azg53dqmq55ckev",
+      "nome": "AÇÚCAR AMARATI",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 2.69
+    },
+    {
+      "id": "gus12ug56smq55ckev",
+      "nome": "MARG QUALY",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 23.97
+    },
+    {
+      "id": "u8mvu7pagdcmq55ckev",
+      "nome": "REG NESCAU LV 9 PG 8",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 15.81
+    },
+    {
+      "id": "n3ddoxfh7rqmq55ckev",
+      "nome": "ACHOC GOLD NESCAU",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 45.99
+    },
+    {
+      "id": "k1qn32ux63mq55ckev",
+      "nome": "AGUA SANTA APOLENA",
+      "categoria": "insumos",
+      "unidade": "L",
+      "ultimoValor": 2.19
+    },
+    {
+      "id": "nhjcaioxxyrmq55ckev",
+      "nome": "AGUA M.A.DA AMAZÔNIA",
+      "categoria": "insumos",
+      "unidade": "L",
+      "ultimoValor": 0.99
+    },
+    {
+      "id": "jdiq8ctyb3lmq55ckev",
+      "nome": "AGUA R.BELAGUA",
+      "categoria": "insumos",
+      "unidade": "L",
+      "ultimoValor": 1.99
+    },
+    {
+      "id": "6s76i23xeygmq55ckev",
+      "nome": "AGUA R.BELAGUA PET",
+      "categoria": "insumos",
+      "unidade": "L",
+      "ultimoValor": 1.59
+    },
+    {
+      "id": "wx0el0lfrdmq55ckev",
+      "nome": "REF COCA COLA MINI",
+      "categoria": "insumos",
+      "unidade": "L",
+      "ultimoValor": 2.65
+    },
+    {
+      "id": "x3343udvqpmq55ckev",
+      "nome": "REF COCA COLA ZERO MINI",
+      "categoria": "insumos",
+      "unidade": "L",
+      "ultimoValor": 14.7
+    },
+    {
+      "id": "mv75arpii8dmq55eu26",
+      "nome": "MANTEIGA COMUM",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 18.5
+    },
+    {
+      "id": "a30m1idi75mq55eu26",
+      "nome": "MARGARINA FOLHADA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 37.69
+    },
+    {
+      "id": "o85b7etus2mq55eu26",
+      "nome": "MARGARINA PASTELLA",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 14.9
+    },
+    {
+      "id": "38vw8tuaq3umq56mz0y",
+      "nome": "PÃO HAMBURGUER",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 19.98
+    },
+    {
+      "id": "c32k9c71qpmq56y24z",
+      "nome": "Polpa de maracujá",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 20
+    },
+    {
+      "id": "x36n4lj30oimq56y24z",
+      "nome": "Polpa de acerola",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 10
+    },
+    {
+      "id": "fnct4mtlc6omq6lpnif",
+      "nome": "SACO LIXO FORTE/DAOGRAU 100L",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 49.2
+    },
+    {
+      "id": "btpzdqkmh2cmq6lqx2z",
+      "nome": "Salsicha Hot Dog",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 10.6
+    },
+    {
+      "id": "jztmskkuedpmq6lqx2z",
+      "nome": "Linguiça Calabresa",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 46.9
+    },
+    {
+      "id": "7vk5flyrwiwmq6lswfw",
+      "nome": "Delice de Peru Fatiado",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 26.9
+    },
+    {
+      "id": "ii3u2z65ismq6lswfw",
+      "nome": "Maionese Sachê",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 19.9
+    },
+    {
+      "id": "j4ojufjm2v8mq6lswfw",
+      "nome": "Massa para Pastel",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 18.9
+    },
+    {
+      "id": "vce9jeta6oamq6lswfw",
+      "nome": "Mistura para Pão de Queijo",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 15.95
+    },
+    {
+      "id": "gd21xljdeb4mq6lswfw",
+      "nome": "Ponta de Queijo",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 37.9
+    },
+    {
+      "id": "sxtznh3cu5cmq6lswfw",
+      "nome": "Queijo Mussarela Leite Fatiado",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 44.9
+    },
+    {
+      "id": "tfqx4asn3gpmq6lswfw",
+      "nome": "Requeijão",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 29.9
+    },
+    {
+      "id": "f2fvxsq6ebmq6mbk8c",
+      "nome": "P��o de Chá",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 19.98
+    },
+    {
+      "id": "y3o4du6ycymq6mqlei",
+      "nome": "Chocolate em pó 50%",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 43.5
+    },
+    {
+      "id": "vbfpkxf6mnmq6mqlei",
+      "nome": "Copo térmico de isopor 300ml",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 9.5
+    },
+    {
+      "id": "391msjw8bmmq6mqlei",
+      "nome": "Tampa transparente para copo isopor 300",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 12
+    },
+    {
+      "id": "lgvhgcezd8mq6mqlei",
+      "nome": "Saco para confeitar",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 7
+    },
+    {
+      "id": "zlaifk5c54kmq6mqlei",
+      "nome": "Saco plástico 10x10",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 5
+    },
+    {
+      "id": "9woftlajussmq76awpm",
+      "nome": "Outros",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 648.6
+    },
+    {
+      "id": "p7l21ilafahmq76kvoa",
+      "nome": "Pão de Forma",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12
+    },
+    {
+      "id": "s73fecgqvhrmq80ej4z",
+      "nome": "AMACIE CRESPA",
+      "categoria": "material de limpeza",
+      "unidade": "un",
+      "ultimoValor": 2.4
+    },
+    {
+      "id": "55xmxp30zf5mq80ej4z",
+      "nome": "AGUA BELAGUA PET",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 1.59
+    },
+    {
+      "id": "k9utsnrtqsdmq80ej4z",
+      "nome": "AGUA H.A.DA AMAZONIA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 0.99
+    },
+    {
+      "id": "ttz115iktrmq82947g",
+      "nome": "MISTURA PARA PAO DE QUEIJO",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 15.95
+    },
+    {
+      "id": "lqxwv2mn8vmq82947h",
+      "nome": "QUEIJO MUSSARELA FATIADO",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 44.9
+    },
+    {
+      "id": "lqzybaioozomq829vw0",
+      "nome": "PONTA PRESUNT/APRESUNT",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 16.89
+    },
+    {
+      "id": "gb07yfaz9plmq829vw0",
+      "nome": "QUEIJO MUSS. FATIADO",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 44.9
+    },
+    {
+      "id": "2l5jj8egmormq84qs37",
+      "nome": "CHOCOLATE BARRA 33G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 2.75
+    },
+    {
+      "id": "smljjn8iwtsmq84qs38",
+      "nome": "PRATO DESCARTAVEL 15CM RASO",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 1.1
+    },
+    {
+      "id": "xnjv1uzc0zmq84ssah",
+      "nome": "Pétalas de flores (premium)",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 37.26
+    },
+    {
+      "id": "xc089u0nvtmq84ssah",
+      "nome": "Filme PVC para embalar",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 40.38
+    },
+    {
+      "id": "f5cwq4cj2x6mq84ssah",
+      "nome": "Barca grande para organiza��ão",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 4.21
+    },
+    {
+      "id": "fbxnrute03mq84ssah",
+      "nome": "Copo plástico 100 unidades com fundo",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 12.58
+    },
+    {
+      "id": "snfifmxhnw9mq84ssah",
+      "nome": "Copo plástico 100 unidades com tampa",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 15.1
+    },
+    {
+      "id": "nrc29pgvu7mq8og2pf",
+      "nome": "POLPA MARACUJA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 20
+    },
+    {
+      "id": "ylw9p573lhsmq8og2pf",
+      "nome": "POLPA ACEROLA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 10
+    },
+    {
+      "id": "42j0bx6g7aamqaatocs",
+      "nome": "AMIDO DE MILHO MARIZA 200G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 1.99
+    },
+    {
+      "id": "qakh8xlor9cmqaatocs",
+      "nome": "BACON SEARA FAT 250G",
+      "categoria": "proteína",
+      "unidade": "un",
+      "ultimoValor": 20.59
+    },
+    {
+      "id": "k3klkz0xszrmqaatocs",
+      "nome": "CATCHUP HEINZ SACHET 144X7G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 34.9
+    },
+    {
+      "id": "b8ckya486xemqaatocs",
+      "nome": "CHOC NESTLE CLASSIC 80G MEIO AMARGO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 9.69
+    },
+    {
+      "id": "d65enm57csnmqaatocs",
+      "nome": "CR LEITE MOCOCA TP 200G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 2.59
+    },
+    {
+      "id": "nz1i210zwxqmqaatocs",
+      "nome": "FLOCOS CHOC DECORA 500G MACIOS",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 16.9
+    },
+    {
+      "id": "z90xjx25ki9mqaatocs",
+      "nome": "LEITE CONDENSADO PIRACANJUBA TP 395G SEMI DESN",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 5.75
+    },
+    {
+      "id": "nnyrvgdvd9emqaatocs",
+      "nome": "MOSTARDA PREDILECTA BISNAGA 3,3KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 23.5
+    },
+    {
+      "id": "qvgu75q2x6mqaatocs",
+      "nome": "PRES COZ PERDIGAO S/C FT",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 39.264069
+    },
+    {
+      "id": "5yt8hcdv2yqmqaatocs",
+      "nome": "SACOLA ASSAI VD POLI 48X55",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 0.14
+    },
+    {
+      "id": "n0r5jct4ksmqaatwmt",
+      "nome": "ABOBORA JACARE KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 3.985663
+    },
+    {
+      "id": "j9cts6u17xpmqaatwmt",
+      "nome": "ACHOC PO NESCAU 2,01KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 59.9
+    },
+    {
+      "id": "119w40ywqasemqaatwmt",
+      "nome": "ACUCAR TRITURADO ITAMARATI ESP 1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 3.09
+    },
+    {
+      "id": "3lsasfs9twumqaatwmt",
+      "nome": "BEB LACTEA 3 CORACOES WHEY 250ML CL 15G PROTEINA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 4.9
+    },
+    {
+      "id": "vajl47zvjzcmqaatwmt",
+      "nome": "BEB LACTEA PIRACANJUBA WHEY FRUT VE 250ML 23G PROT",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 8.79
+    },
+    {
+      "id": "osls7u34pgmqaatwmt",
+      "nome": "CHEIRO VERDE COENTRO/CEBOLINHA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 2.69
+    },
+    {
+      "id": "uz17guj4zkimqaatwmt",
+      "nome": "COB CULIN MILK OURO 1,8KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 18.29
+    },
+    {
+      "id": "3nzqiq5h41amqaatwmt",
+      "nome": "DET LIQ YPE 5L CLEAR",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 25.9
+    },
+    {
+      "id": "8ib6zsgg1nwmqaatwmt",
+      "nome": "FARINHA TRIGO D MARIA PASTEL 5KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 19.19
+    },
+    {
+      "id": "cj6qzcket64mqaatwmt",
+      "nome": "FARINHA TRIGO MIRELLA PASTEL 5KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 25.29
+    },
+    {
+      "id": "00ia4bjt0lrppmqaatwmt",
+      "nome": "HAMB AURORA FAROESTE 672G CHURRASCO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 19.2
+    },
+    {
+      "id": "lnjloxa0femqaatwmt",
+      "nome": "LAVA ROUPA PO ASSIM SC 400G ROSA TRI ECONOMICO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 3.45
+    },
+    {
+      "id": "mg2uzwx9cgmqaatwmt",
+      "nome": "LEITE CONDENSADO MOCOCA TP 395G SEMI DESN",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 6.19
+    },
+    {
+      "id": "m0ds6ivf4hgmqaatwmt",
+      "nome": "LEITE LV INT PARMALAT 1L",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 5.19
+    },
+    {
+      "id": "76w1ahklhkcmqaatwmt",
+      "nome": "MAC RICOSA SEMOLA 500G CONCHA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 4.79
+    },
+    {
+      "id": "86c68mne2d5mqaatwmt",
+      "nome": "MAC RICOSA SEMOLA 500G PADRE NOSSO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 4.8
+    },
+    {
+      "id": "nrk7z44mppmqaatwmt",
+      "nome": "MARG QUALY 500G S/SAL",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 10.9
+    },
+    {
+      "id": "ud85a5bngumqaatwmt",
+      "nome": "REQ CULINARIO CANTO DE MINAS 400G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12.8
+    },
+    {
+      "id": "uqqwdnxmjifmqaatwmt",
+      "nome": "REQ CULINARIO CANTO DE MINAS 400G CHEDDAR",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12.8
+    },
+    {
+      "id": "lby70x1q6vmqaatwmt",
+      "nome": "SALS HOT DOG CONG FRIMESA 2KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 26.39
+    },
+    {
+      "id": "xgg7bcsu0cmqaatwmt",
+      "nome": "TOMATE GRAPE BJ 180G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 6.09
+    },
+    {
+      "id": "3wnc49ddyqimqaatyyr",
+      "nome": "AMEIXA SECA S/C EXCELENCIA 150G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12.49
+    },
+    {
+      "id": "gutgkws7ca7mqaatyyr",
+      "nome": "AZEITONA VDE V FERTIL FAT 120G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 8.99
+    },
+    {
+      "id": "qlwa4bgyk7mqaatyyr",
+      "nome": "CAFE SOLUVEL 3 CORACOES SACHE 40G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 7.19
+    },
+    {
+      "id": "qqzwy395gpgmqaatyyr",
+      "nome": "CEBOLA NACIONAL KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 6.843206
+    },
+    {
+      "id": "rk3kiz9cmcmqaatyyr",
+      "nome": "FERM PO ROYAL 250G",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12.19
+    },
+    {
+      "id": "x18rkl7clnmqaatyyr",
+      "nome": "INSET SBP AERO 450ML LV+ PG- CITRONELA",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 13.9
+    },
+    {
+      "id": "7esblr4sjccmqaatyyr",
+      "nome": "LEITE CONDENSADO MOCA LA 395G INTEGRAL",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12.25
+    },
+    {
+      "id": "h7feis41ocumqaatyyr",
+      "nome": "LEITE PO CAMPONESA INT 1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 29.49
+    },
+    {
+      "id": "xoq3y90b27mqaatyyr",
+      "nome": "LIMAO THAITI KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 2.747592
+    },
+    {
+      "id": "dkk4qdcd66bmqaatyyr",
+      "nome": "MAIONESE SALADA SACHE 1KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12.9
+    },
+    {
+      "id": "tnkm6aijsedmqaatyyr",
+      "nome": "OLEO SOJA CONCORDIA PET 900ML",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 7.69
+    },
+    {
+      "id": "lgzqmff6fc9mqaatyyr",
+      "nome": "P FGO CONG AURORA 1KG FILE PEITO BJ",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 17.9
+    },
+    {
+      "id": "ebr9f71fx1omqaatyyr",
+      "nome": "PIMENTA DE CHEIRO KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 18.926829
+    },
+    {
+      "id": "tncz6uaygrsmqaatyyr",
+      "nome": "TOMATE SALADA KG",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 12.484429
+    },
+    {
+      "id": "f910cpl81afmqbq52i0",
+      "nome": "POTE PP 250ML COM TAMPA",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 7.9
+    },
+    {
+      "id": "cebtp4mp2qmqbq8rg0",
+      "nome": "FERMENTO SECO INSTANTANEO",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 16.49
+    },
+    {
+      "id": "6y0u7cictimqbqbc4a",
+      "nome": "Chicória (Hortaliça)",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 8.79
+    },
+    {
+      "id": "ke8gug233qgmqbqbc4b",
+      "nome": "Creme Culin��rio",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 2.39
+    },
+    {
+      "id": "o2xs14qndhcmqbqccwx",
+      "nome": "COLHER REFEIÇÃO CRISTAL STRAW",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 3.2
+    },
+    {
+      "id": "63wxhjmy6v6mqbqccwx",
+      "nome": "FACA REFEIÇÃO BRANCA STRAW",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 3.2
+    },
+    {
+      "id": "irrauxb4enfmqbqccwx",
+      "nome": "GARFO REFEIÇÃO CRISTAL STRAW",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 2.75
+    },
+    {
+      "id": "6utgvr6ydogmqbqccwx",
+      "nome": "MEXEDOR GRANDE 11CM STRAW CRISTAL",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 12.6
+    },
+    {
+      "id": "ehrejppgymrmqbqf7q3",
+      "nome": "Açúcar Refinado Mascavo",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 15.99
+    },
+    {
+      "id": "wf9lscul4rmqbqf7q3",
+      "nome": "Embalagem Envelope",
+      "categoria": "descartáveis",
+      "unidade": "un",
+      "ultimoValor": 59.34
+    },
+    {
+      "id": "vp2xrl9si5mqbqf7q3",
+      "nome": "Delícia de Peru Pezer",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 21.9
+    },
+    {
+      "id": "70e1o7lnojcmqbqf7q3",
+      "nome": "Mussarela Natural",
+      "categoria": "prote��������na",
+      "unidade": "kg",
+      "ultimoValor": 45.9
+    },
+    {
+      "id": "d04bw64nryqmqbqf7q4",
+      "nome": "Salsicha",
+      "categoria": "prote����������������na",
+      "unidade": "kg",
+      "ultimoValor": 37.9
+    },
+    {
+      "id": "pfah06u43nomqbqf7q4",
+      "nome": "Farinha de Trigo",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 20.9
+    },
+    {
+      "id": "pmvx0945acmqbqf7q4",
+      "nome": "Água Mineral 500ml",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 0.99
+    },
+    {
+      "id": "i41h36g41amqbqf7q4",
+      "nome": "Catchup",
+      "categoria": "insumos",
+      "unidade": "un",
+      "ultimoValor": 5.49
+    },
+    {
+      "id": "sgmqh9tmmrmqbqkvk4",
+      "nome": "Margarina",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 14.9
+    },
+    {
+      "id": "n0kd8fhsrpbmqbqkvk4",
+      "nome": "Presunto",
+      "categoria": "proteína",
+      "unidade": "kg",
+      "ultimoValor": 18.9
+    },
+    {
+      "id": "kr6p1scyxpfmqbqkvk4",
+      "nome": "Queijo",
+      "categoria": "insumos",
+      "unidade": "kg",
+      "ultimoValor": 37.9
+    }
+  ],
+  "funcionarios": [],
+  "faltas": [
+    {
+      "id": "cye3j2wm9grmq6eaa6r",
+      "funcionarioId": "fg2bm3goompmq4jyliy",
+      "data": "2026-06-08",
+      "dias": "0.5",
+      "motivo": "",
+      "desconto": 27.016666666666666,
+      "mes": "2026-06"
+    },
+    {
+      "id": "6ajkzbpzg2omq4jzonq",
+      "funcionarioId": "fg2bm3goompmq4jyliy",
+      "data": "2026-06-08",
+      "dias": "1",
+      "motivo": "",
+      "desconto": 54.03333333333333,
+      "mes": "2026-06"
+    },
+    {
+      "id": "vmmnc019fmq4jwv4f",
+      "funcionarioId": "bzbdiwg99mdmq4jwig7",
+      "data": "2026-06-08",
+      "dias": "2",
+      "motivo": "Doente ",
+      "desconto": 151.29333333333335,
+      "mes": "2026-06"
+    }
+  ],
+  "adiantamentos": [],
+  "consumacoes": [],
+  "encargos": [
+    {
+      "id": "8km08tpq4qcmq4k11wd",
+      "funcionarioId": "vrvhgr23ibmq4k0kf3",
+      "data": "2026-06-08",
+      "valor": 0,
+      "bonificacao": 800,
+      "comissao": 0,
+      "salarioFamilia": 0,
+      "descricao": "",
+      "mes": "2026-06"
+    },
+    {
+      "id": "lt6m2ztm9emq4jz0m4",
+      "funcionarioId": "fg2bm3goompmq4jyliy",
+      "data": "2026-06-08",
+      "valor": 0,
+      "bonificacao": 800,
+      "comissao": 0,
+      "salarioFamilia": 0,
+      "descricao": "",
+      "mes": "2026-06"
+    },
+    {
+      "id": "0l9hx2g29ekmq4jxm6v",
+      "funcionarioId": "bzbdiwg99mdmq4jwig7",
+      "data": "2026-06-08",
+      "valor": 0,
+      "bonificacao": 400,
+      "comissao": 0,
+      "salarioFamilia": 0,
+      "descricao": "Vale transporte ",
+      "mes": "2026-06"
+    },
+    {
+      "id": "c2pvtfgcuymq4juqgu",
+      "funcionarioId": "au2sm6z18pmmq4ju27e",
+      "data": "2026-06-08",
+      "valor": 0,
+      "bonificacao": 800,
+      "comissao": 0,
+      "salarioFamilia": 0,
+      "descricao": "",
+      "mes": "2026-06"
+    }
+  ],
+  "categorias": [
+    "Alimentação",
+    "Bebidas",
+    "Limpeza",
+    "Salários",
+    "Adiantamento",
+    "Aluguel",
+    "Energia",
+    "Água",
+    "Internet",
+    "Outros",
+    "FGTS",
+    "SIMPLES",
+    "TRANSPORTE ",
+    "Vale Transporte",
+    "Diarista",
+    "Comissão"
+  ],
+  "config": {
+    "budgetCmv": 33
+  },
+  "listaCompras": [],
+  "listaCatOrdem": [
+    "bebidas",
+    "grãos",
+    "mercearia básica",
+    "material de limpeza",
+    "farinhas",
+    "massas",
+    "latas, caixas e temperos",
+    "molhos",
+    "chocolates",
+    "cafés e complementos",
+    "latic����nios",
+    "carnes",
+    "polpas",
+    "hortifruti",
+    "descartáveis",
+    "temperos",
+    "proteína",
+    "santa lucia",
+    "outros",
+    "laticínios",
+    "queijo minas",
+    "cia do sorveteiro",
+    "embalagens"
+  ],
+  "normalizacoes": [],
+  "movEstoque": [],
+  "listaCategorias": [
+    "queijo minas",
+    "santa lucia",
+    "cia do sorveteiro",
+    "queijo minas"
+  ],
+  "pedidosLista": [
+    {
+      "id": "quccevnom9pmqf790bl",
+      "data": "2026-06-15",
+      "itens": [
+        {
+          "nome": "Açucar sachê",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "cafés e complementos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Mexedor",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Saco p/ misto",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Energetico",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "bebidas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Mexedor de café",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Sacola 2 kg",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Mistura p/ pão de queijo",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "queijo minas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Milharina",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "farinhas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Coco Ralado",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "latas, caixas e temperos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Couve",
+          "quantidade": 1,
+          "unidade": "kg",
+          "categoria": "hortifruti",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Pote para Cuscuz 250 ml",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Prato Descartável Pequeno",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Farinha de Trigo Dona Maria",
+          "quantidade": 1,
+          "unidade": "kg",
+          "categoria": "farinhas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Maizena",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "latas, caixas e temperos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Bombril",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "material de limpeza",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Espanador",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "material de limpeza",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Skilhos",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "outros",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Coca-Cola Zero 220 ml",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "bebidas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "H2OH! Limão 350 ml",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "bebidas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Nescalzinho 180ml",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "laticínios",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "sazon camarão",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "latas, caixas e temperos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Queijo Muçarela",
+          "quantidade": 1,
+          "unidade": "kg",
+          "categoria": "laticínios",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Luva de silicone M",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Wey Pro P",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "laticínios",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Ketchup Sachê",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "molhos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Agua mineral",
+          "quantidade": 10,
+          "unidade": "un",
+          "categoria": "bebidas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Leite Condensado Integral",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "latas, caixas e temperos",
+          "obs": "zerodo",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Creme de Leite em Caixa",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "latas, caixas e temperos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": "4"
+        },
+        {
+          "nome": "Azeitona",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "latas, caixas e temperos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "frango P/ cremso loja",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "carnes",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Leite de aveia",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "laticínios",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Coca-Cola Zero 350 ml",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "bebidas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Chocolate 50%",
+          "quantidade": 1,
+          "unidade": "kg",
+          "categoria": "chocolates",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Presunto de Peru",
+          "quantidade": 1,
+          "unidade": "g",
+          "categoria": "laticínios",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": "700"
+        },
+        {
+          "nome": "Ovos",
+          "quantidade": 1,
+          "unidade": "bd",
+          "categoria": "hortifruti",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": "3"
+        },
+        {
+          "nome": "Pão de forma",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "santa lucia",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Queijo Muçarela",
+          "quantidade": 1,
+          "unidade": "g",
+          "categoria": "queijo minas",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": "300"
+        },
+        {
+          "nome": "Alface",
+          "quantidade": 2,
+          "unidade": "un",
+          "categoria": "hortifruti",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Bobina Grande",
+          "quantidade": 1,
+          "unidade": "un",
+          "categoria": "descartáveis",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Leite Liq Integral",
+          "quantidade": 1,
+          "unidade": "L",
+          "categoria": "laticínios",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        },
+        {
+          "nome": "Café Solúvel",
+          "quantidade": 2,
+          "unidade": "un",
+          "categoria": "cafés e complementos",
+          "obs": "",
+          "urgente": false,
+          "estoqueQtd": ""
+        }
+      ],
+      "criadoEm": "2026-06-15T12:38:41.121Z"
+    }
+  ],
+  "produtosLista": [
+    {
+      "nome": "Leite Integral",
+      "cat": "laticínios",
+      "unidade": "L",
+      "id": "qtpkse5hqqsmqebaqgk"
+    },
+    {
+      "nome": "Leite Zero Lactose",
+      "cat": "laticínios",
+      "unidade": "L",
+      "id": "l2amm1bmbrmqebaqgk"
+    },
+    {
+      "nome": "Margarina Qualy",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "5m9mbk5nu8bmqebaqgk"
+    },
+    {
+      "nome": "Manteiga Comum",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "sr5kk1jhaglmqebaqgk"
+    },
+    {
+      "nome": "Catupiry Confraria",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "iu1idwppx0jmqebaqgk"
+    },
+    {
+      "nome": "Catupiry Escola",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "s416wikrbbrmqebaqgk"
+    },
+    {
+      "nome": "Queijo Muçarela",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "54gb8rfmv03mqebaqgk"
+    },
+    {
+      "nome": "Queijo Coalho",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "c29vjmmp6femqebaqgk"
+    },
+    {
+      "nome": "Queijo Parmesão",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "6oqrp7f83wnmqebaqgk"
+    },
+    {
+      "nome": "Queijo Provolone",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "7msxkenxoj7mqebaqgk"
+    },
+    {
+      "nome": "Presunto de Peru",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "tk8e68o84rmqebaqgk"
+    },
+    {
+      "nome": "Peito de Peru",
+      "cat": "latic��nios",
+      "unidade": "kg",
+      "id": "mvtqfd6c5admqebaqgk"
+    },
+    {
+      "nome": "Salame",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "tzw1icimgvmqebaqgk"
+    },
+    {
+      "nome": "Bacon",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "bxe2qdun3zjmqebaqgk"
+    },
+    {
+      "nome": "Calabresa",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "b5kcqphh87mmqebaqgk"
+    },
+    {
+      "nome": "Charque",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "mcsqo2igedmqebaqgk"
+    },
+    {
+      "nome": "Carne Seca",
+      "cat": "laticínios",
+      "unidade": "kg",
+      "id": "sg1ns62wwmmqebaqgk"
+    },
+    {
+      "nome": "Margarina para Folhado",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "1r7os0p00emqebaqgk"
+    },
+    {
+      "nome": "Margarina Pastelera",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "mu861pdgxmsmqebaqgk"
+    },
+    {
+      "nome": "Leite em Pó Integral",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "bgae3scftugmqebaqgk"
+    },
+    {
+      "nome": "Nescauzinho",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "jahivpjetqpmqebaqgk"
+    },
+    {
+      "nome": "Chocolate Líquido",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "xft0qdsws88mqebaqgk"
+    },
+    {
+      "nome": "Chocolate Líquido Integral",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "di5e0xjguv9mqebaqgk"
+    },
+    {
+      "nome": "Chocolate Líquido Zero",
+      "cat": "laticínios",
+      "unidade": "un",
+      "id": "1v1qxonurwkmqebaqgk"
+    },
+    {
+      "nome": "Coca-Cola 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "r7gwqfx0xqmqebaqgk"
+    },
+    {
+      "nome": "Coca-Cola Zero 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "xy4a9cppepgmqebaqgk"
+    },
+    {
+      "nome": "Fanta Laranja 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "kpdu4fjxnwimqebaqgk"
+    },
+    {
+      "nome": "Sprite 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "9n3zuobsokgmqebaqgk"
+    },
+    {
+      "nome": "Pepsi 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "qmfwrkzpt6nmqebaqgk"
+    },
+    {
+      "nome": "Pepsi Black 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "1gan4ox4yp1mqebaqgk"
+    },
+    {
+      "nome": "Guaran�� Antarctica 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "76jcjgzg596mqebaqgk"
+    },
+    {
+      "nome": "Guaraná Antarctica Zero 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "ckcmg9j40l6mqebaqgk"
+    },
+    {
+      "nome": "Sukita Laranja 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "90bsqwfq3tfmqebaqgk"
+    },
+    {
+      "nome": "Sukita Uva 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "6hk7g3olcddmqebaqgk"
+    },
+    {
+      "nome": "Coca-Cola 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "009a6g54cl5pvmqebaqgk"
+    },
+    {
+      "nome": "Coca-Cola Zero 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "7o8mdgepwlqmqebaqgk"
+    },
+    {
+      "nome": "Fanta Laranja 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "87j6744ipcnmqebaqgk"
+    },
+    {
+      "nome": "Fanta Uva 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "f3g9liwu7wmqebaqgk"
+    },
+    {
+      "nome": "Sprite 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "e1gnwknrn3mqebaqgk"
+    },
+    {
+      "nome": "Sprite Zero 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "2pgpot463xhmqebaqgk"
+    },
+    {
+      "nome": "Guaran������ Antarctica 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "1ibiddhxpsmqebaqgk"
+    },
+    {
+      "nome": "Guaraná Antarctica Zero 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "p72kc6qx3gmqebaqgk"
+    },
+    {
+      "nome": "Pepsi 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "9mguwx3anwfmqebaqgk"
+    },
+    {
+      "nome": "Pepsi Black 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "huymugraumqebaqgk"
+    },
+    {
+      "nome": "Kuat 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "6ht1rscvyf7mqebaqgk"
+    },
+    {
+      "nome": "Kuat Zero 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "ndglx4dkminmqebaqgk"
+    },
+    {
+      "nome": "Schweppes Citrus 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "x8u4cy3am8dmqebaqgk"
+    },
+    {
+      "nome": "Schweppes Tônica 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "q33qmpck2tmqebaqgk"
+    },
+    {
+      "nome": "Sukita Laranja 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "ui2wwel7jamqebaqgk"
+    },
+    {
+      "nome": "Sukita Uva 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "wo8w7lhuk9omqebaqgk"
+    },
+    {
+      "nome": "H2OH! Limão 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "u0a7xth6kxnmqebaqgk"
+    },
+    {
+      "nome": "H2OH! Limoneto 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "d9o8wwvxunemqebaqgk"
+    },
+    {
+      "nome": "Saco Lixo 30L",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "87o1mi991wkmqebw6om"
+    },
+    {
+      "nome": "Lava Louça",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "1k51drai1qlmqebw6om"
+    },
+    {
+      "nome": "Desengordurante",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "1zazry0tg8mmqebw6om"
+    },
+    {
+      "nome": "Limpador Multiuso",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "5jng22b05dwmqebw6om"
+    },
+    {
+      "nome": "Esponjas",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "z7ydmq99qcmqebw6om"
+    },
+    {
+      "nome": "Bombril",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "nylbp1o3bkjmqebw6om"
+    },
+    {
+      "nome": "Panos Multiuso",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "jfp44zv0rwmqebw6om"
+    },
+    {
+      "nome": "Água Sanitária",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "yhbe8lrxenmqebw6om"
+    },
+    {
+      "nome": "Desinfetante",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "kj5z7r9d09mqebw6om"
+    },
+    {
+      "nome": "Cera Líquida",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "lhl3ki93lvmqebw6om"
+    },
+    {
+      "nome": "Limpador Perfumado",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "0it83fod2r1fmqebw6om"
+    },
+    {
+      "nome": "Removedor",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "f6ezaj0gsy4mqebw6om"
+    },
+    {
+      "nome": "Sabão em Pó",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "mh2w3597g8mqebw6om"
+    },
+    {
+      "nome": "Sabão Líquido",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "nrdwp8ogpcgmqebw6om"
+    },
+    {
+      "nome": "Amaciante",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "69ipgfpf3tmmqebw6om"
+    },
+    {
+      "nome": "Alvejante",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "kwfwvlap8ppmqebw6om"
+    },
+    {
+      "nome": "Tira-manchas",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "41lixv5v0akmqebw6om"
+    },
+    {
+      "nome": "Cloro Líquido",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "nw66ynova8mqebw6om"
+    },
+    {
+      "nome": "Desengraxante",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "jn4nmoeudymqebw6om"
+    },
+    {
+      "nome": "Detergente Concentrado",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "xvj3t57pl1amqebw6om"
+    },
+    {
+      "nome": "Álcool",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "yd99ugyvtpsmqebw6om"
+    },
+    {
+      "nome": "Limpeza Pesada",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "pnmwkaquxgmqebw6om"
+    },
+    {
+      "nome": "Sacos de Lixo 100L",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "ghyokld1w4mqebw6om"
+    },
+    {
+      "nome": "Vassouras",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "fn77hwoa8jbmqebw6om"
+    },
+    {
+      "nome": "Rodos",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "i1qtvbf342mqebw6om"
+    },
+    {
+      "nome": "Baldes",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "kctef8e4e49mqebw6om"
+    },
+    {
+      "nome": "Escovas",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "yrvs290ny8mqebw6om"
+    },
+    {
+      "nome": "Flanelas",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "00jko9z4mqfdgmqebw6om"
+    },
+    {
+      "nome": "Mops",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "ntfj097gljqmqebw6om"
+    },
+    {
+      "nome": "Limpa Vaso Sanitário",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "zfrybfwikbhmqebw6om"
+    },
+    {
+      "nome": "Limpa Vidro",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "1294kp3qmrgmqebw6om"
+    },
+    {
+      "nome": "Papel Higiênico",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "w0koti8ju4fmqebw6om"
+    },
+    {
+      "nome": "Sabonete Líquido",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "fcud8pqt3xmqebw6om"
+    },
+    {
+      "nome": "Carne para Sopa",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "1renhg8qcbomqeg6lwz"
+    },
+    {
+      "nome": "Carne Paulista",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "pes5yw131hemqeg6lwz"
+    },
+    {
+      "nome": "Picadinho",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "nmrf28pem1mqeg6lwz"
+    },
+    {
+      "nome": "Filé Mignon",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "v684l9twz9amqeg6lwz"
+    },
+    {
+      "nome": "Filé de Frango",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "h5ikpd9hftamqeg6lwz"
+    },
+    {
+      "nome": "Carne para Hambúrguer",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "8b2ix84yniomqeg6lwz"
+    },
+    {
+      "nome": "Camarão Rosa",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "oy715a7796rmqeg6lwz"
+    },
+    {
+      "nome": "Camarão Regional",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "trvjislcghimqeg6lwz"
+    },
+    {
+      "nome": "Caranguejo",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "wfhr07b9zzmqeg6lwz"
+    },
+    {
+      "nome": "Papel Interfolhado",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "bxmrul8yfscmqeg6lwz"
+    },
+    {
+      "nome": "Lenço de Mesa",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "gob964hr49mqeg6lwz"
+    },
+    {
+      "nome": "Embalagem de Crepioca",
+      "cat": "descart��veis",
+      "unidade": "un",
+      "id": "a5ls1edxbpmqeg6lwz"
+    },
+    {
+      "nome": "Embalagem GA10",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "gbihb3z6asbmqeg6lwz"
+    },
+    {
+      "nome": "Embalagem de Torta",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "ac4hjvw3ovvmqeg6lwz"
+    },
+    {
+      "nome": "Embalagem de Bolo G60",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "i8h3vm4d08pmqeg6lwz"
+    },
+    {
+      "nome": "Embalagem de Tapioca",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "70fkry49vb4mqeg6lwz"
+    },
+    {
+      "nome": "Embalagem para Mousse",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "ykb40kf2wumqeg6lwz"
+    },
+    {
+      "nome": "Saco para Salgado",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "0475rx5wiz0pmqeg6lwz"
+    },
+    {
+      "nome": "Saco para Porção de Alimentos",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "9rpkd0cwe35mqeg6lwz"
+    },
+    {
+      "nome": "Saco para Brownie",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "xpdzthu5x7rmqeg6lwz"
+    },
+    {
+      "nome": "Sacola 2 kg",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "3ctc6x2jwblmqeg6lwz"
+    },
+    {
+      "nome": "Sacola de Papel Delivery Grande",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "mu87muiyorhmqeg6lwz"
+    },
+    {
+      "nome": "Sacola de Papel Delivery Média",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "0tyofh9reucpmqeg6lwz"
+    },
+    {
+      "nome": "Sacola de Papel Delivery Pequena",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "7fnpouvyfrnmqeg6lwz"
+    },
+    {
+      "nome": "Sacola de Papel Delivery PP",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "zwsjjniipemqeg6lwz"
+    },
+    {
+      "nome": "Sacola de Bolo Dany",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "r8z8hschf2mqeg6lwz"
+    },
+    {
+      "nome": "Papel Filme",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "od8kup2jcumqeg6lwz"
+    },
+    {
+      "nome": "Pote para Molho Mostarda",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "1v23bs0ckm7mqeg6lwz"
+    },
+    {
+      "nome": "Pote para Cuscuz 250 ml",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "a4d0ikwja3hmqeg6lwz"
+    },
+    {
+      "nome": "Garfo Descartável Grande",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "r66a75c2dipmqeg6lwz"
+    },
+    {
+      "nome": "Garfo Descartável Pequeno",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "1m0s5cpr57dmqeg6lwz"
+    },
+    {
+      "nome": "Colher Descartável Grande",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "6t16j1h32ramqeg6lwz"
+    },
+    {
+      "nome": "Colher Descartável Pequena",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "9eri3n478dkmqeg6lwz"
+    },
+    {
+      "nome": "Faca Descartável",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "rkl2ydu43ogmqeg6lwz"
+    },
+    {
+      "nome": "Kit Faca e Garfo",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "uilvoskblgpmqeg6lwz"
+    },
+    {
+      "nome": "Kit Colher",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "7rbkm5kpqsumqeg6lwz"
+    },
+    {
+      "nome": "Bobina Grande",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "gnbb4q41g2dmqeg6lwz"
+    },
+    {
+      "nome": "Bobina Pequena",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "u3m7ii7fusnmqeg6lwz"
+    },
+    {
+      "nome": "Prato Descartável Pequeno",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "v1js29psb9amqeg6lwz"
+    },
+    {
+      "nome": "Prato Descartável Grande",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "1f9bx6xjvfjjmqeg6lwz"
+    },
+    {
+      "nome": "Prato de Isopor",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "vb44ayvzk0mmqeg6lwz"
+    },
+    {
+      "nome": "Copo Café 180 ml",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "khmlcbwz81mqeg6lwz"
+    },
+    {
+      "nome": "Copo Salada de Fruta 300 ml",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "em1oiy3e2xfmqeg6lwz"
+    },
+    {
+      "nome": "Copo de Suco 300 ml",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "6h4y5wrf3nkmqeg6lwz"
+    },
+    {
+      "nome": "Canudo para Suco",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "v4hhbisuqwmqeg6lwz"
+    },
+    {
+      "nome": "Canudo para Shake",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "u4ji0ew8v69mqeg6lwz"
+    },
+    {
+      "nome": "Fita Durex",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "3pltum0qj0qmqeg6lwz"
+    },
+    {
+      "nome": "Saquinho para Sachê",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "hmdvprjut2cmqeg6lwz"
+    },
+    {
+      "nome": "Adesivo para Delivery",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "lzmrkbhypjdmqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Morango",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "y7bpb0ewirmqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Maracujá",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "i6vpkquoglkmqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Uva",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "s4f0j02dy1mqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Acerola",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "stfcj77oa1mqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Goiaba",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "rtjle5ozulmqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Graviola",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "x99fu9bauomqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Abacaxi",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "77b1u395pe8mqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Abacaxi com Hortelã",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "bz9r7j9d98mqeg6lwz"
+    },
+    {
+      "nome": "Polpa de Taperebá",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "4n14gfoa11imqeg6lwz"
+    },
+    {
+      "nome": "Sorvete",
+      "cat": "polpas",
+      "unidade": "un",
+      "id": "p419udieb9omqeg6lwz"
+    },
+    {
+      "nome": "Açúcar",
+      "cat": "mercearia básica",
+      "unidade": "kg",
+      "id": "p34cq03tc6cmqeg6lwz"
+    },
+    {
+      "nome": "Arroz",
+      "cat": "mercearia b���������sica",
+      "unidade": "kg",
+      "id": "k3rtntxc1cmqeg6lwz"
+    },
+    {
+      "nome": "Feijão",
+      "cat": "mercearia básica",
+      "unidade": "kg",
+      "id": "mg97ckzwr39mqeg6lwz"
+    },
+    {
+      "nome": "Farinha de Trigo Dona Maria",
+      "cat": "farinhas",
+      "unidade": "kg",
+      "id": "l26z92w7xzdmqeg6lwz"
+    },
+    {
+      "nome": "Farinha de Trigo Mirella",
+      "cat": "farinhas",
+      "unidade": "kg",
+      "id": "gnf77oylnsmqeg6lwz"
+    },
+    {
+      "nome": "Farinha de Tapioca",
+      "cat": "farinhas",
+      "unidade": "kg",
+      "id": "ipl8crfc3rmqeg6lwz"
+    },
+    {
+      "nome": "Flocão de Milho",
+      "cat": "farinhas",
+      "unidade": "kg",
+      "id": "z750074l9hfmqeg6lwz"
+    },
+    {
+      "nome": "Fubá de Milho",
+      "cat": "farinhas",
+      "unidade": "kg",
+      "id": "nbrasrxfmumqeg6lwz"
+    },
+    {
+      "nome": "Farinha Panko",
+      "cat": "farinhas",
+      "unidade": "kg",
+      "id": "bt6qe50eetemqeg6lwz"
+    },
+    {
+      "nome": "Farinha de Rosca",
+      "cat": "farinhas",
+      "unidade": "kg",
+      "id": "61ak5lp7t0kmqeg6lwz"
+    },
+    {
+      "nome": "Café em Grão",
+      "cat": "cafés e complementos",
+      "unidade": "kg",
+      "id": "ditzw6e504amqeg6lwz"
+    },
+    {
+      "nome": "Café em Pó",
+      "cat": "cafés e complementos",
+      "unidade": "un",
+      "id": "mchpyr7d3smqeg6lwz"
+    },
+    {
+      "nome": "Café Solúvel",
+      "cat": "cafés e complementos",
+      "unidade": "un",
+      "id": "v2djfedh56mqeg6lwz"
+    },
+    {
+      "nome": "Café Descafeinado",
+      "cat": "cafés e complementos",
+      "unidade": "un",
+      "id": "6dvxkiiynewmqeg6lwz"
+    },
+    {
+      "nome": "Adoçante",
+      "cat": "cafés e complementos",
+      "unidade": "un",
+      "id": "zn28mzzrcumqeg6lwz"
+    },
+    {
+      "nome": "Chocolate Confraria",
+      "cat": "cafés e complementos",
+      "unidade": "un",
+      "id": "4n37g92y7kmqeg6lwz"
+    },
+    {
+      "nome": "Cebola",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "mnfv5ui87ejmqeg6lwz"
+    },
+    {
+      "nome": "Cenoura",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "jlxcvn25cdhmqeg6lwz"
+    },
+    {
+      "nome": "Pimentinha",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "zm4d97bwy1mqeg6lwz"
+    },
+    {
+      "nome": "Abóbora",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "n4ve41hxpqnmqeg6lwz"
+    },
+    {
+      "nome": "Couve",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "apboyrmqihjmqeg6lwz"
+    },
+    {
+      "nome": "Batata",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "luzchop55ufmqeg6lwz"
+    },
+    {
+      "nome": "Tomate",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "nw35w38seumqeg6lwz"
+    },
+    {
+      "nome": "Tomate Cereja",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "6l0lrgmwipwmqeg6lwz"
+    },
+    {
+      "nome": "Limão",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "p7oq7ouh15amqeg6lwz"
+    },
+    {
+      "nome": "Maçã",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "m0potd9o56imqeg6lwz"
+    },
+    {
+      "nome": "Mamão",
+      "cat": "hortifruti",
+      "unidade": "un",
+      "id": "mcpf34vnlegmqeg6lwz"
+    },
+    {
+      "nome": "Abacate",
+      "cat": "hortifruti",
+      "unidade": "un",
+      "id": "fd5vzhbjpj4mqeg6lwz"
+    },
+    {
+      "nome": "Banana",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "2sz9ug9crrnmqeg6lwz"
+    },
+    {
+      "nome": "Laranja",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "g8jofmyxa9hmqeg6lwz"
+    },
+    {
+      "nome": "Gengibre",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "gdud6l25ddmqeg6lwz"
+    },
+    {
+      "nome": "Alface",
+      "cat": "hortifruti",
+      "unidade": "un",
+      "id": "0zcln3m8f2xrmqeg6lwz"
+    },
+    {
+      "nome": "Abacaxi",
+      "cat": "hortifruti",
+      "unidade": "un",
+      "id": "haurmi4q4stmqeg6lwz"
+    },
+    {
+      "nome": "Coco",
+      "cat": "hortifruti",
+      "unidade": "un",
+      "id": "7vz85f3slxjmqeg6lwz"
+    },
+    {
+      "nome": "Morango Congelado",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "kz7l46echbmqeg6lwz"
+    },
+    {
+      "nome": "Ameixa Seca sem Caroço",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "39bt50av436mqeg6lwz"
+    },
+    {
+      "nome": "Ovos",
+      "cat": "hortifruti",
+      "unidade": "un",
+      "id": "3xo3wyx82fomqeg6lwz"
+    },
+    {
+      "nome": "Goma de Tapioca",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "hzzefzmnfd7mqeg6lwz"
+    },
+    {
+      "nome": "Chocolate 50%",
+      "cat": "chocolates",
+      "unidade": "kg",
+      "id": "v2pbs91045mqeg6lwz"
+    },
+    {
+      "nome": "Chocolate 32%",
+      "cat": "chocolates",
+      "unidade": "kg",
+      "id": "pyqtu5202ekmqeg6lwz"
+    },
+    {
+      "nome": "Chocolate em Barra Meio Amargo",
+      "cat": "chocolates",
+      "unidade": "kg",
+      "id": "ihqljnz7bzdmqeg6lwz"
+    },
+    {
+      "nome": "Nescau em Pó",
+      "cat": "chocolates",
+      "unidade": "un",
+      "id": "tfjsv7hie3cmqeg6lwz"
+    },
+    {
+      "nome": "Confeito de Chocolate",
+      "cat": "chocolates",
+      "unidade": "kg",
+      "id": "etqwcn0pqmhmqeg6lwz"
+    },
+    {
+      "nome": "Nutella",
+      "cat": "chocolates",
+      "unidade": "un",
+      "id": "8to6qws6sl3mqeg6lwz"
+    },
+    {
+      "nome": "Creme de Leite em Caixa",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "4agva5jbd2tmqeg6lwz"
+    },
+    {
+      "nome": "Leite Condensado Integral",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "z474755cmmimqeg6lwz"
+    },
+    {
+      "nome": "Leite Condensado em Lata",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "c4k5wnla4umqeg6lwz"
+    },
+    {
+      "nome": "Creme de Leite em Lata",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "s446y6mbadjmqeg6lwz"
+    },
+    {
+      "nome": "Gelatina sem Sabor",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "bivl8rcrr3mqeg6lwz"
+    },
+    {
+      "nome": "Pimenta",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "yujnc4u0ltmqeg6lwz"
+    },
+    {
+      "nome": "Maizena",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "qwq8hy0aknkmqeg6lwz"
+    },
+    {
+      "nome": "Biscoito para Café",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "8xdwn5a97rmqeg6lwz"
+    },
+    {
+      "nome": "Doce de Leite",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "7am7969r9zcmqeg6lwz"
+    },
+    {
+      "nome": "Seleta de Legumes",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "pgpjttjgbllmqeg6lwz"
+    },
+    {
+      "nome": "Milho",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "vtafndkd2lmqeg6lwz"
+    },
+    {
+      "nome": "Azeitona",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "ic53zidaziqmqeg6lwz"
+    },
+    {
+      "nome": "Saz������n Picanha",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "uxzdmzopdpsmqeg6lwz"
+    },
+    {
+      "nome": "Sazón Nordeste",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "5pb555o52fmqeg6lwz"
+    },
+    {
+      "nome": "Sal",
+      "cat": "latas, caixas e temperos",
+      "unidade": "kg",
+      "id": "fbpsadd5nfbmqeg6lwz"
+    },
+    {
+      "nome": "Arrozina",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "kt1n742ujomqeg6lwz"
+    },
+    {
+      "nome": "Macarrão para Sopa",
+      "cat": "massas",
+      "unidade": "kg",
+      "id": "1hkdiv04slamqeg6lwz"
+    },
+    {
+      "nome": "Macarrão para Macarronada",
+      "cat": "massas",
+      "unidade": "kg",
+      "id": "nhkx6vpek6mqeg6lwz"
+    },
+    {
+      "nome": "Carne para Hambúrguer Ivan",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "laesi8ur33mqec74pd"
+    },
+    {
+      "nome": "Faca Descart�����vel",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "p4mkne9ou5mqecz1if"
+    },
+    {
+      "id": "nn76u8o7q3kmqed7ui0",
+      "nome": "Catupiry Confraria Ivan",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "bsto1zp0cmrmqed8o5c",
+      "nome": "Queijo Fatiado Ivan",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "fu4rjc3zqo5mqed9101",
+      "nome": "Queijo barra",
+      "cat": "laticínios",
+      "unidade": "kg"
+    },
+    {
+      "id": "7ozhp55fxhemqed9c3i",
+      "nome": "Queijo barra Ivan",
+      "cat": "laticínios",
+      "unidade": "kg"
+    },
+    {
+      "id": "s35pnemx38mqed9q18",
+      "nome": "Presunto fatiado Ivan",
+      "cat": "laticínios",
+      "unidade": "kg"
+    },
+    {
+      "id": "06iefgf8tsn9mqeda3t4",
+      "nome": "Salsicha Ivan",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "tq40owpruumqedabev",
+      "nome": "Salsicha",
+      "cat": "",
+      "unidade": "un"
+    },
+    {
+      "id": "mstrc65pe5mqedb15h",
+      "nome": "Carne p/ hamburguer",
+      "cat": "carnes",
+      "unidade": "un"
+    },
+    {
+      "id": "yvdzye3yt4mqedbnjz",
+      "nome": "Margarina Pastela Ivan",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "596jyy26w7tmqednoou",
+      "nome": "Nescalzinho 180ml",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "iqnyn9epyhmqedpfgd",
+      "nome": "Leite de coco",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "79tvjfrlb74mqedymuv",
+      "nome": "Suco saco Morango",
+      "cat": "bebidas",
+      "unidade": "un"
+    },
+    {
+      "id": "zxvbiui4lzmqedyvnq",
+      "nome": "Suco em saco limão",
+      "cat": "bebidas",
+      "unidade": "un"
+    },
+    {
+      "id": "6o5m5x029cdmqedzd0e",
+      "nome": "Chantily 1L",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "thlesbhqbrdmqee667g",
+      "nome": "Wey Pro P",
+      "cat": "latic��nios",
+      "unidade": "un"
+    },
+    {
+      "nome": "Guaraná Antarctica 220 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "z693jzuq1uamqeep72b"
+    },
+    {
+      "nome": "Guaraná Antarctica 350 ml",
+      "cat": "bebidas",
+      "unidade": "un",
+      "id": "fw5vyda26bnmqeep72b"
+    },
+    {
+      "nome": "Papel Higi������������������������������nico",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "hm5869wk8kumqeep72b"
+    },
+    {
+      "nome": "Saco para Por��ão de Alimentos",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "w6adtny6cl8mqeep72b"
+    },
+    {
+      "nome": "Garfo Descart��vel Grande",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "sl1idwiwcemqeep72b"
+    },
+    {
+      "nome": "Ameixa Seca sem Caro��o",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "5uqlh5t32fmqeexqgo"
+    },
+    {
+      "nome": "Sazón Picanha",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un",
+      "id": "cseunbmb74qmqeexqgo"
+    },
+    {
+      "id": "0nwj3zsow2ybmqefph9b",
+      "nome": "Agua mineral",
+      "cat": "bebidas",
+      "unidade": "un"
+    },
+    {
+      "id": "s7uc91y9binmqefpw5t",
+      "nome": "Agua mineral c/ gas",
+      "cat": "",
+      "unidade": "un"
+    },
+    {
+      "id": "jb5crki0xnmqefqij5",
+      "nome": "Energetico",
+      "cat": "bebidas",
+      "unidade": "un"
+    },
+    {
+      "id": "hbbl2e9qcckmqefr46u",
+      "nome": "Gas pra chantily",
+      "cat": "descartáveis",
+      "unidade": "un"
+    },
+    {
+      "id": "9vjumukmhjjmqefrmxj",
+      "nome": "Creme cannoli",
+      "cat": "chocolates",
+      "unidade": "un"
+    },
+    {
+      "id": "9ljfdpw3rbfmqefuhd1",
+      "nome": "Haus",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "pznhf1aazqmqefuoot",
+      "nome": "Trident",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "0pvk41pqi1vamqefuvj2",
+      "nome": "Paçoca",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "ujouxmtzwumqefv58i",
+      "nome": "Mentos",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "lwrgrhn5i8mqefveuw",
+      "nome": "Chiclets",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "bcg44uqz29rmqefvlgy",
+      "nome": "Babalu",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "cex8p9qjmzsmqefvsbp",
+      "nome": "Kitkat",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "kt8asbqcpmfmqefw034",
+      "nome": "Jujuba",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "qt9lusyfx8nmqefw99w",
+      "nome": "Skilhos",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "kk3xr8eauhmqefwh2f",
+      "nome": "Beijo de moça",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "248t026rcfghmqefwvfy",
+      "nome": "Chocolate batom",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "nt7ie9yj5amqefxghp",
+      "nome": "Chicle flics",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "qeav7ihj78pmqefxuaw",
+      "nome": "Chiclete big big",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "81uvv0eotkemqefy4ig",
+      "nome": "Bomom sonho de valsa",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "h1xo7it60pkmqefyepb",
+      "nome": "Bombom ouro branco",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "gnzdcxz41armqefzpjp",
+      "nome": "Queijo Cuia",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "xt3l0jnuvtsmqeiidla",
+      "nome": "Açucar sachê",
+      "cat": "cafés e complementos",
+      "unidade": "un"
+    },
+    {
+      "id": "seaaxhky9xhmqeij3zp",
+      "nome": "Saco p/ misto",
+      "cat": "descartáveis",
+      "unidade": "un"
+    },
+    {
+      "nome": "Molho para Hot Dog",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "yg9kg3om6bdmqeissc1"
+    },
+    {
+      "nome": "Molho para Pizza",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "qynv51x83f8mqeissc1"
+    },
+    {
+      "nome": "Extrato de Tomate",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "2mnt7op3idjmqeissc1"
+    },
+    {
+      "nome": "Molho Barbecue",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "h1kum8vl6hmqeissc1"
+    },
+    {
+      "nome": "Ketchup Sachê",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "98j3ov66uuqmqeissc1"
+    },
+    {
+      "nome": "Maionese Sachê",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "1v98kb9vjbimqeissc1"
+    },
+    {
+      "nome": "Mostarda Sachê",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "8ytrzlb2piymqeissc1"
+    },
+    {
+      "nome": "Açúcar Sachê",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "6dczgiub4a6mqeissc1"
+    },
+    {
+      "nome": "Maionese em Quilo",
+      "cat": "molhos",
+      "unidade": "kg",
+      "id": "soeai5aidpmqeissc1"
+    },
+    {
+      "nome": "Ketchup em Quilo",
+      "cat": "molhos",
+      "unidade": "kg",
+      "id": "yl8idfjze5pmqeissc1"
+    },
+    {
+      "nome": "Mostarda em Quilo",
+      "cat": "molhos",
+      "unidade": "kg",
+      "id": "yo5dotk4x2mqeissc1"
+    },
+    {
+      "id": "hou4d448h1omqeivp75",
+      "nome": "Milharina",
+      "cat": "farinhas",
+      "unidade": "un"
+    },
+    {
+      "id": "dt2sr6fe5hmqeiwxjk",
+      "nome": "Coco Ralado",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un"
+    },
+    {
+      "id": "nmovyzd9asfmqeiy8x8",
+      "nome": "Espanador",
+      "cat": "material de limpeza",
+      "unidade": "un"
+    },
+    {
+      "id": "aofvl14h3pwmqeizfr0",
+      "nome": "sazon camarão",
+      "cat": "latas, caixas e temperos",
+      "unidade": "un"
+    },
+    {
+      "id": "l82qi1ibyfmqej0510",
+      "nome": "Luva de silicone M",
+      "cat": "descartáveis",
+      "unidade": "un"
+    },
+    {
+      "nome": "Colher Descart��vel Grande",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "50oos9plxxmqemhycm"
+    },
+    {
+      "nome": "Cera L��quida",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "e2jd2ei3ccmqec6agu"
+    },
+    {
+      "nome": "Sab��o em Pó",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "vsq1ozwrmw9mqec6agu"
+    },
+    {
+      "nome": "Limpa Vaso Sanit��rio",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "2yfhzsankdwmqec6agu"
+    },
+    {
+      "nome": "Camar��o Regional",
+      "cat": "carnes",
+      "unidade": "kg",
+      "id": "baw1xgttq6omqec6p7o"
+    },
+    {
+      "nome": "Garfo Descart��vel Pequeno",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "wa5trwtenpcmqecz1if"
+    },
+    {
+      "nome": "Faca Descart��vel",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "8v7cwrs1hhfmqecz1if"
+    },
+    {
+      "nome": "Saquinho para Sach��",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "7lm2bdcgqdnmqecz1if"
+    },
+    {
+      "nome": "��gua Sanitária",
+      "cat": "material de limpeza",
+      "unidade": "un",
+      "id": "il7ddt4bufdmqeep72b"
+    },
+    {
+      "nome": "Saco para Porç��o de Alimentos",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "fmhpoohhu9wmqeep72b"
+    },
+    {
+      "nome": "Ma��ã",
+      "cat": "hortifruti",
+      "unidade": "kg",
+      "id": "bvyld4czm2mmqefcf0u"
+    },
+    {
+      "nome": "Nescau em P������������",
+      "cat": "chocolates",
+      "unidade": "un",
+      "id": "wf0a957vqnmqefcf0u"
+    },
+    {
+      "id": "khpw036l6a9mqej81j8",
+      "nome": "frango P/ cremso loja",
+      "cat": "outros",
+      "unidade": "un"
+    },
+    {
+      "id": "8mfwlp8f687mqej9gi2",
+      "nome": "Leite de aveia",
+      "cat": "laticínios",
+      "unidade": "un"
+    },
+    {
+      "id": "s20cj6tvcqemqejfp4t",
+      "nome": "P����o de forma",
+      "cat": "santa lucia",
+      "unidade": "un"
+    },
+    {
+      "id": "5s9nl8vdogmqejh65d",
+      "nome": "Leite Liq Integral",
+      "cat": "laticínios",
+      "unidade": "L"
+    },
+    {
+      "nome": "Len��o de Mesa",
+      "cat": "descartáveis",
+      "unidade": "un",
+      "id": "4edq9s7asiemqekn2hd"
+    },
+    {
+      "nome": "Açúcar Sach��",
+      "cat": "molhos",
+      "unidade": "un",
+      "id": "628l7z2c54omqf0ao4a"
+    }
+  ],
+  "produtosSeedDone": true,
+  "produtosSeedV2": true,
+  "produtosSeedV3": true,
+  "produtosSeedV4": true,
+  "produtosSeedV5": true,
+  "listaDeletedIds": [
+    "w663zjipo98mqeiint4",
+    "pdvyzo5kg2mqeimqxn",
+    "qzhqf73v3gimqein5oq",
+    "zobc8akux6mqeindh3",
+    "lnmyc96n4tmqeinpf4",
+    "nku3waallz8mqeio3aw",
+    "ews91s3co4mqeiq1o4",
+    "jv7lknxhrrdmqeivp75",
+    "ba5tf8chvjcmqeiwxjk",
+    "5qf8bq67tf8mqeix3mg",
+    "xb0dnscclqjmqeixbr4",
+    "ry4ea74xtmqeixhmg",
+    "mi7pv19r7smqeixqjt",
+    "1n4cz9nl1jojmqeixud4",
+    "pszswafh2xmqeiy03y",
+    "wuprnbctnrmqeiy8x8",
+    "zd8qzk3xp3mqeiyef5",
+    "9iytxr8jxgfmqeiyl6k",
+    "32ramy1kgdtmqeiytom",
+    "8obsmnmzxd6mqeiz38k",
+    "7y3y79z5i6vmqeizfr0",
+    "uv2fa9d5xammqeizq6f",
+    "s7ap16wzzhbmqej0510",
+    "oe3ci9rkxvmqej1mg3",
+    "6gkd6dn0ki9mqej28ue",
+    "fnwdomwwepfmqeguozj",
+    "h4o8nx6ztjrmqej73w1",
+    "8igquz2mrqsmqej7chz",
+    "xhyxgk47mdmqej7k1y",
+    "mu7kzq8dr6mqej94kc",
+    "18sj13weta1mqej9gi2",
+    "lrsd40vw3omqej9oth",
+    "iei3d25522mqejc0mu",
+    "2seg7cikc0gmqejd9cj",
+    "2yium14fq87mqejdqcp",
+    "ko7tqzs6ejrmqejfp4t",
+    "trslcjopaxomqejg3v8",
+    "g3n3cc5fcgcmqejge4m",
+    "nx9jxcmkjhmmqejgn3p",
+    "j648gcy8akomqejh65d",
+    "o47iae7mzhmqejhgkw"
+  ],
+  "listaCatOrdemV2": true,
+  "produtosSeedV6": true,
+  "listaCatOrdemV3": true,
+  "usuarios": [
+    {
+      "id": "usr-admin",
+      "nome": "Administrativo",
+      "senha": "172839",
+      "role": "admin"
+    },
+    {
+      "id": "usr-op-seama",
+      "nome": "Op. Lista SEAMA",
+      "senha": "0002",
+      "role": "op",
+      "empresa": "SEAMA"
+    },
+    {
+      "id": "usr-op-cfr",
+      "nome": "Confraria",
+      "senha": "0001",
+      "role": "op",
+      "empresa": "CONFRARIA"
+    },
+    {
+      "id": "o87xmygh6mmqekxqep",
+      "nome": "Mario",
+      "senha": "3007",
+      "role": "admin"
+    },
+    {
+      "id": "k1fzci5x8femqf0rwoh",
+      "nome": "Dany",
+      "senha": "3013",
+      "role": "admin"
+    }
+  ],
+  "usuariosSeedDone": true,
+  "produtosDedupV1": true
+}

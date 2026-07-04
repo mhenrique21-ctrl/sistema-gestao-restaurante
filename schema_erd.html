@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERD — Sistema de Gestão Restaurante</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+header {
+  background: #1a1d27;
+  border-bottom: 1px solid #2d3148;
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+header h1 { font-size: 16px; font-weight: 600; color: #fff; }
+header span { font-size: 12px; color: #64748b; }
+.badge { background: #4f3bb8; color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+
+.legend {
+  display: flex;
+  gap: 20px;
+  margin-left: auto;
+  align-items: center;
+}
+.leg-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94a3b8; }
+.leg-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.canvas-wrap {
+  overflow: auto;
+  padding: 40px;
+  min-height: calc(100vh - 57px);
+}
+
+svg {
+  display: block;
+  min-width: 1400px;
+  min-height: 900px;
+}
+
+/* Tables */
+.table-group rect.header { rx: 0; }
+.table-rect { filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4)); }
+
+/* Relation lines */
+.rel-line { stroke-dasharray: none; stroke-width: 1.5; fill: none; }
+
+/* Tooltip */
+.tooltip {
+  position: fixed;
+  background: #1e2235;
+  border: 1px solid #3d4466;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  max-width: 280px;
+  z-index: 200;
+}
+.tooltip.show { opacity: 1; }
+.tooltip-title { font-weight: 700; color: #a78bfa; margin-bottom: 6px; font-size: 13px; }
+.tooltip-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; }
+.tooltip-col { color: #e2e8f0; }
+.tooltip-type { color: #64748b; font-size: 11px; }
+.tooltip-pk { color: #fbbf24; font-size: 10px; font-weight: 700; }
+.tooltip-fk { color: #34d399; font-size: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">ERD</div>
+  <h1>Sistema de Gestão — Confraria Café &amp; Cantina Seama</h1>
+  <span>PostgreSQL · 11 tabelas · 10 relacionamentos</span>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#4f3bb8"></div> Financeiro</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#1e7b4e"></div> Operacional</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#1a5fad"></div> RH</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#9a6000"></div> Agenda</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#475569"></div> Base</div>
+  </div>
+</header>
+
+<div class="canvas-wrap">
+<svg id="erd" viewBox="0 0 1500 980" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const TABLES = [
+  {
+    id: 'empresas',
+    label: 'empresas',
+    color: '#475569',
+    header: '#334155',
+    x: 620, y: 40,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'nome', type: 'VARCHAR(120)' },
+      { name: 'cnpj', type: 'VARCHAR(18)', unique: true },
+      { name: 'ativo', type: 'BOOLEAN' },
+      { name: 'criado_em', type: 'TIMESTAMPTZ' },
+    ]
+  },
+  {
+    id: 'categorias',
+    label: 'categorias',
+    color: '#475569',
+    header: '#334155',
+    x: 220, y: 200,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'nome', type: 'VARCHAR(80)' },
+      { name: 'tipo', type: 'ENUM' },
+      { name: 'cor', type: 'VARCHAR(7)' },
+      { name: 'empresa_id', type: 'INT', fk: 'empresas' },
+    ]
+  },
+  {
+    id: 'lancamentos',
+    label: 'lancamentos',
+    color: '#4f3bb8',
+    header: '#3d2ea8',
+    x: 20, y: 420,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'empresa_id', type: 'INT', fk: 'empresas' },
+      { name: 'categoria_id', type: 'INT', fk: 'categorias' },
+      { name: 'tipo', type: 'ENUM' },
+      { name: 'descricao', type: 'VARCHAR(255)' },
+      { name: 'valor', type: 'NUMERIC(12,2)' },
+      { name: 'data', type: 'DATE' },
+      { name: 'forma_pag', type: 'ENUM' },
+      { name: 'status', type: 'ENUM' },
+    ]
+  },
+  {
+    id: 'compras',
+    label: 'compras',
+    color: '#4f3bb8',
+    header: '#3d2ea8',
+    x: 310, y: 420,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'empresa_id', type: 'INT', fk: 'empresas' },
+      { name: 'categoria_id', type: 'INT', fk: 'categorias' },
+      { name: 'fornecedor', type: 'VARCHAR(150)' },
+      { name: 'data', type: 'DATE' },
+      { name: 'valor_total', type: 'NUMERIC(12,2)' },
+      { name: 'status_pag', type: 'ENUM' },
+      { name: 'data_vencimento', type: 'DATE' },
+      { name: 'origem', type: 'ENUM' },
+    ]
+  },
+  {
+    id: 'compra_itens',
+    label: 'compra_itens',
+    color: '#4f3bb8',
+    header: '#3d2ea8',
+    x: 310, y: 720,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'compra_id', type: 'INT', fk: 'compras' },
+      { name: 'descricao', type: 'VARCHAR(200)' },
+      { name: 'quantidade', type: 'NUMERIC(10,3)' },
+      { name: 'unidade', type: 'VARCHAR(20)' },
+      { name: 'valor_unit', type: 'NUMERIC(12,4)' },
+      { name: 'valor_total', type: 'NUMERIC(12,2)' },
+    ]
+  },
+  {
+    id: 'fichas',
+    label: 'fichas',
+    color: '#1e7b4e',
+    header: '#155c3a',
+    x: 620, y: 300,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'empresa_id', type: 'INT', fk: 'empresas' },
+      { name: 'nome', type: 'VARCHAR(150)' },
+      { name: 'categoria', type: 'VARCHAR(80)' },
+      { name: 'preco_venda', type: 'NUMERIC(10,2)' },
+      { name: 'custo_total', type: 'NUMERIC(10,2)' },
+      { name: 'cmv_percentual', type: 'GENERATED' },
+      { name: 'meta_cmv', type: 'NUMERIC(5,2)' },
+    ]
+  },
+  {
+    id: 'ficha_ingredientes',
+    label: 'ficha_ingredientes',
+    color: '#1e7b4e',
+    header: '#155c3a',
+    x: 620, y: 620,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'ficha_id', type: 'INT', fk: 'fichas' },
+      { name: 'ingrediente', type: 'VARCHAR(150)' },
+      { name: 'quantidade', type: 'NUMERIC(10,4)' },
+      { name: 'unidade', type: 'VARCHAR(20)' },
+      { name: 'custo_unit', type: 'NUMERIC(10,4)' },
+      { name: 'custo_total', type: 'GENERATED' },
+    ]
+  },
+  {
+    id: 'funcionarios',
+    label: 'funcionarios',
+    color: '#1a5fad',
+    header: '#144a8a',
+    x: 980, y: 300,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'empresa_id', type: 'INT', fk: 'empresas' },
+      { name: 'nome', type: 'VARCHAR(150)' },
+      { name: 'cargo', type: 'VARCHAR(80)' },
+      { name: 'salario_base', type: 'NUMERIC(10,2)' },
+      { name: 'data_admissao', type: 'DATE' },
+      { name: 'status', type: 'ENUM' },
+    ]
+  },
+  {
+    id: 'faltas',
+    label: 'faltas',
+    color: '#1a5fad',
+    header: '#144a8a',
+    x: 860, y: 620,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'funcionario_id', type: 'INT', fk: 'funcionarios' },
+      { name: 'data', type: 'DATE' },
+      { name: 'tipo', type: 'ENUM' },
+      { name: 'dias', type: 'NUMERIC(4,2)' },
+      { name: 'justificada', type: 'BOOLEAN' },
+    ]
+  },
+  {
+    id: 'adiantamentos',
+    label: 'adiantamentos',
+    color: '#1a5fad',
+    header: '#144a8a',
+    x: 1100, y: 620,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'funcionario_id', type: 'INT', fk: 'funcionarios' },
+      { name: 'data', type: 'DATE' },
+      { name: 'valor', type: 'NUMERIC(10,2)' },
+      { name: 'forma_pag', type: 'VARCHAR(20)' },
+      { name: 'status', type: 'ENUM' },
+    ]
+  },
+  {
+    id: 'eventos',
+    label: 'eventos',
+    color: '#9a6000',
+    header: '#7a4c00',
+    x: 1220, y: 300,
+    cols: [
+      { name: 'id', type: 'SERIAL', pk: true },
+      { name: 'empresa_id', type: 'INT', fk: 'empresas' },
+      { name: 'titulo', type: 'VARCHAR(200)' },
+      { name: 'data', type: 'DATE' },
+      { name: 'hora_inicio', type: 'TIME' },
+      { name: 'tipo', type: 'ENUM' },
+      { name: 'descricao', type: 'TEXT' },
+    ]
+  },
+];
+
+const COL_H = 22;
+const HEADER_H = 32;
+const PAD = 14;
+const MIN_W = 180;
+
+function tableHeight(t) { return HEADER_H + t.cols.length * COL_H + PAD; }
+function tableWidth(t) {
+  const max = Math.max(t.label.length * 8.5 + 30, ...t.cols.map(c => (c.name.length + c.type.length) * 6.5 + 60));
+  return Math.max(MIN_W, max);
+}
+
+const svg = document.getElementById('erd');
+
+// Draw relations first (behind tables)
+const RELATIONS = [
+  { from: 'categorias',       fromAnchor: 'right', to: 'empresas',      toAnchor: 'bottom' },
+  { from: 'lancamentos',      fromAnchor: 'top',   to: 'categorias',    toAnchor: 'bottom' },
+  { from: 'lancamentos',      fromAnchor: 'top',   to: 'empresas',      toAnchor: 'left' },
+  { from: 'compras',          fromAnchor: 'top',   to: 'categorias',    toAnchor: 'bottom' },
+  { from: 'compras',          fromAnchor: 'top',   to: 'empresas',      toAnchor: 'bottom' },
+  { from: 'compra_itens',     fromAnchor: 'top',   to: 'compras',       toAnchor: 'bottom' },
+  { from: 'fichas',           fromAnchor: 'top',   to: 'empresas',      toAnchor: 'bottom' },
+  { from: 'ficha_ingredientes', fromAnchor: 'top', to: 'fichas',        toAnchor: 'bottom' },
+  { from: 'funcionarios',     fromAnchor: 'top',   to: 'empresas',      toAnchor: 'right' },
+  { from: 'faltas',           fromAnchor: 'top',   to: 'funcionarios',  toAnchor: 'bottom' },
+  { from: 'adiantamentos',    fromAnchor: 'top',   to: 'funcionarios',  toAnchor: 'bottom' },
+  { from: 'eventos',          fromAnchor: 'top',   to: 'empresas',      toAnchor: 'right' },
+];
+
+function getAnchor(t, anchor) {
+  const w = tableWidth(t);
+  const h = tableHeight(t);
+  switch(anchor) {
+    case 'top':    return [t.x + w/2, t.y];
+    case 'bottom': return [t.x + w/2, t.y + h];
+    case 'left':   return [t.x, t.y + HEADER_H/2];
+    case 'right':  return [t.x + w, t.y + HEADER_H/2];
+  }
+}
+
+function tableById(id) { return TABLES.find(t => t.id === id); }
+
+const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+
+// Arrow markers
+['#94a3b8','#4f3bb8','#1e7b4e','#1a5fad','#9a6000'].forEach((color, i) => {
+  const m = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+  m.setAttribute('id', `arrow${i}`);
+  m.setAttribute('markerWidth', '8');
+  m.setAttribute('markerHeight', '8');
+  m.setAttribute('refX', '6');
+  m.setAttribute('refY', '3');
+  m.setAttribute('orient', 'auto');
+  const poly = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  poly.setAttribute('d', 'M0,0 L0,6 L8,3 z');
+  poly.setAttribute('fill', color);
+  m.appendChild(poly);
+  defs.appendChild(m);
+});
+svg.appendChild(defs);
+
+const colorIndex = { '#475569': 0, '#4f3bb8': 1, '#1e7b4e': 2, '#1a5fad': 3, '#9a6000': 4 };
+
+RELATIONS.forEach(rel => {
+  const fromT = tableById(rel.from);
+  const toT = tableById(rel.to);
+  if (!fromT || !toT) return;
+
+  const [x1, y1] = getAnchor(fromT, rel.fromAnchor);
+  const [x2, y2] = getAnchor(toT, rel.toAnchor);
+
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  let d;
+  if (Math.abs(y1 - y2) > Math.abs(x1 - x2)) {
+    d = `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;
+  } else {
+    d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+  }
+  line.setAttribute('d', d);
+  line.setAttribute('class', 'rel-line');
+  line.setAttribute('stroke', '#334155');
+  line.setAttribute('marker-end', `url(#arrow0)`);
+  svg.appendChild(line);
+});
+
+// Draw tables
+const tooltip = document.getElementById('tooltip');
+
+TABLES.forEach(t => {
+  const w = tableWidth(t);
+  const h = tableHeight(t);
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'table-group');
+  g.style.cursor = 'pointer';
+
+  // Shadow rect
+  const shadow = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  shadow.setAttribute('x', t.x + 3);
+  shadow.setAttribute('y', t.y + 3);
+  shadow.setAttribute('width', w);
+  shadow.setAttribute('height', h);
+  shadow.setAttribute('rx', 8);
+  shadow.setAttribute('fill', 'rgba(0,0,0,0.5)');
+  g.appendChild(shadow);
+
+  // Body
+  const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  body.setAttribute('x', t.x);
+  body.setAttribute('y', t.y);
+  body.setAttribute('width', w);
+  body.setAttribute('height', h);
+  body.setAttribute('rx', 8);
+  body.setAttribute('fill', '#1e2235');
+  body.setAttribute('stroke', t.color);
+  body.setAttribute('stroke-width', '1.5');
+  g.appendChild(body);
+
+  // Header
+  const hdr = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  hdr.setAttribute('x', t.x);
+  hdr.setAttribute('y', t.y);
+  hdr.setAttribute('width', w);
+  hdr.setAttribute('height', HEADER_H);
+  hdr.setAttribute('rx', 8);
+  hdr.setAttribute('fill', t.color);
+  g.appendChild(hdr);
+
+  // Header bottom corners square
+  const hdrFix = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  hdrFix.setAttribute('x', t.x);
+  hdrFix.setAttribute('y', t.y + HEADER_H - 8);
+  hdrFix.setAttribute('width', w);
+  hdrFix.setAttribute('height', 8);
+  hdrFix.setAttribute('fill', t.color);
+  g.appendChild(hdrFix);
+
+  // Table name
+  const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  label.setAttribute('x', t.x + 10);
+  label.setAttribute('y', t.y + 21);
+  label.setAttribute('fill', '#ffffff');
+  label.setAttribute('font-size', '12');
+  label.setAttribute('font-weight', '700');
+  label.setAttribute('font-family', "'Segoe UI', monospace");
+  label.textContent = t.label;
+  g.appendChild(label);
+
+  // Column count
+  const cnt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  cnt.setAttribute('x', t.x + w - 10);
+  cnt.setAttribute('y', t.y + 21);
+  cnt.setAttribute('fill', 'rgba(255,255,255,0.6)');
+  cnt.setAttribute('font-size', '10');
+  cnt.setAttribute('text-anchor', 'end');
+  cnt.setAttribute('font-family', "'Segoe UI', sans-serif");
+  cnt.textContent = `${t.cols.length} cols`;
+  g.appendChild(cnt);
+
+  // Columns
+  t.cols.forEach((col, i) => {
+    const cy = t.y + HEADER_H + i * COL_H + COL_H / 2 + 4;
+
+    // Row hover bg (invisible by default)
+    const rowBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rowBg.setAttribute('x', t.x + 1);
+    rowBg.setAttribute('y', t.y + HEADER_H + i * COL_H);
+    rowBg.setAttribute('width', w - 2);
+    rowBg.setAttribute('height', COL_H);
+    rowBg.setAttribute('fill', 'rgba(255,255,255,0.03)');
+    rowBg.setAttribute('rx', i === t.cols.length - 1 ? 0 : 0);
+    g.appendChild(rowBg);
+
+    // Separator
+    if (i > 0) {
+      const sep = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      sep.setAttribute('x1', t.x + 1);
+      sep.setAttribute('y1', t.y + HEADER_H + i * COL_H);
+      sep.setAttribute('x2', t.x + w - 1);
+      sep.setAttribute('y2', t.y + HEADER_H + i * COL_H);
+      sep.setAttribute('stroke', '#2d3148');
+      sep.setAttribute('stroke-width', '0.5');
+      g.appendChild(sep);
+    }
+
+    // Badge (PK/FK)
+    if (col.pk) {
+      const badge = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      badge.setAttribute('x', t.x + 8);
+      badge.setAttribute('y', cy - 7);
+      badge.setAttribute('width', 18);
+      badge.setAttribute('height', 13);
+      badge.setAttribute('rx', 3);
+      badge.setAttribute('fill', '#92400e');
+      g.appendChild(badge);
+      const bt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      bt.setAttribute('x', t.x + 17);
+      bt.setAttribute('y', cy + 2);
+      bt.setAttribute('fill', '#fbbf24');
+      bt.setAttribute('font-size', '8');
+      bt.setAttribute('font-weight', '700');
+      bt.setAttribute('text-anchor', 'middle');
+      bt.setAttribute('font-family', 'monospace');
+      bt.textContent = 'PK';
+      g.appendChild(bt);
+    } else if (col.fk) {
+      const badge = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      badge.setAttribute('x', t.x + 8);
+      badge.setAttribute('y', cy - 7);
+      badge.setAttribute('width', 16);
+      badge.setAttribute('height', 13);
+      badge.setAttribute('rx', 3);
+      badge.setAttribute('fill', '#064e3b');
+      g.appendChild(badge);
+      const bt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      bt.setAttribute('x', t.x + 16);
+      bt.setAttribute('y', cy + 2);
+      bt.setAttribute('fill', '#34d399');
+      bt.setAttribute('font-size', '8');
+      bt.setAttribute('font-weight', '700');
+      bt.setAttribute('text-anchor', 'middle');
+      bt.setAttribute('font-family', 'monospace');
+      bt.textContent = 'FK';
+      g.appendChild(bt);
+    }
+
+    // Col name
+    const colName = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    colName.setAttribute('x', t.x + 30);
+    colName.setAttribute('y', cy + 3);
+    colName.setAttribute('fill', col.pk ? '#fde68a' : col.fk ? '#6ee7b7' : '#cbd5e1');
+    colName.setAttribute('font-size', '11');
+    colName.setAttribute('font-family', 'monospace');
+    colName.textContent = col.name;
+    g.appendChild(colName);
+
+    // Col type
+    const colType = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    colType.setAttribute('x', t.x + w - 8);
+    colType.setAttribute('y', cy + 3);
+    colType.setAttribute('fill', '#475569');
+    colType.setAttribute('font-size', '10');
+    colType.setAttribute('text-anchor', 'end');
+    colType.setAttribute('font-family', 'monospace');
+    colType.textContent = col.type;
+    g.appendChild(colType);
+  });
+
+  // Tooltip
+  g.addEventListener('mouseenter', (e) => {
+    const rows = t.cols.map(c => {
+      const badges = [c.pk ? '<span class="tooltip-pk">PK</span>' : '', c.fk ? `<span class="tooltip-fk">FK→${c.fk}</span>` : ''].filter(Boolean).join(' ');
+      return `<div class="tooltip-row"><span class="tooltip-col">${c.name}</span><span class="tooltip-type">${c.type}</span>${badges}</div>`;
+    }).join('');
+    tooltip.innerHTML = `<div class="tooltip-title">${t.label}</div>${rows}`;
+    tooltip.classList.add('show');
+  });
+  g.addEventListener('mousemove', (e) => {
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top  = (e.clientY - 10) + 'px';
+  });
+  g.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+
+  svg.appendChild(g);
+});
+</script>
+</body>
+</html>

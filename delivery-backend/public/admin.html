@@ -882,7 +882,7 @@ function filtrarPedidos(filtro) {
 
 function renderPedidos(orders) {
   if (!orders.length) {
-    document.getElementById('pedidos-lista').innerHTML = `<div class="card" style="text-align:center;color:#64748b;padding:40px">Nenhum pedido encontrado</div>`;
+    document.getElementById('pedidos-lista').innerHTML = `<div class="card" style="text-align:center;color:var(--muted);padding:40px">Nenhum pedido encontrado</div>`;
     return;
   }
   document.getElementById('pedidos-lista').innerHTML = orders.map(o => {
@@ -890,24 +890,26 @@ function renderPedidos(orders) {
     const prox = STATUS_NEXT[o.status];
     const hora = new Date(o.created_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
     const data = new Date(o.created_at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit'});
+    const num = o.order_number || o.id.slice(-4);
+    const addr = o.delivery_address ? (typeof o.delivery_address === 'string' ? o.delivery_address : `${o.delivery_address.street||''}, ${o.delivery_address.number||''} — ${o.delivery_address.neighborhood||''}`) : '';
     return `
-    <div style="background:#1e293b;border:1px solid #334155;border-left:4px solid ${cor};border-radius:12px;padding:16px;margin-bottom:12px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:5px solid ${cor};border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.15)">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <span style="font-family:monospace;font-weight:800;font-size:1.1rem">#${o.id.slice(-6).toUpperCase()}</span>
-          <span style="background:${cor};color:#fff;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:700">${STATUS_LABEL[o.status]||o.status}</span>
-          <span style="color:#64748b;font-size:.78rem">${data} às ${hora}</span>
-          <span style="font-size:.85rem">${o.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-family:monospace;font-weight:900;font-size:1.15rem;color:var(--text)">#${num}</span>
+          <span style="background:${cor};color:#fff;padding:3px 12px;border-radius:999px;font-size:.75rem;font-weight:700;letter-spacing:.03em">${STATUS_LABEL[o.status]||o.status}</span>
+          <span style="color:var(--muted);font-size:.8rem">${data} às ${hora}</span>
+          <span style="font-size:.85rem;color:var(--text)">${o.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-weight:800;color:#a78bfa;font-size:1.05rem">R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</span>
-          <span style="color:#64748b;font-size:.78rem">${o.payment_method||'-'}</span>
+          <span style="font-weight:900;color:#7c3aed;font-size:1.1rem">R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</span>
+          <span style="color:var(--muted);font-size:.8rem;background:var(--hover);padding:2px 8px;border-radius:6px">${o.payment_method||'-'}</span>
         </div>
       </div>
-      <div style="display:flex;gap:24px;margin-top:10px;font-size:.82rem;flex-wrap:wrap">
-        <div><span style="color:#64748b">Cliente: </span><strong>${o.customer_name||'—'}</strong></div>
-        ${o.customer_phone ? `<div>📱 ${o.customer_phone}</div>` : ''}
-        ${o.delivery_address ? `<div style="color:#94a3b8">📍 ${o.delivery_address}</div>` : ''}
+      <div style="display:flex;gap:20px;margin-top:10px;font-size:.85rem;flex-wrap:wrap;align-items:center">
+        <div><span style="color:var(--muted)">Cliente: </span><strong style="color:var(--text)">${o.customer_name||'—'}</strong></div>
+        ${o.customer_phone ? `<div style="color:var(--muted)">📱 <span style="color:var(--text)">${o.customer_phone}</span></div>` : ''}
+        ${addr ? `<div style="color:var(--muted)">📍 <span style="color:var(--text)">${addr}</span></div>` : ''}
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
@@ -921,43 +923,55 @@ function renderPedidos(orders) {
 async function verPedido(id) {
   const o = await api('GET', '/orders/' + id);
   const items = o.items || [];
-  openModal(`Pedido #${id.slice(-6).toUpperCase()}`, `
+  const num = o.order_number || id.slice(-4);
+  openModal(`Pedido #${num}`, `
     <div style="font-size:.85rem;display:grid;gap:10px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><span style="color:#64748b">Cliente:</span> <strong>${o.customer_name||'—'}</strong></div>
-        <div><span style="color:#64748b">WhatsApp:</span> ${o.customer_phone||'—'}</div>
-        <div><span style="color:#64748b">Tipo:</span> ${o.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</div>
-        <div><span style="color:#64748b">Pagamento:</span> ${o.payment_method||'—'}</div>
-        ${o.delivery_address ? `<div style="grid-column:1/-1"><span style="color:#64748b">Endereço:</span> ${o.delivery_address}</div>` : ''}
+        <div><span style="color:var(--muted)">Cliente:</span> <strong style="color:var(--text)">${o.customer_name||'—'}</strong></div>
+        <div><span style="color:var(--muted)">WhatsApp:</span> <span style="color:var(--text)">${o.customer_phone||'—'}</span></div>
+        <div><span style="color:var(--muted)">Tipo:</span> <span style="color:var(--text)">${o.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</span></div>
+        <div><span style="color:var(--muted)">Pagamento:</span> <span style="color:var(--text)">${o.payment_method||'—'}</span></div>
+        ${o.delivery_address ? `<div style="grid-column:1/-1"><span style="color:var(--muted)">Endereço:</span> <span style="color:var(--text)">${typeof o.delivery_address === 'string' ? o.delivery_address : JSON.stringify(o.delivery_address)}</span></div>` : ''}
       </div>
-      <hr style="border-color:#334155">
-      <strong>Itens do pedido</strong>
+      <hr style="border-color:var(--border)">
+      <strong style="color:var(--text)">Itens do pedido</strong>
       ${items.map(i => `
-        <div style="display:flex;justify-content:space-between;padding:8px;background:#0f172a;border-radius:8px">
+        <div style="display:flex;justify-content:space-between;padding:10px;background:var(--hover);border-radius:8px;gap:8px">
           <div>
-            <span style="font-weight:700">${i.quantity}x</span> ${i.product_name||i.name||'—'}
-            ${i.notes ? `<div style="color:#64748b;font-size:.75rem">${i.notes}</div>` : ''}
+            <span style="font-weight:700;color:var(--text)">${i.quantity}x</span> <span style="color:var(--text)">${i.product_name||i.name||'—'}</span>
+            ${(i.addons||[]).map(a => `<div style="color:var(--muted);font-size:.75rem;margin-left:8px">➕ ${a.name}</div>`).join('')}
+            ${i.notes ? `<div style="color:var(--muted);font-size:.75rem;margin-top:2px">📝 ${i.notes}</div>` : ''}
           </div>
-          <span class="price">R$ ${parseFloat((i.unit_price||i.price||0)*i.quantity).toFixed(2).replace('.',',')}</span>
-        </div>`).join('') || '<p style="color:#475569">Sem itens registrados</p>'}
-      <hr style="border-color:#334155">
-      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1rem">
+          <span class="price" style="white-space:nowrap">R$ ${parseFloat((i.unit_price||i.price||0)*i.quantity).toFixed(2).replace('.',',')}</span>
+        </div>`).join('') || `<p style="color:var(--muted)">Sem itens registrados</p>`}
+      <hr style="border-color:var(--border)">
+      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1rem;color:var(--text)">
         <span>Total</span>
         <span class="price">R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</span>
       </div>
-      ${o.notes ? `<div style="background:#0f172a;border-radius:8px;padding:8px;color:#94a3b8"><strong>Obs:</strong> ${o.notes}</div>` : ''}
+      ${o.notes ? `<div style="background:var(--hover);border-radius:8px;padding:10px;color:var(--text)"><strong>Obs:</strong> ${o.notes}</div>` : ''}
     </div>`, null);
   document.getElementById('modal-confirm').style.display = 'none';
 }
 
 async function avancarStatus(id, status) {
-  await api('PATCH', '/orders/' + id + '/status', { status });
+  const r = await api('PATCH', '/orders/' + id + '/status', { status });
   toast('Status atualizado!'); carregarPedidos();
+  if (r && r.whatsapp_link) {
+    if (confirm('Enviar mensagem WhatsApp para o cliente?')) {
+      window.open(r.whatsapp_link, '_blank');
+    }
+  }
 }
 async function cancelarPedido(id) {
   if (!confirm('Cancelar este pedido?')) return;
-  await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado' });
+  const r = await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado' });
   toast('Pedido cancelado'); carregarPedidos();
+  if (r && r.whatsapp_link) {
+    if (confirm('Avisar o cliente via WhatsApp?')) {
+      window.open(r.whatsapp_link, '_blank');
+    }
+  }
 }
 
 // ── Formas de Pagamento ───────────────────────────────────────────
