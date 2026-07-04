@@ -140,6 +140,21 @@ router.post('/guest', async (req, res) => {
 
     broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length } });
 
+    // Notifica WhatsApp da loja sobre novo pedido
+    try {
+      const settingsResult = await pool.query(`SELECT value FROM settings WHERE key = 'store_whatsapp_number'`);
+      const storePhone = (settingsResult.rows[0]?.value || '').replace(/\D/g, '');
+      if (storePhone) {
+        const itemsList = resolvedItems.map(i => `• ${i.quantity}x ${i.product_name}`).join('\n');
+        const totalFmt = `R$ ${total.toFixed(2).replace('.', ',')}`;
+        const tipo = (delivery_type === 'retirada') ? '🏪 Retirada' : '🛵 Entrega';
+        const msg = `🔔 *Novo Pedido #${order.order_number}*\n\n👤 ${customer.name}\n📱 ${phone}\n${tipo}\n\n${itemsList}\n\n💰 Total: ${totalFmt}\n💳 Pagamento: ${payment_method}`;
+        sendWhatsApp(storePhone, msg);
+      }
+    } catch (e) {
+      console.error('[whatsapp/new_order]', e.message);
+    }
+
     res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
