@@ -5,6 +5,27 @@ const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub')
 const stripeService = require('../services/stripe');
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
+const https = require('https');
+const http = require('http');
+
+async function sendWhatsApp(phone, message) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ number: `55${phone}`, text: message });
+    const req = http.request({
+      hostname: 'localhost',
+      port: 8081,
+      path: '/message/sendText/confraria',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': 'confraria2024', 'Content-Length': Buffer.byteLength(body) },
+    }, (res) => {
+      res.resume();
+      resolve(res.statusCode);
+    });
+    req.on('error', (e) => { console.error('[whatsapp]', e.message); resolve(null); });
+    req.write(body);
+    req.end();
+  });
+}
 
 // Valida e resolve os adicionais escolhidos para um item, recalculando o preço no servidor
 // (nunca confia no preço enviado pelo cliente). Retorna [{ addon_option_id, name, price, quantity }]
@@ -383,7 +404,12 @@ router.patch('/:id/status', async (req, res) => {
         } else if (status === 'cancelado') {
           msg = `❌ *Pedido #${orderNum} cancelado*\n\nOlá ${firstName}! Infelizmente seu pedido foi cancelado. Entre em contato conosco para mais informações. 😔`;
         }
-        if (msg) whatsapp_link = `https://wa.me/55${customerPhone}?text=${encodeURIComponent(msg)}`;
+        if (msg) {
+          whatsapp_link = `https://wa.me/55${customerPhone}?text=${encodeURIComponent(msg)}`;
+          sendWhatsApp(customerPhone, msg).then(code => {
+            console.log(`[whatsapp] status ${code} → ${customerPhone}`);
+          });
+        }
       }
     }
 
