@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import MenuPage from './pages/MenuPage'
 import CartPage from './pages/CartPage'
@@ -6,8 +7,14 @@ import OrderStatusPage from './pages/OrderStatusPage'
 import OrdersPage from './pages/OrdersPage'
 import LoginPage from './pages/LoginPage'
 import BottomNav from './components/BottomNav'
+import { api } from './api'
+import { applyThemeColor } from './theme'
 
 export default function App() {
+  useEffect(() => {
+    api.settings().then((s) => applyThemeColor(s.primary_color)).catch(() => {})
+  }, [])
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">

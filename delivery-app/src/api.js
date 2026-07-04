@@ -29,6 +29,10 @@ export const api = {
   // Menu
   menu: () => request('GET', '/menu'),
 
+  // Bairros e configurações
+  neighborhoods: () => request('GET', '/neighborhoods'),
+  settings: () => request('GET', '/settings'),
+
   // Customers
   getCustomer: (id) => request('GET', `/customers/${id}`),
   createCustomer: (data) => request('POST', '/customers', data),

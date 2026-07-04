@@ -1,28 +1,40 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCart } from '../store/cart'
+import { useCart, itemLineTotal } from '../store/cart'
 import { api } from '../api'
 
 const PAYMENT_METHODS = [
-  { id: 'pix',            label: 'PIX',             icon: '⚡', desc: 'Chave: confrariacafe@pix.com' },
+  { id: 'pix',            label: 'PIX',             icon: '⚡', desc: 'Chave PIX informada na confirmação' },
   { id: 'dinheiro',       label: 'Dinheiro',         icon: '💵', desc: 'Pague na entrega / retirada' },
   { id: 'cartao_credito', label: 'Cartão de Crédito',icon: '💳', desc: 'Maquininha na entrega' },
   { id: 'cartao_debito',  label: 'Cartão de Débito', icon: '🏦', desc: 'Maquininha na entrega' },
 ]
 
-const BAIRROS = {
-  'CENTRAL':     [{ n:'Santa Rita',taxa:7},{ n:'Central',taxa:6},{ n:'Trem',taxa:7},{ n:'Jesus de Nazaré',taxa:8},{ n:'Perpétuo Socorro',taxa:8}],
-  'OESTE':       [{ n:'Alvorada',taxa:10},{ n:'Nova Esperança',taxa:9},{ n:'Cabralzinho',taxa:15},{ n:'Irmãos Platon',taxa:17},{ n:'Goiabal',taxa:17},{ n:'Marabaixo 1 e 2',taxa:17},{ n:'Parque Novo Mundo',taxa:20},{ n:'Parque das Nações',taxa:20},{ n:'Resd. Jardim América',taxa:22},{ n:'Resd. Jardim Europa',taxa:22},{ n:'Resd. Cidade Jardim',taxa:22},{ n:'Resd. Amazonas',taxa:24}],
-  'ZONA SUL':    [{ n:'Buritizal',taxa:10},{ n:'Novo Buritizal',taxa:11},{ n:'Muca',taxa:10},{ n:'Beirol',taxa:8},{ n:'Santa Inês',taxa:8},{ n:'Araxá',taxa:9},{ n:'Congós',taxa:12},{ n:'Pedrinhas',taxa:12},{ n:'Jardim Equatorial',taxa:10},{ n:'Jardim Marco Zero',taxa:12},{ n:'Universidade',taxa:16},{ n:'Zerão',taxa:16},{ n:'Cond. Parque Felicitá',taxa:17},{ n:'Cond. Portal do Sol',taxa:19},{ n:'Cond. Manari',taxa:19},{ n:'Cond. Arboretto',taxa:19},{ n:'Cond. Villa Tropical',taxa:19},{ n:'Chefe Clodoaldo',taxa:19},{ n:'Cond. Verana',taxa:20},{ n:'Fazendinha',taxa:23}],
-  'ZONA NORTE':  [{ n:'Cidade Nova',taxa:10},{ n:'Julião Ramos',taxa:7},{ n:'Laguinho',taxa:8},{ n:'Pacoval',taxa:10},{ n:'São Lázaro',taxa:12},{ n:'Pantanal',taxa:14},{ n:'Renascer',taxa:12},{ n:'Vit. do Renascer',taxa:12},{ n:'Infraero 1',taxa:13},{ n:'Infraero 2',taxa:18},{ n:'Sol Nascente',taxa:20},{ n:'Ipê',taxa:20},{ n:'Açaí',taxa:18},{ n:'Boné Azul',taxa:17},{ n:'Novo Horizonte',taxa:19},{ n:'Jardim Felidade',taxa:16},{ n:'Jardim Felidade 2',taxa:18},{ n:'Brasil Novo',taxa:20},{ n:'Cond. Terra Nova',taxa:23},{ n:'Macapaba',taxa:20},{ n:'Morada das Palmeiras',taxa:18},{ n:'Resid. Bella Vista',taxa:23},{ n:'Amazonas',taxa:25},{ n:'Resid. Bouganville',taxa:12}],
+function onlyDigits(v) {
+  return (v || '').replace(/\D/g, '')
 }
 
-function getTaxa(bairro) {
-  for (const lista of Object.values(BAIRROS)) {
-    const found = lista.find(b => b.n === bairro)
-    if (found) return found.taxa
+function buildWhatsAppMessage({ order, items, deliveryType, address, payment, total, deliveryFee, storeName }) {
+  const lines = []
+  lines.push(`🛍️ *Novo pedido${storeName ? ` — ${storeName}` : ''}*`)
+  lines.push(`Pedido #${order.id?.slice(-6).toUpperCase()}`)
+  lines.push('')
+  for (const i of items) {
+    lines.push(`${i.qty}x ${i.product.name} — ${itemLineTotal(i).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`)
+    for (const a of i.addons || []) lines.push(`   + ${a.name}`)
+    if (i.notes) lines.push(`   obs: ${i.notes}`)
   }
-  return 0
+  lines.push('')
+  if (deliveryType === 'retirada') {
+    lines.push('🏪 Retirada no local')
+  } else {
+    lines.push(`🛵 Entrega: ${address.street}, ${address.number || 's/n'} — ${address.neighborhood}`)
+    if (address.complement) lines.push(`   Complemento: ${address.complement}`)
+    lines.push(`   Taxa de entrega: ${deliveryFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`)
+  }
+  lines.push(`💳 Pagamento: ${PAYMENT_METHODS.find((m) => m.id === payment)?.label}`)
+  lines.push(`💰 Total: *${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}*`)
+  return lines.join('\n')
 }
 
 export default function CheckoutPage() {
@@ -43,9 +55,48 @@ export default function CheckoutPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(null)
 
-  const subtotal = items.reduce((s, i) => s + i.product.price * i.qty, 0)
+  const [neighborhoods, setNeighborhoods] = useState([])
+  const [settings, setSettings] = useState({ store_whatsapp_number: '', pix_key: '', store_name: '' })
+
+  useEffect(() => {
+    api.neighborhoods().then(setNeighborhoods).catch(() => setNeighborhoods([]))
+    api.settings().then(setSettings).catch(() => {})
+  }, [])
+
+  const bairrosPorZona = useMemo(() => {
+    const groups = {}
+    for (const n of neighborhoods) {
+      if (!groups[n.zone]) groups[n.zone] = []
+      groups[n.zone].push(n)
+    }
+    return groups
+  }, [neighborhoods])
+
+  function getTaxa(bairroNome) {
+    const found = neighborhoods.find((n) => n.name === bairroNome)
+    return found ? found.delivery_fee : 0
+  }
+
+  const subtotal = items.reduce((s, i) => s + itemLineTotal(i), 0)
   const deliveryFee = deliveryType === 'delivery' ? getTaxa(neighborhood) : 0
   const total = subtotal + deliveryFee
+
+  function sendToWhatsApp(order) {
+    const storeNumber = onlyDigits(settings.store_whatsapp_number)
+    if (!storeNumber) return false
+    const message = buildWhatsAppMessage({
+      order,
+      items,
+      deliveryType,
+      address: { street, number, neighborhood, complement },
+      payment,
+      total,
+      deliveryFee,
+      storeName: settings.store_name,
+    })
+    window.open(`https://wa.me/${storeNumber}?text=${encodeURIComponent(message)}`, '_blank')
+    return true
+  }
 
   async function handleSubmit() {
     setError('')
@@ -69,11 +120,13 @@ export default function CheckoutPage() {
         items: items.map(i => ({
           product_id: i.product.id,
           quantity: i.qty,
-          notes: [...(i.extras || []), i.notes].filter(Boolean).join(', ') || null,
+          notes: i.notes || null,
+          addons: (i.addons || []).map((a) => ({ addon_option_id: a.id, quantity: 1 })),
         })),
       })
       clear()
       setSuccess(order)
+      sendToWhatsApp(order)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -83,6 +136,7 @@ export default function CheckoutPage() {
 
   // Tela de confirmação
   if (success) {
+    const waConfigured = !!onlyDigits(settings.store_whatsapp_number)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
         <div className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-lg text-center">
@@ -109,12 +163,25 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {success.payment_method === 'pix' && (
+          {success.payment_method === 'pix' && settings.pix_key && (
             <div className="bg-violet-50 rounded-2xl p-4 mb-6 text-sm text-violet-700">
               <p className="font-bold mb-1">⚡ Pague o PIX para confirmar</p>
-              <p>Chave PIX: <strong>confrariacafe@pix.com</strong></p>
+              <p>Chave PIX: <strong>{settings.pix_key}</strong></p>
               <p className="mt-1 text-xs text-violet-500">Valor: {parseFloat(success.total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
             </div>
+          )}
+
+          {waConfigured ? (
+            <button
+              onClick={() => sendToWhatsApp(success)}
+              className="w-full bg-emerald-500 text-white rounded-2xl py-3 font-bold mb-3 press active:bg-emerald-600 flex items-center justify-center gap-2"
+            >
+              📲 Reenviar pedido no WhatsApp
+            </button>
+          ) : (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-xl p-3 mb-3">
+              WhatsApp da loja ainda não configurado — peça ao lojista para preencher em Configurações no painel admin.
+            </p>
           )}
 
           <p className="text-xs text-gray-400 mb-5">Entraremos em contato pelo WhatsApp informado para confirmar o pedido.</p>
@@ -196,10 +263,10 @@ export default function CheckoutPage() {
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400 bg-white"
                 >
                   <option value="">— Selecione o bairro —</option>
-                  {Object.entries(BAIRROS).map(([zona, bairros]) => (
+                  {Object.entries(bairrosPorZona).map(([zona, bairros]) => (
                     <optgroup key={zona} label={`── ${zona} ──`}>
                       {bairros.map(b => (
-                        <option key={b.n} value={b.n}>{b.n} — R$ {b.taxa.toFixed(2).replace('.', ',')}</option>
+                        <option key={b.id} value={b.name}>{b.name} — R$ {b.delivery_fee.toFixed(2).replace('.', ',')}</option>
                       ))}
                     </optgroup>
                   ))}
@@ -291,8 +358,13 @@ export default function CheckoutPage() {
           <div className="space-y-1.5 text-sm">
             {items.map(i => (
               <div key={i.key} className="flex justify-between text-gray-600">
-                <span>{i.qty}x {i.product.name}</span>
-                <span>{(i.product.price * i.qty).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span>
+                  {i.qty}x {i.product.name}
+                  {(i.addons || []).length > 0 && (
+                    <span className="block text-xs text-gray-400">{i.addons.map(a => a.name).join(', ')}</span>
+                  )}
+                </span>
+                <span>{itemLineTotal(i).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
             ))}
             <div className="border-t border-gray-100 pt-2 mt-2">

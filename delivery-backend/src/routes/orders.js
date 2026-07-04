@@ -6,6 +6,51 @@ const stripeService = require('../services/stripe');
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
 
+// Valida e resolve os adicionais escolhidos para um item, recalculando o preço no servidor
+// (nunca confia no preço enviado pelo cliente). Retorna [{ addon_option_id, name, price, quantity }]
+async function resolveAddons(productId, addons, client = pool) {
+  if (!addons || !Array.isArray(addons) || addons.length === 0) return [];
+
+  const optionIds = addons.map((a) => a.addon_option_id).filter(Boolean);
+  if (!optionIds.length) return [];
+
+  const placeholders = optionIds.map((_, i) => `$${i + 1}`).join(',');
+  const result = await client.query(
+    `SELECT o.id, o.name, o.price, g.product_id
+     FROM addon_options o
+     JOIN addon_groups g ON g.id = o.group_id
+     WHERE o.id IN (${placeholders}) AND o.active = true`,
+    optionIds
+  );
+
+  const byId = {};
+  for (const row of result.rows) byId[row.id] = row;
+
+  const resolved = [];
+  for (const a of addons) {
+    const option = byId[a.addon_option_id];
+    if (!option) throw { status: 400, message: 'Adicional inválido' };
+    if (option.product_id !== productId) throw { status: 400, message: 'Adicional não pertence a este produto' };
+    resolved.push({
+      addon_option_id: option.id,
+      name: option.name,
+      price: parseFloat(option.price),
+      quantity: a.quantity && a.quantity > 0 ? a.quantity : 1,
+    });
+  }
+  return resolved;
+}
+
+async function insertItemAddons(orderItemId, addons, client = pool) {
+  for (const a of addons || []) {
+    await client.query(
+      `INSERT INTO order_item_addons (order_item_id, addon_option_id, name, price, quantity)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [orderItemId, a.addon_option_id, a.name, a.price, a.quantity]
+    );
+  }
+}
+
 // POST /api/orders/guest — pedido sem autenticação (app cliente)
 router.post('/guest', async (req, res) => {
   const { name, phone, delivery_type, delivery_address,
@@ -31,15 +76,19 @@ router.post('/guest', async (req, res) => {
     const resolvedItems = [];
     for (const item of items) {
       const prod = await pool.query(
-        `SELECT id, name, price, available FROM products WHERE id = $1`,
+        `SELECT id, name, price, promo_price, available FROM products WHERE id = $1`,
         [item.product_id]
       );
       if (!prod.rows[0]) throw { status: 400, message: 'Produto não encontrado' };
       if (!prod.rows[0].available) throw { status: 400, message: `"${prod.rows[0].name}" indisponível` };
-      const unitPrice = parseFloat(prod.rows[0].price);
-      const itemSub = unitPrice * item.quantity;
+      const unitPrice = prod.rows[0].promo_price !== null ? parseFloat(prod.rows[0].promo_price) : parseFloat(prod.rows[0].price);
+
+      const resolvedAddons = await resolveAddons(item.product_id, item.addons);
+      const addonsUnitTotal = resolvedAddons.reduce((s, a) => s + a.price * a.quantity, 0);
+
+      const itemSub = (unitPrice + addonsUnitTotal) * item.quantity;
       subtotal += itemSub;
-      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSub, product_name: prod.rows[0].name });
+      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSub, product_name: prod.rows[0].name, addons: resolvedAddons });
     }
 
     const total = subtotal + parseFloat(delivery_fee);
@@ -55,15 +104,16 @@ router.post('/guest', async (req, res) => {
     const order = orderResult.rows[0];
 
     for (const item of resolvedItems) {
-      await pool.query(
+      const itemResult = await pool.query(
         `INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal, notes)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
         [order.id, item.product_id, item.quantity, item.unit_price, item.subtotal, item.notes || null]
       );
+      await insertItemAddons(itemResult.rows[0].id, item.addons);
     }
 
     await pool.query(
-      `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'aguardando_pagamento',$2)`,
+      `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'aguardando_pagamento',$2) RETURNING id`,
       [order.id, adminId]
     );
 
@@ -138,6 +188,16 @@ router.get('/:id', async (req, res) => {
       [req.params.id]
     );
 
+    const itemAddons = await pool.query(
+      `SELECT a.* FROM order_item_addons a
+       JOIN order_items oi ON oi.id = a.order_item_id
+       WHERE oi.order_id = $1`,
+      [req.params.id]
+    );
+    for (const item of items.rows) {
+      item.addons = itemAddons.rows.filter((a) => a.order_item_id === item.id);
+    }
+
     const history = await pool.query(
       `SELECT h.*, u.name AS user_name
        FROM order_status_history h
@@ -178,17 +238,19 @@ router.post('/', async (req, res) => {
         throw { status: 400, message: 'Cada item precisa de product_id e quantity > 0' };
       }
       const prod = await client.query(
-        `SELECT p.id, p.name, p.price, p.available, c.name AS category_name
+        `SELECT p.id, p.name, p.price, p.promo_price, p.available, c.name AS category_name
          FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = $1`,
         [item.product_id]
       );
       if (!prod.rows[0]) throw { status: 400, message: `Produto ${item.product_id} não encontrado` };
       if (!prod.rows[0].available) throw { status: 400, message: `Produto "${prod.rows[0].name}" indisponível` };
 
-      const unitPrice = parseFloat(prod.rows[0].price);
-      const itemSubtotal = unitPrice * item.quantity;
+      const unitPrice = prod.rows[0].promo_price !== null ? parseFloat(prod.rows[0].promo_price) : parseFloat(prod.rows[0].price);
+      const resolvedAddons = await resolveAddons(item.product_id, item.addons, client);
+      const addonsUnitTotal = resolvedAddons.reduce((s, a) => s + a.price * a.quantity, 0);
+      const itemSubtotal = (unitPrice + addonsUnitTotal) * item.quantity;
       subtotal += itemSubtotal;
-      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSubtotal, product_name: prod.rows[0].name, category_name: prod.rows[0].category_name });
+      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSubtotal, product_name: prod.rows[0].name, category_name: prod.rows[0].category_name, addons: resolvedAddons });
     }
 
     const total = Math.max(0, subtotal + parseFloat(delivery_fee) - parseFloat(discount));
@@ -207,16 +269,17 @@ router.post('/', async (req, res) => {
 
     // Insere itens
     for (const item of resolvedItems) {
-      await client.query(
+      const itemResult = await client.query(
         `INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal, notes)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
         [order.id, item.product_id, item.quantity, item.unit_price, item.subtotal, item.notes || null]
       );
+      await insertItemAddons(itemResult.rows[0].id, item.addons, client);
     }
 
     // Histórico inicial
     await client.query(
-      `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,$2,$3)`,
+      `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,$2,$3) RETURNING id`,
       [order.id, 'aguardando_pagamento', req.user.id]
     );
 
@@ -228,7 +291,7 @@ router.post('/', async (req, res) => {
       try {
         pixData = await stripeService.createPixPayment(order.id, total);
         await pool.query(
-          `UPDATE orders SET stripe_payment_intent_id=$1, stripe_pix_qr_code=$2, stripe_pix_qr_code_url=$3 WHERE id=$4`,
+          `UPDATE orders SET stripe_payment_intent_id=$1, stripe_pix_qr_code=$2, stripe_pix_qr_code_url=$3 WHERE id=$4 RETURNING id`,
           [pixData.paymentIntentId, pixData.qrCode, pixData.qrCodeUrl, order.id]
         );
       } catch (stripeErr) {
@@ -289,7 +352,7 @@ router.patch('/:id/status', async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
 
     await pool.query(
-      `INSERT INTO order_status_history (order_id, status, user_id, notes) VALUES ($1,$2,$3,$4)`,
+      `INSERT INTO order_status_history (order_id, status, user_id, notes) VALUES ($1,$2,$3,$4) RETURNING id`,
       [req.params.id, status, req.user.id, notes || null]
     );
 
@@ -317,7 +380,7 @@ router.post('/webhook/stripe', async (req, res) => {
       );
       if (result.rows[0]) {
         await pool.query(
-          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'pago')`,
+          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'pago') RETURNING id`,
           [result.rows[0].id]
         );
         broadcastOrderUpdate({ event: 'payment_confirmed', order_id: result.rows[0].id });
@@ -327,7 +390,7 @@ router.post('/webhook/stripe', async (req, res) => {
     if (event.type === 'payment_intent.payment_failed') {
       const pi = event.data.object;
       await pool.query(
-        `UPDATE orders SET payment_status='falhou' WHERE stripe_payment_intent_id=$1`,
+        `UPDATE orders SET payment_status='falhou' WHERE stripe_payment_intent_id=$1 RETURNING id`,
         [pi.id]
       );
     }

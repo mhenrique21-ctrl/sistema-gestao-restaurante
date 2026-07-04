@@ -41,6 +41,8 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/neighborhoods', require('./routes/neighborhoods'));
+app.use('/api/settings', require('./routes/settings'));
 
 // Health check
 app.get('/health', (req, res) => {

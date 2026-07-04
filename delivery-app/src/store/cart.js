@@ -1,6 +1,18 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+// Preço unitário do item já somando os adicionais escolhidos
+export function itemUnitPrice(item) {
+  const addonsTotal = (item.addons || []).reduce((s, a) => s + a.price, 0)
+  const base = item.product.promo_price ?? item.product.price
+  return base + addonsTotal
+}
+
+// Total da linha (preço unitário com adicionais × quantidade)
+export function itemLineTotal(item) {
+  return itemUnitPrice(item) * item.qty
+}
+
 export const useCart = create(
   persist(
     (set, get) => ({
@@ -9,14 +21,16 @@ export const useCart = create(
       deliveryType: 'delivery',
       address: null,
 
-      addItem(product, qty = 1, extras = [], notes = '') {
-        const key = `${product.id}-${extras.join(',')}-${notes}`
+      // addons: [{ id, name, price }]
+      addItem(product, qty = 1, addons = [], notes = '') {
+        const addonsKey = addons.map((a) => a.id).sort().join(',')
+        const key = `${product.id}-${addonsKey}-${notes}`
         const items = get().items
         const existing = items.find((i) => i.key === key)
         if (existing) {
           set({ items: items.map((i) => i.key === key ? { ...i, qty: i.qty + qty } : i) })
         } else {
-          set({ items: [...items, { key, product, qty, extras, notes }] })
+          set({ items: [...items, { key, product, qty, addons, notes }] })
         }
       },
 
@@ -39,7 +53,7 @@ export const useCart = create(
       setAddress(a) { set({ address: a }) },
 
       get total() {
-        return get().items.reduce((sum, i) => sum + i.product.price * i.qty, 0)
+        return get().items.reduce((sum, i) => sum + itemLineTotal(i), 0)
       },
 
       get count() {
@@ -49,3 +63,7 @@ export const useCart = create(
     { name: 'confraria-cart', partialize: (s) => ({ items: s.items, customer: s.customer }) }
   )
 )
+
+// Garante que o carrinho salvo seja recarregado logo no início (hidratação automática
+// do persist nem sempre dispara a tempo em carregamentos completos da página)
+useCart.persist.rehydrate()

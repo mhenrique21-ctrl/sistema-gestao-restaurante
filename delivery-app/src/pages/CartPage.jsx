@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { useCart } from '../store/cart'
+import { useCart, itemLineTotal, itemUnitPrice } from '../store/cart'
 
 export default function CartPage() {
   const { items, updateQty, removeItem, clear } = useCart()
   const navigate = useNavigate()
 
-  const subtotal = items.reduce((s, i) => s + i.product.price * i.qty, 0)
+  const subtotal = items.reduce((s, i) => s + itemLineTotal(i), 0)
 
   if (items.length === 0) {
     return (
@@ -45,21 +45,23 @@ export default function CartPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900 text-sm">{item.product.name}</p>
-                  {item.extras.length > 0 && (
-                    <p className="text-xs text-violet-500 mt-0.5">{item.extras.join(' · ')}</p>
+                  {(item.addons || []).length > 0 && (
+                    <p className="text-xs text-violet-500 mt-0.5">
+                      {item.addons.map((a) => a.price > 0 ? `${a.name} (+${a.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : a.name).join(' · ')}
+                    </p>
                   )}
                   {item.notes && (
                     <p className="text-xs text-gray-400 mt-0.5 italic">"{item.notes}"</p>
                   )}
                   <p className="text-violet-600 font-bold text-sm mt-1">
-                    {(item.product.price * item.qty).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {itemLineTotal(item).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </p>
                 </div>
                 <button onClick={() => removeItem(item.key)} className="text-gray-300 text-xl press">🗑</button>
               </div>
               <div className="flex items-center justify-between mt-3">
                 <span className="text-xs text-gray-400">
-                  {item.product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} cada
+                  {itemUnitPrice(item).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} cada
                 </span>
                 <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-2 py-1">
                   <button onClick={() => updateQty(item.key, item.qty - 1)} className="w-7 h-7 flex items-center justify-center text-lg text-gray-600 press">−</button>

@@ -101,6 +101,8 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" onclick="showPage('clientes')">👥 Clientes</button>
     <button class="nav-btn" onclick="showPage('usuarios')">🔐 Usuários</button>
     <button class="nav-btn" onclick="showPage('pedidos')">📋 Pedidos</button>
+    <button class="nav-btn" onclick="showPage('bairros')">📍 Bairros</button>
+    <button class="nav-btn" onclick="showPage('configuracoes')">⚙️ Configurações</button>
     <button class="nav-btn" onclick="showPage('impressoras')">🖨 Impressoras</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
@@ -150,6 +152,41 @@ async function api(method, path, body) {
   return data;
 }
 
+function imagePickerHtml(url = '') {
+  return `
+    <div>
+      <label>Imagem do produto</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <img id="f-image-preview" src="${url}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;background:#0f172a;${url ? '' : 'display:none'}" />
+        <input type="file" accept="image/*" id="f-image-file" onchange="handleImageUpload(this)" style="flex:1" />
+        <span id="f-image-status" style="font-size:.75rem;color:#64748b"></span>
+      </div>
+      <input type="hidden" id="f-image" value="${url}" />
+    </div>`;
+}
+
+async function handleImageUpload(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('f-image-status');
+  statusEl.textContent = 'Enviando...';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    const res = await fetch('/api/menu/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao enviar imagem');
+    document.getElementById('f-image').value = data.url;
+    const preview = document.getElementById('f-image-preview');
+    preview.src = data.url;
+    preview.style.display = '';
+    statusEl.textContent = '✓ Enviada';
+  } catch (err) {
+    statusEl.textContent = '';
+    toast(err.message, true);
+  }
+}
+
 function toast(msg, err = false) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -162,92 +199,31 @@ function logout() {
   location.reload();
 }
 
-// ── Catálogo de Bairros e Taxas de Entrega ────────────────────────
-const BAIRROS = {
-  'CENTRAL': [
-    { nome: 'Santa Rita',       taxa: 7  },
-    { nome: 'Central',          taxa: 6  },
-    { nome: 'Trem',             taxa: 7  },
-    { nome: 'Jesus de Nazaré',  taxa: 8  },
-    { nome: 'Perpétuo Socorro', taxa: 8  },
-  ],
-  'OESTE': [
-    { nome: 'Alvorada',              taxa: 10 },
-    { nome: 'Nova Esperança',        taxa: 9  },
-    { nome: 'Cabralzinho',           taxa: 15 },
-    { nome: 'Irmãos Platon',         taxa: 17 },
-    { nome: 'Goiabal',               taxa: 17 },
-    { nome: 'Marabaixo 1 e 2',       taxa: 17 },
-    { nome: 'Parque Novo Mundo',     taxa: 20 },
-    { nome: 'Parque das Nações',     taxa: 20 },
-    { nome: 'Resd. Jardim América',  taxa: 22 },
-    { nome: 'Resd. Jardim Europa',   taxa: 22 },
-    { nome: 'Resd. Cidade Jardim',   taxa: 22 },
-    { nome: 'Resd. Amazonas',        taxa: 24 },
-  ],
-  'ZONA SUL': [
-    { nome: 'Buritizal',             taxa: 10 },
-    { nome: 'Novo Buritizal',        taxa: 11 },
-    { nome: 'Muca',                  taxa: 10 },
-    { nome: 'Beirol',                taxa: 8  },
-    { nome: 'Santa Inês',            taxa: 8  },
-    { nome: 'Araxá',                 taxa: 9  },
-    { nome: 'Congós',                taxa: 12 },
-    { nome: 'Pedrinhas',             taxa: 12 },
-    { nome: 'Jardim Equatorial',     taxa: 10 },
-    { nome: 'Jardim Marco Zero',     taxa: 12 },
-    { nome: 'Universidade',          taxa: 16 },
-    { nome: 'Zerão',                 taxa: 16 },
-    { nome: 'Cond. Parque Felicitá', taxa: 17 },
-    { nome: 'Cond. Portal do Sol',   taxa: 19 },
-    { nome: 'Cond. Manari',          taxa: 19 },
-    { nome: 'Cond. Arboretto',       taxa: 19 },
-    { nome: 'Cond. Villa Tropical',  taxa: 19 },
-    { nome: 'Chefe Clodoaldo',       taxa: 19 },
-    { nome: 'Cond. Verana',          taxa: 20 },
-    { nome: 'Fazendinha',            taxa: 23 },
-  ],
-  'ZONA NORTE': [
-    { nome: 'Cidade Nova',           taxa: 10 },
-    { nome: 'Julião Ramos',          taxa: 7  },
-    { nome: 'Laguinho',              taxa: 8  },
-    { nome: 'Pacoval',               taxa: 10 },
-    { nome: 'São Lázaro',            taxa: 12 },
-    { nome: 'Pantanal',              taxa: 14 },
-    { nome: 'Renascer',              taxa: 12 },
-    { nome: 'Vit. do Renascer',      taxa: 12 },
-    { nome: 'Infraero 1',            taxa: 13 },
-    { nome: 'Infraero 2',            taxa: 18 },
-    { nome: 'Sol Nascente',          taxa: 20 },
-    { nome: 'Ipê',                   taxa: 20 },
-    { nome: 'Açaí',                  taxa: 18 },
-    { nome: 'Boné Azul',             taxa: 17 },
-    { nome: 'Novo Horizonte',        taxa: 19 },
-    { nome: 'Jardim Felidade',       taxa: 16 },
-    { nome: 'Jardim Felidade 2',     taxa: 18 },
-    { nome: 'Brasil Novo',           taxa: 20 },
-    { nome: 'Cond. Terra Nova',      taxa: 23 },
-    { nome: 'Macapaba',              taxa: 20 },
-    { nome: 'Morada das Palmeiras',  taxa: 18 },
-    { nome: 'Resid. Bella Vista',    taxa: 23 },
-    { nome: 'Amazonas',              taxa: 25 },
-    { nome: 'Resid. Bouganville',    taxa: 12 },
-  ],
-};
+// ── Catálogo de Bairros e Taxas de Entrega (carregado da API) ─────
+let NEIGHBORHOODS = [];
+async function carregarBairrosCache() {
+  try {
+    NEIGHBORHOODS = await api('GET', '/neighborhoods?all=true');
+  } catch (e) {
+    NEIGHBORHOODS = [];
+  }
+}
 
 function getTaxaEntrega(bairro) {
-  for (const zona of Object.values(BAIRROS)) {
-    const found = zona.find(b => b.nome === bairro);
-    if (found) return found.taxa;
-  }
-  return null;
+  const found = NEIGHBORHOODS.find(b => b.name === bairro);
+  return found ? parseFloat(found.delivery_fee) : null;
 }
 
 function bairroSelectOptions(selected) {
-  return Object.entries(BAIRROS).map(([zona, bairros]) => `
+  const zonas = {};
+  for (const b of NEIGHBORHOODS) {
+    if (!b.active) continue;
+    (zonas[b.zone] = zonas[b.zone] || []).push(b);
+  }
+  return Object.entries(zonas).map(([zona, bairros]) => `
     <optgroup label="── ${zona} ──">
-      ${bairros.map(b => `<option value="${b.nome}" ${b.nome === selected ? 'selected' : ''}>
-        ${b.nome} — R$ ${b.taxa.toFixed(2).replace('.',',')}
+      ${bairros.map(b => `<option value="${b.name}" ${b.name === selected ? 'selected' : ''}>
+        ${b.name} — R$ ${parseFloat(b.delivery_fee).toFixed(2).replace('.',',')}
       </option>`).join('')}
     </optgroup>`).join('');
 }
@@ -292,9 +268,9 @@ function showPage(page) {
   currentPage = page;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   event?.target?.classList?.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', impressoras:'Impressoras' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', impressoras:'Impressoras' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, impressoras: pageImpressoras };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, impressoras: pageImpressoras };
   pages[page]?.();
 }
 
@@ -371,7 +347,9 @@ function renderProdutos(filter = '') {
             <td class="price">R$ ${parseFloat(p.price).toFixed(2).replace('.',',')}</td>
             <td><button class="toggle ${p.available ? 'on' : ''}" onclick="toggleDisponivel('${p.id}', ${p.available})" title="${p.available ? 'Disponível' : 'Indisponível'}"></button></td>
             <td style="display:flex;gap:6px">
-              <button class="btn btn-secondary btn-sm" onclick="modalEditarProduto('${p.id}')">✏️</button>
+              <button class="btn btn-secondary btn-sm" onclick="modalEditarProduto('${p.id}')" title="Editar">✏️</button>
+              <button class="btn btn-secondary btn-sm" onclick="modalAdicionaisProduto('${p.id}')" title="Adicionais">🧩</button>
+              <button class="btn btn-danger btn-sm" onclick="excluirProduto('${p.id}')" title="Excluir">🗑️</button>
             </td>
           </tr>`).join('')}
       </table>
@@ -388,12 +366,23 @@ function modalNovoProduto() {
         <div><label>Categoria</label><select id="f-cat">${opts}</select></div>
       </div>
       <div><label>Descrição</label><textarea id="f-desc"></textarea></div>
+      ${imagePickerHtml()}
+      <div class="form-grid cols-2">
+        <div><label>Preço promocional (R$, opcional)</label><input id="f-promo" type="number" step="0.01" /></div>
+        <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
+          <button type="button" class="toggle" id="f-featured-toggle" onclick="this.classList.toggle('on')"></button>
+          <label style="margin:0">Produto em destaque</label>
+        </div>
+      </div>
     </div>`, async () => {
     await api('POST', '/menu/products', {
-      name: document.getElementById('f-name').value,
-      price: parseFloat(document.getElementById('f-price').value),
-      category_id: document.getElementById('f-cat').value,
-      description: document.getElementById('f-desc').value,
+      name: v('f-name'),
+      price: parseFloat(v('f-price')),
+      category_id: v('f-cat'),
+      description: v('f-desc'),
+      image_url: v('f-image') || undefined,
+      promo_price: v('f-promo') ? parseFloat(v('f-promo')) : undefined,
+      featured: document.getElementById('f-featured-toggle').classList.contains('on'),
     });
     toast('Produto criado!'); closeModal(); pageProdutos();
   });
@@ -411,15 +400,136 @@ function modalEditarProduto(id) {
         <div><label>Categoria</label><select id="f-cat">${opts}</select></div>
       </div>
       <div><label>Descrição</label><textarea id="f-desc">${p.description || ''}</textarea></div>
+      ${imagePickerHtml(p.image_url || '')}
+      <div class="form-grid cols-2">
+        <div><label>Preço promocional (R$, opcional)</label><input id="f-promo" type="number" step="0.01" value="${p.promo_price ?? ''}" /></div>
+        <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
+          <button type="button" class="toggle ${p.featured ? 'on' : ''}" id="f-featured-toggle" onclick="this.classList.toggle('on')"></button>
+          <label style="margin:0">Produto em destaque</label>
+        </div>
+      </div>
+      <hr style="border-color:#334155">
+      <div id="addons-section"><p style="color:#64748b;font-size:.8rem">Carregando adicionais...</p></div>
     </div>`, async () => {
     await api('PATCH', '/menu/products/' + id, {
-      name: document.getElementById('f-name').value,
-      price: parseFloat(document.getElementById('f-price').value),
-      category_id: document.getElementById('f-cat').value,
-      description: document.getElementById('f-desc').value,
+      name: v('f-name'),
+      price: parseFloat(v('f-price')),
+      category_id: v('f-cat'),
+      description: v('f-desc'),
+      image_url: v('f-image'),
+      promo_price: v('f-promo') ? parseFloat(v('f-promo')) : null,
+      featured: document.getElementById('f-featured-toggle').classList.contains('on'),
     });
     toast('Produto atualizado!'); closeModal(); pageProdutos();
   });
+  renderAddonsSection(id, () => modalEditarProduto(id));
+}
+
+async function excluirProduto(id) {
+  const p = produtos.find(x => x.id === id);
+  if (!confirm(`Excluir o produto "${p?.name || ''}"? Essa ação não pode ser desfeita.`)) return;
+  try {
+    await api('DELETE', '/menu/products/' + id);
+    toast('Produto excluído!'); pageProdutos();
+  } catch (e) {
+    toast('❌ ' + e.message, true);
+  }
+}
+
+function modalAdicionaisProduto(id) {
+  const p = produtos.find(x => x.id === id);
+  if (!p) return;
+  openModal('Adicionais — ' + p.name, `<div id="addons-section"><p style="color:#64748b;font-size:.8rem">Carregando adicionais...</p></div>`, null);
+  document.getElementById('modal-confirm').style.display = 'none';
+  renderAddonsSection(id, () => modalAdicionaisProduto(id));
+}
+
+// ── Adicionais de um produto ─────────────────────────────────────
+let addonsReopen = null;
+async function renderAddonsSection(productId, reopen) {
+  if (reopen) addonsReopen = reopen;
+  const el = document.getElementById('addons-section');
+  if (!el) return;
+  const groups = await api('GET', `/menu/products/${productId}/addon-groups`);
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <strong style="font-size:.85rem">Adicionais</strong>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="modalNovoGrupoAddon('${productId}')">+ Grupo</button>
+    </div>
+    ${groups.length === 0 ? '<p style="color:#475569;font-size:.8rem">Nenhum grupo de adicionais</p>' : ''}
+    ${groups.map(g => `
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <strong style="font-size:.82rem">${g.name}</strong>
+            <span class="badge ${g.required ? 'badge-red' : 'badge-gray'}" style="margin-left:6px">${g.required ? 'obrigatório' : 'opcional'}</span>
+            <span style="color:#64748b;font-size:.72rem;margin-left:4px">min ${g.min_select} · máx ${g.max_select}</span>
+          </div>
+          <div style="display:flex;gap:4px">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="modalNovaOpcaoAddon('${productId}','${g.id}')">+ Opção</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removerGrupoAddon('${productId}','${g.id}')">✕</button>
+          </div>
+        </div>
+        ${(g.options || []).map(o => `
+          <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.78rem;color:#cbd5e1">
+            <span>${o.name}</span>
+            <span style="display:flex;align-items:center;gap:8px">
+              <span class="price">+R$ ${parseFloat(o.price).toFixed(2).replace('.',',')}</span>
+              <button type="button" class="btn btn-danger btn-sm" onclick="removerOpcaoAddon('${productId}','${o.id}')">✕</button>
+            </span>
+          </div>`).join('') || '<p style="color:#475569;font-size:.75rem;padding-left:4px">Sem opções</p>'}
+      </div>`).join('')}`;
+}
+
+function modalNovoGrupoAddon(productId) {
+  openModal('Novo Grupo de Adicionais', `
+    <div class="form-grid">
+      <div><label>Nome do grupo</label><input id="ag-name" placeholder="Ex: Ponto do açúcar" /></div>
+      <div class="form-grid cols-3">
+        <div><label>Mínimo</label><input id="ag-min" type="number" value="0" /></div>
+        <div><label>Máximo</label><input id="ag-max" type="number" value="1" /></div>
+        <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
+          <button type="button" class="toggle" id="ag-required" onclick="this.classList.toggle('on')"></button>
+          <label style="margin:0">Obrigatório</label>
+        </div>
+      </div>
+    </div>`, async () => {
+    await api('POST', `/menu/products/${productId}/addon-groups`, {
+      name: v('ag-name'),
+      min_select: parseInt(v('ag-min')) || 0,
+      max_select: parseInt(v('ag-max')) || 1,
+      required: document.getElementById('ag-required').classList.contains('on'),
+    });
+    toast('Grupo criado!'); closeModal();
+    (addonsReopen || (() => modalEditarProduto(productId)))();
+  });
+  document.getElementById('modal-confirm').style.display = '';
+}
+
+async function removerGrupoAddon(productId, groupId) {
+  if (!confirm('Remover este grupo e suas opções?')) return;
+  await api('DELETE', '/menu/addon-groups/' + groupId);
+  toast('Grupo removido');
+  renderAddonsSection(productId);
+}
+
+function modalNovaOpcaoAddon(productId, groupId) {
+  openModal('Nova Opção', `
+    <div class="form-grid cols-2">
+      <div><label>Nome</label><input id="ao-name" placeholder="Ex: Bacon extra" /></div>
+      <div><label>Preço adicional (R$)</label><input id="ao-price" type="number" step="0.01" value="0" /></div>
+    </div>`, async () => {
+    await api('POST', `/menu/addon-groups/${groupId}/options`, { name: v('ao-name'), price: parseFloat(v('ao-price')) || 0 });
+    toast('Opção criada!'); closeModal();
+    (addonsReopen || (() => modalEditarProduto(productId)))();
+  });
+  document.getElementById('modal-confirm').style.display = '';
+}
+
+async function removerOpcaoAddon(productId, optionId) {
+  await api('DELETE', '/menu/addon-options/' + optionId);
+  toast('Opção removida');
+  renderAddonsSection(productId);
 }
 
 async function toggleDisponivel(id, current) {
@@ -818,6 +928,145 @@ function salvarImpressoras() {
   alert(`Adicione ao arquivo .env do delivery-backend:\n\nPRINTER_BEBIDAS=${v('p-bebidas')}\nPRINTER_COMIDA_QUENTE=${v('p-comida')}\nPRINTER_MONTAGEM=${v('p-montagem')}`);
 }
 
+// ── Bairros ───────────────────────────────────────────────────────
+async function pageBairros() {
+  await carregarBairrosCache();
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="modalNovoBairro()">+ Novo bairro</button>
+    </div>
+    <div class="card">
+      <h3>Bairros e taxas de entrega (${NEIGHBORHOODS.length})</h3>
+      <table>
+        <tr><th>Zona</th><th>Bairro</th><th>Taxa</th><th>Ativo</th><th>Ações</th></tr>
+        ${NEIGHBORHOODS.map(b => `
+          <tr>
+            <td><span class="badge badge-blue">${b.zone}</span></td>
+            <td style="font-weight:600">${b.name}</td>
+            <td class="price">R$ ${parseFloat(b.delivery_fee).toFixed(2).replace('.',',')}</td>
+            <td><button class="toggle ${b.active ? 'on' : ''}" onclick="toggleBairroAtivo('${b.id}', ${b.active})"></button></td>
+            <td><button class="btn btn-secondary btn-sm" onclick="modalEditarBairro('${b.id}')">✏️</button></td>
+          </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#475569;padding:20px">Nenhum bairro cadastrado</td></tr>'}
+      </table>
+    </div>`;
+}
+
+function bairroForm(b = {}) {
+  return `
+    <div class="form-grid">
+      <div><label>Zona</label><input id="b-zone" value="${b.zone || ''}" placeholder="Ex: CENTRAL" /></div>
+      <div><label>Nome do bairro</label><input id="b-name" value="${b.name || ''}" /></div>
+      <div><label>Taxa de entrega (R$)</label><input id="b-fee" type="number" step="0.01" value="${b.delivery_fee ?? ''}" /></div>
+    </div>`;
+}
+
+function modalNovoBairro() {
+  openModal('Novo Bairro', bairroForm(), async () => {
+    await api('POST', '/neighborhoods', { zone: v('b-zone') || 'GERAL', name: v('b-name'), delivery_fee: parseFloat(v('b-fee')) });
+    toast('Bairro criado!'); closeModal(); pageBairros();
+  });
+}
+
+function modalEditarBairro(id) {
+  const b = NEIGHBORHOODS.find(x => x.id === id);
+  if (!b) return;
+  openModal('Editar Bairro', bairroForm(b), async () => {
+    await api('PATCH', '/neighborhoods/' + id, { zone: v('b-zone') || 'GERAL', name: v('b-name'), delivery_fee: parseFloat(v('b-fee')) });
+    toast('Bairro atualizado!'); closeModal(); pageBairros();
+  });
+}
+
+async function toggleBairroAtivo(id, current) {
+  await api('PATCH', '/neighborhoods/' + id, { active: !current });
+  toast(current ? 'Bairro desativado' : 'Bairro ativado');
+  pageBairros();
+}
+
+// ── Configurações ─────────────────────────────────────────────────
+function cfgImageHtml(idPrefix, label, url, folder, previewStyle) {
+  return `
+    <div>
+      <label>${label}</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <img id="${idPrefix}-preview" src="${url || ''}" style="${previewStyle};object-fit:cover;border-radius:8px;background:#0f172a;${url ? '' : 'display:none'}" />
+        <input type="file" accept="image/*" id="${idPrefix}-file" onchange="handleCfgImageUpload(this,'${idPrefix}','${folder}')" style="flex:1" />
+        <span id="${idPrefix}-status" style="font-size:.75rem;color:#64748b"></span>
+      </div>
+      <input type="hidden" id="${idPrefix}" value="${url || ''}" />
+    </div>`;
+}
+
+async function handleCfgImageUpload(inputEl, idPrefix, folder) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById(`${idPrefix}-status`);
+  statusEl.textContent = 'Enviando...';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    fd.append('folder', folder);
+    const res = await fetch('/api/menu/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao enviar imagem');
+    document.getElementById(idPrefix).value = data.url;
+    const preview = document.getElementById(`${idPrefix}-preview`);
+    preview.src = data.url;
+    preview.style.display = '';
+    statusEl.textContent = '✓ Enviada';
+  } catch (err) {
+    statusEl.textContent = '';
+    toast(err.message, true);
+  }
+}
+
+async function pageConfiguracoes() {
+  const s = await api('GET', '/settings');
+  document.getElementById('content').innerHTML = `
+    <div class="card">
+      <h3>Dados da loja</h3>
+      <div class="form-grid">
+        <div><label>Nome da loja</label><input id="cfg-name" value="${s.store_name || ''}" /></div>
+        <div>
+          <label>WhatsApp da loja (com DDD, só números)</label>
+          <input id="cfg-wa" value="${s.store_whatsapp_number || ''}" placeholder="Ex: 96999990000" />
+          <p style="color:#64748b;font-size:.75rem;margin-top:4px">Para onde os pedidos do app são enviados automaticamente ao serem finalizados.</p>
+        </div>
+        <div><label>Chave PIX</label><input id="cfg-pix" value="${s.pix_key || ''}" placeholder="email, telefone, CPF/CNPJ ou chave aleatória" /></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3>Aparência do app do cliente</h3>
+      <div class="form-grid">
+        ${cfgImageHtml('cfg-logo', 'Logo', s.logo_url, 'logo', 'width:56px;height:56px')}
+        ${cfgImageHtml('cfg-banner', 'Foto de capa (banner)', s.banner_image_url, 'banner', 'width:160px;height:56px')}
+        <div>
+          <label>Cor principal do app</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="color" id="cfg-color" value="${s.primary_color || '#7c3aed'}" style="width:48px;height:38px;padding:2px;background:none" />
+            <input id="cfg-color-hex" value="${s.primary_color || '#7c3aed'}" oninput="document.getElementById('cfg-color').value=this.value" style="flex:1" />
+          </div>
+          <p style="color:#64748b;font-size:.75rem;margin-top:4px">Usada nos botões, destaques e ícones do app do cliente.</p>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" onclick="salvarConfiguracoes()">💾 Salvar configurações</button>
+    </div>`;
+  document.getElementById('cfg-color').addEventListener('input', (e) => document.getElementById('cfg-color-hex').value = e.target.value);
+}
+
+async function salvarConfiguracoes() {
+  await api('PATCH', '/settings', {
+    store_name: v('cfg-name'),
+    store_whatsapp_number: v('cfg-wa').replace(/\D/g, ''),
+    pix_key: v('cfg-pix'),
+    logo_url: v('cfg-logo'),
+    banner_image_url: v('cfg-banner'),
+    primary_color: v('cfg-color'),
+  });
+  toast('Configurações salvas!');
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 function v(id) { return document.getElementById(id)?.value || ''; }
 
@@ -826,7 +1075,7 @@ api('GET', '/auth/me').then(u => {
   document.getElementById('user-info').textContent = `${u.name} · ${u.role}`;
 }).catch(() => {});
 
-showPage('dashboard');
+carregarBairrosCache().then(() => showPage('dashboard'));
 </script>
 </body>
 </html>

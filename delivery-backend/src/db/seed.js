@@ -13,12 +13,14 @@ async function seed() {
       INSERT INTO users (name, email, password_hash, role)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (email) DO NOTHING
+      RETURNING id
     `, ['Administrador', 'admin@confraria.com', passwordHash, 'admin']);
 
     await client.query(`
       INSERT INTO users (name, email, password_hash, role)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (email) DO NOTHING
+      RETURNING id
     `, ['Cozinha', 'cozinha@confraria.com', await bcrypt.hash('cozinha123', 10), 'cozinha']);
 
     // Categorias Confraria
@@ -84,6 +86,7 @@ async function seed() {
         INSERT INTO products (category_id, name, description, price, sort_order)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT DO NOTHING
+        RETURNING id
       `, [categoryIds[p.cat], p.name, p.description, p.price, 0]);
     }
 
@@ -92,7 +95,95 @@ async function seed() {
       INSERT INTO customers (name, phone, email, address_street, address_number, address_neighborhood, address_city)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (phone) DO NOTHING
+      RETURNING id
     `, ['João Silva', '11999990001', 'joao@email.com', 'Rua das Flores', '123', 'Centro', 'São Paulo']);
+
+    // Bairros e taxas de entrega
+    const neighborhoods = [
+      ['CENTRAL', 'Santa Rita', 7], ['CENTRAL', 'Central', 6], ['CENTRAL', 'Trem', 7],
+      ['CENTRAL', 'Jesus de Nazaré', 8], ['CENTRAL', 'Perpétuo Socorro', 8],
+      ['OESTE', 'Alvorada', 10], ['OESTE', 'Nova Esperança', 9], ['OESTE', 'Cabralzinho', 15],
+      ['OESTE', 'Irmãos Platon', 17], ['OESTE', 'Goiabal', 17], ['OESTE', 'Marabaixo 1 e 2', 17],
+      ['OESTE', 'Parque Novo Mundo', 20], ['OESTE', 'Parque das Nações', 20],
+      ['OESTE', 'Resd. Jardim América', 22], ['OESTE', 'Resd. Jardim Europa', 22],
+      ['OESTE', 'Resd. Cidade Jardim', 22], ['OESTE', 'Resd. Amazonas', 24],
+      ['ZONA SUL', 'Buritizal', 10], ['ZONA SUL', 'Novo Buritizal', 11], ['ZONA SUL', 'Muca', 10],
+      ['ZONA SUL', 'Beirol', 8], ['ZONA SUL', 'Santa Inês', 8], ['ZONA SUL', 'Araxá', 9],
+      ['ZONA SUL', 'Congós', 12], ['ZONA SUL', 'Pedrinhas', 12], ['ZONA SUL', 'Jardim Equatorial', 10],
+      ['ZONA SUL', 'Jardim Marco Zero', 12], ['ZONA SUL', 'Universidade', 16], ['ZONA SUL', 'Zerão', 16],
+      ['ZONA SUL', 'Cond. Parque Felicitá', 17], ['ZONA SUL', 'Cond. Portal do Sol', 19],
+      ['ZONA SUL', 'Cond. Manari', 19], ['ZONA SUL', 'Cond. Arboretto', 19],
+      ['ZONA SUL', 'Cond. Villa Tropical', 19], ['ZONA SUL', 'Chefe Clodoaldo', 19],
+      ['ZONA SUL', 'Cond. Verana', 20], ['ZONA SUL', 'Fazendinha', 23],
+      ['ZONA NORTE', 'Cidade Nova', 10], ['ZONA NORTE', 'Julião Ramos', 7], ['ZONA NORTE', 'Laguinho', 8],
+      ['ZONA NORTE', 'Pacoval', 10], ['ZONA NORTE', 'São Lázaro', 12], ['ZONA NORTE', 'Pantanal', 14],
+      ['ZONA NORTE', 'Renascer', 12], ['ZONA NORTE', 'Vit. do Renascer', 12], ['ZONA NORTE', 'Infraero 1', 13],
+      ['ZONA NORTE', 'Infraero 2', 18], ['ZONA NORTE', 'Sol Nascente', 20], ['ZONA NORTE', 'Ipê', 20],
+      ['ZONA NORTE', 'Açaí', 18], ['ZONA NORTE', 'Boné Azul', 17], ['ZONA NORTE', 'Novo Horizonte', 19],
+      ['ZONA NORTE', 'Jardim Felidade', 16], ['ZONA NORTE', 'Jardim Felidade 2', 18],
+      ['ZONA NORTE', 'Brasil Novo', 20], ['ZONA NORTE', 'Cond. Terra Nova', 23], ['ZONA NORTE', 'Macapaba', 20],
+      ['ZONA NORTE', 'Morada das Palmeiras', 18], ['ZONA NORTE', 'Resid. Bella Vista', 23],
+      ['ZONA NORTE', 'Amazonas', 25], ['ZONA NORTE', 'Resid. Bouganville', 12],
+    ];
+    for (let i = 0; i < neighborhoods.length; i++) {
+      const [zone, name, fee] = neighborhoods[i];
+      await client.query(
+        `INSERT INTO neighborhoods (zone, name, delivery_fee, sort_order) VALUES ($1,$2,$3,$4) ON CONFLICT (name) DO NOTHING RETURNING id`,
+        [zone, name, fee, i + 1]
+      );
+    }
+
+    // Configurações padrão da loja
+    await client.query(`
+      INSERT INTO settings (key, value) VALUES
+        ('store_whatsapp_number', ''),
+        ('pix_key', 'confrariacafe@pix.com'),
+        ('store_name', 'Confraria Café')
+      ON CONFLICT (key) DO NOTHING
+      RETURNING key
+    `);
+
+    // Produtos em destaque e promoção (exemplo)
+    await client.query(`
+      UPDATE products SET featured = true
+      WHERE name IN ('Cappuccino', 'Cheesecake de Frutas', 'Combo Salgados (3un)')
+      RETURNING id
+    `);
+    await client.query(`
+      UPDATE products SET promo_price = 9.90, promo_label = 'OFERTA' WHERE name = 'Cappuccino'
+      RETURNING id
+    `);
+
+    // Adicionais de exemplo (Cappuccino e Coxinha de Frango)
+    async function addonGroup(productName, groupName, { minSelect = 0, maxSelect = 1, required = false, sortOrder = 1 }, options) {
+      const prod = await client.query('SELECT id FROM products WHERE name = $1', [productName]);
+      if (!prod.rows[0]) return;
+      const group = await client.query(
+        `INSERT INTO addon_groups (product_id, name, min_select, max_select, required, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [prod.rows[0].id, groupName, minSelect, maxSelect, required, sortOrder]
+      );
+      for (let i = 0; i < options.length; i++) {
+        const [name, price] = options[i];
+        await client.query(
+          `INSERT INTO addon_options (group_id, name, price, sort_order) VALUES ($1,$2,$3,$4) RETURNING id`,
+          [group.rows[0].id, name, price, i + 1]
+        );
+      }
+    }
+
+    const existingGroups = await client.query('SELECT count(*) FROM addon_groups');
+    if (parseInt(existingGroups.rows[0].count) === 0) {
+      await addonGroup('Cappuccino', 'Ponto do açúcar', { minSelect: 1, maxSelect: 1, required: true, sortOrder: 1 }, [
+        ['Sem açúcar', 0], ['Pouco açúcar', 0], ['Açúcar normal', 0], ['Extra açúcar', 0],
+      ]);
+      await addonGroup('Cappuccino', 'Tipo de leite', { minSelect: 0, maxSelect: 1, required: false, sortOrder: 2 }, [
+        ['Leite integral', 0], ['Leite desnatado', 0], ['Leite vegetal (aveia/amêndoas)', 4],
+      ]);
+      await addonGroup('Coxinha de Frango', 'Adicionais', { minSelect: 0, maxSelect: 3, required: false, sortOrder: 1 }, [
+        ['Catupiry extra', 3], ['Bacon', 4], ['Molho especial', 2],
+      ]);
+    }
 
     console.log('[seed] Seed concluído!');
     console.log('  → Admin: admin@confraria.com / admin123');

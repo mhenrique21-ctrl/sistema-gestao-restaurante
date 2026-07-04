@@ -55,8 +55,53 @@ CREATE TABLE IF NOT EXISTS products (
   price NUMERIC(10,2) NOT NULL CHECK (price >= 0),
   image_url VARCHAR(500),
   available BOOLEAN NOT NULL DEFAULT true,
+  featured BOOLEAN NOT NULL DEFAULT false,
+  promo_price NUMERIC(10,2),
+  promo_label VARCHAR(50),
   sort_order INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Grupos de adicionais/complementos por produto
+CREATE TABLE IF NOT EXISTS addon_groups (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  name VARCHAR(150) NOT NULL,
+  min_select INT NOT NULL DEFAULT 0,
+  max_select INT NOT NULL DEFAULT 1,
+  required BOOLEAN NOT NULL DEFAULT false,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Opções dentro de cada grupo de adicionais
+CREATE TABLE IF NOT EXISTS addon_options (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  group_id UUID NOT NULL REFERENCES addon_groups(id) ON DELETE CASCADE,
+  name VARCHAR(150) NOT NULL,
+  price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  sort_order INT NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Bairros e taxas de entrega
+CREATE TABLE IF NOT EXISTS neighborhoods (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  zone VARCHAR(100) NOT NULL DEFAULT 'GERAL',
+  name VARCHAR(150) NOT NULL,
+  delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT true,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(name)
+);
+
+-- Configurações da loja (chave/valor)
+CREATE TABLE IF NOT EXISTS settings (
+  key VARCHAR(100) PRIMARY KEY,
+  value TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -107,6 +152,17 @@ CREATE TABLE IF NOT EXISTS order_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Adicionais escolhidos em cada item do pedido (snapshot de nome/preço)
+CREATE TABLE IF NOT EXISTS order_item_addons (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  order_item_id UUID NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
+  addon_option_id UUID REFERENCES addon_options(id) ON DELETE SET NULL,
+  name VARCHAR(150) NOT NULL,
+  price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  quantity INT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Histórico de mudanças de status do pedido
 CREATE TABLE IF NOT EXISTS order_status_history (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -124,6 +180,11 @@ CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_available ON products(available) WHERE available = true;
+CREATE INDEX IF NOT EXISTS idx_products_featured ON products(featured) WHERE featured = true;
+CREATE INDEX IF NOT EXISTS idx_addon_groups_product ON addon_groups(product_id);
+CREATE INDEX IF NOT EXISTS idx_addon_options_group ON addon_options(group_id);
+CREATE INDEX IF NOT EXISTS idx_order_item_addons_item ON order_item_addons(order_item_id);
+CREATE INDEX IF NOT EXISTS idx_neighborhoods_active ON neighborhoods(active) WHERE active = true;
 
 -- Trigger: atualiza updated_at automaticamente
 CREATE OR REPLACE FUNCTION update_updated_at()
