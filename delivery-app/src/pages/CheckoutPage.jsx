@@ -41,7 +41,8 @@ export default function CheckoutPage() {
   const navigate = useNavigate()
   const { items, clear } = useCart()
 
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
   const [payment, setPayment] = useState('pix')
   const [deliveryType, setDeliveryType] = useState('delivery')
@@ -100,7 +101,8 @@ export default function CheckoutPage() {
 
   async function handleSubmit() {
     setError('')
-    if (!name.trim()) return setError('Informe seu nome')
+    if (!firstName.trim()) return setError('Informe seu nome')
+    if (!lastName.trim()) return setError('Informe seu sobrenome')
     if (!phone.trim()) return setError('Informe seu WhatsApp')
     if (deliveryType === 'delivery' && !neighborhood) return setError('Selecione o bairro de entrega')
     if (deliveryType === 'delivery' && !street.trim()) return setError('Informe a rua de entrega')
@@ -108,7 +110,7 @@ export default function CheckoutPage() {
     setLoading(true)
     try {
       const order = await api.guestOrder({
-        name: name.trim(),
+        name: `${firstName.trim()} ${lastName.trim()}`,
         phone: phone.replace(/\D/g, ''),
         delivery_type: deliveryType,
         delivery_address: deliveryType === 'delivery'
@@ -212,13 +214,23 @@ export default function CheckoutPage() {
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
           <h3 className="font-semibold text-gray-900 mb-3">👤 Seus dados</h3>
           <div className="space-y-2">
-            <div>
-              <label className="text-xs text-gray-500 font-medium">Nome completo *</label>
-              <input
-                value={name} onChange={e => setName(e.target.value)}
-                placeholder="João Silva"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 font-medium">Nome *</label>
+                <input
+                  value={firstName} onChange={e => setFirstName(e.target.value)}
+                  placeholder="João"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium">Sobrenome *</label>
+                <input
+                  value={lastName} onChange={e => setLastName(e.target.value)}
+                  placeholder="Silva"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                />
+              </div>
             </div>
             <div>
               <label className="text-xs text-gray-500 font-medium">WhatsApp *</label>
