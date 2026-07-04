@@ -746,14 +746,14 @@ function modalEditarUsuario(u) {
     const body = { name: v('eu-name'), role: v('eu-role') };
     const pass = v('eu-pass');
     if (pass) body.password = pass;
-    await api('PATCH', \`/users/\${u.id}\`, body);
+    await api('PATCH', `/users/${u.id}`, body);
     toast('Usuário atualizado!'); closeModal(); pageUsuarios();
   });
 }
 
 async function toggleUsuario(id, active) {
   if (!confirm(active ? 'Desativar este usuário?' : 'Ativar este usuário?')) return;
-  await api('PATCH', \`/users/\${id}\`, { active: !active });
+  await api('PATCH', `/users/${id}`, { active: !active });
   toast(active ? 'Usuário desativado' : 'Usuário ativado'); pageUsuarios();
 }
 
@@ -994,7 +994,7 @@ function modalEditarPagamento(m) {
         <label for="epm-change" style="margin:0">Requer informar troco</label>
       </div>
     </div>`, async () => {
-    await api('PATCH', \`/payment-methods/\${m.id}\`, {
+    await api('PATCH', `/payment-methods/${m.id}`, {
       name: v('epm-name'), description: v('epm-desc'), pix_key: v('epm-pix') || null,
       sort_order: parseInt(v('epm-order')) || 0,
       requires_change: document.getElementById('epm-change').checked
@@ -1004,13 +1004,13 @@ function modalEditarPagamento(m) {
 }
 
 async function togglePagamento(id, active) {
-  await api('PATCH', \`/payment-methods/\${id}\`, { active: !active });
+  await api('PATCH', `/payment-methods/${id}`, { active: !active });
   toast(active ? 'Desativado' : 'Ativado'); pagePagamentos();
 }
 
 async function deletarPagamento(id) {
   if (!confirm('Excluir esta forma de pagamento?')) return;
-  await api('DELETE', \`/payment-methods/\${id}\`);
+  await api('DELETE', `/payment-methods/${id}`);
   toast('Excluído!'); pagePagamentos();
 }
 
