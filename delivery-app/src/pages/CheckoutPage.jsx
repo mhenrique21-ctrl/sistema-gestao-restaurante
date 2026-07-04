@@ -4,7 +4,7 @@ import { useCart, itemLineTotal } from '../store/cart'
 import { api } from '../api'
 
 const PAYMENT_METHODS = [
-  { id: 'pix',            label: 'PIX',             icon: '⚡', desc: 'Chave PIX informada na confirmação' },
+  { id: 'pix',            label: 'PIX',             icon: '⚡', desc: 'Pague via PIX após confirmar' },
   { id: 'dinheiro',       label: 'Dinheiro',         icon: '💵', desc: 'Pague na entrega / retirada' },
   { id: 'cartao_credito', label: 'Cartão de Crédito',icon: '💳', desc: 'Maquininha na entrega' },
   { id: 'cartao_debito',  label: 'Cartão de Débito', icon: '🏦', desc: 'Maquininha na entrega' },
@@ -55,6 +55,32 @@ function buildWhatsAppMessage({ order, items, deliveryType, address, payment, to
   lines.push('_Confraria Café — obrigado pelo pedido! ☕_')
 
   return lines.join('\n')
+}
+
+function PixCopyBox({ pixKey, total }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard.writeText(pixKey).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 3000)
+    })
+  }
+  return (
+    <div className="bg-violet-50 rounded-2xl p-4 mb-6 text-sm text-violet-700">
+      <p className="font-bold mb-2">⚡ Pague via PIX para confirmar</p>
+      {total && <p className="text-violet-600 font-bold text-base mb-3">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>}
+      <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-violet-200 mb-2">
+        <span className="flex-1 font-mono text-sm text-gray-800 break-all">{pixKey}</span>
+        <button
+          onClick={copy}
+          className="flex-shrink-0 bg-violet-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg press active:bg-violet-700"
+        >
+          {copied ? '✅ Copiado!' : '📋 Copiar'}
+        </button>
+      </div>
+      <p className="text-xs text-violet-500">Chave CNPJ — copie e cole no seu banco</p>
+    </div>
+  )
 }
 
 export default function CheckoutPage() {
@@ -254,11 +280,7 @@ export default function CheckoutPage() {
           </div>
 
           {success.payment_method === 'pix' && settings.pix_key && (
-            <div className="bg-violet-50 rounded-2xl p-4 mb-6 text-sm text-violet-700">
-              <p className="font-bold mb-1">⚡ Pague o PIX para confirmar</p>
-              <p>Chave PIX: <strong>{settings.pix_key}</strong></p>
-              <p className="mt-1 text-xs text-violet-500">Valor: {parseFloat(success.total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-            </div>
+            <PixCopyBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
           )}
 
           {waConfigured ? (
@@ -500,6 +522,12 @@ export default function CheckoutPage() {
               </button>
             ))}
           </div>
+
+          {payment === 'pix' && settings.pix_key && (
+            <div className="mt-3">
+              <PixCopyBox pixKey={settings.pix_key} />
+            </div>
+          )}
 
           {payment === 'dinheiro' && (
             <div className="mt-3">
