@@ -122,6 +122,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" onclick="showPage('bairros',this)">📍 Bairros</button>
     <button class="nav-btn" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
     <button class="nav-btn" onclick="showPage('pagamentos',this)">💳 Pagamentos</button>
+    <button class="nav-btn" onclick="showPage('adicionais',this)">➕ Adicionais</button>
     <button class="nav-btn" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
@@ -305,9 +306,9 @@ function showPage(page, btn) {
   currentPage = page;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', impressoras:'Impressoras' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', impressoras:'Impressoras' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, impressoras: pageImpressoras };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, impressoras: pageImpressoras };
   pages[page]?.();
 }
 
@@ -1100,6 +1101,110 @@ async function deletarPagamento(id) {
   if (!confirm('Excluir esta forma de pagamento?')) return;
   await api('DELETE', `/payment-methods/${id}`);
   toast('Excluído!'); pagePagamentos();
+}
+
+// ── Adicionais ────────────────────────────────────────────────────
+let _adicionaisProdutos = [];
+
+async function pageAdicionais() {
+  document.getElementById('content').innerHTML = `<div class="card"><p style="color:var(--muted)">Carregando...</p></div>`;
+  try {
+    const prods = await api('GET', '/menu');
+    _adicionaisProdutos = prods.filter(p => p.addon_groups && p.addon_groups.length > 0 || true);
+    // Busca todos produtos com grupos de adicionais
+    const cats = await api('GET', '/categories');
+    renderAdicionais(prods, cats);
+  } catch(e) { toast('Erro ao carregar adicionais: ' + e.message, true); }
+}
+
+function renderAdicionais(prods, cats) {
+  // Filtra só produtos que têm grupos de adicionais
+  const comAdicionais = prods.filter(p => p.addon_groups && p.addon_groups.length > 0);
+
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <p style="color:var(--muted);font-size:.85rem">${comAdicionais.length} produto(s) com adicionais configurados</p>
+      <button class="btn btn-primary" onclick="modalNovoGrupo()">+ Adicionar grupo a produto</button>
+    </div>
+    ${comAdicionais.length === 0 ? `<div class="card" style="text-align:center;color:var(--muted);padding:40px">Nenhum produto com adicionais. Clique em "+ Adicionar grupo a produto" para começar.</div>` : ''}
+    ${comAdicionais.map(p => `
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <strong style="color:var(--text);font-size:1rem">${p.name}</strong>
+            <span style="color:var(--muted);font-size:.78rem;margin-left:8px">${p.category_name||''}</span>
+          </div>
+          <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border:none" onclick="modalNovoGrupo('${p.id}','${p.name.replace(/'/g,"\\'")}')">+ Novo grupo</button>
+        </div>
+        ${(p.addon_groups||[]).map(g => `
+          <div style="background:var(--hover);border-radius:8px;padding:12px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <strong style="color:var(--text)">${g.name}</strong>
+                <span style="font-size:.75rem;color:var(--muted)">${g.required ? '• Obrigatório' : '• Opcional'} · máx ${g.max_select||'∞'}</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-secondary" onclick="modalNovaOpcao('${g.id}','${g.name.replace(/'/g,"\\'")}')">+ Opção</button>
+                <button class="btn btn-sm btn-danger" onclick="deletarGrupo('${g.id}')">🗑</button>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${(g.addon_options||[]).map(o => `
+                <div style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 10px">
+                  <span style="color:var(--text);font-size:.85rem">${o.name}</span>
+                  <span style="color:#7c3aed;font-size:.8rem;font-weight:700">+R$ ${parseFloat(o.price).toFixed(2).replace('.',',')}</span>
+                  <button onclick="deletarOpcao('${o.id}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:.8rem;padding:0 2px">✕</button>
+                </div>`).join('')}
+              ${(g.addon_options||[]).length === 0 ? `<span style="color:var(--muted);font-size:.8rem">Nenhuma opção ainda</span>` : ''}
+            </div>
+          </div>`).join('')}
+      </div>`).join('')}`;
+}
+
+async function modalNovoGrupo(productId, productName) {
+  const prods = _adicionaisProdutos;
+  const opts = prods.map(p => `<option value="${p.id}" ${p.id===productId?'selected':''}>${p.name}</option>`).join('');
+  openModal('Novo Grupo de Adicionais', `
+    <div style="display:grid;gap:12px">
+      <div><label>Produto</label><select id="f-grupo-prod" style="width:100%;padding:8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px">${opts}</select></div>
+      <div><label>Nome do grupo</label><input id="f-grupo-nome" class="input" placeholder="ex: Adicionais, Molhos, Tamanho" value="" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Mín. seleção</label><input id="f-grupo-min" class="input" type="number" value="0" min="0"/></div>
+        <div><label>Máx. seleção</label><input id="f-grupo-max" class="input" type="number" value="10" min="1"/></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="f-grupo-req" type="checkbox"/> Obrigatório</label>
+    </div>`, async () => {
+    const prodId = document.getElementById('f-grupo-prod').value;
+    const nome = document.getElementById('f-grupo-nome').value.trim();
+    if (!nome) { toast('Informe o nome do grupo', true); throw new Error(); }
+    await api('POST', `/menu/products/${prodId}/addon-groups`, { name: nome, min_select: +document.getElementById('f-grupo-min').value, max_select: +document.getElementById('f-grupo-max').value, required: document.getElementById('f-grupo-req').checked });
+    toast('Grupo criado!'); pageAdicionais();
+  });
+}
+
+async function modalNovaOpcao(groupId, groupName) {
+  openModal(`Nova opção — ${groupName}`, `
+    <div style="display:grid;gap:12px">
+      <div><label>Nome da opção</label><input id="f-op-nome" class="input" placeholder="ex: Queijo Mussarela" /></div>
+      <div><label>Preço adicional (R$)</label><input id="f-op-preco" class="input" type="number" step="0.01" value="0" min="0"/></div>
+    </div>`, async () => {
+    const nome = document.getElementById('f-op-nome').value.trim();
+    if (!nome) { toast('Informe o nome da opção', true); throw new Error(); }
+    await api('POST', `/menu/addon-groups/${groupId}/options`, { name: nome, price: +document.getElementById('f-op-preco').value });
+    toast('Opção adicionada!'); pageAdicionais();
+  });
+}
+
+async function deletarGrupo(id) {
+  if (!confirm('Remover este grupo e todas as suas opções?')) return;
+  await api('DELETE', '/menu/addon-groups/' + id);
+  toast('Grupo removido!'); pageAdicionais();
+}
+
+async function deletarOpcao(id) {
+  if (!confirm('Remover esta opção?')) return;
+  await api('DELETE', '/menu/addon-options/' + id);
+  toast('Opção removida!'); pageAdicionais();
 }
 
 // ── Impressoras ───────────────────────────────────────────────────
