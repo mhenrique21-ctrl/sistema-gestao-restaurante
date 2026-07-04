@@ -98,6 +98,9 @@ export default function CheckoutPage() {
   const [complement, setComplement] = useState('')
   const [notes, setNotes] = useState('')
   const [troco, setTroco] = useState('')
+  const [coupon, setCoupon] = useState('')
+  const [couponApplied, setCouponApplied] = useState(null) // { code, type, value }
+  const [couponError, setCouponError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(null)
@@ -183,7 +186,24 @@ export default function CheckoutPage() {
 
   const subtotal = items.reduce((s, i) => s + itemLineTotal(i), 0)
   const deliveryFee = deliveryType === 'delivery' ? getTaxa(neighborhood) : 0
-  const total = subtotal + deliveryFee
+  const discount = couponApplied
+    ? (couponApplied.type === 'percent' ? subtotal * couponApplied.value / 100 : couponApplied.value)
+    : 0
+  const total = subtotal + deliveryFee - discount
+
+  function applyCoupon() {
+    setCouponError('')
+    const code = coupon.trim().toUpperCase()
+    if (!code) return
+    // Cupons locais — adicione mais aqui ou conecte a uma API futura
+    const COUPONS = {
+      'BEMVINDO10': { type: 'percent', value: 10, label: '10% de desconto' },
+      'FRETE0':     { type: 'fixed',   value: deliveryFee, label: 'Frete grátis' },
+    }
+    const found = COUPONS[code]
+    if (!found) { setCouponError('Cupom inválido ou expirado'); return }
+    setCouponApplied({ code, ...found })
+  }
 
   function sendToWhatsApp(order) {
     const storeNumber = onlyDigits(settings.store_whatsapp_number)
@@ -223,7 +243,8 @@ export default function CheckoutPage() {
           : null,
         payment_method: payment,
         delivery_fee: deliveryFee,
-        notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : ''].filter(Boolean).join(' | ') || null,
+        notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : '', couponApplied ? `Cupom: ${couponApplied.code}` : ''].filter(Boolean).join(' | ') || null,
+        discount: discount > 0 ? discount : undefined,
         items: items.map(i => ({
           product_id: i.product.id,
           quantity: i.qty,
@@ -232,14 +253,17 @@ export default function CheckoutPage() {
         })),
       })
       clear()
-      // Salva endereço se for novo (cliente identificado e endereço novo)
-      if (deliveryType === 'delivery' && foundCustomer && (addingNewAddress || !selectedAddressId)) {
-        const BASE = import.meta.env.VITE_API_URL || ''
-        fetch(`${BASE}/api/delivery/save-address`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ customer_id: foundCustomer.id, street, number, neighborhood, complement }),
-        }).catch(() => {})
+      const BASE = import.meta.env.VITE_API_URL || ''
+      // Primeira compra: salva cliente e endereço automaticamente
+      if (deliveryType === 'delivery') {
+        const customerId = foundCustomer?.id || order.customer_id
+        if (customerId && (addingNewAddress || !selectedAddressId || !foundCustomer)) {
+          fetch(`${BASE}/api/delivery/save-address`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_id: customerId, street, number, neighborhood, complement }),
+          }).catch(() => {})
+        }
       }
       setSuccess(order)
       sendToWhatsApp(order)
@@ -458,7 +482,7 @@ export default function CheckoutPage() {
                     <label className="text-xs text-gray-500 font-medium">Número</label>
                     <input
                       value={number} onChange={e => setNumber(e.target.value)}
-                      placeholder="123"
+                      placeholder="123" inputMode="numeric"
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
                     />
                   </div>
@@ -533,7 +557,7 @@ export default function CheckoutPage() {
             <div className="mt-3">
               <label className="text-xs text-gray-500 font-medium">Troco para quanto? (opcional)</label>
               <input
-                type="number" value={troco} onChange={e => setTroco(e.target.value)}
+                type="number" inputMode="numeric" value={troco} onChange={e => setTroco(e.target.value)}
                 placeholder="Ex: 50"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
               />
@@ -550,6 +574,33 @@ export default function CheckoutPage() {
             rows={2}
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-violet-400 resize-none"
           />
+        </div>
+
+        {/* Cupom de desconto */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+          <h3 className="font-semibold text-gray-900 mb-2">🎟️ Cupom de desconto</h3>
+          {couponApplied ? (
+            <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+              <div>
+                <span className="text-emerald-700 font-bold text-sm">{couponApplied.code}</span>
+                <span className="text-emerald-600 text-xs ml-2">— {couponApplied.label}</span>
+              </div>
+              <button onClick={() => { setCouponApplied(null); setCoupon('') }} className="text-gray-400 text-lg press">✕</button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                value={coupon} onChange={e => { setCoupon(e.target.value.toUpperCase()); setCouponError('') }}
+                onKeyDown={e => e.key === 'Enter' && applyCoupon()}
+                placeholder="Digite o código"
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-400 uppercase"
+              />
+              <button onClick={applyCoupon} className="bg-violet-600 text-white px-4 rounded-xl text-sm font-bold press active:bg-violet-700">
+                Aplicar
+              </button>
+            </div>
+          )}
+          {couponError && <p className="text-red-500 text-xs mt-1">{couponError}</p>}
         </div>
 
         {/* Resumo */}
@@ -576,6 +627,12 @@ export default function CheckoutPage() {
                 <span>Taxa de entrega</span>
                 <span>{deliveryFee === 0 ? 'Grátis' : deliveryFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-emerald-600 font-medium">
+                  <span>🎟️ Desconto ({couponApplied.code})</span>
+                  <span>- {discount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-100 mt-1">
                 <span>Total</span>
                 <span className="text-violet-600 text-base">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
