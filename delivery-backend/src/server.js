@@ -30,8 +30,10 @@ app.use(cors({
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve páginas estáticas (kitchen.html, retaguarda.html)
-app.use(express.static(require('path').join(__dirname, '../public')));
+// Serve páginas estáticas sem cache
+app.use(express.static(require('path').join(__dirname, '../public'), {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-store')
+}));
 
 // Rotas
 app.use('/api/auth', require('./routes/auth'));
