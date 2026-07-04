@@ -1,19 +1,6 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 
-// Cria tabela customer_addresses se não existir (executado uma vez)
-pool.query(`
-  CREATE TABLE IF NOT EXISTS customer_addresses (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    label TEXT,
-    street TEXT NOT NULL,
-    number TEXT,
-    neighborhood TEXT,
-    complement TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  )
-`).catch(err => console.error('[delivery] migration customer_addresses:', err.message));
 
 // GET /api/delivery/lookup?phone=11999999999
 // Busca cliente pelo telefone e retorna seus endereços salvos (sem auth)
