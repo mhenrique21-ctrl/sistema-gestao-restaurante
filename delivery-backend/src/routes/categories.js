@@ -30,6 +30,21 @@ router.post('/', requireRole('admin'), async (req, res) => {
   }
 });
 
+// GET /api/categories/:id/products — todos os produtos (admin)
+router.get('/:id/products', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT p.*, c.name AS category_name FROM products p
+       JOIN categories c ON c.id = p.category_id
+       WHERE p.category_id = $1 ORDER BY p.sort_order, p.name`,
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PATCH /api/categories/:id
 router.patch('/:id', requireRole('admin'), async (req, res) => {
   const fields = ['name', 'description', 'sort_order', 'image_url', 'active'];

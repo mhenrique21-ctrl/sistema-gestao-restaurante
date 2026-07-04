@@ -1109,10 +1109,11 @@ let _adicionaisCatId = null;
 async function pageAdicionais() {
   document.getElementById('content').innerHTML = `<div class="card"><p style="color:var(--muted)">Carregando...</p></div>`;
   try {
-    const [todos, cats] = await Promise.all([api('GET', '/menu'), api('GET', '/categories')]);
+    const cats = await api('GET', '/categories');
     const catAd = cats.find(c => c.name === 'Adicionais');
-    _adicionaisCatId = catAd?.id || null;
-    const prods = todos.filter(p => p.category_name === 'Adicionais');
+    if (!catAd) { document.getElementById('content').innerHTML = `<div class="card" style="text-align:center;color:var(--muted);padding:40px">Categoria "Adicionais" não encontrada.</div>`; return; }
+    _adicionaisCatId = catAd.id;
+    const prods = await api('GET', `/categories/${catAd.id}/products`);
     renderAdicionais(prods);
   } catch(e) { toast('Erro ao carregar adicionais: ' + e.message, true); }
 }
