@@ -103,6 +103,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" onclick="showPage('pedidos')">📋 Pedidos</button>
     <button class="nav-btn" onclick="showPage('bairros')">📍 Bairros</button>
     <button class="nav-btn" onclick="showPage('configuracoes')">⚙️ Configurações</button>
+    <button class="nav-btn" onclick="showPage('pagamentos')">💳 Pagamentos</button>
     <button class="nav-btn" onclick="showPage('impressoras')">🖨 Impressoras</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
@@ -268,9 +269,9 @@ function showPage(page) {
   currentPage = page;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   event?.target?.classList?.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', impressoras:'Impressoras' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', impressoras:'Impressoras' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, impressoras: pageImpressoras };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, impressoras: pageImpressoras };
   pages[page]?.();
 }
 
@@ -915,6 +916,96 @@ async function cancelarPedido(id) {
   if (!confirm('Cancelar este pedido?')) return;
   await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado' });
   toast('Pedido cancelado'); carregarPedidos();
+}
+
+// ── Formas de Pagamento ───────────────────────────────────────────
+async function pagePagamentos() {
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="modalNovoPagamento()">+ Nova forma</button>
+    </div>
+    <div class="card" id="pay-table"><p style="color:#64748b">Carregando...</p></div>`;
+  try {
+    const methods = await api('GET', '/payment-methods');
+    renderPagamentos(methods);
+  } catch(e) {
+    document.getElementById('pay-table').innerHTML = '<p style="color:#ef4444">Erro ao carregar formas de pagamento.</p>';
+  }
+}
+
+function renderPagamentos(methods) {
+  document.getElementById('pay-table').innerHTML = `
+    <h3>Formas de Pagamento</h3>
+    <table>
+      <tr><th>Ordem</th><th>Nome</th><th>Descrição</th><th>Chave PIX</th><th>Troco</th><th>Status</th><th>Ações</th></tr>
+      ${methods.map(m => `
+        <tr>
+          <td style="color:#94a3b8">${m.sort_order}</td>
+          <td style="font-weight:600">${m.name}</td>
+          <td style="color:#64748b">${m.description || '—'}</td>
+          <td style="font-size:.8rem">${m.pix_key || '—'}</td>
+          <td>${m.requires_change ? '<span class="badge badge-blue">Sim</span>' : '—'}</td>
+          <td><span class="badge ${m.active ? 'badge-green' : 'badge-red'}">${m.active ? 'Ativo' : 'Inativo'}</span></td>
+          <td>
+            <button class="btn btn-sm" onclick='modalEditarPagamento(${JSON.stringify(m)})'>✏️ Editar</button>
+            <button class="btn btn-sm btn-danger" onclick="togglePagamento('${m.id}',${m.active})" style="margin-left:4px">${m.active ? 'Desativar' : 'Ativar'}</button>
+            <button class="btn btn-sm btn-danger" onclick="deletarPagamento('${m.id}')" style="margin-left:4px">🗑</button>
+          </td>
+        </tr>`).join('')}
+    </table>`;
+}
+
+function modalNovoPagamento() {
+  openModal('Nova Forma de Pagamento', `
+    <div class="form-grid">
+      <div><label>Nome</label><input id="pm-name" placeholder="Ex: PIX, Dinheiro..." /></div>
+      <div><label>Descrição</label><input id="pm-desc" placeholder="Ex: Pagamento via PIX" /></div>
+      <div><label>Chave PIX <small style="color:#94a3b8">(opcional)</small></label><input id="pm-pix" placeholder="email, CPF ou chave aleatória" /></div>
+      <div><label>Ordem de exibição</label><input id="pm-order" type="number" value="0" /></div>
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="pm-change" style="width:18px;height:18px" />
+        <label for="pm-change" style="margin:0">Requer informar troco</label>
+      </div>
+    </div>`, async () => {
+    await api('POST', '/payment-methods', {
+      name: v('pm-name'), description: v('pm-desc'), pix_key: v('pm-pix') || null,
+      sort_order: parseInt(v('pm-order')) || 0,
+      requires_change: document.getElementById('pm-change').checked
+    });
+    toast('Forma de pagamento criada!'); closeModal(); pagePagamentos();
+  });
+}
+
+function modalEditarPagamento(m) {
+  openModal('Editar Forma de Pagamento', `
+    <div class="form-grid">
+      <div><label>Nome</label><input id="epm-name" value="${m.name}" /></div>
+      <div><label>Descrição</label><input id="epm-desc" value="${m.description || ''}" /></div>
+      <div><label>Chave PIX</label><input id="epm-pix" value="${m.pix_key || ''}" /></div>
+      <div><label>Ordem de exibição</label><input id="epm-order" type="number" value="${m.sort_order}" /></div>
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="epm-change" style="width:18px;height:18px" ${m.requires_change ? 'checked' : ''} />
+        <label for="epm-change" style="margin:0">Requer informar troco</label>
+      </div>
+    </div>`, async () => {
+    await api('PATCH', \`/payment-methods/\${m.id}\`, {
+      name: v('epm-name'), description: v('epm-desc'), pix_key: v('epm-pix') || null,
+      sort_order: parseInt(v('epm-order')) || 0,
+      requires_change: document.getElementById('epm-change').checked
+    });
+    toast('Forma de pagamento atualizada!'); closeModal(); pagePagamentos();
+  });
+}
+
+async function togglePagamento(id, active) {
+  await api('PATCH', \`/payment-methods/\${id}\`, { active: !active });
+  toast(active ? 'Desativado' : 'Ativado'); pagePagamentos();
+}
+
+async function deletarPagamento(id) {
+  if (!confirm('Excluir esta forma de pagamento?')) return;
+  await api('DELETE', \`/payment-methods/\${id}\`);
+  toast('Excluído!'); pagePagamentos();
 }
 
 // ── Impressoras ───────────────────────────────────────────────────
