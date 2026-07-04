@@ -1000,6 +1000,7 @@ async function carregarPedidos() {
     const qs = pedidosFiltro !== 'todos' ? `?status=${pedidosFiltro}&limit=100` : '?limit=100';
     const orders = await api('GET', '/orders' + qs);
     renderPedidos(orders);
+    startOrderTimers();
   } catch(e) { toast('Erro ao carregar pedidos: ' + e.message, true); }
 }
 
@@ -1057,6 +1058,7 @@ function renderPedidos(orders) {
           <span style="font-family:monospace;font-weight:900;font-size:1.15rem;color:var(--text)">#${num}</span>
           <span style="background:${cor};color:#fff;padding:3px 12px;border-radius:999px;font-size:.75rem;font-weight:700;letter-spacing:.03em">${STATUS_LABEL[o.status]||o.status}</span>
           <span style="color:var(--muted);font-size:.8rem">${data} às ${hora}</span>
+          <span id="timer-${o.id}" style="font-size:.78rem;font-weight:700;padding:2px 8px;border-radius:6px;background:#1e3a5f;color:#60a5fa" data-since="${o.created_at}" data-status="${o.status}">⏱ --:--</span>
           <span style="font-size:.85rem;color:var(--text)">${o.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1089,6 +1091,38 @@ function renderPedidos(orders) {
           ${cardsHtml}
         </div>`;
     }).join('');
+}
+
+// ── Cronômetros dos pedidos ────────────────────────────────────────
+const TIMER_STOP_STATUSES = ['entregue', 'cancelado'];
+let _timerInterval = null;
+function startOrderTimers() {
+  if (_timerInterval) clearInterval(_timerInterval);
+  function tick() {
+    document.querySelectorAll('[id^="timer-"]').forEach(el => {
+      const status = el.dataset.status;
+      if (TIMER_STOP_STATUSES.includes(status)) {
+        el.textContent = status === 'entregue' ? '✅ Entregue' : '✕ Cancelado';
+        el.style.background = status === 'entregue' ? '#14532d' : '#450a0a';
+        el.style.color = status === 'entregue' ? '#86efac' : '#fca5a5';
+        return;
+      }
+      const since = new Date(el.dataset.since);
+      const diff = Math.floor((Date.now() - since) / 1000);
+      const h = Math.floor(diff / 3600);
+      const m = Math.floor((diff % 3600) / 60);
+      const s = diff % 60;
+      const txt = h > 0 ? `${h}h ${String(m).padStart(2,'0')}m` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      el.textContent = `⏱ ${txt}`;
+      // Cor por urgência
+      if (diff > 3600) { el.style.background='#450a0a'; el.style.color='#fca5a5'; } // >60min vermelho
+      else if (diff > 1800) { el.style.background='#431407'; el.style.color='#fdba74'; } // >30min laranja
+      else if (diff > 900) { el.style.background='#422006'; el.style.color='#fde68a'; } // >15min amarelo
+      else { el.style.background='#1e3a5f'; el.style.color='#60a5fa'; } // azul normal
+    });
+  }
+  tick();
+  _timerInterval = setInterval(tick, 1000);
 }
 
 async function verPedido(id) {
@@ -1482,13 +1516,88 @@ async function pageConfiguracoes() {
         </div>
       </div>
     </div>
+    <div class="card" style="margin-top:16px">
+      <h3>🕐 Horários de Funcionamento</h3>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Define quando a loja aparece aberta para os clientes no app.</div>
+      <table style="font-size:.84rem">
+        <tr><th>Dia</th><th>Aberto</th><th>Abertura</th><th>Fechamento</th></tr>
+        ${(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']).map((dia, i) => {
+          const key = `hs_${i}`;
+          const h = (s.business_hours || {})[i] || {};
+          return `<tr>
+            <td style="font-weight:600;color:var(--text)">${dia}</td>
+            <td><button type="button" class="toggle ${h.open ? 'on' : ''}" id="${key}_open" onclick="this.classList.toggle('on')"></button></td>
+            <td><input type="time" id="${key}_from" value="${h.from||'08:00'}" style="width:110px" /></td>
+            <td><input type="time" id="${key}_to" value="${h.to||'22:00'}" style="width:110px" /></td>
+          </tr>`;
+        }).join('')}
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>📅 Datas Especiais e Feriados</h3>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Defina horários diferentes ou feche a loja em datas específicas.</div>
+      <div id="special-dates-list">
+        ${((s.special_dates || [])).map((d, i) => `
+          <div id="sd-${i}" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px">
+            <div><label>Data</label><input type="date" id="sd_date_${i}" value="${d.date||''}" /></div>
+            <div><label>Descrição</label><input id="sd_desc_${i}" value="${d.desc||''}" placeholder="Ex: Natal" /></div>
+            <div><label>Abertura</label><input type="time" id="sd_from_${i}" value="${d.from||''}" /></div>
+            <div><label>Fechamento</label><input type="time" id="sd_to_${i}" value="${d.to||''}" /></div>
+            <div><label>Fechado</label><button type="button" class="toggle ${d.closed ? 'on' : ''}" id="sd_closed_${i}" onclick="this.classList.toggle('on')" title="Fechar loja nessa data"></button></div>
+          </div>`).join('')}
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="addSpecialDate()" style="margin-top:8px">+ Adicionar data</button>
+    </div>
+
     <div style="margin-top:16px">
       <button class="btn btn-primary" onclick="salvarConfiguracoes()">💾 Salvar configurações</button>
     </div>`;
   document.getElementById('cfg-color').addEventListener('input', (e) => document.getElementById('cfg-color-hex').value = e.target.value);
 }
 
+let _sdCount = 0;
+function addSpecialDate() {
+  const list = document.getElementById('special-dates-list');
+  const i = 'new_' + (_sdCount++);
+  const div = document.createElement('div');
+  div.id = `sd-${i}`;
+  div.style = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px';
+  div.innerHTML = `
+    <div><label>Data</label><input type="date" id="sd_date_${i}" /></div>
+    <div><label>Descrição</label><input id="sd_desc_${i}" placeholder="Ex: Feriado" /></div>
+    <div><label>Abertura</label><input type="time" id="sd_from_${i}" /></div>
+    <div><label>Fechamento</label><input type="time" id="sd_to_${i}" /></div>
+    <div><label>Fechado</label><button type="button" class="toggle" id="sd_closed_${i}" onclick="this.classList.toggle('on')" title="Fechar loja nessa data"></button></div>`;
+  list.appendChild(div);
+}
+
 async function salvarConfiguracoes() {
+  // Horários de funcionamento
+  const business_hours = {};
+  for (let i = 0; i < 7; i++) {
+    const key = `hs_${i}`;
+    business_hours[i] = {
+      open: document.getElementById(`${key}_open`)?.classList.contains('on') || false,
+      from: document.getElementById(`${key}_from`)?.value || '08:00',
+      to: document.getElementById(`${key}_to`)?.value || '22:00',
+    };
+  }
+  // Datas especiais
+  const special_dates = [];
+  document.querySelectorAll('[id^="sd-"]').forEach(row => {
+    const i = row.id.replace('sd-', '');
+    const date = document.getElementById(`sd_date_${i}`)?.value;
+    if (!date) return;
+    special_dates.push({
+      date,
+      desc: document.getElementById(`sd_desc_${i}`)?.value || '',
+      from: document.getElementById(`sd_from_${i}`)?.value || '',
+      to: document.getElementById(`sd_to_${i}`)?.value || '',
+      closed: document.getElementById(`sd_closed_${i}`)?.classList.contains('on') || false,
+    });
+  });
+
   await api('PATCH', '/settings', {
     store_name: v('cfg-name'),
     store_whatsapp_number: v('cfg-wa').replace(/\D/g, ''),
@@ -1496,6 +1605,8 @@ async function salvarConfiguracoes() {
     logo_url: v('cfg-logo'),
     banner_image_url: v('cfg-banner'),
     primary_color: v('cfg-color'),
+    business_hours,
+    special_dates,
   });
   toast('Configurações salvas!');
 }

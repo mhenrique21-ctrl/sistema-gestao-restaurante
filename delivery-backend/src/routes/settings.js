@@ -3,7 +3,8 @@ const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 // Chaves conhecidas expostas publicamente (nada sensível)
-const PUBLIC_KEYS = ['store_whatsapp_number', 'pix_key', 'store_name', 'banner_image_url', 'logo_url', 'primary_color'];
+const PUBLIC_KEYS = ['store_whatsapp_number', 'pix_key', 'store_name', 'banner_image_url', 'logo_url', 'primary_color', 'business_hours', 'special_dates'];
+const JSON_KEYS = ['business_hours', 'special_dates'];
 
 const PUBLIC_KEYS_PLACEHOLDERS = PUBLIC_KEYS.map((_, i) => `$${i + 1}`).join(',');
 
@@ -15,8 +16,14 @@ router.get('/', async (req, res) => {
       PUBLIC_KEYS
     );
     const settings = {};
-    for (const key of PUBLIC_KEYS) settings[key] = '';
-    for (const row of result.rows) settings[row.key] = row.value || '';
+    for (const key of PUBLIC_KEYS) settings[key] = JSON_KEYS.includes(key) ? null : '';
+    for (const row of result.rows) {
+      if (JSON_KEYS.includes(row.key)) {
+        try { settings[row.key] = row.value ? JSON.parse(row.value) : null; } catch { settings[row.key] = null; }
+      } else {
+        settings[row.key] = row.value || '';
+      }
+    }
     res.json(settings);
   } catch (err) {
     console.error('[settings/GET]', err.message);
@@ -31,11 +38,14 @@ router.patch('/', authMiddleware, requireRole('admin'), async (req, res) => {
 
   try {
     for (const [key, value] of entries) {
+      const stored = JSON_KEYS.includes(key)
+        ? (value == null ? '' : JSON.stringify(value))
+        : (value === null || value === undefined ? '' : String(value));
       await pool.query(
         `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
          RETURNING key`,
-        [key, value === null || value === undefined ? '' : String(value)]
+        [key, stored]
       );
     }
     const result = await pool.query(`SELECT key, value FROM settings WHERE key IN (${PUBLIC_KEYS_PLACEHOLDERS})`, PUBLIC_KEYS);
