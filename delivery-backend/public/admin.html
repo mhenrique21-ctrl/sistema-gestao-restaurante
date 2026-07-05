@@ -1968,7 +1968,7 @@ async function pageConfiguracoes() {
       <h3>🕐 Horários de Funcionamento</h3>
       <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Define quando a loja aparece aberta para os clientes no app.</div>
       <table style="font-size:.84rem">
-        <tr><th>Dia</th><th>Aberto</th><th>Abertura</th><th>Fechamento</th></tr>
+        <tr><th>Dia</th><th>Aberto</th><th>Abertura</th><th>Fechamento</th><th>Banner do dia (URL)</th></tr>
         ${(['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo']).map((dia, i) => {
           const key = `hs_${i}`;
           const h = (s.business_hours || {})[i] || {};
@@ -1977,6 +1977,7 @@ async function pageConfiguracoes() {
             <td><button type="button" class="toggle ${h.open ? 'on' : ''}" id="${key}_open" onclick="this.classList.toggle('on')"></button></td>
             <td><input type="time" id="${key}_from" value="${h.from||'08:00'}" style="width:110px" /></td>
             <td><input type="time" id="${key}_to" value="${h.to||'22:00'}" style="width:110px" /></td>
+            <td><input type="url" id="${key}_banner" value="${h.banner_url||''}" placeholder="https://..." style="width:220px" /></td>
           </tr>`;
         }).join('')}
       </table>
@@ -2029,6 +2030,7 @@ async function salvarConfiguracoes() {
       open: document.getElementById(`${key}_open`)?.classList.contains('on') || false,
       from: document.getElementById(`${key}_from`)?.value || '08:00',
       to: document.getElementById(`${key}_to`)?.value || '22:00',
+      banner_url: document.getElementById(`${key}_banner`)?.value || '',
     };
   }
   // Datas especiais

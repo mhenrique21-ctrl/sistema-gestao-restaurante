@@ -91,8 +91,11 @@ export default function MenuPage() {
     }).catch(console.error).finally(() => setLoading(false))
     api.settings().then((s) => {
       if (s.store_name) setStoreName(s.store_name)
-      if (s.banner_image_url) setBannerUrl(s.banner_image_url)
       if (s.logo_url) setLogoUrl(s.logo_url)
+      // Banner do dia: adminIndex = (jsDay + 6) % 7
+      const adminIdx = (new Date().getDay() + 6) % 7
+      const dayBanner = s.business_hours?.[adminIdx]?.banner_url
+      setBannerUrl(dayBanner || s.banner_image_url || null)
       setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates))
     }).catch(() => {})
   }, [])
