@@ -412,21 +412,23 @@ function tocarSomPedido() {
 
 // ── Banner de novo pedido ─────────────────────────────────────────
 let _bannerTimer = null;
-function mostrarBannerNovoPedido(num) {
+function mostrarBannerNovoPedido(num, waLink) {
   let banner = document.getElementById('novo-pedido-banner');
   if (!banner) {
     banner = document.createElement('div');
     banner.id = 'novo-pedido-banner';
-    banner.style = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#10b981;color:#fff;font-family:system-ui,sans-serif;font-size:1rem;font-weight:700;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer';
-    banner.innerHTML = `<span id="banner-msg">🔔 Novo pedido chegou!</span><button onclick="document.getElementById('novo-pedido-banner').remove()" style="background:rgba(0,0,0,.2);border:none;color:#fff;border-radius:6px;padding:4px 12px;font-size:.85rem;cursor:pointer">✕ Fechar</button>`;
-    banner.onclick = (e) => {
-      if (e.target.tagName === 'BUTTON') return;
-      document.querySelectorAll('.nav-btn').forEach(b => { if (b.textContent.includes('Pedidos')) b.click(); });
-      banner.remove();
-    };
     document.body.appendChild(banner);
   }
-  document.getElementById('banner-msg').textContent = num ? `🔔 Novo pedido #${num} chegou!` : '🔔 Novo pedido chegou!';
+  const waBtn = waLink
+    ? `<a href="${waLink}" target="_blank" style="background:#25D366;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:.85rem;font-weight:700;text-decoration:none;white-space:nowrap">📲 WhatsApp</a>`
+    : '';
+  banner.style = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#10b981;color:#fff;font-family:system-ui,sans-serif;font-size:1rem;font-weight:700;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+  banner.innerHTML = `
+    <span style="flex:1;cursor:pointer" onclick="document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.includes('Pedidos'))b.click()});document.getElementById('novo-pedido-banner').remove()">
+      🔔 ${num ? `Novo pedido #${num} chegou!` : 'Novo pedido chegou!'}
+    </span>
+    ${waBtn}
+    <button onclick="document.getElementById('novo-pedido-banner').remove()" style="background:rgba(0,0,0,.2);border:none;color:#fff;border-radius:6px;padding:5px 12px;font-size:.85rem;cursor:pointer">✕</button>`;
   if (_bannerTimer) clearTimeout(_bannerTimer);
   _bannerTimer = setTimeout(() => banner?.remove(), 30000);
 }
@@ -441,7 +443,7 @@ function mostrarBannerNovoPedido(num) {
     const m = JSON.parse(e.data);
     if (m.type === 'order_update') {
       tocarSomPedido();
-      mostrarBannerNovoPedido(m.order_number || m.order?.order_number);
+      mostrarBannerNovoPedido(m.order?.order_number, m.whatsapp_link);
       // Notificação do navegador
       if (Notification.permission === 'granted') {
         new Notification('🔔 Novo pedido!', { body: 'Um novo pedido chegou na Confraria Café', icon: '/api/logo' });

@@ -138,23 +138,19 @@ router.post('/guest', async (req, res) => {
       [order.id, adminId]
     );
 
-    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length } });
-
-    // Notifica WhatsApp da loja sobre novo pedido
+    // Gera link WhatsApp manual para o admin confirmar o pedido com o cliente
+    let whatsapp_link = null;
     try {
-      const settingsResult = await pool.query(`SELECT value FROM settings WHERE key = 'store_whatsapp_number'`);
-      const storePhone = (settingsResult.rows[0]?.value || '').replace(/\D/g, '');
-      console.log('[whatsapp/new_order] storePhone:', storePhone, 'order:', order.order_number);
-      if (storePhone) {
+      if (phone) {
         const itemsList = resolvedItems.map(i => `• ${i.quantity}x ${i.product_name}`).join('\n');
         const totalFmt = `R$ ${total.toFixed(2).replace('.', ',')}`;
         const tipo = (delivery_type === 'retirada') ? '🏪 Retirada' : '🛵 Entrega';
         const msg = `🔔 *Novo Pedido #${order.order_number}*\n\n👤 ${customer.name}\n📱 ${phone}\n${tipo}\n\n${itemsList}\n\n💰 Total: ${totalFmt}\n💳 Pagamento: ${payment_method}`;
-        sendWhatsApp(storePhone, msg).then(code => console.log('[whatsapp/new_order] status:', code));
+        whatsapp_link = `https://wa.me/55${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;
       }
-    } catch (e) {
-      console.error('[whatsapp/new_order]', e.message);
-    }
+    } catch(e) {}
+
+    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, whatsapp_link });
 
     res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
   } catch (err) {
