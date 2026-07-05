@@ -113,12 +113,12 @@ textarea { resize: vertical; min-height: 70px; }
     <p>Painel Administrativo</p>
   </div>
   <nav>
-    <button class="nav-btn active" onclick="showPage('dashboard',this)">📊 Dashboard</button>
+    <button class="nav-btn" onclick="showPage('dashboard',this)">📊 Dashboard</button>
     <button class="nav-btn" onclick="showPage('produtos',this)">🍽 Produtos</button>
     <button class="nav-btn" onclick="showPage('categorias',this)">📂 Categorias</button>
     <button class="nav-btn" onclick="showPage('clientes',this)">👥 Clientes</button>
     <button class="nav-btn" onclick="showPage('usuarios',this)">🔐 Usuários</button>
-    <button class="nav-btn" onclick="showPage('pedidos',this)">📋 Pedidos</button>
+    <button class="nav-btn active" onclick="showPage('pedidos',this)">📋 Pedidos</button>
     <button class="nav-btn" onclick="showPage('bairros',this)">📍 Bairros</button>
     <button class="nav-btn" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
     <button class="nav-btn" onclick="showPage('pagamentos',this)">💳 Pagamentos</button>
@@ -1697,7 +1697,7 @@ api('GET', '/auth/me').then(u => {
   document.getElementById('user-info').textContent = `${u.name} · ${u.role}`;
 }).catch(() => {});
 
-carregarBairrosCache().then(() => showPage('dashboard'));
+carregarBairrosCache().then(() => showPage('pedidos'));
 </script>
 </body>
 </html>
