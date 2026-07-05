@@ -1211,7 +1211,7 @@ function renderPedidos(orders) {
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
         <button class="btn btn-secondary btn-sm" onclick="imprimirPedido('${o.id}')">🖨 Imprimir</button>
-        ${o.customer_phone ? `<button class="btn btn-sm" style="background:#25D366;color:#fff;border:none" onclick="abrirWACliente('${(o.customer_phone||'').replace(/\D/g,'')}','${(o.customer_name||'').replace(/'/g,'').replace(/"/g,'')}','${o.order_number||o.id.slice(-4)}')">📲 WA</button>` : ''}
+        ${(() => { const ph=(o.customer_phone||'').replace(/\D/g,''); if(!ph) return ''; const msg=encodeURIComponent('Olá '+o.customer_name+'! Pedido #'+(o.order_number||o.id.slice(-4))+' recebido. Confraria Café.'); return `<a class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none;display:inline-flex;align-items:center" href="https://wa.me/55${ph}?text=${msg}" target="_blank">📲 WA</a>`; })()}
         <button class="btn btn-secondary btn-sm" onclick="editarPedido('${o.id}','${(o.customer_phone||'').replace(/'/g,'')}','${o.delivery_type}')">✏️ Editar</button>
         <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="excluirPedido('${o.id}')">🗑 Excluir</button>
         ${o.status === 'aguardando_pagamento' || o.status === 'pago' ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
