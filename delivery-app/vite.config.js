@@ -14,7 +14,7 @@ export default defineConfig({
         name: 'Confraria Delivery',
         short_name: 'Confraria',
         description: 'Peça seu café, bolo ou salgado favorito',
-        theme_color: '#7c3aed',
+        theme_color: '#991b1b',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',

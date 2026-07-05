@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Fundo vermelho com cantos arredondados -->
+  <rect width="512" height="512" rx="100" fill="#991b1b"/>
+
+  <!-- Xícara de café -->
+  <rect x="156" y="190" width="160" height="110" rx="14" fill="#fff" opacity="0.97"/>
+  <path d="M316 220 Q360 220 360 255 Q360 290 316 290" stroke="#fff" stroke-width="18" fill="none" stroke-linecap="round"/>
+  <ellipse cx="236" cy="300" rx="90" ry="16" fill="#fff" opacity="0.97"/>
+  <!-- Café dentro da xícara -->
+  <rect x="168" y="202" width="136" height="86" rx="8" fill="#7f1d1d"/>
+  <!-- Vapor -->
+  <path d="M206 175 Q214 155 206 138" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M236 170 Q244 148 236 130" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M266 175 Q274 155 266 138" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- Moto / scooter abaixo -->
+  <!-- Corpo da moto -->
+  <ellipse cx="160" cy="360" rx="28" ry="28" stroke="#fff" stroke-width="12" fill="none"/>
+  <ellipse cx="352" cy="360" rx="28" ry="28" stroke="#fff" stroke-width="12" fill="none"/>
+  <path d="M188 360 L240 340 L310 340 L324 360" stroke="#fff" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M240 340 L260 310 L310 310 L320 340" stroke="#fff" stroke-width="10" fill="#991b1b" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Guidão -->
+  <path d="M310 315 L340 295 L360 300" stroke="#fff" stroke-width="10" fill="none" stroke-linecap="round"/>
+
+  <!-- Texto DELIVERY -->
+  <text x="256" y="430" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="36" fill="#fff" letter-spacing="3" opacity="0.9">DELIVERY</text>
+</svg>
