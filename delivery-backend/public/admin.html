@@ -393,6 +393,44 @@ function atualizarTaxaEntrega() {
   }
 }
 
+// ── Som de notificação (beep via Web Audio API) ───────────────────
+function tocarSomPedido() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.18, 0.36].forEach(t => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.4, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.15);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.15);
+    });
+  } catch(e) {}
+}
+
+// ── Banner de novo pedido ─────────────────────────────────────────
+let _bannerTimer = null;
+function mostrarBannerNovoPedido(num) {
+  let banner = document.getElementById('novo-pedido-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'novo-pedido-banner';
+    banner.style = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#10b981;color:#fff;font-family:system-ui,sans-serif;font-size:1rem;font-weight:700;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer';
+    banner.innerHTML = `<span id="banner-msg">🔔 Novo pedido chegou!</span><button onclick="document.getElementById('novo-pedido-banner').remove()" style="background:rgba(0,0,0,.2);border:none;color:#fff;border-radius:6px;padding:4px 12px;font-size:.85rem;cursor:pointer">✕ Fechar</button>`;
+    banner.onclick = (e) => {
+      if (e.target.tagName === 'BUTTON') return;
+      document.querySelectorAll('.nav-btn').forEach(b => { if (b.textContent.includes('Pedidos')) b.click(); });
+      banner.remove();
+    };
+    document.body.appendChild(banner);
+  }
+  document.getElementById('banner-msg').textContent = num ? `🔔 Novo pedido #${num} chegou!` : '🔔 Novo pedido chegou!';
+  if (_bannerTimer) clearTimeout(_bannerTimer);
+  _bannerTimer = setTimeout(() => banner?.remove(), 30000);
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────
 ;(function wsConnect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -402,12 +440,22 @@ function atualizarTaxaEntrega() {
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'order_update') {
-      toast('🔔 Novo pedido chegou!');
-      if (currentPage === 'pedidos') showPage('pedidos');
+      tocarSomPedido();
+      mostrarBannerNovoPedido(m.order_number || m.order?.order_number);
+      // Notificação do navegador
+      if (Notification.permission === 'granted') {
+        new Notification('🔔 Novo pedido!', { body: 'Um novo pedido chegou na Confraria Café', icon: '/api/logo' });
+      }
+      if (currentPage === 'pedidos') carregarPedidos();
       if (currentPage === 'dashboard') showPage('dashboard');
     }
   };
 })();
+
+// Pedir permissão para notificações do navegador
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
 
 // ── Router ────────────────────────────────────────────────────────
 let currentPage = 'dashboard';
