@@ -424,9 +424,6 @@ router.patch('/:id/status', async (req, res) => {
         }
         if (msg) {
           whatsapp_link = `https://wa.me/55${customerPhone}?text=${encodeURIComponent(msg)}`;
-          sendWhatsApp(customerPhone, msg).then(code => {
-            console.log(`[whatsapp] status ${code} → ${customerPhone}`);
-          });
         }
       }
     }
