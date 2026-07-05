@@ -1211,7 +1211,7 @@ function renderPedidos(orders) {
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
         <button class="btn btn-secondary btn-sm" onclick="imprimirPedido('${o.id}')">🖨 Imprimir</button>
-        ${o.customer_phone ? `<a class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none" href="https://wa.me/55${(o.customer_phone||'').replace(/\D/g,'')}?text=${encodeURIComponent('Olá ' + (o.customer_name||'') + '! Seu pedido #' + (o.order_number||o.id.slice(-4)) + ' foi recebido pela Confraria Café ☕')}" target="_blank">📲 WA</a>` : ''}
+        ${o.customer_phone ? `<button class="btn btn-sm" style="background:#25D366;color:#fff;border:none" onclick="abrirWACliente('${(o.customer_phone||'').replace(/\D/g,'')}','${(o.customer_name||'').replace(/'/g,'').replace(/"/g,'')}','${o.order_number||o.id.slice(-4)}')">📲 WA</button>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="editarPedido('${o.id}','${(o.customer_phone||'').replace(/'/g,'')}','${o.delivery_type}')">✏️ Editar</button>
         <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="excluirPedido('${o.id}')">🗑 Excluir</button>
         ${o.status === 'aguardando_pagamento' || o.status === 'pago' ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
@@ -1300,6 +1300,11 @@ async function verPedido(id) {
       ${o.notes ? `<div style="background:var(--hover);border-radius:8px;padding:10px;color:var(--text)"><strong>Obs:</strong> ${o.notes}</div>` : ''}
     </div>`, null);
   document.getElementById('modal-confirm').style.display = 'none';
+}
+
+function abrirWACliente(phone, nome, num) {
+  const msg = 'Olá ' + nome + '! Seu pedido #' + num + ' foi recebido pela Confraria Café. Em breve entraremos em contato!';
+  window.open('https://wa.me/55' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
 function copiarEndereco(addr) {
