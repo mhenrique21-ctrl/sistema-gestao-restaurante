@@ -547,19 +547,34 @@ async function pageProdutos() {
   renderProdutos();
 }
 
-let _prodFilter = '', _prodStatus = 'todos';
+let _prodFilter = '', _prodStatus = 'todos', _prodCat = '', _prodPrecoMin = '', _prodPrecoMax = '';
 function renderProdutos(filter, status) {
   if (filter !== undefined) _prodFilter = filter;
   if (status !== undefined) _prodStatus = status;
+  const catEl = document.getElementById('filtro-cat');
+  const precoMinEl = document.getElementById('filtro-preco-min');
+  const precoMaxEl = document.getElementById('filtro-preco-max');
+  if (catEl) _prodCat = catEl.value;
+  if (precoMinEl) _prodPrecoMin = precoMinEl.value;
+  if (precoMaxEl) _prodPrecoMax = precoMaxEl.value;
   let list = produtos;
   if (_prodFilter) list = list.filter(p => p.name.toLowerCase().includes(_prodFilter.toLowerCase()));
   if (_prodStatus === 'ativos') list = list.filter(p => p.available);
   if (_prodStatus === 'inativos') list = list.filter(p => !p.available);
+  if (_prodCat) list = list.filter(p => p.category_id === _prodCat);
+  if (_prodPrecoMin) list = list.filter(p => parseFloat(p.price) >= parseFloat(_prodPrecoMin));
+  if (_prodPrecoMax) list = list.filter(p => parseFloat(p.price) <= parseFloat(_prodPrecoMax));
   const inativos = produtos.filter(p => !p.available).length;
+  const catOptions = [{ id: '', name: 'Todas' }, ...categorias].map(c => `<option value="${c.id}" ${_prodCat===c.id?'selected':''}>${c.name}</option>`).join('');
   document.getElementById('content').innerHTML = `
     <div class="search-bar">
-      <input placeholder="Buscar produto..." value="${_prodFilter}" oninput="renderProdutos(this.value)" />
-      <div style="display:flex;gap:6px">
+      <input placeholder="🔍 Buscar por nome..." value="${_prodFilter}" oninput="renderProdutos(this.value)" style="flex:2;min-width:160px" />
+      <select id="filtro-cat" onchange="renderProdutos()" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--surface);color:var(--text);font-size:.85rem">
+        ${catOptions}
+      </select>
+      <input id="filtro-preco-min" type="number" placeholder="R$ mín" value="${_prodPrecoMin}" oninput="renderProdutos()" style="width:80px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:var(--surface);color:var(--text);font-size:.85rem" />
+      <input id="filtro-preco-max" type="number" placeholder="R$ máx" value="${_prodPrecoMax}" oninput="renderProdutos()" style="width:80px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:var(--surface);color:var(--text);font-size:.85rem" />
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-sm ${_prodStatus==='todos'?'btn-primary':'btn-secondary'}" onclick="renderProdutos(undefined,'todos')">Todos</button>
         <button class="btn btn-sm ${_prodStatus==='ativos'?'btn-primary':'btn-secondary'}" onclick="renderProdutos(undefined,'ativos')">✅ Ativos</button>
         <button class="btn btn-sm ${_prodStatus==='inativos'?'btn-danger':'btn-secondary'}" onclick="renderProdutos(undefined,'inativos')">🚫 Indisponíveis${inativos>0?' ('+inativos+')':''}</button>
