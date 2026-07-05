@@ -341,24 +341,6 @@ export default function CheckoutPage() {
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
           <h3 className="font-semibold text-gray-900 mb-3">👤 Seus dados</h3>
           <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-gray-500 font-medium">Nome *</label>
-                <input
-                  value={firstName} onChange={e => setFirstName(e.target.value)}
-                  placeholder="João"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 font-medium">Sobrenome *</label>
-                <input
-                  value={lastName} onChange={e => setLastName(e.target.value)}
-                  placeholder="Silva"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                />
-              </div>
-            </div>
             <div>
               <label className="text-xs text-gray-500 font-medium">WhatsApp *</label>
               <div className="relative">
@@ -382,6 +364,24 @@ export default function CheckoutPage() {
               {foundCustomer && (
                 <p className="text-xs text-emerald-600 mt-1 font-medium">✅ Cliente encontrado: {foundCustomer.name}</p>
               )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 font-medium">Nome *</label>
+                <input
+                  value={firstName} onChange={e => setFirstName(e.target.value)}
+                  placeholder="João"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium">Sobrenome *</label>
+                <input
+                  value={lastName} onChange={e => setLastName(e.target.value)}
+                  placeholder="Silva"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                />
+              </div>
             </div>
           </div>
         </div>
