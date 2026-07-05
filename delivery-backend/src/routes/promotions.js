@@ -17,11 +17,12 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/promotions/apply?subtotal=XX&delivery_fee=XX — calcula desconto aplicável agora
+// GET /api/promotions/apply?subtotal=XX&delivery_fee=XX&zone=CENTRAL — calcula desconto aplicável agora
 router.get('/apply', async (req, res) => {
   const subtotal = parseFloat(req.query.subtotal || 0);
   const deliveryFee = parseFloat(req.query.delivery_fee || 0);
-  const nowDay = new Date().getDay(); // 0=Dom...6=Sab
+  const zone = (req.query.zone || '').toUpperCase() || null;
+  const nowDay = new Date().getDay();
 
   try {
     const result = await pool.query(`SELECT * FROM promotions WHERE active = true ORDER BY created_at`);
@@ -29,14 +30,10 @@ router.get('/apply', async (req, res) => {
     let discount = 0;
 
     for (const promo of result.rows) {
-      // Verificar dia
-      if (promo.day_of_week && promo.day_of_week.length > 0) {
-        if (!promo.day_of_week.includes(nowDay)) continue;
-      }
-      // Verificar valor mínimo
+      if (promo.day_of_week?.length && !promo.day_of_week.includes(nowDay)) continue;
       if (subtotal < parseFloat(promo.min_order_value)) continue;
+      if (promo.zones?.length && zone && !promo.zones.includes(zone)) continue;
 
-      // Calcular desconto
       let d = 0;
       if (promo.discount_type === 'free_delivery') d = deliveryFee;
       else if (promo.discount_type === 'percent') d = subtotal * (parseFloat(promo.discount_value) / 100);
@@ -45,11 +42,7 @@ router.get('/apply', async (req, res) => {
       if (d > discount) { discount = d; appliedPromo = promo; }
     }
 
-    res.json({
-      applied: !!appliedPromo,
-      promo: appliedPromo,
-      discount: Math.round(discount * 100) / 100,
-    });
+    res.json({ applied: !!appliedPromo, promo: appliedPromo, discount: Math.round(discount * 100) / 100 });
   } catch (err) {
     console.error('[promotions/apply]', err.message);
     res.status(500).json({ error: 'Erro interno' });

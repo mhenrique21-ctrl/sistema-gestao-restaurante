@@ -8,13 +8,20 @@ const { printOrderTicket } = require('../services/printer');
 const https = require('https');
 const http = require('http');
 
-async function applyPromotion(subtotal, deliveryFee) {
+async function applyPromotion(subtotal, deliveryFee, neighborhoodName) {
   const nowDay = new Date().getDay();
+  // Busca zona do bairro se informado
+  let zone = null;
+  if (neighborhoodName) {
+    const nb = await pool.query(`SELECT zone FROM neighborhoods WHERE name = $1 LIMIT 1`, [neighborhoodName]);
+    zone = nb.rows[0]?.zone?.toUpperCase() || null;
+  }
   const result = await pool.query(`SELECT * FROM promotions WHERE active = true ORDER BY created_at`);
   let discount = 0, appliedPromo = null;
   for (const promo of result.rows) {
-    if (promo.day_of_week && promo.day_of_week.length > 0 && !promo.day_of_week.includes(nowDay)) continue;
+    if (promo.day_of_week?.length && !promo.day_of_week.includes(nowDay)) continue;
     if (subtotal < parseFloat(promo.min_order_value)) continue;
+    if (promo.zones?.length && zone && !promo.zones.includes(zone)) continue;
     let d = 0;
     if (promo.discount_type === 'free_delivery') d = deliveryFee;
     else if (promo.discount_type === 'percent') d = subtotal * (parseFloat(promo.discount_value) / 100);
@@ -129,7 +136,8 @@ router.post('/guest', async (req, res) => {
     }
 
     const fee = parseFloat(delivery_fee);
-    const { discount: promoDiscount, promo: appliedPromo } = await applyPromotion(subtotal, fee);
+    const neighborhoodName = delivery_address?.neighborhood || null;
+    const { discount: promoDiscount, promo: appliedPromo } = await applyPromotion(subtotal, fee, neighborhoodName);
     const total = subtotal + fee - promoDiscount;
 
     const orderResult = await pool.query(

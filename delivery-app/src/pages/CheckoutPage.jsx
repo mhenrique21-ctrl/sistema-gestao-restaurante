@@ -166,9 +166,13 @@ export default function CheckoutPage() {
 
   // Verifica promoção aplicável agora (lado cliente, tempo real)
   const nowDay = new Date().getDay()
+  const selectedNeighborhood = neighborhoods.find(n => n.name === neighborhood)
+  const selectedZone = selectedNeighborhood?.zone?.toUpperCase() || null
   const applicablePromo = Array.isArray(activePromo) ? activePromo.find(p => {
-    if (p.day_of_week && p.day_of_week.length && !p.day_of_week.includes(nowDay)) return false
-    return subtotal >= parseFloat(p.min_order_value)
+    if (p.day_of_week?.length && !p.day_of_week.includes(nowDay)) return false
+    if (subtotal < parseFloat(p.min_order_value)) return false
+    if (p.zones?.length && selectedZone && !p.zones.includes(selectedZone)) return false
+    return true
   }) : null
   const promoDiscount = applicablePromo
     ? applicablePromo.discount_type === 'free_delivery' ? deliveryFee
@@ -484,28 +488,33 @@ export default function CheckoutPage() {
           {couponError && <p style={{ color: 'var(--danger)', fontSize: 11, marginTop: 4 }}>{couponError}</p>}
         </Section>
 
-        {/* Banner promoção ativa */}
-        {Array.isArray(activePromo) && activePromo.length > 0 && (() => {
+        {/* Banner promoções disponíveis hoje */}
+        {Array.isArray(activePromo) && (() => {
           const DAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-          return activePromo.map(p => {
-            const dias = p.day_of_week?.length ? p.day_of_week.map(d => DAYS_PT[d]).join(', ') : null
-            const isToday = !p.day_of_week?.length || p.day_of_week.includes(nowDay)
+          const todayPromos = activePromo.filter(p => !p.day_of_week?.length || p.day_of_week.includes(nowDay))
+          if (!todayPromos.length) return null
+          return todayPromos.map(p => {
             const meetsMin = subtotal >= parseFloat(p.min_order_value)
+            const meetsZone = !p.zones?.length || !selectedZone || p.zones.includes(selectedZone)
+            const applied = meetsMin && meetsZone && deliveryType === 'delivery'
+            const zonaLabel = p.zones?.length ? `Zona ${p.zones.join(', ')}` : null
             return (
               <div key={p.id} style={{
                 borderRadius: 14, padding: '12px 14px', marginBottom: 4,
-                background: isToday && meetsMin ? 'rgba(22,163,74,0.1)' : 'rgba(201,162,94,0.07)',
-                border: `1px solid ${isToday && meetsMin ? 'rgba(22,163,74,0.4)' : 'rgba(201,162,94,0.25)'}`,
+                background: applied ? 'rgba(22,163,74,0.1)' : 'rgba(201,162,94,0.07)',
+                border: `1px solid ${applied ? 'rgba(22,163,74,0.4)' : 'rgba(201,162,94,0.25)'}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 20 }}>🎉</span>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 13, fontWeight: 800, color: isToday && meetsMin ? 'var(--green)' : 'var(--gold)', margin: 0 }}>
-                      {p.name} {isToday && meetsMin ? '— APLICADO!' : ''}
+                    <p style={{ fontSize: 13, fontWeight: 800, color: applied ? 'var(--green)' : 'var(--gold)', margin: 0 }}>
+                      {p.name}{applied ? ' — APLICADO!' : ''}
                     </p>
-                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0 }}>
-                      {dias ? `Toda ${dias}` : 'Todos os dias'} · pedidos acima de {brl(parseFloat(p.min_order_value))}
-                      {!meetsMin && isToday ? ` · faltam ${brl(parseFloat(p.min_order_value) - subtotal)}` : ''}
+                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: '2px 0 0' }}>
+                      {parseFloat(p.min_order_value) > 0 ? `Pedidos acima de ${brl(parseFloat(p.min_order_value))}` : 'Qualquer valor'}
+                      {zonaLabel ? ` · ${zonaLabel}` : ''}
+                      {!meetsMin ? ` · faltam ${brl(parseFloat(p.min_order_value) - subtotal)}` : ''}
+                      {!meetsZone && selectedZone ? ` · não disponível para ${selectedZone}` : ''}
                     </p>
                   </div>
                 </div>
