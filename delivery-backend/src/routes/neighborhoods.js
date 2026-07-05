@@ -6,19 +6,14 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 router.get('/', async (req, res) => {
   try {
     const includeInactive = req.query.all === 'true';
-    const [neighborhoodsResult, settingsResult] = await Promise.all([
-      pool.query(
-        includeInactive
-          ? `SELECT * FROM neighborhoods ORDER BY zone, sort_order, name`
-          : `SELECT * FROM neighborhoods WHERE active = true ORDER BY zone, sort_order, name`
-      ),
-      pool.query(`SELECT value FROM settings WHERE key = 'free_delivery'`),
-    ]);
-    const freeDelivery = settingsResult.rows[0]?.value === 'true';
-    res.json(neighborhoodsResult.rows.map((n) => ({
+    const result = await pool.query(
+      includeInactive
+        ? `SELECT * FROM neighborhoods ORDER BY zone, sort_order, name`
+        : `SELECT * FROM neighborhoods WHERE active = true ORDER BY zone, sort_order, name`
+    );
+    res.json(result.rows.map((n) => ({
       ...n,
-      delivery_fee: freeDelivery ? 0 : parseFloat(n.delivery_fee),
-      free_delivery: freeDelivery,
+      delivery_fee: n.free_delivery ? 0 : parseFloat(n.delivery_fee),
     })));
   } catch (err) {
     console.error('[neighborhoods/GET]', err.message);
@@ -46,7 +41,7 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
 
 // PATCH /api/neighborhoods/:id — editar bairro (admin)
 router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
-  const fields = ['zone', 'name', 'delivery_fee', 'active', 'sort_order'];
+  const fields = ['zone', 'name', 'delivery_fee', 'active', 'sort_order', 'free_delivery'];
   const updates = [], values = [];
   let idx = 1;
   for (const f of fields) {
