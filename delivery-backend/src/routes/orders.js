@@ -140,7 +140,7 @@ router.post('/guest', async (req, res) => {
 
     // Auto-confirmar pedido
     try {
-      await pool.query(`UPDATE orders SET status = 'confirmado' WHERE id = $1`, [order.id]);
+      await pool.query(`UPDATE orders SET status = 'confirmado' WHERE id = $1 RETURNING id`, [order.id]);
       await pool.query(
         `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'confirmado',$2) RETURNING id`,
         [order.id, adminId]
