@@ -1302,12 +1302,14 @@ async function verPedido(id) {
 }
 
 async function confirmarEEnviarWA(id) {
+  // Abre janela imediatamente (antes do await) para não ser bloqueada no mobile
+  const win = window.open('', '_blank');
   try {
     const o = await api('GET', '/orders/' + id);
     const num = o.order_number || id.slice(-4);
     const nome = (o.customer_name || '').split(' ')[0];
     const phone = (o.customer_phone || '').replace(/\D/g, '');
-    if (!phone) { toast('Cliente sem telefone', true); return; }
+    if (!phone) { win.close(); toast('Cliente sem telefone', true); return; }
 
     const items = (o.items || []).map(i => {
       const addons = (i.addons||[]).map(a => `   ➕ ${a.name}`).join('\n');
@@ -1331,9 +1333,10 @@ async function confirmarEEnviarWA(id) {
       carregarPedidos();
     }
 
-    // Abre WhatsApp
-    window.open('https://wa.me/55' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+    // Navega a janela já aberta para o WhatsApp
+    win.location.href = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(msg);
   } catch(e) {
+    win.close();
     toast('Erro: ' + e.message, true);
   }
 }
