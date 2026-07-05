@@ -184,19 +184,6 @@ router.post('/guest', async (req, res) => {
       }
     } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
 
-    // Envia notificação para o admin (Mensagens Salvas)
-    try {
-      const itemsList = resolvedItems.map(i => `• ${i.quantity}x ${i.product_name}`).join('\n');
-      const totalFmt = `R$ ${total.toFixed(2).replace('.', ',')}`;
-      const tipo = (delivery_type === 'retirada') ? '🏪 Retirada' : '🛵 Entrega';
-      const msg = `🔔 *Novo Pedido #${order.order_number}*\n\n👤 ${customer.name}\n📱 ${phone}\n${tipo}\n\n${itemsList}\n\n💰 Total: ${totalFmt}\n💳 Pagamento: ${payment_method}`;
-      const settingsResult = await pool.query(`SELECT value FROM settings WHERE key = 'store_whatsapp_number'`);
-      const storePhone = (settingsResult.rows[0]?.value || '').replace(/\D/g, '');
-      if (storePhone) {
-        sendWhatsApp(storePhone, msg).then(code => console.log('[whatsapp/new_order] admin status:', code));
-      }
-    } catch(e) { console.error('[whatsapp/new_order]', e.message); }
-
     broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length } });
 
     res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
