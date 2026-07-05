@@ -1,45 +1,95 @@
 @import "tailwindcss";
 
-* { -webkit-tap-highlight-color: transparent; }
+* { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+:root {
+  --bg:       #0F0F0F;
+  --surface:  #1A1208;
+  --card:     #221810;
+  --border:   #2E2218;
+  --gold:     #C9A25E;
+  --gold-dim: #8B6B35;
+  --cream:    #F8F4ED;
+  --muted:    #7A6548;
+  --danger:   #E05252;
+  --green:    #4CAF80;
+  --radius:   16px;
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f9fafb;
+  background: var(--bg);
+  color: var(--cream);
   overscroll-behavior-y: none;
 }
 
-/* Safe area iOS */
+/* Safe area */
 .safe-top    { padding-top: env(safe-area-inset-top); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 
-/* Smooth scroll for category nav */
-.scroll-snap-x {
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-}
-.scroll-snap-x > * { scroll-snap-align: start; }
-
-/* Hide scrollbar */
+/* Scrollbar hide */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Card press effect */
-.press:active { transform: scale(0.97); }
+/* Scroll snap */
+.scroll-snap-x { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+.scroll-snap-x > * { scroll-snap-align: start; }
 
-/* QR Code pulse */
-@keyframes pulse-border {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(124,58,237,0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(124,58,237,0); }
+/* Press effect */
+.press { transition: transform 0.12s ease, opacity 0.12s ease; }
+.press:active { transform: scale(0.96); opacity: 0.85; }
+
+/* Gold glow btn */
+.btn-gold {
+  background: linear-gradient(135deg, #C9A25E 0%, #A07840 100%);
+  color: #0F0F0F;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.12s;
+  box-shadow: 0 4px 20px rgba(201,162,94,0.3);
 }
-.pix-qr { animation: pulse-border 2s infinite; }
+.btn-gold:active { transform: scale(0.97); opacity: 0.9; }
+.btn-gold:disabled { opacity: 0.4; }
 
-/* Skeleton shimmer */
+/* Shimmer skeleton */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background: linear-gradient(90deg, #1A1208 25%, #2A1E10 50%, #1A1208 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
+  border-radius: 12px;
+}
+
+/* Slide up sheet */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.slide-up { animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.3s ease forwards; }
+
+/* PIX pulse */
+@keyframes pix-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,162,94,0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(201,162,94,0); }
+}
+.pix-qr { animation: pix-pulse 2s infinite; }
+
+/* Gold divider */
+.gold-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+  opacity: 0.4;
 }

@@ -2,13 +2,18 @@ import { useMemo, useState } from 'react'
 import { useCart } from '../store/cart'
 import { useNavigate } from 'react-router-dom'
 
+function money(v) {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 export default function ProductModal({ product, onClose }) {
   const navigate = useNavigate()
   const addItem = useCart((s) => s.addItem)
   const [qty, setQty] = useState(1)
-  const [selected, setSelected] = useState({}) // { [groupId]: optionId[] }
+  const [selected, setSelected] = useState({})
   const [notes, setNotes] = useState('')
   const [added, setAdded] = useState(false)
+  const [imgBroken, setImgBroken] = useState(false)
 
   const groups = product.addon_groups || []
 
@@ -16,15 +21,9 @@ export default function ProductModal({ product, onClose }) {
     setSelected((prev) => {
       const current = prev[group.id] || []
       const isSelected = current.includes(option.id)
-
-      if (group.max_select === 1) {
-        return { ...prev, [group.id]: isSelected ? [] : [option.id] }
-      }
-
-      if (isSelected) {
-        return { ...prev, [group.id]: current.filter((id) => id !== option.id) }
-      }
-      if (current.length >= group.max_select) return prev // limite atingido
+      if (group.max_select === 1) return { ...prev, [group.id]: isSelected ? [] : [option.id] }
+      if (isSelected) return { ...prev, [group.id]: current.filter((id) => id !== option.id) }
+      if (current.length >= group.max_select) return prev
       return { ...prev, [group.id]: [...current, option.id] }
     })
   }
@@ -41,9 +40,7 @@ export default function ProductModal({ product, onClose }) {
     return result
   }, [selected, groups])
 
-  const missingRequired = groups.filter(
-    (g) => g.required && (selected[g.id] || []).length < g.min_select
-  )
+  const missingRequired = groups.filter((g) => g.required && (selected[g.id] || []).length < g.min_select)
   const canAdd = missingRequired.length === 0
 
   function handleAdd() {
@@ -53,140 +50,141 @@ export default function ProductModal({ product, onClose }) {
   }
 
   const unitPrice = (product.promo_price ?? product.price) + selectedAddons.reduce((s, a) => s + a.price, 0)
-  const total = (unitPrice * qty).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const total = (unitPrice * qty)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div
-        className="relative bg-white w-full max-w-md rounded-t-3xl p-6 pb-24 animate-slide-up max-h-[90vh] overflow-y-auto no-scrollbar"
-        onClick={(e) => e.stopPropagation()}
-        style={{ animation: 'slideUp 0.25s ease-out' }}
-      >
+      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.75)' }} />
+      <div className="slide-up relative w-full max-w-md rounded-t-3xl max-h-[92vh] overflow-y-auto no-scrollbar"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        onClick={(e) => e.stopPropagation()}>
+
         {/* Handle */}
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
-
-        <div className="flex justify-between items-start mb-1">
-          <h2 className="text-xl font-bold text-gray-900 pr-8">{product.name}</h2>
-          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
-        </div>
-        <p className="text-gray-500 text-sm mb-1">{product.description}</p>
-        <div className="flex items-center gap-2 mb-4">
-          {product.promo_price != null ? (
-            <>
-              <p className="text-gray-400 text-sm line-through">
-                {product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </p>
-              <p className="text-violet-600 font-bold text-lg">
-                {product.promo_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </p>
-              <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
-                {product.promo_label || 'OFERTA'}
-              </span>
-            </>
-          ) : (
-            <p className="text-violet-600 font-bold text-lg">
-              {product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </p>
-          )}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--border)' }} />
         </div>
 
-        {groups.map((group) => {
-          const current = selected[group.id] || []
-          const isMissing = group.required && current.length < group.min_select
-          return (
-            <div key={group.id} className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <p className="text-sm font-semibold text-gray-700">{group.name}</p>
-                {group.required && (
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isMissing ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                    Obrigatório
-                  </span>
-                )}
-                {group.max_select > 1 && (
-                  <span className="text-[10px] text-gray-400">até {group.max_select}</span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {group.options.map((opt) => {
-                  const isSelected = current.includes(opt.id)
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => toggleOption(group, opt)}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all press ${
-                        isSelected
-                          ? 'bg-violet-600 text-white border-violet-600'
-                          : 'bg-white text-gray-600 border-gray-200'
-                      }`}
-                    >
-                      {opt.name}
-                      {opt.price > 0 && (
-                        <span className={isSelected ? 'text-violet-100' : 'text-gray-400'}>
-                          {' '}+{opt.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-
-        <div className="mb-4">
-          <p className="text-sm font-semibold text-gray-700 mb-2">Observação</p>
-          <input
-            type="text"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Ex: tirar a cereja, caprichoso no leite..."
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-violet-400"
-          />
-        </div>
-
-        {/* Qty + Add */}
-        {added ? (
-          <div className="space-y-3">
-            <p className="text-center text-emerald-600 font-semibold text-sm">✅ Item adicionado ao carrinho!</p>
-            <button
-              onClick={() => { onClose(); navigate('/checkout') }}
-              className="w-full bg-violet-600 text-white rounded-xl py-3 font-bold text-sm press active:bg-violet-700"
-            >
-              🛒 Finalizar Pedido
-            </button>
-            <button
-              onClick={onClose}
-              className="w-full border border-gray-200 text-gray-700 rounded-xl py-3 font-semibold text-sm press active:bg-gray-50"
-            >
-              Continuar Comprando
-            </button>
+        {/* Product image */}
+        {product.image_url && !imgBroken ? (
+          <div className="mx-4 mt-2 rounded-2xl overflow-hidden h-48">
+            <img src={product.image_url} alt={product.name} onError={() => setImgBroken(true)}
+              className="w-full h-full object-cover" />
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-2 py-1">
-              <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="w-8 h-8 flex items-center justify-center text-xl text-gray-600 press">−</button>
-              <span className="w-6 text-center font-bold text-gray-900">{qty}</span>
-              <button onClick={() => setQty((q) => q + 1)} className="w-8 h-8 flex items-center justify-center text-xl text-violet-600 press">+</button>
-            </div>
-            <button
-              onClick={handleAdd}
-              disabled={!canAdd}
-              className="flex-1 bg-violet-600 text-white rounded-xl py-3 font-semibold text-sm flex items-center justify-between px-4 press active:bg-violet-700 disabled:opacity-40"
-            >
-              <span>{canAdd ? 'Adicionar ao carrinho' : 'Escolha as opções obrigatórias'}</span>
-              <span>{total}</span>
-            </button>
-          </div>
+          <div className="mx-4 mt-2 rounded-2xl h-36 flex items-center justify-center text-6xl"
+            style={{ background: 'var(--card)' }}>☕</div>
         )}
-      </div>
 
-      <style>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-      `}</style>
+        <div className="px-5 pt-4 pb-6">
+          {/* Title + price */}
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h2 className="text-xl font-black leading-tight flex-1" style={{ color: 'var(--cream)' }}>{product.name}</h2>
+            <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--card)', color: 'var(--muted)' }}>✕</button>
+          </div>
+
+          {product.description && (
+            <p className="text-sm mb-3" style={{ color: 'var(--muted)' }}>{product.description}</p>
+          )}
+
+          <div className="flex items-center gap-2 mb-5">
+            {product.promo_price != null ? (
+              <>
+                <span className="text-sm line-through" style={{ color: 'var(--muted)' }}>{money(product.price)}</span>
+                <span className="text-xl font-black" style={{ color: 'var(--gold)' }}>{money(product.promo_price)}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: 'rgba(201,162,94,0.15)', color: 'var(--gold)' }}>
+                  {product.promo_label || 'OFERTA'}
+                </span>
+              </>
+            ) : (
+              <span className="text-xl font-black" style={{ color: 'var(--gold)' }}>{money(product.price)}</span>
+            )}
+          </div>
+
+          {/* Addon groups */}
+          {groups.map((group) => {
+            const current = selected[group.id] || []
+            const isMissing = group.required && current.length < group.min_select
+            return (
+              <div key={group.id} className="mb-5">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <p className="text-sm font-bold" style={{ color: 'var(--cream)' }}>{group.name}</p>
+                  {group.required && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: isMissing ? 'rgba(224,82,82,0.15)' : 'rgba(76,175,128,0.15)', color: isMissing ? 'var(--danger)' : 'var(--green)' }}>
+                      {isMissing ? 'Obrigatório' : '✓ Ok'}
+                    </span>
+                  )}
+                  {group.max_select > 1 && (
+                    <span className="text-[10px]" style={{ color: 'var(--muted)' }}>até {group.max_select}</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {group.options.map((opt) => {
+                    const isSel = current.includes(opt.id)
+                    return (
+                      <button key={opt.id} onClick={() => toggleOption(group, opt)}
+                        className="px-3 py-2 rounded-xl text-xs font-semibold press transition-all"
+                        style={{
+                          background: isSel ? 'var(--gold)' : 'var(--card)',
+                          color: isSel ? '#0F0F0F' : 'var(--cream)',
+                          border: `1px solid ${isSel ? 'var(--gold)' : 'var(--border)'}`,
+                        }}>
+                        {opt.name}
+                        {opt.price > 0 && (
+                          <span style={{ color: isSel ? '#3B2418' : 'var(--muted)' }}> +{money(opt.price)}</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Notes */}
+          <div className="mb-5">
+            <p className="text-sm font-bold mb-2" style={{ color: 'var(--cream)' }}>Observação</p>
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
+              placeholder="Ex: sem açúcar, capricha no leite..."
+              className="w-full text-sm px-4 py-3 rounded-xl outline-none"
+              style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--cream)' }} />
+          </div>
+
+          {/* Qty + Add */}
+          {added ? (
+            <div className="space-y-3 fade-in">
+              <p className="text-center text-sm font-semibold" style={{ color: 'var(--green)' }}>✅ Adicionado ao carrinho!</p>
+              <button onClick={() => { onClose(); navigate('/checkout') }} className="btn-gold w-full py-4 text-sm">
+                Finalizar Pedido
+              </button>
+              <button onClick={onClose} className="w-full py-3 rounded-xl text-sm font-semibold press"
+                style={{ background: 'var(--card)', color: 'var(--cream)', border: '1px solid var(--border)' }}>
+                Continuar Comprando
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 px-3 py-2 rounded-xl"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                <button onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  className="w-8 h-8 flex items-center justify-center text-xl font-bold press"
+                  style={{ color: 'var(--muted)' }}>−</button>
+                <span className="w-6 text-center font-black" style={{ color: 'var(--cream)' }}>{qty}</span>
+                <button onClick={() => setQty((q) => q + 1)}
+                  className="w-8 h-8 flex items-center justify-center text-xl font-bold press"
+                  style={{ color: 'var(--gold)' }}>+</button>
+              </div>
+              <button onClick={handleAdd} disabled={!canAdd}
+                className="btn-gold flex-1 py-4 flex items-center justify-between px-4 text-sm">
+                <span>{canAdd ? 'Adicionar' : 'Escolha opções'}</span>
+                <span className="font-black">{money(total)}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

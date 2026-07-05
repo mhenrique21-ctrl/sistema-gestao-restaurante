@@ -5,56 +5,65 @@ import { useCart, itemLineTotal } from '../store/cart'
 import { useNavigate } from 'react-router-dom'
 import hero from '../assets/hero.png'
 
-const EMOJI = { 'Café': '☕', 'Bebidas': '🥤', 'Bolos': '🎂', 'Salgados': '🥐' }
+const CAT_ICONS = {
+  'Café': '☕', 'Cafés': '☕', 'Bebidas': '🥤', 'Bolos': '🎂', 'Bolos e Tortas': '🎂',
+  'Tortas': '🎂', 'Salgados': '🥐', 'Doces': '🍬', 'Tapiocas': '🫓',
+  'Crepiocas': '🥞', 'Croissant': '🥐', 'Cuscuz': '🌽', 'Sanduíches': '🥪',
+}
 
 function money(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function ProductThumb({ product, emoji }) {
+function ProductCard({ product, catName, onClick }) {
   const [broken, setBroken] = useState(false)
-  if (product.image_url && !broken) {
-    return (
-      <img
-        src={product.image_url}
-        alt={product.name}
-        onError={() => setBroken(true)}
-        className="w-16 h-16 rounded-xl object-cover flex-shrink-0 bg-gray-100"
-      />
-    )
-  }
-  return (
-    <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-2xl flex-shrink-0 text-gray-300">
-      {emoji || '🍽'}
-    </div>
-  )
-}
+  const hasImg = product.image_url && !broken
 
-function ProductRow({ product, emoji, onClick }) {
   return (
-    <button onClick={onClick} className="w-full flex items-start gap-3 py-3 text-left press border-b border-gray-100 last:border-0">
+    <button onClick={onClick} className="press w-full text-left flex items-center gap-3 py-4"
+      style={{ borderBottom: '1px solid var(--border)' }}>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          {product.promo_price != null && (
-            <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded">
-              {product.promo_label || 'OFERTA'}
-            </span>
-          )}
-          <p className="font-semibold text-gray-900 text-sm truncate">{product.name}</p>
-        </div>
+        {product.promo_price != null && (
+          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1"
+            style={{ background: 'rgba(201,162,94,0.15)', color: 'var(--gold)' }}>
+            {product.promo_label || 'OFERTA'}
+          </span>
+        )}
+        <p className="font-semibold text-sm leading-snug" style={{ color: 'var(--cream)' }}>
+          {product.name}
+        </p>
         {product.description && (
-          <p className="text-gray-400 text-xs mt-0.5 line-clamp-2">{product.description}</p>
+          <p className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--muted)' }}>
+            {product.description}
+          </p>
         )}
-        {product.promo_price != null ? (
-          <div className="flex items-center gap-1.5 mt-1">
-            <p className="text-gray-400 text-xs line-through">{money(product.price)}</p>
-            <p className="text-violet-600 font-bold text-sm">{money(product.promo_price)}</p>
-          </div>
-        ) : (
-          <p className="text-gray-900 font-bold text-sm mt-1">{money(product.price)}</p>
-        )}
+        <div className="flex items-center gap-2 mt-1.5">
+          {product.promo_price != null ? (
+            <>
+              <span className="text-xs line-through" style={{ color: 'var(--muted)' }}>{money(product.price)}</span>
+              <span className="font-bold text-sm" style={{ color: 'var(--gold)' }}>{money(product.promo_price)}</span>
+            </>
+          ) : (
+            <span className="font-bold text-sm" style={{ color: 'var(--gold)' }}>{money(product.price)}</span>
+          )}
+        </div>
       </div>
-      <ProductThumb product={product} emoji={emoji} />
+      <div className="relative flex-shrink-0">
+        {hasImg ? (
+          <img src={product.image_url} alt={product.name} onError={() => setBroken(true)}
+            className="w-20 h-20 rounded-2xl object-cover"
+            style={{ border: '1px solid var(--border)' }} />
+        ) : (
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl"
+            style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+            {CAT_ICONS[catName] || '🍽'}
+          </div>
+        )}
+        <div className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center text-sm font-black shadow-lg press"
+          style={{ background: 'var(--gold)', color: '#0F0F0F' }}>
+          +
+        </div>
+      </div>
     </button>
   )
 }
@@ -66,7 +75,7 @@ export default function MenuPage() {
   const [logoUrl, setLogoUrl] = useState(null)
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState(null)
-  const [selected, setSelected] = useState(null) // { product, category }
+  const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
   const catRefs = useRef({})
   const count = useCart((s) => s.items.reduce((n, i) => n + i.qty, 0))
@@ -94,138 +103,117 @@ export default function MenuPage() {
     ? menu.map((c) => ({ ...c, products: c.products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) })).filter((c) => c.products.length > 0)
     : menu
 
-  // Ofertas: produtos com preço promocional, exibidos como uma seção fixa no topo
   const offers = menu.flatMap((c) => c.products.map((p) => ({ ...p, categoryName: c.name }))).filter((p) => p.promo_price != null)
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
-      {/* Capa + cartão da loja */}
-      <div className="relative flex-shrink-0">
-        <div className="h-28 w-full overflow-hidden safe-top">
-          <img src={bannerUrl || hero} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-        </div>
-        <div className="relative -mt-6 mx-4 bg-white rounded-2xl shadow-md border border-gray-100 px-4 py-3 flex items-center gap-3">
-          {logoUrl ? (
-            <img src={logoUrl} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0 bg-gray-100" />
-          ) : (
-            <div className="w-11 h-11 rounded-full bg-violet-600 text-white flex items-center justify-center text-xl flex-shrink-0">☕</div>
-          )}
-          <div className="min-w-0">
-            <h1 className="font-bold text-gray-900 text-base truncate">{storeName}</h1>
-            <p className="text-emerald-600 text-xs font-medium">● Aberto para pedidos</p>
+    <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--bg)' }}>
+
+      {/* Header */}
+      <div className="flex-shrink-0 safe-top" style={{ background: 'var(--surface)' }}>
+        <div className="px-4 pt-4 pb-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-medium" style={{ color: 'var(--muted)' }}>Bem-vindo ao</p>
+            <h1 className="text-lg font-black tracking-tight" style={{ color: 'var(--cream)' }}>{storeName}</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: 'rgba(76,175,128,0.15)', color: 'var(--green)' }}>
+              ● Aberto
+            </span>
+            {logoUrl && (
+              <img src={logoUrl} alt="" className="w-9 h-9 rounded-full object-cover" style={{ border: '1.5px solid var(--gold-dim)' }} />
+            )}
           </div>
         </div>
-      </div>
 
-      <div className="px-4 pt-3">
-        <div className="relative">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar no cardápio..."
-            className="w-full bg-gray-100 placeholder-gray-400 text-gray-900 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-gray-50 focus:ring-2 focus:ring-violet-200"
-          />
-          <span className="absolute right-3 top-2.5 text-gray-400">🔍</span>
+        {/* Banner */}
+        <div className="mx-4 mb-3 rounded-2xl overflow-hidden relative h-32">
+          <img src={bannerUrl || hero} alt="" className="w-full h-full object-cover" />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(15,10,5,0.7) 0%, transparent 60%)' }} />
+          <div className="absolute bottom-3 left-4">
+            <p className="text-xs font-semibold" style={{ color: 'var(--gold)' }}>Cardápio completo</p>
+            <p className="text-sm font-black" style={{ color: 'var(--cream)' }}>Peça agora 🛵</p>
+          </div>
         </div>
-      </div>
 
-      {/* Category nav */}
-      {!search && (
-        <div className="bg-white px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
-          {offers.length > 0 && (
-            <button
-              onClick={() => scrollTo('ofertas')}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all press ${
-                active === 'ofertas' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              🔥 Ofertas
-            </button>
-          )}
-          {menu.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => scrollTo(cat.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all press ${
-                active === cat.id ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              <span>{EMOJI[cat.name] || '🍽'}</span>
-              {cat.name}
-            </button>
-          ))}
+        {/* Search */}
+        <div className="px-4 pb-3">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar no cardápio..."
+              className="flex-1 bg-transparent text-sm outline-none"
+              style={{ color: 'var(--cream)' }} />
+          </div>
         </div>
-      )}
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
-        {loading ? (
-          <div className="p-4 space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="skeleton h-20 rounded-xl" />
+        {/* Category pills */}
+        {!search && (
+          <div className="flex gap-2 px-4 pb-3 overflow-x-auto no-scrollbar">
+            {offers.length > 0 && (
+              <button onClick={() => scrollTo('ofertas')}
+                className="flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold press transition-all"
+                style={{ background: active === 'ofertas' ? 'var(--gold)' : 'var(--card)', color: active === 'ofertas' ? '#0F0F0F' : 'var(--muted)', border: '1px solid var(--border)' }}>
+                🔥 Ofertas
+              </button>
+            )}
+            {menu.map((cat) => (
+              <button key={cat.id} onClick={() => scrollTo(cat.id)}
+                className="flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-bold press transition-all"
+                style={{ background: active === cat.id ? 'var(--gold)' : 'var(--card)', color: active === cat.id ? '#0F0F0F' : 'var(--muted)', border: '1px solid var(--border)' }}>
+                {CAT_ICONS[cat.name] || '🍽'} {cat.name}
+              </button>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-28">
+        {loading ? (
+          <div className="px-4 pt-4 space-y-4">
+            {[1,2,3,4,5].map((i) => <div key={i} className="skeleton h-24" />)}
           </div>
         ) : (
           <>
-            {/* Ofertas */}
             {!search && offers.length > 0 && (
-              <div ref={(el) => (catRefs.current['ofertas'] = el)} className="px-4 pt-3">
-                <h2 className="text-base font-bold text-gray-900 mb-1">Ofertas</h2>
-                <div>
-                  {offers.map((product) => (
-                    <ProductRow
-                      key={product.id}
-                      product={product}
-                      emoji={EMOJI[product.categoryName]}
-                      onClick={() => setSelected({ product, category: product.categoryName })}
-                    />
-                  ))}
-                </div>
+              <div ref={(el) => (catRefs.current['ofertas'] = el)} className="px-4 pt-4">
+                <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--gold)' }}>🔥 Ofertas</p>
+                {offers.map((p) => (
+                  <ProductCard key={p.id} product={p} catName={p.categoryName} onClick={() => setSelected({ product: p, category: p.categoryName })} />
+                ))}
               </div>
             )}
-
-            {/* Categories */}
             {filtered.map((cat) => (
-              <div key={cat.id} ref={(el) => (catRefs.current[cat.id] = el)} className="px-4 pt-3">
-                <h2 className="text-base font-bold text-gray-900 mb-1">{cat.name}</h2>
-                <div>
-                  {cat.products.map((product) => (
-                    <ProductRow
-                      key={product.id}
-                      product={product}
-                      emoji={EMOJI[cat.name]}
-                      onClick={() => setSelected({ product, category: cat.name })}
-                    />
-                  ))}
-                </div>
+              <div key={cat.id} ref={(el) => (catRefs.current[cat.id] = el)} className="px-4 pt-4">
+                <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--gold)' }}>
+                  {CAT_ICONS[cat.name] || '🍽'} {cat.name}
+                </p>
+                {cat.products.map((p) => (
+                  <ProductCard key={p.id} product={p} catName={cat.name} onClick={() => setSelected({ product: p, category: cat.name })} />
+                ))}
               </div>
             ))}
           </>
         )}
       </div>
 
-      {/* Floating cart button */}
+      {/* Floating cart */}
       {count > 0 && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-30">
-          <button
-            onClick={() => navigate('/cart')}
-            className="w-full bg-violet-600 text-white rounded-2xl p-4 flex items-center justify-between shadow-xl press active:bg-violet-700"
-          >
-            <span className="bg-violet-500 rounded-xl px-2 py-0.5 text-sm font-bold">{count}</span>
-            <span className="font-bold">Ver carrinho</span>
+          <button onClick={() => navigate('/cart')}
+            className="btn-gold w-full py-4 flex items-center justify-between px-5 text-sm">
+            <span className="w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs"
+              style={{ background: 'rgba(0,0,0,0.2)' }}>{count}</span>
+            <span className="font-black">Ver carrinho</span>
             <span className="font-bold">{money(total)}</span>
           </button>
         </div>
       )}
 
       {selected && (
-        <ProductModal
-          product={selected.product}
-          category={selected.category}
-          onClose={() => setSelected(null)}
-        />
+        <ProductModal product={selected.product} category={selected.category} onClose={() => setSelected(null)} />
       )}
     </div>
   )

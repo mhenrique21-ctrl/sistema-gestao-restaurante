@@ -8,16 +8,15 @@ import OrdersPage from './pages/OrdersPage'
 import LoginPage from './pages/LoginPage'
 import BottomNav from './components/BottomNav'
 import { api } from './api'
-import { applyThemeColor } from './theme'
 
 export default function App() {
   useEffect(() => {
-    api.settings().then((s) => applyThemeColor(s.primary_color)).catch(() => {})
+    api.settings().catch(() => {})
   }, [])
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">
+      <div className="min-h-screen flex flex-col max-w-md mx-auto relative" style={{ background: 'var(--bg)' }}>
         <Routes>
           <Route path="/" element={<MenuPage />} />
           <Route path="/cart" element={<CartPage />} />
