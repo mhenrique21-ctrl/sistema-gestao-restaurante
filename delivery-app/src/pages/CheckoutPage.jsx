@@ -307,22 +307,7 @@ export default function CheckoutPage() {
             <PixCopyBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
           )}
 
-          {waConfigured ? (
-            <button
-              onClick={() => sendToWhatsApp(success)}
-              className="w-full bg-emerald-500 text-white rounded-2xl py-3 font-bold mb-3 press active:bg-emerald-600 flex items-center justify-center gap-2"
-            >
-              📲 Enviar pedido no WhatsApp
-            </button>
-          ) : (
-            <p className="text-xs text-amber-600 bg-amber-50 rounded-xl p-3 mb-3">
-              WhatsApp da loja ainda não configurado — peça ao lojista para preencher em Configurações no painel admin.
-            </p>
-          )}
-
-          <p className="text-xs text-gray-400 mb-4">Toque no botão acima para enviar os detalhes do pedido pelo WhatsApp.</p>
-
-          <a
+          <
             href="https://wa.me/5596974007410"
             target="_blank"
             rel="noopener noreferrer"
