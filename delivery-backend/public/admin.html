@@ -1074,6 +1074,8 @@ function renderPedidos(orders) {
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
+        <button class="btn btn-secondary btn-sm" onclick="editarPedido('${o.id}','${(o.customer_phone||'').replace(/'/g,'')}','${o.delivery_type}')">✏️ Editar</button>
+        <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="excluirPedido('${o.id}')">🗑 Excluir</button>
         ${o.status === 'aguardando_pagamento' || o.status === 'pago' ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
         ${o.status === 'confirmado' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
         ${o.status !== 'confirmado' && o.status !== 'em_preparo' && o.status !== 'pronto' && o.status !== 'saiu_para_entrega' && o.status !== 'entregue' && o.status !== 'cancelado' && o.status !== 'aguardando_pagamento' && o.status !== 'pago' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
@@ -1171,6 +1173,66 @@ async function avancarStatus(id, status) {
     toast('Status atualizado!');
   }
 }
+function editarPedido(id, phone, deliveryType) {
+  const isDelivery = deliveryType === 'delivery';
+  const overlay = document.createElement('div');
+  overlay.style = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:420px">
+      <h3 style="margin-bottom:18px;font-size:1rem;color:var(--text)">✏️ Editar Pedido</h3>
+      <label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Telefone do cliente</label>
+      <input id="ep-phone" value="${phone}" placeholder="(96) 99999-0000" style="margin-bottom:14px" />
+      ${isDelivery ? `
+      <label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Rua</label>
+      <input id="ep-street" placeholder="Rua..." style="margin-bottom:8px" />
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Número</label><input id="ep-number" placeholder="Nº" /></div>
+        <div><label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Bairro</label><input id="ep-neighborhood" placeholder="Bairro" /></div>
+      </div>
+      <label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Complemento</label>
+      <input id="ep-complement" placeholder="Apto, bloco..." style="margin-bottom:14px" />
+      ` : ''}
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="this.closest('div[style*=inset]').remove()" class="btn btn-secondary" style="flex:1">Cancelar</button>
+        <button onclick="salvarEdicaoPedido('${id}','${isDelivery}')" class="btn" style="flex:1;background:#7c3aed;color:#fff">Salvar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function salvarEdicaoPedido(id, isDelivery) {
+  const phone = document.getElementById('ep-phone')?.value;
+  const body = { phone };
+  if (isDelivery === 'true') {
+    body.delivery_address = {
+      street: document.getElementById('ep-street')?.value,
+      number: document.getElementById('ep-number')?.value,
+      neighborhood: document.getElementById('ep-neighborhood')?.value,
+      complement: document.getElementById('ep-complement')?.value,
+    };
+  }
+  try {
+    await api('PATCH', '/orders/' + id, body);
+    document.querySelector('div[style*="inset:0"]')?.remove();
+    toast('Pedido atualizado!');
+    carregarPedidos();
+  } catch (e) {
+    toast('Erro ao salvar: ' + e.message);
+  }
+}
+
+async function excluirPedido(id) {
+  const senha = prompt('Digite a senha para excluir este pedido:');
+  if (!senha) return;
+  try {
+    await api('DELETE', '/orders/' + id, { password: senha });
+    toast('Pedido excluído');
+    carregarPedidos();
+  } catch (e) {
+    alert(e.message || 'Senha incorreta');
+  }
+}
+
 async function cancelarPedido(id) {
   if (!confirm('Cancelar este pedido?')) return;
   const r = await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado' });

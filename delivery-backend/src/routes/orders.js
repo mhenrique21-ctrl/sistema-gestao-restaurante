@@ -435,6 +435,40 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// PATCH /api/orders/:id — editar endereço e telefone do pedido
+router.patch('/:id', async (req, res) => {
+  const { phone, delivery_address } = req.body;
+  try {
+    const order = await pool.query(`SELECT customer_id FROM orders WHERE id = $1`, [req.params.id]);
+    if (!order.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    if (phone) {
+      await pool.query(`UPDATE customers SET phone = $1 WHERE id = $2`, [phone.replace(/\D/g, ''), order.rows[0].customer_id]);
+    }
+    if (delivery_address !== undefined) {
+      await pool.query(`UPDATE orders SET delivery_address = $1 WHERE id = $2`, [delivery_address ? JSON.stringify(delivery_address) : null, req.params.id]);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[orders/PATCH]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// DELETE /api/orders/:id — excluir pedido (requer senha admin)
+router.delete('/:id', async (req, res) => {
+  const { password } = req.body;
+  const ADMIN_DELETE_PASSWORD = process.env.ADMIN_DELETE_PASSWORD || 'confraria2024';
+  if (password !== ADMIN_DELETE_PASSWORD) return res.status(403).json({ error: 'Senha incorreta' });
+  try {
+    await pool.query(`DELETE FROM orders WHERE id = $1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[orders/DELETE]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // POST /api/orders/webhook/stripe — webhook Stripe
 router.post('/webhook/stripe', async (req, res) => {
   const sig = req.headers['stripe-signature'];
