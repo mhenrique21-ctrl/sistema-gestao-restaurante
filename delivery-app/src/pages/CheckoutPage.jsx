@@ -307,7 +307,7 @@ export default function CheckoutPage() {
             <PixCopyBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
           )}
 
-          <
+          <a
             href="https://wa.me/5596974007410"
             target="_blank"
             rel="noopener noreferrer"
