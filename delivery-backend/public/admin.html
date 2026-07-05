@@ -541,8 +541,8 @@ function stat(icon, label, val) {
 let produtos = [], categorias = [];
 async function pageProdutos() {
   [produtos, categorias] = await Promise.all([
-    api('GET', '/menu').then(cats => cats.flatMap(c => c.products.map(p => ({ ...p, category_name: c.name, category_id: c.id })))),
-    api('GET', '/menu').then(cats => cats.map(c => ({ id: c.id, name: c.name }))),
+    api('GET', '/menu/admin').then(cats => cats.flatMap(c => c.products.map(p => ({ ...p, category_name: c.name, category_id: c.id })))),
+    api('GET', '/menu/admin').then(cats => cats.map(c => ({ id: c.id, name: c.name }))),
   ]);
   renderProdutos();
 }

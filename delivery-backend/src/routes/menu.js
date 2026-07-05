@@ -131,6 +131,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/menu/admin — todos os produtos incluindo indisponíveis (admin)
+router.get('/admin', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.id AS category_id, c.name AS category_name, c.sort_order AS category_sort,
+        p.id AS product_id, p.name AS product_name, p.description, p.price,
+        p.image_url AS product_image, p.available, p.featured, p.promo_price,
+        p.promo_label, p.sort_order AS product_sort
+      FROM categories c
+      LEFT JOIN products p ON p.category_id = c.id
+      WHERE c.active = true
+      ORDER BY c.sort_order, p.sort_order, p.name
+    `);
+    const cats = {};
+    for (const row of result.rows) {
+      if (!cats[row.category_id]) cats[row.category_id] = { id: row.category_id, name: row.category_name, products: [] };
+      if (row.product_id) cats[row.category_id].products.push({
+        id: row.product_id, name: row.product_name, description: row.description,
+        price: row.price, image_url: row.product_image, available: row.available,
+        featured: row.featured, promo_price: row.promo_price, promo_label: row.promo_label,
+        sort_order: row.product_sort, category_id: row.category_id, category_name: row.category_name,
+      });
+    }
+    res.json(Object.values(cats));
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar produtos' });
+  }
+});
+
 // GET /api/menu/products/:id — produto específico
 router.get('/products/:id', async (req, res) => {
   try {
