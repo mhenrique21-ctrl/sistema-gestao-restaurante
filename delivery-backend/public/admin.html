@@ -1934,6 +1934,29 @@ async function handleCfgImageUpload(inputEl, idPrefix, folder) {
   }
 }
 
+async function handleBannerDayUpload(inputEl, idPrefix) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById(`${idPrefix}-status`);
+  statusEl.textContent = 'Enviando...';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    fd.append('folder', 'banners');
+    const res = await fetch('/api/menu/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao enviar imagem');
+    document.getElementById(idPrefix).value = data.url;
+    const preview = document.getElementById(`${idPrefix}-preview`);
+    preview.src = data.url;
+    preview.style.display = '';
+    statusEl.textContent = '✓';
+  } catch (err) {
+    statusEl.textContent = '';
+    toast(err.message, true);
+  }
+}
+
 async function pageConfiguracoes() {
   const s = await api('GET', '/settings');
   document.getElementById('content').innerHTML = `
@@ -1977,7 +2000,17 @@ async function pageConfiguracoes() {
             <td><button type="button" class="toggle ${h.open ? 'on' : ''}" id="${key}_open" onclick="this.classList.toggle('on')"></button></td>
             <td><input type="time" id="${key}_from" value="${h.from||'08:00'}" style="width:110px" /></td>
             <td><input type="time" id="${key}_to" value="${h.to||'22:00'}" style="width:110px" /></td>
-            <td><input type="url" id="${key}_banner" value="${h.banner_url||''}" placeholder="https://..." style="width:220px" /></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                ${h.banner_url ? `<img id="${key}_banner-preview" src="${h.banner_url}" style="width:64px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />` : `<img id="${key}_banner-preview" src="" style="width:64px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:none" />`}
+                <label style="cursor:pointer;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.78rem;color:var(--muted)">
+                  📂 Escolher
+                  <input type="file" accept="image/*" style="display:none" onchange="handleBannerDayUpload(this,'${key}_banner')">
+                </label>
+                <span id="${key}_banner-status" style="font-size:.72rem;color:var(--muted)"></span>
+                <input type="hidden" id="${key}_banner" value="${h.banner_url||''}" />
+              </div>
+            </td>
           </tr>`;
         }).join('')}
       </table>
