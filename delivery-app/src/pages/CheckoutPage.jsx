@@ -266,7 +266,6 @@ export default function CheckoutPage() {
         }
       }
       setSuccess(order)
-      sendToWhatsApp(order)
     } catch (err) {
       setError(err.message)
     } finally {
