@@ -47,7 +47,7 @@ router.get('/:id/products', async (req, res) => {
 
 // PATCH /api/categories/:id
 router.patch('/:id', requireRole('admin'), async (req, res) => {
-  const fields = ['name', 'description', 'sort_order', 'image_url', 'active'];
+  const fields = ['name', 'description', 'sort_order', 'image_url', 'active', 'printer'];
   const updates = [], values = [];
   let idx = 1;
   for (const f of fields) {
