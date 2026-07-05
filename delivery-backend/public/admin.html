@@ -1087,7 +1087,6 @@ const STATUS_LABEL = {
   aguardando_pagamento:'⏳ Aguardando',
   pago:'💳 Pago',
   confirmado:'📋 Confirmado',
-  em_preparo:'🍳 Em preparo',
   pronto:'✅ Pronto',
   saiu_para_entrega:'🛵 A caminho',
   entregue:'🏠 Entregue',
@@ -1095,8 +1094,7 @@ const STATUS_LABEL = {
 };
 const STATUS_NEXT = {
   pago:'confirmado',
-  confirmado:'em_preparo',
-  em_preparo:'pronto',
+  confirmado:'pronto',
   pronto:'saiu_para_entrega',
   saiu_para_entrega:'entregue'
 };
@@ -1104,7 +1102,6 @@ const STATUS_COLOR = {
   aguardando_pagamento:'#92400e',
   pago:'#1e40af',
   confirmado:'#5b21b6',
-  em_preparo:'#92400e',
   pronto:'#065f46',
   saiu_para_entrega:'#0369a1',
   entregue:'#374151',
@@ -1118,7 +1115,7 @@ async function pagePedidos() {
   document.getElementById('content').innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
       <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1">
-        ${['todos','aguardando_pagamento','pago','confirmado','em_preparo','pronto','saiu_para_entrega','entregue','cancelado'].map(s => `
+        ${['todos','aguardando_pagamento','pago','confirmado','pronto','saiu_para_entrega','entregue','cancelado'].map(s => `
           <button class="btn btn-sm" id="filtro-${s}" onclick="filtrarPedidos('${s}')"
             style="background:${s==='todos'?'#7c3aed':'#1e293b'};color:${s==='todos'?'#fff':'#94a3b8'};border:1px solid #334155">
             ${s==='todos'?'Todos':STATUS_LABEL[s]||s}
@@ -1216,10 +1213,9 @@ function renderPedidos(orders) {
         ${!o.customer_phone && (o.status==='aguardando_pagamento'||o.status==='pago') ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="editarPedido('${o.id}','${(o.customer_phone||'').replace(/'/g,'')}','${o.delivery_type}')">✏️ Editar</button>
         <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="excluirPedido('${o.id}')">🗑 Excluir</button>
-        ${o.status === 'confirmado' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
-        ${o.status !== 'confirmado' && o.status !== 'em_preparo' && o.status !== 'pronto' && o.status !== 'saiu_para_entrega' && o.status !== 'entregue' && o.status !== 'cancelado' && o.status !== 'aguardando_pagamento' && o.status !== 'pago' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
-        ${o.status === 'em_preparo' ? `<button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none" onclick="avancarStatus('${o.id}','pronto')">✅ Pedido Pronto</button>` : ''}
-        ${o.status === 'em_preparo' || o.status === 'pronto' ? `<button class="btn btn-sm" style="background:#0ea5e9;color:#fff;border:none" onclick="avancarStatus('${o.id}','saiu_para_entrega')">🛵 A Caminho</button>` : ''}
+        ${o.status === 'confirmado' ? `<button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none" onclick="avancarStatus('${o.id}','pronto')">✅ Pronto</button>` : ''}
+        ${o.status === 'confirmado' ? `<button class="btn btn-sm" style="background:#0ea5e9;color:#fff;border:none" onclick="avancarStatus('${o.id}','saiu_para_entrega')">🛵 A Caminho</button>` : ''}
+        ${o.status === 'pronto' ? `<button class="btn btn-sm" style="background:#0ea5e9;color:#fff;border:none" onclick="avancarStatus('${o.id}','saiu_para_entrega')">🛵 A Caminho</button>` : ''}
         ${o.status === 'saiu_para_entrega' ? `<button class="btn btn-success btn-sm" onclick="avancarStatus('${o.id}','entregue')">🎉 Entregue</button>` : ''}
         ${o.status !== 'cancelado' && o.status !== 'entregue' ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedido('${o.id}')">✕ Cancelar</button>` : ''}
       </div>
