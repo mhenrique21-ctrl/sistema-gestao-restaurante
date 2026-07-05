@@ -84,7 +84,9 @@ textarea { resize: vertical; min-height: 70px; }
 /* Modal */
 .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; }
 .modal-bg.open { display: flex; }
-.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal-scroll { flex: 1; overflow-y: auto; padding: 24px 24px 0; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; background: var(--surface); }
 .modal h2 { font-size: 1rem; font-weight: 700; margin-bottom: 20px; }
 
 /* Search */
@@ -195,11 +197,13 @@ textarea { resize: vertical; min-height: 70px; }
 <!-- Modal genérico -->
 <div class="modal-bg" id="modal">
   <div class="modal">
-    <h2 id="modal-title">Modal</h2>
-    <div id="modal-body"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+    <div class="modal-scroll">
+      <h2 id="modal-title">Modal</h2>
+      <div id="modal-body"></div>
+    </div>
+    <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" id="modal-confirm" onclick="confirmModal()">Salvar</button>
+      <button class="btn btn-primary" id="modal-confirm" onclick="confirmModal()">💾 Salvar</button>
     </div>
   </div>
 </div>
