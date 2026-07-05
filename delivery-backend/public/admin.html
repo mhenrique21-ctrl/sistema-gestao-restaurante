@@ -446,11 +446,19 @@ function mostrarBannerNovoPedido(num, waLinkCliente, waLinkAdmin) {
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'order_update') {
-      tocarSomPedido();
-      mostrarBannerNovoPedido(m.order?.order_number, m.whatsapp_link_cliente, m.whatsapp_link_admin);
-      // Notificação do navegador
-      if (Notification.permission === 'granted') {
-        new Notification('🔔 Novo pedido!', { body: 'Um novo pedido chegou na Confraria Café', icon: '/api/logo' });
+      if (m.event === 'new_order') {
+        tocarSomPedido();
+        // Gera links no frontend com os dados do pedido recebido
+        const o = m.order || {};
+        const num = o.order_number;
+        const phoneClean = (o.customer_phone || '').replace(/\D/g,'');
+        const msgAdmin = `🔔 *Novo Pedido #${num}*\n👤 ${o.customer_name||''}\n📱 ${o.customer_phone||''}\n💰 ${o.item_count||''} item(s)`;
+        const waCliente = phoneClean ? `https://wa.me/55${phoneClean}?text=${encodeURIComponent('Olá ' + (o.customer_name||'') + '! Seu pedido #' + num + ' foi recebido pela Confraria Café ☕')}` : null;
+        const waAdmin = m.whatsapp_link_admin || null;
+        mostrarBannerNovoPedido(num, waCliente, waAdmin);
+        if (Notification.permission === 'granted') {
+          new Notification('🔔 Novo pedido!', { body: `Pedido #${num} de ${o.customer_name||'cliente'}`, icon: '/api/logo' });
+        }
       }
       if (currentPage === 'pedidos') carregarPedidos();
       if (currentPage === 'dashboard') showPage('dashboard');
@@ -1203,6 +1211,7 @@ function renderPedidos(orders) {
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
         <button class="btn btn-secondary btn-sm" onclick="imprimirPedido('${o.id}')">🖨 Imprimir</button>
+        ${o.customer_phone ? `<a class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none" href="https://wa.me/55${(o.customer_phone||'').replace(/\D/g,'')}?text=${encodeURIComponent('Olá ' + (o.customer_name||'') + '! Seu pedido #' + (o.order_number||o.id.slice(-4)) + ' foi recebido pela Confraria Café ☕')}" target="_blank">📲 WA</a>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="editarPedido('${o.id}','${(o.customer_phone||'').replace(/'/g,'')}','${o.delivery_type}')">✏️ Editar</button>
         <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="excluirPedido('${o.id}')">🗑 Excluir</button>
         ${o.status === 'aguardando_pagamento' || o.status === 'pago' ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
