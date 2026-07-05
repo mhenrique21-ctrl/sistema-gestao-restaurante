@@ -138,23 +138,20 @@ router.post('/guest', async (req, res) => {
       [order.id, adminId]
     );
 
-    // Gera links WhatsApp manuais (cliente → admin e admin → cliente)
-    let whatsapp_link_cliente = null;
-    let whatsapp_link_admin = null;
+    // Envia notificação automática via Evolution API para o admin (Mensagens Salvas)
     try {
       const itemsList = resolvedItems.map(i => `• ${i.quantity}x ${i.product_name}`).join('\n');
       const totalFmt = `R$ ${total.toFixed(2).replace('.', ',')}`;
       const tipo = (delivery_type === 'retirada') ? '🏪 Retirada' : '🛵 Entrega';
       const msg = `🔔 *Novo Pedido #${order.order_number}*\n\n👤 ${customer.name}\n📱 ${phone}\n${tipo}\n\n${itemsList}\n\n💰 Total: ${totalFmt}\n💳 Pagamento: ${payment_method}`;
-      // Link para admin enviar ao CLIENTE
-      if (phone) whatsapp_link_cliente = `https://wa.me/55${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;
-      // Link para admin enviar para o número da LOJA (auto-notificação)
       const settingsResult = await pool.query(`SELECT value FROM settings WHERE key = 'store_whatsapp_number'`);
       const storePhone = (settingsResult.rows[0]?.value || '').replace(/\D/g, '');
-      if (storePhone) whatsapp_link_admin = `https://wa.me/55${storePhone}?text=${encodeURIComponent(msg)}`;
-    } catch(e) {}
+      if (storePhone) {
+        sendWhatsApp(storePhone, msg).then(code => console.log('[whatsapp/new_order] admin status:', code));
+      }
+    } catch(e) { console.error('[whatsapp/new_order]', e.message); }
 
-    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, whatsapp_link_cliente, whatsapp_link_admin });
+    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length } });
 
     res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
   } catch (err) {
