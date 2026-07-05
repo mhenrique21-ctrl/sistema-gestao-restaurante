@@ -459,6 +459,7 @@ router.patch('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     await pool.query(`DELETE FROM order_items WHERE order_id = $1`, [req.params.id]);
+    await pool.query(`DELETE FROM order_status_history WHERE order_id = $1`, [req.params.id]);
     await pool.query(`DELETE FROM orders WHERE id = $1`, [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
