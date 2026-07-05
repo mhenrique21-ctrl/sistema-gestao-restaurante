@@ -1211,7 +1211,9 @@ function renderPedidos(orders) {
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
         <button class="btn btn-secondary btn-sm" onclick="imprimirPedido('${o.id}')">🖨 Imprimir</button>
-        ${o.customer_phone ? `<button class="btn btn-sm" style="background:#25D366;color:#fff;border:none" onclick="confirmarEEnviarWA('${o.id}')">📲 ${o.status==='aguardando_pagamento'||o.status==='pago' ? 'Confirmar + WA' : 'WA Cliente'}</button>` : (o.status==='aguardando_pagamento'||o.status==='pago' ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : '')}
+        ${o.customer_phone && (o.status==='aguardando_pagamento'||o.status==='pago') ? `<button class="btn btn-sm" style="background:#25D366;color:#fff;border:none" onclick="confirmarEEnviarWA('${o.id}')">📲 Confirmar + WA</button>` : ''}
+        ${o.customer_phone && o.status!=='aguardando_pagamento' && o.status!=='pago' && o.status!=='cancelado' && o.status!=='entregue' ? `<button class="btn btn-sm" style="background:#25D366;color:#fff;border:none" onclick="reenviarWA('${o.id}')">📲 WA</button>` : ''}
+        ${!o.customer_phone && (o.status==='aguardando_pagamento'||o.status==='pago') ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="editarPedido('${o.id}','${(o.customer_phone||'').replace(/'/g,'')}','${o.delivery_type}')">✏️ Editar</button>
         <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="excluirPedido('${o.id}')">🗑 Excluir</button>
         ${o.status === 'confirmado' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
@@ -1301,44 +1303,45 @@ async function verPedido(id) {
   document.getElementById('modal-confirm').style.display = 'none';
 }
 
+function montarMsgWA(o) {
+  const num = o.order_number || o.id?.slice(-4) || '?';
+  const nome = (o.customer_name || 'Cliente').split(' ')[0];
+  const items = (o.items || []).map(i => {
+    const sub = parseFloat((i.unit_price||i.price||0)*i.quantity).toFixed(2).replace('.',',');
+    const addons = (i.addons||[]).map(a => `   ➕ ${a.name}`).join('\n');
+    const obs = i.notes ? `\n   📝 ${i.notes}` : '';
+    return `• ${i.quantity}x ${i.product_name||i.name} — R$ ${sub}${addons?'\n'+addons:''}${obs}`;
+  }).join('\n');
+  const addr = o.delivery_address ? (typeof o.delivery_address==='string' ? o.delivery_address : `${o.delivery_address.street||''}, ${o.delivery_address.number||''} - ${o.delivery_address.neighborhood||''}`) : '';
+  const tipo = o.delivery_type==='retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr?'\n📍 '+addr:''}`;
+  const taxa = o.delivery_fee>0 ? `\n🛵 Taxa: R$ ${parseFloat(o.delivery_fee).toFixed(2).replace('.',',')}` : '';
+  const desc = o.discount_amount>0 ? `\n🎟 Desconto: -R$ ${parseFloat(o.discount_amount).toFixed(2).replace('.',',')}` : '';
+  const obs = o.notes ? `\n\n📝 *Obs:* ${o.notes}` : '';
+  return `✅ *Pedido #${num} confirmado!*\n\nOlá ${nome}! Recebemos seu pedido e já estamos preparando tudo ☕\n\n*Itens:*\n${items}${obs}\n\n${tipo}${taxa}${desc}\n\n💰 *Total: R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}*\n💳 ${o.payment_method||''}\n\nEm breve ficará pronto! 🎉`;
+}
+
 async function confirmarEEnviarWA(id) {
-  // Abre janela imediatamente (antes do await) para não ser bloqueada no mobile
-  const win = window.open('', '_blank');
+  const win = window.open('', '_blank'); // abre antes do await (evita bloqueio mobile)
   try {
     const o = await api('GET', '/orders/' + id);
-    const num = o.order_number || id.slice(-4);
-    const nome = (o.customer_name || '').split(' ')[0];
     const phone = (o.customer_phone || '').replace(/\D/g, '');
     if (!phone) { win.close(); toast('Cliente sem telefone', true); return; }
-
-    const items = (o.items || []).map(i => {
-      const addons = (i.addons||[]).map(a => `   ➕ ${a.name}`).join('\n');
-      const obs = i.notes ? `   📝 ${i.notes}` : '';
-      return `• ${i.quantity}x ${i.product_name||i.name} — R$ ${parseFloat((i.unit_price||i.price||0)*i.quantity).toFixed(2).replace('.',',')}${addons ? '\n'+addons : ''}${obs ? '\n'+obs : ''}`;
-    }).join('\n');
-
-    const addr = o.delivery_address ? (typeof o.delivery_address === 'string' ? o.delivery_address : `${o.delivery_address.street||''}, ${o.delivery_address.number||''} - ${o.delivery_address.neighborhood||''}`) : '';
-    const tipo = o.delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
-    const taxa = o.delivery_fee > 0 ? `\n🛵 Taxa de entrega: R$ ${parseFloat(o.delivery_fee).toFixed(2).replace('.',',')}` : '';
-    const desconto = o.discount_amount > 0 ? `\n🎟 Desconto: -R$ ${parseFloat(o.discount_amount).toFixed(2).replace('.',',')}` : '';
-    const total = `R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}`;
-    const pagamento = o.payment_method || '';
-    const obs = o.notes ? `\n📝 Obs: ${o.notes}` : '';
-
-    const msg = `✅ *Pedido #${num} confirmado!*\n\nOlá ${nome}! Recebemos seu pedido e já estamos preparando tudo. ☕\n\n*Itens:*\n${items}${obs}\n\n${tipo}${taxa}${desconto}\n\n💰 *Total: ${total}*\n💳 ${pagamento}\n\nEm breve seu pedido ficará pronto! 🎉`;
-
-    // Confirma o pedido
     if (o.status === 'aguardando_pagamento' || o.status === 'pago') {
       await api('PATCH', '/orders/' + id + '/status', { status: 'confirmado' });
       carregarPedidos();
     }
+    win.location.href = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(montarMsgWA(o));
+  } catch(e) { win.close(); toast('Erro: ' + e.message, true); }
+}
 
-    // Navega a janela já aberta para o WhatsApp
-    win.location.href = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(msg);
-  } catch(e) {
-    win.close();
-    toast('Erro: ' + e.message, true);
-  }
+async function reenviarWA(id) {
+  const win = window.open('', '_blank');
+  try {
+    const o = await api('GET', '/orders/' + id);
+    const phone = (o.customer_phone || '').replace(/\D/g, '');
+    if (!phone) { win.close(); toast('Cliente sem telefone', true); return; }
+    win.location.href = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(montarMsgWA(o));
+  } catch(e) { win.close(); toast('Erro: ' + e.message, true); }
 }
 
 function copiarEndereco(addr) {
