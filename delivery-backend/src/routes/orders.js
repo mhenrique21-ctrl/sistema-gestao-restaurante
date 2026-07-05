@@ -148,42 +148,6 @@ router.post('/guest', async (req, res) => {
       order.status = 'confirmado';
     } catch(e) { console.error('[auto-confirm]', e.message); }
 
-    // Envia cupom completo ao cliente via Evolution API
-    try {
-      const customerPhone = customer.phone.replace(/\D/g, '');
-      if (customerPhone) {
-        const nome = customer.name.split(' ')[0];
-        const itemsList = resolvedItems.map(i => {
-          const sub = (i.unit_price * i.quantity).toFixed(2).replace('.', ',');
-          const addonsLines = (i.addons || []).map(a => `   ➕ ${a.name}`).join('\n');
-          const obsItem = i.notes ? `\n   📝 ${i.notes}` : '';
-          return `• ${i.quantity}x ${i.product_name} — R$ ${sub}${addonsLines ? '\n' + addonsLines : ''}${obsItem}`;
-        }).join('\n');
-        const addr = delivery_address
-          ? (typeof delivery_address === 'string' ? delivery_address
-            : `${delivery_address.street || ''}, ${delivery_address.number || ''} - ${delivery_address.neighborhood || ''}`)
-          : '';
-        const tipo = delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
-        const taxaLine = parseFloat(delivery_fee) > 0 ? `\nTaxa entrega: R$ ${parseFloat(delivery_fee).toFixed(2).replace('.', ',')}` : '';
-        const subtotalLine = parseFloat(delivery_fee) > 0 ? `\nSubtotal: R$ ${subtotal.toFixed(2).replace('.', ',')}` : '';
-        const obsGeral = notes ? `\n\n📝 *Obs:* ${notes}` : '';
-        const msgCliente =
-          `☕ *Confraria Café*\n` +
-          `📍 Av Almirante Barroso, 746 - Centro\n` +
-          `📞 96 97400-7410\n` +
-          `─────────────────\n` +
-          `✅ *Pedido #${order.order_number} confirmado!*\n\n` +
-          `Olá ${nome}! Seu pedido foi recebido e já estamos preparando ☕\n\n` +
-          `*🛒 Itens:*\n${itemsList}${obsGeral}\n\n` +
-          `${tipo}${subtotalLine}${taxaLine}\n` +
-          `─────────────────\n` +
-          `💰 *Total: R$ ${total.toFixed(2).replace('.', ',')}*\n` +
-          `💳 Pagamento: ${payment_method}\n\n` +
-          `Em breve ficará pronto! 🎉`;
-        sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/confirm_cliente] status:', code));
-      }
-    } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
-
     // Envia notificação para o admin (Mensagens Salvas)
     try {
       const itemsList = resolvedItems.map(i => `• ${i.quantity}x ${i.product_name}`).join('\n');

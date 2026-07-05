@@ -312,7 +312,7 @@ export default function CheckoutPage() {
               onClick={() => sendToWhatsApp(success)}
               className="w-full bg-emerald-500 text-white rounded-2xl py-3 font-bold mb-3 press active:bg-emerald-600 flex items-center justify-center gap-2"
             >
-              📲 Reenviar pedido no WhatsApp
+              📲 Enviar pedido no WhatsApp
             </button>
           ) : (
             <p className="text-xs text-amber-600 bg-amber-50 rounded-xl p-3 mb-3">
@@ -320,7 +320,7 @@ export default function CheckoutPage() {
             </p>
           )}
 
-          <p className="text-xs text-gray-400 mb-5">Entraremos em contato pelo WhatsApp informado para confirmar o pedido.</p>
+          <p className="text-xs text-gray-400 mb-5">Toque no botão acima para enviar os detalhes do pedido pelo WhatsApp.</p>
 
           <button
             onClick={() => navigate('/')}
