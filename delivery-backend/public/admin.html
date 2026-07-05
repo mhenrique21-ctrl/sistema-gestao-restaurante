@@ -1846,10 +1846,31 @@ function salvarImpressoras() {
 // ── Bairros ───────────────────────────────────────────────────────
 async function pageBairros() {
   await carregarBairrosCache();
+  const cfg = await api('GET', '/settings');
+  const freeDelivery = cfg.free_delivery === 'true' || cfg.free_delivery === true;
   document.getElementById('content').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-primary" onclick="modalNovoBairro()">+ Novo bairro</button>
     </div>
+
+    <!-- Taxa Zero Banner -->
+    <div class="card" style="margin-bottom:16px;border:2px solid ${freeDelivery ? '#16a34a' : 'var(--border)'};background:${freeDelivery ? 'rgba(22,163,74,0.07)' : 'var(--surface)'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:1.3rem">🎉</span>
+            <strong style="font-size:1rem;color:var(--text)">Frete Grátis (Taxa Zero)</strong>
+            ${freeDelivery ? '<span style="background:#16a34a;color:#fff;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px">ATIVO</span>' : ''}
+          </div>
+          <p style="font-size:.82rem;color:var(--muted);margin-top:4px">
+            Quando ativado, todos os bairros exibem taxa R$ 0,00 no app do cliente. Use em promoções.
+          </p>
+        </div>
+        <button class="toggle ${freeDelivery ? 'on' : ''}" id="free-delivery-toggle"
+          onclick="toggleFreeDelivery(this)" style="flex-shrink:0"></button>
+      </div>
+    </div>
+
     <div class="card">
       <h3>Bairros e taxas de entrega (${NEIGHBORHOODS.length})</h3>
       <table>
@@ -1889,6 +1910,18 @@ function modalEditarBairro(id) {
     await api('PATCH', '/neighborhoods/' + id, { zone: v('b-zone') || 'GERAL', name: v('b-name'), delivery_fee: parseFloat(v('b-fee')) });
     toast('Bairro atualizado!'); closeModal(); pageBairros();
   });
+}
+
+async function toggleFreeDelivery(btn) {
+  const isOn = btn.classList.toggle('on');
+  try {
+    await api('PATCH', '/settings', { free_delivery: isOn ? 'true' : 'false' });
+    toast(isOn ? '🎉 Frete Grátis ATIVADO para todos os bairros!' : 'Taxa de entrega restaurada.');
+    pageBairros();
+  } catch(e) {
+    btn.classList.toggle('on');
+    toast('Erro ao salvar configuração', true);
+  }
 }
 
 async function toggleBairroAtivo(id, current) {

@@ -6,12 +6,20 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 router.get('/', async (req, res) => {
   try {
     const includeInactive = req.query.all === 'true';
-    const result = await pool.query(
-      includeInactive
-        ? `SELECT * FROM neighborhoods ORDER BY zone, sort_order, name`
-        : `SELECT * FROM neighborhoods WHERE active = true ORDER BY zone, sort_order, name`
-    );
-    res.json(result.rows.map((n) => ({ ...n, delivery_fee: parseFloat(n.delivery_fee) })));
+    const [neighborhoodsResult, settingsResult] = await Promise.all([
+      pool.query(
+        includeInactive
+          ? `SELECT * FROM neighborhoods ORDER BY zone, sort_order, name`
+          : `SELECT * FROM neighborhoods WHERE active = true ORDER BY zone, sort_order, name`
+      ),
+      pool.query(`SELECT value FROM settings WHERE key = 'free_delivery'`),
+    ]);
+    const freeDelivery = settingsResult.rows[0]?.value === 'true';
+    res.json(neighborhoodsResult.rows.map((n) => ({
+      ...n,
+      delivery_fee: freeDelivery ? 0 : parseFloat(n.delivery_fee),
+      free_delivery: freeDelivery,
+    })));
   } catch (err) {
     console.error('[neighborhoods/GET]', err.message);
     res.status(500).json({ error: 'Erro ao buscar bairros' });
