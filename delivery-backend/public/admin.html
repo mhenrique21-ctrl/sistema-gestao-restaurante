@@ -1087,13 +1087,13 @@ function renderPedidos(orders) {
   const groups = {};
   for (const o of sorted) {
     const dt = new Date(o.created_at);
-    const key = dt.toISOString().slice(0, 10); // YYYY-MM-DD
+    const key = dt.toLocaleDateString('sv-SE', {timeZone:'America/Sao_Paulo'}); // YYYY-MM-DD
     if (!groups[key]) groups[key] = [];
     groups[key].push(o);
   }
 
-  const hoje = new Date().toISOString().slice(0, 10);
-  const ontem = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const hoje = new Date().toLocaleDateString('sv-SE', {timeZone:'America/Sao_Paulo'});
+  const ontem = new Date(Date.now() - 86400000).toLocaleDateString('sv-SE', {timeZone:'America/Sao_Paulo'});
 
   function labelData(key) {
     if (key === hoje) return '📅 Hoje';
@@ -1107,8 +1107,8 @@ function renderPedidos(orders) {
       const dayOrders = groups[dateKey];
       const cardsHtml = dayOrders.map(o => {
         const cor = STATUS_COLOR[o.status] || '#334155';
-        const hora = new Date(o.created_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
-        const data = new Date(o.created_at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit'});
+        const hora = new Date(o.created_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'});
+        const data = new Date(o.created_at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:'America/Sao_Paulo'});
     const num = o.order_number || o.id.slice(-4);
     const addr = o.delivery_address ? (typeof o.delivery_address === 'string' ? o.delivery_address : `${o.delivery_address.street||''}, ${o.delivery_address.number||''} — ${o.delivery_address.neighborhood||''}`) : '';
     return `
@@ -1134,6 +1134,7 @@ function renderPedidos(orders) {
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
+        <button class="btn btn-secondary btn-sm" onclick="imprimirPedido('${o.id}')">🖨 Imprimir</button>
         <button class="btn btn-secondary btn-sm" onclick="editarPedido('${o.id}','${(o.customer_phone||'').replace(/'/g,'')}','${o.delivery_type}')">✏️ Editar</button>
         <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="excluirPedido('${o.id}')">🗑 Excluir</button>
         ${o.status === 'aguardando_pagamento' || o.status === 'pago' ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
@@ -1222,6 +1223,72 @@ async function verPedido(id) {
       ${o.notes ? `<div style="background:var(--hover);border-radius:8px;padding:10px;color:var(--text)"><strong>Obs:</strong> ${o.notes}</div>` : ''}
     </div>`, null);
   document.getElementById('modal-confirm').style.display = 'none';
+}
+
+async function imprimirPedido(id) {
+  const o = await api('GET', '/orders/' + id);
+  const items = o.items || [];
+  const num = o.order_number || id.slice(-4);
+  const now = new Date(o.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const addr = o.delivery_address ? (typeof o.delivery_address === 'string' ? o.delivery_address : `${o.delivery_address.street||''}, ${o.delivery_address.number||''} - ${o.delivery_address.neighborhood||''}${o.delivery_address.complement ? ' / ' + o.delivery_address.complement : ''}`) : '';
+
+  const linhaH = '================================';
+  const linhaL = '--------------------------------';
+
+  const win = window.open('', '_blank', 'width=340,height=600');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Pedido #${num}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 4mm; color: #000; background: #fff; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .bold { font-weight: bold; }
+  .linha { border-top: 1px dashed #000; margin: 4px 0; }
+  .item-row { display: flex; justify-content: space-between; margin: 2px 0; }
+  .item-name { flex: 1; }
+  .item-price { white-space: nowrap; margin-left: 4px; }
+  .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-top: 4px; }
+  .obs { font-size: 11px; font-style: italic; margin-left: 8px; }
+  @media print {
+    body { width: 80mm; }
+    @page { margin: 0; size: 80mm auto; }
+  }
+</style>
+</head><body>
+<div class="center bold" style="font-size:15px">☕ CONFRARIA CAFÉ</div>
+<div class="center" style="font-size:10px">pedidos.confrariacafe.com</div>
+<div class="linha"></div>
+<div class="center bold" style="font-size:16px">PEDIDO #${num}</div>
+<div class="center" style="font-size:10px">${now}</div>
+<div class="linha"></div>
+<div><strong>Cliente:</strong> ${o.customer_name||'—'}</div>
+${o.customer_phone ? `<div><strong>Tel:</strong> ${o.customer_phone}</div>` : ''}
+<div><strong>Tipo:</strong> ${o.delivery_type === 'retirada' ? 'RETIRADA NA LOJA' : 'ENTREGA'}</div>
+${addr ? `<div><strong>Endereço:</strong> ${addr}</div>` : ''}
+<div><strong>Pagamento:</strong> ${o.payment_method||'—'}</div>
+<div class="linha"></div>
+<div class="bold">ITENS</div>
+<div style="margin-top:4px">
+${items.map(i => {
+  const nome = i.product_name || i.name || '—';
+  const subtotal = 'R$ ' + parseFloat((i.unit_price||i.price||0)*i.quantity).toFixed(2).replace('.',',');
+  const addons = (i.addons||[]).map(a => `<div class="obs">+ ${a.name}</div>`).join('');
+  const obs = i.notes ? `<div class="obs">📝 ${i.notes}</div>` : '';
+  return `<div class="item-row"><span class="item-name">${i.quantity}x ${nome}</span><span class="item-price">${subtotal}</span></div>${addons}${obs}`;
+}).join('')}
+</div>
+<div class="linha"></div>
+${o.delivery_fee > 0 ? `<div class="item-row"><span>Taxa de entrega</span><span>R$ ${parseFloat(o.delivery_fee).toFixed(2).replace('.',',')}</span></div>` : ''}
+${o.discount_amount > 0 ? `<div class="item-row"><span>Desconto</span><span>- R$ ${parseFloat(o.discount_amount).toFixed(2).replace('.',',')}</span></div>` : ''}
+<div class="total-row"><span>TOTAL</span><span>R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</span></div>
+${o.notes ? `<div class="linha"></div><div class="bold">OBS:</div><div>${o.notes}</div>` : ''}
+<div class="linha"></div>
+<div class="center" style="font-size:10px;margin-top:4px">Obrigado pela preferência! ☕</div>
+</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
 async function avancarStatus(id, status) {
