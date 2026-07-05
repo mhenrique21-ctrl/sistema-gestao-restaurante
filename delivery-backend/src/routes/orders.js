@@ -461,11 +461,12 @@ router.delete('/:id', async (req, res) => {
   const ADMIN_DELETE_PASSWORD = process.env.ADMIN_DELETE_PASSWORD || 'confraria2024';
   if (password !== ADMIN_DELETE_PASSWORD) return res.status(403).json({ error: 'Senha incorreta' });
   try {
+    await pool.query(`DELETE FROM order_items WHERE order_id = $1`, [req.params.id]);
     await pool.query(`DELETE FROM orders WHERE id = $1`, [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     console.error('[orders/DELETE]', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    res.status(500).json({ error: 'Erro interno: ' + err.message });
   }
 });
 
