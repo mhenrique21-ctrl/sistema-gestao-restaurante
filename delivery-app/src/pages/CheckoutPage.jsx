@@ -276,7 +276,6 @@ export default function CheckoutPage() {
 
   // Tela de confirmação
   if (success) {
-    const waConfigured = !!onlyDigits(settings.store_whatsapp_number)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
         <div className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-lg text-center">
