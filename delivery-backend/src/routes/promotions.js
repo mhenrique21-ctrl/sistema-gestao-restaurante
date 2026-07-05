@@ -80,11 +80,20 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
 
 // PATCH /api/promotions/:id — editar promoção
 router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
-  const fields = ['name', 'description', 'active', 'day_of_week', 'min_order_value', 'discount_type', 'discount_value'];
+  const scalar = ['name', 'description', 'active', 'min_order_value', 'discount_type', 'discount_value'];
   const updates = [], values = [];
   let idx = 1;
-  for (const f of fields) {
+  for (const f of scalar) {
     if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
+  }
+  // Arrays (text[]) precisam de cast explícito
+  if (req.body.day_of_week !== undefined) {
+    updates.push(`day_of_week = $${idx++}::int[]`);
+    values.push(req.body.day_of_week);
+  }
+  if (req.body.zones !== undefined) {
+    updates.push(`zones = $${idx++}::text[]`);
+    values.push(req.body.zones);
   }
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);
@@ -95,7 +104,8 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Promoção não encontrada' });
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('[promotions/PATCH]', err.message);
+    res.status(500).json({ error: 'Erro interno: ' + err.message });
   }
 });
 
