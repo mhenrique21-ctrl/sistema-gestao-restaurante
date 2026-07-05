@@ -194,6 +194,30 @@ router.post('/guest', async (req, res) => {
   }
 });
 
+// GET /api/orders/customer/:phone — histórico público por telefone (app cliente)
+router.get('/customer/:phone', async (req, res) => {
+  const phone = req.params.phone.replace(/\D/g, '');
+  if (!phone) return res.status(400).json({ error: 'Telefone inválido' });
+  try {
+    const result = await pool.query(
+      `SELECT o.id, o.order_number, o.status, o.total, o.created_at, o.delivery_type,
+              COUNT(oi.id)::int AS item_count
+       FROM orders o
+       JOIN customers c ON c.id = o.customer_id
+       LEFT JOIN order_items oi ON oi.order_id = o.id
+       WHERE c.phone = $1
+       GROUP BY o.id
+       ORDER BY o.created_at DESC
+       LIMIT 50`,
+      [phone]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[orders/customer]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 router.use(authMiddleware);
 
 // GET /api/orders — listar pedidos (com filtros)

@@ -43,4 +43,5 @@ export const api = {
   createOrder: (data) => request('POST', '/orders', data),
   getOrder: (id) => request('GET', `/orders/${id}`),
   getOrders: (params = '') => request('GET', `/orders${params}`),
+  getCustomerOrders: (phone) => request('GET', `/orders/customer/${phone.replace(/\D/g, '')}`),
 }
