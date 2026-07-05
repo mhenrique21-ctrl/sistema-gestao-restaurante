@@ -320,7 +320,16 @@ export default function CheckoutPage() {
             </p>
           )}
 
-          <p className="text-xs text-gray-400 mb-5">Toque no botão acima para enviar os detalhes do pedido pelo WhatsApp.</p>
+          <p className="text-xs text-gray-400 mb-4">Toque no botão acima para enviar os detalhes do pedido pelo WhatsApp.</p>
+
+          <a
+            href="https://wa.me/5596974007410"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full bg-white border-2 border-emerald-500 text-emerald-600 rounded-2xl py-3 font-bold mb-3 press flex items-center justify-center gap-2 no-underline"
+          >
+            💬 Falar com a loja
+          </a>
 
           <button
             onClick={() => navigate('/')}
