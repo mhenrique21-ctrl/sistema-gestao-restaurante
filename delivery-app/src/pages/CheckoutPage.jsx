@@ -4,83 +4,84 @@ import { useCart, itemLineTotal } from '../store/cart'
 import { api } from '../api'
 
 const PAYMENT_METHODS = [
-  { id: 'pix',            label: 'PIX',             icon: '⚡', desc: 'Pague via PIX após confirmar' },
-  { id: 'dinheiro',       label: 'Dinheiro',         icon: '💵', desc: 'Pague na entrega / retirada' },
-  { id: 'cartao_credito', label: 'Cartão de Crédito',icon: '💳', desc: 'Maquininha na entrega' },
-  { id: 'cartao_debito',  label: 'Cartão de Débito', icon: '🏦', desc: 'Maquininha na entrega' },
+  { id: 'pix',            label: 'PIX',              icon: '⚡', desc: 'Pague via PIX após confirmar' },
+  { id: 'dinheiro',       label: 'Dinheiro',          icon: '💵', desc: 'Pague na entrega / retirada' },
+  { id: 'cartao_credito', label: 'Cartão de Crédito', icon: '💳', desc: 'Maquininha na entrega' },
+  { id: 'cartao_debito',  label: 'Cartão de Débito',  icon: '🏦', desc: 'Maquininha na entrega' },
 ]
 
-function onlyDigits(v) {
-  return (v || '').replace(/\D/g, '')
+function brl(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
+function onlyDigits(v) { return (v || '').replace(/\D/g, '') }
+
+const INPUT = {
+  background: 'var(--card)',
+  border: '1px solid var(--border)',
+  color: 'var(--cream)',
+  borderRadius: 12,
+  padding: '10px 14px',
+  fontSize: 14,
+  outline: 'none',
+  width: '100%',
+}
+const LABEL = { fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 4, display: 'block' }
+const CARD = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 12 }
+
+function Section({ title, children }) {
+  return (
+    <div style={CARD}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 14, letterSpacing: 1, textTransform: 'uppercase' }}>{title}</p>
+      {children}
+    </div>
+  )
 }
 
-function buildWhatsAppMessage({ order, items, deliveryType, address, payment, total, deliveryFee, storeName, customerName, customerPhone }) {
-  const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-  const sep = '─────────────────────'
-  const lines = []
-
-  lines.push(`☕ *${storeName || 'Novo Pedido'}*`)
-  lines.push(`🧾 *Pedido #${order.order_number}*`)
-  lines.push(sep)
-
-  lines.push(`👤 *Cliente:* ${customerName}`)
-  if (customerPhone) lines.push(`📱 *WhatsApp:* ${customerPhone}`)
-  lines.push(sep)
-
-  lines.push('🛒 *Itens do Pedido:*')
-  for (const i of items) {
-    lines.push(`  • *${i.qty}x* ${i.product.name}  →  ${brl(itemLineTotal(i))}`)
-    for (const a of i.addons || []) lines.push(`      ➕ ${a.name}`)
-    if (i.notes) lines.push(`      📝 _${i.notes}_`)
-  }
-  lines.push(sep)
-
-  if (deliveryType === 'retirada') {
-    lines.push('🏪 *Retirada no local*')
-  } else {
-    lines.push('🛵 *Endereço de Entrega:*')
-    lines.push(`  📍 ${address.street}, ${address.number || 's/n'}`)
-    lines.push(`  🏘️ ${address.neighborhood}`)
-    if (address.complement) lines.push(`  🏠 ${address.complement}`)
-    lines.push(`  🚚 Taxa de entrega: ${brl(deliveryFee)}`)
-  }
-  lines.push(sep)
-
-  const payLabel = PAYMENT_METHODS.find((m) => m.id === payment)?.label || payment
-  lines.push(`💳 *Pagamento:* ${payLabel}`)
-  lines.push(sep)
-
-  lines.push(`💰 *Total: ${brl(total)}*`)
-  lines.push('')
-  lines.push('_Confraria Café — obrigado pelo pedido! ☕_')
-
-  return lines.join('\n')
-}
-
-function PixCopyBox({ pixKey, total }) {
+function PixBox({ pixKey, total }) {
   const [copied, setCopied] = useState(false)
   function copy() {
-    navigator.clipboard.writeText(pixKey).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 3000)
-    })
+    navigator.clipboard.writeText(pixKey).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000) })
   }
   return (
-    <div className="bg-violet-50 rounded-2xl p-4 mb-6 text-sm text-violet-700">
-      <p className="font-bold mb-2">⚡ Pague via PIX para confirmar</p>
-      {total && <p className="text-violet-600 font-bold text-base mb-3">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>}
-      <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-violet-200 mb-2">
-        <span className="flex-1 font-mono text-sm text-gray-800 break-all">{pixKey}</span>
-        <button
-          onClick={copy}
-          className="flex-shrink-0 bg-violet-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg press active:bg-violet-700"
-        >
+    <div style={{ background: 'rgba(201,162,94,0.08)', border: '1px solid rgba(201,162,94,0.25)', borderRadius: 12, padding: 14, marginTop: 12 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 6 }}>⚡ Chave PIX para pagamento</p>
+      {total && <p style={{ fontSize: 18, fontWeight: 900, color: 'var(--gold)', marginBottom: 10 }}>{brl(total)}</p>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', borderRadius: 10, padding: '8px 12px', border: '1px solid var(--border)' }}>
+        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 13, color: 'var(--cream)', wordBreak: 'break-all' }}>{pixKey}</span>
+        <button onClick={copy} className="press" style={{ background: 'var(--gold)', color: '#0F0F0F', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
           {copied ? '✅ Copiado!' : '📋 Copiar'}
         </button>
       </div>
-      <p className="text-xs text-violet-500">Chave CNPJ — copie e cole no seu banco</p>
+      <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Chave CNPJ — copie e cole no seu banco</p>
     </div>
   )
+}
+
+function buildWhatsAppMessage({ order, items, deliveryType, address, payment, total, deliveryFee, storeName, customerName, customerPhone }) {
+  const sep = '─────────────────────'
+  const lines = [
+    `☕ *${storeName || 'Novo Pedido'}*`,
+    `🧾 *Pedido #${order.order_number}*`, sep,
+    `👤 *Cliente:* ${customerName}`,
+    customerPhone ? `📱 *WhatsApp:* ${customerPhone}` : null, sep,
+    '🛒 *Itens:*',
+    ...items.map(i => [
+      `  • *${i.qty}x* ${i.product.name}  →  ${brl(itemLineTotal(i))}`,
+      ...(i.addons || []).map(a => `      ➕ ${a.name}`),
+      i.notes ? `      📝 _${i.notes}_` : null,
+    ]).flat().filter(Boolean),
+    sep,
+    deliveryType === 'retirada' ? '🏪 *Retirada no local*' : [
+      '🛵 *Endereço de Entrega:*',
+      `  📍 ${address.street}, ${address.number || 's/n'}`,
+      `  🏘️ ${address.neighborhood}`,
+      address.complement ? `  🏠 ${address.complement}` : null,
+      `  🚚 Taxa: ${brl(deliveryFee)}`,
+    ].filter(Boolean).join('\n'),
+    sep,
+    `💳 *Pagamento:* ${PAYMENT_METHODS.find(m => m.id === payment)?.label || payment}`, sep,
+    `💰 *Total: ${brl(total)}*`,
+    '', '_Confraria Café — obrigado! ☕_',
+  ].flat().filter(v => v !== null)
+  return lines.join('\n')
 }
 
 export default function CheckoutPage() {
@@ -99,16 +100,13 @@ export default function CheckoutPage() {
   const [notes, setNotes] = useState('')
   const [troco, setTroco] = useState('')
   const [coupon, setCoupon] = useState('')
-  const [couponApplied, setCouponApplied] = useState(null) // { code, type, value }
+  const [couponApplied, setCouponApplied] = useState(null)
   const [couponError, setCouponError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(null)
-
   const [neighborhoods, setNeighborhoods] = useState([])
   const [settings, setSettings] = useState({ store_whatsapp_number: '', pix_key: '', store_name: '' })
-
-  // Lookup de cliente por telefone
   const [foundCustomer, setFoundCustomer] = useState(null)
   const [savedAddresses, setSavedAddresses] = useState([])
   const [selectedAddressId, setSelectedAddressId] = useState(null)
@@ -131,97 +129,52 @@ export default function CheckoutPage() {
       if (!data) { setFoundCustomer(null); setSavedAddresses([]); return }
       setFoundCustomer(data.customer)
       setSavedAddresses(data.addresses || [])
-      // preenche nome automaticamente
       const parts = (data.customer.name || '').split(' ')
       setFirstName(parts[0] || '')
       setLastName(parts.slice(1).join(' ') || '')
-      // seleciona primeiro endereço se delivery
-      if (data.addresses && data.addresses.length > 0) {
+      if (data.addresses?.length > 0) {
         const first = data.addresses[0]
-        setSelectedAddressId(first.id)
-        setStreet(first.street || '')
-        setNumber(first.number || '')
-        setNeighborhood(first.neighborhood || '')
-        setComplement(first.complement || '')
-        setAddingNewAddress(false)
+        setSelectedAddressId(first.id); setStreet(first.street || '')
+        setNumber(first.number || ''); setNeighborhood(first.neighborhood || '')
+        setComplement(first.complement || ''); setAddingNewAddress(false)
       }
-    } catch (_) {
-      setFoundCustomer(null)
-    } finally {
-      setLookingUp(false)
-    }
+    } catch (_) { setFoundCustomer(null) }
+    finally { setLookingUp(false) }
   }
 
   function applyAddress(addr) {
-    setSelectedAddressId(addr.id)
-    setStreet(addr.street || '')
-    setNumber(addr.number || '')
-    setNeighborhood(addr.neighborhood || '')
-    setComplement(addr.complement || '')
-    setAddingNewAddress(false)
-  }
-
-  function startNewAddress() {
-    setSelectedAddressId(null)
-    setStreet('')
-    setNumber('')
-    setNeighborhood('')
-    setComplement('')
-    setAddingNewAddress(true)
+    setSelectedAddressId(addr.id); setStreet(addr.street || '')
+    setNumber(addr.number || ''); setNeighborhood(addr.neighborhood || '')
+    setComplement(addr.complement || ''); setAddingNewAddress(false)
   }
 
   const bairrosPorZona = useMemo(() => {
-    const groups = {}
-    for (const n of neighborhoods) {
-      if (!groups[n.zone]) groups[n.zone] = []
-      groups[n.zone].push(n)
-    }
-    return groups
+    const g = {}
+    for (const n of neighborhoods) { if (!g[n.zone]) g[n.zone] = []; g[n.zone].push(n) }
+    return g
   }, [neighborhoods])
 
-  function getTaxa(bairroNome) {
-    const found = neighborhoods.find((n) => n.name === bairroNome)
+  function getTaxa(nome) {
+    const found = neighborhoods.find(n => n.name === nome)
     return found ? found.delivery_fee : 0
   }
 
   const subtotal = items.reduce((s, i) => s + itemLineTotal(i), 0)
   const deliveryFee = deliveryType === 'delivery' ? getTaxa(neighborhood) : 0
-  const discount = couponApplied
-    ? (couponApplied.type === 'percent' ? subtotal * couponApplied.value / 100 : couponApplied.value)
-    : 0
+  const discount = couponApplied ? (couponApplied.type === 'percent' ? subtotal * couponApplied.value / 100 : couponApplied.value) : 0
   const total = subtotal + deliveryFee - discount
 
   function applyCoupon() {
     setCouponError('')
     const code = coupon.trim().toUpperCase()
     if (!code) return
-    // Cupons locais — adicione mais aqui ou conecte a uma API futura
     const COUPONS = {
       'BEMVINDO10': { type: 'percent', value: 10, label: '10% de desconto' },
-      'FRETE0':     { type: 'fixed',   value: deliveryFee, label: 'Frete grátis' },
+      'FRETE0':     { type: 'fixed', value: deliveryFee, label: 'Frete grátis' },
     }
     const found = COUPONS[code]
     if (!found) { setCouponError('Cupom inválido ou expirado'); return }
     setCouponApplied({ code, ...found })
-  }
-
-  function sendToWhatsApp(order) {
-    const storeNumber = onlyDigits(settings.store_whatsapp_number)
-    if (!storeNumber) return false
-    const message = buildWhatsAppMessage({
-      order,
-      items,
-      deliveryType,
-      address: { street, number, neighborhood, complement },
-      payment,
-      total,
-      deliveryFee,
-      storeName: settings.store_name,
-      customerName: `${firstName} ${lastName}`.trim(),
-      customerPhone: phone,
-    })
-    window.open(`https://wa.me/${storeNumber}?text=${encodeURIComponent(message)}`, '_blank')
-    return true
   }
 
   async function handleSubmit() {
@@ -229,95 +182,69 @@ export default function CheckoutPage() {
     if (!firstName.trim()) return setError('Informe seu nome')
     if (!lastName.trim()) return setError('Informe seu sobrenome')
     if (!phone.trim()) return setError('Informe seu WhatsApp')
-    if (deliveryType === 'delivery' && !neighborhood) return setError('Selecione o bairro de entrega')
-    if (deliveryType === 'delivery' && !street.trim()) return setError('Informe a rua de entrega')
-
+    if (deliveryType === 'delivery' && !neighborhood) return setError('Selecione o bairro')
+    if (deliveryType === 'delivery' && !street.trim()) return setError('Informe a rua')
     setLoading(true)
     try {
       const order = await api.guestOrder({
         name: `${firstName.trim()} ${lastName.trim()}`,
         phone: phone.replace(/\D/g, ''),
         delivery_type: deliveryType,
-        delivery_address: deliveryType === 'delivery'
-          ? { street, number, neighborhood, complement }
-          : null,
+        delivery_address: deliveryType === 'delivery' ? { street, number, neighborhood, complement } : null,
         payment_method: payment,
         delivery_fee: deliveryFee,
         notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : '', couponApplied ? `Cupom: ${couponApplied.code}` : ''].filter(Boolean).join(' | ') || null,
         discount: discount > 0 ? discount : undefined,
-        items: items.map(i => ({
-          product_id: i.product.id,
-          quantity: i.qty,
-          notes: i.notes || null,
-          addons: (i.addons || []).map((a) => ({ addon_option_id: a.id, quantity: 1 })),
-        })),
+        items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
       })
       clear()
       const BASE = import.meta.env.VITE_API_URL || ''
-      // Primeira compra: salva cliente e endereço automaticamente
       if (deliveryType === 'delivery') {
         const customerId = foundCustomer?.id || order.customer_id
         if (customerId && (addingNewAddress || !selectedAddressId || !foundCustomer)) {
-          fetch(`${BASE}/api/delivery/save-address`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer_id: customerId, street, number, neighborhood, complement }),
-          }).catch(() => {})
+          fetch(`${BASE}/api/delivery/save-address`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_id: customerId, street, number, neighborhood, complement }) }).catch(() => {})
         }
       }
       setSuccess(order)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
   }
 
-  // Tela de confirmação
+  // Tela de sucesso
   if (success) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
-        <div className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-lg text-center">
+      <div className="flex flex-col items-center justify-center min-h-screen px-5" style={{ background: 'var(--bg)' }}>
+        <div className="w-full max-w-sm rounded-3xl p-7 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <div className="text-6xl mb-4">🎉</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Pedido enviado!</h2>
-          <p className="text-gray-500 text-sm mb-4">
-            Recebemos seu pedido <strong className="text-violet-600">#{success.id?.slice(-6).toUpperCase()}</strong>
+          <h2 className="text-2xl font-black mb-2" style={{ color: 'var(--cream)' }}>Pedido enviado!</h2>
+          <p className="text-sm mb-5" style={{ color: 'var(--muted)' }}>
+            Pedido <span style={{ color: 'var(--gold)', fontWeight: 800 }}>#{success.id?.slice(-6).toUpperCase()}</span> recebido!
           </p>
 
-          <div className="bg-gray-50 rounded-2xl p-4 text-left space-y-2 mb-6 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Pagamento</span>
-              <span className="font-semibold">{PAYMENT_METHODS.find(m => m.id === success.payment_method)?.label}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Total</span>
-              <span className="font-bold text-violet-600">
-                {parseFloat(success.total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Tipo</span>
-              <span className="font-semibold">{success.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega'}</span>
-            </div>
+          <div className="rounded-2xl p-4 mb-5 space-y-2 text-left" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            {[
+              { label: 'Pagamento', value: PAYMENT_METHODS.find(m => m.id === success.payment_method)?.label },
+              { label: 'Total', value: brl(parseFloat(success.total)), gold: true },
+              { label: 'Tipo', value: success.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Entrega' },
+            ].map(row => (
+              <div key={row.label} className="flex justify-between text-sm">
+                <span style={{ color: 'var(--muted)' }}>{row.label}</span>
+                <span style={{ fontWeight: 700, color: row.gold ? 'var(--gold)' : 'var(--cream)' }}>{row.value}</span>
+              </div>
+            ))}
           </div>
 
           {success.payment_method === 'pix' && settings.pix_key && (
-            <PixCopyBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
+            <PixBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
           )}
 
-          <a
-            href="https://wa.me/5596974007410"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full bg-white border-2 border-emerald-500 text-emerald-600 rounded-2xl py-3 font-bold mb-3 press flex items-center justify-center gap-2 no-underline"
-          >
+          <a href="https://wa.me/5596974007410" target="_blank" rel="noopener noreferrer"
+            className="press flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-bold text-sm mb-3 no-underline"
+            style={{ background: 'rgba(76,175,128,0.12)', border: '1px solid rgba(76,175,128,0.3)', color: 'var(--green)' }}>
             💬 Falar com a loja
           </a>
 
-          <button
-            onClick={() => navigate('/')}
-            className="w-full bg-violet-600 text-white rounded-2xl py-3 font-bold press"
-          >
+          <button onClick={() => navigate('/')} className="btn-gold w-full py-3 text-sm">
             Voltar ao cardápio
           </button>
         </div>
@@ -326,138 +253,114 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <div className="bg-white safe-top px-4 pt-4 pb-3 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/cart')} className="text-gray-400 text-xl press">←</button>
-          <h1 className="text-lg font-bold text-gray-900">Finalizar Pedido</h1>
+    <div className="flex flex-col min-h-screen" style={{ background: 'var(--bg)' }}>
+      {/* Header */}
+      <div className="safe-top flex-shrink-0" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-3 px-4 pt-4 pb-4">
+          <button onClick={() => navigate('/cart')} className="press w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{ background: 'var(--card)', color: 'var(--cream)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h1 className="flex-1 text-lg font-black" style={{ color: 'var(--cream)' }}>Finalizar Pedido</h1>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-48">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-4 pt-4 pb-40">
 
         {/* Seus dados */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-3">👤 Seus dados</h3>
-          <div className="space-y-2">
-            <div>
-              <label className="text-xs text-gray-500 font-medium">WhatsApp *</label>
-              <div className="relative">
-                <input
-                  type="tel" value={phone}
-                  onChange={e => {
-                    const digits = e.target.value.replace(/\D/g, '').slice(0, 11)
-                    let masked = digits
-                    if (digits.length > 2) masked = `(${digits.slice(0,2)}) ${digits.slice(2)}`
-                    if (digits.length > 7) masked = `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`
-                    setPhone(masked)
-                    if (digits.length >= 10) lookupByPhone(digits)
-                  }}
-                  onBlur={e => lookupByPhone(e.target.value)}
-                  placeholder="(96) 99999-0000"
-                  maxLength={15}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                />
-                {lookingUp && <span className="absolute right-3 top-3 text-xs text-gray-400">🔍</span>}
+        <Section title="👤 Seus dados">
+          <label style={LABEL}>WhatsApp *</label>
+          <div style={{ position: 'relative', marginBottom: 10 }}>
+            <input type="tel" value={phone} style={INPUT}
+              onChange={e => {
+                const d = e.target.value.replace(/\D/g, '').slice(0, 11)
+                let m = d
+                if (d.length > 2) m = `(${d.slice(0,2)}) ${d.slice(2)}`
+                if (d.length > 7) m = `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`
+                setPhone(m)
+                if (d.length >= 10) lookupByPhone(d)
+              }}
+              onBlur={e => lookupByPhone(e.target.value)}
+              placeholder="(96) 99999-0000" maxLength={15}
+            />
+            {lookingUp && <span style={{ position: 'absolute', right: 12, top: 10, fontSize: 12, color: 'var(--muted)' }}>🔍</span>}
+          </div>
+
+          {foundCustomer ? (
+            <div className="flex items-center gap-3 fade-in" style={{ background: 'rgba(76,175,128,0.1)', border: '1px solid rgba(76,175,128,0.25)', borderRadius: 12, padding: '10px 14px' }}>
+              <span style={{ color: 'var(--green)', fontSize: 18 }}>✅</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--cream)' }}>{foundCustomer.name}</p>
+                <p style={{ fontSize: 11, color: 'var(--green)' }}>Cliente encontrado</p>
+              </div>
+              <button onClick={() => { setFoundCustomer(null); setFirstName(''); setLastName('') }}
+                className="press" style={{ color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+          ) : phone.replace(/\D/g,'').length >= 10 && !lookingUp ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }} className="fade-in">
+              <div>
+                <label style={LABEL}>Nome *</label>
+                <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="João" style={INPUT} />
+              </div>
+              <div>
+                <label style={LABEL}>Sobrenome *</label>
+                <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Silva" style={INPUT} />
               </div>
             </div>
+          ) : null}
+        </Section>
 
-            {foundCustomer ? (
-              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                <span className="text-emerald-600 text-lg">✅</span>
-                <div>
-                  <p className="text-emerald-700 font-bold text-sm">{foundCustomer.name}</p>
-                  <p className="text-emerald-600 text-xs">Cliente encontrado</p>
-                </div>
-                <button
-                  onClick={() => { setFoundCustomer(null); setFirstName(''); setLastName('') }}
-                  className="ml-auto text-gray-400 text-sm press"
-                >✕</button>
-              </div>
-            ) : phone.replace(/\D/g,'').length >= 10 && !lookingUp ? (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-500 font-medium">Nome *</label>
-                  <input
-                    value={firstName} onChange={e => setFirstName(e.target.value)}
-                    placeholder="João"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 font-medium">Sobrenome *</label>
-                  <input
-                    value={lastName} onChange={e => setLastName(e.target.value)}
-                    placeholder="Silva"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Entrega ou Retirada */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-3">🚀 Como quer receber?</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { id: 'delivery', label: '🛵 Entrega', desc: 'Taxa por bairro' },
-              { id: 'retirada', label: '🏪 Retirada', desc: 'Sem taxa' },
-            ].map(opt => (
-              <button
-                key={opt.id}
-                onClick={() => setDeliveryType(opt.id)}
-                className={`p-3 rounded-xl border-2 text-left transition-all press ${deliveryType === opt.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100 bg-white'}`}
-              >
-                <p className="font-medium text-sm text-gray-900">{opt.label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
+        {/* Como receber */}
+        <Section title="🚀 Como quer receber?">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[{ id: 'delivery', label: '🛵 Entrega', desc: 'Taxa por bairro' }, { id: 'retirada', label: '🏪 Retirada', desc: 'Sem taxa' }].map(opt => (
+              <button key={opt.id} onClick={() => setDeliveryType(opt.id)} className="press"
+                style={{
+                  padding: 12, borderRadius: 12, textAlign: 'left', cursor: 'pointer',
+                  background: deliveryType === opt.id ? 'rgba(201,162,94,0.12)' : 'var(--surface)',
+                  border: `2px solid ${deliveryType === opt.id ? 'var(--gold)' : 'var(--border)'}`,
+                }}>
+                <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{opt.label}</p>
+                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{opt.desc}</p>
               </button>
             ))}
           </div>
-        </div>
+        </Section>
 
         {/* Endereço */}
         {deliveryType === 'delivery' && (
-          <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-            <h3 className="font-semibold text-gray-900 mb-3">📍 Endereço de entrega</h3>
-
-            {/* Endereços salvos do cliente */}
+          <Section title="📍 Endereço de entrega">
             {savedAddresses.length > 0 && !addingNewAddress && (
-              <div className="mb-3 space-y-2">
-                <p className="text-xs text-gray-500 font-medium mb-1">Endereços salvos:</p>
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, fontWeight: 600 }}>Endereços salvos:</p>
                 {savedAddresses.map(addr => (
-                  <button
-                    key={addr.id}
-                    onClick={() => applyAddress(addr)}
-                    className={`w-full text-left p-3 rounded-xl border-2 transition-all press ${selectedAddressId === addr.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100 bg-gray-50'}`}
-                  >
-                    <p className="text-sm font-semibold text-gray-800">{addr.street}{addr.number ? `, ${addr.number}` : ''}</p>
-                    <p className="text-xs text-gray-500">{[addr.neighborhood, addr.complement].filter(Boolean).join(' · ')}</p>
+                  <button key={addr.id} onClick={() => applyAddress(addr)} className="press w-full"
+                    style={{ textAlign: 'left', padding: 12, borderRadius: 12, marginBottom: 6, cursor: 'pointer',
+                      background: selectedAddressId === addr.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
+                      border: `2px solid ${selectedAddressId === addr.id ? 'var(--gold)' : 'var(--border)'}` }}>
+                    <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{addr.street}{addr.number ? `, ${addr.number}` : ''}</p>
+                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>{[addr.neighborhood, addr.complement].filter(Boolean).join(' · ')}</p>
                   </button>
                 ))}
-                <button
-                  onClick={startNewAddress}
-                  className="w-full text-center text-sm text-violet-600 font-semibold py-2 border-2 border-dashed border-violet-200 rounded-xl press"
-                >
+                <button onClick={() => { setSelectedAddressId(null); setStreet(''); setNumber(''); setNeighborhood(''); setComplement(''); setAddingNewAddress(true) }}
+                  className="press w-full" style={{ padding: 10, borderRadius: 12, border: '2px dashed var(--border)', background: 'none', color: 'var(--gold)', fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}>
                   ➕ Usar outro endereço
                 </button>
               </div>
             )}
 
-            {/* Formulário de endereço (novo ou sem histórico) */}
             {(savedAddresses.length === 0 || addingNewAddress) && (
-              <div className="space-y-2">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} className="fade-in">
                 {addingNewAddress && (
                   <button onClick={() => { setAddingNewAddress(false); if (savedAddresses[0]) applyAddress(savedAddresses[0]) }}
-                    className="text-xs text-gray-400 mb-1 press">← Voltar aos endereços salvos</button>
+                    className="press" style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, cursor: 'pointer', textAlign: 'left' }}>
+                    ← Voltar aos salvos
+                  </button>
                 )}
                 <div>
-                  <label className="text-xs text-gray-500 font-medium">Bairro *</label>
-                  <select
-                    value={neighborhood} onChange={e => setNeighborhood(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400 bg-white"
-                  >
+                  <label style={LABEL}>Bairro *</label>
+                  <select value={neighborhood} onChange={e => setNeighborhood(e.target.value)}
+                    style={{ ...INPUT, appearance: 'none' }}>
                     <option value="">— Selecione o bairro —</option>
                     {Object.entries(bairrosPorZona).map(([zona, bairros]) => (
                       <optgroup key={zona} label={`── ${zona} ──`}>
@@ -467,49 +370,29 @@ export default function CheckoutPage() {
                       </optgroup>
                     ))}
                   </select>
-                  {neighborhood && (
-                    <p className="text-xs text-violet-600 font-semibold mt-1">
-                      🛵 Taxa de entrega: R$ {getTaxa(neighborhood).toFixed(2).replace('.', ',')}
-                    </p>
-                  )}
+                  {neighborhood && <p style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 700, marginTop: 4 }}>🛵 Taxa: R$ {getTaxa(neighborhood).toFixed(2).replace('.', ',')}</p>}
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 font-medium">Rua / Avenida *</label>
-                  <input
-                    value={street} onChange={e => setStreet(e.target.value)}
-                    placeholder="Av. Duque de Caxias"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                  />
+                  <label style={LABEL}>Rua / Avenida *</label>
+                  <input value={street} onChange={e => setStreet(e.target.value)} placeholder="Av. Duque de Caxias" style={INPUT} />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div>
-                    <label className="text-xs text-gray-500 font-medium">Número</label>
-                    <input
-                      value={number} onChange={e => setNumber(e.target.value)}
-                      placeholder="123" inputMode="numeric"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                    />
+                    <label style={LABEL}>Número</label>
+                    <input value={number} onChange={e => setNumber(e.target.value)} placeholder="123" inputMode="numeric" style={INPUT} />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 font-medium">Complemento</label>
-                    <input
-                      value={complement} onChange={e => setComplement(e.target.value)}
-                      placeholder="Apto 12"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                    />
+                    <label style={LABEL}>Complemento</label>
+                    <input value={complement} onChange={e => setComplement(e.target.value)} placeholder="Apto 12" style={INPUT} />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Bairro selecionado (quando endereço salvo não tem bairro nos neighborhoods) */}
             {savedAddresses.length > 0 && !addingNewAddress && (
-              <div className="mt-3">
-                <label className="text-xs text-gray-500 font-medium">Bairro (para calcular taxa) *</label>
-                <select
-                  value={neighborhood} onChange={e => setNeighborhood(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400 bg-white"
-                >
+              <div style={{ marginTop: 10 }}>
+                <label style={LABEL}>Bairro (para calcular taxa) *</label>
+                <select value={neighborhood} onChange={e => setNeighborhood(e.target.value)} style={{ ...INPUT, appearance: 'none' }}>
                   <option value="">— Selecione o bairro —</option>
                   {Object.entries(bairrosPorZona).map(([zona, bairros]) => (
                     <optgroup key={zona} label={`── ${zona} ──`}>
@@ -519,142 +402,117 @@ export default function CheckoutPage() {
                     </optgroup>
                   ))}
                 </select>
-                {neighborhood && (
-                  <p className="text-xs text-violet-600 font-semibold mt-1">
-                    🛵 Taxa de entrega: R$ {getTaxa(neighborhood).toFixed(2).replace('.', ',')}
-                  </p>
-                )}
+                {neighborhood && <p style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 700, marginTop: 4 }}>🛵 Taxa: R$ {getTaxa(neighborhood).toFixed(2).replace('.', ',')}</p>}
               </div>
             )}
-          </div>
+          </Section>
         )}
 
         {/* Pagamento */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-3">💳 Forma de pagamento</h3>
-          <div className="space-y-2">
+        <Section title="💳 Forma de pagamento">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {PAYMENT_METHODS.map(m => (
-              <button
-                key={m.id}
-                onClick={() => setPayment(m.id)}
-                className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all press ${payment === m.id ? 'border-violet-600 bg-violet-50' : 'border-gray-100 bg-white'}`}
-              >
-                <span className="text-2xl">{m.icon}</span>
-                <div className="text-left flex-1">
-                  <p className="font-medium text-sm text-gray-900">{m.label}</p>
-                  <p className="text-xs text-gray-400">{m.desc}</p>
+              <button key={m.id} onClick={() => setPayment(m.id)} className="press"
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, cursor: 'pointer', textAlign: 'left',
+                  background: payment === m.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
+                  border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}` }}>
+                <span style={{ fontSize: 22 }}>{m.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{m.label}</p>
+                  <p style={{ fontSize: 11, color: 'var(--muted)' }}>{m.desc}</p>
                 </div>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${payment === m.id ? 'border-violet-600' : 'border-gray-200'}`}>
-                  {payment === m.id && <div className="w-2.5 h-2.5 bg-violet-600 rounded-full" />}
+                <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {payment === m.id && <div style={{ width: 10, height: 10, background: 'var(--gold)', borderRadius: '50%' }} />}
                 </div>
               </button>
             ))}
           </div>
 
-          {payment === 'pix' && settings.pix_key && (
-            <div className="mt-3">
-              <PixCopyBox pixKey={settings.pix_key} />
-            </div>
-          )}
+          {payment === 'pix' && settings.pix_key && <PixBox pixKey={settings.pix_key} />}
 
           {payment === 'dinheiro' && (
-            <div className="mt-3">
-              <label className="text-xs text-gray-500 font-medium">Troco para quanto? (opcional)</label>
-              <input
-                type="number" inputMode="numeric" value={troco} onChange={e => setTroco(e.target.value)}
-                placeholder="Ex: 50"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-              />
+            <div style={{ marginTop: 10 }}>
+              <label style={LABEL}>Troco para quanto? (opcional)</label>
+              <input type="number" inputMode="numeric" value={troco} onChange={e => setTroco(e.target.value)} placeholder="Ex: 50" style={INPUT} />
             </div>
           )}
-        </div>
+        </Section>
 
-        {/* Observação */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-2">📝 Observações</h3>
-          <textarea
-            value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder="Alguma instrução especial?"
-            rows={2}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-violet-400 resize-none"
-          />
-        </div>
+        {/* Observações */}
+        <Section title="📝 Observações">
+          <textarea value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="Alguma instrução especial?" rows={2}
+            style={{ ...INPUT, resize: 'none', fontFamily: 'inherit' }} />
+        </Section>
 
-        {/* Cupom de desconto */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-2">🎟️ Cupom de desconto</h3>
+        {/* Cupom */}
+        <Section title="🎟️ Cupom de desconto">
           {couponApplied ? (
-            <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(76,175,128,0.1)', border: '1px solid rgba(76,175,128,0.25)', borderRadius: 12, padding: '10px 14px' }}>
               <div>
-                <span className="text-emerald-700 font-bold text-sm">{couponApplied.code}</span>
-                <span className="text-emerald-600 text-xs ml-2">— {couponApplied.label}</span>
+                <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--green)' }}>{couponApplied.code}</span>
+                <span style={{ fontSize: 11, color: 'var(--green)', marginLeft: 6 }}>— {couponApplied.label}</span>
               </div>
-              <button onClick={() => { setCouponApplied(null); setCoupon('') }} className="text-gray-400 text-lg press">✕</button>
+              <button onClick={() => { setCouponApplied(null); setCoupon('') }} className="press"
+                style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
             </div>
           ) : (
-            <div className="flex gap-2">
-              <input
-                value={coupon} onChange={e => { setCoupon(e.target.value.toUpperCase()); setCouponError('') }}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={coupon} onChange={e => { setCoupon(e.target.value.toUpperCase()); setCouponError('') }}
                 onKeyDown={e => e.key === 'Enter' && applyCoupon()}
-                placeholder="Digite o código"
-                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-400 uppercase"
-              />
-              <button onClick={applyCoupon} className="bg-violet-600 text-white px-4 rounded-xl text-sm font-bold press active:bg-violet-700">
+                placeholder="Digite o código" style={{ ...INPUT, textTransform: 'uppercase', flex: 1 }} />
+              <button onClick={applyCoupon} className="btn-gold press" style={{ padding: '10px 16px', fontSize: 13, borderRadius: 12, whiteSpace: 'nowrap' }}>
                 Aplicar
               </button>
             </div>
           )}
-          {couponError && <p className="text-red-500 text-xs mt-1">{couponError}</p>}
-        </div>
+          {couponError && <p style={{ color: 'var(--danger)', fontSize: 11, marginTop: 4 }}>{couponError}</p>}
+        </Section>
 
         {/* Resumo */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-3">🧾 Resumo</h3>
-          <div className="space-y-1.5 text-sm">
+        <Section title="🧾 Resumo">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {items.map(i => (
-              <div key={i.key} className="flex justify-between text-gray-600">
-                <span>
+              <div key={i.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: 'var(--muted)' }}>
                   {i.qty}x {i.product.name}
-                  {(i.addons || []).length > 0 && (
-                    <span className="block text-xs text-gray-400">{i.addons.map(a => a.name).join(', ')}</span>
-                  )}
+                  {(i.addons || []).length > 0 && <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)' }}>{i.addons.map(a => a.name).join(', ')}</span>}
                 </span>
-                <span>{itemLineTotal(i).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span style={{ color: 'var(--cream)', fontWeight: 600 }}>{brl(itemLineTotal(i))}</span>
               </div>
             ))}
-            <div className="border-t border-gray-100 pt-2 mt-2">
-              <div className="flex justify-between text-gray-500">
-                <span>Subtotal</span>
-                <span>{subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+            <div className="gold-line" />
+            {[
+              { label: 'Subtotal', value: brl(subtotal) },
+              { label: 'Entrega', value: deliveryFee === 0 ? 'Grátis' : brl(deliveryFee) },
+              discount > 0 ? { label: `🎟️ ${couponApplied.code}`, value: `- ${brl(discount)}`, green: true } : null,
+            ].filter(Boolean).map(row => (
+              <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: 'var(--muted)' }}>{row.label}</span>
+                <span style={{ color: row.green ? 'var(--green)' : 'var(--cream)', fontWeight: 600 }}>{row.value}</span>
               </div>
-              <div className="flex justify-between text-gray-500">
-                <span>Taxa de entrega</span>
-                <span>{deliveryFee === 0 ? 'Grátis' : deliveryFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-emerald-600 font-medium">
-                  <span>🎟️ Desconto ({couponApplied.code})</span>
-                  <span>- {discount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-100 mt-1">
-                <span>Total</span>
-                <span className="text-violet-600 text-base">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-              </div>
+            ))}
+            <div className="gold-line" />
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: 'var(--cream)' }}>Total</span>
+              <span style={{ fontWeight: 900, fontSize: 16, color: 'var(--gold)' }}>{brl(total)}</span>
             </div>
           </div>
-        </div>
+        </Section>
 
-        {error && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-xl">{error}</p>}
+        {error && (
+          <div style={{ background: 'rgba(224,82,82,0.12)', border: '1px solid rgba(224,82,82,0.3)', borderRadius: 12, padding: 12, textAlign: 'center', fontSize: 13, color: 'var(--danger)' }}>
+            {error}
+          </div>
+        )}
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-4 bg-white border-t border-gray-100 safe-bottom z-50">
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="w-full bg-violet-600 text-white rounded-2xl py-4 font-bold text-base press active:bg-violet-700 disabled:opacity-60 flex items-center justify-center gap-2"
-        >
-          {loading ? '⏳ Enviando...' : `✅ Confirmar pedido · ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}
+      {/* Botão fixo */}
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-4 safe-bottom z-50"
+        style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+        <button onClick={handleSubmit} disabled={loading} className="btn-gold w-full py-4 flex items-center justify-between px-5">
+          <span className="text-sm font-black">{loading ? '⏳ Enviando...' : '✅ Confirmar pedido'}</span>
+          <span className="text-sm font-black">{brl(total)}</span>
         </button>
       </div>
     </div>
