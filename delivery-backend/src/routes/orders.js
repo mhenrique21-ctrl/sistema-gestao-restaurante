@@ -458,9 +458,9 @@ router.patch('/:id', async (req, res) => {
 // DELETE /api/orders/:id — excluir pedido (requer senha admin)
 router.delete('/:id', async (req, res) => {
   try {
-    await pool.query(`DELETE FROM order_items WHERE order_id = $1`, [req.params.id]);
-    await pool.query(`DELETE FROM order_status_history WHERE order_id = $1`, [req.params.id]);
-    await pool.query(`DELETE FROM orders WHERE id = $1`, [req.params.id]);
+    await pool.query(`DELETE FROM order_items WHERE order_id = $1 RETURNING id`, [req.params.id]);
+    await pool.query(`DELETE FROM order_status_history WHERE order_id = $1 RETURNING id`, [req.params.id]);
+    await pool.query(`DELETE FROM orders WHERE id = $1 RETURNING id`, [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     console.error('[orders/DELETE]', err.message);
