@@ -1,5 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { useCart, itemLineTotal, itemUnitPrice } from '../store/cart'
+import { useEffect, useState } from 'react'
+import { api } from '../api'
+import { checkStoreOpen } from '../utils/storeStatus'
 
 function money(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -9,6 +12,11 @@ export default function CartPage() {
   const { items, updateQty, removeItem, clear } = useCart()
   const navigate = useNavigate()
   const subtotal = items.reduce((s, i) => s + itemLineTotal(i), 0)
+  const [storeStatus, setStoreStatus] = useState({ open: true })
+
+  useEffect(() => {
+    api.settings().then((s) => setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates))).catch(() => {})
+  }, [])
 
   if (items.length === 0) {
     return (
@@ -107,8 +115,20 @@ export default function CartPage() {
       {/* CTA */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-4 safe-bottom z-30"
         style={{ background: 'var(--bg)' }}>
-        <button onClick={() => navigate('/checkout')}
-          className="btn-gold w-full py-4 flex items-center justify-between px-5">
+        {!storeStatus.open && (
+          <div className="mb-2 rounded-xl px-4 py-2.5 flex items-center gap-2"
+            style={{ background: 'rgba(224,82,82,0.12)', border: '1px solid rgba(224,82,82,0.3)' }}>
+            <span>🔒</span>
+            <p className="text-xs font-semibold" style={{ color: 'var(--danger)' }}>
+              Loja fechada — {storeStatus.reason || 'Fora do horário'}
+            </p>
+          </div>
+        )}
+        <button
+          onClick={() => storeStatus.open && navigate('/checkout')}
+          disabled={!storeStatus.open}
+          className="btn-gold w-full py-4 flex items-center justify-between px-5"
+          style={!storeStatus.open ? { opacity: 0.4, cursor: 'not-allowed' } : {}}>
           <span className="text-sm font-black">Finalizar pedido</span>
           <span className="text-sm font-black">{money(subtotal)}</span>
         </button>

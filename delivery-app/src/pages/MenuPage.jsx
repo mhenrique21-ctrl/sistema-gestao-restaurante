@@ -4,6 +4,7 @@ import ProductModal from '../components/ProductModal'
 import { useCart, itemLineTotal } from '../store/cart'
 import { useNavigate } from 'react-router-dom'
 import hero from '../assets/hero.png'
+import { checkStoreOpen } from '../utils/storeStatus'
 
 const CAT_ICONS = {
   'Café': '☕', 'Cafés': '☕', 'Bebidas': '🥤', 'Bolos': '🎂', 'Bolos e Tortas': '🎂',
@@ -77,6 +78,7 @@ export default function MenuPage() {
   const [active, setActive] = useState(null)
   const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
+  const [storeStatus, setStoreStatus] = useState({ open: true })
   const catRefs = useRef({})
   const count = useCart((s) => s.items.reduce((n, i) => n + i.qty, 0))
   const total = useCart((s) => s.items.reduce((sum, i) => sum + itemLineTotal(i), 0))
@@ -91,6 +93,7 @@ export default function MenuPage() {
       if (s.store_name) setStoreName(s.store_name)
       if (s.banner_image_url) setBannerUrl(s.banner_image_url)
       if (s.logo_url) setLogoUrl(s.logo_url)
+      setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates))
     }).catch(() => {})
   }, [])
 
@@ -116,8 +119,9 @@ export default function MenuPage() {
             <h1 className="text-lg font-black tracking-tight" style={{ color: 'var(--cream)' }}>{storeName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: 'rgba(76,175,128,0.15)', color: 'var(--green)' }}>
-              ● Aberto
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
+              style={{ background: storeStatus.open ? 'rgba(76,175,128,0.15)' : 'rgba(224,82,82,0.15)', color: storeStatus.open ? 'var(--green)' : 'var(--danger)' }}>
+              ● {storeStatus.open ? 'Aberto' : (storeStatus.reason || 'Fechado')}
             </span>
             {logoUrl && (
               <img src={logoUrl} alt="" className="w-9 h-9 rounded-full object-cover" style={{ border: '1.5px solid var(--gold-dim)' }} />
@@ -168,6 +172,18 @@ export default function MenuPage() {
           </div>
         )}
       </div>
+
+      {/* Banner loja fechada */}
+      {!storeStatus.open && (
+        <div className="flex-shrink-0 mx-4 mt-3 rounded-2xl px-4 py-3 flex items-center gap-3"
+          style={{ background: 'rgba(224,82,82,0.12)', border: '1px solid rgba(224,82,82,0.3)' }}>
+          <span className="text-xl">🔒</span>
+          <div>
+            <p className="text-sm font-bold" style={{ color: 'var(--danger)' }}>Loja fechada no momento</p>
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>{storeStatus.reason || 'Fora do horário de funcionamento'}</p>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto no-scrollbar pb-28">
