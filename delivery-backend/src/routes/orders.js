@@ -400,7 +400,7 @@ router.patch('/:id/status', async (req, res) => {
     const order = result.rows[0];
     let whatsapp_link = null;
 
-    const NOTIFY_STATUSES = ['em_preparo', 'saiu_para_entrega', 'cancelado'];
+    const NOTIFY_STATUSES = ['confirmado', 'em_preparo', 'saiu_para_entrega', 'cancelado'];
     if (NOTIFY_STATUSES.includes(status)) {
       const customerPhone = (order.customer_phone || '').replace(/\D/g, '');
       const orderNum = order.order_number;
@@ -408,7 +408,9 @@ router.patch('/:id/status', async (req, res) => {
 
       if (customerPhone) {
         let msg = '';
-        if (status === 'em_preparo') {
+        if (status === 'confirmado') {
+          msg = `✅ *Pedido #${orderNum} confirmado!*\n\nOlá ${firstName}! Recebemos seu pedido e já estamos cuidando de tudo. Logo logo estará pronto! ☕🎉`;
+        } else if (status === 'em_preparo') {
           msg = `👨‍🍳 *Pedido #${orderNum} em preparo!*\n\nOlá ${firstName}! Seu pedido está sendo preparado com carinho. Em breve estará pronto! ☕`;
         } else if (status === 'saiu_para_entrega') {
           const isRetirada = order.delivery_type === 'retirada';
