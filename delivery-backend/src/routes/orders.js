@@ -138,19 +138,23 @@ router.post('/guest', async (req, res) => {
       [order.id, adminId]
     );
 
-    // Gera link WhatsApp manual para o admin confirmar o pedido com o cliente
-    let whatsapp_link = null;
+    // Gera links WhatsApp manuais (cliente → admin e admin → cliente)
+    let whatsapp_link_cliente = null;
+    let whatsapp_link_admin = null;
     try {
-      if (phone) {
-        const itemsList = resolvedItems.map(i => `• ${i.quantity}x ${i.product_name}`).join('\n');
-        const totalFmt = `R$ ${total.toFixed(2).replace('.', ',')}`;
-        const tipo = (delivery_type === 'retirada') ? '🏪 Retirada' : '🛵 Entrega';
-        const msg = `🔔 *Novo Pedido #${order.order_number}*\n\n👤 ${customer.name}\n📱 ${phone}\n${tipo}\n\n${itemsList}\n\n💰 Total: ${totalFmt}\n💳 Pagamento: ${payment_method}`;
-        whatsapp_link = `https://wa.me/55${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;
-      }
+      const itemsList = resolvedItems.map(i => `• ${i.quantity}x ${i.product_name}`).join('\n');
+      const totalFmt = `R$ ${total.toFixed(2).replace('.', ',')}`;
+      const tipo = (delivery_type === 'retirada') ? '🏪 Retirada' : '🛵 Entrega';
+      const msg = `🔔 *Novo Pedido #${order.order_number}*\n\n👤 ${customer.name}\n📱 ${phone}\n${tipo}\n\n${itemsList}\n\n💰 Total: ${totalFmt}\n💳 Pagamento: ${payment_method}`;
+      // Link para admin enviar ao CLIENTE
+      if (phone) whatsapp_link_cliente = `https://wa.me/55${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;
+      // Link para admin enviar para o número da LOJA (auto-notificação)
+      const settingsResult = await pool.query(`SELECT value FROM settings WHERE key = 'store_whatsapp_number'`);
+      const storePhone = (settingsResult.rows[0]?.value || '').replace(/\D/g, '');
+      if (storePhone) whatsapp_link_admin = `https://wa.me/55${storePhone}?text=${encodeURIComponent(msg)}`;
     } catch(e) {}
 
-    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, whatsapp_link });
+    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, whatsapp_link_cliente, whatsapp_link_admin });
 
     res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
   } catch (err) {
