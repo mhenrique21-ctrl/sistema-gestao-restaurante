@@ -52,6 +52,7 @@ app.use('/api/neighborhoods', require('./routes/neighborhoods'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/payment-methods', require('./routes/paymentMethods'));
 app.use('/api/delivery', require('./routes/delivery'));
+app.use('/api/promotions', require('./routes/promotions'));
 
 // Health check
 app.get('/health', (req, res) => {

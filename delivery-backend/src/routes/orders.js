@@ -8,6 +8,22 @@ const { printOrderTicket } = require('../services/printer');
 const https = require('https');
 const http = require('http');
 
+async function applyPromotion(subtotal, deliveryFee) {
+  const nowDay = new Date().getDay();
+  const result = await pool.query(`SELECT * FROM promotions WHERE active = true ORDER BY created_at`);
+  let discount = 0, appliedPromo = null;
+  for (const promo of result.rows) {
+    if (promo.day_of_week && promo.day_of_week.length > 0 && !promo.day_of_week.includes(nowDay)) continue;
+    if (subtotal < parseFloat(promo.min_order_value)) continue;
+    let d = 0;
+    if (promo.discount_type === 'free_delivery') d = deliveryFee;
+    else if (promo.discount_type === 'percent') d = subtotal * (parseFloat(promo.discount_value) / 100);
+    else if (promo.discount_type === 'fixed') d = parseFloat(promo.discount_value);
+    if (d > discount) { discount = d; appliedPromo = promo; }
+  }
+  return { discount: Math.round(discount * 100) / 100, promo: appliedPromo };
+}
+
 async function sendWhatsApp(phone, message) {
   return new Promise((resolve) => {
     const body = JSON.stringify({ number: `55${phone}`, text: message });
@@ -112,15 +128,17 @@ router.post('/guest', async (req, res) => {
       resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSub, product_name: prod.rows[0].name, addons: resolvedAddons });
     }
 
-    const total = subtotal + parseFloat(delivery_fee);
+    const fee = parseFloat(delivery_fee);
+    const { discount: promoDiscount, promo: appliedPromo } = await applyPromotion(subtotal, fee);
+    const total = subtotal + fee - promoDiscount;
 
     const orderResult = await pool.query(
       `INSERT INTO orders (customer_id, user_id, delivery_type, delivery_address, subtotal,
         delivery_fee, discount, total, payment_method, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,'aguardando_pagamento') RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'aguardando_pagamento') RETURNING *`,
       [customer.id, adminId, delivery_type || 'delivery',
        delivery_address ? JSON.stringify(delivery_address) : null,
-       subtotal, parseFloat(delivery_fee), total, payment_method, notes || null]
+       subtotal, fee, promoDiscount, total, payment_method, notes || null]
     );
     const order = orderResult.rows[0];
 
@@ -164,7 +182,8 @@ router.post('/guest', async (req, res) => {
             : `${delivery_address.street || ''}, ${delivery_address.number || ''} - ${delivery_address.neighborhood || ''}`)
           : '';
         const tipo = delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
-        const taxaLine = parseFloat(delivery_fee) > 0 ? `\nTaxa entrega: R$ ${parseFloat(delivery_fee).toFixed(2).replace('.', ',')}` : '';
+        const promoLine = promoDiscount > 0 ? `\n🎉 Desconto (${appliedPromo?.name}): -R$ ${promoDiscount.toFixed(2).replace('.', ',')}` : '';
+        const taxaLine = fee > 0 ? `\nTaxa entrega: R$ ${(fee - promoDiscount).toFixed(2).replace('.', ',')}${promoDiscount > 0 ? ' ✅ Grátis!' : ''}` : '';
         const subtotalLine = parseFloat(delivery_fee) > 0 ? `\nSubtotal: R$ ${subtotal.toFixed(2).replace('.', ',')}` : '';
         const obsGeral = notes ? `\n\n📝 *Obs:* ${notes}` : '';
         const msgCliente =
@@ -175,7 +194,7 @@ router.post('/guest', async (req, res) => {
           `✅ *Pedido #${order.order_number} confirmado!*\n\n` +
           `Olá ${nome}! Seu pedido foi recebido e já estamos preparando ☕\n\n` +
           `*🛒 Itens:*\n${itemsList}${obsGeral}\n\n` +
-          `${tipo}${subtotalLine}${taxaLine}\n` +
+          `${tipo}${subtotalLine}${taxaLine}${promoLine}\n` +
           `─────────────────\n` +
           `💰 *Total: R$ ${total.toFixed(2).replace('.', ',')}*\n` +
           `💳 Pagamento: ${payment_method}\n\n` +

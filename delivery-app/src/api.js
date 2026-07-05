@@ -44,4 +44,8 @@ export const api = {
   getOrder: (id) => request('GET', `/orders/${id}`),
   getOrders: (params = '') => request('GET', `/orders${params}`),
   getCustomerOrders: (phone) => request('GET', `/orders/customer/${phone.replace(/\D/g, '')}`),
+
+  // Promoções
+  getPromotions: () => request('GET', '/promotions'),
+  applyPromotion: (subtotal, deliveryFee) => request('GET', `/promotions/apply?subtotal=${subtotal}&delivery_fee=${deliveryFee}`),
 }

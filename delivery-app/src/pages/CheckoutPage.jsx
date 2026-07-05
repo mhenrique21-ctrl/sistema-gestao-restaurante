@@ -112,10 +112,12 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addingNewAddress, setAddingNewAddress] = useState(false)
   const [lookingUp, setLookingUp] = useState(false)
+  const [activePromo, setActivePromo] = useState(null)
 
   useEffect(() => {
     api.neighborhoods().then(setNeighborhoods).catch(() => setNeighborhoods([]))
     api.settings().then(setSettings).catch(() => {})
+    api.getPromotions().then(setActivePromo).catch(() => {})
   }, [])
 
   async function lookupByPhone(phoneVal) {
@@ -161,7 +163,20 @@ export default function CheckoutPage() {
 
   const subtotal = items.reduce((s, i) => s + itemLineTotal(i), 0)
   const deliveryFee = deliveryType === 'delivery' ? getTaxa(neighborhood) : 0
-  const discount = couponApplied ? (couponApplied.type === 'percent' ? subtotal * couponApplied.value / 100 : couponApplied.value) : 0
+
+  // Verifica promoção aplicável agora (lado cliente, tempo real)
+  const nowDay = new Date().getDay()
+  const applicablePromo = Array.isArray(activePromo) ? activePromo.find(p => {
+    if (p.day_of_week && p.day_of_week.length && !p.day_of_week.includes(nowDay)) return false
+    return subtotal >= parseFloat(p.min_order_value)
+  }) : null
+  const promoDiscount = applicablePromo
+    ? applicablePromo.discount_type === 'free_delivery' ? deliveryFee
+      : applicablePromo.discount_type === 'percent' ? subtotal * parseFloat(applicablePromo.discount_value) / 100
+      : parseFloat(applicablePromo.discount_value)
+    : 0
+
+  const discount = couponApplied ? (couponApplied.type === 'percent' ? subtotal * couponApplied.value / 100 : couponApplied.value) : promoDiscount
   const total = subtotal + deliveryFee - discount
 
   function applyCoupon() {
@@ -469,6 +484,36 @@ export default function CheckoutPage() {
           {couponError && <p style={{ color: 'var(--danger)', fontSize: 11, marginTop: 4 }}>{couponError}</p>}
         </Section>
 
+        {/* Banner promoção ativa */}
+        {Array.isArray(activePromo) && activePromo.length > 0 && (() => {
+          const DAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+          return activePromo.map(p => {
+            const dias = p.day_of_week?.length ? p.day_of_week.map(d => DAYS_PT[d]).join(', ') : null
+            const isToday = !p.day_of_week?.length || p.day_of_week.includes(nowDay)
+            const meetsMin = subtotal >= parseFloat(p.min_order_value)
+            return (
+              <div key={p.id} style={{
+                borderRadius: 14, padding: '12px 14px', marginBottom: 4,
+                background: isToday && meetsMin ? 'rgba(22,163,74,0.1)' : 'rgba(201,162,94,0.07)',
+                border: `1px solid ${isToday && meetsMin ? 'rgba(22,163,74,0.4)' : 'rgba(201,162,94,0.25)'}`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 20 }}>🎉</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: isToday && meetsMin ? 'var(--green)' : 'var(--gold)', margin: 0 }}>
+                      {p.name} {isToday && meetsMin ? '— APLICADO!' : ''}
+                    </p>
+                    <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0 }}>
+                      {dias ? `Toda ${dias}` : 'Todos os dias'} · pedidos acima de {brl(parseFloat(p.min_order_value))}
+                      {!meetsMin && isToday ? ` · faltam ${brl(parseFloat(p.min_order_value) - subtotal)}` : ''}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        })()}
+
         {/* Resumo */}
         <Section title="🧾 Resumo">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -485,7 +530,8 @@ export default function CheckoutPage() {
             {[
               { label: 'Subtotal', value: brl(subtotal) },
               { label: 'Entrega', value: deliveryFee === 0 ? 'Grátis' : brl(deliveryFee) },
-              discount > 0 ? { label: `🎟️ ${couponApplied.code}`, value: `- ${brl(discount)}`, green: true } : null,
+              applicablePromo && !couponApplied ? { label: `🎉 ${applicablePromo.name}`, value: `- ${brl(promoDiscount)}`, green: true } : null,
+              couponApplied ? { label: `🎟️ ${couponApplied.code}`, value: `- ${brl(discount)}`, green: true } : null,
             ].filter(Boolean).map(row => (
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)' }}>{row.label}</span>
