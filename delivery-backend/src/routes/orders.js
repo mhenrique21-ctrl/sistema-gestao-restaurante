@@ -139,15 +139,14 @@ router.post('/guest', async (req, res) => {
     );
 
     // Auto-confirmar pedido
-    await pool.query(
-      `UPDATE orders SET status = 'confirmado' WHERE id = $1`,
-      [order.id]
-    );
-    await pool.query(
-      `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'confirmado',$2) RETURNING id`,
-      [order.id, adminId]
-    );
-    order.status = 'confirmado';
+    try {
+      await pool.query(`UPDATE orders SET status = 'confirmado' WHERE id = $1`, [order.id]);
+      await pool.query(
+        `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'confirmado',$2) RETURNING id`,
+        [order.id, adminId]
+      );
+      order.status = 'confirmado';
+    } catch(e) { console.error('[auto-confirm]', e.message); }
 
     // Envia cupom completo ao cliente via Evolution API
     try {
