@@ -1074,7 +1074,9 @@ function renderPedidos(orders) {
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')">👁 Ver itens</button>
-        ${o.status !== 'em_preparo' && o.status !== 'pronto' && o.status !== 'saiu_para_entrega' && o.status !== 'entregue' && o.status !== 'cancelado' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
+        ${o.status === 'aguardando_pagamento' || o.status === 'pago' ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')">✅ Confirmar</button>` : ''}
+        ${o.status === 'confirmado' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
+        ${o.status !== 'confirmado' && o.status !== 'em_preparo' && o.status !== 'pronto' && o.status !== 'saiu_para_entrega' && o.status !== 'entregue' && o.status !== 'cancelado' && o.status !== 'aguardando_pagamento' && o.status !== 'pago' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none" onclick="avancarStatus('${o.id}','em_preparo')">👨‍🍳 Em Preparo</button>` : ''}
         ${o.status === 'em_preparo' ? `<button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none" onclick="avancarStatus('${o.id}','pronto')">✅ Pedido Pronto</button>` : ''}
         ${o.status === 'em_preparo' || o.status === 'pronto' ? `<button class="btn btn-sm" style="background:#0ea5e9;color:#fff;border:none" onclick="avancarStatus('${o.id}','saiu_para_entrega')">🛵 A Caminho</button>` : ''}
         ${o.status === 'saiu_para_entrega' ? `<button class="btn btn-success btn-sm" onclick="avancarStatus('${o.id}','entregue')">🎉 Entregue</button>` : ''}
