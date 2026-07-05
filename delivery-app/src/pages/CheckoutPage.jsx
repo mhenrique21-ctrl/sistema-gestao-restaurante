@@ -360,28 +360,40 @@ export default function CheckoutPage() {
                 />
                 {lookingUp && <span className="absolute right-3 top-3 text-xs text-gray-400">🔍</span>}
               </div>
-              {foundCustomer && (
-                <p className="text-xs text-emerald-600 mt-1 font-medium">✅ Cliente encontrado: {foundCustomer.name}</p>
-              )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-gray-500 font-medium">Nome *</label>
-                <input
-                  value={firstName} onChange={e => setFirstName(e.target.value)}
-                  placeholder="João"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                />
+
+            {foundCustomer ? (
+              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                <span className="text-emerald-600 text-lg">✅</span>
+                <div>
+                  <p className="text-emerald-700 font-bold text-sm">{foundCustomer.name}</p>
+                  <p className="text-emerald-600 text-xs">Cliente encontrado</p>
+                </div>
+                <button
+                  onClick={() => { setFoundCustomer(null); setFirstName(''); setLastName('') }}
+                  className="ml-auto text-gray-400 text-sm press"
+                >✕</button>
               </div>
-              <div>
-                <label className="text-xs text-gray-500 font-medium">Sobrenome *</label>
-                <input
-                  value={lastName} onChange={e => setLastName(e.target.value)}
-                  placeholder="Silva"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
-                />
+            ) : phone.replace(/\D/g,'').length >= 10 && !lookingUp ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Nome *</label>
+                  <input
+                    value={firstName} onChange={e => setFirstName(e.target.value)}
+                    placeholder="João"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Sobrenome *</label>
+                  <input
+                    value={lastName} onChange={e => setLastName(e.target.value)}
+                    placeholder="Silva"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mt-0.5 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
 
