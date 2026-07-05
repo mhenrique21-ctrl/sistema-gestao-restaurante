@@ -1314,10 +1314,23 @@ function montarMsgWA(o) {
   }).join('\n');
   const addr = o.delivery_address ? (typeof o.delivery_address==='string' ? o.delivery_address : `${o.delivery_address.street||''}, ${o.delivery_address.number||''} - ${o.delivery_address.neighborhood||''}`) : '';
   const tipo = o.delivery_type==='retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr?'\n📍 '+addr:''}`;
-  const taxa = o.delivery_fee>0 ? `\n🛵 Taxa: R$ ${parseFloat(o.delivery_fee).toFixed(2).replace('.',',')}` : '';
+  const taxa = o.delivery_fee>0 ? `\n🛵 Taxa entrega: R$ ${parseFloat(o.delivery_fee).toFixed(2).replace('.',',')}` : '';
   const desc = o.discount_amount>0 ? `\n🎟 Desconto: -R$ ${parseFloat(o.discount_amount).toFixed(2).replace('.',',')}` : '';
-  const obs = o.notes ? `\n\n📝 *Obs:* ${o.notes}` : '';
-  return `✅ *Pedido #${num} confirmado!*\n\nOlá ${nome}! Recebemos seu pedido e já estamos preparando tudo ☕\n\n*Itens:*\n${items}${obs}\n\n${tipo}${taxa}${desc}\n\n💰 *Total: R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}*\n💳 ${o.payment_method||''}\n\nEm breve ficará pronto! 🎉`;
+  const obsGeral = o.notes ? `\n\n📝 *Obs:* ${o.notes}` : '';
+  const subtotal = (o.items||[]).reduce((s,i)=>s+parseFloat((i.unit_price||i.price||0)*i.quantity),0);
+  const linhaSubtotal = taxa || desc ? `\nSubtotal: R$ ${subtotal.toFixed(2).replace('.',',')}` : '';
+  return `☕ *Confraria Café*\n` +
+    `📍 Av Almirante Barroso, 746 - Centro\n` +
+    `📞 96 97400-7410\n` +
+    `─────────────────\n` +
+    `✅ *Pedido #${num} confirmado!*\n\n` +
+    `Olá ${nome}! Seu pedido foi recebido e já estamos preparando ☕\n\n` +
+    `*🛒 Itens:*\n${items}${obsGeral}\n\n` +
+    `${tipo}${linhaSubtotal}${taxa}${desc}\n` +
+    `─────────────────\n` +
+    `💰 *Total: R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}*\n` +
+    `💳 Pagamento: ${o.payment_method||''}\n\n` +
+    `Em breve ficará pronto! 🎉`;
 }
 
 async function confirmarEEnviarWA(id) {
