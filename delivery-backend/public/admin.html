@@ -1334,27 +1334,27 @@ function montarMsgWA(o) {
 }
 
 async function confirmarEEnviarWA(id) {
-  const win = window.open('', '_blank'); // abre antes do await (evita bloqueio mobile)
   try {
     const o = await api('GET', '/orders/' + id);
     const phone = (o.customer_phone || '').replace(/\D/g, '');
-    if (!phone) { win.close(); toast('Cliente sem telefone', true); return; }
+    if (!phone) { toast('Cliente sem telefone', true); return; }
     if (o.status === 'aguardando_pagamento' || o.status === 'pago') {
       await api('PATCH', '/orders/' + id + '/status', { status: 'confirmado' });
       carregarPedidos();
     }
-    win.location.href = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(montarMsgWA(o));
-  } catch(e) { win.close(); toast('Erro: ' + e.message, true); }
+    const url = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(montarMsgWA(o));
+    toastWhatsApp('✅ Pedido confirmado! Toque para avisar o cliente:', url);
+  } catch(e) { toast('Erro: ' + e.message, true); }
 }
 
 async function reenviarWA(id) {
-  const win = window.open('', '_blank');
   try {
     const o = await api('GET', '/orders/' + id);
     const phone = (o.customer_phone || '').replace(/\D/g, '');
-    if (!phone) { win.close(); toast('Cliente sem telefone', true); return; }
-    win.location.href = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(montarMsgWA(o));
-  } catch(e) { win.close(); toast('Erro: ' + e.message, true); }
+    if (!phone) { toast('Cliente sem telefone', true); return; }
+    const url = 'https://wa.me/55' + phone + '?text=' + encodeURIComponent(montarMsgWA(o));
+    toastWhatsApp('📲 Toque para enviar ao cliente:', url);
+  } catch(e) { toast('Erro: ' + e.message, true); }
 }
 
 function copiarEndereco(addr) {
