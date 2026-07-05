@@ -1222,14 +1222,13 @@ async function salvarEdicaoPedido(id, isDelivery) {
 }
 
 async function excluirPedido(id) {
-  const senha = prompt('Digite a senha para excluir este pedido:');
-  if (!senha) return;
+  if (!confirm('Excluir este pedido? Essa ação não pode ser desfeita.')) return;
   try {
-    await api('DELETE', '/orders/' + id, { password: senha });
+    await api('DELETE', '/orders/' + id);
     toast('Pedido excluído');
     carregarPedidos();
   } catch (e) {
-    alert(e.message || 'Senha incorreta');
+    alert(e.message || 'Erro ao excluir');
   }
 }
 

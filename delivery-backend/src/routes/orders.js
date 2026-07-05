@@ -457,9 +457,6 @@ router.patch('/:id', async (req, res) => {
 
 // DELETE /api/orders/:id — excluir pedido (requer senha admin)
 router.delete('/:id', async (req, res) => {
-  const { password } = req.body;
-  const ADMIN_DELETE_PASSWORD = process.env.ADMIN_DELETE_PASSWORD || 'confraria2024';
-  if (password !== ADMIN_DELETE_PASSWORD) return res.status(403).json({ error: 'Senha incorreta' });
   try {
     await pool.query(`DELETE FROM order_items WHERE order_id = $1`, [req.params.id]);
     await pool.query(`DELETE FROM orders WHERE id = $1`, [req.params.id]);
