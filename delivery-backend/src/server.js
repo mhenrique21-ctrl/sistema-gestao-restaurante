@@ -35,6 +35,11 @@ app.use(express.static(require('path').join(__dirname, '../public'), {
   setHeaders: (res) => res.setHeader('Cache-Control', 'no-store')
 }));
 
+// Serve logo diretamente (Nginx não bloqueia /api/)
+app.get('/api/logo', (req, res) => {
+  res.sendFile(require('path').join(__dirname, '../public/logo.png'));
+});
+
 // Rotas
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/menu', require('./routes/menu'));

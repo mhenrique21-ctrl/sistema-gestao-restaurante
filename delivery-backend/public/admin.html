@@ -1253,7 +1253,7 @@ function copiarEndereco(addr) {
 
 async function getLogoDataUrl() {
   try {
-    const res = await fetch('/logo.png');
+    const res = await fetch('/api/logo');
     if (!res.ok) return null;
     const blob = await res.blob();
     return new Promise(resolve => {
