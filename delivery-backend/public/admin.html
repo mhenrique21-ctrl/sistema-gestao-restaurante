@@ -103,6 +103,51 @@ textarea { resize: vertical; min-height: 70px; }
 /* Theme button */
 #theme-btn { background: none; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: .8rem; cursor: pointer; transition: all .15s; }
 #theme-btn:hover { background: var(--hover); }
+
+/* Hamburger */
+#hamburger { display: none; background: none; border: none; color: var(--text); font-size: 1.4rem; cursor: pointer; padding: 4px 8px; line-height: 1; }
+
+/* Sidebar overlay (mobile) */
+#sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 199; }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+
+  #hamburger { display: block; }
+
+  #sidebar {
+    position: fixed; top: 0; left: -240px; height: 100vh; width: 240px;
+    z-index: 200; transition: left .25s ease; overflow-y: auto;
+  }
+  #sidebar.open { left: 0; }
+  #sidebar-overlay.open { display: block; }
+
+  #main { width: 100%; }
+
+  #topbar { padding: 10px 16px; }
+  #topbar h2 { font-size: .9rem; }
+
+  #content { padding: 12px; }
+
+  .card { padding: 14px; }
+
+  /* Tables scroll horizontally */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Form grids drop to 1 col */
+  .form-grid.cols-2,
+  .form-grid.cols-3 { grid-template-columns: 1fr; }
+
+  /* Modal full-width */
+  .modal { max-width: 100%; margin: 12px; border-radius: 12px; }
+
+  /* Toast at bottom-center */
+  #toast { bottom: 16px; right: 16px; left: 16px; text-align: center; }
+
+  /* Pedidos cards — stack buttons */
+  .pedido-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+}
 </style>
 </head>
 <body>
@@ -128,9 +173,14 @@ textarea { resize: vertical; min-height: 70px; }
   <div class="bottom" id="user-info">Carregando...</div>
 </div>
 
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
 <div id="main">
   <div id="topbar">
-    <h2 id="page-title">Dashboard</h2>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="hamburger" onclick="toggleSidebar()">☰</button>
+      <h2 id="page-title">Dashboard</h2>
+    </div>
     <div style="display:flex;gap:10px;align-items:center;">
       <span id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
       <button id="theme-btn" onclick="toggleTheme()">🌙 Escuro</button>
@@ -267,6 +317,15 @@ function toast(msg, err = false) {
   setTimeout(() => el.className = '', 3000);
 }
 
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
 function toggleTheme() {
   const light = document.body.classList.toggle('light');
   localStorage.setItem('admin_theme', light ? 'light' : 'dark');
@@ -356,6 +415,7 @@ let modalCallback = null;
 
 function showPage(page, btn) {
   currentPage = page;
+  closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', impressoras:'Impressoras' };
