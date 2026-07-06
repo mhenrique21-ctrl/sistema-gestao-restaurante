@@ -1080,11 +1080,25 @@ function modalEditarCategoria(id, name, desc, printer) {
     <div class="form-grid">
       <div><label>Nome</label><input id="f-name" value="${name}" /></div>
       <div><label>Descrição</label><input id="f-desc" value="${desc}" /></div>
-      <div><label>Impressora</label>${printerSelectHtml(printer)}</div>
+      <div>
+        <label>Impressora</label>
+        ${printerSelectHtml(printer)}
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:.83rem;color:var(--muted)">
+          <input type="checkbox" id="f-apply-produtos" checked>
+          Aplicar impressora a todos os produtos desta categoria
+        </label>
+      </div>
     </div>`, async () => {
-    const printer = document.getElementById('f-printer').value || null;
-    await api('PATCH', '/categories/' + id, { name: document.getElementById('f-name').value, description: document.getElementById('f-desc').value, printer });
-    toast('Categoria atualizada!'); closeModal(); pageCategorias();
+    const newPrinter = document.getElementById('f-printer').value || null;
+    const applyProdutos = document.getElementById('f-apply-produtos').checked;
+    await api('PATCH', '/categories/' + id, { name: document.getElementById('f-name').value, description: document.getElementById('f-desc').value, printer: newPrinter });
+    if (applyProdutos) {
+      const r = await api('POST', `/categories/${id}/apply-printer`, { printer: newPrinter });
+      toast(`Categoria atualizada e ${r.updated} produto(s) atualizados!`);
+    } else {
+      toast('Categoria atualizada!');
+    }
+    closeModal(); pageCategorias();
   });
 }
 

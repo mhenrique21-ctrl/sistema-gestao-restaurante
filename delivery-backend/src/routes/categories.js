@@ -66,4 +66,20 @@ router.patch('/:id', requireRole('admin'), async (req, res) => {
   }
 });
 
+// POST /api/categories/:id/apply-printer — aplica impressora a todos os produtos da categoria
+router.post('/:id/apply-printer', requireRole('admin'), async (req, res) => {
+  const { printer } = req.body;
+  const target = ['cozinha', 'balcao'].includes(printer) ? printer : null;
+  const targetSql = target ? `'${target}'` : 'NULL';
+  try {
+    const r = await pool.query(
+      `UPDATE products SET print_target = ${targetSql} WHERE category_id = $1`,
+      [req.params.id]
+    );
+    res.json({ updated: r.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;
