@@ -812,7 +812,7 @@ const ADDON_TEMPLATES = [
     { name: 'Sem descartável', price: 0 },
   ]},
   { name: 'Adicionais', min_select: 0, max_select: 10, required: false, options: [] },
-  { name: 'Croissant doce', min_select: 1, max_select: 1, required: true, options: [
+  { name: 'Croissant doce', min_select: 1, max_select: 1, required: true, active_days: null, options: [
     { name: 'Croissant de chocolate', price: 0 },
     { name: 'Croissant de pistache', price: 0 },
     { name: 'Croissant de doce de leite', price: 0 },
@@ -883,6 +883,7 @@ async function renderAddonsSection(productId, reopen) {
             <strong style="font-size:.83rem;color:var(--text)">${g.name}</strong>
             <span style="background:${g.required?'#dc2626':'#475569'};color:#fff;font-size:.65rem;padding:1px 7px;border-radius:999px">${g.required ? 'obrigatório' : 'opcional'}</span>
             <span style="color:var(--muted);font-size:.72rem">máx ${g.max_select}</span>
+            ${g.active_days && g.active_days.length > 0 ? `<span style="background:#0f172a;border:1px solid var(--border);color:#94a3b8;font-size:.65rem;padding:1px 7px;border-radius:999px">📅 ${g.active_days.map(v=>DAYS_WEEK.find(d=>d.v===v)?.l||v).join(', ')}</span>` : ''}
           </div>
           <div style="display:flex;gap:4px">
             <button type="button" class="btn btn-secondary btn-sm" onclick="modalNovaOpcaoAddon('${productId}','${g.id}')">+ Opção</button>
@@ -919,6 +920,7 @@ async function aplicarTemplate(productId, templateIndex) {
   try {
     const group = await api('POST', `/menu/products/${productId}/addon-groups`, {
       name: t.name, min_select: t.min_select, max_select: t.max_select, required: t.required,
+      active_days: t.active_days || [],
     });
     for (const op of t.options) {
       await api('POST', `/menu/addon-groups/${group.id}/options`, { name: op.name, price: op.price });
@@ -957,17 +959,42 @@ function modalNovoGrupoAddon(productId) {
           <label style="margin:0">Obrigatório</label>
         </div>
       </div>
+      ${agActiveDaysHtml(null)}
     </div>`, async () => {
     await api('POST', `/menu/products/${productId}/addon-groups`, {
       name: v('ag-name'),
       min_select: parseInt(v('ag-min')) || 0,
       max_select: parseInt(v('ag-max')) || 3,
       required: document.getElementById('ag-required').classList.contains('on'),
+      active_days: getAgActiveDays(),
     });
     toast('Grupo criado!'); closeModal();
     (addonsReopen || (() => modalEditarProduto(productId)))();
   });
   document.getElementById('modal-confirm').style.display = '';
+}
+
+function agActiveDaysHtml(selected = null) {
+  const all = selected === null || (Array.isArray(selected) && selected.length === 0);
+  return `<div>
+    <label>Dias ativos</label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <input type="checkbox" id="ag-alldays" ${all?'checked':''} onchange="
+        document.querySelectorAll('.ag-day-cb').forEach(c=>c.disabled=this.checked);
+        if(this.checked) document.querySelectorAll('.ag-day-cb').forEach(c=>c.checked=false);">
+      <span style="font-size:.85rem;color:var(--muted)">Todos os dias</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${DAYS_WEEK.map(d=>`<label style="display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer">
+        <input type="checkbox" class="ag-day-cb" value="${d.v}" ${!all&&(selected||[]).includes(d.v)?'checked':''} ${all?'disabled':''}>
+        ${d.l}</label>`).join('')}
+    </div>
+  </div>`;
+}
+
+function getAgActiveDays() {
+  if (document.getElementById('ag-alldays')?.checked) return [];
+  return Array.from(document.querySelectorAll('.ag-day-cb:checked')).map(c => parseInt(c.value));
 }
 
 async function removerGrupoAddon(productId, groupId) {

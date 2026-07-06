@@ -72,8 +72,9 @@ router.get('/', async (req, res) => {
         o.sort_order AS option_sort
       FROM addon_groups g
       LEFT JOIN addon_options o ON o.group_id = g.id AND o.active = true
+      WHERE (g.active_days IS NULL OR $1 = ANY(g.active_days))
       ORDER BY g.sort_order, o.sort_order, o.name
-    `);
+    `, [todayJs]);
 
     const addonsByProduct = {};
     for (const row of addonsResult.rows) {
@@ -286,12 +287,14 @@ router.get('/products/:id/addon-groups', authMiddleware, requireRole('admin'), a
 
 // POST /api/menu/products/:id/addon-groups — criar grupo (admin)
 router.post('/products/:id/addon-groups', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { name, min_select = 0, max_select = 1, required = false, sort_order = 0 } = req.body;
+  const { name, min_select = 0, max_select = 1, required = false, sort_order = 0, active_days } = req.body;
   if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+  const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
+  const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
   try {
     const result = await pool.query(
-      `INSERT INTO addon_groups (product_id, name, min_select, max_select, required, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      `INSERT INTO addon_groups (product_id, name, min_select, max_select, required, sort_order, active_days)
+       VALUES ($1,$2,$3,$4,$5,$6,${daysSql}) RETURNING *`,
       [req.params.id, name, min_select, max_select, required, sort_order]
     );
     res.status(201).json(result.rows[0]);
@@ -308,6 +311,11 @@ router.patch('/addon-groups/:id', authMiddleware, requireRole('admin'), async (r
   let idx = 1;
   for (const f of fields) {
     if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
+  }
+  if (req.body.active_days !== undefined) {
+    const daysArr = Array.isArray(req.body.active_days) && req.body.active_days.length > 0 ? req.body.active_days.map(Number) : null;
+    const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
+    updates.push(`active_days = ${daysSql}`);
   }
   if (!updates.length) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
   values.push(req.params.id);
