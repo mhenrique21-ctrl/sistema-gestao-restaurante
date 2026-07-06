@@ -97,13 +97,18 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   for (const f of scalar) {
     if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
   }
+  // Arrays embutidos diretamente no SQL para evitar problemas de cast do pg driver
   if (req.body.day_of_week !== undefined) {
-    updates.push(`day_of_week = $${idx++}`);
-    values.push(pgIntArray(req.body.day_of_week));
+    const arr = req.body.day_of_week;
+    const sql = arr && arr.length ? `ARRAY[${arr.map(Number).join(',')}]::int[]` : 'NULL::int[]';
+    updates.push(`day_of_week = ${sql}`);
   }
   if (req.body.zones !== undefined) {
-    updates.push(`zones = $${idx++}`);
-    values.push(pgTextArray(req.body.zones));
+    const arr = req.body.zones;
+    const sql = arr && arr.length
+      ? `ARRAY[${arr.map(z => `'${String(z).replace(/'/g, "''")}'`).join(',')}]::text[]`
+      : 'NULL::text[]';
+    updates.push(`zones = ${sql}`);
   }
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);
