@@ -2584,8 +2584,11 @@ function templateCard(t) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
         <div>
           <h3 style="margin:0 0 8px">${t.name}</h3>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
             ${t.items.map(item => `<span style="background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:.82rem">${item}</span>`).join('')}
+          </div>
+          <div style="font-size:.75rem;color:var(--muted)">
+            📅 ${(!t.active_days || t.active_days.length === 0) ? 'Todos os dias' : t.active_days.map(v => DAYS_WEEK.find(d=>d.v===v)?.l||v).join(', ')}
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
@@ -2604,8 +2607,9 @@ function modalNovoTemplate() {
     const rawItems = v('tpl-items');
     const items = rawItems.split('\n').map(s => s.trim()).filter(Boolean);
     if (items.length === 0) throw new Error('Adicione ao menos um item');
+    const active_days = getTplActiveDays();
     const list = loadTemplates();
-    list.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, items });
+    list.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, items, active_days });
     saveTemplates(list);
     toast('Template criado!'); closeModal(); pageTemplates();
   });
@@ -2621,7 +2625,7 @@ function modalEditarTemplate(id) {
     const rawItems = v('tpl-items');
     const items = rawItems.split('\n').map(s => s.trim()).filter(Boolean);
     if (items.length === 0) throw new Error('Adicione ao menos um item');
-    t.name = name; t.items = items;
+    t.name = name; t.items = items; t.active_days = getTplActiveDays();
     saveTemplates(list);
     toast('Template atualizado!'); closeModal(); pageTemplates();
   });
@@ -2634,14 +2638,38 @@ function excluirTemplate(id) {
   pageTemplates();
 }
 
+function tplActiveDaysHtml(selected = null) {
+  const all = selected === null || (Array.isArray(selected) && selected.length === 0);
+  return `<div>
+    <label>Dias ativos no cardápio</label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <input type="checkbox" id="tpl-alldays" ${all?'checked':''} onchange="
+        document.querySelectorAll('.tpl-day-cb').forEach(c=>c.disabled=this.checked);
+        if(this.checked) document.querySelectorAll('.tpl-day-cb').forEach(c=>c.checked=false);">
+      <span style="font-size:.85rem;color:var(--muted)">Todos os dias</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${DAYS_WEEK.map(d => `<label style="display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer">
+        <input type="checkbox" class="tpl-day-cb" value="${d.v}" ${!all&&(selected||[]).includes(d.v)?'checked':''} ${all?'disabled':''}>
+        ${d.l}</label>`).join('')}
+    </div>
+  </div>`;
+}
+
+function getTplActiveDays() {
+  if (document.getElementById('tpl-alldays')?.checked) return [];
+  return Array.from(document.querySelectorAll('.tpl-day-cb:checked')).map(c => parseInt(c.value));
+}
+
 function templateForm(t = {}) {
   return `
     <div class="form-grid">
       <div><label>Nome do template</label><input id="tpl-name" value="${t.name || ''}" placeholder="Ex: Croissant doce" /></div>
       <div>
         <label>Itens (um por linha)</label>
-        <textarea id="tpl-items" rows="8" style="width:100%;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:.9rem;resize:vertical" placeholder="Croissant de chocolate\nCroissant de pistache\nCroissant de doce de leite">${(t.items || []).join('\n')}</textarea>
+        <textarea id="tpl-items" rows="6" style="width:100%;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:.9rem;resize:vertical" placeholder="Croissant de chocolate\nCroissant de pistache\nCroissant de doce de leite">${(t.items || []).join('\n')}</textarea>
       </div>
+      ${tplActiveDaysHtml(t.active_days ?? null)}
     </div>`;
 }
 
@@ -2678,7 +2706,7 @@ function modalCriarEmLote(t) {
       const cat = document.getElementById(`lote-cat-${i}`)?.value;
       if (!nome || isNaN(preco) || preco <= 0 || !cat) { erros.push(nome || `Item ${i+1}`); continue; }
       try {
-        await api('POST', '/menu/products', { name: nome, price: preco, category_id: cat });
+        await api('POST', '/menu/products', { name: nome, price: preco, category_id: cat, active_days: t.active_days || [] });
       } catch(e) { erros.push(nome); }
     }
     if (erros.length) toast(`⚠️ Alguns itens falharam: ${erros.join(', ')}`, true);
