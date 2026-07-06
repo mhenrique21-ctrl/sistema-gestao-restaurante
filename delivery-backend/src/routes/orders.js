@@ -120,7 +120,7 @@ router.post('/guest', async (req, res) => {
     const resolvedItems = [];
     for (const item of items) {
       const prod = await pool.query(
-        `SELECT id, name, price, promo_price, available FROM products WHERE id = $1`,
+        `SELECT id, name, price, promo_price, available, print_target FROM products WHERE id = $1`,
         [item.product_id]
       );
       if (!prod.rows[0]) throw { status: 400, message: 'Produto não encontrado' };
@@ -132,7 +132,7 @@ router.post('/guest', async (req, res) => {
 
       const itemSub = (unitPrice + addonsUnitTotal) * item.quantity;
       subtotal += itemSub;
-      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSub, product_name: prod.rows[0].name, addons: resolvedAddons });
+      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSub, product_name: prod.rows[0].name, print_target: prod.rows[0].print_target, addons: resolvedAddons });
     }
 
     const fee = parseFloat(delivery_fee);
@@ -212,6 +212,21 @@ router.post('/guest', async (req, res) => {
     } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
 
     broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length } });
+
+    // Impressão automática em todas as impressoras
+    try {
+      const stationMap = getStationsForOrder(resolvedItems);
+      for (const [stationKey, stationItems] of Object.entries(stationMap)) {
+        const stationCfg = STATION_ROUTES[stationKey];
+        printOrderTicket(stationCfg.printer, {
+          stationName: stationCfg.name,
+          emoji: stationCfg.emoji,
+          fullReceipt: stationCfg.fullReceipt || false,
+          order: { ...order, customer_name: customer.name },
+          items: stationItems,
+        }).catch((e) => console.error(`[print/${stationKey}]`, e.message));
+      }
+    } catch(e) { console.error('[print/guest]', e.message); }
 
     res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
   } catch (err) {
