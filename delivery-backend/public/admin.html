@@ -2613,12 +2613,14 @@ api('GET', '/auth/me').then(u => {
 
 carregarBairrosCache().then(() => {
   applyPermissions();
-  // Abrir primeira aba acessível
-  const firstAllowed = Array.from(document.querySelectorAll('#sidebar-nav .nav-btn'))
-    .find(b => b.style.display !== 'none');
-  if (firstAllowed) {
-    firstAllowed.classList.add('active');
-    showPage(firstAllowed.dataset.page, firstAllowed);
+  // Abrir aba Pedidos por padrão (ou primeira acessível para operador)
+  const pedidosBtn = document.querySelector('#sidebar-nav .nav-btn[data-page="pedidos"]');
+  const defaultBtn = (pedidosBtn && pedidosBtn.style.display !== 'none')
+    ? pedidosBtn
+    : Array.from(document.querySelectorAll('#sidebar-nav .nav-btn')).find(b => b.style.display !== 'none');
+  if (defaultBtn) {
+    defaultBtn.classList.add('active');
+    showPage(defaultBtn.dataset.page, defaultBtn);
   }
 });
 
