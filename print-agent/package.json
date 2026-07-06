@@ -1,0 +1,13 @@
+{
+  "name": "confraria-print-agent",
+  "version": "1.0.0",
+  "description": "Agente de impressão local para Confraria Café",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "dependencies": {
+    "node-thermal-printer": "^4.3.5",
+    "ws": "^8.17.1"
+  }
+}
