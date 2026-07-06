@@ -181,7 +181,10 @@ router.post('/guest', async (req, res) => {
         const nome = customer.name.split(' ')[0];
         const itemsList = resolvedItems.map(i => {
           const sub = (i.unit_price * i.quantity).toFixed(2).replace('.', ',');
-          const addonsLines = (i.addons || []).map(a => `   ➕ ${a.name}`).join('\n');
+          const addonsLines = (i.addons || []).map(a => {
+            const addonTotal = (parseFloat(a.price || 0) * (a.quantity || 1)).toFixed(2).replace('.', ',');
+            return parseFloat(a.price || 0) > 0 ? `   ➕ ${a.name} — R$ ${addonTotal}` : `   ➕ ${a.name}`;
+          }).join('\n');
           const obsItem = i.notes ? `\n   📝 ${i.notes}` : '';
           return `• ${i.quantity}x ${i.product_name} — R$ ${sub}${addonsLines ? '\n' + addonsLines : ''}${obsItem}`;
         }).join('\n');
