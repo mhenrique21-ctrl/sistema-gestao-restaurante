@@ -1162,8 +1162,8 @@ async function buscarClientes(q) {
       <table>
         <tr><th>Nome</th><th>WhatsApp</th><th>Endereço</th><th>Ações</th></tr>
         ${clientes.map(c => `
-          <tr>
-            <td style="font-weight:600">${c.name}</td>
+          <tr style="${c.blocked ? 'opacity:.55' : ''}">
+            <td style="font-weight:600">${c.name}${c.blocked ? ' <span style="background:#7f1d1d;color:#fca5a5;border-radius:999px;padding:1px 7px;font-size:.68rem;font-weight:700">🚫 Bloqueado</span>' : ''}</td>
             <td>${c.phone ? '📱 ' + c.phone : '-'}</td>
             <td style="font-size:.78rem">
               ${c.address_neighborhood ? `<span style="color:#f1f5f9">${c.address_neighborhood}</span>` : ''}
@@ -1173,6 +1173,8 @@ async function buscarClientes(q) {
             <td style="display:flex;gap:6px">
               <button class="btn btn-secondary btn-sm" onclick="verCliente('${c.id}')">👁</button>
               <button class="btn btn-secondary btn-sm" onclick="modalEditarCliente('${c.id}')">✏️</button>
+              <button class="btn btn-sm" style="background:${c.blocked ? '#064e3b' : '#7c2d12'};color:#fff" onclick="toggleBloquearCliente('${c.id}',${c.blocked})">${c.blocked ? '✅ Desbloquear' : '🚫 Bloquear'}</button>
+              <button class="btn btn-sm" style="background:#1e293b;color:#ef4444;border:1px solid #ef4444" onclick="deletarCliente('${c.id}','${c.name.replace(/'/g,'')}')">🗑</button>
             </td>
           </tr>`).join('')}
       </table>
@@ -1195,6 +1197,21 @@ async function verCliente(id) {
         </div>`).join('')}
     </div>`, null);
   document.getElementById('modal-confirm').style.display = 'none';
+}
+
+async function toggleBloquearCliente(id, bloqueado) {
+  const acao = bloqueado ? 'desbloquear' : 'bloquear';
+  if (!confirm(`Deseja ${acao} este cliente?`)) return;
+  await api('PATCH', `/customers/${id}/block`, { blocked: !bloqueado });
+  toast(`Cliente ${bloqueado ? 'desbloqueado' : 'bloqueado'}!`);
+  buscarClientes(document.getElementById('cli-search')?.value || '');
+}
+
+async function deletarCliente(id, nome) {
+  if (!confirm(`Deletar cliente "${nome}"? Esta ação não pode ser desfeita.`)) return;
+  await api('DELETE', `/customers/${id}`);
+  toast('Cliente removido!');
+  buscarClientes(document.getElementById('cli-search')?.value || '');
 }
 
 function modalNovoCliente() {
