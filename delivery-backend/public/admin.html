@@ -1030,8 +1030,13 @@ async function toggleDisponivel(id, current) {
 }
 
 // ── Categorias ────────────────────────────────────────────────────
+let _cats = [];
 async function pageCategorias() {
-  const cats = await api('GET', '/menu');
+  _cats = await api('GET', '/menu');
+  renderCategorias();
+}
+
+function renderCategorias() {
   document.getElementById('content').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-primary" onclick="modalNovaCategoria()">+ Nova categoria</button>
@@ -1039,12 +1044,18 @@ async function pageCategorias() {
     <div class="card">
       <h3>Categorias</h3>
       <table>
-        <tr><th>Nome</th><th>Descrição</th><th>Impressora</th><th>Produtos</th><th>Ações</th></tr>
-        ${cats.map(c => {
+        <tr><th></th><th>Nome</th><th>Descrição</th><th>Impressora</th><th>Produtos</th><th>Ações</th></tr>
+        ${_cats.map((c, i) => {
           const printerLabel = c.printer === 'cozinha' ? '🍳 Cozinha' : c.printer === 'balcao' ? '🏪 Balcão' : '—';
           const printerColor = c.printer === 'cozinha' ? '#f59e0b' : c.printer === 'balcao' ? '#3b82f6' : '#64748b';
           return `
           <tr>
+            <td style="width:60px">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <button class="btn btn-secondary btn-sm" style="padding:2px 7px;font-size:.7rem;line-height:1" ${i===0?'disabled':''} onclick="moverCategoria(${i},-1)">▲</button>
+                <button class="btn btn-secondary btn-sm" style="padding:2px 7px;font-size:.7rem;line-height:1" ${i===_cats.length-1?'disabled':''} onclick="moverCategoria(${i},1)">▼</button>
+              </div>
+            </td>
             <td style="font-weight:700">${c.name}</td>
             <td style="color:#64748b">${c.description || '-'}</td>
             <td><span style="color:${printerColor};font-weight:600;font-size:.82rem">${printerLabel}</span></td>
@@ -1054,6 +1065,15 @@ async function pageCategorias() {
         }).join('')}
       </table>
     </div>`;
+}
+
+async function moverCategoria(idx, dir) {
+  const swap = idx + dir;
+  if (swap < 0 || swap >= _cats.length) return;
+  [_cats[idx], _cats[swap]] = [_cats[swap], _cats[idx]];
+  renderCategorias();
+  // Salva nova ordem no backend
+  await Promise.all(_cats.map((c, i) => api('PATCH', '/categories/' + c.id, { sort_order: i })));
 }
 
 function printerSelectHtml(selected = '') {
