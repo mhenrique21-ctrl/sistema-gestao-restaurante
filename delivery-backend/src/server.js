@@ -54,6 +54,7 @@ app.use('/api/payment-methods', require('./routes/paymentMethods'));
 app.use('/api/delivery', require('./routes/delivery'));
 app.use('/api/promotions', require('./routes/promotions'));
 app.use('/api/coupons', require('./routes/coupons'));
+app.use('/api/templates', require('./routes/templates'));
 
 // Health check
 app.get('/health', (req, res) => {

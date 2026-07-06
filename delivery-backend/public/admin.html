@@ -2556,17 +2556,10 @@ carregarBairrosCache().then(() => {
 });
 
 // ── Templates ─────────────────────────────────────────────────────
-const TEMPLATES_KEY = 'admin_templates';
-
-function loadTemplates() {
-  try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || '[]'); } catch { return []; }
-}
-function saveTemplates(list) {
-  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list));
-}
-
-function pageTemplates() {
-  const list = loadTemplates();
+async function pageTemplates() {
+  document.getElementById('content').innerHTML = '<p style="color:var(--muted)">Carregando...</p>';
+  let list = [];
+  try { list = await api('GET', '/templates'); } catch(e) { toast('Erro ao carregar templates', true); }
   document.getElementById('content').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-primary" onclick="modalNovoTemplate()">+ Novo Template</button>
@@ -2605,37 +2598,30 @@ function modalNovoTemplate() {
   openModal('Novo Template', templateForm(), async () => {
     const name = v('tpl-name').trim();
     if (!name) throw new Error('Informe o nome do template');
-    const rawItems = v('tpl-items');
-    const items = rawItems.split('\n').map(s => s.trim()).filter(Boolean);
+    const items = v('tpl-items').split('\n').map(s => s.trim()).filter(Boolean);
     if (items.length === 0) throw new Error('Adicione ao menos um item');
-    const active_days = getTplActiveDays();
-    const list = loadTemplates();
-    list.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, items, active_days });
-    saveTemplates(list);
+    await api('POST', '/templates', { name, items, active_days: getTplActiveDays() });
     toast('Template criado!'); closeModal(); pageTemplates();
   });
 }
 
-function modalEditarTemplate(id) {
-  const list = loadTemplates();
-  const t = list.find(x => x.id === id);
+async function modalEditarTemplate(id) {
+  let t;
+  try { const list = await api('GET', '/templates'); t = list.find(x => x.id === id); } catch {}
   if (!t) return;
   openModal('Editar Template', templateForm(t), async () => {
     const name = v('tpl-name').trim();
     if (!name) throw new Error('Informe o nome do template');
-    const rawItems = v('tpl-items');
-    const items = rawItems.split('\n').map(s => s.trim()).filter(Boolean);
+    const items = v('tpl-items').split('\n').map(s => s.trim()).filter(Boolean);
     if (items.length === 0) throw new Error('Adicione ao menos um item');
-    t.name = name; t.items = items; t.active_days = getTplActiveDays();
-    saveTemplates(list);
+    await api('PATCH', `/templates/${id}`, { name, items, active_days: getTplActiveDays() });
     toast('Template atualizado!'); closeModal(); pageTemplates();
   });
 }
 
-function excluirTemplate(id) {
+async function excluirTemplate(id) {
   if (!confirm('Excluir este template?')) return;
-  const list = loadTemplates().filter(x => x.id !== id);
-  saveTemplates(list);
+  await api('DELETE', `/templates/${id}`);
   pageTemplates();
 }
 
@@ -2675,7 +2661,9 @@ function templateForm(t = {}) {
 }
 
 async function modalAplicarExistentes(id) {
-  const t = loadTemplates().find(x => x.id === id);
+  let t;
+  try { const list = await api('GET', '/templates'); t = list.find(x => x.id === id); } catch {}
+  if (!t) return;
   if (!t) return;
 
   // Carrega todos os produtos se ainda não carregados
@@ -2725,8 +2713,10 @@ async function modalAplicarExistentes(id) {
   });
 }
 
-function usarTemplate(id) {
-  const t = loadTemplates().find(x => x.id === id);
+async function usarTemplate(id) {
+  let t;
+  try { const list = await api('GET', '/templates'); t = list.find(x => x.id === id); } catch {}
+  if (!t) return;
   if (!t) return;
   // Navega para Produtos e abre um modal de criação em lote
   showPage('produtos', document.querySelector('[data-page="produtos"]'));
@@ -2767,18 +2757,6 @@ function modalCriarEmLote(t) {
   });
 }
 
-// Seed default template se não houver nenhum
-(function seedTemplates() {
-  const list = loadTemplates();
-  if (list.length === 0) {
-    list.push({
-      id: 'croissant-doce',
-      name: 'Croissant doce',
-      items: ['Croissant de chocolate', 'Croissant de pistache', 'Croissant de doce de leite'],
-    });
-    saveTemplates(list);
-  }
-})();
 </script>
 </body>
 </html>
