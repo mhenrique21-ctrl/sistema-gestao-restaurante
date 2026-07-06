@@ -2592,7 +2592,8 @@ function templateCard(t) {
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
-          <button class="btn btn-primary btn-sm" onclick="usarTemplate('${t.id}')">⚡ Usar</button>
+          <button class="btn btn-primary btn-sm" onclick="usarTemplate('${t.id}')">⚡ Criar produtos</button>
+          <button class="btn btn-secondary btn-sm" onclick="modalAplicarExistentes('${t.id}')">🔗 Aplicar a existentes</button>
           <button class="btn btn-secondary btn-sm" onclick="modalEditarTemplate('${t.id}')">✏️</button>
           <button class="btn btn-danger btn-sm" onclick="excluirTemplate('${t.id}')">🗑</button>
         </div>
@@ -2671,6 +2672,57 @@ function templateForm(t = {}) {
       </div>
       ${tplActiveDaysHtml(t.active_days ?? null)}
     </div>`;
+}
+
+async function modalAplicarExistentes(id) {
+  const t = loadTemplates().find(x => x.id === id);
+  if (!t) return;
+
+  // Carrega todos os produtos se ainda não carregados
+  if (!produtos || produtos.length === 0) {
+    try { produtos = await api('GET', '/menu/admin').then(cats => cats.flatMap(c => c.products.map(p => ({...p, category_name: c.name, category_id: c.id})))); }
+    catch(e) { toast('Erro ao carregar produtos', true); return; }
+  }
+
+  // Busca produtos cujo nome contenha o nome do template ou qualquer item
+  const keywords = [t.name, ...t.items].map(s => s.toLowerCase());
+  const matches = produtos.filter(p => keywords.some(kw => p.name.toLowerCase().includes(kw.split(' ')[0])));
+
+  const daysLabel = (!t.active_days || t.active_days.length === 0)
+    ? 'Todos os dias'
+    : t.active_days.map(v => DAYS_WEEK.find(d=>d.v===v)?.l||v).join(', ');
+
+  if (matches.length === 0) {
+    toast('Nenhum produto encontrado com nome similar ao template', true);
+    return;
+  }
+
+  openModal(`🔗 Aplicar template — ${t.name}`, `
+    <p style="color:var(--muted);margin-bottom:12px">Selecione os produtos que receberão os dias: <strong>${daysLabel}</strong></p>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.aplic-cb').forEach(c=>c.checked=true)">Selecionar todos</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.aplic-cb').forEach(c=>c.checked=false)">Desmarcar todos</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto">
+      ${matches.map(p => `
+        <label style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;cursor:pointer">
+          <input type="checkbox" class="aplic-cb" value="${p.id}" checked>
+          <span style="font-size:.88rem">${p.name}</span>
+          <span style="font-size:.75rem;color:var(--muted);margin-left:auto">${p.category_name}</span>
+        </label>`).join('')}
+    </div>`, async () => {
+    const selected = Array.from(document.querySelectorAll('.aplic-cb:checked')).map(c => c.value);
+    if (selected.length === 0) throw new Error('Selecione ao menos um produto');
+    let ok = 0, erros = 0;
+    for (const pid of selected) {
+      try {
+        await api('PATCH', `/menu/products/${pid}`, { active_days: t.active_days || [] });
+        ok++;
+      } catch { erros++; }
+    }
+    toast(`✅ ${ok} produto(s) atualizado(s)${erros ? ` — ${erros} erro(s)` : ''}`);
+    closeModal();
+  });
 }
 
 function usarTemplate(id) {
