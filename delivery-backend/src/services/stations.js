@@ -1,53 +1,48 @@
-// Roteamento de itens para estações de preparo
-// Cada estação recebe apenas os itens que lhe pertencem
+// Roteamento de itens para impressoras
+// Caixa: TODOS os itens (cupom completo)
+// Cozinha: itens com print_target = 'cozinha'
+// Balcão: itens com print_target = 'balcao'
 
 const STATION_ROUTES = {
-  bebidas: {
-    name: 'Bebidas',
-    emoji: '☕',
-    categories: ['Café', 'Bebidas'],
-    color: '#2563eb',
-    printer: process.env.PRINTER_BEBIDAS || null,
-  },
-  comida_quente: {
-    name: 'Comida Quente',
-    emoji: '🔥',
-    categories: ['Salgados'],
-    color: '#dc2626',
-    printer: process.env.PRINTER_COMIDA_QUENTE || null,
-  },
-  montagem: {
-    name: 'Montagem',
-    emoji: '🎂',
-    categories: ['Bolos'],
+  caixa: {
+    name: 'Caixa',
+    emoji: '🧾',
     color: '#7c3aed',
-    printer: process.env.PRINTER_MONTAGEM || null,
+    printer: process.env.PRINTER_CAIXA || null,
+    fullReceipt: true,
+  },
+  cozinha: {
+    name: 'Cozinha',
+    emoji: '🍳',
+    color: '#f59e0b',
+    printer: process.env.PRINTER_COZINHA || null,
+    fullReceipt: false,
+  },
+  balcao: {
+    name: 'Balcão',
+    emoji: '🏪',
+    color: '#3b82f6',
+    printer: process.env.PRINTER_BALCAO || null,
+    fullReceipt: false,
   },
 };
 
 function getStationsForOrder(orderItems) {
-  // orderItems: [{ product_name, category_name, quantity, notes, ... }]
   const stationMap = {};
 
+  // Caixa sempre recebe todos os itens
+  stationMap['caixa'] = [...orderItems];
+
+  // Cozinha e Balcão só recebem itens direcionados a eles
   for (const item of orderItems) {
-    const station = getStationForCategory(item.category_name || item.category);
-    if (!station) continue;
-
-    if (!stationMap[station]) stationMap[station] = [];
-    stationMap[station].push(item);
-  }
-
-  return stationMap; // { bebidas: [...items], comida_quente: [...items] }
-}
-
-function getStationForCategory(categoryName) {
-  if (!categoryName) return 'montagem';
-  for (const [key, cfg] of Object.entries(STATION_ROUTES)) {
-    if (cfg.categories.some((c) => categoryName.toLowerCase().includes(c.toLowerCase()))) {
-      return key;
+    const target = item.print_target; // 'cozinha' | 'balcao' | null
+    if (target === 'cozinha' || target === 'balcao') {
+      if (!stationMap[target]) stationMap[target] = [];
+      stationMap[target].push(item);
     }
   }
-  return 'montagem'; // fallback
+
+  return stationMap;
 }
 
-module.exports = { STATION_ROUTES, getStationsForOrder, getStationForCategory };
+module.exports = { STATION_ROUTES, getStationsForOrder };

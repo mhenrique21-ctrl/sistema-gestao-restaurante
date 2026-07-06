@@ -39,6 +39,7 @@ router.post('/upload', authMiddleware, requireRole('admin'), upload.single('imag
 // GET /api/menu — cardápio completo agrupado por categoria
 router.get('/', async (req, res) => {
   try {
+    const todayJs = new Date().getDay(); // 0=Dom, 1=Seg … 6=Sáb
     const result = await pool.query(`
       SELECT
         c.id AS category_id,
@@ -58,9 +59,10 @@ router.get('/', async (req, res) => {
         p.sort_order AS product_sort
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id AND p.available = true
+        AND (p.active_days IS NULL OR $1 = ANY(p.active_days))
       WHERE c.active = true
       ORDER BY c.sort_order, p.sort_order, p.name
-    `);
+    `, [todayJs]);
 
     const addonsResult = await pool.query(`
       SELECT
@@ -139,7 +141,7 @@ router.get('/admin', authMiddleware, async (req, res) => {
         c.id AS category_id, c.name AS category_name, c.sort_order AS category_sort,
         p.id AS product_id, p.name AS product_name, p.description, p.price,
         p.image_url AS product_image, p.available, p.featured, p.promo_price,
-        p.promo_label, p.sort_order AS product_sort
+        p.promo_label, p.sort_order AS product_sort, p.active_days, p.print_target
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id
       WHERE c.active = true
@@ -153,6 +155,8 @@ router.get('/admin', authMiddleware, async (req, res) => {
         price: row.price, image_url: row.product_image, available: row.available,
         featured: row.featured, promo_price: row.promo_price, promo_label: row.promo_label,
         sort_order: row.product_sort, category_id: row.category_id, category_name: row.category_name,
+        active_days: row.active_days,
+        print_target: row.print_target,
       });
     }
     res.json(Object.values(cats));
@@ -179,15 +183,18 @@ router.get('/products/:id', async (req, res) => {
 
 // POST /api/menu/products — criar produto (admin)
 router.post('/products', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label } = req.body;
+  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target } = req.body;
   if (!category_id || !name || price === undefined) {
     return res.status(400).json({ error: 'category_id, name e price são obrigatórios' });
   }
+  const days = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
+  const validTargets = ['cozinha', 'balcao', null, undefined];
+  const target = validTargets.includes(print_target) ? (print_target || null) : null;
   try {
     const result = await pool.query(
-      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null]
+      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null, days, target]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -198,7 +205,7 @@ router.post('/products', authMiddleware, requireRole('admin'), async (req, res) 
 
 // PATCH /api/menu/products/:id — atualizar produto (admin)
 router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, res) => {
-  const fields = ['name', 'description', 'price', 'image_url', 'available', 'sort_order', 'category_id', 'featured', 'promo_price', 'promo_label'];
+  const fields = ['name', 'description', 'price', 'image_url', 'available', 'sort_order', 'category_id', 'featured', 'promo_price', 'promo_label', 'print_target'];
   const updates = [];
   const values = [];
   let idx = 1;
@@ -208,6 +215,15 @@ router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, 
       updates.push(`${field} = $${idx++}`);
       values.push(req.body[field]);
     }
+  }
+
+  // active_days: null = todos os dias; array vazio = todos os dias
+  if (req.body.active_days !== undefined) {
+    const days = Array.isArray(req.body.active_days) && req.body.active_days.length > 0
+      ? req.body.active_days.map(Number)
+      : null;
+    const sql = days ? `ARRAY[${days.join(',')}]::int[]` : 'NULL::int[]';
+    updates.push(`active_days = ${sql}`);
   }
 
   if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });

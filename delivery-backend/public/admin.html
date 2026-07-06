@@ -114,7 +114,7 @@ textarea { resize: vertical; min-height: 70px; }
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
-  body { flex-direction: column; }
+  body { flex-direction: column; height: 100vh; overflow: hidden; }
 
   #hamburger { display: block; }
 
@@ -159,19 +159,19 @@ textarea { resize: vertical; min-height: 70px; }
     <h1>☕ Confraria Café</h1>
     <p>Painel Administrativo</p>
   </div>
-  <nav>
-    <button class="nav-btn" onclick="showPage('dashboard',this)">📊 Dashboard</button>
-    <button class="nav-btn" onclick="showPage('produtos',this)">🍽 Produtos</button>
-    <button class="nav-btn" onclick="showPage('categorias',this)">📂 Categorias</button>
-    <button class="nav-btn" onclick="showPage('clientes',this)">👥 Clientes</button>
-    <button class="nav-btn" onclick="showPage('usuarios',this)">🔐 Usuários</button>
-    <button class="nav-btn active" onclick="showPage('pedidos',this)">📋 Pedidos</button>
-    <button class="nav-btn" onclick="showPage('bairros',this)">📍 Bairros</button>
-    <button class="nav-btn" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
-    <button class="nav-btn" onclick="showPage('pagamentos',this)">💳 Pagamentos</button>
-    <button class="nav-btn" onclick="showPage('adicionais',this)">➕ Adicionais</button>
-    <button class="nav-btn" onclick="showPage('promocoes',this)">🎉 Promoções</button>
-    <button class="nav-btn" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
+  <nav id="sidebar-nav">
+    <button class="nav-btn" data-page="dashboard" onclick="showPage('dashboard',this)">📊 Dashboard</button>
+    <button class="nav-btn" data-page="pedidos" onclick="showPage('pedidos',this)">📋 Pedidos</button>
+    <button class="nav-btn" data-page="produtos" onclick="showPage('produtos',this)">🍽 Produtos</button>
+    <button class="nav-btn" data-page="categorias" onclick="showPage('categorias',this)">📂 Categorias</button>
+    <button class="nav-btn" data-page="clientes" onclick="showPage('clientes',this)">👥 Clientes</button>
+    <button class="nav-btn" data-page="usuarios" onclick="showPage('usuarios',this)">🔐 Usuários</button>
+    <button class="nav-btn" data-page="bairros" onclick="showPage('bairros',this)">📍 Bairros</button>
+    <button class="nav-btn" data-page="configuracoes" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
+    <button class="nav-btn" data-page="pagamentos" onclick="showPage('pagamentos',this)">💳 Pagamentos</button>
+    <button class="nav-btn" data-page="adicionais" onclick="showPage('adicionais',this)">➕ Adicionais</button>
+    <button class="nav-btn" data-page="promocoes" onclick="showPage('promocoes',this)">🎉 Promoções</button>
+    <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
 </div>
@@ -213,16 +213,29 @@ textarea { resize: vertical; min-height: 70px; }
 // ── Auth ──────────────────────────────────────────────────────────
 let TOKEN = localStorage.getItem('admin_token');
 
+// Perfil do usuário logado
+let CURRENT_USER = null;
+
+function parseJwt(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
+}
+
+function canAccess(page) {
+  if (!CURRENT_USER) return false;
+  if (CURRENT_USER.role === 'admin') return true;
+  return (CURRENT_USER.permissions || []).includes(page);
+}
+
 async function showLoginScreen() {
   document.body.innerHTML = `
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f172a;font-family:system-ui,sans-serif;">
-      <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:40px;width:100%;max-width:380px;text-align:center;">
+      <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:40px;width:100%;max-width:380px;text-align:center;margin:16px;">
         <div style="font-size:2.5rem;margin-bottom:8px;">☕</div>
         <h1 style="color:#f1f5f9;font-size:1.3rem;font-weight:800;margin-bottom:4px;">Confraria Café</h1>
         <p style="color:#64748b;font-size:.8rem;margin-bottom:28px;">Painel Administrativo</p>
         <div style="text-align:left;margin-bottom:14px;">
-          <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px;">E-mail</label>
-          <input id="login-email" type="email" placeholder="admin@confrariacafe.com"
+          <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px;">Nome</label>
+          <input id="login-nome" type="text" placeholder="Seu nome de usuário"
             style="width:100%;background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:8px;padding:10px 14px;font-size:.9rem;outline:none;" />
         </div>
         <div style="text-align:left;margin-bottom:20px;">
@@ -241,21 +254,21 @@ async function showLoginScreen() {
 }
 
 async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
+  const nome = document.getElementById('login-nome').value.trim();
   const senha = document.getElementById('login-senha').value;
   const erro = document.getElementById('login-erro');
   const btn = document.getElementById('login-btn');
-  if (!email || !senha) { erro.textContent = 'Preencha e-mail e senha'; erro.style.display='block'; return; }
+  if (!nome || !senha) { erro.textContent = 'Preencha nome e senha'; erro.style.display='block'; return; }
   btn.textContent = 'Entrando...'; btn.disabled = true;
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: senha }),
+      body: JSON.stringify({ name: nome, password: senha }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
-    if (data.user && data.user.role !== 'admin') throw new Error('Acesso restrito a administradores');
+    if (!['admin','operador'].includes(data.user?.role)) throw new Error('Acesso não autorizado');
     TOKEN = data.token;
     localStorage.setItem('admin_token', TOKEN);
     location.reload();
@@ -268,6 +281,7 @@ async function doLogin() {
 }
 
 if (!TOKEN) { showLoginScreen(); }
+else { CURRENT_USER = parseJwt(TOKEN); }
 
 async function api(method, path, body) {
   const res = await fetch('/api' + path, {
@@ -589,12 +603,16 @@ function renderProdutos(filter, status) {
     <div class="card">
       <h3>Produtos (${list.length})</h3>
       <table>
-        <tr><th>Nome</th><th>Categoria</th><th>Preço</th><th>Status</th><th>Ações</th></tr>
-        ${list.map(p => `
+        <tr><th>Nome</th><th>Categoria</th><th>Preço</th><th>Impressora</th><th>Status</th><th>Ações</th></tr>
+        ${list.map(p => {
+          const ptLabel = p.print_target === 'cozinha' ? '🍳 Cozinha' : p.print_target === 'balcao' ? '🏪 Balcão' : '🧾 Caixa';
+          const ptColor = p.print_target === 'cozinha' ? '#f59e0b' : p.print_target === 'balcao' ? '#3b82f6' : '#64748b';
+          return `
           <tr style="${!p.available ? 'opacity:0.6' : ''}">
             <td>${p.name}</td>
             <td><span class="badge badge-blue">${p.category_name}</span></td>
             <td class="price">R$ ${parseFloat(p.price).toFixed(2).replace('.',',')}</td>
+            <td><span style="color:${ptColor};font-size:.78rem;font-weight:700">${ptLabel}</span></td>
             <td>
               <button onclick="toggleDisponivel('${p.id}', ${p.available})"
                 style="padding:4px 10px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:${p.available ? '#d1fae5' : '#fee2e2'};color:${p.available ? '#065f46' : '#991b1b'}">
@@ -610,9 +628,43 @@ function renderProdutos(filter, status) {
               </button>
               <button class="btn btn-danger btn-sm" onclick="excluirProduto('${p.id}')" title="Excluir">🗑️</button>
             </td>
-          </tr>`).join('')}
+          </tr>`;}).join('')}
       </table>
     </div>`;
+}
+
+const DAYS_WEEK = [
+  { v: 1, l: 'Seg' }, { v: 2, l: 'Ter' }, { v: 3, l: 'Qua' },
+  { v: 4, l: 'Qui' }, { v: 5, l: 'Sex' }, { v: 6, l: 'Sáb' }, { v: 0, l: 'Dom' }
+];
+
+function activeDaysHtml(selected = null) {
+  const all = selected === null || selected.length === 0;
+  return `<div>
+    <label>Dias ativos no cardápio</label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <input type="checkbox" id="f-alldays" ${all?'checked':''} onchange="
+        const on=this.checked;
+        document.querySelectorAll('.f-day-cb').forEach(c=>c.disabled=on);
+        document.getElementById('f-days-wrap').style.opacity=on?'.4':'1';">
+      <span style="font-size:.82rem;color:var(--muted)">Todos os dias</span>
+    </div>
+    <div id="f-days-wrap" style="display:flex;flex-wrap:wrap;gap:6px;opacity:${all?'.4':'1'}">
+      ${DAYS_WEEK.map(d => `
+        <label style="display:flex;align-items:center;gap:4px;font-size:.8rem;font-weight:400;
+          background:var(--hover);border-radius:6px;padding:4px 8px;cursor:pointer;">
+          <input type="checkbox" class="f-day-cb" value="${d.v}"
+            ${selected && selected.includes(d.v)?'checked':''}
+            ${all?'disabled':''} style="width:auto">
+          ${d.l}
+        </label>`).join('')}
+    </div>
+  </div>`;
+}
+
+function getActiveDays() {
+  if (document.getElementById('f-alldays')?.checked) return [];
+  return Array.from(document.querySelectorAll('.f-day-cb:checked')).map(c => parseInt(c.value));
 }
 
 function modalNovoProduto() {
@@ -633,6 +685,15 @@ function modalNovoProduto() {
           <label style="margin:0">Produto em destaque</label>
         </div>
       </div>
+      ${activeDaysHtml(null)}
+      <div><label>🖨 Destino de impressão</label>
+        <select id="f-print">
+          <option value="">Somente Caixa (padrão)</option>
+          <option value="cozinha">🍳 Cozinha</option>
+          <option value="balcao">🏪 Balcão</option>
+        </select>
+        <small style="color:#64748b">Independente do destino, todos os itens sempre saem no Caixa.</small>
+      </div>
     </div>`, async () => {
     await api('POST', '/menu/products', {
       name: v('f-name'),
@@ -642,6 +703,8 @@ function modalNovoProduto() {
       image_url: v('f-image') || undefined,
       promo_price: v('f-promo') ? parseFloat(v('f-promo')) : undefined,
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
+      active_days: getActiveDays(),
+      print_target: v('f-print') || null,
     });
     toast('Produto criado!'); closeModal(); pageProdutos();
   });
@@ -667,6 +730,15 @@ function modalEditarProduto(id) {
           <label style="margin:0">Produto em destaque</label>
         </div>
       </div>
+      ${activeDaysHtml(p.active_days || null)}
+      <div><label>🖨 Destino de impressão</label>
+        <select id="f-print">
+          <option value="" ${!p.print_target?'selected':''}>Somente Caixa (padrão)</option>
+          <option value="cozinha" ${p.print_target==='cozinha'?'selected':''}>🍳 Cozinha</option>
+          <option value="balcao" ${p.print_target==='balcao'?'selected':''}>🏪 Balcão</option>
+        </select>
+        <small style="color:#64748b">Independente do destino, todos os itens sempre saem no Caixa.</small>
+      </div>
       <hr style="border-color:#334155">
       <div id="addons-section"><p style="color:#64748b;font-size:.8rem">Carregando adicionais...</p></div>
     </div>`, async () => {
@@ -678,6 +750,8 @@ function modalEditarProduto(id) {
       image_url: v('f-image'),
       promo_price: v('f-promo') ? parseFloat(v('f-promo')) : null,
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
+      active_days: getActiveDays(),
+      print_target: v('f-print') || null,
     });
     toast('Produto atualizado!'); closeModal(); pageProdutos();
   });
@@ -1100,42 +1174,79 @@ async function pageUsuarios() {
   }
 }
 
+const ALL_PAGES = [
+  { key:'dashboard', label:'📊 Dashboard' },
+  { key:'pedidos', label:'📋 Pedidos' },
+  { key:'produtos', label:'🍽 Produtos' },
+  { key:'categorias', label:'📂 Categorias' },
+  { key:'clientes', label:'👥 Clientes' },
+  { key:'bairros', label:'📍 Bairros' },
+  { key:'configuracoes', label:'⚙️ Configurações' },
+  { key:'pagamentos', label:'💳 Pagamentos' },
+  { key:'adicionais', label:'➕ Adicionais' },
+  { key:'promocoes', label:'🎉 Promoções' },
+  { key:'impressoras', label:'🖨 Impressoras' },
+];
+
+function permissionsForm(selectedPerms = []) {
+  return `<div style="margin-top:12px;padding:12px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;">
+    <label style="display:block;margin-bottom:8px;font-weight:700">Funcionalidades liberadas</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      ${ALL_PAGES.map(p => `
+        <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:400;cursor:pointer;">
+          <input type="checkbox" class="perm-cb" value="${p.key}" ${selectedPerms.includes(p.key)?'checked':''} style="width:auto">
+          ${p.label}
+        </label>`).join('')}
+    </div>
+  </div>`;
+}
+
+function getSelectedPerms() {
+  return Array.from(document.querySelectorAll('.perm-cb:checked')).map(cb => cb.value);
+}
+
 function renderUsuarios(users) {
   document.getElementById('usr-table').innerHTML = `
     <h3>Usuários do sistema</h3>
-    <table>
-      <tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Ações</th></tr>
+    <div class="table-wrap"><table>
+      <tr><th>Nome</th><th>Perfil</th><th>Status</th><th>Ações</th></tr>
       ${users.map(u => `
         <tr>
           <td style="font-weight:600">${u.name}</td>
-          <td>${u.email}</td>
-          <td><span class="badge badge-blue">${u.role}</span></td>
+          <td><span class="badge ${u.role==='admin'?'badge-blue':'badge-gray'}">${u.role==='admin'?'Administrador':'Operador'}</span></td>
           <td><span class="badge ${u.active ? 'badge-green' : 'badge-red'}">${u.active ? 'Ativo' : 'Inativo'}</span></td>
           <td>
             <button class="btn btn-sm" onclick='modalEditarUsuario(${JSON.stringify(u)})'>✏️ Editar</button>
             <button class="btn btn-sm btn-danger" onclick="toggleUsuario('${u.id}',${u.active})" style="margin-left:4px">${u.active ? 'Desativar' : 'Ativar'}</button>
           </td>
         </tr>`).join('')}
-    </table>`;
+    </table></div>`;
+}
+
+function usuarioRoleSelect(selected, id) {
+  return `<select id="${id}" onchange="document.getElementById('perm-section').style.display=this.value==='operador'?'block':'none'">
+    <option value="admin" ${selected==='admin'?'selected':''}>Administrador</option>
+    <option value="operador" ${selected!=='admin'?'selected':''}>Operador</option>
+  </select>`;
 }
 
 function modalEditarUsuario(u) {
+  const isOp = u.role !== 'admin';
   openModal('Editar Usuário', `
     <div class="form-grid">
       <div><label>Nome</label><input id="eu-name" value="${u.name}" /></div>
-      <div><label>Perfil</label>
-        <select id="eu-role">
-          <option value="atendente" ${u.role==='atendente'?'selected':''}>Atendente</option>
-          <option value="cozinha" ${u.role==='cozinha'?'selected':''}>Cozinha</option>
-          <option value="entregador" ${u.role==='entregador'?'selected':''}>Entregador</option>
-          <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
-        </select>
-      </div>
+      <div><label>Perfil</label>${usuarioRoleSelect(u.role, 'eu-role')}</div>
       <div><label>Nova senha <small style="color:#94a3b8">(deixe em branco para não alterar)</small></label><input id="eu-pass" type="password" /></div>
+    </div>
+    <div id="perm-section" style="display:${isOp?'block':'none'}">
+      ${permissionsForm(u.permissions || [])}
     </div>`, async () => {
-    const body = { name: v('eu-name'), role: v('eu-role') };
+    const role = v('eu-role');
+    const body = { name: v('eu-name'), role };
     const pass = v('eu-pass');
     if (pass) body.password = pass;
+    if (role === 'operador') body.permissions = getSelectedPerms();
+    else body.permissions = ALL_PAGES.map(p => p.key);
     await api('PATCH', `/users/${u.id}`, body);
     toast('Usuário atualizado!'); closeModal(); pageUsuarios();
   });
@@ -1151,18 +1262,15 @@ function modalNovoUsuario() {
   openModal('Novo Usuário', `
     <div class="form-grid">
       <div><label>Nome</label><input id="u-name" /></div>
-      <div><label>E-mail</label><input id="u-email" type="email" /></div>
       <div><label>Senha</label><input id="u-pass" type="password" /></div>
-      <div><label>Perfil</label>
-        <select id="u-role">
-          <option value="atendente">Atendente</option>
-          <option value="cozinha">Cozinha</option>
-          <option value="entregador">Entregador</option>
-          <option value="admin">Admin</option>
-        </select>
-      </div>
+      <div><label>Perfil</label>${usuarioRoleSelect('operador', 'u-role')}</div>
+    </div>
+    <div id="perm-section" style="display:block">
+      ${permissionsForm([])}
     </div>`, async () => {
-    await api('POST', '/auth/register', { name: v('u-name'), email: v('u-email'), password: v('u-pass'), role: v('u-role') });
+    const role = v('u-role');
+    const perms = role === 'operador' ? getSelectedPerms() : ALL_PAGES.map(p => p.key);
+    await api('POST', '/users', { name: v('u-name'), password: v('u-pass'), role, permissions: perms });
     toast('Usuário criado!'); closeModal(); pageUsuarios();
   });
 }
@@ -2080,43 +2188,63 @@ async function deletarAdicional(id) {
 function pageImpressoras() {
   document.getElementById('content').innerHTML = `
     <div class="card">
-      <h3>Configuração de Impressoras ESC/POS</h3>
-      <p style="color:#64748b;font-size:.85rem;margin-bottom:20px">Configure o endereço IP de cada impressora térmica. Use o formato <code style="background:#0f172a;padding:2px 6px;border-radius:4px">tcp://192.168.0.X:9100</code> para impressoras em rede.</p>
-      <div class="form-grid">
-        <div>
-          <label>☕ Impressora — Bebidas</label>
-          <input id="p-bebidas" placeholder="tcp://192.168.0.101:9100" value="${localStorage.getItem('p_bebidas')||''}" />
+      <h3>🖨 Configuração de Impressoras</h3>
+      <p style="color:#64748b;font-size:.85rem;margin-bottom:20px">
+        Configure as 3 impressoras do sistema. Todos os pedidos saem na <strong style="color:#f1f5f9">Caixa</strong>.
+        Cozinha e Balcão recebem apenas os produtos direcionados a eles.
+      </p>
+
+      <div style="display:grid;gap:16px">
+
+        <div style="padding:16px;border:1px solid #7c3aed;border-radius:10px;background:rgba(124,58,237,.08)">
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🧾 Caixa <span style="color:#64748b;font-weight:400;font-size:.8rem">(USB — imprime TODOS os pedidos)</span></div>
+          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Cupom completo: cliente, itens, totais, forma de pagamento.</div>
+          <input id="p-caixa" placeholder="Exemplo USB Windows: printer:NomeDaImpressora  |  Linux: /dev/usb/lp0" value="${localStorage.getItem('p_caixa')||''}" />
         </div>
-        <div>
-          <label>🔥 Impressora — Comida Quente</label>
-          <input id="p-comida" placeholder="tcp://192.168.0.102:9100" value="${localStorage.getItem('p_comida')||''}" />
+
+        <div style="padding:16px;border:1px solid #f59e0b;border-radius:10px;background:rgba(245,158,11,.08)">
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🍳 Cozinha <span style="color:#64748b;font-weight:400;font-size:.8rem">(rede TCP — itens direcionados)</span></div>
+          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Cozinha" no cadastro do produto.</div>
+          <input id="p-cozinha" placeholder="tcp://192.168.0.101:9100" value="${localStorage.getItem('p_cozinha')||''}" />
         </div>
-        <div>
-          <label>🎂 Impressora — Montagem</label>
-          <input id="p-montagem" placeholder="tcp://192.168.0.103:9100" value="${localStorage.getItem('p_montagem')||''}" />
+
+        <div style="padding:16px;border:1px solid #3b82f6;border-radius:10px;background:rgba(59,130,246,.08)">
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🏪 Balcão <span style="color:#64748b;font-weight:400;font-size:.8rem">(rede TCP — itens direcionados)</span></div>
+          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Balcão" no cadastro do produto.</div>
+          <input id="p-balcao" placeholder="tcp://192.168.0.102:9100" value="${localStorage.getItem('p_balcao')||''}" />
         </div>
       </div>
-      <div style="margin-top:16px;display:flex;gap:10px">
-        <button class="btn btn-primary" onclick="salvarImpressoras()">💾 Salvar no .env</button>
+
+      <div style="margin-top:20px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="salvarImpressoras()">💾 Salvar e gerar .env</button>
       </div>
     </div>
+
     <div class="card">
-      <h3>Como conectar impressoras</h3>
-      <div style="font-size:.83rem;color:#94a3b8;line-height:1.8">
-        <p><strong style="color:#f1f5f9">Via rede (TCP)</strong> — Conecte a impressora no roteador e use <code style="background:#0f172a;padding:1px 6px;border-radius:4px">tcp://IP:9100</code></p>
-        <p><strong style="color:#f1f5f9">Via USB no Windows</strong> — Use <code style="background:#0f172a;padding:1px 6px;border-radius:4px">printer:NomeDaImpressora</code></p>
-        <p><strong style="color:#f1f5f9">Via USB no Linux</strong> — Use <code style="background:#0f172a;padding:1px 6px;border-radius:4px">/dev/usb/lp0</code></p>
-        <p style="margin-top:8px;color:#64748b">Sem impressora configurada, os tickets são apenas exibidos no terminal do servidor.</p>
+      <h3>📋 Regras de impressão</h3>
+      <div style="font-size:.83rem;color:#94a3b8;line-height:2">
+        <p>✅ <strong style="color:#f1f5f9">Caixa</strong> — recebe <em>todos</em> os pedidos com cupom completo (valores, endereço, pagamento)</p>
+        <p>✅ <strong style="color:#f1f5f9">Cozinha</strong> — recebe apenas itens com destino "Cozinha" (sem valores)</p>
+        <p>✅ <strong style="color:#f1f5f9">Balcão</strong> — recebe apenas itens com destino "Balcão" (sem valores)</p>
+        <p>ℹ️ Produto sem destino definido → imprime <em>somente</em> no Caixa</p>
+      </div>
+      <div style="margin-top:16px;font-size:.83rem;color:#94a3b8;line-height:1.8">
+        <p><strong style="color:#f1f5f9">USB Windows</strong> — <code style="background:#0f172a;padding:1px 6px;border-radius:4px">printer:NomeDaImpressora</code></p>
+        <p><strong style="color:#f1f5f9">USB Linux</strong> — <code style="background:#0f172a;padding:1px 6px;border-radius:4px">/dev/usb/lp0</code></p>
+        <p><strong style="color:#f1f5f9">Rede TCP</strong> — <code style="background:#0f172a;padding:1px 6px;border-radius:4px">tcp://192.168.0.X:9100</code></p>
       </div>
     </div>`;
 }
 
 function salvarImpressoras() {
-  localStorage.setItem('p_bebidas', v('p-bebidas'));
-  localStorage.setItem('p_comida', v('p-comida'));
-  localStorage.setItem('p_montagem', v('p-montagem'));
-  toast('Configurações salvas! Adicione ao .env do servidor:');
-  alert(`Adicione ao arquivo .env do delivery-backend:\n\nPRINTER_BEBIDAS=${v('p-bebidas')}\nPRINTER_COMIDA_QUENTE=${v('p-comida')}\nPRINTER_MONTAGEM=${v('p-montagem')}`);
+  const caixa = v('p-caixa');
+  const cozinha = v('p-cozinha');
+  const balcao = v('p-balcao');
+  localStorage.setItem('p_caixa', caixa);
+  localStorage.setItem('p_cozinha', cozinha);
+  localStorage.setItem('p_balcao', balcao);
+  toast('Configurações salvas!');
+  alert(`Adicione ao arquivo .env do delivery-backend:\n\nPRINTER_CAIXA=${caixa}\nPRINTER_COZINHA=${cozinha}\nPRINTER_BALCAO=${balcao}`);
 }
 
 // ── Bairros ───────────────────────────────────────────────────────
@@ -2394,11 +2522,36 @@ async function salvarConfiguracoes() {
 function v(id) { return document.getElementById(id)?.value || ''; }
 
 // ── Init ──────────────────────────────────────────────────────────
-api('GET', '/auth/me').then(u => {
-  document.getElementById('user-info').textContent = `${u.name} · ${u.role}`;
-}).catch(() => {});
+function applyPermissions() {
+  if (!CURRENT_USER) return;
+  const isAdmin = CURRENT_USER.role === 'admin';
+  const perms = CURRENT_USER.permissions || [];
+  document.querySelectorAll('#sidebar-nav .nav-btn').forEach(btn => {
+    const page = btn.dataset.page;
+    const allowed = isAdmin || perms.includes(page);
+    btn.style.display = allowed ? '' : 'none';
+  });
+  // Mostrar badge do perfil
+  const roleLabel = isAdmin ? 'Administrador' : 'Operador';
+  document.getElementById('user-info').innerHTML =
+    `<strong>${CURRENT_USER.name}</strong><br><span style="color:#7c3aed">${roleLabel}</span>`;
+}
 
-carregarBairrosCache().then(() => showPage('pedidos'));
+api('GET', '/auth/me').then(u => {
+  CURRENT_USER = { ...CURRENT_USER, ...u };
+  applyPermissions();
+}).catch(() => { applyPermissions(); });
+
+carregarBairrosCache().then(() => {
+  applyPermissions();
+  // Abrir primeira aba acessível
+  const firstAllowed = Array.from(document.querySelectorAll('#sidebar-nav .nav-btn'))
+    .find(b => b.style.display !== 'none');
+  if (firstAllowed) {
+    firstAllowed.classList.add('active');
+    showPage(firstAllowed.dataset.page, firstAllowed);
+  }
+});
 </script>
 </body>
 </html>

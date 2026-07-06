@@ -356,7 +356,7 @@ router.post('/', async (req, res) => {
         throw { status: 400, message: 'Cada item precisa de product_id e quantity > 0' };
       }
       const prod = await client.query(
-        `SELECT p.id, p.name, p.price, p.promo_price, p.available, c.name AS category_name
+        `SELECT p.id, p.name, p.price, p.promo_price, p.available, p.print_target, c.name AS category_name
          FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = $1`,
         [item.product_id]
       );
@@ -368,7 +368,7 @@ router.post('/', async (req, res) => {
       const addonsUnitTotal = resolvedAddons.reduce((s, a) => s + a.price * a.quantity, 0);
       const itemSubtotal = (unitPrice + addonsUnitTotal) * item.quantity;
       subtotal += itemSubtotal;
-      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSubtotal, product_name: prod.rows[0].name, category_name: prod.rows[0].category_name, addons: resolvedAddons });
+      resolvedItems.push({ ...item, unit_price: unitPrice, subtotal: itemSubtotal, product_name: prod.rows[0].name, category_name: prod.rows[0].category_name, print_target: prod.rows[0].print_target, addons: resolvedAddons });
     }
 
     const total = Math.max(0, subtotal + parseFloat(delivery_fee) - parseFloat(discount));
@@ -431,6 +431,7 @@ router.post('/', async (req, res) => {
       printOrderTicket(stationCfg.printer, {
         stationName: stationCfg.name,
         emoji: stationCfg.emoji,
+        fullReceipt: stationCfg.fullReceipt || false,
         order,
         items: stationItems,
       }).catch((e) => console.error('[print]', e.message));
