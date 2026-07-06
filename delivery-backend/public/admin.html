@@ -2286,22 +2286,42 @@ function pageImpressoras() {
 
       <div style="display:grid;gap:16px">
 
+        <div id="printer-detect-box" style="padding:12px 16px;border:1px solid #334155;border-radius:10px;background:rgba(255,255,255,.03);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-size:.85rem;color:#94a3b8">Impressoras instaladas neste computador:</span>
+          <button class="btn btn-secondary btn-sm" onclick="detectarImpressoras()">🔍 Detectar</button>
+          <span id="printer-list-wrap" style="display:none;flex:1;min-width:200px">
+            <select id="printer-select" style="width:100%" onchange="selecionarImpressora(this.value)">
+              <option value="">— selecione para preencher campo —</option>
+            </select>
+          </span>
+          <span id="printer-detect-msg" style="font-size:.8rem;color:#64748b"></span>
+        </div>
+
         <div style="padding:16px;border:1px solid #7c3aed;border-radius:10px;background:rgba(124,58,237,.08)">
           <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🧾 Caixa <span style="color:#64748b;font-weight:400;font-size:.8rem">(USB — imprime TODOS os pedidos)</span></div>
           <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Cupom completo: cliente, itens, totais, forma de pagamento.</div>
-          <input id="p-caixa" placeholder="Exemplo USB Windows: printer:NomeDaImpressora  |  Linux: /dev/usb/lp0" value="${localStorage.getItem('p_caixa')||''}" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="p-caixa" style="flex:1" placeholder="printer:NomeDaImpressora  ou  /dev/usb/lp0" value="${localStorage.getItem('p_caixa')||''}" />
+            <button class="btn btn-secondary btn-sm" title="Usar impressora selecionada" onclick="usarSelecionada('p-caixa')">⬆</button>
+          </div>
         </div>
 
         <div style="padding:16px;border:1px solid #f59e0b;border-radius:10px;background:rgba(245,158,11,.08)">
           <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🍳 Cozinha <span style="color:#64748b;font-weight:400;font-size:.8rem">(rede TCP — itens direcionados)</span></div>
           <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Cozinha" no cadastro do produto.</div>
-          <input id="p-cozinha" placeholder="tcp://192.168.0.101:9100" value="${localStorage.getItem('p_cozinha')||''}" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="p-cozinha" style="flex:1" placeholder="tcp://192.168.0.101:9100  ou  printer:Nome" value="${localStorage.getItem('p_cozinha')||''}" />
+            <button class="btn btn-secondary btn-sm" title="Usar impressora selecionada" onclick="usarSelecionada('p-cozinha')">⬆</button>
+          </div>
         </div>
 
         <div style="padding:16px;border:1px solid #3b82f6;border-radius:10px;background:rgba(59,130,246,.08)">
           <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🏪 Balcão <span style="color:#64748b;font-weight:400;font-size:.8rem">(rede TCP — itens direcionados)</span></div>
           <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Balcão" no cadastro do produto.</div>
-          <input id="p-balcao" placeholder="tcp://192.168.0.102:9100" value="${localStorage.getItem('p_balcao')||''}" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="p-balcao" style="flex:1" placeholder="tcp://192.168.0.102:9100  ou  printer:Nome" value="${localStorage.getItem('p_balcao')||''}" />
+            <button class="btn btn-secondary btn-sm" title="Usar impressora selecionada" onclick="usarSelecionada('p-balcao')">⬆</button>
+          </div>
         </div>
       </div>
 
@@ -2324,6 +2344,40 @@ function pageImpressoras() {
         <p><strong style="color:#f1f5f9">Rede TCP</strong> — <code style="background:#0f172a;padding:1px 6px;border-radius:4px">tcp://192.168.0.X:9100</code></p>
       </div>
     </div>`;
+}
+
+async function detectarImpressoras() {
+  const msg = document.getElementById('printer-detect-msg');
+  msg.textContent = 'Detectando...';
+  try {
+    const data = await api('GET', '/printers');
+    const list = data.printers || [];
+    if (list.length === 0) {
+      msg.textContent = 'Nenhuma impressora encontrada no servidor.';
+      return;
+    }
+    const sel = document.getElementById('printer-select');
+    sel.innerHTML = '<option value="">— selecione para preencher campo —</option>' +
+      list.map(p => `<option value="printer:${p}">${p}</option>`).join('');
+    document.getElementById('printer-list-wrap').style.display = '';
+    msg.textContent = `${list.length} impressora(s) encontrada(s).`;
+  } catch(e) {
+    msg.textContent = 'Erro ao detectar. O servidor precisa estar rodando localmente.';
+  }
+}
+
+function selecionarImpressora(val) {
+  // Preenche automaticamente o campo Caixa se estiver vazio
+  if (!val) return;
+  const caixa = document.getElementById('p-caixa');
+  if (caixa && !caixa.value) caixa.value = val;
+}
+
+function usarSelecionada(fieldId) {
+  const sel = document.getElementById('printer-select');
+  if (!sel || !sel.value) { toast('Primeiro detecte e selecione uma impressora acima.'); return; }
+  const field = document.getElementById(fieldId);
+  if (field) field.value = sel.value;
 }
 
 function salvarImpressoras() {
