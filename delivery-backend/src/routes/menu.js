@@ -56,6 +56,7 @@ router.get('/', async (req, res) => {
         p.featured,
         p.promo_price,
         p.promo_label,
+        p.promo_days,
         p.sort_order AS product_sort
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id AND p.available = true
@@ -120,7 +121,7 @@ router.get('/', async (req, res) => {
           image_url: row.product_image,
           available: row.available,
           featured: row.featured,
-          promo_price: row.promo_price !== null ? parseFloat(row.promo_price) : null,
+          promo_price: (row.promo_price !== null && (row.promo_days === null || row.promo_days.includes(todayJs))) ? parseFloat(row.promo_price) : null,
           promo_label: row.promo_label,
           addon_groups: Object.values(addonsByProduct[row.product_id] || {}),
         });

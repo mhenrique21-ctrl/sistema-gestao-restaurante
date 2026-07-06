@@ -60,6 +60,19 @@ function ProductCard({ product, catName, onClick }) {
             {CAT_ICONS[catName] || '🍽'}
           </div>
         )}
+        {product.promo_price != null && (
+          <div className="absolute -top-2 -left-2 flex items-center justify-center"
+            style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: 'linear-gradient(135deg,#ff4d4d,#ff8c00)',
+              boxShadow: '0 2px 8px rgba(255,77,77,0.55)',
+              color: '#fff', fontWeight: 900, fontSize: 10,
+              lineHeight: 1, textAlign: 'center', padding: 4,
+              border: '2px solid #fff',
+            }}>
+            20%<br/>OFF
+          </div>
+        )}
         <div className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center text-sm font-black shadow-lg press"
           style={{ background: 'var(--gold)', color: '#0F0F0F' }}>
           +
