@@ -4923,9 +4923,11 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   const delItem=(id:string)=>setItens(prev=>prev.filter(it=>it.id!==id));
   const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});};
 
-  // Catalog quick-fill (new Novo Pedido flow)
-  const [qtdsCatalog,setQtdsCatalog]=useState<Record<string,string>>({});
-  const [qtdsAtual,setQtdsAtual]=useState<Record<string,string>>({});
+  // Catalog quick-fill — persiste no localStorage para sobreviver à troca de aba
+  const [qtdsCatalog,setQtdsCatalogRaw]=useState<Record<string,string>>(()=>{try{const s=localStorage.getItem("prod_qtds_ped");if(s)return JSON.parse(s);}catch{}return {};});
+  const [qtdsAtual,setQtdsAtualRaw]=useState<Record<string,string>>(()=>{try{const s=localStorage.getItem("prod_qtds_atual");if(s)return JSON.parse(s);}catch{}return {};});
+  const setQtdsCatalog=(fn:any)=>setQtdsCatalogRaw(prev=>{const next=typeof fn==="function"?fn(prev):fn;try{localStorage.setItem("prod_qtds_ped",JSON.stringify(next));}catch{}return next;});
+  const setQtdsAtual=(fn:any)=>setQtdsAtualRaw(prev=>{const next=typeof fn==="function"?fn(prev):fn;try{localStorage.setItem("prod_qtds_atual",JSON.stringify(next));}catch{}return next;});
   // itens com Pedido > 0 (para arquivar) ou qualquer campo preenchido (para compartilhar)
   const preenchidos=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0||parseFloat(qtdsAtual[p.id]||"0")>0).length;
   const _itensFilled=(catalog:any[])=>catalog
@@ -4933,11 +4935,11 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     .map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id])||0,qtdAtual:qtdsAtual[p.id]||"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
 
   const gerarPedidoCatalog=()=>{
-    const itensPed=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0)
-      .map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id]),qtdAtual:qtdsAtual[p.id]||"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
-    if(!itensPed.length)return alert("Preencha pelo menos 1 quantidade no campo 'Pedido'.");
-    const pedido={id:uid(),data:today(),itens:itensPed,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    const itensFilled=_itensFilled(prodsCatalog);
+    if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade (Atual ou Pedido).");
+    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
+    try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}
     setQtdsCatalog({});setQtdsAtual({});
     if(confirm("✅ Pedido gerado! Compartilhar via WhatsApp?"))
       window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(pedido))}`,"_blank");
@@ -5236,7 +5238,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
                 const vPed=qtdsCatalog[p.id]||"";
                 const filled=parseFloat(vPed)>0;
                 const filledAtual=parseFloat(vAtual)>0;
-                const inputBase:any={type:"number",inputMode:"numeric",min:"0",step:"1",placeholder:"0",onFocus:(e:any)=>e.currentTarget.select()};
+                const inputBase:any={type:"text",inputMode:"numeric",pattern:"[0-9]*",placeholder:"",onFocus:(e:any)=>e.currentTarget.select()};
                 const styleAtual:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filledAtual?"#f59e0b12":"var(--bg4)",border:filledAtual?"2px solid #f59e0b":"1px solid #f59e0b44",borderRadius:8,color:filledAtual?"#f59e0b":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
                 const stylePed:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filled?"#c084fc12":"var(--bg4)",border:filled?"2px solid #c084fc":"1px solid #c084fc44",borderRadius:8,color:filled?"#c084fc":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
                 return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 6px",borderBottom:"1px solid var(--border)",background:filled?"#c084fc06":filledAtual?"#f59e0b04":"transparent"}}>
@@ -5276,7 +5278,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
                 style={{background:preenchidos>0?"#1a1040":"var(--border2)",color:preenchidos>0?"#c084fc":"#555",border:preenchidos>0?"1px solid #5b21b6":"1px solid var(--border2)",padding:"14px 16px",fontSize:14}}>
                 🖨️
               </button>
-              {preenchidos>0&&<button onClick={()=>{setQtdsCatalog({});setQtdsAtual({});}} className="btn"
+              {preenchidos>0&&<button onClick={()=>{try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}setQtdsCatalog({});setQtdsAtual({});}} className="btn"
                 style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"14px 14px",fontSize:14}} title="Zerar tudo">
                 ✕
               </button>}
