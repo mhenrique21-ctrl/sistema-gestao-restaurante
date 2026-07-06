@@ -211,7 +211,7 @@ router.post('/guest', async (req, res) => {
       }
     } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
 
-    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length } });
+    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, items: resolvedItems });
 
     // Impressão automática em todas as impressoras
     try {
