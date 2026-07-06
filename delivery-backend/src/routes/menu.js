@@ -187,19 +187,21 @@ router.post('/products', authMiddleware, requireRole('admin'), async (req, res) 
   if (!category_id || !name || price === undefined) {
     return res.status(400).json({ error: 'category_id, name e price são obrigatórios' });
   }
-  const days = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
-  const validTargets = ['cozinha', 'balcao', null, undefined];
-  const target = validTargets.includes(print_target) ? (print_target || null) : null;
+  const target = ['cozinha','balcao'].includes(print_target) ? print_target : null;
+  // Embed active_days directly in SQL to avoid pg driver array serialization issues
+  const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
+  const daysSql = daysArr ? `ARRAY[${daysArr.join(',')}]::int[]` : 'NULL';
   try {
     const result = await pool.query(
       `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null, days, target]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, $10) RETURNING *`,
+      [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null, target]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === '23503') return res.status(400).json({ error: 'Categoria não encontrada' });
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('[menu/POST product]', err.message);
+    res.status(500).json({ error: 'Erro interno: ' + err.message });
   }
 });
 
