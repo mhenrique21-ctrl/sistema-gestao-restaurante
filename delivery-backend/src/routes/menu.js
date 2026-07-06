@@ -188,14 +188,15 @@ router.post('/products', authMiddleware, requireRole('admin'), async (req, res) 
     return res.status(400).json({ error: 'category_id, name e price são obrigatórios' });
   }
   const target = ['cozinha','balcao'].includes(print_target) ? print_target : null;
-  // Usa string literal '{1,3,5}' que o pg converte corretamente para int[]
   const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
-  const daysPg = daysArr ? ('{' + daysArr.join(',') + '}') : null;
+  // Embed active_days e print_target direto no SQL (evita problema com $10/$11 no pg driver)
+  const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
+  const targetSql = target ? `'${target}'` : 'NULL';
   try {
     const result = await pool.query(
       `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null, daysPg, target]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}) RETURNING *`,
+      [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
