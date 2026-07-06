@@ -669,6 +669,23 @@ function getActiveDays() {
   return Array.from(document.querySelectorAll('.f-day-cb:checked')).map(c => parseInt(c.value));
 }
 
+function promoDaysHtml(selected = null) {
+  const none = selected === null || selected.length === 0;
+  return `<div>
+    <label>🏷 Dias da promoção <span style="color:var(--muted);font-size:.75rem;font-weight:400">(deixe vazio para sempre ativa)</span></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+      ${DAYS_WEEK.map(d=>`<label style="display:flex;align-items:center;gap:4px;font-size:.82rem;cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:var(--input-bg)">
+        <input type="checkbox" class="f-promo-day-cb" value="${d.v}" ${!none&&(selected||[]).includes(d.v)?'checked':''}>
+        ${d.l}</label>`).join('')}
+    </div>
+  </div>`;
+}
+
+function getPromoDays() {
+  const checked = Array.from(document.querySelectorAll('.f-promo-day-cb:checked')).map(c => parseInt(c.value));
+  return checked.length > 0 ? checked : [];
+}
+
 function modalNovoProduto() {
   const opts = categorias.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
   openModal('Novo Produto', `
@@ -687,6 +704,7 @@ function modalNovoProduto() {
           <label style="margin:0">Produto em destaque</label>
         </div>
       </div>
+      ${promoDaysHtml(null)}
       ${activeDaysHtml(null)}
       <div><label>🖨 Destino de impressão</label>
         <select id="f-print">
@@ -704,6 +722,7 @@ function modalNovoProduto() {
       description: v('f-desc'),
       image_url: v('f-image') || undefined,
       promo_price: v('f-promo') ? parseFloat(v('f-promo')) : undefined,
+      promo_days: getPromoDays(),
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
       active_days: getActiveDays(),
       print_target: v('f-print') || null,
@@ -732,6 +751,7 @@ function modalEditarProduto(id) {
           <label style="margin:0">Produto em destaque</label>
         </div>
       </div>
+      ${promoDaysHtml(p.promo_days || null)}
       ${activeDaysHtml(p.active_days || null)}
       <div><label>🖨 Destino de impressão</label>
         <select id="f-print">
@@ -751,6 +771,7 @@ function modalEditarProduto(id) {
       description: v('f-desc'),
       image_url: v('f-image'),
       promo_price: v('f-promo') ? parseFloat(v('f-promo')) : null,
+      promo_days: getPromoDays(),
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
       active_days: getActiveDays(),
       print_target: v('f-print') || null,

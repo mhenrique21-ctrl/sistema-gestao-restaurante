@@ -185,19 +185,20 @@ router.get('/products/:id', async (req, res) => {
 
 // POST /api/menu/products — criar produto (admin)
 router.post('/products', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target } = req.body;
+  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days } = req.body;
   if (!category_id || !name || price === undefined) {
     return res.status(400).json({ error: 'category_id, name e price são obrigatórios' });
   }
   const target = ['cozinha','balcao'].includes(print_target) ? print_target : null;
   const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
-  // Embed active_days e print_target direto no SQL (evita problema com $10/$11 no pg driver)
+  const promoArr = Array.isArray(promo_days) && promo_days.length > 0 ? promo_days.map(Number) : null;
   const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
   const targetSql = target ? `'${target}'` : 'NULL';
+  const promoDaysSql = promoArr ? `'{${promoArr.join(',')}}'::int[]` : 'NULL';
   try {
     const result = await pool.query(
-      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}) RETURNING *`,
+      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}, ${promoDaysSql}) RETURNING *`,
       [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null]
     );
     res.status(201).json(result.rows[0]);
@@ -222,13 +223,20 @@ router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, 
     }
   }
 
-  // active_days: null = todos os dias; array vazio = todos os dias
   if (req.body.active_days !== undefined) {
     const days = Array.isArray(req.body.active_days) && req.body.active_days.length > 0
       ? req.body.active_days.map(Number)
       : null;
-    const sql = days ? `ARRAY[${days.join(',')}]::int[]` : 'NULL::int[]';
+    const sql = days ? `'{${days.join(',')}}'::int[]` : 'NULL';
     updates.push(`active_days = ${sql}`);
+  }
+
+  if (req.body.promo_days !== undefined) {
+    const pdays = Array.isArray(req.body.promo_days) && req.body.promo_days.length > 0
+      ? req.body.promo_days.map(Number)
+      : null;
+    const sql = pdays ? `'{${pdays.join(',')}}'::int[]` : 'NULL';
+    updates.push(`promo_days = ${sql}`);
   }
 
   if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
