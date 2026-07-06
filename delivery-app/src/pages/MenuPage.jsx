@@ -160,9 +160,10 @@ export default function MenuPage() {
             title="Fale conosco no WhatsApp"
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-              background: 'var(--card)', border: '1px solid var(--border)',
-              color: '#25D366', transition: 'opacity .2s',
+              width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+              background: '#25D366', border: 'none',
+              color: '#fff', transition: 'opacity .2s',
+              boxShadow: '0 2px 8px rgba(37,211,102,0.45)',
             }}
             onMouseOver={e => e.currentTarget.style.opacity = '.75'}
             onMouseOut={e => e.currentTarget.style.opacity = '1'}
