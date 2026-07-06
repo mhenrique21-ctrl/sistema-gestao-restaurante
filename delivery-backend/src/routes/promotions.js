@@ -2,6 +2,16 @@ const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
+// Converte array JS para literal PostgreSQL: [1,2] → '{1,2}' | ['A','B'] → '{"A","B"}'
+function pgIntArray(arr) {
+  if (!arr || !Array.isArray(arr) || arr.length === 0) return null;
+  return '{' + arr.map(Number).join(',') + '}';
+}
+function pgTextArray(arr) {
+  if (!arr || !Array.isArray(arr) || arr.length === 0) return null;
+  return '{' + arr.map(s => '"' + String(s).replace(/"/g, '\\"') + '"').join(',') + '}';
+}
+
 const DAY_NAMES = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 
 // GET /api/promotions — lista promoções ativas (público, usado no checkout)
@@ -65,11 +75,12 @@ router.get('/all', authMiddleware, requireRole('admin'), async (req, res) => {
 router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   const { name, description, active, day_of_week, min_order_value, discount_type, discount_value } = req.body;
   if (!name || !discount_type) return res.status(400).json({ error: 'name e discount_type são obrigatórios' });
+  const { zones } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO promotions (name, description, active, day_of_week, min_order_value, discount_type, discount_value)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [name, description || '', active !== false, day_of_week || null, min_order_value || 0, discount_type, discount_value || 0]
+      `INSERT INTO promotions (name, description, active, day_of_week, zones, min_order_value, discount_type, discount_value)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [name, description || '', active !== false, pgIntArray(day_of_week), pgTextArray(zones), min_order_value || 0, discount_type, discount_value || 0]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -86,16 +97,13 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   for (const f of scalar) {
     if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
   }
-  // Arrays: converter para literal PostgreSQL {val1,val2}
   if (req.body.day_of_week !== undefined) {
-    const arr = req.body.day_of_week;
     updates.push(`day_of_week = $${idx++}`);
-    values.push(arr === null ? null : (Array.isArray(arr) ? arr : [arr]));
+    values.push(pgIntArray(req.body.day_of_week));
   }
   if (req.body.zones !== undefined) {
-    const arr = req.body.zones;
     updates.push(`zones = $${idx++}`);
-    values.push(arr === null ? null : (Array.isArray(arr) ? arr : [arr]));
+    values.push(pgTextArray(req.body.zones));
   }
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);
