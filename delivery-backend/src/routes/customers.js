@@ -116,4 +116,36 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// PATCH /api/customers/:id/block — bloquear/desbloquear cliente
+router.patch('/:id/block', async (req, res) => {
+  const { blocked } = req.body;
+  if (typeof blocked !== 'boolean') return res.status(400).json({ error: 'Campo blocked obrigatório' });
+  try {
+    const result = await pool.query(
+      'UPDATE customers SET blocked = $1 WHERE id = $2 AND active = true RETURNING *',
+      [blocked, req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Cliente não encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[customers/:id/block]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// DELETE /api/customers/:id — deletar cliente (soft delete)
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'UPDATE customers SET active = false WHERE id = $1 AND active = true RETURNING id',
+      [req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Cliente não encontrado' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[customers/:id/DELETE]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

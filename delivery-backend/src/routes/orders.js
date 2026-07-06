@@ -108,10 +108,11 @@ router.post('/guest', async (req, res) => {
     const custResult = await pool.query(
       `INSERT INTO customers (name, phone) VALUES ($1, $2)
        ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id, name, phone`,
+       RETURNING id, name, phone, blocked`,
       [name, phone.replace(/\D/g, '')]
     );
     const customer = custResult.rows[0];
+    if (customer.blocked) return res.status(403).json({ error: 'Não foi possível realizar o pedido.' });
 
     const adminResult = await pool.query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
     const adminId = adminResult.rows[0]?.id;
