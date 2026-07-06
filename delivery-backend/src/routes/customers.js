@@ -11,18 +11,27 @@ router.get('/', async (req, res) => {
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
-    let query = 'SELECT * FROM customers WHERE active = true';
     const values = [];
+    let where = 'WHERE c.active = true';
 
     if (search) {
-      query += ` AND (name ILIKE $1 OR phone ILIKE $1)`;
       values.push(`%${search}%`);
+      where += ` AND (c.name ILIKE $${values.length} OR c.phone ILIKE $${values.length})`;
     }
 
-    query += ` ORDER BY name LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
     values.push(parseInt(limit), offset);
-
-    const result = await pool.query(query, values);
+    const result = await pool.query(
+      `SELECT c.*,
+              COUNT(o.id)::int AS total_pedidos,
+              COALESCE(SUM(o.total),0)::numeric AS total_gasto
+       FROM customers c
+       LEFT JOIN orders o ON o.customer_id = c.id
+       ${where}
+       GROUP BY c.id
+       ORDER BY c.name
+       LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values
+    );
     res.json(result.rows);
   } catch (err) {
     console.error('[customers/GET]', err.message);
