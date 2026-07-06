@@ -143,10 +143,10 @@ router.post('/guest', async (req, res) => {
     const orderResult = await pool.query(
       `INSERT INTO orders (customer_id, user_id, delivery_type, delivery_address, subtotal,
         delivery_fee, discount, total, payment_method, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'aguardando_pagamento') RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,${promoDiscount},$7,$8,$9,'aguardando_pagamento') RETURNING *`,
       [customer.id, adminId, delivery_type || 'delivery',
        delivery_address ? JSON.stringify(delivery_address) : null,
-       subtotal, fee, promoDiscount, total, payment_method, notes || null]
+       subtotal, fee, total, payment_method, notes || null]
     );
     const order = orderResult.rows[0];
 
