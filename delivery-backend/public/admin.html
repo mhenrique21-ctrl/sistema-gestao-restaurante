@@ -172,6 +172,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="adicionais" onclick="showPage('adicionais',this)">➕ Adicionais</button>
     <button class="nav-btn" data-page="promocoes" onclick="showPage('promocoes',this)">🎉 Promoções</button>
     <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
+    <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
 </div>
@@ -499,9 +500,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates };
   pages[page]?.();
 }
 
@@ -1186,6 +1187,7 @@ const ALL_PAGES = [
   { key:'adicionais', label:'➕ Adicionais' },
   { key:'promocoes', label:'🎉 Promoções' },
   { key:'impressoras', label:'🖨 Impressoras' },
+  { key:'templates', label:'📋 Templates' },
 ];
 
 function permissionsForm(selectedPerms = []) {
@@ -2552,6 +2554,151 @@ carregarBairrosCache().then(() => {
     showPage(firstAllowed.dataset.page, firstAllowed);
   }
 });
+
+// ── Templates ─────────────────────────────────────────────────────
+const TEMPLATES_KEY = 'admin_templates';
+
+function loadTemplates() {
+  try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || '[]'); } catch { return []; }
+}
+function saveTemplates(list) {
+  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list));
+}
+
+function pageTemplates() {
+  const list = loadTemplates();
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="modalNovoTemplate()">+ Novo Template</button>
+    </div>
+    <div id="templates-list">
+      ${list.length === 0
+        ? '<div class="card" style="text-align:center;color:var(--muted)">Nenhum template criado ainda.</div>'
+        : list.map(t => templateCard(t)).join('')}
+    </div>`;
+}
+
+function templateCard(t) {
+  return `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        <div>
+          <h3 style="margin:0 0 8px">${t.name}</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${t.items.map(item => `<span style="background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:.82rem">${item}</span>`).join('')}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button class="btn btn-primary btn-sm" onclick="usarTemplate('${t.id}')">⚡ Usar</button>
+          <button class="btn btn-secondary btn-sm" onclick="modalEditarTemplate('${t.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="excluirTemplate('${t.id}')">🗑</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function modalNovoTemplate() {
+  openModal('Novo Template', templateForm(), async () => {
+    const name = v('tpl-name').trim();
+    if (!name) throw new Error('Informe o nome do template');
+    const rawItems = v('tpl-items');
+    const items = rawItems.split('\n').map(s => s.trim()).filter(Boolean);
+    if (items.length === 0) throw new Error('Adicione ao menos um item');
+    const list = loadTemplates();
+    list.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, items });
+    saveTemplates(list);
+    toast('Template criado!'); closeModal(); pageTemplates();
+  });
+}
+
+function modalEditarTemplate(id) {
+  const list = loadTemplates();
+  const t = list.find(x => x.id === id);
+  if (!t) return;
+  openModal('Editar Template', templateForm(t), async () => {
+    const name = v('tpl-name').trim();
+    if (!name) throw new Error('Informe o nome do template');
+    const rawItems = v('tpl-items');
+    const items = rawItems.split('\n').map(s => s.trim()).filter(Boolean);
+    if (items.length === 0) throw new Error('Adicione ao menos um item');
+    t.name = name; t.items = items;
+    saveTemplates(list);
+    toast('Template atualizado!'); closeModal(); pageTemplates();
+  });
+}
+
+function excluirTemplate(id) {
+  if (!confirm('Excluir este template?')) return;
+  const list = loadTemplates().filter(x => x.id !== id);
+  saveTemplates(list);
+  pageTemplates();
+}
+
+function templateForm(t = {}) {
+  return `
+    <div class="form-grid">
+      <div><label>Nome do template</label><input id="tpl-name" value="${t.name || ''}" placeholder="Ex: Croissant doce" /></div>
+      <div>
+        <label>Itens (um por linha)</label>
+        <textarea id="tpl-items" rows="8" style="width:100%;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:.9rem;resize:vertical" placeholder="Croissant de chocolate\nCroissant de pistache\nCroissant de doce de leite">${(t.items || []).join('\n')}</textarea>
+      </div>
+    </div>`;
+}
+
+function usarTemplate(id) {
+  const t = loadTemplates().find(x => x.id === id);
+  if (!t) return;
+  // Navega para Produtos e abre um modal de criação em lote
+  showPage('produtos', document.querySelector('[data-page="produtos"]'));
+  // Aguarda renderização
+  setTimeout(() => modalCriarEmLote(t), 400);
+}
+
+function modalCriarEmLote(t) {
+  const catOptions = categorias.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  const rows = t.items.map((item, i) => `
+    <tr>
+      <td><input id="lote-nome-${i}" value="${item}" style="width:100%;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px" /></td>
+      <td><input id="lote-preco-${i}" type="number" step="0.01" placeholder="0,00" style="width:80px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px" /></td>
+      <td><select id="lote-cat-${i}" style="background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px">${catOptions}</select></td>
+    </tr>`).join('');
+
+  openModal(`⚡ Criar produtos — ${t.name}`, `
+    <p style="color:var(--muted);margin-bottom:12px">Preencha preço e categoria para cada item e clique em Salvar.</p>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <tr style="font-size:.8rem;color:var(--muted)"><th style="text-align:left;padding:4px 8px">Nome</th><th style="text-align:left;padding:4px 8px">Preço (R$)</th><th style="text-align:left;padding:4px 8px">Categoria</th></tr>
+        ${rows}
+      </table>
+    </div>`, async () => {
+    const erros = [];
+    for (let i = 0; i < t.items.length; i++) {
+      const nome = document.getElementById(`lote-nome-${i}`)?.value?.trim();
+      const preco = parseFloat(document.getElementById(`lote-preco-${i}`)?.value);
+      const cat = document.getElementById(`lote-cat-${i}`)?.value;
+      if (!nome || isNaN(preco) || preco <= 0 || !cat) { erros.push(nome || `Item ${i+1}`); continue; }
+      try {
+        await api('POST', '/menu/products', { name: nome, price: preco, category_id: cat });
+      } catch(e) { erros.push(nome); }
+    }
+    if (erros.length) toast(`⚠️ Alguns itens falharam: ${erros.join(', ')}`, true);
+    else toast('Todos os produtos criados!');
+    closeModal(); pageProdutos();
+  });
+}
+
+// Seed default template se não houver nenhum
+(function seedTemplates() {
+  const list = loadTemplates();
+  if (list.length === 0) {
+    list.push({
+      id: 'croissant-doce',
+      name: 'Croissant doce',
+      items: ['Croissant de chocolate', 'Croissant de pistache', 'Croissant de doce de leite'],
+    });
+    saveTemplates(list);
+  }
+})();
 </script>
 </body>
 </html>
