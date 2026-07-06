@@ -3406,7 +3406,7 @@ const CAT_ICONS:Record<string,string>={
 };
 const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
-const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false,rua:""};
+const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"0",obs:"",urgente:false,rua:""};
 
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
@@ -4667,8 +4667,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itensSorted.length})</span>
         </div>
         {itensSorted.map((item:any,idx:number)=>{
-          const estoque=getMpEstoque(item.nome);
-          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):estoque;
+          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":isEditing?"#7c8fff":"var(--border)"}`,transition:"all .15s"}}>
@@ -4730,8 +4729,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itens.length})</span>
         </div>
         {itensSorted.map((item:any)=>{
-          const estoque=getMpEstoque(item.nome);
-          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):estoque;
+          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":"var(--border)"}`,transition:"all .15s"}}>
             <button onClick={()=>toggle(item.id)}
