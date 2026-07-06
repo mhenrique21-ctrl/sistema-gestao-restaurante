@@ -1148,32 +1148,57 @@ async function pageClientes() {
   document.getElementById('content').innerHTML = `
     <div class="search-bar">
       <input placeholder="Buscar por nome ou telefone..." id="cli-search" oninput="buscarClientes(this.value)" />
+      <select id="cli-sort" onchange="renderClientesTabela()" style="background:#1e293b;color:#f1f5f9;border:1px solid #334155;border-radius:8px;padding:8px 12px;font-size:.85rem">
+        <option value="nome">A–Z Nome</option>
+        <option value="zona">Zona / Bairro</option>
+        <option value="melhores">Melhores clientes</option>
+        <option value="mais_pedidos">Mais pedidos</option>
+        <option value="recentes">Mais recentes</option>
+        <option value="bloqueados">Bloqueados primeiro</option>
+      </select>
       <button class="btn btn-primary" onclick="modalNovoCliente()">+ Novo cliente</button>
     </div>
-    <div id="cli-table"><p style="color:#64748b">Digite para buscar ou aguarde...</p></div>`;
+    <div id="cli-table"><p style="color:#64748b">Carregando...</p></div>`;
   buscarClientes('');
 }
 
+let _clientesCache = [];
+
 async function buscarClientes(q) {
-  const clientes = await api('GET', '/customers?search=' + encodeURIComponent(q) + '&limit=50');
+  _clientesCache = await api('GET', '/customers?search=' + encodeURIComponent(q) + '&limit=200');
+  renderClientesTabela();
+}
+
+function renderClientesTabela() {
+  const sort = document.getElementById('cli-sort')?.value || 'nome';
+  let clientes = [..._clientesCache];
+
+  if (sort === 'nome')         clientes.sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+  else if (sort === 'zona')    clientes.sort((a,b) => (a.address_neighborhood||'zzz').localeCompare(b.address_neighborhood||'zzz', 'pt-BR'));
+  else if (sort === 'melhores') clientes.sort((a,b) => parseFloat(b.total_gasto||0) - parseFloat(a.total_gasto||0));
+  else if (sort === 'mais_pedidos') clientes.sort((a,b) => (b.total_pedidos||0) - (a.total_pedidos||0));
+  else if (sort === 'recentes') clientes.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  else if (sort === 'bloqueados') clientes.sort((a,b) => (b.blocked ? 1 : 0) - (a.blocked ? 1 : 0));
+
   document.getElementById('cli-table').innerHTML = `
     <div class="card">
       <h3>Clientes (${clientes.length})</h3>
       <table>
-        <tr><th>Nome</th><th>WhatsApp</th><th>Endereço</th><th>Ações</th></tr>
+        <tr><th>Nome</th><th>WhatsApp</th><th>Bairro</th><th style="text-align:right">Pedidos</th><th style="text-align:right">Total gasto</th><th>Ações</th></tr>
         ${clientes.map(c => `
           <tr style="${c.blocked ? 'opacity:.55' : ''}">
             <td style="font-weight:600">${c.name}${c.blocked ? ' <span style="background:#7f1d1d;color:#fca5a5;border-radius:999px;padding:1px 7px;font-size:.68rem;font-weight:700">🚫 Bloqueado</span>' : ''}</td>
             <td>${c.phone ? '📱 ' + c.phone : '-'}</td>
             <td style="font-size:.78rem">
-              ${c.address_neighborhood ? `<span style="color:#f1f5f9">${c.address_neighborhood}</span>` : ''}
+              ${c.address_neighborhood ? `<span style="color:#f1f5f9">${c.address_neighborhood}</span>` : '<span style="color:#475569">-</span>'}
               ${c.address_neighborhood && getTaxaEntrega(c.address_neighborhood) !== null ? `<span style="background:#064e3b;color:#6ee7b7;border-radius:999px;padding:1px 7px;font-size:.7rem;font-weight:700;margin-left:4px">🛵 R$ ${getTaxaEntrega(c.address_neighborhood).toFixed(2).replace('.',',')}</span>` : ''}
-              ${c.address_street ? `<div style="color:#64748b;margin-top:2px">${[c.address_street, c.address_number, c.address_city].filter(Boolean).join(', ')}</div>` : ''}
             </td>
-            <td style="display:flex;gap:6px">
+            <td style="text-align:right;color:#94a3b8">${c.total_pedidos||0}</td>
+            <td style="text-align:right;font-weight:600;color:#6ee7b7">R$ ${parseFloat(c.total_gasto||0).toFixed(2).replace('.',',')}</td>
+            <td style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-secondary btn-sm" onclick="verCliente('${c.id}')">👁</button>
               <button class="btn btn-secondary btn-sm" onclick="modalEditarCliente('${c.id}')">✏️</button>
-              <button class="btn btn-sm" style="background:${c.blocked ? '#064e3b' : '#7c2d12'};color:#fff" onclick="toggleBloquearCliente('${c.id}',${c.blocked})">${c.blocked ? '✅ Desbloquear' : '🚫 Bloquear'}</button>
+              <button class="btn btn-sm" style="background:${c.blocked ? '#064e3b' : '#7c2d12'};color:#fff" onclick="toggleBloquearCliente('${c.id}',${c.blocked})">${c.blocked ? '✅' : '🚫'}</button>
               <button class="btn btn-sm" style="background:#1e293b;color:#ef4444;border:1px solid #ef4444" onclick="deletarCliente('${c.id}','${c.name.replace(/'/g,'')}')">🗑</button>
             </td>
           </tr>`).join('')}
