@@ -1765,7 +1765,12 @@ async function pagePromocoes() {
           </div>`;
         }).join('')}
       </div>
+    </div>
+
+    <div class="card" style="margin-top:16px" id="cupons-section">
+      <p style="color:var(--muted);text-align:center;padding:20px">Carregando cupons...</p>
     </div>`;
+  renderCupons();
 }
 
 function promocaoForm(p = {}, zonas = []) {
@@ -1875,6 +1880,117 @@ async function deletarPromocao(id) {
   if (!confirm('Excluir esta promoção?')) return;
   await api('DELETE', '/promotions/' + id);
   toast('Promoção removida'); pagePromocoes();
+}
+
+// ── Cupons ────────────────────────────────────────────────────────
+async function renderCupons() {
+  const cupons = await api('GET', '/coupons');
+  const TYPE_LABEL = { percent: '% Desconto', fixed: 'R$ Fixo', free_delivery: '🚚 Frete grátis' };
+  document.getElementById('cupons-section').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 style="margin:0">🎟️ Cupons de Desconto</h3>
+      <button class="btn btn-primary btn-sm" onclick="modalNovoCupom()">+ Novo cupom</button>
+    </div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px">
+      Cupons que o cliente digita no checkout para obter desconto.
+    </p>
+    ${cupons.length === 0 ? '<p style="color:var(--muted);text-align:center;padding:20px">Nenhum cupom cadastrado</p>' : ''}
+    <table style="font-size:.83rem">
+      <tr><th>Código</th><th>Descrição</th><th>Desconto</th><th>Mín.</th><th>Usos</th><th>Validade</th><th>Ativo</th><th>Ações</th></tr>
+      ${cupons.map(c => `
+        <tr>
+          <td><strong style="font-family:monospace;letter-spacing:1px;color:var(--primary)">${c.code}</strong></td>
+          <td style="color:var(--muted)">${c.description || '—'}</td>
+          <td>${c.discount_type === 'percent' ? `${c.discount_value}%` : c.discount_type === 'fixed' ? `R$ ${parseFloat(c.discount_value).toFixed(2).replace('.',',')}` : 'Frete grátis'}</td>
+          <td>R$ ${parseFloat(c.min_order_value||0).toFixed(2).replace('.',',')}</td>
+          <td style="text-align:center">${c.uses_count}${c.max_uses ? '/' + c.max_uses : ''}</td>
+          <td>${c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : 'Sem validade'}</td>
+          <td><button class="toggle ${c.active ? 'on' : ''}" onclick="toggleCupom('${c.id}',${c.active})"></button></td>
+          <td style="display:flex;gap:6px">
+            <button class="btn btn-secondary btn-sm" onclick="modalEditarCupom('${c.id}')">✏️</button>
+            <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:none" onclick="deletarCupom('${c.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}
+    </table>`;
+}
+
+function cupomForm(c = {}) {
+  return `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label>Código do cupom</label><input id="cp-code" value="${c.code||''}" placeholder="Ex: BEMVINDO10" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" /></div>
+      <div><label>Descrição</label><input id="cp-desc" value="${c.description||''}" placeholder="Ex: 10% de desconto para novos clientes" /></div>
+      <div>
+        <label>Tipo de desconto</label>
+        <select id="cp-type" onchange="updateCupomField()" style="width:100%">
+          <option value="percent" ${c.discount_type==='percent'?'selected':''}>% Porcentagem</option>
+          <option value="fixed" ${c.discount_type==='fixed'?'selected':''}>R$ Valor fixo</option>
+          <option value="free_delivery" ${c.discount_type==='free_delivery'?'selected':''}>🚚 Frete grátis</option>
+        </select>
+      </div>
+      <div id="cp-value-wrap" style="${c.discount_type==='free_delivery'?'display:none':''}">
+        <label id="cp-value-label">${c.discount_type==='fixed'?'Valor (R$)':'Porcentagem (%)'}</label>
+        <input id="cp-value" type="number" step="0.01" value="${c.discount_value||0}" />
+      </div>
+      <div><label>Valor mínimo do pedido (R$)</label><input id="cp-min" type="number" step="0.01" value="${c.min_order_value||0}" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label>Máx. de usos (vazio = ilimitado)</label><input id="cp-max" type="number" value="${c.max_uses||''}" placeholder="Ilimitado" /></div>
+        <div><label>Validade (opcional)</label><input id="cp-expires" type="date" value="${c.expires_at?c.expires_at.slice(0,10):''}" /></div>
+      </div>
+    </div>`;
+}
+
+function updateCupomField() {
+  const t = document.getElementById('cp-type')?.value;
+  const wrap = document.getElementById('cp-value-wrap');
+  const label = document.getElementById('cp-value-label');
+  if (!wrap) return;
+  wrap.style.display = t === 'free_delivery' ? 'none' : '';
+  if (label) label.textContent = t === 'fixed' ? 'Valor (R$)' : 'Porcentagem (%)';
+}
+
+function getCupomData() {
+  return {
+    code: document.getElementById('cp-code')?.value.trim().toUpperCase(),
+    description: document.getElementById('cp-desc')?.value,
+    discount_type: document.getElementById('cp-type')?.value,
+    discount_value: parseFloat(document.getElementById('cp-value')?.value||0),
+    min_order_value: parseFloat(document.getElementById('cp-min')?.value||0),
+    max_uses: document.getElementById('cp-max')?.value ? parseInt(document.getElementById('cp-max').value) : null,
+    expires_at: document.getElementById('cp-expires')?.value || null,
+    active: true,
+  };
+}
+
+function modalNovoCupom() {
+  openModal('Novo Cupom', cupomForm(), async () => {
+    const data = getCupomData();
+    if (!data.code) { toast('Informe o código do cupom', true); return; }
+    await api('POST', '/coupons', data);
+    toast('Cupom criado!'); closeModal(); renderCupons();
+  });
+}
+
+async function modalEditarCupom(id) {
+  const cupons = await api('GET', '/coupons');
+  const c = cupons.find(x => x.id === id);
+  if (!c) return;
+  openModal('Editar Cupom', cupomForm(c), async () => {
+    await api('PATCH', '/coupons/' + id, getCupomData());
+    toast('Cupom atualizado!'); closeModal(); renderCupons();
+  });
+  setTimeout(updateCupomField, 50);
+}
+
+async function toggleCupom(id, current) {
+  await api('PATCH', '/coupons/' + id, { active: !current });
+  toast(current ? 'Cupom desativado' : 'Cupom ativado!');
+  renderCupons();
+}
+
+async function deletarCupom(id) {
+  if (!confirm('Excluir este cupom?')) return;
+  await api('DELETE', '/coupons/' + id);
+  toast('Cupom removido'); renderCupons();
 }
 
 // ── Adicionais ────────────────────────────────────────────────────

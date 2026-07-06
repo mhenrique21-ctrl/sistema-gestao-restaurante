@@ -180,20 +180,25 @@ export default function CheckoutPage() {
       : parseFloat(applicablePromo.discount_value)
     : 0
 
-  const discount = couponApplied ? (couponApplied.type === 'percent' ? subtotal * couponApplied.value / 100 : couponApplied.value) : promoDiscount
+  const discount = couponApplied ? (couponApplied.discount ?? 0) : promoDiscount
   const total = subtotal + deliveryFee - discount
 
-  function applyCoupon() {
+  async function applyCoupon() {
     setCouponError('')
     const code = coupon.trim().toUpperCase()
     if (!code) return
-    const COUPONS = {
-      'BEMVINDO10': { type: 'percent', value: 10, label: '10% de desconto' },
-      'FRETE0':     { type: 'fixed', value: deliveryFee, label: 'Frete grátis' },
+    try {
+      const res = await api.validateCoupon(code, subtotal, deliveryFee)
+      setCouponApplied({
+        code: res.coupon.code,
+        type: res.coupon.discount_type,
+        value: res.coupon.discount_value,
+        label: res.coupon.description || code,
+        discount: res.discount,
+      })
+    } catch (err) {
+      setCouponError(err.message)
     }
-    const found = COUPONS[code]
-    if (!found) { setCouponError('Cupom inválido ou expirado'); return }
-    setCouponApplied({ code, ...found })
   }
 
   async function handleSubmit() {
@@ -217,6 +222,7 @@ export default function CheckoutPage() {
         items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
       })
       clear()
+      if (couponApplied?.code) api.useCoupon(couponApplied.code).catch(() => {})
       const BASE = import.meta.env.VITE_API_URL || ''
       if (deliveryType === 'delivery') {
         const customerId = foundCustomer?.id || order.customer_id

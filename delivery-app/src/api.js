@@ -48,4 +48,8 @@ export const api = {
   // Promoções
   getPromotions: () => request('GET', '/promotions'),
   applyPromotion: (subtotal, deliveryFee) => request('GET', `/promotions/apply?subtotal=${subtotal}&delivery_fee=${deliveryFee}`),
+
+  // Cupons
+  validateCoupon: (code, subtotal, deliveryFee) => request('POST', '/coupons/validate', { code, subtotal, delivery_fee: deliveryFee }),
+  useCoupon: (code) => request('POST', '/coupons/use', { code }),
 }
