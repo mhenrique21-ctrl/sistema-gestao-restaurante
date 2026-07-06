@@ -86,14 +86,16 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   for (const f of scalar) {
     if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
   }
-  // Arrays (text[]) precisam de cast explícito
+  // Arrays: converter para literal PostgreSQL {val1,val2}
   if (req.body.day_of_week !== undefined) {
-    updates.push(`day_of_week = $${idx++}::int[]`);
-    values.push(req.body.day_of_week);
+    const arr = req.body.day_of_week;
+    updates.push(`day_of_week = $${idx++}`);
+    values.push(arr === null ? null : (Array.isArray(arr) ? arr : [arr]));
   }
   if (req.body.zones !== undefined) {
-    updates.push(`zones = $${idx++}::text[]`);
-    values.push(req.body.zones);
+    const arr = req.body.zones;
+    updates.push(`zones = $${idx++}`);
+    values.push(arr === null ? null : (Array.isArray(arr) ? arr : [arr]));
   }
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);
