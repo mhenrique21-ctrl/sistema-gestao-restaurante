@@ -4629,7 +4629,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           </select>
         </div>
         <div style={{flex:"1 1 70px"}}>
-          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>TEM</div>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Tem na Loja</div>
           <input type="number" min="0" step="0.1" placeholder="0" value={form.estoqueQtd} onChange={e=>setF("estoqueQtd",e.target.value)} className="inp" style={{marginBottom:0}}/>
         </div>
       </div>
