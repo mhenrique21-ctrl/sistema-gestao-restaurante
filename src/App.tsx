@@ -592,7 +592,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
       produtosLista: byIdDedup(s.produtosLista||[]),
-      pedidosLista:  byId(s.pedidosLista||[]),
+      pedidosLista:  (()=>{const m=new Map();(p.pedidosLista||[]).forEach((x:any)=>m.set(x.id,x));(s.pedidosLista||[]).forEach((x:any)=>m.set(x.id,x));return [...m.values()].filter((x:any)=>!_listaDeletados.has(x.id)).sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));})()
     };
     // listaCompras: merge por ID, versão mais recente (updatedAt) vence
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
@@ -3657,7 +3657,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     todosIds.forEach(id=>_listaDeletados.add(id));
 
     const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un"})),criadoEm:new Date().toISOString()};
-    setDb((d:any)=>({
+    (setDbAndSave||setDb)((d:any)=>({
       ...d,
       pedidosLista:[pedido,...(d.pedidosLista||[])],
       listaCompras:[],
@@ -3674,7 +3674,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         todosIds.forEach(id=>_listaDeletados.add(id));
         const itensArq=[...comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un"})),...naoTemList.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",naoTem:true}))];
         const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
-        setDb((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500)}));
+        (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500)}));
         setAutoArchiveMsg("✅ Lista finalizada e arquivada automaticamente!");
         setTimeout(()=>setAutoArchiveMsg(""),4000);
       }
