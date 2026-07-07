@@ -3406,7 +3406,7 @@ const CAT_ICONS:Record<string,string>={
 };
 const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
-const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,rua:""};
+const EMPTY_FORM_LISTA={nome:"",qtd:"",unidade:"un",cat:"",estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,rua:""};
 
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
@@ -4560,68 +4560,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             {form.urgente?"🔴":"⚪"}
           </button>
         </div>
-        {estoquePreview!==null&&<div style={{fontSize:11,color:estoquePreview===0?"#ff5c7a":estoquePreview<2?"#fbbf24":"#4ade80",marginTop:4}}>
-          📦 Em estoque: {estoquePreview} {form.unidade}
-        </div>}
-        {isAdmin&&(()=>{
-          const q=form.nome.trim().toLowerCase();
-          if(q.length<2)return null;
-          const existingProd=prodsCatalog.find((p:any)=>p.nome.toLowerCase()===q);
-          const savedIds=existingProd?getProdVinculados(existingProd):[];
-          const activeIds=pendingMpLinks!==null?pendingMpLinks:savedIds;
-          const cb3=concBusca.trim().toLowerCase();
-          const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb3?(mn.includes(cb3)||cb3.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,20);
-          const vinMps=(db.materiasPrimas||[]).filter((m:any)=>activeIds.includes(m.id));
-          vinMps.forEach((m:any)=>{if(!mps.find((o:any)=>o.id===m.id))mps.unshift(m);});
-          const hasUnsaved=existingProd&&pendingMpLinks!==null&&JSON.stringify(pendingMpLinks.sort())!==JSON.stringify(savedIds.sort());
-          return <div style={{marginTop:6,background:"#0d1020",borderRadius:8,border:`1px solid ${hasUnsaved?"#fbbf2466":"#1e2235"}`,padding:"6px 10px"}}>
-            <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar com compra — clique para vincular</div>
-            <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
-              className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-            {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
-              <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
-              {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
-                <span style={{color:"#4ade80"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
-                {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
-                <button onClick={()=>{const nw=activeIds.filter((id:string)=>id!==m.id);setPendingMpLinks(nw);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
-              </div>)}
-            </div>}
-            {!mps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
-            <div style={{maxHeight:150,overflowY:"auto" as const}}>
-            {mps.map((mp:any)=>{
-              const isLinked=activeIds.includes(mp.id);
-              return <div key={mp.id} onClick={()=>{
-                  const cur=pendingMpLinks!==null?[...pendingMpLinks]:[...savedIds];
-                  if(isLinked)setPendingMpLinks(cur.filter((id:string)=>id!==mp.id));
-                  else setPendingMpLinks([...cur,mp.id]);
-                }}
-                style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
-                  background:isLinked?"#4ade8015":"transparent",border:isLinked?"1px solid #4ade8044":"1px solid transparent"}}>
-                <span style={{fontSize:13}}>{isLinked?"☑️":"⬜"}</span>
-                <span style={{flex:1,color:isLinked?"#4ade80":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
-                {mp.ultimoValor>0
-                  ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
-                  :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
-              </div>;
-            })}
-            </div>
-            {hasUnsaved&&<button onClick={()=>{
-              if(existingProd){
-                syncProdByName(existingProd.nome,(p:any)=>({...p,mpVinculados:pendingMpLinks||[],mpVinculadoId:undefined}));
-                setPendingMpLinks(null);
-              }
-            }} className="btn" style={{width:"100%",marginTop:4,background:"#4ade80",color:"#111",padding:"8px",fontSize:12,fontWeight:700}}>
-              💾 Salvar Vínculo{(pendingMpLinks?.length||0)>0?` (${pendingMpLinks?.length})`:""}
-            </button>}
-            {!existingProd&&activeIds.length>0&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>⚡ Vínculos serão salvos ao adicionar o produto</div>}
-          </div>;
-        })()}
       </div>
       {/* Qtd + Unidade + Estoque atual */}
       <div style={{display:"flex",gap:8,marginBottom:10}}>
         <div style={{flex:"1 1 70px"}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Quantidade</div>
-          <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)} className="inp" style={{marginBottom:0}}/>
+          <input type="number" min="0.1" step="0.1" placeholder="0" value={form.qtd} onChange={e=>setF("qtd",e.target.value)} className="inp" style={{marginBottom:0}}/>
         </div>
         <div style={{flex:"1 1 70px"}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Unidade</div>
