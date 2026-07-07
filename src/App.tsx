@@ -3656,7 +3656,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     const todosIds=lista.map((i:any)=>i.id);
     todosIds.forEach(id=>_listaDeletados.add(id));
 
-    const pedido={id:uid(),data:today(),itens:comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un"})),criadoEm:new Date().toISOString()};
+    const pedido={id:uid(),data:today(),itens:lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),criadoEm:new Date().toISOString()};
     (setDbAndSave||setDb)((d:any)=>({
       ...d,
       pedidosLista:[pedido,...(d.pedidosLista||[])],
@@ -3672,7 +3672,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         autoArchiveRef.current=true;
         const todosIds=lista.map((i:any)=>i.id);
         todosIds.forEach(id=>_listaDeletados.add(id));
-        const itensArq=[...comprados.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un"})),...naoTemList.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",naoTem:true}))];
+        const itensArq=lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem}));
         const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
         (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500)}));
         setAutoArchiveMsg("✅ Lista finalizada e arquivada automaticamente!");
