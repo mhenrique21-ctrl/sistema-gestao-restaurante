@@ -4675,7 +4675,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {estoqueRef>0&&<span style={{fontSize:10,color:estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: {estoqueRef} {item.estoqueUn||item.unidade}</span>}
+                {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
               {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
@@ -4734,7 +4734,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {estoqueRef>0&&<span style={{fontSize:10,color:estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: {estoqueRef} {item.estoqueUn||item.unidade}</span>}
+                {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
               {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
