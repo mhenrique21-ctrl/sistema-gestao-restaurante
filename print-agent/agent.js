@@ -186,7 +186,7 @@ async function handleNewOrder(order, items) {
 
   const balItems = items.filter(i => i.print_target === 'balcao');
   if (balItems.length) {
-    try { rawPrint(PRINTERS.balcao, await buildBalcao(order, balItems)); }
+    try { rawPrint(PRINTERS.caixa, await buildBalcao(order, balItems)); }
     catch(e) { console.error('[PRINT][Balcao]', e.message); }
   }
 }
