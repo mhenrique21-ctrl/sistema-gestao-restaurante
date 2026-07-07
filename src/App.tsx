@@ -4978,7 +4978,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
     Object.entries(pc).forEach(([cat,its])=>{
       txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
-      its.forEach((it:any)=>{const partes=[];if(it.qtdAtual!=null&&it.qtdAtual!=="")partes.push(`Atual: ${it.qtdAtual} ${it.unidade||"un"}`);if(it.quantidade!=null)partes.push(`Pedido: *${it.quantidade} ${it.unidade||"un"}*`);if(it.obs)partes.push(it.obs);txt+=`• ${it.nome}\n  ${partes.join(" | ")}\n`;});
+      its.forEach((it:any)=>{const un=it.unidade||"un";const partes=[];if(it.qtdAtual!=null&&it.qtdAtual!=="")partes.push(`Atual: ${parseFloat(it.qtdAtual)===0?"*ZERADO*":`${it.qtdAtual} ${un}`}`);if(it.quantidade!=null)partes.push(`Pedido: ${it.quantidade===0?"*ZERADO*":`*${it.quantidade} ${un}*`}`);if(it.obs)partes.push(it.obs);txt+=`• ${it.nome}\n  ${partes.join(" | ")}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
