@@ -4000,7 +4000,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.quantidade||1}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.unidade||"un"}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#555">${i.urgente?"⚠ URGENTE":""}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#777">${i.estoqueQtd==="sim"?"✓ TEM":""}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#777">${i.estoqueQtd!=null&&i.estoqueQtd!==""?i.estoqueQtd+" "+(i.unidade||"un"):""}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
       </tr>`).join("")}`).join("");
     const dataHoje=new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
@@ -4630,9 +4630,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         </div>
         <div style={{flex:"1 1 70px"}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>TEM</div>
-          <button type="button" onClick={()=>setF("estoqueQtd",form.estoqueQtd==="sim"?"":"sim")} className="inp" style={{marginBottom:0,background:form.estoqueQtd==="sim"?"#0f2a1a":"#1a1a1a",color:form.estoqueQtd==="sim"?"#4ade80":"#555",fontWeight:700,fontSize:13,border:`1px solid ${form.estoqueQtd==="sim"?"#4ade80":"var(--border)"}`,cursor:"pointer",textAlign:"center" as const}}>
-            {form.estoqueQtd==="sim"?"✓ SIM":"✗ NÃO"}
-          </button>
+          <input type="number" min="0" step="0.1" placeholder="0" value={form.estoqueQtd} onChange={e=>setF("estoqueQtd",e.target.value)} className="inp" style={{marginBottom:0}}/>
         </div>
       </div>
       {/* Categoria (admin) */}
@@ -4702,7 +4700,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itensSorted.length})</span>
         </div>
         {itensSorted.map((item:any,idx:number)=>{
-          const temEstoque=item.estoqueQtd==="sim";
+          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":isEditing?"#7c8fff":"var(--border)"}`,transition:"all .15s"}}>
@@ -4727,7 +4725,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {temEstoque&&<span style={{fontSize:10,color:"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 TEM</span>}
+                {estoqueRef>0&&<span style={{fontSize:10,color:estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 {estoqueRef} {item.unidade}</span>}
               </div>
               {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
@@ -4762,7 +4760,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itens.length})</span>
         </div>
         {itensSorted.map((item:any)=>{
-          const temEstoque=item.estoqueQtd==="sim";
+          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":"var(--border)"}`,transition:"all .15s"}}>
             <button onClick={()=>toggle(item.id)}
@@ -4786,7 +4784,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {temEstoque&&<span style={{fontSize:10,color:"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 TEM</span>}
+                {estoqueRef>0&&<span style={{fontSize:10,color:estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 {estoqueRef} {item.unidade}</span>}
               </div>
               {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
