@@ -41,31 +41,24 @@ async function buildCaixa(order, items) {
 
   const tag = `PEDIDO #${(order.order_number||order.id||'').toString().slice(-6).toUpperCase()}`;
 
-  // Margem superior (~1,5 cm = ~4 linhas em branco)
-  p.println(''); p.println(''); p.println(''); p.println('');
+  // Margem superior (~1,5 cm = ~2 linhas em branco)
+  p.println(''); p.println('');
 
   // Cabeçalho
   p.alignCenter();
   p.bold(true); p.setTextSize(1,1); p.println('CONFRARIA CAFE'); p.setTextSize(0,0); p.bold(false);
-  p.println('');
   p.println('Av Almirante Barroso, 746 - Centro');
   p.println('WhatsApp: (96) 97400-7410');
-  p.println('');
   p.drawLine();
 
   // Número do pedido (grande)
-  p.println('');
-  p.alignCenter();
   p.bold(true); p.setTextSize(1,1); p.println(tag); p.setTextSize(0,0); p.bold(false);
-  p.println('');
   p.alignLeft();
   p.println(fmtTime());
-  p.println('');
 
   // Nome do cliente (maior)
   if (order.customer_name) {
     p.bold(true); p.setTextSize(1,0); p.println(`Cliente: ${order.customer_name}`); p.setTextSize(0,0); p.bold(false);
-    p.println('');
   }
 
   // Endereço de entrega ou retirada
@@ -77,11 +70,8 @@ async function buildCaixa(order, items) {
     p.println(`Entrega: ${addr}`);
   }
 
-  p.println('');
   p.drawLine();
-  p.println('');
   p.bold(true); p.println('ITENS'); p.bold(false);
-  p.println('');
 
   for (const item of items) {
     const tot = item.subtotal != null ? parseFloat(item.subtotal) : parseFloat(item.unit_price||0) * item.quantity;
@@ -94,38 +84,28 @@ async function buildCaixa(order, items) {
       }
     }
     p.alignRight(); p.println(fmt(tot)); p.alignLeft();
-    p.println('');
   }
 
   p.drawLine();
-  p.println('');
   const sub = items.reduce((s,i) => s + (i.subtotal != null ? parseFloat(i.subtotal) : parseFloat(i.unit_price||0)*i.quantity), 0);
   p.println(`Subtotal:    ${fmt(sub)}`);
   if (parseFloat(order.delivery_fee||0) > 0) p.println(`Entrega:     ${fmt(order.delivery_fee)}`);
   if (parseFloat(order.discount||0) > 0)     p.println(`Desconto:   -${fmt(order.discount)}`);
-  p.println('');
   p.bold(true); p.println(`TOTAL:       ${fmt(order.total||order.total_amount)}`); p.bold(false);
-  p.println('');
   if (order.payment_method) p.println(`Pagamento: ${order.payment_method}`);
-  if (order.notes) { p.println(''); p.drawLine(); p.println(`OBS: ${order.notes}`); }
+  if (order.notes) { p.drawLine(); p.println(`OBS: ${order.notes}`); }
 
   // Rodapé
-  p.println('');
   p.drawLine();
-  p.println('');
   p.alignCenter();
   p.println('Obrigado pela preferencia!');
-  p.println('');
   p.bold(true); p.println('--- CUPOM DE DESCONTO ---'); p.bold(false);
-  p.println('');
   p.bold(true); p.setTextSize(1,1); p.println('VALE5'); p.setTextSize(0,0); p.bold(false);
-  p.println('');
   p.println('5% de desconto no proximo pedido');
   p.println('Informe o codigo ao realizar seu pedido');
-  p.println('');
 
-  // Margem inferior (~2 cm = ~5 linhas em branco)
-  p.println(''); p.println(''); p.println(''); p.println(''); p.println('');
+  // Margem inferior (~2 cm = ~3 linhas em branco)
+  p.println(''); p.println(''); p.println('');
 
   p.cut(); await p.execute();
   return fs.readFileSync(tmp);
