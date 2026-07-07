@@ -4926,11 +4926,17 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   const [qtdsAtual,setQtdsAtualRaw]=useState<Record<string,string>>(()=>{try{const s=localStorage.getItem("prod_qtds_atual");if(s)return JSON.parse(s);}catch{}return {};});
   const setQtdsCatalog=(fn:any)=>setQtdsCatalogRaw(prev=>{const next=typeof fn==="function"?fn(prev):fn;try{localStorage.setItem("prod_qtds_ped",JSON.stringify(next));}catch{}return next;});
   const setQtdsAtual=(fn:any)=>setQtdsAtualRaw(prev=>{const next=typeof fn==="function"?fn(prev):fn;try{localStorage.setItem("prod_qtds_atual",JSON.stringify(next));}catch{}return next;});
-  // itens com Pedido > 0 (para arquivar) ou qualquer campo preenchido (para compartilhar)
-  const preenchidos=prodsCatalog.filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0||parseFloat(qtdsAtual[p.id]||"0")>0).length;
+  // campo "preenchido" = qualquer valor digitado, incluindo "0"
+  const _campoPreenchido=(map:Record<string,string>,id:string)=>map[id]!==undefined&&map[id]!=="";
+  const preenchidos=prodsCatalog.filter((p:any)=>_campoPreenchido(qtdsCatalog,p.id)||_campoPreenchido(qtdsAtual,p.id)).length;
   const _itensFilled=(catalog:any[])=>catalog
-    .filter((p:any)=>parseFloat(qtdsCatalog[p.id]||"0")>0||parseFloat(qtdsAtual[p.id]||"0")>0)
-    .map((p:any)=>({nome:p.nome,quantidade:parseFloat(qtdsCatalog[p.id])||0,qtdAtual:qtdsAtual[p.id]||"",unidade:p.unidade||"un",categoria:p.cat||"",obs:""}));
+    .filter((p:any)=>_campoPreenchido(qtdsCatalog,p.id)||_campoPreenchido(qtdsAtual,p.id))
+    .map((p:any)=>({
+      nome:p.nome,
+      quantidade:_campoPreenchido(qtdsCatalog,p.id)?parseFloat(qtdsCatalog[p.id]):null,
+      qtdAtual:_campoPreenchido(qtdsAtual,p.id)?qtdsAtual[p.id]:"",
+      unidade:p.unidade||"un",categoria:p.cat||"",obs:""
+    }));
 
   const gerarPedidoCatalog=()=>{
     const itensFilled=_itensFilled(prodsCatalog);
@@ -4972,7 +4978,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
     Object.entries(pc).forEach(([cat,its])=>{
       txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
-      its.forEach((it:any)=>{const partes=[];if(it.qtdAtual&&parseFloat(it.qtdAtual)>0)partes.push(`Atual: ${it.qtdAtual} ${it.unidade||"un"}`);if(it.quantidade>0)partes.push(`Pedido: *${it.quantidade} ${it.unidade||"un"}*`);if(it.obs)partes.push(it.obs);txt+=`• ${it.nome}\n  ${partes.join(" | ")}\n`;});
+      its.forEach((it:any)=>{const partes=[];if(it.qtdAtual!=null&&it.qtdAtual!=="")partes.push(`Atual: ${it.qtdAtual} ${it.unidade||"un"}`);if(it.quantidade!=null)partes.push(`Pedido: *${it.quantidade} ${it.unidade||"un"}*`);if(it.obs)partes.push(it.obs);txt+=`• ${it.nome}\n  ${partes.join(" | ")}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
     return txt;
@@ -5233,8 +5239,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
               const renderItem=(p:any)=>{
                 const vAtual=qtdsAtual[p.id]||"";
                 const vPed=qtdsCatalog[p.id]||"";
-                const filled=parseFloat(vPed)>0;
-                const filledAtual=parseFloat(vAtual)>0;
+                const filled=vPed!=="";
+                const filledAtual=vAtual!=="";
                 const inputBase:any={type:"text",inputMode:"numeric",pattern:"[0-9]*",placeholder:"",onFocus:(e:any)=>e.currentTarget.select()};
                 const styleAtual:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filledAtual?"#f59e0b12":"var(--bg4)",border:filledAtual?"2px solid #f59e0b":"1px solid #f59e0b44",borderRadius:8,color:filledAtual?"#f59e0b":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
                 const stylePed:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filled?"#c084fc12":"var(--bg4)",border:filled?"2px solid #c084fc":"1px solid #c084fc44",borderRadius:8,color:filled?"#c084fc":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
