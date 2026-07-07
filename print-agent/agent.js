@@ -156,6 +156,41 @@ async function buildEstacao(nome, order, items) {
   return fs.readFileSync(tmp);
 }
 
+async function buildBalcao(order, items) {
+  const tmp = path.join(os.tmpdir(), `build_${Date.now()}.prn`);
+  const p = new ThermalPrinter({ type: PrinterTypes.EPSON, interface: tmp,
+    characterSet: CharacterSet.PC858_EURO, removeSpecialCharacters: false, width: 48 });
+
+  const tag = `PEDIDO #${(order.order_number||order.id||'').toString().slice(-6).toUpperCase()}`;
+
+  p.alignCenter();
+  p.bold(true); p.setTextSize(1,1); p.println('BALCAO'); p.setTextSize(0,0); p.bold(false);
+  p.println('');
+  p.bold(true); p.setTextSize(1,1); p.println(tag); p.setTextSize(0,0); p.bold(false);
+  p.println('');
+  p.alignLeft();
+  p.println(fmtTime());
+  if (order.delivery_type === 'retirada') { p.bold(true); p.println('** RETIRADA **'); p.bold(false); }
+  else if (order.customer_name) { p.bold(true); p.setTextSize(1,0); p.println(`Cliente: ${order.customer_name}`); p.setTextSize(0,0); p.bold(false); }
+  p.println('');
+  p.drawLine();
+  p.println('');
+
+  for (const item of items) {
+    p.bold(true); p.setTextSize(1,1); p.println(`${item.quantity}x ${item.product_name}`); p.setTextSize(0,0); p.bold(false);
+    p.println('');
+    if (item.notes) { p.println(`-> ${item.notes}`); p.println(''); }
+    if (item.addons && item.addons.length) {
+      for (const a of item.addons) { p.bold(true); p.println(`+ ${a.name}`); p.bold(false); }
+      p.println('');
+    }
+  }
+
+  if (order.notes) { p.drawLine(); p.println(''); p.bold(true); p.println(`OBS: ${order.notes}`); p.bold(false); p.println(''); }
+  p.drawLine(); p.cut(); await p.execute();
+  return fs.readFileSync(tmp);
+}
+
 async function handleNewOrder(order, items) {
   if (!order || !items || !items.length) { console.log('[agent] Pedido sem itens'); return; }
   console.log(`[agent] Imprimindo pedido #${order.order_number||order.id} - ${items.length} item(s)`);
@@ -171,7 +206,7 @@ async function handleNewOrder(order, items) {
 
   const balItems = items.filter(i => i.print_target === 'balcao');
   if (balItems.length) {
-    try { rawPrint(PRINTERS.balcao, await buildEstacao('Balcao', order, balItems)); }
+    try { rawPrint(PRINTERS.balcao, await buildBalcao(order, balItems)); }
     catch(e) { console.error('[PRINT][Balcao]', e.message); }
   }
 }
