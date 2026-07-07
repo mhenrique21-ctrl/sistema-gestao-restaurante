@@ -3406,7 +3406,7 @@ const CAT_ICONS:Record<string,string>={
 };
 const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
-const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"0",obs:"",urgente:false,rua:""};
+const EMPTY_FORM_LISTA={nome:"",qtd:"1",unidade:"un",cat:"",estoqueQtd:"",obs:"",urgente:false,rua:""};
 
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
@@ -3905,6 +3905,38 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(expandedPedido===id)setExpandedPedido(null);
   };
 
+  const retomarLista=(pedido:any)=>{
+    const dataFmt=pedido.data?pedido.data.split("-").reverse().join("/"):"-";
+    if(!confirm(`Retomar lista de ${dataFmt} com ${(pedido.itens||[]).length} item(ns)?\nOs itens pendentes atuais serão substituídos.`))return;
+    const novosItens=(pedido.itens||[]).filter((i:any)=>!i.naoTem).map((i:any,idx:number)=>({
+      id:uid(),
+      nome:i.nome,
+      quantidade:i.quantidade||1,
+      unidade:i.unidade||"un",
+      categoria:i.categoria||"outros",
+      obs:i.obs||"",
+      urgente:!!i.urgente,
+      estoqueQtd:i.estoqueQtd||"",
+      comprado:false,
+      naoTem:false,
+      ordem:Date.now()+idx,
+      adicionadoPor:login?.label||"",
+      criadoEm:new Date().toISOString(),
+      updatedAt:Date.now(),
+    }));
+    setDb((d:any)=>{
+      const pendIds=(d.listaCompras||[]).filter((i:any)=>!i.comprado).map((i:any)=>i.id);
+      pendIds.forEach((id:string)=>_listaDeletados.add(id));
+      const jaComprados=(d.listaCompras||[]).filter((i:any)=>i.comprado);
+      return{
+        ...d,
+        listaCompras:[...novosItens,...jaComprados],
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...pendIds])].slice(-500),
+      };
+    });
+    setSubTab("nova");
+  };
+
   const imprimirPedido=(pedido:any)=>{
     const w=window.open("","_blank","width=800,height=700");
     if(!w)return;
@@ -3968,7 +4000,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.quantidade||1}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.unidade||"un"}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#555">${i.urgente?"⚠ URGENTE":""}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#777">${i.estoqueQtd!=null&&i.estoqueQtd!==""?i.estoqueQtd+" "+( i.unidade||"un"):""}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#777">${i.estoqueQtd==="sim"?"✓ TEM":""}</td>
         <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
       </tr>`).join("")}`).join("");
     const dataHoje=new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
@@ -3995,7 +4027,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <h1>🛒 Lista de Compras</h1>
       <div class="sub">Data: ${dataHoje} · ${pendentes.length} pendente(s) · ${ordemCat.length} categoria(s)</div>
       <table>
-        <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>Qtd Ref. Estoque</th><th>Observação</th></tr>
+        <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>TEM</th><th>Observação</th></tr>
         ${rows}
       </table>
       <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
@@ -4032,6 +4064,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             <span style={{fontSize:14,color:"#fb923c"}}>{p.autoArquivado?"📋":"🛒"}</span>
             <span style={{flex:1,fontSize:13,fontWeight:700}}>{dataFmt}{p.autoArquivado?<span style={{fontSize:9,color:"#fbbf24",marginLeft:6}}>auto</span>:""}</span>
             <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
+            <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #4ade8044",borderRadius:6,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
             <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
             {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>}
             <span style={{fontSize:11,color:"#555"}}>{expanded?"▲":"▼"}</span>
@@ -4596,8 +4629,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           </select>
         </div>
         <div style={{flex:"1 1 70px"}}>
-          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Qtd. em Estoque</div>
-          <input type="number" min="0" step="0.1" placeholder="0" value={form.estoqueQtd} onChange={e=>setF("estoqueQtd",e.target.value)} className="inp" style={{marginBottom:0}}/>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>TEM</div>
+          <button type="button" onClick={()=>setF("estoqueQtd",form.estoqueQtd==="sim"?"":"sim")} className="inp" style={{marginBottom:0,background:form.estoqueQtd==="sim"?"#0f2a1a":"#1a1a1a",color:form.estoqueQtd==="sim"?"#4ade80":"#555",fontWeight:700,fontSize:13,border:`1px solid ${form.estoqueQtd==="sim"?"#4ade80":"var(--border)"}`,cursor:"pointer",textAlign:"center" as const}}>
+            {form.estoqueQtd==="sim"?"✓ SIM":"✗ NÃO"}
+          </button>
         </div>
       </div>
       {/* Categoria (admin) */}
@@ -4667,7 +4702,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itensSorted.length})</span>
         </div>
         {itensSorted.map((item:any,idx:number)=>{
-          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
+          const temEstoque=item.estoqueQtd==="sim";
           const isEditing=editId===item.id;
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":isEditing?"#7c8fff":"var(--border)"}`,transition:"all .15s"}}>
@@ -4692,9 +4727,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {estoqueRef>0&&<span style={{fontSize:10,color:estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>
-                  📦 {estoqueRef} {item.unidade}
-                </span>}
+                {temEstoque&&<span style={{fontSize:10,color:"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 TEM</span>}
               </div>
               {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
@@ -4729,7 +4762,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itens.length})</span>
         </div>
         {itensSorted.map((item:any)=>{
-          const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
+          const temEstoque=item.estoqueQtd==="sim";
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":"var(--border)"}`,transition:"all .15s"}}>
             <button onClick={()=>toggle(item.id)}
@@ -4753,7 +4786,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {estoqueRef>0&&<span style={{fontSize:10,color:estoqueRef<2?"#fbbf24":"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 {estoqueRef} {item.unidade}</span>}
+                {temEstoque&&<span style={{fontSize:10,color:"#4ade80",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}}>📦 TEM</span>}
               </div>
               {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
