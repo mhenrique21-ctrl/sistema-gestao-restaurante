@@ -520,9 +520,46 @@ router.post('/', async (req, res) => {
   }
 });
 
+// POST /api/orders/from-admin — cria pedido substituto (admin)
+router.post('/from-admin', async (req, res) => {
+  const { customer_id, items, delivery_type, delivery_address, payment_method } = req.body;
+  if (!customer_id || !Array.isArray(items) || !items.length) {
+    return res.status(400).json({ error: 'customer_id e items são obrigatórios' });
+  }
+  try {
+    let subtotal = 0;
+    for (const i of items) {
+      const price = parseFloat(i.unit_price) || 0;
+      const qty = parseInt(i.quantity) || 1;
+      subtotal += price * qty;
+    }
+    const orderRes = await pool.query(
+      `INSERT INTO orders (customer_id, status, delivery_type, delivery_address, payment_method, subtotal, total)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [customer_id, 'confirmado', delivery_type || 'retirada',
+       delivery_address ? JSON.stringify(delivery_address) : null,
+       payment_method || 'dinheiro', subtotal, subtotal]
+    );
+    const order = orderRes.rows[0];
+    for (const i of items) {
+      const qty = parseInt(i.quantity) || 1;
+      const price = parseFloat(i.unit_price) || 0;
+      await pool.query(
+        `INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+        [order.id, i.product_id, qty, price, qty * price]
+      );
+    }
+    broadcastOrderUpdate({ event: 'new_order', order: { ...order, item_count: items.length } });
+    res.status(201).json({ id: order.id, order_number: order.order_number });
+  } catch (err) {
+    console.error('[orders/from-admin]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PATCH /api/orders/:id/status — atualizar status
 router.patch('/:id/status', async (req, res) => {
-  const { status, notes } = req.body;
+  const { status, notes, faltantes, reason } = req.body;
   const validStatuses = [
     'aguardando_pagamento','pago','confirmado','em_preparo',
     'pronto','saiu_para_entrega','entregue','cancelado'
@@ -586,12 +623,22 @@ router.patch('/:id/status', async (req, res) => {
             msg = `🛵 *Pedido #${orderNum} saiu para entrega!*\n\nOlá ${firstName}! Seu pedido saiu e está a caminho. Logo chegará aí! 🎉`;
           }
         } else if (status === 'cancelado') {
-          msg = `❌ *Pedido #${orderNum} cancelado*\n\nOlá ${firstName}! Infelizmente seu pedido foi cancelado. Entre em contato conosco para mais informações. 😔`;
+          const faltantesList = Array.isArray(faltantes) ? faltantes.filter(f => f.product_id) : [];
+          let extra = '';
+          if (faltantesList.length) {
+            extra += '\n\n🚫 *Itens indisponíveis:*\n' + faltantesList.map(f => `• ${f.quantity || 1}× ${f.name}`).join('\n');
+          }
+          if (reason) extra += `\n\n📝 *Motivo:* ${reason}`;
+          msg = `❌ *Pedido #${orderNum} cancelado*\n\nOlá ${firstName}! Infelizmente precisamos cancelar seu pedido.${extra}\n\nEntre em contato conosco para mais informações. 😔`;
+          // Desabilita produtos faltantes
+          for (const f of faltantesList) {
+            await pool.query(`UPDATE products SET available = false WHERE id = $1 RETURNING id`, [f.product_id]);
+          }
         }
         if (msg) {
           whatsapp_link = `https://wa.me/55${customerPhone}?text=${encodeURIComponent(msg)}`;
-          // Envio automático para pronto e saiu_para_entrega
-          if (status === 'pronto' || status === 'saiu_para_entrega') {
+          // Envio automático para pronto, saiu_para_entrega e cancelado
+          if (status === 'pronto' || status === 'saiu_para_entrega' || status === 'cancelado') {
             sendWhatsApp(customerPhone, msg).then(code => console.log(`[whatsapp/${status}] status:`, code));
           }
         }

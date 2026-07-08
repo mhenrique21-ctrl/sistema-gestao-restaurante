@@ -1890,15 +1890,233 @@ async function excluirPedido(id) {
   }, { confirmLabel: '🗑 Confirmar Exclusão' });
 }
 
-async function cancelarPedido(id) {
-  if (!confirm('Cancelar este pedido?')) return;
-  const r = await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado' });
-  carregarPedidos();
-  if (r && r.whatsapp_link) {
-    toastWhatsApp('Pedido cancelado.', r.whatsapp_link);
-  } else {
-    toast('Pedido cancelado');
+function buildCancelFaltanteRows(items) {
+  return items.map((i, idx) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" class="faltante-chk"
+        data-idx="${idx}" data-name="${(i.product_name||'').replace(/"/g,'&quot;')}"
+        data-id="${i.product_id||''}" data-qty="${i.quantity||1}" data-price="${i.unit_price||0}"
+        style="width:16px;height:16px;accent-color:#ef4444">
+      <span style="flex:1;font-size:.88rem;color:var(--cream)">${i.quantity}× ${i.product_name}</span>
+      <span style="font-size:.8rem;color:#ef4444">Faltante?</span>
+    </label>`).join('');
+}
+
+function getFaltanteIds(overlay) {
+  return new Set([...overlay.querySelectorAll('.faltante-chk:checked')].map(c => c.dataset.id));
+}
+
+function renderSubstituteItems(overlay, items) {
+  const div = overlay.querySelector('#sub-items');
+  if (!div) return;
+  if (!items.length) {
+    div.innerHTML = '<p style="color:#ef4444;font-size:.83rem;padding:8px 0">Todos os itens marcados como faltantes.</p>';
+    updateSubstituteTotal(overlay);
+    return;
   }
+  div.innerHTML = items.map(i => {
+    const pid = i.product_id;
+    const price = parseFloat(i.unit_price) || 0;
+    const qty = parseInt(i.quantity) || 1;
+    return `<div class="sub-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)" data-pid="${pid}" data-price="${price}">
+      <span style="flex:1;font-size:.85rem;color:var(--cream)">${i.product_name}</span>
+      <div style="display:flex;align-items:center;gap:4px">
+        <button type="button" onclick="subQtyBtn(this,-1)" style="background:#374151;border:none;color:white;width:24px;height:24px;border-radius:4px;cursor:pointer;line-height:1">−</button>
+        <span class="sub-qty" style="min-width:24px;text-align:center;font-size:.88rem">${qty}</span>
+        <button type="button" onclick="subQtyBtn(this,1)" style="background:#374151;border:none;color:white;width:24px;height:24px;border-radius:4px;cursor:pointer;line-height:1">+</button>
+      </div>
+      <span class="sub-row-total" style="font-size:.82rem;color:#94a3b8;min-width:56px;text-align:right">R$ ${(price*qty).toFixed(2)}</span>
+    </div>`;
+  }).join('');
+  updateSubstituteTotal(overlay);
+}
+
+function subQtyBtn(btn, delta) {
+  const row = btn.closest('.sub-row');
+  const qtyEl = row.querySelector('.sub-qty');
+  const totalEl = row.querySelector('.sub-row-total');
+  const price = parseFloat(row.dataset.price) || 0;
+  let qty = parseInt(qtyEl.textContent) + delta;
+  if (qty < 1) qty = 1;
+  qtyEl.textContent = qty;
+  totalEl.textContent = 'R$ ' + (price * qty).toFixed(2);
+  updateSubstituteTotal(btn.closest('#cancel-overlay'));
+}
+
+function updateSubstituteTotal(overlay) {
+  const totalEl = overlay && overlay.querySelector('#sub-total');
+  if (!totalEl) return;
+  let total = 0;
+  overlay.querySelectorAll('.sub-row').forEach(row => {
+    const price = parseFloat(row.dataset.price) || 0;
+    const qty = parseInt(row.querySelector('.sub-qty') && row.querySelector('.sub-qty').textContent) || 0;
+    total += price * qty;
+  });
+  totalEl.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+}
+
+function addProductToSubstitute() {
+  const overlay = document.getElementById('cancel-overlay');
+  const sel = document.getElementById('add-product-sel');
+  const qtyInput = document.getElementById('add-product-qty');
+  if (!sel || !sel.value) return;
+  const opt = sel.options[sel.selectedIndex];
+  const pid = sel.value;
+  const price = parseFloat(opt.dataset.price) || 0;
+  const name = opt.dataset.name || opt.text.split(' — ')[0];
+  const qty = parseInt(qtyInput.value) || 1;
+  const existing = overlay.querySelector('.sub-row[data-pid="' + pid + '"]');
+  if (existing) {
+    const qtyEl = existing.querySelector('.sub-qty');
+    const newQty = parseInt(qtyEl.textContent) + qty;
+    qtyEl.textContent = newQty;
+    existing.querySelector('.sub-row-total').textContent = 'R$ ' + (price * newQty).toFixed(2);
+  } else {
+    const subItems = document.getElementById('sub-items');
+    const p = subItems.querySelector('p');
+    if (p) p.remove();
+    const div = document.createElement('div');
+    div.className = 'sub-row';
+    div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)';
+    div.dataset.pid = pid;
+    div.dataset.price = price;
+    div.innerHTML = '<span style="flex:1;font-size:.85rem;color:var(--cream)">' + name + '</span>' +
+      '<div style="display:flex;align-items:center;gap:4px">' +
+        '<button type="button" onclick="subQtyBtn(this,-1)" style="background:#374151;border:none;color:white;width:24px;height:24px;border-radius:4px;cursor:pointer;line-height:1">−</button>' +
+        '<span class="sub-qty" style="min-width:24px;text-align:center;font-size:.88rem">' + qty + '</span>' +
+        '<button type="button" onclick="subQtyBtn(this,1)" style="background:#374151;border:none;color:white;width:24px;height:24px;border-radius:4px;cursor:pointer;line-height:1">+</button>' +
+      '</div>' +
+      '<span class="sub-row-total" style="font-size:.82rem;color:#94a3b8;min-width:56px;text-align:right">R$ ' + (price * qty).toFixed(2) + '</span>';
+    subItems.appendChild(div);
+  }
+  updateSubstituteTotal(overlay);
+  sel.value = '';
+  qtyInput.value = 1;
+}
+
+async function toggleSubstituteSection(btn) {
+  const section = document.getElementById('substitute-section');
+  const arrow = document.getElementById('sub-arrow');
+  const isOpen = section.style.display !== 'none';
+  section.style.display = isOpen ? 'none' : 'block';
+  arrow.textContent = isOpen ? '▼' : '▲';
+  if (!isOpen && !section.dataset.productsLoaded) {
+    section.dataset.productsLoaded = '1';
+    try {
+      const overlay = document.getElementById('cancel-overlay');
+      const menu = await api('GET', '/menu');
+      const products = [];
+      for (const cat of (menu || [])) {
+        for (const p of (cat.products || [])) products.push(p);
+      }
+      const addRow = document.getElementById('add-product-row');
+      if (addRow) {
+        addRow.innerHTML =
+          '<select id="add-product-sel" style="flex:1;padding:7px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.82rem">' +
+            '<option value="">Selecionar produto...</option>' +
+            products.map(p => '<option value="' + p.id + '" data-price="' + p.price + '" data-name="' + (p.name||'').replace(/"/g,'&quot;') + '">' + p.name + ' — R$ ' + parseFloat(p.price).toFixed(2) + '</option>').join('') +
+          '</select>' +
+          '<input type="number" id="add-product-qty" value="1" min="1" style="width:52px;padding:7px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text)">' +
+          '<button type="button" onclick="addProductToSubstitute()" style="background:#7c3aed;color:white;border:none;padding:7px 12px;border-radius:8px;cursor:pointer;font-size:.82rem;white-space:nowrap">+ Adicionar</button>';
+      }
+    } catch(e) { /* silencioso */ }
+  }
+}
+
+async function confirmarCancelamentoPedido(id) {
+  const overlay = document.getElementById('cancel-overlay');
+  const reason = document.getElementById('cancel-motivo') && document.getElementById('cancel-motivo').value.trim() || null;
+  const faltantes = [...overlay.querySelectorAll('.faltante-chk:checked')].map(c => ({
+    name: c.dataset.name, product_id: c.dataset.id, quantity: parseInt(c.dataset.qty) || 1
+  }));
+  const doSubstitute = document.getElementById('substitute-section') && document.getElementById('substitute-section').style.display !== 'none';
+  const substituteItems = [];
+  if (doSubstitute) {
+    overlay.querySelectorAll('.sub-row').forEach(row => {
+      const qty = parseInt(row.querySelector('.sub-qty') && row.querySelector('.sub-qty').textContent) || 0;
+      if (qty > 0) substituteItems.push({ product_id: row.dataset.pid, quantity: qty, unit_price: parseFloat(row.dataset.price) || 0 });
+    });
+  }
+  try {
+    await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado', reason, faltantes: faltantes.length ? faltantes : null });
+    if (doSubstitute && substituteItems.length) {
+      const od = overlay._orderData;
+      const novo = await api('POST', '/orders/from-admin', {
+        customer_id: od.customer_id,
+        items: substituteItems,
+        delivery_type: od.delivery_type,
+        delivery_address: od.delivery_address,
+        payment_method: od.payment_method,
+      });
+      toast('Cancelado e novo pedido #' + novo.order_number + ' criado!');
+    } else {
+      toast('Pedido cancelado. WhatsApp enviado ao cliente.');
+    }
+    overlay.remove();
+    carregarPedidos();
+  } catch(e) {
+    toast(e.message || 'Erro ao cancelar', true);
+  }
+}
+
+async function cancelarPedido(id) {
+  const overlay = document.createElement('div');
+  overlay.id = 'cancel-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9998;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 16px';
+  overlay.innerHTML = '<div style="color:var(--muted);padding:40px;margin:auto">Carregando...</div>';
+  document.body.appendChild(overlay);
+  let orderData;
+  try {
+    orderData = await api('GET', '/orders/' + id);
+  } catch(e) {
+    overlay.remove();
+    toast('Erro ao carregar pedido', true);
+    return;
+  }
+  overlay._orderData = orderData;
+  const items = orderData.items || [];
+  const itemsHtml = items.length ? buildCancelFaltanteRows(items) : '<p style="color:var(--muted);font-size:.85rem">Sem itens</p>';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:480px;margin:auto">
+      <h3 style="margin-bottom:4px;font-size:1rem;color:var(--text)">✕ Cancelar Pedido #${orderData.order_number}</h3>
+      <p style="font-size:.8rem;color:#ef4444;margin-bottom:16px">WhatsApp será enviado automaticamente ao cliente.</p>
+      ${items.length ? '<p style="font-size:.83rem;color:var(--muted);margin-bottom:8px">Marque os produtos que estavam em falta:</p>' : ''}
+      <div style="max-height:200px;overflow-y:auto;margin-bottom:16px">${itemsHtml}</div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:.83rem;color:var(--muted);display:block;margin-bottom:6px">Motivo do cancelamento (opcional)</label>
+        <textarea id="cancel-motivo" rows="2" placeholder="Ex: produto indisponível, cliente desistiu..."
+          style="width:100%;padding:10px;border-radius:10px;background:var(--card);border:1px solid var(--border);color:var(--cream);font-size:.85rem;resize:none;outline:none;box-sizing:border-box"></textarea>
+      </div>
+      ${items.length ? `
+      <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">
+        <button type="button" onclick="toggleSubstituteSection(this)"
+          style="width:100%;padding:12px 14px;background:var(--card);border:none;color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center">
+          🔄 Criar pedido substituto (itens restantes)
+          <span id="sub-arrow">▼</span>
+        </button>
+        <div id="substitute-section" style="display:none;padding:14px">
+          <div id="sub-items"></div>
+          <div id="add-product-row" style="display:flex;gap:6px;align-items:center;margin-top:12px">
+            <span style="font-size:.8rem;color:var(--muted)">Carregando produtos...</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid var(--border);margin-top:10px">
+            <span style="font-size:.83rem;color:var(--muted)">Total estimado:</span>
+            <span id="sub-total" style="font-weight:700;color:var(--text)">R$ 0,00</span>
+          </div>
+        </div>
+      </div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button type="button" onclick="document.getElementById('cancel-overlay').remove()" class="btn btn-secondary" style="flex:1">Voltar</button>
+        <button type="button" onclick="confirmarCancelamentoPedido('${id}')" class="btn btn-danger" style="flex:1">✕ Confirmar Cancelamento</button>
+      </div>
+    </div>`;
+  overlay.querySelectorAll('.faltante-chk').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const faltanteIds = getFaltanteIds(overlay);
+      renderSubstituteItems(overlay, items.filter(i => !faltanteIds.has(i.product_id)));
+    });
+  });
+  renderSubstituteItems(overlay, items);
 }
 
 function toastWhatsApp(msg, link) {
