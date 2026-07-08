@@ -513,10 +513,15 @@ function showPage(page, btn) {
   pages[page]?.();
 }
 
-function openModal(title, body, cb) {
+function openModal(title, body, cb, opts = {}) {
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').innerHTML = body;
-  document.getElementById('modal-confirm').style.display = cb ? '' : 'none';
+  const btn = document.getElementById('modal-confirm');
+  btn.style.display = cb ? '' : 'none';
+  if (opts.confirmLabel) btn.textContent = opts.confirmLabel;
+  else btn.textContent = 'Salvar';
+  if (opts.confirmStyle) Object.assign(btn.style, opts.confirmStyle instanceof Object ? opts.confirmStyle : {});
+  else { btn.style.background = ''; btn.style.color = ''; btn.style.border = ''; }
   document.getElementById('modal').classList.add('open');
   modalCallback = cb;
 }
@@ -1840,14 +1845,45 @@ async function salvarEdicaoPedido(id, isDelivery) {
 }
 
 async function excluirPedido(id) {
-  if (!confirm('Excluir este pedido? Essa ação não pode ser desfeita.')) return;
+  // Busca itens do pedido para mostrar no modal
+  let orderData = null;
   try {
-    await api('DELETE', '/orders/' + id);
-    toast('Pedido excluído');
-    carregarPedidos();
-  } catch (e) {
-    alert(e.message || 'Erro ao excluir');
-  }
+    orderData = await api('GET', '/orders/public/' + id);
+  } catch(e) {}
+
+  const items = orderData?.items || [];
+  const itemsHtml = items.length ? items.map(i => `
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" class="faltante-check" data-name="${(i.product_name||'').replace(/"/g,'&quot;')}" style="width:16px;height:16px;accent-color:#ef4444">
+      <span style="flex:1;font-size:.88rem" style="color:var(--cream)">${i.quantity}× ${i.product_name}</span>
+      <span style="font-size:.8rem;color:#ef4444">Faltante?</span>
+    </label>`).join('') : '<p style="color:var(--muted);font-size:.85rem">Itens não disponíveis</p>';
+
+  openModal('🗑 Excluir Pedido', `
+    <div>
+      <p style="color:#ef4444;font-size:.85rem;margin-bottom:16px;font-weight:600">⚠️ Essa ação não pode ser desfeita.</p>
+      ${items.length ? `
+      <p style="font-size:.83rem;color:var(--muted);margin-bottom:8px">Marque os produtos que estavam em falta:</p>
+      <div style="max-height:200px;overflow-y:auto;margin-bottom:16px">${itemsHtml}</div>` : ''}
+      <div>
+        <label style="font-size:.83rem;color:var(--muted);display:block;margin-bottom:6px">Motivo da exclusão (opcional)</label>
+        <textarea id="exclusao-motivo" rows="2" placeholder="Ex: pedido duplicado, cliente desistiu, erro no lançamento..."
+          style="width:100%;padding:10px;border-radius:10px;background:var(--card);border:1px solid var(--border);color:var(--cream);font-size:.85rem;resize:none;outline:none"></textarea>
+      </div>
+    </div>
+  `, async () => {
+    const reason = document.getElementById('exclusao-motivo')?.value?.trim() || null;
+    const faltantes = [...document.querySelectorAll('.faltante-check:checked')].map(c => c.dataset.name);
+    try {
+      await api('DELETE', '/orders/' + id, { reason, faltantes: faltantes.length ? faltantes : null });
+      toast('Pedido excluído');
+      closeModal();
+      carregarPedidos();
+    } catch(e) {
+      toast(e.message || 'Erro ao excluir', true);
+    }
+  }, { confirmLabel: '🗑 Confirmar Exclusão' });
+}
 }
 
 async function cancelarPedido(id) {
@@ -2442,23 +2478,22 @@ async function deletarAdicional(id) {
 }
 
 // ── Impressoras ───────────────────────────────────────────────────
-function pageImpressoras() {
+async function pageImpressoras() {
   document.getElementById('content').innerHTML = `
     <div class="card">
       <h3>🖨 Configuração de Impressoras</h3>
       <p style="color:#64748b;font-size:.85rem;margin-bottom:20px">
-        Configure as 3 impressoras do sistema. Todos os pedidos saem na <strong style="color:#f1f5f9">Caixa</strong>.
-        Cozinha e Balcão recebem apenas os produtos direcionados a eles.
+        Defina os nomes das impressoras. Configuração salva no banco — vale para todos os dispositivos.
       </p>
 
       <div style="display:grid;gap:16px">
 
         <div id="printer-detect-box" style="padding:12px 16px;border:1px solid #334155;border-radius:10px;background:rgba(255,255,255,.03);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span style="font-size:.85rem;color:#94a3b8">Impressoras instaladas neste computador:</span>
+          <span style="font-size:.85rem;color:#94a3b8">Impressoras instaladas no agente local:</span>
           <button class="btn btn-secondary btn-sm" onclick="detectarImpressoras()">🔍 Detectar</button>
           <span id="printer-list-wrap" style="display:none;flex:1;min-width:200px">
-            <select id="printer-select" style="width:100%" onchange="selecionarImpressora(this.value)">
-              <option value="">— selecione para preencher campo —</option>
+            <select id="printer-select" style="width:100%">
+              <option value="">— selecione para copiar nome —</option>
             </select>
           </span>
           <span id="printer-detect-msg" style="font-size:.8rem;color:#64748b"></span>
@@ -2468,32 +2503,33 @@ function pageImpressoras() {
           <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🧾 Caixa <span style="color:#64748b;font-weight:400;font-size:.8rem">(USB — imprime TODOS os pedidos)</span></div>
           <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Cupom completo: cliente, itens, totais, forma de pagamento.</div>
           <div style="display:flex;gap:8px;align-items:center">
-            <input id="p-caixa" style="flex:1" placeholder="printer:NomeDaImpressora  ou  /dev/usb/lp0" value="${localStorage.getItem('p_caixa')||''}" />
+            <input id="p-caixa" style="flex:1" placeholder="Nome exato da impressora no Windows" />
             <button class="btn btn-secondary btn-sm" title="Usar impressora selecionada" onclick="usarSelecionada('p-caixa')">⬆</button>
           </div>
         </div>
 
         <div style="padding:16px;border:1px solid #f59e0b;border-radius:10px;background:rgba(245,158,11,.08)">
-          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🍳 Cozinha <span style="color:#64748b;font-weight:400;font-size:.8rem">(rede TCP — itens direcionados)</span></div>
-          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Cozinha" no cadastro do produto.</div>
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🍳 Cozinha <span style="color:#64748b;font-weight:400;font-size:.8rem">(rede — itens direcionados)</span></div>
+          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Cozinha".</div>
           <div style="display:flex;gap:8px;align-items:center">
-            <input id="p-cozinha" style="flex:1" placeholder="tcp://192.168.0.101:9100  ou  printer:Nome" value="${localStorage.getItem('p_cozinha')||''}" />
+            <input id="p-cozinha" style="flex:1" placeholder="Nome exato da impressora no Windows" />
             <button class="btn btn-secondary btn-sm" title="Usar impressora selecionada" onclick="usarSelecionada('p-cozinha')">⬆</button>
           </div>
         </div>
 
         <div style="padding:16px;border:1px solid #3b82f6;border-radius:10px;background:rgba(59,130,246,.08)">
-          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🏪 Balcão <span style="color:#64748b;font-weight:400;font-size:.8rem">(rede TCP — itens direcionados)</span></div>
-          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Balcão" no cadastro do produto.</div>
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">🏪 Balcão <span style="color:#64748b;font-weight:400;font-size:.8rem">(USB — itens direcionados)</span></div>
+          <div style="font-size:.78rem;color:#94a3b8;margin-bottom:8px">Ticket de produção apenas com os itens marcados como "Balcão".</div>
           <div style="display:flex;gap:8px;align-items:center">
-            <input id="p-balcao" style="flex:1" placeholder="tcp://192.168.0.102:9100  ou  printer:Nome" value="${localStorage.getItem('p_balcao')||''}" />
+            <input id="p-balcao" style="flex:1" placeholder="Nome exato da impressora no Windows" />
             <button class="btn btn-secondary btn-sm" title="Usar impressora selecionada" onclick="usarSelecionada('p-balcao')">⬆</button>
           </div>
         </div>
       </div>
 
-      <div style="margin-top:20px;display:flex;gap:10px">
-        <button class="btn btn-primary" onclick="salvarImpressoras()">💾 Salvar e gerar .env</button>
+      <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
+        <button class="btn btn-primary" onclick="salvarImpressoras()">💾 Salvar</button>
+        <span id="printer-save-msg" style="font-size:.83rem;color:#64748b"></span>
       </div>
     </div>
 
@@ -2505,12 +2541,17 @@ function pageImpressoras() {
         <p>✅ <strong style="color:#f1f5f9">Balcão</strong> — recebe apenas itens com destino "Balcão" (sem valores)</p>
         <p>ℹ️ Produto sem destino definido → imprime <em>somente</em> no Caixa</p>
       </div>
-      <div style="margin-top:16px;font-size:.83rem;color:#94a3b8;line-height:1.8">
-        <p><strong style="color:#f1f5f9">USB Windows</strong> — <code style="background:#0f172a;padding:1px 6px;border-radius:4px">printer:NomeDaImpressora</code></p>
-        <p><strong style="color:#f1f5f9">USB Linux</strong> — <code style="background:#0f172a;padding:1px 6px;border-radius:4px">/dev/usb/lp0</code></p>
-        <p><strong style="color:#f1f5f9">Rede TCP</strong> — <code style="background:#0f172a;padding:1px 6px;border-radius:4px">tcp://192.168.0.X:9100</code></p>
-      </div>
     </div>`;
+
+  // Carrega config atual do banco
+  try {
+    const cfg = await api('GET', '/printers/config');
+    if (cfg.printer_caixa)   document.getElementById('p-caixa').value   = cfg.printer_caixa;
+    if (cfg.printer_cozinha) document.getElementById('p-cozinha').value = cfg.printer_cozinha;
+    if (cfg.printer_balcao)  document.getElementById('p-balcao').value  = cfg.printer_balcao;
+  } catch(e) {
+    console.warn('Erro ao carregar config impressoras:', e.message);
+  }
 }
 
 async function detectarImpressoras() {
@@ -2520,24 +2561,17 @@ async function detectarImpressoras() {
     const data = await api('GET', '/printers');
     const list = data.printers || [];
     if (list.length === 0) {
-      msg.textContent = 'Nenhuma impressora encontrada no servidor.';
+      msg.textContent = 'Nenhuma impressora encontrada.';
       return;
     }
     const sel = document.getElementById('printer-select');
-    sel.innerHTML = '<option value="">— selecione para preencher campo —</option>' +
-      list.map(p => `<option value="printer:${p}">${p}</option>`).join('');
+    sel.innerHTML = '<option value="">— selecione para copiar nome —</option>' +
+      list.map(p => `<option value="${p}">${p}</option>`).join('');
     document.getElementById('printer-list-wrap').style.display = '';
     msg.textContent = `${list.length} impressora(s) encontrada(s).`;
   } catch(e) {
-    msg.textContent = 'Erro ao detectar. O servidor precisa estar rodando localmente.';
+    msg.textContent = 'Erro ao detectar.';
   }
-}
-
-function selecionarImpressora(val) {
-  // Preenche automaticamente o campo Caixa se estiver vazio
-  if (!val) return;
-  const caixa = document.getElementById('p-caixa');
-  if (caixa && !caixa.value) caixa.value = val;
 }
 
 function usarSelecionada(fieldId) {
@@ -2547,15 +2581,21 @@ function usarSelecionada(fieldId) {
   if (field) field.value = sel.value;
 }
 
-function salvarImpressoras() {
-  const caixa = v('p-caixa');
-  const cozinha = v('p-cozinha');
-  const balcao = v('p-balcao');
-  localStorage.setItem('p_caixa', caixa);
-  localStorage.setItem('p_cozinha', cozinha);
-  localStorage.setItem('p_balcao', balcao);
-  toast('Configurações salvas!');
-  alert(`Adicione ao arquivo .env do delivery-backend:\n\nPRINTER_CAIXA=${caixa}\nPRINTER_COZINHA=${cozinha}\nPRINTER_BALCAO=${balcao}`);
+async function salvarImpressoras() {
+  const saveMsg = document.getElementById('printer-save-msg');
+  saveMsg.textContent = 'Salvando...';
+  try {
+    await api('POST', '/printers/config', {
+      printer_caixa:   document.getElementById('p-caixa').value.trim(),
+      printer_cozinha: document.getElementById('p-cozinha').value.trim(),
+      printer_balcao:  document.getElementById('p-balcao').value.trim(),
+    });
+    toast('Impressoras salvas!');
+    saveMsg.textContent = '';
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message, true);
+    saveMsg.textContent = '';
+  }
 }
 
 // ── Bairros ───────────────────────────────────────────────────────
@@ -2966,7 +3006,27 @@ async function carregarRelatorio() {
             <td><strong>${fmt(o.total)}</strong></td>
             <td style="white-space:nowrap">${new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>
           </tr>`).join('')}
-      </table>`;
+      </table>
+
+      ${(r.deleted_orders||[]).length > 0 ? `
+      <h3 style="margin-bottom:12px;margin-top:28px;color:#f87171">🗑 Pedidos Excluídos (${r.deleted_orders.length})</h3>
+      <table style="font-size:.78rem">
+        <tr><th>#</th><th>Cliente</th><th>Total</th><th>Pagamento</th><th>Produtos Faltantes</th><th>Motivo</th><th>Excluído às</th></tr>
+        ${r.deleted_orders.map(o => {
+          const falt = Array.isArray(o.faltantes) && o.faltantes.length ? o.faltantes.join(', ') : '—';
+          const hora = new Date(o.deleted_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+          return `<tr style="opacity:.85">
+            <td><strong style="color:#f87171">#${o.order_number||'—'}</strong></td>
+            <td>${o.customer_name||'—'}</td>
+            <td style="color:#f87171"><strong>${fmt(o.total)}</strong></td>
+            <td>${o.payment_method||'—'}</td>
+            <td style="color:#f59e0b">${falt}</td>
+            <td style="color:var(--muted)">${o.reason||'—'}</td>
+            <td style="white-space:nowrap">${hora}</td>
+          </tr>`;
+        }).join('')}
+      </table>` : ''}
+      `;
   } catch(e) {
     document.getElementById('fin-content').innerHTML = `<p style="color:var(--danger)">Erro: ${e.message}</p>`;
   }

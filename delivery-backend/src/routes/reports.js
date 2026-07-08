@@ -59,12 +59,22 @@ router.get('/daily', async (req, res) => {
       ORDER BY created_at
     `, [date]);
 
+    // Pedidos excluídos do dia
+    const deleted = await pool.query(`
+      SELECT order_number, customer_name, customer_phone, total, payment_method,
+             delivery_type, reason, faltantes, items, deleted_at, order_created_at
+      FROM order_deletions
+      WHERE DATE(deleted_at AT TIME ZONE 'America/Belem') = $1
+      ORDER BY deleted_at
+    `, [date]);
+
     res.json({
       date,
       by_payment: byPayment.rows,
       by_status: byStatus.rows,
       totals: totals.rows[0],
       orders: orders.rows,
+      deleted_orders: deleted.rows,
     });
   } catch (err) {
     console.error('[reports/daily]', err.message);

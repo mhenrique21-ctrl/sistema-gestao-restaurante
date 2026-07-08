@@ -625,9 +625,49 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/orders/:id — excluir pedido (requer senha admin)
+// DELETE /api/orders/:id — excluir pedido com registro de exclusão
 router.delete('/:id', async (req, res) => {
+  const { reason, faltantes } = req.body || {};
   try {
+    // Salva snapshot do pedido antes de excluir
+    const snap = await pool.query(
+      `SELECT o.*, c.name AS customer_name, c.phone AS customer_phone
+       FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
+       WHERE o.id = $1`,
+      [req.params.id]
+    );
+    const o = snap.rows[0];
+    if (o) {
+      const itemsSnap = await pool.query(
+        `SELECT oi.quantity, oi.unit_price, oi.subtotal, p.name AS product_name
+         FROM order_items oi JOIN products p ON p.id = oi.product_id
+         WHERE oi.order_id = $1`,
+        [req.params.id]
+      );
+      const safeItems   = JSON.stringify(itemsSnap.rows).replace(/'/g, "''");
+      const safeFalt    = faltantes ? JSON.stringify(faltantes).replace(/'/g, "''") : null;
+      const safeReason  = reason ? reason.replace(/'/g, "''") : null;
+      const safeOrderId = req.params.id.replace(/'/g, "''");
+      const safeDelType = (o.delivery_type || '').replace(/'/g, "''");
+      const safeCreated = o.created_at ? `'${new Date(o.created_at).toISOString()}'` : 'NULL';
+      const safeUser    = req.user?.id ? `'${req.user.id}'` : 'NULL';
+      await pool.query(
+        `INSERT INTO order_deletions
+           (order_id, order_number, customer_name, customer_phone, total, subtotal,
+            delivery_fee, discount, payment_method, delivery_type, items, faltantes,
+            reason, deleted_by, order_created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
+                 '${safeDelType}',
+                 '${safeItems}'::jsonb,
+                 ${safeFalt ? `'${safeFalt}'::jsonb` : 'NULL'},
+                 ${safeReason ? `'${safeReason}'` : 'NULL'},
+                 ${safeUser},
+                 ${safeCreated}) RETURNING id`,
+        [req.params.id, o.order_number, o.customer_name || null, o.customer_phone || null,
+         o.total, o.subtotal, o.delivery_fee || 0, o.discount || 0, o.payment_method || null]
+      );
+    }
+    await pool.query(`DELETE FROM order_item_addons WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1) RETURNING id`, [req.params.id]);
     await pool.query(`DELETE FROM order_items WHERE order_id = $1 RETURNING id`, [req.params.id]);
     await pool.query(`DELETE FROM order_status_history WHERE order_id = $1 RETURNING id`, [req.params.id]);
     await pool.query(`DELETE FROM orders WHERE id = $1 RETURNING id`, [req.params.id]);
