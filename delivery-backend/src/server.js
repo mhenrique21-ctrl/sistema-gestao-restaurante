@@ -56,6 +56,7 @@ app.use('/api/promotions', require('./routes/promotions'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/templates', require('./routes/templates'));
 app.use('/api/printers', require('./routes/printers'));
+app.use('/api/reports', require('./routes/reports'));
 
 // Health check
 app.get('/health', (req, res) => {

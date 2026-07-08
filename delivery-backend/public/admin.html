@@ -173,6 +173,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="promocoes" onclick="showPage('promocoes',this)">🎉 Promoções</button>
     <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
     <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
+    <button class="nav-btn" data-page="financeiro" onclick="showPage('financeiro',this)">💰 Financeiro</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
 </div>
@@ -500,9 +501,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro };
   pages[page]?.();
 }
 
@@ -2845,6 +2846,186 @@ api('GET', '/auth/me').then(u => {
   CURRENT_USER = { ...CURRENT_USER, ...u };
   applyPermissions();
 }).catch(() => { applyPermissions(); });
+
+// ── Financeiro ────────────────────────────────────────────────────
+const STATUS_FIN = {
+  aguardando_pagamento: 'Aguardando pagamento',
+  pago: 'Pago',
+  confirmado: 'Confirmado',
+  pronto: 'Pronto',
+  saiu_para_entrega: 'Saiu p/ entrega',
+  entregue: 'Entregue',
+  cancelado: 'Cancelado',
+};
+
+async function pageFinanceiro() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('content').innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+        <h2 style="margin:0">💰 Relatório Financeiro</h2>
+        <input type="date" id="fin-date" value="${today}" onchange="carregarRelatorio()"
+          style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:.9rem"/>
+        <button class="btn btn-primary btn-sm" onclick="carregarRelatorio()">🔄 Atualizar</button>
+        <button class="btn btn-secondary btn-sm" onclick="imprimirRelatorioA4()">🖨️ Imprimir A4</button>
+        <button class="btn btn-secondary btn-sm" onclick="imprimirRelatorioTermica()">🧾 Imprimir Térmica</button>
+      </div>
+      <div id="fin-content"><p style="color:var(--muted)">Carregando...</p></div>
+    </div>`;
+  carregarRelatorio();
+}
+
+async function carregarRelatorio() {
+  const date = document.getElementById('fin-date')?.value;
+  if (!date) return;
+  document.getElementById('fin-content').innerHTML = '<p style="color:var(--muted)">Carregando...</p>';
+  try {
+    const r = await api('GET', `/reports/daily?date=${date}`);
+    window._relatorioAtual = r;
+    const fmt = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
+    const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', {weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
+    document.getElementById('fin-content').innerHTML = `
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:16px;text-transform:capitalize">${dateLabel}</p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px">
+        <div class="card" style="text-align:center;padding:14px">
+          <div style="font-size:1.5rem;font-weight:900;color:var(--primary)">${r.totals.total_pedidos}</div>
+          <div style="font-size:.75rem;color:var(--muted)">Total de Pedidos</div>
+        </div>
+        <div class="card" style="text-align:center;padding:14px">
+          <div style="font-size:1.3rem;font-weight:900;color:#22c55e">${fmt(r.totals.receita)}</div>
+          <div style="font-size:.75rem;color:var(--muted)">Receita Líquida</div>
+        </div>
+        <div class="card" style="text-align:center;padding:14px">
+          <div style="font-size:1.3rem;font-weight:900;color:var(--gold)">${fmt(r.totals.total_entregas)}</div>
+          <div style="font-size:.75rem;color:var(--muted)">Taxa de Entrega</div>
+        </div>
+        <div class="card" style="text-align:center;padding:14px">
+          <div style="font-size:1.3rem;font-weight:900;color:#f87171">${fmt(r.totals.total_descontos)}</div>
+          <div style="font-size:.75rem;color:var(--muted)">Descontos</div>
+        </div>
+        <div class="card" style="text-align:center;padding:14px">
+          <div style="font-size:1.3rem;font-weight:900;color:#f87171">${r.totals.cancelados}</div>
+          <div style="font-size:.75rem;color:var(--muted)">Cancelados</div>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom:12px">💳 Por Forma de Pagamento</h3>
+      <table style="font-size:.83rem;margin-bottom:24px">
+        <tr><th>Forma</th><th>Qtd</th><th>Subtotal</th><th>Entrega</th><th>Desconto</th><th>Total</th></tr>
+        ${r.by_payment.map(p => `
+          <tr>
+            <td><strong>${p.payment_method}</strong></td>
+            <td style="text-align:center">${p.qty}</td>
+            <td>${fmt(p.subtotal)}</td>
+            <td>${fmt(p.delivery_fee)}</td>
+            <td style="color:#f87171">-${fmt(p.discount)}</td>
+            <td><strong style="color:#22c55e">${fmt(p.total)}</strong></td>
+          </tr>`).join('')}
+        <tr style="border-top:2px solid var(--border);font-weight:700">
+          <td>TOTAL</td>
+          <td style="text-align:center">${r.by_payment.reduce((s,p)=>s+parseInt(p.qty),0)}</td>
+          <td>${fmt(r.by_payment.reduce((s,p)=>s+parseFloat(p.subtotal||0),0))}</td>
+          <td>${fmt(r.totals.total_entregas)}</td>
+          <td style="color:#f87171">-${fmt(r.totals.total_descontos)}</td>
+          <td style="color:#22c55e">${fmt(r.totals.receita)}</td>
+        </tr>
+      </table>
+
+      <h3 style="margin-bottom:12px">📊 Por Status</h3>
+      <table style="font-size:.83rem;margin-bottom:24px">
+        <tr><th>Status</th><th>Qtd</th><th>Total</th></tr>
+        ${r.by_status.map(s => `
+          <tr>
+            <td>${STATUS_FIN[s.status]||s.status}</td>
+            <td style="text-align:center">${s.qty}</td>
+            <td>${fmt(s.total)}</td>
+          </tr>`).join('')}
+      </table>
+
+      <h3 style="margin-bottom:12px">📋 Pedidos do Dia</h3>
+      <table style="font-size:.78rem">
+        <tr><th>#</th><th>Cliente</th><th>Status</th><th>Pagamento</th><th>Tipo</th><th>Subtotal</th><th>Entrega</th><th>Desconto</th><th>Total</th><th>Hora</th></tr>
+        ${r.orders.map(o => `
+          <tr style="${o.status==='cancelado'?'opacity:.5':''}">
+            <td><strong>#${o.order_number||''}</strong></td>
+            <td>${o.customer_name||'—'}</td>
+            <td>${STATUS_FIN[o.status]||o.status}</td>
+            <td>${o.payment_method||'—'}</td>
+            <td>${o.delivery_type==='retirada'?'Retirada':'Entrega'}</td>
+            <td>${fmt(o.subtotal)}</td>
+            <td>${fmt(o.delivery_fee)}</td>
+            <td style="color:#f87171">-${fmt(o.discount)}</td>
+            <td><strong>${fmt(o.total)}</strong></td>
+            <td style="white-space:nowrap">${new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>
+          </tr>`).join('')}
+      </table>`;
+  } catch(e) {
+    document.getElementById('fin-content').innerHTML = `<p style="color:var(--danger)">Erro: ${e.message}</p>`;
+  }
+}
+
+function imprimirRelatorioA4() {
+  const r = window._relatorioAtual;
+  if (!r) return toast('Carregue o relatório primeiro', true);
+  const fmt = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
+  const date = document.getElementById('fin-date').value;
+  const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Relatório Financeiro — ${date}</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:20px}
+    h1{font-size:18px;margin-bottom:4px} h2{font-size:14px;margin:16px 0 8px}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    th{background:#f3f4f6;text-align:left;padding:6px 8px;border:1px solid #ddd;font-size:11px}
+    td{padding:5px 8px;border:1px solid #ddd;font-size:11px}
+    .cards{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+    .card{border:1px solid #ddd;border-radius:8px;padding:12px 16px;min-width:120px;text-align:center}
+    .card-val{font-size:16px;font-weight:700} .card-lbl{font-size:10px;color:#666}
+    .total-row{font-weight:700;background:#f9fafb}
+    .cancelado{opacity:.5}
+    @media print{body{padding:0}}
+  </style></head><body>
+  <h1>CONFRARIA CAFÉ — Relatório Financeiro</h1>
+  <p style="color:#666;text-transform:capitalize">${dateLabel}</p>
+  <div class="cards">
+    <div class="card"><div class="card-val">${r.totals.total_pedidos}</div><div class="card-lbl">Pedidos</div></div>
+    <div class="card"><div class="card-val" style="color:green">${fmt(r.totals.receita)}</div><div class="card-lbl">Receita</div></div>
+    <div class="card"><div class="card-val">${fmt(r.totals.total_entregas)}</div><div class="card-lbl">Entregas</div></div>
+    <div class="card"><div class="card-val" style="color:red">-${fmt(r.totals.total_descontos)}</div><div class="card-lbl">Descontos</div></div>
+    <div class="card"><div class="card-val" style="color:red">${r.totals.cancelados}</div><div class="card-lbl">Cancelados</div></div>
+  </div>
+  <h2>Por Forma de Pagamento</h2>
+  <table><tr><th>Forma</th><th>Qtd</th><th>Subtotal</th><th>Entrega</th><th>Desconto</th><th>Total</th></tr>
+    ${r.by_payment.map(p=>`<tr><td>${p.payment_method}</td><td>${p.qty}</td><td>${fmt(p.subtotal)}</td><td>${fmt(p.delivery_fee)}</td><td>-${fmt(p.discount)}</td><td><b>${fmt(p.total)}</b></td></tr>`).join('')}
+    <tr class="total-row"><td>TOTAL</td><td>${r.by_payment.reduce((s,p)=>s+parseInt(p.qty),0)}</td><td>${fmt(r.by_payment.reduce((s,p)=>s+parseFloat(p.subtotal||0),0))}</td><td>${fmt(r.totals.total_entregas)}</td><td>-${fmt(r.totals.total_descontos)}</td><td>${fmt(r.totals.receita)}</td></tr>
+  </table>
+  <h2>Por Status</h2>
+  <table><tr><th>Status</th><th>Qtd</th><th>Total</th></tr>
+    ${r.by_status.map(s=>`<tr><td>${STATUS_FIN[s.status]||s.status}</td><td>${s.qty}</td><td>${fmt(s.total)}</td></tr>`).join('')}
+  </table>
+  <h2>Pedidos do Dia</h2>
+  <table><tr><th>#</th><th>Cliente</th><th>Status</th><th>Pagamento</th><th>Tipo</th><th>Sub</th><th>Entrega</th><th>Desc</th><th>Total</th><th>Hora</th></tr>
+    ${r.orders.map(o=>`<tr class="${o.status==='cancelado'?'cancelado':''}"><td>#${o.order_number||''}</td><td>${o.customer_name||'—'}</td><td>${STATUS_FIN[o.status]||o.status}</td><td>${o.payment_method||'—'}</td><td>${o.delivery_type==='retirada'?'Retirada':'Entrega'}</td><td>${fmt(o.subtotal)}</td><td>${fmt(o.delivery_fee)}</td><td>-${fmt(o.discount)}</td><td><b>${fmt(o.total)}</b></td><td>${new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td></tr>`).join('')}
+  </table>
+  <script>window.onload=()=>window.print()<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+async function imprimirRelatorioTermica() {
+  const r = window._relatorioAtual;
+  if (!r) return toast('Carregue o relatório primeiro', true);
+  const date = document.getElementById('fin-date').value;
+  try {
+    await api('POST', '/printers/print-report', { date, report: r });
+    toast('Enviado para impressora térmica!');
+  } catch(e) {
+    toast('Erro: ' + e.message, true);
+  }
+}
 
 carregarBairrosCache().then(() => {
   applyPermissions();

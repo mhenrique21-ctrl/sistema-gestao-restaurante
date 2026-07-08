@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { exec } = require('child_process');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { broadcastToStation } = require('../websocket/hub');
 
 router.use(authMiddleware);
 
@@ -25,6 +26,15 @@ router.get('/', requireRole('admin'), (req, res) => {
 
     res.json({ printers });
   });
+});
+
+// POST /api/printers/print-report — envia relatório financeiro para impressão térmica via agente
+router.post('/print-report', requireRole('admin'), (req, res) => {
+  const { date, report } = req.body;
+  if (!report) return res.status(400).json({ error: 'Dados do relatório ausentes' });
+
+  broadcastToStation('caixa', { event: 'print_report', date, report });
+  res.json({ ok: true });
 });
 
 module.exports = router;
