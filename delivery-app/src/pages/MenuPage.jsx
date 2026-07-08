@@ -70,7 +70,7 @@ function ProductCard({ product, catName, onClick }) {
               lineHeight: 1, textAlign: 'center', padding: 4,
               border: '2px solid #fff',
             }}>
-            20%<br/>OFF
+            {Math.round((1 - product.promo_price / product.price) * 100)}%<br/>OFF
           </div>
         )}
         <div className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center text-sm font-black shadow-lg press"
