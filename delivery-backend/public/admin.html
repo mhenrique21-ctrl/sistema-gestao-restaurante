@@ -2079,12 +2079,15 @@ async function refazerPedido(id) {
     .filter(i => i.product_available !== false)
     .map(i => ({ product_id: i.product_id, product_name: i.product_name, unit_price: parseFloat(i.unit_price)||0, quantity: parseInt(i.quantity)||1 }));
 
+  const feeOrig = parseFloat(orderData.delivery_fee) || 0;
+  const pmOrig = orderData.payment_method || 'dinheiro';
+
   overlay.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:500px;margin:auto">
       <h3 style="margin-bottom:4px;font-size:1rem;color:var(--text)">📋 Refazer Pedido #${orderData.order_number}</h3>
       <p style="font-size:.8rem;color:var(--muted);margin-bottom:16px">Cliente: <strong>${orderData.customer_name||'—'}</strong></p>
       <p style="font-size:.83rem;color:var(--muted);margin-bottom:8px">Itens do novo pedido:</p>
-      <div id="refazer-items" style="max-height:220px;overflow-y:auto;margin-bottom:14px"></div>
+      <div id="refazer-items" style="max-height:200px;overflow-y:auto;margin-bottom:14px"></div>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
         <select id="refazer-prod-sel" style="flex:1;min-width:180px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.82rem">
           <option value="">+ Adicionar produto...</option>
@@ -2093,8 +2096,21 @@ async function refazerPedido(id) {
         <input type="number" id="refazer-prod-qty" value="1" min="1" style="width:52px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text)">
         <button type="button" onclick="refazerAddProduct()" style="background:#7c3aed;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.82rem">Adicionar</button>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div>
+          <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">🛵 Taxa de entrega (R$)</label>
+          <input type="number" id="refazer-fee" value="${feeOrig.toFixed(2)}" min="0" step="0.01"
+            oninput="calcRefazerTotal()"
+            style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">💳 Pagamento</label>
+          <input type="text" id="refazer-payment" value="${pmOrig}"
+            style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);box-sizing:border-box">
+        </div>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border);margin-bottom:16px">
-        <span style="font-size:.85rem;color:var(--muted)">Total do novo pedido:</span>
+        <span style="font-size:.85rem;color:var(--muted)">Total (itens + taxa):</span>
         <span id="refazer-total" style="font-weight:900;font-size:1.1rem;color:#7c3aed">R$ 0,00</span>
       </div>
       <div style="display:flex;gap:8px">
@@ -2148,14 +2164,15 @@ function refazerAddProduct() {
 function calcRefazerTotal() {
   const overlay = document.getElementById('refazer-overlay');
   if (!overlay) return;
-  let total = 0;
+  let subtotal = 0;
   overlay.querySelectorAll('.refazer-row').forEach(row => {
     const price = parseFloat(row.dataset.price) || 0;
     const qty = parseInt(row.querySelector('.refazer-qty') && row.querySelector('.refazer-qty').textContent) || 0;
-    total += price * qty;
+    subtotal += price * qty;
   });
+  const fee = parseFloat(document.getElementById('refazer-fee') && document.getElementById('refazer-fee').value) || 0;
   const el = overlay.querySelector('#refazer-total');
-  if (el) el.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+  if (el) el.textContent = 'R$ ' + (subtotal + fee).toFixed(2).replace('.', ',');
 }
 
 async function confirmarRefazerPedido(originalId) {
@@ -2164,13 +2181,15 @@ async function confirmarRefazerPedido(originalId) {
   if (!items.length) { toast('Adicione ao menos um item', true); return; }
   const od = overlay._orderData;
   try {
+    const fee = parseFloat(document.getElementById('refazer-fee') && document.getElementById('refazer-fee').value) || 0;
+    const payment = (document.getElementById('refazer-payment') && document.getElementById('refazer-payment').value.trim()) || od.payment_method || 'dinheiro';
     const novo = await api('POST', '/orders/from-admin', {
       customer_id: od.customer_id,
       items,
       delivery_type: od.delivery_type,
       delivery_address: od.delivery_address,
-      payment_method: od.payment_method,
-      delivery_fee: parseFloat(od.delivery_fee) || 0,
+      payment_method: payment,
+      delivery_fee: fee,
     });
     toast('Novo pedido #' + novo.order_number + ' criado com sucesso!');
     overlay.remove();
