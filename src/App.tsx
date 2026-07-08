@@ -7724,45 +7724,73 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
     const adts=(db.adiantamentos||[]).filter((x:any)=>inPer(x.data));
     const cons=(db.consumacoes||[]).filter((x:any)=>inPer(x.data));
     const faltas=(db.faltas||[]).filter((x:any)=>inPer(x.data));
+    const encs=(db.encargos||[]).filter((x:any)=>inPer(x.data));
     const folha=funcs.reduce((s:number,f:any)=>s+f.salario,0);
     const totAdt=adts.reduce((s:number,a:any)=>s+parseMoney(a.valor),0);
     const totCons=cons.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
     const totDesc=faltas.reduce((s:number,f:any)=>s+(f.desconto||0),0);
-    const totLiq=folha-totAdt-totDesc;
+    const totEncDesc=encs.reduce((s:number,e:any)=>s+(e.valor||0),0);
+    const totBonif=encs.reduce((s:number,e:any)=>s+(e.bonificacao||0),0);
+    const totComis=encs.reduce((s:number,e:any)=>s+(e.comissao||0),0);
+    const totSalFam=encs.reduce((s:number,e:any)=>s+(e.salarioFamilia||0),0);
+    const totAcres=totBonif+totComis+totSalFam;
+    const totLiq=folha+totAcres-totAdt-totCons-totDesc-totEncDesc;
     // Resumo por funcionário
     const resumoRows=funcs.map((f:any)=>{
       const fAdts=adts.filter((a:any)=>a.funcionarioId===f.id).reduce((s:number,a:any)=>s+parseMoney(a.valor),0);
       const fCons=cons.filter((c:any)=>c.funcionarioId===f.id).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
       const fDesc=faltas.filter((x:any)=>x.funcionarioId===f.id).reduce((s:number,x:any)=>s+(x.desconto||0),0);
-      const liq=f.salario-fAdts-fDesc;
-      return`<tr><td>${f.nome}</td><td>${fmtMoney(f.salario)}</td><td class="yellow">-${fmtMoney(fAdts)}</td><td class="red">-${fmtMoney(fDesc)}</td><td class="blue">${fmtMoney(fCons)}</td><td><strong>${fmtMoney(liq)}</strong></td></tr>`;
+      const fEncs=encs.filter((e:any)=>e.funcionarioId===f.id);
+      const fEncDesc=fEncs.reduce((s:number,e:any)=>s+(e.valor||0),0);
+      const fBonif=fEncs.reduce((s:number,e:any)=>s+(e.bonificacao||0),0);
+      const fComis=fEncs.reduce((s:number,e:any)=>s+(e.comissao||0),0);
+      const fSalFam=fEncs.reduce((s:number,e:any)=>s+(e.salarioFamilia||0),0);
+      const fAcres=fBonif+fComis+fSalFam;
+      const liq=f.salario+fAcres-fAdts-fCons-fDesc-fEncDesc;
+      const acresStr=fAcres>0?`+${fmtMoney(fAcres)}`:"—";
+      const descStr=(fAdts+fCons+fDesc+fEncDesc)>0?`-${fmtMoney(fAdts+fCons+fDesc+fEncDesc)}`:"—";
+      return`<tr><td>${f.nome}</td><td style="text-align:right">${fmtMoney(f.salario)}</td><td style="text-align:right;color:#166534">${acresStr}</td><td style="text-align:right;color:#991b1b">${descStr}</td><td style="text-align:right;font-weight:700">${fmtMoney(liq)}</td></tr>`;
+    }).join("");
+    const encRows=encs.map((e:any)=>{
+      const fn=funcs.find((f:any)=>f.id===e.funcionarioId);
+      const partes=[];
+      if(e.bonificacao>0)partes.push(`Bonif: +${fmtMoney(e.bonificacao)}`);
+      if(e.comissao>0)partes.push(`Comis: +${fmtMoney(e.comissao)}`);
+      if(e.salarioFamilia>0)partes.push(`Sal.Fam: +${fmtMoney(e.salarioFamilia)}`);
+      if(e.valor>0)partes.push(`Desc: -${fmtMoney(e.valor)}`);
+      return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(e.data)}</td><td>${e.descricao||"—"}</td><td style="color:#166534;text-align:right">${e.bonificacao>0?`+${fmtMoney(e.bonificacao)}`:"—"}</td><td style="color:#166534;text-align:right">${e.comissao>0?`+${fmtMoney(e.comissao)}`:"—"}</td><td style="color:#166534;text-align:right">${e.salarioFamilia>0?`+${fmtMoney(e.salarioFamilia)}`:"—"}</td><td style="color:#991b1b;text-align:right">${e.valor>0?`-${fmtMoney(e.valor)}`:"—"}</td></tr>`;
     }).join("");
     abrirRelatorio(gerarRelatorioHTML("Relatório de RH",empresa,`
-      <style>.blue{color:#1e40af;text-align:right}.yellow{color:#92400e;text-align:right}.red{color:#991b1b;text-align:right}.green{color:#166534;text-align:right}</style>
+      <style>td,th{text-align:left}td:not(:first-child),th:not(:first-child){text-align:right}</style>
       <div class="summary-grid">
         <div class="summary-card"><div class="val">${funcs.length}</div><div class="lbl">Funcionários</div></div>
         <div class="summary-card"><div class="val">${fmtMoney(folha)}</div><div class="lbl">Folha Bruta</div></div>
+        <div class="summary-card"><div class="val" style="color:#166534">+${fmtMoney(totAcres)}</div><div class="lbl">Acréscimos</div></div>
         <div class="summary-card"><div class="val" style="color:#92400e">-${fmtMoney(totAdt)}</div><div class="lbl">Adiantamentos</div></div>
-        <div class="summary-card"><div class="val" style="color:#991b1b">-${fmtMoney(totDesc)}</div><div class="lbl">Descontos (Falta)</div></div>
-        <div class="summary-card"><div class="val" style="color:#1e40af">${fmtMoney(totCons)}</div><div class="lbl">Consumações</div></div>
-        <div class="summary-card"><div class="val" style="color:#166534">${fmtMoney(totLiq)}</div><div class="lbl">Folha Líquida</div></div>
+        <div class="summary-card"><div class="val" style="color:#991b1b">-${fmtMoney(totDesc+totEncDesc)}</div><div class="lbl">Descontos</div></div>
+        <div class="summary-card"><div class="val" style="color:#1e40af">-${fmtMoney(totCons)}</div><div class="lbl">Consumações</div></div>
+        <div class="summary-card"><div class="val" style="color:#166534;font-size:20px">${fmtMoney(totLiq)}</div><div class="lbl">Folha Líquida</div></div>
       </div>
       <div class="section"><h2>Resumo por Funcionário</h2><table>
-        <tr><th>Nome</th><th style="text-align:right">Salário</th><th style="text-align:right">Adiant.</th><th style="text-align:right">Desc. Falta</th><th style="text-align:right">Consumação</th><th style="text-align:right">Líquido</th></tr>
+        <tr><th>Nome</th><th>Salário</th><th style="color:#166534">Acréscimos</th><th style="color:#991b1b">Descontos</th><th>Líquido</th></tr>
         ${resumoRows}
-        <tr class="total-row"><td>TOTAL</td><td style="text-align:right">${fmtMoney(folha)}</td><td style="text-align:right;color:#92400e">-${fmtMoney(totAdt)}</td><td style="text-align:right;color:#991b1b">-${fmtMoney(totDesc)}</td><td style="text-align:right;color:#1e40af">${fmtMoney(totCons)}</td><td style="text-align:right">${fmtMoney(totLiq)}</td></tr>
+        <tr class="total-row"><td>TOTAL</td><td>${fmtMoney(folha)}</td><td style="color:#166534">+${fmtMoney(totAcres)}</td><td style="color:#991b1b">-${fmtMoney(totAdt+totCons+totDesc+totEncDesc)}</td><td>${fmtMoney(totLiq)}</td></tr>
       </table></div>
-      <div class="section"><h2>Adiantamentos (${adts.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th style="text-align:right">Valor</th></tr>
-        ${adts.length?adts.map((a:any)=>{const fn=funcs.find((f:any)=>f.id===a.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(a.data)}</td><td>${a.descricao||"—"}</td><td class="yellow">${fmtMoney(parseMoney(a.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#999">Nenhum adiantamento no período</td></tr>`}
-        ${adts.length?`<tr class="total-row"><td colspan="3">Total Adiantamentos</td><td style="text-align:right">${fmtMoney(totAdt)}</td></tr>`:""}
+      <div class="section"><h2>Adiantamentos (${adts.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th>Valor</th></tr>
+        ${adts.length?adts.map((a:any)=>{const fn=funcs.find((f:any)=>f.id===a.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(a.data)}</td><td>${a.descricao||"—"}</td><td style="color:#92400e">-${fmtMoney(parseMoney(a.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#999">Nenhum adiantamento no período</td></tr>`}
+        ${adts.length?`<tr class="total-row"><td colspan="3">Total</td><td>-${fmtMoney(totAdt)}</td></tr>`:""}
       </table></div>
-      <div class="section"><h2>Consumações (${cons.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th style="text-align:right">Valor</th></tr>
-        ${cons.length?cons.map((c:any)=>{const fn=funcs.find((f:any)=>f.id===c.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(c.data)}</td><td>${c.descricao||"—"}</td><td class="blue">${fmtMoney(parseMoney(c.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#999">Nenhuma consumação no período</td></tr>`}
-        ${cons.length?`<tr class="total-row"><td colspan="3">Total Consumações</td><td style="text-align:right">${fmtMoney(totCons)}</td></tr>`:""}
+      <div class="section"><h2>Acréscimos e Encargos (${encs.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th style="color:#166534">Bonificação</th><th style="color:#166534">Comissão</th><th style="color:#166534">Sal. Família</th><th style="color:#991b1b">Desconto</th></tr>
+        ${encs.length?encRows:`<tr><td colspan="7" style="text-align:center;color:#999">Nenhum encargo/acréscimo no período</td></tr>`}
+        ${encs.length?`<tr class="total-row"><td colspan="3">Total</td><td style="color:#166534">+${fmtMoney(totBonif)}</td><td style="color:#166534">+${fmtMoney(totComis)}</td><td style="color:#166534">+${fmtMoney(totSalFam)}</td><td style="color:#991b1b">-${fmtMoney(totEncDesc)}</td></tr>`:""}
       </table></div>
-      <div class="section"><h2>Faltas e Descontos (${faltas.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Dias</th><th>Motivo</th><th style="text-align:right">Desconto</th></tr>
-        ${faltas.length?faltas.map((f:any)=>{const fn=funcs.find((x:any)=>x.id===f.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(f.data)}</td><td>${f.dias}</td><td>${f.motivo||"—"}</td><td class="red">-${fmtMoney(f.desconto)}</td></tr>`;}).join(""):`<tr><td colspan="5" style="text-align:center;color:#999">Nenhuma falta no período</td></tr>`}
-        ${faltas.length?`<tr class="total-row"><td colspan="4">Total Descontos</td><td style="text-align:right;color:#991b1b">-${fmtMoney(totDesc)}</td></tr>`:""}
+      <div class="section"><h2>Consumações (${cons.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th>Valor</th></tr>
+        ${cons.length?cons.map((c:any)=>{const fn=funcs.find((f:any)=>f.id===c.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(c.data)}</td><td>${c.descricao||"—"}</td><td style="color:#1e40af">-${fmtMoney(parseMoney(c.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#999">Nenhuma consumação no período</td></tr>`}
+        ${cons.length?`<tr class="total-row"><td colspan="3">Total</td><td>-${fmtMoney(totCons)}</td></tr>`:""}
+      </table></div>
+      <div class="section"><h2>Faltas e Descontos (${faltas.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Dias</th><th>Motivo</th><th>Desconto</th></tr>
+        ${faltas.length?faltas.map((f:any)=>{const fn=funcs.find((x:any)=>x.id===f.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(f.data)}</td><td>${f.dias}</td><td>${f.motivo||"—"}</td><td style="color:#991b1b">-${fmtMoney(f.desconto)}</td></tr>`;}).join(""):`<tr><td colspan="5" style="text-align:center;color:#999">Nenhuma falta no período</td></tr>`}
+        ${faltas.length?`<tr class="total-row"><td colspan="4">Total</td><td>-${fmtMoney(totDesc)}</td></tr>`:""}
       </table></div>`));
   };
   const gVendas=()=>{
