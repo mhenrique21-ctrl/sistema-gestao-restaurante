@@ -113,9 +113,6 @@ router.get('/', async (req, res) => {
         };
       }
       if (row.product_id) {
-        const activePromo = row.promo_price !== null && (row.promo_days === null || row.promo_days.includes(todayJs));
-        // Se produto tem promoção ativa, não aparece na categoria original (só na seção Ofertas)
-        if (activePromo && row.category_name !== 'Ofertas') continue;
         menu[row.category_id].products.push({
           id: row.product_id,
           name: row.product_name,
@@ -124,7 +121,7 @@ router.get('/', async (req, res) => {
           image_url: row.product_image,
           available: row.available,
           featured: row.featured,
-          promo_price: activePromo ? parseFloat(row.promo_price) : null,
+          promo_price: (row.promo_price !== null && (row.promo_days === null || row.promo_days.includes(todayJs))) ? parseFloat(row.promo_price) : null,
           promo_label: row.promo_label,
           addon_groups: Object.values(addonsByProduct[row.product_id] || {}),
         });
