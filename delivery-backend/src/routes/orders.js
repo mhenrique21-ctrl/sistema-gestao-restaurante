@@ -522,23 +522,23 @@ router.post('/', async (req, res) => {
 
 // POST /api/orders/from-admin — cria pedido substituto (admin)
 router.post('/from-admin', async (req, res) => {
-  const { customer_id, items, delivery_type, delivery_address, payment_method } = req.body;
+  const { customer_id, items, delivery_type, delivery_address, payment_method, delivery_fee } = req.body;
   if (!customer_id || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: 'customer_id e items são obrigatórios' });
   }
   try {
     let subtotal = 0;
     for (const i of items) {
-      const price = parseFloat(i.unit_price) || 0;
-      const qty = parseInt(i.quantity) || 1;
-      subtotal += price * qty;
+      subtotal += (parseFloat(i.unit_price) || 0) * (parseInt(i.quantity) || 1);
     }
+    const fee = parseFloat(delivery_fee) || 0;
+    const total = subtotal + fee;
     const orderRes = await pool.query(
-      `INSERT INTO orders (customer_id, status, delivery_type, delivery_address, payment_method, subtotal, total)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      `INSERT INTO orders (customer_id, status, delivery_type, delivery_address, payment_method, subtotal, delivery_fee, total)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [customer_id, 'confirmado', delivery_type || 'retirada',
        delivery_address ? JSON.stringify(delivery_address) : null,
-       payment_method || 'dinheiro', subtotal, subtotal]
+       payment_method || 'dinheiro', subtotal, fee, total]
     );
     const order = orderRes.rows[0];
     for (const i of items) {
@@ -548,6 +548,21 @@ router.post('/from-admin', async (req, res) => {
         `INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
         [order.id, i.product_id, qty, price, qty * price]
       );
+    }
+    // Busca telefone e nome do cliente para enviar WhatsApp
+    const cust = await pool.query(
+      `SELECT name, phone FROM customers WHERE id = $1`,
+      [customer_id]
+    );
+    if (cust.rows[0]) {
+      const phone = (cust.rows[0].phone || '').replace(/\D/g, '');
+      const firstName = cust.rows[0].name?.split(' ')[0] || '';
+      if (phone) {
+        const itemsList = items.map(i => `• ${i.quantity}× ${i.product_name}`).join('\n');
+        const feeText = fee > 0 ? `\n🛵 Taxa de entrega: R$ ${fee.toFixed(2)}` : '';
+        const msg = `📋 *Pedido #${order.order_number} confirmado!*\n\nOlá ${firstName}! Seu pedido foi refeito e já está em preparo:\n\n${itemsList}${feeText}\n\n💰 *Total: R$ ${total.toFixed(2)}* (${payment_method || 'dinheiro'})\n\nObrigado pela preferência! ☕`;
+        sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/from-admin] status:', code));
+      }
     }
     broadcastOrderUpdate({ event: 'new_order', order: { ...order, item_count: items.length } });
     res.status(201).json({ id: order.id, order_number: order.order_number });
