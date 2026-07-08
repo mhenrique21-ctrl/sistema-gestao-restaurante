@@ -162,6 +162,11 @@ export default function CheckoutPage() {
   }
 
   const subtotal = items.reduce((s, i) => s + itemLineTotal(i), 0)
+  // Subtotal apenas dos itens SEM promoção ativa (base para desconto de cupom)
+  const subtotalSemPromo = items.reduce((s, i) => {
+    if (i.product.promo_price != null) return s
+    return s + itemLineTotal(i)
+  }, 0)
   const deliveryFee = deliveryType === 'delivery' ? getTaxa(neighborhood) : 0
 
   // Verifica promoção aplicável agora (lado cliente, tempo real)
@@ -188,7 +193,7 @@ export default function CheckoutPage() {
     const code = coupon.trim().toUpperCase()
     if (!code) return
     try {
-      const res = await api.validateCoupon(code, subtotal, deliveryFee)
+      const res = await api.validateCoupon(code, subtotalSemPromo, deliveryFee)
       setCouponApplied({
         code: res.coupon.code,
         type: res.coupon.discount_type,
@@ -219,6 +224,7 @@ export default function CheckoutPage() {
         delivery_fee: deliveryFee,
         notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : ''].filter(Boolean).join(' | ') || null,
         coupon_code: couponApplied?.code || undefined,
+        coupon_subtotal: couponApplied ? subtotalSemPromo : undefined,
         items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
       })
       clear()

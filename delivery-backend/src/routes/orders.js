@@ -98,7 +98,7 @@ async function insertItemAddons(orderItemId, addons, client = pool) {
 // POST /api/orders/guest — pedido sem autenticação (app cliente)
 router.post('/guest', async (req, res) => {
   const { name, phone, delivery_type, delivery_address,
-          payment_method, notes, delivery_fee = 0, items, coupon_code } = req.body;
+          payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal } = req.body;
 
   if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
   if (!items?.length) return res.status(400).json({ error: 'Carrinho vazio' });
@@ -149,10 +149,12 @@ router.post('/guest', async (req, res) => {
         [coupon_code.trim().toUpperCase()]
       );
       const c = cRes.rows[0];
+      // base para desconto: apenas itens sem promo_price (enviado pelo frontend)
+      const couponBase = coupon_subtotal != null ? parseFloat(coupon_subtotal) : subtotal;
       if (c && !(c.expires_at && new Date(c.expires_at) < new Date())
              && !(c.max_uses !== null && c.uses_count >= c.max_uses)
-             && subtotal >= parseFloat(c.min_order_value)) {
-        if (c.discount_type === 'percent')      couponDiscount = subtotal * (parseFloat(c.discount_value) / 100);
+             && couponBase >= parseFloat(c.min_order_value)) {
+        if (c.discount_type === 'percent')      couponDiscount = couponBase * (parseFloat(c.discount_value) / 100);
         else if (c.discount_type === 'fixed')   couponDiscount = parseFloat(c.discount_value);
         else if (c.discount_type === 'free_delivery') couponDiscount = fee;
         couponDiscount = Math.round(Math.min(couponDiscount, subtotal + fee) * 100) / 100;
