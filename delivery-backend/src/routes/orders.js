@@ -752,7 +752,7 @@ router.delete('/:id', async (req, res) => {
         msg += `Infelizmente seu pedido foi cancelado.\n\n`;
       }
       msg += `Pedimos desculpas pelo transtorno. Entre em contato para reagendar ou escolher outro item ☕\n📞 96 97400-7410`;
-      if (phone) sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/exclusao] status:', code));
+      // WhatsApp não é enviado ao excluir — apenas ao cancelar
     }
 
     await pool.query(`DELETE FROM order_item_addons WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1) RETURNING id`, [req.params.id]);
