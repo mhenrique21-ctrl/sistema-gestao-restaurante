@@ -2019,8 +2019,7 @@ async function pagePromocoes() {
       <p style="font-size:.82rem;color:var(--muted);margin-bottom:16px">Produtos com preço promocional ativo no app do cliente.</p>
       <div id="promo-produtos-list"><p style="color:var(--muted);text-align:center;padding:20px">Carregando...</p></div>
     </div>`;
-  renderCupons();
-  renderPromoProdutos();
+  renderCupons().then(() => renderPromoProdutos());
 }
 
 async function renderPromoProdutos() {
