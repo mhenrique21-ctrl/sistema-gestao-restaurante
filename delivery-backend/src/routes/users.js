@@ -25,10 +25,11 @@ router.post('/', async (req, res) => {
   if (role && !validRoles.includes(role)) return res.status(400).json({ error: 'Role inválida' });
   try {
     const hash = await bcrypt.hash(password, 10);
+    const email = req.body.email?.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@interno.local`;
     const r = await pool.query(
       `INSERT INTO users (name, email, password_hash, role, permissions)
-       VALUES ($1, NULL, $2, $3, $4) RETURNING id, name, email, role, active, permissions`,
-      [name.trim(), hash, role || 'operador', permissions || []]
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role, active, permissions`,
+      [name.trim(), email, hash, role || 'operador', permissions || []]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
