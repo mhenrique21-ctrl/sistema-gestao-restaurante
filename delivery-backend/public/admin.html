@@ -2344,8 +2344,9 @@ function npAddProduct() {
   const qty = parseInt(qtyInput.value) || 1;
   const product = (overlay._allProducts || []).find(function(p) { return p.id === pid; });
   const groups = product && product.addon_groups ? product.addon_groups.filter(function(g) { return g.options && g.options.length > 0; }) : [];
-  toast('[debug] prod=' + (product ? product.name.slice(0,15) : 'NULL') + ' | groups=' + groups.length + ' | total_ag=' + (product && product.addon_groups ? product.addon_groups.length : -1));
   if (groups.length > 0) {
+    var firstOpt = groups[0].options && groups[0].options[0];
+    toast('[debug] g0=' + groups[0].name + ' | opt0keys=' + (firstOpt ? Object.keys(firstOpt).join(',') : 'NO_OPT'));
     npShowAddonModal(pid, name, basePrice, qty, groups);
   } else {
     const existing = overlay._items.find(function(i) { return i.product_id === pid && (!i.addons || !i.addons.length); });
