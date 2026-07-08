@@ -2078,6 +2078,16 @@ async function novoPedidoAdmin() {
     const [menu, bairros] = await Promise.all([api('GET', '/menu'), api('GET', '/neighborhoods')]);
     for (const cat of (menu || [])) for (const p of (cat.products || [])) overlay._allProducts.push(p);
     overlay._bairros = bairros || [];
+    // Popula o select de bairros após carregamento
+    const neighSel = document.getElementById('np-neighborhood');
+    if (neighSel) {
+      neighSel.innerHTML = buildBairrosOptions(overlay._bairros);
+      // Se já buscou cliente antes dos bairros carregarem, aplica o endereço agora
+      if (overlay._pendingNeighborhood) {
+        npMatchBairro(overlay._pendingNeighborhood);
+        overlay._pendingNeighborhood = null;
+      }
+    }
   } catch(e) { /* silencioso */ }
 }
 
@@ -2197,6 +2207,20 @@ function npSetTipo(tipo) {
   }
 }
 
+function npMatchBairro(neighborhood) {
+  const sel = document.getElementById('np-neighborhood');
+  if (!sel || !neighborhood) return false;
+  const q = neighborhood.toLowerCase().trim();
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value.toLowerCase().trim() === q) {
+      sel.selectedIndex = i;
+      npAtualizarTaxa();
+      return true;
+    }
+  }
+  return false;
+}
+
 function npAtualizarTaxa() {
   const sel = document.getElementById('np-neighborhood');
   const opt = sel.options[sel.selectedIndex];
@@ -2219,22 +2243,19 @@ async function npBuscarCliente() {
       document.getElementById('np-name').value = r.customer.name || '';
       info.textContent = '✅ Cliente encontrado';
       info.style.color = '#10b981';
-      // Pré-preenche endereço se tiver
-      if (r.addresses && r.addresses[0]) {
-        const a = r.addresses[0];
-        if (document.getElementById('np-street')) document.getElementById('np-street').value = a.street || '';
-        if (document.getElementById('np-number')) document.getElementById('np-number').value = a.number || '';
-        if (document.getElementById('np-complement')) document.getElementById('np-complement').value = a.complement || '';
-        const sel = document.getElementById('np-neighborhood');
-        if (sel && a.neighborhood) {
-          for (let i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].value.toLowerCase() === a.neighborhood.toLowerCase()) {
-              sel.selectedIndex = i;
-              npAtualizarTaxa();
-              break;
-            }
-          }
+      const addr = r.addresses && r.addresses[0];
+      if (addr) {
+        const stEl = document.getElementById('np-street');
+        const numEl = document.getElementById('np-number');
+        const cmpEl = document.getElementById('np-complement');
+        if (stEl) stEl.value = addr.street || '';
+        if (numEl) numEl.value = addr.number || '';
+        if (cmpEl) cmpEl.value = addr.complement || '';
+        if (addr.neighborhood) {
+          const matched = npMatchBairro(addr.neighborhood);
+          if (!matched) overlay._pendingNeighborhood = addr.neighborhood;
         }
+        npSetTipo('delivery');
       }
     } else {
       overlay._customerId = null;
