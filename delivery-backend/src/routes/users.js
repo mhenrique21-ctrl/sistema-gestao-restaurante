@@ -26,10 +26,11 @@ router.post('/', async (req, res) => {
   try {
     const hash = await bcrypt.hash(password, 10);
     const email = req.body.email?.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@interno.local`;
+    const perms = Array.isArray(permissions) ? permissions : (typeof permissions === 'string' ? permissions.split(',').filter(Boolean) : []);
     const r = await pool.query(
       `INSERT INTO users (name, email, password_hash, role, permissions)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role, active, permissions`,
-      [name.trim(), email, hash, role || 'operador', permissions || []]
+       VALUES ($1, $2, $3, $4, $5::text[]) RETURNING id, name, email, role, active, permissions`,
+      [name.trim(), email, hash, role || 'operador', `{${perms.join(',')}}`]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
