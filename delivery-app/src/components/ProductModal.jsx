@@ -18,12 +18,23 @@ export default function ProductModal({ product, onClose }) {
   const groups = product.addon_groups || []
 
   function toggleOption(group, option) {
+    const effectiveMax = group.max_select * qty
     setSelected((prev) => {
       const current = prev[group.id] || []
-      const isSelected = current.includes(option.id)
-      if (group.max_select === 1) return { ...prev, [group.id]: isSelected ? [] : [option.id] }
-      if (isSelected) return { ...prev, [group.id]: current.filter((id) => id !== option.id) }
-      if (current.length >= group.max_select) return prev
+      // Conta quantas vezes essa opção já está selecionada
+      const countThis = current.filter((id) => id === option.id).length
+      // Se atingiu o limite total, não adiciona mais
+      if (current.length >= effectiveMax && countThis === 0) return prev
+      // Se já tem uma seleção desta opção e o max por grupo era 1 (single-choice), alterna
+      if (group.max_select === 1 && qty === 1) {
+        return { ...prev, [group.id]: countThis > 0 ? current.filter((id) => id !== option.id) : [option.id] }
+      }
+      // Multi-unit: adiciona mais uma instância da opção ou remove a última
+      if (countThis > 0) {
+        const idx = current.lastIndexOf(option.id)
+        return { ...prev, [group.id]: current.filter((_, i) => i !== idx) }
+      }
+      if (current.length >= effectiveMax) return prev
       return { ...prev, [group.id]: [...current, option.id] }
     })
   }
@@ -40,7 +51,7 @@ export default function ProductModal({ product, onClose }) {
     return result
   }, [selected, groups])
 
-  const missingRequired = groups.filter((g) => g.required && (selected[g.id] || []).length < g.min_select)
+  const missingRequired = groups.filter((g) => g.required && (selected[g.id] || []).length < g.min_select * qty)
   const canAdd = missingRequired.length === 0
 
   function handleAdd() {
@@ -105,7 +116,9 @@ export default function ProductModal({ product, onClose }) {
           {/* Addon groups */}
           {groups.map((group) => {
             const current = selected[group.id] || []
-            const isMissing = group.required && current.length < group.min_select
+            const effectiveMax = group.max_select * qty
+            const effectiveMin = group.min_select * qty
+            const isMissing = group.required && current.length < effectiveMin
             return (
               <div key={group.id} className="mb-5">
                 <div className="flex items-center gap-2 mb-2.5">
@@ -113,16 +126,19 @@ export default function ProductModal({ product, onClose }) {
                   {group.required && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                       style={{ background: isMissing ? 'rgba(224,82,82,0.15)' : 'rgba(76,175,128,0.15)', color: isMissing ? 'var(--danger)' : 'var(--green)' }}>
-                      {isMissing ? 'Obrigatório' : '✓ Ok'}
+                      {isMissing ? `Escolha ${effectiveMin - current.length} mais` : '✓ Ok'}
                     </span>
                   )}
-                  {group.max_select > 1 && (
-                    <span className="text-[10px]" style={{ color: 'var(--muted)' }}>até {group.max_select}</span>
+                  {qty > 1 && (
+                    <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                      {current.length}/{effectiveMax} (1 por unidade)
+                    </span>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {group.options.map((opt) => {
-                    const isSel = current.includes(opt.id)
+                    const countThis = current.filter((id) => id === opt.id).length
+                    const isSel = countThis > 0
                     return (
                       <button key={opt.id} onClick={() => toggleOption(group, opt)}
                         className="px-3 py-2 rounded-xl text-xs font-semibold press transition-all"
@@ -131,7 +147,7 @@ export default function ProductModal({ product, onClose }) {
                           color: isSel ? '#0F0F0F' : 'var(--cream)',
                           border: `1px solid ${isSel ? 'var(--gold)' : 'var(--border)'}`,
                         }}>
-                        {opt.name}
+                        {opt.name}{countThis > 1 ? ` ×${countThis}` : ''}
                         {opt.price > 0 && (
                           <span style={{ color: isSel ? '#3B2418' : 'var(--muted)' }}> +{money(opt.price)}</span>
                         )}
