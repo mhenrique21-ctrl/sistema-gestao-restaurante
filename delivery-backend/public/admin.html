@@ -2151,7 +2151,7 @@ function buildNovoPedidoHtml(customerName, customerPhone, deliveryType, items, b
           '<div id="np-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;z-index:10;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.3)"></div>' +
         '</div>' +
         '<input type="hidden" id="np-prod-sel" data-price="" data-name="">' +
-        '<input type="number" id="np-prod-qty" value="1" min="1" style="width:52px;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text)">' +
+        '<input type="number" id="np-prod-qty" value="1" min="1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();npAddProduct();}" style="width:52px;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text)">' +
         '<button type="button" onclick="npAddProduct()" style="background:#7c3aed;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:.82rem">+ Add</button>' +
       '</div>' +
     '</div>' +
