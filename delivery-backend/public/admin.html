@@ -2075,7 +2075,9 @@ async function refazerPedido(id) {
     calcRefazerTotal();
   }
 
-  overlay._refazerItems = items.map(i => ({ product_id: i.product_id, product_name: i.product_name, unit_price: parseFloat(i.unit_price)||0, quantity: parseInt(i.quantity)||1 }));
+  overlay._refazerItems = items
+    .filter(i => i.product_available !== false)
+    .map(i => ({ product_id: i.product_id, product_name: i.product_name, unit_price: parseFloat(i.unit_price)||0, quantity: parseInt(i.quantity)||1 }));
 
   overlay.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:500px;margin:auto">

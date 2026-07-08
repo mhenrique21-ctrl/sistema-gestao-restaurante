@@ -369,7 +369,7 @@ router.get('/:id', async (req, res) => {
     if (!order.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
 
     const items = await pool.query(
-      `SELECT oi.*, p.name AS product_name, p.image_url
+      `SELECT oi.*, p.name AS product_name, p.image_url, p.available AS product_available
        FROM order_items oi JOIN products p ON p.id = oi.product_id
        WHERE oi.order_id = $1`,
       [req.params.id]
