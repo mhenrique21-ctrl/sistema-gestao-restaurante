@@ -301,7 +301,7 @@ router.get('/public/:id', async (req, res) => {
     if (!order.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
 
     const items = await pool.query(
-      `SELECT oi.id, oi.quantity, oi.subtotal, p.name AS product_name
+      `SELECT oi.id, oi.quantity, oi.subtotal, oi.product_id, p.name AS product_name
        FROM order_items oi JOIN products p ON p.id = oi.product_id
        WHERE oi.order_id = $1`,
       [req.params.id]
@@ -667,11 +667,37 @@ router.delete('/:id', async (req, res) => {
          o.total, o.subtotal, o.delivery_fee || 0, o.discount || 0, o.payment_method || null]
       );
     }
+    // Desabilitar produtos faltantes no cardápio
+    const faltantesIds = Array.isArray(faltantes) ? faltantes.filter(f => f.product_id).map(f => f.product_id) : [];
+    for (const pid of faltantesIds) {
+      await pool.query(`UPDATE products SET available = false WHERE id = $1 RETURNING id`, [pid]);
+    }
+
+    // WhatsApp automático para o cliente
+    if (o && o.customer_phone) {
+      const phone = o.customer_phone.replace(/\D/g, '');
+      const firstName = (o.customer_name || '').split(' ')[0] || 'Cliente';
+      const num = o.order_number;
+      const faltantesNomes = Array.isArray(faltantes) && faltantes.length
+        ? faltantes.map(f => `🚫 ${f.quantity ? f.quantity + '× ' : ''}${f.name}`).join('\n')
+        : null;
+      let msg = `❌ *Pedido #${num} cancelado*\n\nOlá ${firstName}! `;
+      if (faltantesNomes) {
+        msg += `Infelizmente precisamos cancelar seu pedido pois alguns itens estavam em falta:\n\n${faltantesNomes}\n\n`;
+      } else if (reason) {
+        msg += `Seu pedido foi cancelado. Motivo: ${reason}\n\n`;
+      } else {
+        msg += `Infelizmente seu pedido foi cancelado.\n\n`;
+      }
+      msg += `Pedimos desculpas pelo transtorno. Entre em contato para reagendar ou escolher outro item ☕\n📞 96 97400-7410`;
+      if (phone) sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/exclusao] status:', code));
+    }
+
     await pool.query(`DELETE FROM order_item_addons WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1) RETURNING id`, [req.params.id]);
     await pool.query(`DELETE FROM order_items WHERE order_id = $1 RETURNING id`, [req.params.id]);
     await pool.query(`DELETE FROM order_status_history WHERE order_id = $1 RETURNING id`, [req.params.id]);
     await pool.query(`DELETE FROM orders WHERE id = $1 RETURNING id`, [req.params.id]);
-    res.json({ ok: true });
+    res.json({ ok: true, disabled_products: faltantesIds.length });
   } catch (err) {
     console.error('[orders/DELETE]', err.message);
     res.status(500).json({ error: 'Erro interno: ' + err.message });
