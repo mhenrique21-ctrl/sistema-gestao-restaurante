@@ -159,7 +159,7 @@ router.post('/guest', async (req, res) => {
         else if (c.discount_type === 'free_delivery') couponDiscount = fee;
         couponDiscount = Math.round(Math.min(couponDiscount, subtotal + fee) * 100) / 100;
         appliedCoupon = c;
-        await pool.query(`UPDATE coupons SET uses_count = uses_count + 1 WHERE id = $1`, [c.id]);
+        await pool.query(`UPDATE coupons SET uses_count = uses_count + 1 WHERE id = $1 RETURNING id`, [c.id]);
       }
     }
 

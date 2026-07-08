@@ -71,7 +71,7 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   const { code, description, discount_type, discount_value, min_order_value, max_uses, max_uses_per_customer, allowed_categories, expires_at } = req.body;
   if (!code || !discount_type) return res.status(400).json({ error: 'Código e tipo são obrigatórios' });
   const catsArr = Array.isArray(allowed_categories) ? allowed_categories : (typeof allowed_categories === 'string' ? allowed_categories.split(',').filter(Boolean) : []);
-  const cats = catsArr.length ? `{${catsArr.join(',')}}` : null;
+  const cats = catsArr.length ? `{${catsArr.map(c => `"${c}"`).join(',')}}` : null;
   try {
     const result = await pool.query(
       `INSERT INTO coupons (code, description, discount_type, discount_value, min_order_value, max_uses, max_uses_per_customer, allowed_categories, expires_at)
@@ -94,7 +94,7 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   if (b.code !== undefined && b.discount_type !== undefined) {
     try {
       const catsArr = Array.isArray(b.allowed_categories) ? b.allowed_categories : (typeof b.allowed_categories === 'string' ? b.allowed_categories.split(',').filter(Boolean) : []);
-      const cats = catsArr.length ? `{${catsArr.join(',')}}` : null;
+      const cats = catsArr.length ? `{${catsArr.map(c => `"${c}"`).join(',')}}` : null;
       // expires_at vem do input date (YYYY-MM-DD) — seguro interpolar diretamente para evitar bug $10+
       const expiresSQL = b.expires_at ? `'${b.expires_at.replace(/[^0-9\-]/g, '')}'::date` : 'NULL';
       const result = await pool.query(
