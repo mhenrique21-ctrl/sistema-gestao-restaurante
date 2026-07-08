@@ -118,9 +118,10 @@ export default function MenuPage() {
     catRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  const menuSemOfertas = menu.filter((c) => c.name !== 'Ofertas')
   const filtered = search.trim()
-    ? menu.map((c) => ({ ...c, products: c.products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) })).filter((c) => c.products.length > 0)
-    : menu
+    ? menuSemOfertas.map((c) => ({ ...c, products: c.products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) })).filter((c) => c.products.length > 0)
+    : menuSemOfertas
 
   const offers = menu.flatMap((c) => c.products.map((p) => ({ ...p, categoryName: c.name }))).filter((p) => p.promo_price != null)
 
