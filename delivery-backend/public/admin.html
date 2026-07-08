@@ -2344,6 +2344,7 @@ function npAddProduct() {
   const qty = parseInt(qtyInput.value) || 1;
   const product = (overlay._allProducts || []).find(function(p) { return p.id === pid; });
   const groups = product && product.addon_groups ? product.addon_groups.filter(function(g) { return g.options && g.options.length > 0; }) : [];
+  console.log('[npAddProduct] product:', product && product.name, '| addon_groups:', product && product.addon_groups, '| filtered groups:', groups);
   if (groups.length > 0) {
     npShowAddonModal(pid, name, basePrice, qty, groups);
   } else {
