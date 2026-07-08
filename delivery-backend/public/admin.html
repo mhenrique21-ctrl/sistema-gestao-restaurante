@@ -2073,20 +2073,27 @@ async function novoPedidoAdmin() {
   overlay.innerHTML = buildNovoPedidoHtml('', '', 'retirada', [], []);
   document.body.appendChild(overlay);
 
-  // Carrega produtos e bairros em paralelo
+  // Carrega produtos, bairros e pagamentos em paralelo
   try {
-    const [menu, bairros] = await Promise.all([api('GET', '/menu'), api('GET', '/neighborhoods')]);
+    const [menu, bairros, payments] = await Promise.all([
+      api('GET', '/menu'), api('GET', '/neighborhoods'), api('GET', '/payment-methods')
+    ]);
     for (const cat of (menu || [])) for (const p of (cat.products || [])) overlay._allProducts.push(p);
     overlay._bairros = bairros || [];
-    // Popula o select de bairros após carregamento
+    // Popula bairros
     const neighSel = document.getElementById('np-neighborhood');
     if (neighSel) {
       neighSel.innerHTML = buildBairrosOptions(overlay._bairros);
-      // Se já buscou cliente antes dos bairros carregarem, aplica o endereço agora
       if (overlay._pendingNeighborhood) {
         npMatchBairro(overlay._pendingNeighborhood);
         overlay._pendingNeighborhood = null;
       }
+    }
+    // Popula pagamentos
+    const paySel = document.getElementById('np-payment');
+    if (paySel && payments && payments.length) {
+      paySel.innerHTML = payments.filter(function(p) { return p.active; })
+        .map(function(p) { return '<option value="' + p.name + '">' + p.name + '</option>'; }).join('');
     }
   } catch(e) { /* silencioso */ }
 }
@@ -2100,7 +2107,8 @@ function buildNovoPedidoHtml(customerName, customerPhone, deliveryType, items, b
     '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:14px">' +
       '<p style="font-size:.78rem;color:var(--muted);font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">👤 Cliente</p>' +
       '<div style="display:flex;gap:6px;margin-bottom:8px">' +
-        '<input id="np-phone" type="tel" placeholder="Telefone (ex: 96999990000)" value="' + customerPhone + '" ' +
+        '<input id="np-phone" type="tel" placeholder="(96) 99999-0000" value="' + npFormatPhone(customerPhone) + '" ' +
+          'oninput="npPhoneMask(this)" onkeydown="if(event.key===\'Enter\')npBuscarCliente()" ' +
           'style="flex:1;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem">' +
         '<button type="button" onclick="npBuscarCliente()" style="background:#7c3aed;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.82rem;white-space:nowrap">Buscar</button>' +
       '</div>' +
@@ -2138,6 +2146,7 @@ function buildNovoPedidoHtml(customerName, customerPhone, deliveryType, items, b
         '<div style="flex:1;position:relative">' +
           '<input type="text" id="np-busca" placeholder="🔍 Buscar produto..." autocomplete="off" ' +
             'oninput="npFiltrar(this)" onfocus="npFiltrar(this)" ' +
+            'onkeydown="if(event.key===\'Enter\'){event.preventDefault();npAddProduct();}" ' +
             'style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box;outline:none">' +
           '<div id="np-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;z-index:10;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.3)"></div>' +
         '</div>' +
@@ -2151,8 +2160,9 @@ function buildNovoPedidoHtml(customerName, customerPhone, deliveryType, items, b
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">' +
       '<div>' +
         '<label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">💳 Pagamento</label>' +
-        '<input id="np-payment" type="text" value="pix" placeholder="pix, dinheiro, cartão..." ' +
-          'style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+        '<select id="np-payment" style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+          '<option value="">Carregando...</option>' +
+        '</select>' +
       '</div>' +
       '<div>' +
         '<label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">🛵 Taxa de entrega (R$)</label>' +
@@ -2227,6 +2237,23 @@ function npAtualizarTaxa() {
   const fee = parseFloat(opt && opt.dataset.fee) || 0;
   document.getElementById('np-fee').value = fee.toFixed(2);
   npCalcTotal();
+}
+
+function npFormatPhone(phone) {
+  if (!phone) return '';
+  const d = ('' + phone).replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 10) return d.replace(/^(\d{0,2})(\d{0,4})(\d{0,4})$/, function(_, a, b, c) {
+    return (a ? '(' + a + ')' : '') + (b ? ' ' + b : '') + (c ? '-' + c : '');
+  }).trim();
+  return d.replace(/^(\d{2})(\d{5})(\d{0,4})$/, '($1) $2-$3');
+}
+
+function npPhoneMask(el) {
+  const d = el.value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 10) el.value = d.replace(/^(\d{0,2})(\d{0,4})(\d{0,4})$/, function(_, a, b, c) {
+    return (a ? '(' + a + ')' : '') + (b ? ' ' + b : '') + (c ? '-' + c : '');
+  }).trim();
+  else el.value = d.replace(/^(\d{2})(\d{5})(\d{0,4})$/, '($1) $2-$3');
 }
 
 async function npBuscarCliente() {
