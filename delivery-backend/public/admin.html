@@ -1557,6 +1557,7 @@ function renderPedidos(orders) {
         ${o.status === 'saiu_para_entrega' ? `<button class="btn btn-success btn-sm" onclick="avancarStatus('${o.id}','entregue')">🎉 Entregue</button>` : ''}
         ${o.status !== 'cancelado' && o.status !== 'entregue' ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedido('${o.id}')">✕ Cancelar</button>` : ''}
         ${o.status === 'cancelado' ? `<button class="btn btn-sm" style="background:#065f46;color:#fff;border:none" onclick="reabrirPedido('${o.id}')">🔄 Reabrir</button>` : ''}
+        <button class="btn btn-sm" style="background:#1d4ed8;color:#fff;border:none" onclick="refazerPedido('${o.id}')">📋 Refazer</button>
       </div>
     </div>`;
       }).join('');
@@ -2036,6 +2037,146 @@ async function confirmarCancelamentoPedido(id) {
   }
 }
 
+async function refazerPedido(id) {
+  const overlay = document.createElement('div');
+  overlay.id = 'refazer-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9998;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 16px';
+  overlay.innerHTML = '<div style="color:var(--muted);padding:40px;margin:auto">Carregando...</div>';
+  document.body.appendChild(overlay);
+
+  let orderData, menu;
+  try {
+    [orderData, menu] = await Promise.all([api('GET', '/orders/' + id), api('GET', '/menu')]);
+  } catch(e) { overlay.remove(); toast('Erro ao carregar pedido', true); return; }
+
+  const allProducts = [];
+  for (const cat of (menu || [])) for (const p of (cat.products || [])) allProducts.push(p);
+
+  overlay._orderData = orderData;
+  overlay._allProducts = allProducts;
+
+  const items = orderData.items || [];
+
+  function buildRows() {
+    const div = overlay.querySelector('#refazer-items');
+    if (!div) return;
+    div.innerHTML = overlay._refazerItems.map((i, idx) =>
+      '<div class="refazer-row" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)" data-idx="' + idx + '" data-price="' + i.unit_price + '">' +
+        '<span style="flex:1;font-size:.85rem;color:var(--cream)">' + i.product_name + '</span>' +
+        '<div style="display:flex;align-items:center;gap:4px">' +
+          '<button type="button" onclick="refazerQty(this,-1)" style="background:#374151;border:none;color:white;width:24px;height:24px;border-radius:4px;cursor:pointer;line-height:1">−</button>' +
+          '<span class="refazer-qty" style="min-width:24px;text-align:center;font-size:.88rem">' + i.quantity + '</span>' +
+          '<button type="button" onclick="refazerQty(this,1)" style="background:#374151;border:none;color:white;width:24px;height:24px;border-radius:4px;cursor:pointer;line-height:1">+</button>' +
+        '</div>' +
+        '<button type="button" onclick="refazerRemove(this)" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:1rem;padding:0 4px" title="Remover">✕</button>' +
+        '<span class="refazer-row-total" style="font-size:.82rem;color:#94a3b8;min-width:58px;text-align:right">R$ ' + (parseFloat(i.unit_price)*i.quantity).toFixed(2) + '</span>' +
+      '</div>'
+    ).join('') || '<p style="color:var(--muted);font-size:.83rem;padding:8px 0">Nenhum item.</p>';
+    calcRefazerTotal();
+  }
+
+  overlay._refazerItems = items.map(i => ({ product_id: i.product_id, product_name: i.product_name, unit_price: parseFloat(i.unit_price)||0, quantity: parseInt(i.quantity)||1 }));
+
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:500px;margin:auto">
+      <h3 style="margin-bottom:4px;font-size:1rem;color:var(--text)">📋 Refazer Pedido #${orderData.order_number}</h3>
+      <p style="font-size:.8rem;color:var(--muted);margin-bottom:16px">Cliente: <strong>${orderData.customer_name||'—'}</strong></p>
+      <p style="font-size:.83rem;color:var(--muted);margin-bottom:8px">Itens do novo pedido:</p>
+      <div id="refazer-items" style="max-height:220px;overflow-y:auto;margin-bottom:14px"></div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+        <select id="refazer-prod-sel" style="flex:1;min-width:180px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.82rem">
+          <option value="">+ Adicionar produto...</option>
+          ${allProducts.map(p => '<option value="' + p.id + '" data-price="' + p.price + '" data-name="' + (p.name||'').replace(/"/g,'&quot;') + '">' + p.name + ' — R$ ' + parseFloat(p.price).toFixed(2) + '</option>').join('')}
+        </select>
+        <input type="number" id="refazer-prod-qty" value="1" min="1" style="width:52px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text)">
+        <button type="button" onclick="refazerAddProduct()" style="background:#7c3aed;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.82rem">Adicionar</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border);margin-bottom:16px">
+        <span style="font-size:.85rem;color:var(--muted)">Total do novo pedido:</span>
+        <span id="refazer-total" style="font-weight:900;font-size:1.1rem;color:#7c3aed">R$ 0,00</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="document.getElementById('refazer-overlay').remove()" class="btn btn-secondary" style="flex:1">Cancelar</button>
+        <button type="button" onclick="confirmarRefazerPedido('${id}')" class="btn" style="flex:1;background:#1d4ed8;color:#fff">📋 Criar Novo Pedido</button>
+      </div>
+    </div>`;
+
+  buildRows();
+  overlay._buildRows = buildRows;
+}
+
+function refazerQty(btn, delta) {
+  const overlay = document.getElementById('refazer-overlay');
+  const row = btn.closest('.refazer-row');
+  const idx = parseInt(row.dataset.idx);
+  const price = parseFloat(row.dataset.price) || 0;
+  let qty = parseInt(row.querySelector('.refazer-qty').textContent) + delta;
+  if (qty < 1) qty = 1;
+  overlay._refazerItems[idx].quantity = qty;
+  row.querySelector('.refazer-qty').textContent = qty;
+  row.querySelector('.refazer-row-total').textContent = 'R$ ' + (price * qty).toFixed(2);
+  calcRefazerTotal();
+}
+
+function refazerRemove(btn) {
+  const overlay = document.getElementById('refazer-overlay');
+  const row = btn.closest('.refazer-row');
+  const idx = parseInt(row.dataset.idx);
+  overlay._refazerItems.splice(idx, 1);
+  overlay._buildRows();
+}
+
+function refazerAddProduct() {
+  const overlay = document.getElementById('refazer-overlay');
+  const sel = document.getElementById('refazer-prod-sel');
+  const qtyInput = document.getElementById('refazer-prod-qty');
+  if (!sel.value) return;
+  const opt = sel.options[sel.selectedIndex];
+  const price = parseFloat(opt.dataset.price) || 0;
+  const name = opt.dataset.name || opt.text.split(' — ')[0];
+  const qty = parseInt(qtyInput.value) || 1;
+  const existing = overlay._refazerItems.find(i => i.product_id === sel.value);
+  if (existing) { existing.quantity += qty; }
+  else { overlay._refazerItems.push({ product_id: sel.value, product_name: name, unit_price: price, quantity: qty }); }
+  overlay._buildRows();
+  sel.value = '';
+  qtyInput.value = 1;
+}
+
+function calcRefazerTotal() {
+  const overlay = document.getElementById('refazer-overlay');
+  if (!overlay) return;
+  let total = 0;
+  overlay.querySelectorAll('.refazer-row').forEach(row => {
+    const price = parseFloat(row.dataset.price) || 0;
+    const qty = parseInt(row.querySelector('.refazer-qty') && row.querySelector('.refazer-qty').textContent) || 0;
+    total += price * qty;
+  });
+  const el = overlay.querySelector('#refazer-total');
+  if (el) el.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+}
+
+async function confirmarRefazerPedido(originalId) {
+  const overlay = document.getElementById('refazer-overlay');
+  const items = overlay._refazerItems.filter(i => i.quantity > 0);
+  if (!items.length) { toast('Adicione ao menos um item', true); return; }
+  const od = overlay._orderData;
+  try {
+    const novo = await api('POST', '/orders/from-admin', {
+      customer_id: od.customer_id,
+      items,
+      delivery_type: od.delivery_type,
+      delivery_address: od.delivery_address,
+      payment_method: od.payment_method,
+    });
+    toast('Novo pedido #' + novo.order_number + ' criado com sucesso!');
+    overlay.remove();
+    carregarPedidos();
+  } catch(e) {
+    toast(e.message || 'Erro ao criar pedido', true);
+  }
+}
+
 async function reabrirPedido(id) {
   if (!confirm('Reabrir este pedido? O status voltará para Confirmado.')) return;
   try {
@@ -2075,24 +2216,6 @@ async function cancelarPedido(id) {
         <textarea id="cancel-motivo" rows="2" placeholder="Ex: produto indisponível, cliente desistiu..."
           style="width:100%;padding:10px;border-radius:10px;background:var(--card);border:1px solid var(--border);color:var(--cream);font-size:.85rem;resize:none;outline:none;box-sizing:border-box"></textarea>
       </div>
-      ${items.length ? `
-      <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">
-        <button type="button" onclick="toggleSubstituteSection(this)"
-          style="width:100%;padding:12px 14px;background:var(--card);border:none;color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center">
-          🔄 Criar pedido substituto (itens restantes)
-          <span id="sub-arrow">▼</span>
-        </button>
-        <div id="substitute-section" style="display:none;padding:14px">
-          <div id="sub-items"></div>
-          <div id="add-product-row" style="display:flex;gap:6px;align-items:center;margin-top:12px">
-            <span style="font-size:.8rem;color:var(--muted)">Carregando produtos...</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid var(--border);margin-top:10px">
-            <span style="font-size:.83rem;color:var(--muted)">Total estimado:</span>
-            <span id="sub-total" style="font-weight:700;color:var(--text)">R$ 0,00</span>
-          </div>
-        </div>
-      </div>` : ''}
       <div style="display:flex;gap:8px;margin-top:4px">
         <button type="button" onclick="document.getElementById('cancel-overlay').remove()" class="btn btn-secondary" style="flex:1">Voltar</button>
         <button type="button" onclick="confirmarCancelamentoPedido('${id}')" class="btn btn-danger" style="flex:1">✕ Confirmar Cancelamento</button>
