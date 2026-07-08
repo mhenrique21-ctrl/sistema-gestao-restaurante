@@ -2385,12 +2385,14 @@ function npShowAddonModal(pid, name, basePrice, qty, groups) {
     for (var oi = 0; oi < g.options.length; oi++) {
       var o = g.options[oi];
       var inputType = isMulti ? 'checkbox' : 'radio';
-      var priceLabel = o.price > 0 ? ' <span style="color:#a78bfa">+R$ ' + parseFloat(o.price).toFixed(2) + '</span>' : '';
+      var oName = o.name || o.option_name || '';
+      var oPrice = parseFloat(o.price || o.option_price || 0);
+      var priceLabel = oPrice > 0 ? ' <span style="color:#a78bfa">+R$ ' + oPrice.toFixed(2) + '</span>' : '';
       html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer">' +
-        '<input type="' + inputType + '" name="npag_' + g.group_id + '" value="' + o.option_id + '" ' +
-        'data-name="' + o.option_name.replace(/"/g, '&quot;') + '" data-price="' + (o.price || 0) + '" ' +
+        '<input type="' + inputType + '" name="npag_' + (g.id || g.group_id) + '" value="' + (o.id || o.option_id) + '" ' +
+        'data-name="' + oName.replace(/"/g, '&quot;') + '" data-price="' + oPrice + '" ' +
         'style="accent-color:#7c3aed;width:16px;height:16px">' +
-        '<span style="flex:1;font-size:.85rem;color:var(--cream)">' + o.option_name + priceLabel + '</span>' +
+        '<span style="flex:1;font-size:.85rem;color:var(--cream)">' + oName + priceLabel + '</span>' +
         '</label>';
     }
     html += '</div>';
