@@ -159,7 +159,6 @@ router.post('/guest', async (req, res) => {
         else if (c.discount_type === 'free_delivery') couponDiscount = fee;
         couponDiscount = Math.round(Math.min(couponDiscount, subtotal + fee) * 100) / 100;
         appliedCoupon = c;
-        await pool.query(`UPDATE coupons SET uses_count = uses_count + 1 WHERE id = $1 RETURNING id`, [c.id]);
       }
     }
 
@@ -170,8 +169,8 @@ router.post('/guest', async (req, res) => {
 
     const orderResult = await pool.query(
       `INSERT INTO orders (customer_id, user_id, delivery_type, delivery_address, subtotal,
-        delivery_fee, discount, total, payment_method, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,${finalDiscount},$7,$8,$9,'aguardando_pagamento') RETURNING *`,
+        delivery_fee, discount, total, payment_method, notes, coupon_code, status)
+       VALUES ($1,$2,$3,$4,$5,$6,${finalDiscount},$7,$8,$9,${appliedCoupon ? `'${appliedCoupon.code.replace(/'/g,"''")}'` : 'NULL'},'aguardando_pagamento') RETURNING *`,
       [customer.id, adminId, delivery_type || 'delivery',
        delivery_address ? JSON.stringify(delivery_address) : null,
        subtotal, fee, total, payment_method, notes || null]
@@ -524,6 +523,14 @@ router.patch('/:id/status', async (req, res) => {
     );
 
     broadcastOrderUpdate({ event: 'status_update', order_id: req.params.id, status });
+
+    // Cupom: registra uso definitivo apenas quando pedido fica PRONTO
+    if (status === 'pronto' && result.rows[0].coupon_code) {
+      await pool.query(
+        `UPDATE coupons SET uses_count = uses_count + 1 WHERE code = $1 RETURNING id`,
+        [result.rows[0].coupon_code]
+      );
+    }
 
     const order = result.rows[0];
     let whatsapp_link = null;
