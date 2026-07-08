@@ -21,15 +21,15 @@ export default function ProductModal({ product, onClose }) {
     const effectiveMax = group.max_select * qty
     setSelected((prev) => {
       const current = prev[group.id] || []
-      // Conta quantas vezes essa opção já está selecionada
       const countThis = current.filter((id) => id === option.id).length
-      // Se atingiu o limite total, não adiciona mais
-      if (current.length >= effectiveMax && countThis === 0) return prev
-      // Se já tem uma seleção desta opção e o max por grupo era 1 (single-choice), alterna
-      if (group.max_select === 1 && qty === 1) {
-        return { ...prev, [group.id]: countThis > 0 ? current.filter((id) => id !== option.id) : [option.id] }
+      if (qty === 1) {
+        // Comportamento original: single-choice quando max=1
+        if (group.max_select === 1) return { ...prev, [group.id]: countThis > 0 ? [] : [option.id] }
+        if (countThis > 0) return { ...prev, [group.id]: current.filter((id) => id !== option.id) }
+        if (current.length >= group.max_select) return prev
+        return { ...prev, [group.id]: [...current, option.id] }
       }
-      // Multi-unit: adiciona mais uma instância da opção ou remove a última
+      // Multi-unit: cada clique adiciona/remove uma instância da opção
       if (countThis > 0) {
         const idx = current.lastIndexOf(option.id)
         return { ...prev, [group.id]: current.filter((_, i) => i !== idx) }
@@ -51,7 +51,7 @@ export default function ProductModal({ product, onClose }) {
     return result
   }, [selected, groups])
 
-  const missingRequired = groups.filter((g) => g.required && (selected[g.id] || []).length < g.min_select * qty)
+  const missingRequired = groups.filter((g) => g.required && (selected[g.id] || []).length < g.min_select)
   const canAdd = missingRequired.length === 0
 
   function handleAdd() {
@@ -126,12 +126,12 @@ export default function ProductModal({ product, onClose }) {
                   {group.required && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                       style={{ background: isMissing ? 'rgba(224,82,82,0.15)' : 'rgba(76,175,128,0.15)', color: isMissing ? 'var(--danger)' : 'var(--green)' }}>
-                      {isMissing ? `Escolha ${effectiveMin - current.length} mais` : '✓ Ok'}
+                      {isMissing ? 'Obrigatório' : '✓ Ok'}
                     </span>
                   )}
                   {qty > 1 && (
                     <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
-                      {current.length}/{effectiveMax} (1 por unidade)
+                      {current.length}/{effectiveMax} bebidas
                     </span>
                   )}
                 </div>
