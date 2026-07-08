@@ -1556,6 +1556,7 @@ function renderPedidos(orders) {
         ${o.status === 'pronto' ? `<button class="btn btn-sm" style="background:#0ea5e9;color:#fff;border:none" onclick="avancarStatus('${o.id}','saiu_para_entrega')">🛵 A Caminho</button>` : ''}
         ${o.status === 'saiu_para_entrega' ? `<button class="btn btn-success btn-sm" onclick="avancarStatus('${o.id}','entregue')">🎉 Entregue</button>` : ''}
         ${o.status !== 'cancelado' && o.status !== 'entregue' ? `<button class="btn btn-danger btn-sm" onclick="cancelarPedido('${o.id}')">✕ Cancelar</button>` : ''}
+        ${o.status === 'cancelado' ? `<button class="btn btn-sm" style="background:#065f46;color:#fff;border:none" onclick="reabrirPedido('${o.id}')">🔄 Reabrir</button>` : ''}
       </div>
     </div>`;
       }).join('');
@@ -2032,6 +2033,17 @@ async function confirmarCancelamentoPedido(id) {
     carregarPedidos();
   } catch(e) {
     toast(e.message || 'Erro ao cancelar', true);
+  }
+}
+
+async function reabrirPedido(id) {
+  if (!confirm('Reabrir este pedido? O status voltará para Confirmado.')) return;
+  try {
+    await api('PATCH', '/orders/' + id + '/status', { status: 'confirmado' });
+    toast('Pedido reaberto!');
+    carregarPedidos();
+  } catch(e) {
+    toast(e.message || 'Erro ao reabrir', true);
   }
 }
 
