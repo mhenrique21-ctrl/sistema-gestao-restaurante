@@ -87,26 +87,50 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
 
 // PATCH /api/coupons/:id
 router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
-  const fields = ['code', 'description', 'discount_type', 'discount_value', 'min_order_value', 'max_uses', 'max_uses_per_customer', 'expires_at', 'active'];
+  const b = req.body;
+  // Se vier conjunto completo de campos (edição via modal), usa query estática para evitar bug $10+ no pg
+  if (b.code !== undefined && b.discount_type !== undefined) {
+    try {
+      const result = await pool.query(
+        `UPDATE coupons SET code=$1, description=$2, discount_type=$3, discount_value=$4,
+         min_order_value=$5, max_uses=$6, max_uses_per_customer=$7, expires_at=$8
+         WHERE id=$9 RETURNING *`,
+        [
+          b.code.trim().toUpperCase(), b.description || '',
+          b.discount_type, b.discount_value || 0,
+          b.min_order_value || 0, b.max_uses || null,
+          b.max_uses_per_customer || null, b.expires_at || null,
+          req.params.id
+        ]
+      );
+      if (!result.rows[0]) return res.status(404).json({ error: 'Cupom não encontrado' });
+      return res.json(result.rows[0]);
+    } catch (err) {
+      if (err.code === '23505') return res.status(409).json({ error: 'Código já existe' });
+      console.error('[coupons/PATCH]', err.message);
+      return res.status(500).json({ error: err.message || 'Erro interno' });
+    }
+  }
+  // Atualização parcial (ex: toggle active)
+  const fields = ['active', 'code', 'description', 'discount_type', 'discount_value', 'min_order_value', 'max_uses', 'expires_at'];
   const updates = [], values = [];
   let idx = 1;
   for (const f of fields) {
-    if (req.body[f] !== undefined) {
+    if (b[f] !== undefined) {
       updates.push(`${f} = $${idx++}`);
-      values.push(f === 'code' ? req.body[f].trim().toUpperCase() : req.body[f]);
+      values.push(f === 'code' ? b[f].trim().toUpperCase() : b[f]);
     }
   }
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);
-  const sql = `UPDATE coupons SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`;
-  console.log('[coupons/PATCH] SQL:', sql, 'VALUES:', JSON.stringify(values));
   try {
-    const result = await pool.query(sql, values);
+    const result = await pool.query(
+      `UPDATE coupons SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`, values
+    );
     if (!result.rows[0]) return res.status(404).json({ error: 'Cupom não encontrado' });
     res.json(result.rows[0]);
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Código já existe' });
-    console.error('[coupons/PATCH]', err.message);
+    console.error('[coupons/PATCH partial]', err.message);
     res.status(500).json({ error: err.message || 'Erro interno' });
   }
 });
