@@ -35,7 +35,17 @@ router.get('/lookup', async (req, res) => {
       });
     }
 
-    res.json({ customer, addresses });
+    // Deduplicar: normaliza rua+número+bairro (sem acento, minúsculo, sem espaço extra)
+    const normalize = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+    const seen = new Set();
+    const unique = addresses.filter(a => {
+      const key = `${normalize(a.street)}|${normalize(a.number)}|${normalize(a.neighborhood)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    res.json({ customer, addresses: unique });
   } catch (err) {
     console.error('[delivery/lookup]', err.message);
     res.status(500).json({ error: 'Erro interno' });

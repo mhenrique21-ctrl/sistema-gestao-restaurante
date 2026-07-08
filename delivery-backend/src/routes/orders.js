@@ -290,6 +290,30 @@ router.get('/customer/:phone', async (req, res) => {
   }
 });
 
+// GET /api/orders/public/:id — consulta pública de pedido para o cliente acompanhar
+router.get('/public/:id', async (req, res) => {
+  try {
+    const order = await pool.query(
+      `SELECT o.id, o.order_number, o.status, o.total, o.delivery_type, o.created_at
+       FROM orders o WHERE o.id = $1`,
+      [req.params.id]
+    );
+    if (!order.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    const items = await pool.query(
+      `SELECT oi.id, oi.quantity, oi.subtotal, p.name AS product_name
+       FROM order_items oi JOIN products p ON p.id = oi.product_id
+       WHERE oi.order_id = $1`,
+      [req.params.id]
+    );
+
+    res.json({ ...order.rows[0], items: items.rows });
+  } catch (err) {
+    console.error('[orders/public]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 router.use(authMiddleware);
 
 // GET /api/orders — listar pedidos (com filtros)
@@ -535,7 +559,7 @@ router.patch('/:id/status', async (req, res) => {
     const order = result.rows[0];
     let whatsapp_link = null;
 
-    const NOTIFY_STATUSES = ['confirmado', 'em_preparo', 'saiu_para_entrega', 'cancelado'];
+    const NOTIFY_STATUSES = ['confirmado', 'em_preparo', 'pronto', 'saiu_para_entrega', 'cancelado'];
     if (NOTIFY_STATUSES.includes(status)) {
       const customerPhone = (order.customer_phone || '').replace(/\D/g, '');
       const orderNum = order.order_number;
@@ -547,6 +571,13 @@ router.patch('/:id/status', async (req, res) => {
           msg = `✅ *Pedido #${orderNum} confirmado!*\n\nOlá ${firstName}! Recebemos seu pedido e já estamos cuidando de tudo. Logo logo estará pronto! ☕🎉`;
         } else if (status === 'em_preparo') {
           msg = `👨‍🍳 *Pedido #${orderNum} em preparo!*\n\nOlá ${firstName}! Seu pedido está sendo preparado com carinho. Em breve estará pronto! ☕`;
+        } else if (status === 'pronto') {
+          const isRetirada = order.delivery_type === 'retirada';
+          if (isRetirada) {
+            msg = `🎉 *Pedido #${orderNum} pronto!*\n\nOlá ${firstName}! Seu pedido está pronto para retirada. Pode vir buscar! 🏪☕`;
+          } else {
+            msg = `🎉 *Pedido #${orderNum} pronto!*\n\nOlá ${firstName}! Seu pedido está pronto e logo sairá para entrega. Aguarde! ☕`;
+          }
         } else if (status === 'saiu_para_entrega') {
           const isRetirada = order.delivery_type === 'retirada';
           if (isRetirada) {
@@ -559,6 +590,10 @@ router.patch('/:id/status', async (req, res) => {
         }
         if (msg) {
           whatsapp_link = `https://wa.me/55${customerPhone}?text=${encodeURIComponent(msg)}`;
+          // Envio automático para pronto e saiu_para_entrega
+          if (status === 'pronto' || status === 'saiu_para_entrega') {
+            sendWhatsApp(customerPhone, msg).then(code => console.log(`[whatsapp/${status}] status:`, code));
+          }
         }
       }
     }
