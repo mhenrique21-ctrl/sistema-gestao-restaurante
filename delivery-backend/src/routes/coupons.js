@@ -106,7 +106,8 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Código já existe' });
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('[coupons/PATCH]', err.message);
+    res.status(500).json({ error: err.message || 'Erro interno' });
   }
 });
 
