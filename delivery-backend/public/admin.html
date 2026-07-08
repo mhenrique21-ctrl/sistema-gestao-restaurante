@@ -2266,9 +2266,10 @@ function cupomForm(c = {}) {
       </div>
       <div><label>Valor mínimo do pedido (R$)</label><input id="cp-min" type="number" step="0.01" value="${c.min_order_value||0}" /></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><label>Máx. de usos (vazio = ilimitado)</label><input id="cp-max" type="number" value="${c.max_uses||''}" placeholder="Ilimitado" /></div>
-        <div><label>Validade (opcional)</label><input id="cp-expires" type="date" value="${c.expires_at?c.expires_at.slice(0,10):''}" /></div>
+        <div><label>Máx. de usos total (vazio = ilimitado)</label><input id="cp-max" type="number" value="${c.max_uses||''}" placeholder="Ilimitado" /></div>
+        <div><label>Máx. por cliente (vazio = ilimitado)</label><input id="cp-max-per" type="number" value="${c.max_uses_per_customer||''}" placeholder="Ilimitado" /></div>
       </div>
+      <div><label>Validade (opcional)</label><input id="cp-expires" type="date" value="${c.expires_at?c.expires_at.slice(0,10):''}" /></div>
     </div>`;
 }
 
@@ -2289,6 +2290,7 @@ function getCupomData() {
     discount_value: parseFloat(document.getElementById('cp-value')?.value||0),
     min_order_value: parseFloat(document.getElementById('cp-min')?.value||0),
     max_uses: document.getElementById('cp-max')?.value ? parseInt(document.getElementById('cp-max').value) : null,
+    max_uses_per_customer: document.getElementById('cp-max-per')?.value ? parseInt(document.getElementById('cp-max-per').value) : null,
     expires_at: document.getElementById('cp-expires')?.value || null,
     active: true,
   };

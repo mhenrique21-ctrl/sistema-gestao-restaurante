@@ -68,14 +68,14 @@ router.get('/', authMiddleware, requireRole('admin'), async (req, res) => {
 
 // POST /api/coupons — criar cupom
 router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { code, description, discount_type, discount_value, min_order_value, max_uses, expires_at, active } = req.body;
+  const { code, description, discount_type, discount_value, min_order_value, max_uses, max_uses_per_customer, expires_at, active } = req.body;
   if (!code || !discount_type) return res.status(400).json({ error: 'Código e tipo são obrigatórios' });
   try {
     const result = await pool.query(
-      `INSERT INTO coupons (code, description, discount_type, discount_value, min_order_value, max_uses, expires_at, active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      `INSERT INTO coupons (code, description, discount_type, discount_value, min_order_value, max_uses, max_uses_per_customer, expires_at, active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [code.trim().toUpperCase(), description || '', discount_type, discount_value || 0,
-       min_order_value || 0, max_uses || null, expires_at || null, active !== false]
+       min_order_value || 0, max_uses || null, max_uses_per_customer || null, expires_at || null, active !== false]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -87,7 +87,7 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
 
 // PATCH /api/coupons/:id
 router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
-  const fields = ['code', 'description', 'discount_type', 'discount_value', 'min_order_value', 'max_uses', 'expires_at', 'active'];
+  const fields = ['code', 'description', 'discount_type', 'discount_value', 'min_order_value', 'max_uses', 'max_uses_per_customer', 'expires_at', 'active'];
   const updates = [], values = [];
   let idx = 1;
   for (const f of fields) {
