@@ -106,8 +106,8 @@ router.post('/guest', async (req, res) => {
 
   try {
     const custResult = await pool.query(
-      `INSERT INTO customers (name, phone) VALUES ($1, $2)
-       ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
+      `INSERT INTO customers (name, phone, active) VALUES ($1, $2, true)
+       ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, active = true
        RETURNING id, name, phone, blocked`,
       [name, phone.replace(/\D/g, '')]
     );
