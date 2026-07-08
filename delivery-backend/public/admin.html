@@ -1460,6 +1460,7 @@ async function pagePedidos() {
           </button>`).join('')}
       </div>
       <button class="btn btn-secondary btn-sm" onclick="carregarPedidos()">🔄 Atualizar</button>
+      <button class="btn btn-sm" style="background:#16a34a;color:#fff;border:none;font-weight:700" onclick="novoPedidoAdmin()">＋ Novo Pedido</button>
     </div>
     <div id="pedidos-lista"><p style="color:#64748b">Carregando...</p></div>`;
   await carregarPedidos();
@@ -2057,6 +2058,320 @@ async function confirmarCancelamentoPedido(id) {
     carregarPedidos();
   } catch(e) {
     toast(e.message || 'Erro ao cancelar', true);
+  }
+}
+
+async function novoPedidoAdmin() {
+  const overlay = document.createElement('div');
+  overlay.id = 'novo-pedido-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9998;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 16px';
+  overlay._items = [];
+  overlay._bairros = [];
+  overlay._allProducts = [];
+  overlay._customerId = null;
+
+  overlay.innerHTML = buildNovoPedidoHtml('', '', 'retirada', [], []);
+  document.body.appendChild(overlay);
+
+  // Carrega produtos e bairros em paralelo
+  try {
+    const [menu, bairros] = await Promise.all([api('GET', '/menu'), api('GET', '/neighborhoods')]);
+    for (const cat of (menu || [])) for (const p of (cat.products || [])) overlay._allProducts.push(p);
+    overlay._bairros = bairros || [];
+  } catch(e) { /* silencioso */ }
+}
+
+function buildNovoPedidoHtml(customerName, customerPhone, deliveryType, items, bairros) {
+  const isDelivery = deliveryType === 'delivery';
+  return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:520px;margin:auto">' +
+    '<h3 style="margin-bottom:18px;font-size:1rem;color:var(--text)">＋ Novo Pedido</h3>' +
+
+    // Cliente
+    '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:14px">' +
+      '<p style="font-size:.78rem;color:var(--muted);font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">👤 Cliente</p>' +
+      '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+        '<input id="np-phone" type="tel" placeholder="Telefone (ex: 96999990000)" value="' + customerPhone + '" ' +
+          'style="flex:1;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem">' +
+        '<button type="button" onclick="npBuscarCliente()" style="background:#7c3aed;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.82rem;white-space:nowrap">Buscar</button>' +
+      '</div>' +
+      '<input id="np-name" type="text" placeholder="Nome do cliente" value="' + customerName + '" ' +
+        'style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+      '<p id="np-cliente-info" style="font-size:.78rem;color:#10b981;margin-top:6px;min-height:16px"></p>' +
+    '</div>' +
+
+    // Tipo de entrega
+    '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+      '<button type="button" id="np-btn-retirada" onclick="npSetTipo(\'retirada\')" ' +
+        'style="flex:1;padding:10px;border-radius:8px;border:2px solid ' + (isDelivery?'var(--border)':'#7c3aed') + ';background:' + (isDelivery?'var(--card)':'#1e1b4b') + ';color:' + (isDelivery?'var(--muted)':'#a78bfa') + ';cursor:pointer;font-size:.85rem;font-weight:600">🏪 Retirada</button>' +
+      '<button type="button" id="np-btn-delivery" onclick="npSetTipo(\'delivery\')" ' +
+        'style="flex:1;padding:10px;border-radius:8px;border:2px solid ' + (isDelivery?'#7c3aed':'var(--border)') + ';background:' + (isDelivery?'#1e1b4b':'var(--card)') + ';color:' + (isDelivery?'#a78bfa':'var(--muted)') + ';cursor:pointer;font-size:.85rem;font-weight:600">🛵 Entrega</button>' +
+    '</div>' +
+
+    // Endereço (só delivery)
+    '<div id="np-endereco" style="display:' + (isDelivery?'block':'none') + ';background:var(--card);border-radius:10px;padding:14px;margin-bottom:14px">' +
+      '<p style="font-size:.78rem;color:var(--muted);font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">📍 Endereço</p>' +
+      '<input id="np-street" type="text" placeholder="Rua / Avenida" style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box;margin-bottom:8px">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">' +
+        '<input id="np-number" type="text" placeholder="Número" style="padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;width:100%;box-sizing:border-box">' +
+        '<select id="np-neighborhood" onchange="npAtualizarTaxa()" style="padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;width:100%;box-sizing:border-box">' +
+          buildBairrosOptions(bairros) +
+        '</select>' +
+      '</div>' +
+      '<input id="np-complement" type="text" placeholder="Complemento (apto, bloco...)" style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+    '</div>' +
+
+    // Produtos
+    '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:14px">' +
+      '<p style="font-size:.78rem;color:var(--muted);font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">🛒 Produtos</p>' +
+      '<div id="np-items" style="max-height:180px;overflow-y:auto;margin-bottom:10px"></div>' +
+      '<div style="display:flex;gap:6px;align-items:center;position:relative">' +
+        '<div style="flex:1;position:relative">' +
+          '<input type="text" id="np-busca" placeholder="🔍 Buscar produto..." autocomplete="off" ' +
+            'oninput="npFiltrar(this)" onfocus="npFiltrar(this)" ' +
+            'style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box;outline:none">' +
+          '<div id="np-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;z-index:10;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.3)"></div>' +
+        '</div>' +
+        '<input type="hidden" id="np-prod-sel" data-price="" data-name="">' +
+        '<input type="number" id="np-prod-qty" value="1" min="1" style="width:52px;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text)">' +
+        '<button type="button" onclick="npAddProduct()" style="background:#7c3aed;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:.82rem">+ Add</button>' +
+      '</div>' +
+    '</div>' +
+
+    // Pagamento + total
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">' +
+      '<div>' +
+        '<label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">💳 Pagamento</label>' +
+        '<input id="np-payment" type="text" value="pix" placeholder="pix, dinheiro, cartão..." ' +
+          'style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+      '</div>' +
+      '<div>' +
+        '<label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">🛵 Taxa de entrega (R$)</label>' +
+        '<input id="np-fee" type="number" value="0" min="0" step="0.01" oninput="npCalcTotal()" ' +
+          'style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border);margin-bottom:16px">' +
+      '<span style="font-size:.85rem;color:var(--muted)">Total:</span>' +
+      '<span id="np-total" style="font-weight:900;font-size:1.2rem;color:#7c3aed">R$ 0,00</span>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px">' +
+      '<button type="button" onclick="document.getElementById(\'novo-pedido-overlay\').remove()" class="btn btn-secondary" style="flex:1">Cancelar</button>' +
+      '<button type="button" onclick="npConfirmar()" class="btn" style="flex:1;background:#16a34a;color:#fff;font-weight:700">✅ Criar Pedido</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function buildBairrosOptions(bairros) {
+  if (!bairros || !bairros.length) return '<option value="">Selecionar bairro...</option>';
+  const zones = {};
+  for (const b of bairros) {
+    const z = b.zone || 'Outros';
+    if (!zones[z]) zones[z] = [];
+    zones[z].push(b);
+  }
+  return '<option value="" data-fee="0">Selecionar bairro...</option>' +
+    Object.entries(zones).map(function(entry) {
+      return '<optgroup label="' + entry[0] + '">' +
+        entry[1].map(function(b) {
+          return '<option value="' + b.name + '" data-fee="' + b.delivery_fee + '">' + b.name + (b.free_delivery ? ' (grátis)' : ' — R$ ' + parseFloat(b.delivery_fee).toFixed(2)) + '</option>';
+        }).join('') + '</optgroup>';
+    }).join('');
+}
+
+function npSetTipo(tipo) {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  const isDelivery = tipo === 'delivery';
+  document.getElementById('np-endereco').style.display = isDelivery ? 'block' : 'none';
+  const btnR = document.getElementById('np-btn-retirada');
+  const btnD = document.getElementById('np-btn-delivery');
+  btnR.style.borderColor = isDelivery ? 'var(--border)' : '#7c3aed';
+  btnR.style.background = isDelivery ? 'var(--card)' : '#1e1b4b';
+  btnR.style.color = isDelivery ? 'var(--muted)' : '#a78bfa';
+  btnD.style.borderColor = isDelivery ? '#7c3aed' : 'var(--border)';
+  btnD.style.background = isDelivery ? '#1e1b4b' : 'var(--card)';
+  btnD.style.color = isDelivery ? '#a78bfa' : 'var(--muted)';
+  overlay._deliveryType = tipo;
+  if (!isDelivery) {
+    document.getElementById('np-fee').value = '0';
+    npCalcTotal();
+  }
+}
+
+function npAtualizarTaxa() {
+  const sel = document.getElementById('np-neighborhood');
+  const opt = sel.options[sel.selectedIndex];
+  const fee = parseFloat(opt && opt.dataset.fee) || 0;
+  document.getElementById('np-fee').value = fee.toFixed(2);
+  npCalcTotal();
+}
+
+async function npBuscarCliente() {
+  const phone = (document.getElementById('np-phone').value || '').replace(/\D/g, '');
+  if (!phone) return;
+  const info = document.getElementById('np-cliente-info');
+  info.textContent = 'Buscando...';
+  info.style.color = '#94a3b8';
+  try {
+    const r = await api('GET', '/delivery/lookup?phone=' + phone);
+    const overlay = document.getElementById('novo-pedido-overlay');
+    if (r && r.customer) {
+      overlay._customerId = r.customer.id;
+      document.getElementById('np-name').value = r.customer.name || '';
+      info.textContent = '✅ Cliente encontrado';
+      info.style.color = '#10b981';
+      // Pré-preenche endereço se tiver
+      if (r.addresses && r.addresses[0]) {
+        const a = r.addresses[0];
+        if (document.getElementById('np-street')) document.getElementById('np-street').value = a.street || '';
+        if (document.getElementById('np-number')) document.getElementById('np-number').value = a.number || '';
+        if (document.getElementById('np-complement')) document.getElementById('np-complement').value = a.complement || '';
+        const sel = document.getElementById('np-neighborhood');
+        if (sel && a.neighborhood) {
+          for (let i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value.toLowerCase() === a.neighborhood.toLowerCase()) {
+              sel.selectedIndex = i;
+              npAtualizarTaxa();
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      overlay._customerId = null;
+      info.textContent = '🆕 Novo cliente — preencha o nome';
+      info.style.color = '#f59e0b';
+    }
+  } catch(e) {
+    document.getElementById('np-cliente-info').textContent = 'Erro ao buscar cliente';
+    document.getElementById('np-cliente-info').style.color = '#ef4444';
+  }
+}
+
+function npFiltrar(input) {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  const dropdown = document.getElementById('np-dropdown');
+  if (!overlay || !dropdown) return;
+  const q = input.value.trim().toLowerCase();
+  const products = overlay._allProducts || [];
+  const filtered = q ? products.filter(function(p) { return p.name.toLowerCase().includes(q); }) : products;
+  if (!filtered.length) { dropdown.style.display = 'none'; return; }
+  dropdown.style.display = 'block';
+  dropdown.innerHTML = filtered.slice(0, 20).map(function(p) {
+    return '<div onclick="npSelecionarProduto(\'' + p.id + '\',\'' + (p.name||'').replace(/'/g,"\\'") + '\',' + (parseFloat(p.price)||0) + ')" ' +
+      'style="padding:8px 12px;cursor:pointer;font-size:.85rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">' +
+      '<span style="color:var(--text)">' + p.name + '</span>' +
+      '<span style="color:#7c3aed;font-weight:700;white-space:nowrap;margin-left:8px">R$ ' + parseFloat(p.price).toFixed(2) + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function npSelecionarProduto(id, name, price) {
+  const sel = document.getElementById('np-prod-sel');
+  const busca = document.getElementById('np-busca');
+  const dropdown = document.getElementById('np-dropdown');
+  sel.value = id; sel.dataset.price = price; sel.dataset.name = name;
+  busca.value = name + ' — R$ ' + parseFloat(price).toFixed(2);
+  dropdown.style.display = 'none';
+}
+
+function npAddProduct() {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  const sel = document.getElementById('np-prod-sel');
+  const busca = document.getElementById('np-busca');
+  const qtyInput = document.getElementById('np-prod-qty');
+  if (!sel.value) { toast('Selecione um produto da lista', true); return; }
+  const price = parseFloat(sel.dataset.price) || 0;
+  const name = sel.dataset.name || '';
+  const pid = sel.value;
+  const qty = parseInt(qtyInput.value) || 1;
+  const existing = overlay._items.find(function(i) { return i.product_id === pid; });
+  if (existing) { existing.quantity += qty; }
+  else { overlay._items.push({ product_id: pid, product_name: name, unit_price: price, quantity: qty }); }
+  npRenderItems();
+  sel.value = ''; sel.dataset.price = ''; sel.dataset.name = '';
+  busca.value = ''; qtyInput.value = 1;
+}
+
+function npRenderItems() {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  const div = document.getElementById('np-items');
+  if (!div) return;
+  const items = overlay._items;
+  if (!items.length) { div.innerHTML = '<p style="color:var(--muted);font-size:.83rem;padding:4px 0">Nenhum item adicionado.</p>'; npCalcTotal(); return; }
+  div.innerHTML = items.map(function(i, idx) {
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">' +
+      '<span style="flex:1;font-size:.85rem;color:var(--cream)">' + i.product_name + '</span>' +
+      '<div style="display:flex;align-items:center;gap:4px">' +
+        '<button type="button" onclick="npQty(' + idx + ',-1)" style="background:#374151;border:none;color:white;width:22px;height:22px;border-radius:4px;cursor:pointer;line-height:1">−</button>' +
+        '<span style="min-width:22px;text-align:center;font-size:.88rem">' + i.quantity + '</span>' +
+        '<button type="button" onclick="npQty(' + idx + ',1)" style="background:#374151;border:none;color:white;width:22px;height:22px;border-radius:4px;cursor:pointer;line-height:1">+</button>' +
+      '</div>' +
+      '<button type="button" onclick="npRemove(' + idx + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:.95rem;padding:0 2px">✕</button>' +
+      '<span style="font-size:.82rem;color:#94a3b8;min-width:56px;text-align:right">R$ ' + (i.unit_price * i.quantity).toFixed(2) + '</span>' +
+    '</div>';
+  }).join('');
+  npCalcTotal();
+}
+
+function npQty(idx, delta) {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  overlay._items[idx].quantity = Math.max(1, overlay._items[idx].quantity + delta);
+  npRenderItems();
+}
+
+function npRemove(idx) {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  overlay._items.splice(idx, 1);
+  npRenderItems();
+}
+
+function npCalcTotal() {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  if (!overlay) return;
+  let subtotal = 0;
+  for (const i of (overlay._items || [])) subtotal += i.unit_price * i.quantity;
+  const fee = parseFloat(document.getElementById('np-fee') && document.getElementById('np-fee').value) || 0;
+  const el = document.getElementById('np-total');
+  if (el) el.textContent = 'R$ ' + (subtotal + fee).toFixed(2).replace('.', ',');
+}
+
+async function npConfirmar() {
+  const overlay = document.getElementById('novo-pedido-overlay');
+  const phone = (document.getElementById('np-phone').value || '').replace(/\D/g, '');
+  const name = (document.getElementById('np-name').value || '').trim();
+  const items = overlay._items || [];
+  if (!phone) { toast('Informe o telefone do cliente', true); return; }
+  if (!name) { toast('Informe o nome do cliente', true); return; }
+  if (!items.length) { toast('Adicione ao menos um produto', true); return; }
+  const deliveryType = overlay._deliveryType || 'retirada';
+  const isDelivery = deliveryType === 'delivery';
+  const fee = parseFloat(document.getElementById('np-fee').value) || 0;
+  const payment = (document.getElementById('np-payment').value || '').trim() || 'dinheiro';
+  let delivery_address = null;
+  if (isDelivery) {
+    const street = document.getElementById('np-street').value.trim();
+    const number = document.getElementById('np-number').value.trim();
+    const neighborhood = document.getElementById('np-neighborhood').value;
+    const complement = document.getElementById('np-complement').value.trim();
+    if (!street || !neighborhood) { toast('Preencha rua e bairro', true); return; }
+    delivery_address = { street, number, neighborhood, complement };
+  }
+  try {
+    const novo = await api('POST', '/orders/from-admin', {
+      customer_id: overlay._customerId || null,
+      customer_phone: phone,
+      customer_name: name,
+      items,
+      delivery_type: deliveryType,
+      delivery_address,
+      payment_method: payment,
+      delivery_fee: fee,
+    });
+    toast('Pedido #' + novo.order_number + ' criado! WhatsApp enviado ao cliente.');
+    overlay.remove();
+    carregarPedidos();
+  } catch(e) {
+    toast(e.message || 'Erro ao criar pedido', true);
   }
 }
 

@@ -520,12 +520,32 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/orders/from-admin — cria pedido substituto (admin)
+// POST /api/orders/from-admin — cria pedido via admin (novo ou substituto)
 router.post('/from-admin', async (req, res) => {
-  const { customer_id, items, delivery_type, delivery_address, payment_method, delivery_fee } = req.body;
-  if (!customer_id || !Array.isArray(items) || !items.length) {
-    return res.status(400).json({ error: 'customer_id e items são obrigatórios' });
+  const { customer_id, customer_phone, customer_name, items, delivery_type, delivery_address, payment_method, delivery_fee } = req.body;
+  if (!Array.isArray(items) || !items.length) {
+    return res.status(400).json({ error: 'items são obrigatórios' });
   }
+
+  // Resolve customer_id por telefone se não fornecido
+  let cust_id = customer_id;
+  if (!cust_id && customer_phone) {
+    const phone = customer_phone.replace(/\D/g, '');
+    const existing = await pool.query(`SELECT id FROM customers WHERE phone = $1`, [phone]);
+    if (existing.rows[0]) {
+      cust_id = existing.rows[0].id;
+      if (customer_name) {
+        await pool.query(`UPDATE customers SET name = $1 WHERE id = $2 RETURNING id`, [customer_name, cust_id]);
+      }
+    } else {
+      const created = await pool.query(
+        `INSERT INTO customers (name, phone, active) VALUES ($1, $2, true) RETURNING id`,
+        [customer_name || phone, phone]
+      );
+      cust_id = created.rows[0].id;
+    }
+  }
+  if (!cust_id) return res.status(400).json({ error: 'customer_id ou customer_phone são obrigatórios' });
   try {
     let subtotal = 0;
     for (const i of items) {
@@ -536,7 +556,7 @@ router.post('/from-admin', async (req, res) => {
     const orderRes = await pool.query(
       `INSERT INTO orders (customer_id, status, delivery_type, delivery_address, payment_method, subtotal, delivery_fee, total)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [customer_id, 'confirmado', delivery_type || 'retirada',
+      [cust_id, 'confirmado', delivery_type || 'retirada',
        delivery_address ? JSON.stringify(delivery_address) : null,
        payment_method || 'dinheiro', subtotal, fee, total]
     );
@@ -552,7 +572,7 @@ router.post('/from-admin', async (req, res) => {
     // Busca telefone e nome do cliente para enviar WhatsApp
     const cust = await pool.query(
       `SELECT name, phone FROM customers WHERE id = $1`,
-      [customer_id]
+      [cust_id]
     );
     if (cust.rows[0]) {
       const phone = (cust.rows[0].phone || '').replace(/\D/g, '');
@@ -560,7 +580,9 @@ router.post('/from-admin', async (req, res) => {
       if (phone) {
         const itemsList = items.map(i => `• ${i.quantity}× ${i.product_name}`).join('\n');
         const feeText = fee > 0 ? `\n🛵 Taxa de entrega: R$ ${fee.toFixed(2)}` : '';
-        const msg = `📋 *Pedido #${order.order_number} confirmado!*\n\nOlá ${firstName}! Seu pedido foi refeito e já está em preparo:\n\n${itemsList}${feeText}\n\n💰 *Total: R$ ${total.toFixed(2)}* (${payment_method || 'dinheiro'})\n\nObrigado pela preferência! ☕`;
+        const isRetirada = (delivery_type || 'retirada') === 'retirada';
+        const deliveryLine = isRetirada ? '\n🏪 Retirada no local' : `\n🛵 Entrega${feeText}`;
+        const msg = `✅ *Pedido #${order.order_number} confirmado!*\n\nOlá ${firstName}! Recebemos seu pedido:\n\n${itemsList}${deliveryLine}\n\n💰 *Total: R$ ${total.toFixed(2)}* (${payment_method || 'dinheiro'})\n\nObrigado pela preferência! ☕`;
         sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/from-admin] status:', code));
       }
     }
