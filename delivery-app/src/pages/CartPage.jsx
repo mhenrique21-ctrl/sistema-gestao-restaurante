@@ -43,7 +43,7 @@ export default function CartPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-36">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-52">
         <div className="px-4 pt-4 space-y-3">
           {items.map((item) => (
             <div key={item.key} className="rounded-2xl p-4 fade-in"
@@ -113,7 +113,7 @@ export default function CartPage() {
       </div>
 
       {/* CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-4 safe-bottom z-30"
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-4 safe-bottom z-50"
         style={{ background: 'var(--bg)' }}>
         {!storeStatus.open && (
           <div className="mb-2 rounded-xl px-4 py-2.5 flex items-center gap-2"
