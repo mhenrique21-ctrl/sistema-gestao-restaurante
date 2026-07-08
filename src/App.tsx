@@ -4677,7 +4677,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
-              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
+              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:4}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column" as const,gap:3,flexShrink:0,alignItems:"center"}}>
@@ -4736,7 +4736,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
-              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}</div>}
+              {item.adicionadoPor&&<div style={{fontSize:9,marginTop:2,color:getCorPorNome(item.adicionadoPor),fontWeight:700,letterSpacing:0.3}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:4}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
             <div style={{display:"flex",gap:2}}>
