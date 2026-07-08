@@ -583,6 +583,15 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const seen=new Set<string>();
       return merged.filter((p:any)=>{const k=(p.nome||"").trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
     };
+    // Union por ID entre local (p) e servidor (s): preserva edições locais que ainda não chegaram ao servidor.
+    const unionById=(localArr:any[],serverArr:any[],sortByCriadoEmDesc?:boolean)=>{
+      const m=new Map<string,any>();
+      (localArr||[]).forEach((x:any)=>m.set(x.id,x));
+      (serverArr||[]).forEach((x:any)=>m.set(x.id,x));
+      let out=[...m.values()].filter((x:any)=>!_listaDeletados.has(x.id));
+      if(sortByCriadoEmDesc)out=out.sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+      return out;
+    };
     next[emp]={
       ...s,
       vendas:        byId(s.vendas||[]),
@@ -599,12 +608,13 @@ const mergeFromServer=(prev:any,updates:any)=>{
       normalizacoes: byId(s.normalizacoes||[]),
       movEstoque:    byId(s.movEstoque||[]),
       usuarios:      byId(s.usuarios||[]),
-      produtosProducao: byId(s.produtosProducao||[]),
-      pedidosProducao: byId(s.pedidosProducao||[]),
+      produtosProducao: unionById(p.produtosProducao||[],s.produtosProducao||[]),
+      pedidosProducao:  unionById(p.pedidosProducao||[],s.pedidosProducao||[],true),
+      itensProducaoPendentes: unionById(p.itensProducaoPendentes||[],s.itensProducaoPendentes||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
       produtosLista: byIdDedup(s.produtosLista||[]),
-      pedidosLista:  (()=>{const m=new Map();(p.pedidosLista||[]).forEach((x:any)=>m.set(x.id,x));(s.pedidosLista||[]).forEach((x:any)=>m.set(x.id,x));return [...m.values()].filter((x:any)=>!_listaDeletados.has(x.id)).sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));})()
+      pedidosLista:  unionById(p.pedidosLista||[],s.pedidosLista||[],true)
     };
     // listaCompras: merge por ID, versão mais recente (updatedAt) vence
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
@@ -702,7 +712,7 @@ export default function App() {
       });
     };
     poll();
-    const interval=tab==="lista"?300:3000;
+    const interval=(tab==="lista"||tab==="producao")?300:3000;
     const t=setInterval(poll,interval);
     return()=>clearInterval(t);
   },[login,tab]);
@@ -1010,7 +1020,7 @@ export default function App() {
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
           ? (tab==="producao"
-            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
+            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave}/>
             : tab==="agenda"
             ? <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={false} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} setState={setState} login={login} setDbAndSave={setDbAndSave}/>)
@@ -1019,7 +1029,7 @@ export default function App() {
               {tab==="vendas"     && <Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -4847,7 +4857,7 @@ const EMOJI_PALETTE=["🎂","🥧","🍮","🍗","🥖","🥟","🥐","👩‍�
 let _dbIconesProd:Record<string,string>={};
 const prodCatIcon=(c:string)=>_dbIconesProd[c]||ICON_PROD[c]||"📦";
 
-function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void}){
   const isAdmin=login?.role==="admin";
   _dbIconesProd=db.iconesProducao||{};
   const [iconPicker,setIconPicker]=useState<string|null>(null);
@@ -4934,7 +4944,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     setForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
   const editItem=(it:any)=>{setEditId(it.id);setForm({nome:it.nome,qtd:String(it.quantidade),qtdAtual:it.qtdAtual||"",unidade:it.unidade||"un",cat:it.cat||"",obs:it.obs||""});setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
-  const delItem=(id:string)=>setItens(prev=>prev.filter(it=>it.id!==id));
+  const delItem=(id:string)=>{_listaDeletados.add(id);setItens(prev=>prev.filter(it=>it.id!==id));};
   const cancelEdit=()=>{setEditId(null);setForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});};
 
   // Catalog quick-fill — persiste no localStorage para sobreviver à troca de aba
@@ -4958,7 +4968,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
     const itensFilled=_itensFilled(prodsCatalog);
     if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade (Atual ou Pedido).");
     const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
-    setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
+    (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}
     setQtdsCatalog({});setQtdsAtual({});
     if(confirm("✅ Pedido gerado! Compartilhar via WhatsApp?"))
@@ -4980,8 +4990,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub}:{db:an
   const gerarPedido=()=>{
     if(!itensMarcados.length)return alert("Marque pelo menos 1 produto.");
     const pedido={id:uid(),data:today(),itens:itensMarcados.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    const idsMarcados=itensMarcados.map((it:any)=>it.id);
+    idsMarcados.forEach((id:string)=>_listaDeletados.add(id));
     const restantes=itens.filter((it:any)=>!marcados.has(it.id));
-    setDb((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])],itensProducaoPendentes:restantes}));
+    (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])],itensProducaoPendentes:restantes}));
     setMarcados(new Set());
     if(isMobile&&confirm("Pedido gerado! Compartilhar via WhatsApp?"))
       window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(pedido))}`,"_blank");
