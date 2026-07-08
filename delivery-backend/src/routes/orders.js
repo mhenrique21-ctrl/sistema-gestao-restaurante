@@ -590,8 +590,8 @@ router.post('/from-admin', async (req, res) => {
     broadcastOrderUpdate({ event: 'new_order', order: { ...order, item_count: items.length } });
     res.status(201).json({ id: order.id, order_number: order.order_number });
   } catch (err) {
-    console.error('[orders/from-admin]', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('[orders/from-admin]', err.message, '| code:', err.code, '| detail:', err.detail);
+    res.status(500).json({ error: err.message || 'Erro interno' });
   }
 });
 
