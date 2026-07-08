@@ -2270,6 +2270,12 @@ function cupomForm(c = {}) {
         <div><label>Máx. por cliente (vazio = ilimitado)</label><input id="cp-max-per" type="number" value="${c.max_uses_per_customer||''}" placeholder="Ilimitado" /></div>
       </div>
       <div><label>Validade (opcional)</label><input id="cp-expires" type="date" value="${c.expires_at?c.expires_at.slice(0,10):''}" /></div>
+      <div>
+        <label>Categorias permitidas <span style="font-size:.75rem;color:var(--muted);font-weight:400">(vazio = todas)</span></label>
+        <div id="cp-cats-wrap" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;font-size:.83rem">
+          <span style="color:var(--muted)">Carregando categorias...</span>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -2292,8 +2298,23 @@ function getCupomData() {
     max_uses: document.getElementById('cp-max')?.value ? parseInt(document.getElementById('cp-max').value) : null,
     max_uses_per_customer: document.getElementById('cp-max-per')?.value ? parseInt(document.getElementById('cp-max-per').value) : null,
     expires_at: document.getElementById('cp-expires')?.value || null,
+    allowed_categories: Array.from(document.querySelectorAll('.cp-cat:checked')).map(c => c.value),
     active: true,
   };
+}
+
+function loadCupomCats(selectedIds = []) {
+  api('GET', '/categories').then(cats => {
+    const wrap = document.getElementById('cp-cats-wrap');
+    if (!wrap) return;
+    const excluir = ['Adicionais', 'Ofertas'];
+    const visiveis = cats.filter(c => !excluir.includes(c.name));
+    wrap.innerHTML = visiveis.map(c => `
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="checkbox" class="cp-cat" value="${c.id}" ${selectedIds.includes(c.id)?'checked':''}>
+        ${c.name}
+      </label>`).join('');
+  });
 }
 
 function modalNovoCupom() {
@@ -2303,6 +2324,7 @@ function modalNovoCupom() {
     await api('POST', '/coupons', data);
     toast('Cupom criado!'); closeModal(); renderCupons();
   });
+  setTimeout(() => loadCupomCats([]), 50);
 }
 
 async function modalEditarCupom(id) {
@@ -2313,7 +2335,7 @@ async function modalEditarCupom(id) {
     await api('PATCH', '/coupons/' + id, getCupomData());
     toast('Cupom atualizado!'); closeModal(); renderCupons();
   });
-  setTimeout(updateCupomField, 50);
+  setTimeout(() => { updateCupomField(); loadCupomCats(c.allowed_categories || []); }, 50);
 }
 
 async function toggleCupom(id, current) {
