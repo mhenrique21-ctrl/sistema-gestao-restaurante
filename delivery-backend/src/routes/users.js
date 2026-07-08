@@ -54,8 +54,9 @@ router.patch('/:id', async (req, res) => {
     values.push(hash);
   }
   if (req.body.permissions !== undefined) {
-    updates.push(`permissions = $${idx++}`);
-    values.push(req.body.permissions);
+    const perms = Array.isArray(req.body.permissions) ? req.body.permissions : [];
+    updates.push(`permissions = $${idx++}::text[]`);
+    values.push(`{${perms.join(',')}}`);
   }
   if (!updates.length) return res.status(400).json({ error: 'Nenhum campo' });
   values.push(req.params.id);
