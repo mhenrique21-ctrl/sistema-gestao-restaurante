@@ -217,12 +217,11 @@ export default function CheckoutPage() {
         delivery_address: deliveryType === 'delivery' ? { street, number, neighborhood, complement } : null,
         payment_method: payment,
         delivery_fee: deliveryFee,
-        notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : '', couponApplied ? `Cupom: ${couponApplied.code}` : ''].filter(Boolean).join(' | ') || null,
-        discount: discount > 0 ? discount : undefined,
+        notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : ''].filter(Boolean).join(' | ') || null,
+        coupon_code: couponApplied?.code || undefined,
         items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
       })
       clear()
-      if (couponApplied?.code) api.useCoupon(couponApplied.code).catch(() => {})
       const BASE = import.meta.env.VITE_API_URL || ''
       if (deliveryType === 'delivery') {
         const customerId = foundCustomer?.id || order.customer_id

@@ -98,7 +98,7 @@ async function insertItemAddons(orderItemId, addons, client = pool) {
 // POST /api/orders/guest — pedido sem autenticação (app cliente)
 router.post('/guest', async (req, res) => {
   const { name, phone, delivery_type, delivery_address,
-          payment_method, notes, delivery_fee = 0, items } = req.body;
+          payment_method, notes, delivery_fee = 0, items, coupon_code } = req.body;
 
   if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
   if (!items?.length) return res.status(400).json({ error: 'Carrinho vazio' });
@@ -139,12 +139,37 @@ router.post('/guest', async (req, res) => {
     const fee = parseFloat(delivery_fee);
     const neighborhoodName = delivery_address?.neighborhood || null;
     const { discount: promoDiscount, promo: appliedPromo } = await applyPromotion(subtotal, fee, neighborhoodName);
-    const total = subtotal + fee - promoDiscount;
+
+    // Validar cupom no servidor
+    let couponDiscount = 0;
+    let appliedCoupon = null;
+    if (coupon_code) {
+      const cRes = await pool.query(
+        `SELECT * FROM coupons WHERE code = $1 AND active = true`,
+        [coupon_code.trim().toUpperCase()]
+      );
+      const c = cRes.rows[0];
+      if (c && !(c.expires_at && new Date(c.expires_at) < new Date())
+             && !(c.max_uses !== null && c.uses_count >= c.max_uses)
+             && subtotal >= parseFloat(c.min_order_value)) {
+        if (c.discount_type === 'percent')      couponDiscount = subtotal * (parseFloat(c.discount_value) / 100);
+        else if (c.discount_type === 'fixed')   couponDiscount = parseFloat(c.discount_value);
+        else if (c.discount_type === 'free_delivery') couponDiscount = fee;
+        couponDiscount = Math.round(Math.min(couponDiscount, subtotal + fee) * 100) / 100;
+        appliedCoupon = c;
+        await pool.query(`UPDATE coupons SET uses_count = uses_count + 1 WHERE id = $1`, [c.id]);
+      }
+    }
+
+    // Usa o maior desconto entre promoção e cupom
+    const finalDiscount = Math.max(promoDiscount, couponDiscount);
+    const discountLabel = couponDiscount >= promoDiscount ? (appliedCoupon?.description || coupon_code) : appliedPromo?.name;
+    const total = subtotal + fee - finalDiscount;
 
     const orderResult = await pool.query(
       `INSERT INTO orders (customer_id, user_id, delivery_type, delivery_address, subtotal,
         delivery_fee, discount, total, payment_method, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,${promoDiscount},$7,$8,$9,'aguardando_pagamento') RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,${finalDiscount},$7,$8,$9,'aguardando_pagamento') RETURNING *`,
       [customer.id, adminId, delivery_type || 'delivery',
        delivery_address ? JSON.stringify(delivery_address) : null,
        subtotal, fee, total, payment_method, notes || null]
@@ -194,8 +219,8 @@ router.post('/guest', async (req, res) => {
             : `${delivery_address.street || ''}, ${delivery_address.number || ''} - ${delivery_address.neighborhood || ''}`)
           : '';
         const tipo = delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
-        const promoLine = promoDiscount > 0 ? `\n🎉 Desconto (${appliedPromo?.name}): -R$ ${promoDiscount.toFixed(2).replace('.', ',')}` : '';
-        const taxaLine = fee > 0 ? `\nTaxa entrega: R$ ${(fee - promoDiscount).toFixed(2).replace('.', ',')}${promoDiscount > 0 ? ' ✅ Grátis!' : ''}` : '';
+        const promoLine = finalDiscount > 0 ? `\n🎉 Desconto (${discountLabel}): -R$ ${finalDiscount.toFixed(2).replace('.', ',')}` : '';
+        const taxaLine = fee > 0 ? `\nTaxa entrega: R$ ${fee.toFixed(2).replace('.', ',')}${(appliedCoupon?.discount_type === 'free_delivery' || appliedPromo?.discount_type === 'free_delivery') ? ' ✅ Grátis!' : ''}` : '';
         const subtotalLine = parseFloat(delivery_fee) > 0 ? `\nSubtotal: R$ ${subtotal.toFixed(2).replace('.', ',')}` : '';
         const obsGeral = notes ? `\n\n📝 *Obs:* ${notes}` : '';
         const msgCliente =
