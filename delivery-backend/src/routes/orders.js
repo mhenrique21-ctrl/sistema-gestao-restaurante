@@ -522,7 +522,7 @@ router.post('/', async (req, res) => {
 
 // POST /api/orders/from-admin — cria pedido via admin (novo ou substituto)
 router.post('/from-admin', async (req, res) => {
-  const { customer_id, customer_phone, customer_name, items, delivery_type, delivery_address, payment_method, delivery_fee } = req.body;
+  const { customer_id, customer_phone, customer_name, items, delivery_type, delivery_address, payment_method, delivery_fee, troco } = req.body;
   if (!Array.isArray(items) || !items.length) {
     return res.status(400).json({ error: 'items são obrigatórios' });
   }
@@ -582,7 +582,8 @@ router.post('/from-admin', async (req, res) => {
         const feeText = fee > 0 ? `\n🛵 Taxa de entrega: R$ ${fee.toFixed(2)}` : '';
         const isRetirada = (delivery_type || 'retirada') === 'retirada';
         const deliveryLine = isRetirada ? '\n🏪 Retirada no local' : `\n🛵 Entrega${feeText}`;
-        const msg = `✅ *Pedido #${order.order_number} confirmado!*\n\nOlá ${firstName}! Recebemos seu pedido:\n\n${itemsList}${deliveryLine}\n\n💰 *Total: R$ ${total.toFixed(2)}* (${payment_method || 'dinheiro'})\n\nObrigado pela preferência! ☕`;
+        const trocoLine = troco && parseFloat(troco) > 0 ? `\n💵 Troco para: R$ ${parseFloat(troco).toFixed(2)}` : '';
+        const msg = `✅ *Pedido #${order.order_number} confirmado!*\n\nOlá ${firstName}! Recebemos seu pedido:\n\n${itemsList}${deliveryLine}\n\n💰 *Total: R$ ${total.toFixed(2)}* (${payment_method || 'dinheiro'})${trocoLine}\n\nObrigado pela preferência! ☕`;
         sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/from-admin] status:', code));
       }
     }

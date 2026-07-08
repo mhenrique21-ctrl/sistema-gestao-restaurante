@@ -2160,9 +2160,14 @@ function buildNovoPedidoHtml(customerName, customerPhone, deliveryType, items, b
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">' +
       '<div>' +
         '<label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">💳 Pagamento</label>' +
-        '<select id="np-payment" style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+        '<select id="np-payment" onchange="npToggleTroco()" style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
           '<option value="">Carregando...</option>' +
         '</select>' +
+        '<div id="np-troco-wrap" style="display:none;margin-top:6px">' +
+          '<label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">💵 Troco para (R$)</label>' +
+          '<input id="np-troco" type="number" min="0" step="0.01" placeholder="0,00" ' +
+            'style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box">' +
+        '</div>' +
       '</div>' +
       '<div>' +
         '<label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">🛵 Taxa de entrega (R$)</label>' +
@@ -2229,6 +2234,12 @@ function npMatchBairro(neighborhood) {
     }
   }
   return false;
+}
+
+function npToggleTroco() {
+  const pay = (document.getElementById('np-payment').value || '').toLowerCase();
+  const wrap = document.getElementById('np-troco-wrap');
+  if (wrap) wrap.style.display = pay.includes('dinheiro') ? 'block' : 'none';
 }
 
 function npAtualizarTaxa() {
@@ -2395,6 +2406,8 @@ async function npConfirmar() {
   const isDelivery = deliveryType === 'delivery';
   const fee = parseFloat(document.getElementById('np-fee').value) || 0;
   const payment = (document.getElementById('np-payment').value || '').trim() || 'dinheiro';
+  const trocoVal = parseFloat(document.getElementById('np-troco') && document.getElementById('np-troco').value) || 0;
+  const troco = payment.toLowerCase().includes('dinheiro') && trocoVal > 0 ? trocoVal : 0;
   let delivery_address = null;
   if (isDelivery) {
     const street = document.getElementById('np-street').value.trim();
@@ -2414,6 +2427,7 @@ async function npConfirmar() {
       delivery_address,
       payment_method: payment,
       delivery_fee: fee,
+      troco: troco || null,
     });
     toast('Pedido #' + novo.order_number + ' criado! WhatsApp enviado ao cliente.');
     overlay.remove();
