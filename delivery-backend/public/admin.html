@@ -1799,10 +1799,30 @@ async function avancarStatus(id, status) {
     toast('Status atualizado!');
   }
 }
-function editarPedido(id, phone, deliveryType) {
+async function editarPedido(id, phone, deliveryType) {
   const isDelivery = deliveryType === 'delivery';
   const overlay = document.createElement('div');
-  overlay.style = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center';
+  overlay.id = 'edit-pedido-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center';
+
+  let neighborhoodsHtml = '<option value="">Selecionar bairro...</option>';
+  if (isDelivery) {
+    try {
+      const bairros = await api('GET', '/neighborhoods');
+      const zones = {};
+      for (const b of bairros) {
+        if (!zones[b.zone || 'Outros']) zones[b.zone || 'Outros'] = [];
+        zones[b.zone || 'Outros'].push(b);
+      }
+      neighborhoodsHtml = '<option value="">Selecionar bairro...</option>' +
+        Object.entries(zones).map(([zone, list]) =>
+          '<optgroup label="' + zone + '">' +
+          list.map(b => '<option value="' + b.name + '" data-fee="' + b.delivery_fee + '">' + b.name + (b.free_delivery ? ' (grátis)' : ' — R$ ' + parseFloat(b.delivery_fee).toFixed(2)) + '</option>').join('') +
+          '</optgroup>'
+        ).join('');
+    } catch(e) { /* usa opção vazia */ }
+  }
+
   overlay.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:420px">
       <h3 style="margin-bottom:18px;font-size:1rem;color:var(--text)">✏️ Editar Pedido</h3>
@@ -1813,13 +1833,16 @@ function editarPedido(id, phone, deliveryType) {
       <input id="ep-street" placeholder="Rua..." style="margin-bottom:8px" />
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <div><label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Número</label><input id="ep-number" placeholder="Nº" /></div>
-        <div><label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Bairro</label><input id="ep-neighborhood" placeholder="Bairro" /></div>
+        <div>
+          <label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Bairro</label>
+          <select id="ep-neighborhood" style="width:100%;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem">${neighborhoodsHtml}</select>
+        </div>
       </div>
       <label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Complemento</label>
       <input id="ep-complement" placeholder="Apto, bloco..." style="margin-bottom:14px" />
       ` : ''}
       <div style="display:flex;gap:8px;margin-top:4px">
-        <button onclick="this.closest('div[style*=inset]').remove()" class="btn btn-secondary" style="flex:1">Cancelar</button>
+        <button onclick="document.getElementById('edit-pedido-overlay').remove()" class="btn btn-secondary" style="flex:1">Cancelar</button>
         <button onclick="salvarEdicaoPedido('${id}','${isDelivery}')" class="btn" style="flex:1;background:#7c3aed;color:#fff">Salvar</button>
       </div>
     </div>`;
