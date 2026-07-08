@@ -677,20 +677,20 @@ export default function App() {
     if(!login)return;
     const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
     const poll=()=>{
-      if(syncTimer.current||directSaveRef.current||Date.now()-directSaveEndRef.current<1500)return;
+      if(syncTimer.current||directSaveRef.current||Date.now()-directSaveEndRef.current<300)return;
       const seq=saveSeqRef.current;
       const ts=Date.now();
       Promise.all(emps.map(emp=>
         fetch(`/api/dados/${emp}?_=${ts}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
       )).then(results=>{
-        if(syncTimer.current||directSaveRef.current||saveSeqRef.current!==seq||Date.now()-directSaveEndRef.current<1500)return;
+        if(syncTimer.current||directSaveRef.current||saveSeqRef.current!==seq||Date.now()-directSaveEndRef.current<300)return;
         const updates:any={};
         results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
         if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
       });
     };
     poll();
-    const interval=tab==="lista"?500:3000;
+    const interval=tab==="lista"?300:3000;
     const t=setInterval(poll,interval);
     return()=>clearInterval(t);
   },[login,tab]);
