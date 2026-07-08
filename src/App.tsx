@@ -501,6 +501,18 @@ const migrateDb=(m:any)=>{
       });
       m[e].produtosDedupV2=true;
     }
+    // Limpar caracteres corrompidos (�, zero-width) de nomes de produtos/itens
+    {
+      const RE_LIXO=/[\uFFFD\u200B-\u200D\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+      const temLixo=(s:string)=>{RE_LIXO.lastIndex=0;return RE_LIXO.test(s||"");};
+      const limpar=(s:string)=>String(s||"").replace(RE_LIXO,"").replace(/\s{2,}/g," ").trim();
+      m[e].produtosLista=(m[e].produtosLista||[]).map((p:any)=>temLixo(p.nome)?{...p,nome:limpar(p.nome)}:p);
+      m[e].listaCompras=(m[e].listaCompras||[]).map((i:any)=>temLixo(i.nome)?{...i,nome:limpar(i.nome)}:i);
+      m[e].pedidosLista=(m[e].pedidosLista||[]).map((ped:any)=>
+        (ped.itens||[]).some((i:any)=>temLixo(i.nome))
+          ?{...ped,itens:ped.itens.map((i:any)=>temLixo(i.nome)?{...i,nome:limpar(i.nome)}:i)}
+          :ped);
+    }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].usuarios)m[e].usuarios=[];
     if(!m[e].usuariosSeedDone){
