@@ -690,7 +690,7 @@ export default function App() {
       });
     };
     poll();
-    const interval=tab==="lista"?1000:3000;
+    const interval=tab==="lista"?500:3000;
     const t=setInterval(poll,interval);
     return()=>clearInterval(t);
   },[login,tab]);
@@ -3594,26 +3594,20 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setPendingMpLinks(null);setConcBusca("");};
 
   const toggle=(id:string)=>{
-    const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
-    if(!item)return;
-    const nowComprado=!item.comprado;
-
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
+      const nowComprado=!it.comprado;
       const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
       return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
     });
   };
   const toggleNaoTem=(id:string)=>{
-    const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
-    if(!item)return;
-    const nowNaoTem=!item.naoTem;
-
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
+      const nowNaoTem=!it.naoTem;
       return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:nowNaoTem,comprado:false,updatedAt:ts}:i)};
     });
   };
