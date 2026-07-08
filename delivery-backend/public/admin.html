@@ -2904,6 +2904,27 @@ const STATUS_FIN = {
   cancelado: 'Cancelado',
 };
 
+function renderExcluidos(list, fmt) {
+  if (!list || !list.length) return '';
+  const rows = list.map(function(o) {
+    const falt = Array.isArray(o.faltantes) && o.faltantes.length ? o.faltantes.join(', ') : '—';
+    const hora = new Date(o.deleted_at).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    return '<tr style="opacity:.85">'
+      + '<td><strong style="color:#f87171">#' + (o.order_number||'—') + '</strong></td>'
+      + '<td>' + (o.customer_name||'—') + '</td>'
+      + '<td style="color:#f87171"><strong>' + fmt(o.total) + '</strong></td>'
+      + '<td>' + (o.payment_method||'—') + '</td>'
+      + '<td style="color:#f59e0b">' + falt + '</td>'
+      + '<td style="color:var(--muted)">' + (o.reason||'—') + '</td>'
+      + '<td style="white-space:nowrap">' + hora + '</td>'
+      + '</tr>';
+  }).join('');
+  return '<h3 style="margin-bottom:12px;margin-top:28px;color:#f87171">🗑 Pedidos Excluídos (' + list.length + ')</h3>'
+    + '<table style="font-size:.78rem">'
+    + '<tr><th>#</th><th>Cliente</th><th>Total</th><th>Pagamento</th><th>Produtos Faltantes</th><th>Motivo</th><th>Excluído às</th></tr>'
+    + rows + '</table>';
+}
+
 async function pageFinanceiro() {
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('content').innerHTML = `
@@ -3008,24 +3029,7 @@ async function carregarRelatorio() {
           </tr>`).join('')}
       </table>
 
-      ${(r.deleted_orders||[]).length > 0 ? `
-      <h3 style="margin-bottom:12px;margin-top:28px;color:#f87171">🗑 Pedidos Excluídos (${r.deleted_orders.length})</h3>
-      <table style="font-size:.78rem">
-        <tr><th>#</th><th>Cliente</th><th>Total</th><th>Pagamento</th><th>Produtos Faltantes</th><th>Motivo</th><th>Excluído às</th></tr>
-        ${r.deleted_orders.map(o => {
-          const falt = Array.isArray(o.faltantes) && o.faltantes.length ? o.faltantes.join(', ') : '—';
-          const hora = new Date(o.deleted_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-          return `<tr style="opacity:.85">
-            <td><strong style="color:#f87171">#${o.order_number||'—'}</strong></td>
-            <td>${o.customer_name||'—'}</td>
-            <td style="color:#f87171"><strong>${fmt(o.total)}</strong></td>
-            <td>${o.payment_method||'—'}</td>
-            <td style="color:#f59e0b">${falt}</td>
-            <td style="color:var(--muted)">${o.reason||'—'}</td>
-            <td style="white-space:nowrap">${hora}</td>
-          </tr>`;
-        }).join('')}
-      </table>` : ''}
+      ${renderExcluidos(r.deleted_orders, fmt)}
       `;
   } catch(e) {
     document.getElementById('fin-content').innerHTML = `<p style="color:var(--danger)">Erro: ${e.message}</p>`;
