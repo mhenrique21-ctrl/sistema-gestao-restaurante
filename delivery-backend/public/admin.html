@@ -2023,7 +2023,7 @@ async function pagePromocoes() {
 }
 
 async function renderPromoProdutos() {
-  const prods = await api('GET', '/products');
+  const prods = await api('GET', '/menu/admin').then(cats => cats.flatMap(c => c.products.map(p => ({...p, category_name: c.name}))));
   const comPromo = prods.filter(p => p.promo_price != null);
   const DAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   const el = document.getElementById('promo-produtos-list');
@@ -2086,11 +2086,11 @@ function modalPromoPreco(prod = null) {
     toast('Promoção salva!'); closeModal(); pagePromocoes();
   });
   if (!prod) {
-    api('GET', '/products').then(prods => {
+    api('GET', '/menu/admin').then(cats => cats.flatMap(c => c.products.map(p => ({...p, category_name: c.name})))).then(prods => {
       const sel = document.getElementById('pp-prod');
       if (!sel) return;
       prods.filter(p => p.available !== false).sort((a,b) => a.name.localeCompare(b.name)).forEach(p => {
-        const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o);
+        const o = document.createElement('option'); o.value = p.id; o.textContent = p.name + ' (' + p.category_name + ')'; sel.appendChild(o);
       });
     });
   }
