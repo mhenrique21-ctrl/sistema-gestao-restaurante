@@ -2088,13 +2088,20 @@ async function refazerPedido(id) {
       <p style="font-size:.8rem;color:var(--muted);margin-bottom:16px">Cliente: <strong>${orderData.customer_name||'—'}</strong></p>
       <p style="font-size:.83rem;color:var(--muted);margin-bottom:8px">Itens do novo pedido:</p>
       <div id="refazer-items" style="max-height:200px;overflow-y:auto;margin-bottom:14px"></div>
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-        <select id="refazer-prod-sel" style="flex:1;min-width:180px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.82rem">
-          <option value="">+ Adicionar produto...</option>
-          ${allProducts.map(p => '<option value="' + p.id + '" data-price="' + p.price + '" data-name="' + (p.name||'').replace(/"/g,'&quot;') + '">' + p.name + ' — R$ ' + parseFloat(p.price).toFixed(2) + '</option>').join('')}
-        </select>
-        <input type="number" id="refazer-prod-qty" value="1" min="1" style="width:52px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text)">
-        <button type="button" onclick="refazerAddProduct()" style="background:#7c3aed;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.82rem">Adicionar</button>
+      <div style="position:relative;margin-bottom:14px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <div style="flex:1;position:relative">
+            <input type="text" id="refazer-busca" placeholder="🔍 Buscar produto para adicionar..."
+              autocomplete="off"
+              oninput="refazerFiltrar(this)"
+              onfocus="refazerFiltrar(this)"
+              style="width:100%;padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.85rem;box-sizing:border-box;outline:none">
+            <div id="refazer-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:180px;overflow-y:auto;z-index:10;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.3)"></div>
+          </div>
+          <input type="number" id="refazer-prod-qty" value="1" min="1" style="width:52px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text)">
+          <button type="button" onclick="refazerAddProduct()" style="background:#7c3aed;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.82rem;white-space:nowrap">+ Add</button>
+        </div>
+        <input type="hidden" id="refazer-prod-sel" data-price="" data-name="">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
         <div>
@@ -2144,20 +2151,51 @@ function refazerRemove(btn) {
   overlay._buildRows();
 }
 
+function refazerFiltrar(input) {
+  const overlay = document.getElementById('refazer-overlay');
+  const dropdown = document.getElementById('refazer-dropdown');
+  if (!overlay || !dropdown) return;
+  const q = input.value.trim().toLowerCase();
+  const products = overlay._allProducts || [];
+  const filtered = q ? products.filter(p => p.name.toLowerCase().includes(q)) : products;
+  if (!filtered.length) { dropdown.style.display = 'none'; return; }
+  dropdown.style.display = 'block';
+  dropdown.innerHTML = filtered.slice(0, 20).map(p =>
+    '<div class="refazer-drop-item" onclick="refazerSelecionarProduto(\'' + p.id + '\',\'' + (p.name||'').replace(/'/g,"\\'") + '\',' + (parseFloat(p.price)||0) + ')" ' +
+    'style="padding:8px 12px;cursor:pointer;font-size:.85rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">' +
+      '<span style="color:var(--text)">' + p.name + '</span>' +
+      '<span style="color:#7c3aed;font-weight:700;white-space:nowrap;margin-left:8px">R$ ' + parseFloat(p.price).toFixed(2) + '</span>' +
+    '</div>'
+  ).join('');
+}
+
+function refazerSelecionarProduto(id, name, price) {
+  const sel = document.getElementById('refazer-prod-sel');
+  const busca = document.getElementById('refazer-busca');
+  const dropdown = document.getElementById('refazer-dropdown');
+  sel.value = id;
+  sel.dataset.price = price;
+  sel.dataset.name = name;
+  busca.value = name + ' — R$ ' + parseFloat(price).toFixed(2);
+  dropdown.style.display = 'none';
+}
+
 function refazerAddProduct() {
   const overlay = document.getElementById('refazer-overlay');
   const sel = document.getElementById('refazer-prod-sel');
+  const busca = document.getElementById('refazer-busca');
   const qtyInput = document.getElementById('refazer-prod-qty');
-  if (!sel.value) return;
-  const opt = sel.options[sel.selectedIndex];
-  const price = parseFloat(opt.dataset.price) || 0;
-  const name = opt.dataset.name || opt.text.split(' — ')[0];
+  if (!sel.value) { toast('Selecione um produto da lista', true); return; }
+  const price = parseFloat(sel.dataset.price) || 0;
+  const name = sel.dataset.name || '';
+  const pid = sel.value;
   const qty = parseInt(qtyInput.value) || 1;
-  const existing = overlay._refazerItems.find(i => i.product_id === sel.value);
+  const existing = overlay._refazerItems.find(i => i.product_id === pid);
   if (existing) { existing.quantity += qty; }
-  else { overlay._refazerItems.push({ product_id: sel.value, product_name: name, unit_price: price, quantity: qty }); }
+  else { overlay._refazerItems.push({ product_id: pid, product_name: name, unit_price: price, quantity: qty }); }
   overlay._buildRows();
-  sel.value = '';
+  sel.value = ''; sel.dataset.price = ''; sel.dataset.name = '';
+  busca.value = '';
   qtyInput.value = 1;
 }
 
