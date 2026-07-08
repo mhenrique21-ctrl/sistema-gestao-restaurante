@@ -3436,6 +3436,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [showSugg,setShowSugg]=useState(false);
   const showHistorico=subTab==="arquivo";
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
+  const [expandedMeses,setExpandedMeses]=useState<Set<string>>(()=>new Set([today().slice(0,7)]));
   const showRuaMgmt=subTab==="ruas";
   const setShowRuaMgmt=(v:boolean)=>setSubTab(v?"ruas":"nova");
   const [novaRua,setNovaRua]=useState("");
@@ -4051,32 +4052,60 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <SortCtrl id="listaHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
       </div>
       {!(db.pedidosLista||[]).length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma lista arquivada ainda.</div>}
-      {sortList(db.pedidosLista||[],db,'listaHist','data-desc').map((p:any)=>{
-        const dataFmt=p.data?p.data.split("-").reverse().join("/"):"-";
-        const expanded=expandedPedido===p.id;
-        return <div key={p.id} style={{marginBottom:8,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg4)",cursor:"pointer"}} onClick={()=>setExpandedPedido(expanded?null:p.id)}>
-            <span style={{fontSize:14,color:"#fb923c"}}>{p.autoArquivado?"📋":"🛒"}</span>
-            <span style={{flex:1,fontSize:13,fontWeight:700}}>{dataFmt}{p.autoArquivado?<span style={{fontSize:9,color:"#fbbf24",marginLeft:6}}>auto</span>:""}</span>
-            <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
-            <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #4ade8044",borderRadius:6,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
-            <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
-            {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>}
-            <span style={{fontSize:11,color:"#555"}}>{expanded?"▲":"▼"}</span>
-          </div>
-          {expanded&&<div style={{padding:"8px 12px"}}>
-            {(p.itens||[]).map((it:any,idx:number)=>(
-              <div key={idx} style={{display:"flex",gap:8,alignItems:"center",padding:"4px 0",borderBottom:"1px solid var(--border)",opacity:it.naoTem?0.5:1}}>
-                <span style={{fontSize:12}}>{it.naoTem?"🚫":catIcon(it.categoria||"outros")}</span>
-                <span style={{flex:1,fontSize:13,textDecoration:it.naoTem?"line-through":"none",color:it.naoTem?"#a08030":"inherit"}}>{it.nome}</span>
-                <span style={{fontSize:12,color:"var(--text2)"}}>{it.quantidade||1} {it.unidade||"un"}</span>
-                {it.naoTem&&<span style={{fontSize:9,color:"#fbbf24",fontWeight:700}}>não tem</span>}
-                {it.urgente&&<span style={{fontSize:10,color:"#ff5c7a",fontWeight:700}}>!</span>}
-              </div>
-            ))}
-          </div>}
-        </div>;
-      })}
+      {(()=>{
+        const MESES_PT:Record<string,string>={
+          "01":"Janeiro","02":"Fevereiro","03":"Março","04":"Abril",
+          "05":"Maio","06":"Junho","07":"Julho","08":"Agosto",
+          "09":"Setembro","10":"Outubro","11":"Novembro","12":"Dezembro"
+        };
+        const sorted=sortList(db.pedidosLista||[],db,'listaHist','data-desc');
+        const grupos:Record<string,any[]>={};
+        sorted.forEach((p:any)=>{const k=p.data?p.data.slice(0,7):"sem-data";if(!grupos[k])grupos[k]=[];grupos[k].push(p);});
+        const grupoKeys=Object.keys(grupos).sort((a,b)=>b.localeCompare(a));
+        return grupoKeys.map(mes=>{
+          const pedidos=grupos[mes];
+          const [ano,mm]=mes.split("-");
+          const label=mes==="sem-data"?"Sem data":`${MESES_PT[mm]||mm} ${ano}`;
+          const aberto=expandedMeses.has(mes);
+          const toggleMes=()=>setExpandedMeses(s=>{const n=new Set(s);if(n.has(mes))n.delete(mes);else n.add(mes);return n;});
+          return <div key={mes} style={{marginBottom:8,border:"1px solid #7c3a1066",borderRadius:10,overflow:"hidden"}}>
+            <div onClick={toggleMes} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:"#1a0e0488",cursor:"pointer",userSelect:"none" as const}}>
+              <span style={{fontSize:15}}>{aberto?"📂":"📁"}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:700,color:"#fb923c"}}>{label}</span>
+              <span style={{fontSize:11,color:"#888",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:"1px 8px"}}>{pedidos.length} lista{pedidos.length>1?"s":""}</span>
+              <span style={{fontSize:11,color:"#555"}}>{aberto?"▲":"▼"}</span>
+            </div>
+            {aberto&&<div style={{padding:"6px 8px 8px"}}>
+              {pedidos.map((p:any)=>{
+                const dataFmt=p.data?p.data.split("-").reverse().join("/"):"-";
+                const expanded=expandedPedido===p.id;
+                return <div key={p.id} style={{marginBottom:6,border:"1px solid var(--border)",borderRadius:8,overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg4)",cursor:"pointer"}} onClick={()=>setExpandedPedido(expanded?null:p.id)}>
+                    <span style={{fontSize:13,color:"#fb923c"}}>{p.autoArquivado?"📋":"🛒"}</span>
+                    <span style={{flex:1,fontSize:13,fontWeight:700}}>{dataFmt}{p.autoArquivado?<span style={{fontSize:9,color:"#fbbf24",marginLeft:6}}>auto</span>:""}</span>
+                    <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
+                    <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #4ade8044",borderRadius:6,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
+                    <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
+                    {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>}
+                    <span style={{fontSize:11,color:"#555"}}>{expanded?"▲":"▼"}</span>
+                  </div>
+                  {expanded&&<div style={{padding:"8px 12px"}}>
+                    {(p.itens||[]).map((it:any,idx:number)=>(
+                      <div key={idx} style={{display:"flex",gap:8,alignItems:"center",padding:"4px 0",borderBottom:"1px solid var(--border)",opacity:it.naoTem?0.5:1}}>
+                        <span style={{fontSize:12}}>{it.naoTem?"🚫":catIcon(it.categoria||"outros")}</span>
+                        <span style={{flex:1,fontSize:13,textDecoration:it.naoTem?"line-through":"none",color:it.naoTem?"#a08030":"inherit"}}>{it.nome}</span>
+                        <span style={{fontSize:12,color:"var(--text2)"}}>{it.quantidade||1} {it.unidade||"un"}</span>
+                        {it.naoTem&&<span style={{fontSize:9,color:"#fbbf24",fontWeight:700}}>não tem</span>}
+                        {it.urgente&&<span style={{fontSize:10,color:"#ff5c7a",fontWeight:700}}>!</span>}
+                      </div>
+                    ))}
+                  </div>}
+                </div>;
+              })}
+            </div>}
+          </div>;
+        });
+      })()}
     </div>}
 
     {/* Estimativa de custo (admin only) */}
