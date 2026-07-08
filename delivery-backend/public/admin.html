@@ -2009,8 +2009,102 @@ async function pagePromocoes() {
 
     <div class="card" style="margin-top:16px" id="cupons-section">
       <p style="color:var(--muted);text-align:center;padding:20px">Carregando cupons...</p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <h3 style="margin:0">🏷️ Promoções de Produtos</h3>
+        <button class="btn btn-primary btn-sm" onclick="modalPromoPreco()">+ Adicionar promoção</button>
+      </div>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:16px">Produtos com preço promocional ativo no app do cliente.</p>
+      <div id="promo-produtos-list"><p style="color:var(--muted);text-align:center;padding:20px">Carregando...</p></div>
     </div>`;
   renderCupons();
+  renderPromoProdutos();
+}
+
+async function renderPromoProdutos() {
+  const prods = await api('GET', '/products');
+  const comPromo = prods.filter(p => p.promo_price != null);
+  const DAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const el = document.getElementById('promo-produtos-list');
+  if (!el) return;
+  if (comPromo.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Nenhum produto com promoção ativa</p>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <tr><th>Produto</th><th>Preço normal</th><th>Preço promo</th><th>Desconto</th><th>Label</th><th>Dias</th><th>Ações</th></tr>
+        ${comPromo.map(p => {
+          const pct = Math.round((1 - p.promo_price / p.price) * 100);
+          const dias = p.promo_days && p.promo_days.length ? p.promo_days.map(d => DAYS[d]).join(', ') : 'Sempre';
+          return `<tr>
+            <td><strong>${p.name}</strong></td>
+            <td style="text-decoration:line-through;color:var(--muted)">R$ ${parseFloat(p.price).toFixed(2).replace('.',',')}</td>
+            <td style="color:#16a34a;font-weight:700">R$ ${parseFloat(p.promo_price).toFixed(2).replace('.',',')}</td>
+            <td><span style="background:#fee2e2;color:#dc2626;font-weight:700;padding:2px 8px;border-radius:20px;font-size:.78rem">${pct}% OFF</span></td>
+            <td>${p.promo_label || '<span style="color:var(--muted)">—</span>'}</td>
+            <td style="font-size:.8rem;color:var(--muted)">${dias}</td>
+            <td style="display:flex;gap:6px">
+              <button class="btn btn-secondary btn-sm" onclick="modalEditarPromoPreco(${JSON.stringify(p).split('"').join('&quot;')})">✏️</button>
+              <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:none" onclick="removerPromoPreco('${p.id}','${p.name}')">🗑</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </table>
+    </div>`;
+}
+
+function modalPromoPreco(prod = null) {
+  const DAYS_OPTS = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const sel = prod && prod.promo_days ? prod.promo_days : [];
+  openModal('🏷️ Promoção de Produto', `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      ${!prod ? `<div><label>Produto</label><select id="pp-prod" style="width:100%"><option value="">Selecione...</option></select></div>` : `<div><strong>${prod.name}</strong></div>`}
+      <div style="display:flex;gap:12px">
+        <div style="flex:1"><label>Preço normal (R$)</label><input id="pp-preco" type="number" step="0.01" value="${prod ? prod.price : ''}" ${prod ? 'readonly style="opacity:.6"' : ''}/></div>
+        <div style="flex:1"><label>Preço promocional (R$)</label><input id="pp-promo" type="number" step="0.01" value="${prod && prod.promo_price != null ? prod.promo_price : ''}"/></div>
+      </div>
+      <div><label>Label da tag (ex: 50% OFF • Sábado)</label><input id="pp-label" value="${prod && prod.promo_label ? prod.promo_label : ''}" placeholder="Ex: 50% OFF" /></div>
+      <div>
+        <label>Dias da semana (deixe vazio para sempre ativo)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+          ${DAYS_OPTS.map((d,i) => `<label style="display:flex;align-items:center;gap:4px;font-size:.85rem;cursor:pointer">
+            <input type="checkbox" class="pp-day" value="${i}" ${sel.includes(i)?'checked':''}> ${d}
+          </label>`).join('')}
+        </div>
+      </div>
+    </div>`, async () => {
+    const prodId = prod ? prod.id : document.getElementById('pp-prod').value;
+    const promo_price = parseFloat(document.getElementById('pp-promo').value);
+    const promo_label = document.getElementById('pp-label').value.trim() || null;
+    const promo_days = Array.from(document.querySelectorAll('.pp-day:checked')).map(c => parseInt(c.value));
+    if (!prodId) { toast('Selecione um produto', true); return; }
+    if (isNaN(promo_price)) { toast('Informe o preço promocional', true); return; }
+    await api('PATCH', `/products/${prodId}`, { promo_price, promo_label, promo_days: promo_days.length ? promo_days : null });
+    toast('Promoção salva!'); closeModal(); pagePromocoes();
+  });
+  if (!prod) {
+    api('GET', '/products').then(prods => {
+      const sel = document.getElementById('pp-prod');
+      if (!sel) return;
+      prods.filter(p => p.available !== false).sort((a,b) => a.name.localeCompare(b.name)).forEach(p => {
+        const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o);
+      });
+    });
+  }
+}
+
+function modalEditarPromoPreco(prod) {
+  modalPromoPreco(prod);
+}
+
+async function removerPromoPreco(id, nome) {
+  if (!confirm(`Remover promoção de "${nome}"?`)) return;
+  await api('PATCH', `/products/${id}`, { promo_price: null, promo_label: null, promo_days: null });
+  toast('Promoção removida!'); pagePromocoes();
 }
 
 function promocaoForm(p = {}, zonas = []) {
