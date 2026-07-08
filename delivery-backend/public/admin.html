@@ -2307,7 +2307,7 @@ function loadCupomCats(selectedIds = []) {
   api('GET', '/categories').then(cats => {
     const wrap = document.getElementById('cp-cats-wrap');
     if (!wrap) return;
-    const excluir = ['Adicionais', 'Ofertas'];
+    const excluir = ['Adicionais'];
     const visiveis = cats.filter(c => !excluir.includes(c.name));
     const allChecked = selectedIds.length === 0;
     wrap.innerHTML = visiveis.map(c => `
