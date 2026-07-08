@@ -98,10 +98,10 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   }
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);
+  const sql = `UPDATE coupons SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`;
+  console.log('[coupons/PATCH] SQL:', sql, 'VALUES:', JSON.stringify(values));
   try {
-    const result = await pool.query(
-      `UPDATE coupons SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`, values
-    );
+    const result = await pool.query(sql, values);
     if (!result.rows[0]) return res.status(404).json({ error: 'Cupom não encontrado' });
     res.json(result.rows[0]);
   } catch (err) {
