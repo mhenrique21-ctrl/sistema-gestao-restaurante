@@ -587,7 +587,18 @@ router.post('/from-admin', async (req, res) => {
         sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/from-admin] status:', code));
       }
     }
-    broadcastOrderUpdate({ event: 'new_order', order: { ...order, item_count: items.length } });
+    const customerName = cust.rows[0]?.name || '';
+    const printItems = items.map(i => ({
+      product_name: i.product_name,
+      quantity: parseInt(i.quantity) || 1,
+      unit_price: parseFloat(i.unit_price) || 0,
+      subtotal: (parseInt(i.quantity) || 1) * (parseFloat(i.unit_price) || 0),
+    }));
+    broadcastOrderUpdate({
+      event: 'new_order',
+      order: { ...order, customer_name: customerName, item_count: items.length },
+      items: printItems,
+    });
     res.status(201).json({ id: order.id, order_number: order.order_number });
   } catch (err) {
     console.error('[orders/from-admin]', err.message, '| code:', err.code, '| detail:', err.detail);
