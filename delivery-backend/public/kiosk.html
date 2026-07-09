@@ -540,31 +540,36 @@ function renderProductModal() {
         <div class="price-row" style="margin:6px 0 4px">
           ${p.promo_price != null ? `<span class="price-old">${fmt(p.price)}</span><span class="price-new">${fmt(p.promo_price)}</span>` : `<span class="price-new">${fmt(p.price)}</span>`}
         </div>
-        ${groups.map(g => `
+        ${groups.map(g => {
+          // Com quantidade > 1 no produto (ex: 3x combo), o grupo libera 1 escolha por
+          // unidade — 3 combos = até 3 bebidas, mesmo padrão do app de delivery.
+          const effectiveMax = g.max_select * modalQty;
+          const total = groupTotal(g.id);
+          return `
           <div class="addon-group">
-            <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--muted);font-weight:400">(até ${g.max_select})</span></div>
+            <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--muted);font-weight:400">${modalQty > 1 ? `(${total}/${effectiveMax})` : `(até ${effectiveMax})`}</span></div>
             ${g.options.map(o => {
               const count = addonCount(g.id, o.id);
-              if (g.max_select === 1) {
+              if (effectiveMax === 1) {
                 return `
                   <div class="addon-opt ${count > 0 ? 'selected' : ''}" onclick="selectSingleAddon('${g.id}','${o.id}')">
                     <span>${o.name}</span>
                     <span class="opt-price">${o.price > 0 ? '+' + fmt(o.price) : ''}</span>
                   </div>`;
               }
-              const atCap = groupTotal(g.id) >= g.max_select;
+              const atCap = total >= effectiveMax;
               return `
                 <div class="addon-opt multi ${count > 0 ? 'selected' : ''}">
                   <span>${o.name} ${o.price > 0 ? `<span class="opt-price">+${fmt(o.price)}</span>` : ''}</span>
                   <div class="opt-stepper">
                     <button onclick="decAddon('${g.id}','${o.id}')" ${count === 0 ? 'disabled' : ''}>−</button>
                     <span>${count}</span>
-                    <button onclick="incAddon('${g.id}','${o.id}',${g.max_select})" ${atCap ? 'disabled' : ''}>+</button>
+                    <button onclick="incAddon('${g.id}','${o.id}',${effectiveMax})" ${atCap ? 'disabled' : ''}>+</button>
                   </div>
                 </div>`;
             }).join('')}
           </div>
-        `).join('')}
+        `; }).join('')}
         <textarea class="modal-note" id="modal-note" placeholder="Observação (opcional)" rows="2"></textarea>
       </div>
       <div class="modal-sticky-footer">
@@ -610,10 +615,29 @@ function decAddon(groupId, optionId) {
 
 function changeModalQty(delta) {
   modalQty = Math.max(1, modalQty + delta);
-  const el = document.getElementById('modal-qty-val');
-  if (el) el.textContent = modalQty;
-  const btn = document.getElementById('modal-add-btn');
-  if (btn) btn.textContent = `Adicionar — ${fmt(modalCurrentTotal())}`;
+  trimSelectionsToCap(); // se a quantidade caiu, corta o excesso de adicionais já escolhidos
+  // Muda quantas escolhas cada grupo libera (effectiveMax = max_select × quantidade),
+  // então precisa recompor os grupos de adicionais, não só o número exibido.
+  renderProductModal();
+}
+
+function trimSelectionsToCap() {
+  for (const g of visibleAddonGroups(modalProduct)) {
+    const effectiveMax = g.max_select * modalQty;
+    const m = modalSelections[g.id];
+    if (!m) continue;
+    let total = Object.values(m).reduce((s, c) => s + c, 0);
+    const keys = Object.keys(m);
+    let i = keys.length - 1;
+    while (total > effectiveMax && i >= 0) {
+      const k = keys[i];
+      const reduceBy = Math.min(m[k], total - effectiveMax);
+      m[k] -= reduceBy;
+      total -= reduceBy;
+      if (m[k] <= 0) delete m[k];
+      i--;
+    }
+  }
 }
 
 function closeProductModal() {
