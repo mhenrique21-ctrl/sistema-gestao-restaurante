@@ -62,9 +62,10 @@
   /* ── Cardápio (tela padrão) ───────────────────────── */
   #app-screen { display: flex; height: calc(100vh - 61px); }
   #cat-sidebar { width: 130px; min-width: 130px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 6px; }
-  .cat-btn { width: 100%; background: transparent; border: none; color: var(--muted); padding: 14px 6px; border-radius: 12px; font-size: .78rem; font-weight: 700; text-align: center; margin-bottom: 4px; }
-  .cat-btn .cat-thumb { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; margin: 0 auto 6px; display: block; background: var(--card); }
-  .cat-btn.active { background: var(--gold); color: var(--surface); }
+  .cat-btn { width: 100%; background: var(--card); border: 1px solid var(--border); color: var(--cream); padding: 14px 6px; border-radius: 12px; font-size: .82rem; font-weight: 700; text-align: center; margin-bottom: 8px; }
+  .cat-btn:active { background: var(--card-active); }
+  .cat-btn .cat-thumb { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; margin: 0 auto 6px; display: block; background: var(--surface); }
+  .cat-btn.active { background: var(--gold); color: var(--surface); border-color: var(--gold); box-shadow: 0 2px 10px rgba(201,162,94,.4); }
   #menu-col { flex: 1; overflow-y: auto; }
   #cat-banner { height: 140px; background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 16px 20px; background-color: var(--card); }
   #cat-banner h2 { font-size: 1.4rem; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
