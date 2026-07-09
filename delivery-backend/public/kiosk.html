@@ -61,8 +61,8 @@
 
   /* ── Cardápio (tela padrão) ───────────────────────── */
   #app-screen { display: flex; height: calc(100vh - 61px); }
-  #cat-sidebar { width: 130px; min-width: 130px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 6px; }
-  .cat-btn { width: 100%; background: var(--card); border: 1px solid var(--border); color: var(--cream); padding: 14px 6px; border-radius: 12px; font-size: .82rem; font-weight: 700; text-align: center; margin-bottom: 8px; }
+  #cat-sidebar { width: 140px; min-width: 140px; background: #150e07; border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 6px; }
+  .cat-btn { width: 100%; background: var(--card); border: 1px solid var(--border); color: var(--cream); padding: 16px 6px; border-radius: 12px; font-size: 1rem; font-weight: 700; text-align: center; margin-bottom: 8px; }
   .cat-btn:active { background: var(--card-active); }
   .cat-btn .cat-thumb { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; margin: 0 auto 6px; display: block; background: var(--surface); }
   .cat-btn.active { background: var(--gold); color: var(--surface); border-color: var(--gold); box-shadow: 0 2px 10px rgba(201,162,94,.4); }
@@ -456,12 +456,12 @@ function renderCategorySidebar() {
   const offers = getOffers();
   let html = '';
   if (offers.length > 0) {
-    html += `<button class="cat-btn ${activeCategory === 'ofertas' ? 'active' : ''}" onclick="selectCategory('ofertas')">🔥 Ofertas</button>`;
+    html += `<button class="cat-btn ${activeCategory === 'ofertas' ? 'active' : ''}" onclick="selectCategory('ofertas')">Ofertas</button>`;
   }
   html += visibleCategories().map(c => `
     <button class="cat-btn ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">
       ${c.image_url ? `<img class="cat-thumb" src="${c.image_url}">` : ''}
-      ${CAT_ICONS[c.name] || '🍽'} ${c.name}
+      ${c.name}
     </button>
   `).join('');
   el.innerHTML = html;
