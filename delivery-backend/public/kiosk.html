@@ -96,6 +96,11 @@
   .addon-opt { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--surface); border-radius: 10px; margin-bottom: 6px; border: 2px solid transparent; }
   .addon-opt.selected { border-color: var(--gold); }
   .addon-opt .opt-price { color: var(--muted); font-size: .8rem; }
+  .addon-opt.multi { cursor: default; }
+  .opt-stepper { display: flex; align-items: center; gap: 10px; }
+  .opt-stepper button { background: var(--border); color: var(--cream); border: none; width: 28px; height: 28px; border-radius: 6px; font-size: 1rem; font-weight: 700; }
+  .opt-stepper button:disabled { opacity: .35; }
+  .opt-stepper span { min-width: 14px; text-align: center; font-weight: 700; }
   .modal-qty { display: flex; align-items: center; gap: 14px; margin: 16px 0; }
   .modal-qty button { background: var(--border); color: var(--cream); border: none; width: 36px; height: 36px; border-radius: 8px; font-size: 1.1rem; font-weight: 700; }
   .modal-note { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--cream); font-size: .88rem; margin-top: 10px; }
@@ -469,8 +474,12 @@ function renderProductGrid() {
 }
 
 // ── Modal de produto (quantidade + adicionais + obs) ──
+// Grupos de adicionais que não fazem sentido pra consumo no salão (só delivery/retirada) —
+// ficam ocultos aqui no autoatendimento, mas continuam normais no app de delivery.
+const KIOSK_HIDDEN_ADDON_GROUPS = ['descartáveis', 'descartavel', 'descartáveis ', 'molhos'];
+
 let modalProduct = null;
-let modalSelections = {};
+let modalSelections = {}; // { [groupId]: { [optionId]: quantidade } }
 let modalQty = 1;
 
 function findProduct(id) {
@@ -478,23 +487,39 @@ function findProduct(id) {
   return null;
 }
 
+function visibleAddonGroups(p) {
+  return (p.addon_groups || []).filter(g =>
+    g.options && g.options.length && !KIOSK_HIDDEN_ADDON_GROUPS.includes((g.name || '').trim().toLowerCase())
+  );
+}
+
 function openProductModal(productId) {
   modalProduct = findProduct(productId);
   if (!modalProduct) return;
   modalSelections = {};
   modalQty = 1;
-  (modalProduct.addon_groups || []).forEach(g => { modalSelections[g.id] = []; });
+  visibleAddonGroups(modalProduct).forEach(g => { modalSelections[g.id] = {}; });
   renderProductModal();
+}
+
+function addonCount(groupId, optionId) {
+  return (modalSelections[groupId] && modalSelections[groupId][optionId]) || 0;
+}
+
+function groupTotal(groupId) {
+  const m = modalSelections[groupId] || {};
+  return Object.values(m).reduce((s, c) => s + c, 0);
 }
 
 function modalCurrentTotal() {
   const p = modalProduct;
   const unitPrice = parseFloat(p.promo_price ?? p.price);
   let addonsTotal = 0;
-  for (const g of (p.addon_groups || [])) {
-    for (const optId of (modalSelections[g.id] || [])) {
+  for (const g of visibleAddonGroups(p)) {
+    const m = modalSelections[g.id] || {};
+    for (const [optId, count] of Object.entries(m)) {
       const opt = g.options.find(o => o.id === optId);
-      if (opt) addonsTotal += parseFloat(opt.price || 0);
+      if (opt) addonsTotal += parseFloat(opt.price || 0) * count;
     }
   }
   return (unitPrice + addonsTotal) * modalQty;
@@ -502,7 +527,7 @@ function modalCurrentTotal() {
 
 function renderProductModal() {
   const p = modalProduct;
-  const groups = (p.addon_groups || []).filter(g => g.options && g.options.length);
+  const groups = visibleAddonGroups(p);
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'product-modal-backdrop';
@@ -514,12 +539,26 @@ function renderProductModal() {
         ${groups.map(g => `
           <div class="addon-group">
             <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--muted);font-weight:400">(até ${g.max_select})</span></div>
-            ${g.options.map(o => `
-              <div class="addon-opt ${modalSelections[g.id]?.includes(o.id) ? 'selected' : ''}" onclick="toggleAddon('${g.id}','${o.id}',${g.max_select})">
-                <span>${o.name}</span>
-                <span class="opt-price">${o.price > 0 ? '+' + fmt(o.price) : ''}</span>
-              </div>
-            `).join('')}
+            ${g.options.map(o => {
+              const count = addonCount(g.id, o.id);
+              if (g.max_select === 1) {
+                return `
+                  <div class="addon-opt ${count > 0 ? 'selected' : ''}" onclick="selectSingleAddon('${g.id}','${o.id}')">
+                    <span>${o.name}</span>
+                    <span class="opt-price">${o.price > 0 ? '+' + fmt(o.price) : ''}</span>
+                  </div>`;
+              }
+              const atCap = groupTotal(g.id) >= g.max_select;
+              return `
+                <div class="addon-opt multi ${count > 0 ? 'selected' : ''}">
+                  <span>${o.name} ${o.price > 0 ? `<span class="opt-price">+${fmt(o.price)}</span>` : ''}</span>
+                  <div class="opt-stepper">
+                    <button onclick="decAddon('${g.id}','${o.id}')" ${count === 0 ? 'disabled' : ''}>−</button>
+                    <span>${count}</span>
+                    <button onclick="incAddon('${g.id}','${o.id}',${g.max_select})" ${atCap ? 'disabled' : ''}>+</button>
+                  </div>
+                </div>`;
+            }).join('')}
           </div>
         `).join('')}
         <textarea class="modal-note" id="modal-note" placeholder="Observação (opcional)" rows="2"></textarea>
@@ -541,15 +580,27 @@ function renderProductModal() {
   document.body.appendChild(backdrop);
 }
 
-function toggleAddon(groupId, optionId, maxSelect) {
-  const sel = modalSelections[groupId] || (modalSelections[groupId] = []);
-  const idx = sel.indexOf(optionId);
-  if (idx >= 0) { sel.splice(idx, 1); }
-  else {
-    if (maxSelect === 1) sel.length = 0;
-    else if (sel.length >= maxSelect) return;
-    sel.push(optionId);
-  }
+// Grupos de escolha única (max_select 1) continuam exclusivos: tocar troca a seleção.
+function selectSingleAddon(groupId, optionId) {
+  const already = addonCount(groupId, optionId) > 0;
+  modalSelections[groupId] = already ? {} : { [optionId]: 1 };
+  renderProductModal();
+}
+
+// Grupos com max_select > 1 permitem escolher a mesma opção várias vezes (ex: 2x Bacon),
+// respeitando o limite total do grupo.
+function incAddon(groupId, optionId, maxSelect) {
+  if (groupTotal(groupId) >= maxSelect) return;
+  const m = modalSelections[groupId] || (modalSelections[groupId] = {});
+  m[optionId] = (m[optionId] || 0) + 1;
+  renderProductModal();
+}
+
+function decAddon(groupId, optionId) {
+  const m = modalSelections[groupId];
+  if (!m || !m[optionId]) return;
+  m[optionId] -= 1;
+  if (m[optionId] <= 0) delete m[optionId];
   renderProductModal();
 }
 
@@ -568,31 +619,30 @@ function closeProductModal() {
 
 function confirmAddToCart() {
   const p = modalProduct;
-  for (const g of (p.addon_groups || [])) {
-    const count = (modalSelections[g.id] || []).length;
-    if (g.required && count < g.min_select) {
+  const groups = visibleAddonGroups(p);
+  for (const g of groups) {
+    if (g.required && groupTotal(g.id) < g.min_select) {
       alert(`Selecione ao menos ${g.min_select} opção(ões) em "${g.name}"`);
       return;
     }
   }
   const addons = [];
-  for (const g of (p.addon_groups || [])) {
-    for (const optId of (modalSelections[g.id] || [])) {
+  const addonLabels = [];
+  for (const g of groups) {
+    const m = modalSelections[g.id] || {};
+    for (const [optId, count] of Object.entries(m)) {
+      if (count <= 0) continue;
       const opt = g.options.find(o => o.id === optId);
-      if (opt) addons.push({ addon_option_id: opt.id, quantity: 1 });
+      if (!opt) continue;
+      addons.push({ addon_option_id: opt.id, quantity: count });
+      addonLabels.push(count > 1 ? `${count}x ${opt.name}` : opt.name);
     }
   }
   const note = document.getElementById('modal-note')?.value?.trim() || null;
-  const unitPrice = p.promo_price ?? p.price;
-  const addonsTotal = addons.reduce((s, a) => {
-    const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id));
-    const o = g?.options.find(o => o.id === a.addon_option_id);
-    return s + (o?.price || 0);
-  }, 0);
   cart.push({
     product_id: p.id, product_name: p.name, quantity: modalQty, notes: note, addons,
-    subtotal: (parseFloat(unitPrice) + addonsTotal) * modalQty,
-    addon_labels: addons.map(a => { const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id)); const o = g?.options.find(o => o.id === a.addon_option_id); return o?.name; }).filter(Boolean),
+    subtotal: modalCurrentTotal(),
+    addon_labels: addonLabels,
   });
   closeProductModal();
   renderCartBar();
