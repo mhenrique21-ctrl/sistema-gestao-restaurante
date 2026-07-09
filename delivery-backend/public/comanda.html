@@ -138,6 +138,14 @@
     <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
   </div>
   <div id="scan-error"></div>
+
+  <div id="pending-section" style="margin-top:32px;text-align:left">
+    <div class="side-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>🧾 Aguardando fechamento</span>
+      <button class="btn btn-secondary" style="padding:4px 10px;font-size:.75rem" onclick="loadPendingQueue()">🔄</button>
+    </div>
+    <div id="pending-list"><div class="cart-empty">Carregando...</div></div>
+  </div>
 </div>
 
 <!-- ── Tela 2: comanda aberta ── -->
@@ -279,6 +287,33 @@ function resetToScan() {
   document.getElementById('header-sub').textContent = 'Escaneie ou digite o código do cartão';
   document.getElementById('manual-code').value = '';
   startScanner();
+  loadPendingQueue();
+}
+
+// Comandas com "conta solicitada" pelo cliente (kiosk.html), aguardando o caixa fechar
+// com a forma de pagamento recebida na mesa pelo garçom.
+async function loadPendingQueue() {
+  const el = document.getElementById('pending-list');
+  try {
+    const res = await fetch(`${API}/api/comandas/pending-close`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    const list = await res.json();
+    if (!res.ok || !Array.isArray(list) || !list.length) {
+      el.innerHTML = '<div class="cart-empty">Nenhuma comanda aguardando</div>';
+      return;
+    }
+    el.innerHTML = list.map(c => `
+      <div class="launched-item">
+        <div class="row">
+          <span class="name">${c.label || c.code}</span>
+          <span>${fmt(c.total)}</span>
+        </div>
+        <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="resolveCode('${c.code}')">Abrir e fechar</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>';
+  }
 }
 
 // ── Tela da comanda ─────────────────────────────────
@@ -611,7 +646,7 @@ async function confirmClose() {
 }
 
 // ── Init ─────────────────────────────────────────────
-if (!TOKEN) { showLoginScreen(); } else { document.getElementById('scan-screen').classList.remove('hidden'); startScanner(); }
+if (!TOKEN) { showLoginScreen(); } else { document.getElementById('scan-screen').classList.remove('hidden'); startScanner(); loadPendingQueue(); }
 </script>
 </body>
 </html>

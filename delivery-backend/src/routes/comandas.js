@@ -92,6 +92,21 @@ router.get('/', authMiddleware, requireRole('admin'), async (req, res) => {
   }
 });
 
+// GET /api/comandas/pending-close — fila de comandas aguardando o caixa fechar (equipe)
+router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, code, label, total, closing_requested_at
+       FROM comandas WHERE status = 'aberta' AND closing_requested_at IS NOT NULL
+       ORDER BY closing_requested_at ASC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[comandas/pending-close]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // POST /api/comandas — cadastra um cartão físico (admin)
 router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   const { code, label } = req.body;
@@ -200,6 +215,48 @@ router.post('/:id/orders', async (req, res) => {
   }
 });
 
+// POST /api/comandas/:id/request-close — cliente pede a conta (pública, sem pagamento).
+// Imprime o pré-fechamento no caixa; o garçom recebe o pagamento na mesa e informa o
+// operador do caixa, que fecha de fato pelo comanda.html (POST /:id/close).
+router.post('/:id/request-close', async (req, res) => {
+  try {
+    const comandaResult = await pool.query(`SELECT * FROM comandas WHERE id = $1`, [req.params.id]);
+    const comanda = comandaResult.rows[0];
+    if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
+    if (comanda.status !== 'aberta') return res.status(400).json({ error: 'Comanda não está aberta' });
+
+    const updateResult = await pool.query(
+      `UPDATE comandas SET closing_requested_at = NOW() WHERE id = $1 RETURNING *`,
+      [comanda.id]
+    );
+    const updatedComanda = updateResult.rows[0];
+    const items = await loadComandaItems(comanda.id);
+    const lastMesa = [...items].reverse().find((i) => i.mesa)?.mesa || null;
+
+    const caixaCfg = STATION_ROUTES.caixa;
+    printOrderTicket(caixaCfg.printer, {
+      stationName: caixaCfg.name,
+      emoji: caixaCfg.emoji,
+      fullReceipt: true,
+      order: {
+        id: updatedComanda.id,
+        customer_name: `PRÉ-FECHAMENTO — ${updatedComanda.label || updatedComanda.code}`,
+        total_amount: updatedComanda.total,
+        notes: 'Cliente solicitou a conta. Garçom vai receber o pagamento na mesa.',
+        mesa: lastMesa,
+      },
+      items,
+    }).catch((e) => console.error('[print/comanda/request-close]', e.message));
+
+    broadcastOrderUpdate({ event: 'comanda_closing_requested', comanda: updatedComanda });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[comandas/request-close]', err.message);
+    res.status(500).json({ error: 'Erro ao solicitar fechamento' });
+  }
+});
+
 // DELETE /api/comandas/:id/items/:itemId — remove um item lançado por engano (equipe)
 router.delete('/:id/items/:itemId', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
@@ -230,8 +287,10 @@ router.delete('/:id/items/:itemId', authMiddleware, requireRole('admin', 'atende
   }
 });
 
-// POST /api/comandas/:id/close — fecha a conta (uma ou mais formas de pagamento)
-router.post('/:id/close', async (req, res) => {
+// POST /api/comandas/:id/close — fecha a conta (uma ou mais formas de pagamento). Feito
+// pelo operador do caixa (comanda.html), depois de receber o pagamento na mesa via garçom —
+// não é mais chamado pelo cliente direto (kiosk.html só solicita, via /request-close).
+router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   const { payments } = req.body;
   const validMethods = ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro'];
 
@@ -255,13 +314,23 @@ router.post('/:id/close', async (req, res) => {
     }
 
     const summaryMethod = payments.length === 1 ? payments[0].method : 'misto';
+    const originalCode = comanda.code;
+    // Arquiva o código original nesta linha (fechada, histórico preservado) e libera o
+    // código de verdade numa comanda nova — o mesmo cartão físico já fica pronto pro
+    // próximo cliente, sem precisar de cadastro manual no admin.
+    const archivedCode = `${originalCode}__closed_${Date.now()}`;
 
     const updateResult = await pool.query(
-      `UPDATE comandas SET status = 'fechada', payment_method = $1, closed_at = NOW(), closed_by = $2
-       WHERE id = $3 RETURNING *`,
-      [summaryMethod, req.user?.id || null, comanda.id]
+      `UPDATE comandas SET status = 'fechada', payment_method = $1, closed_at = NOW(), closed_by = $2, code = $3
+       WHERE id = $4 RETURNING *`,
+      [summaryMethod, req.user?.id || null, archivedCode, comanda.id]
     );
-    const closedComanda = updateResult.rows[0];
+    const closedComanda = { ...updateResult.rows[0], code: originalCode };
+
+    await pool.query(
+      `INSERT INTO comandas (code, label, opened_by) VALUES ($1,$2,$3) RETURNING id`,
+      [originalCode, comanda.label, req.user?.id || null]
+    );
 
     for (const p of payments) {
       await pool.query(
@@ -306,12 +375,31 @@ router.post('/:id/reopen', authMiddleware, requireRole('admin'), async (req, res
     if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
     if (comanda.status !== 'fechada') return res.status(400).json({ error: 'Comanda não está fechada' });
 
+    // O código original pode ter sido reciclado pro próximo cliente ao fechar (ver
+    // POST /:id/close). Se ninguém usou o cartão ainda, desfaz o reciclo; se já tem
+    // gente usando, não dá pra reabrir sem confundir o atendimento em andamento.
+    const archivedMatch = comanda.code.match(/^(.*)__closed_\d+$/);
+    let restoredCode = comanda.code;
+    if (archivedMatch) {
+      const originalCode = archivedMatch[1];
+      const recycledResult = await pool.query(`SELECT * FROM comandas WHERE code = $1`, [originalCode]);
+      const recycled = recycledResult.rows[0];
+      if (recycled) {
+        const hasActivity = parseFloat(recycled.total) > 0 || recycled.status !== 'aberta';
+        if (hasActivity) {
+          return res.status(400).json({ error: 'Não é possível reabrir: esse cartão já foi reutilizado por outro cliente.' });
+        }
+        await pool.query(`DELETE FROM comandas WHERE id = $1 RETURNING id`, [recycled.id]);
+        restoredCode = originalCode;
+      }
+    }
+
     await pool.query(`DELETE FROM comanda_payments WHERE comanda_id = $1 RETURNING id`, [comanda.id]);
 
     const updateResult = await pool.query(
-      `UPDATE comandas SET status = 'aberta', payment_method = NULL, closed_at = NULL, closed_by = NULL
-       WHERE id = $1 RETURNING *`,
-      [comanda.id]
+      `UPDATE comandas SET status = 'aberta', payment_method = NULL, closed_at = NULL, closed_by = NULL, code = $1
+       WHERE id = $2 RETURNING *`,
+      [restoredCode, comanda.id]
     );
 
     const items = await loadComandaItems(comanda.id);

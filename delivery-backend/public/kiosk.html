@@ -124,16 +124,8 @@
   .cart-empty, .launched-empty { color: var(--muted); font-size: .82rem; text-align: center; padding: 20px 0; }
 
   /* ── Checkout ─────────────────────────────────────── */
-  #checkout-screen { max-width: 560px; margin: 20px auto; padding: 0 20px 40px; overflow-y: auto; max-height: calc(100vh - 100px); }
-  #checkout-screen h2 { font-size: 1.3rem; margin-bottom: 14px; text-align: center; }
   .close-items { max-height: 26vh; overflow-y: auto; margin: 10px 0; }
   .close-total { font-size: 1.8rem; font-weight: 800; color: var(--gold); text-align: center; margin: 10px 0; }
-  .pay-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; }
-  .pay-row .pay-name { font-weight: 700; }
-  .pay-row input { width: 110px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--cream); font-size: .95rem; text-align: right; }
-  .close-remaining { text-align: center; font-size: .9rem; font-weight: 700; margin-bottom: 12px; }
-  .close-remaining.ok { color: var(--green); }
-  .close-remaining.pending { color: var(--danger); }
 
   /* ── Sucesso ──────────────────────────────────────── */
   .success-screen { min-height: calc(100vh - 61px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; gap: 12px; }
@@ -214,10 +206,10 @@
   <button class="btn btn-primary" onclick="resetToMenu()" style="margin-top:20px">Voltar ao cardápio</button>
 </div>
 
-<!-- ── Scan para fechar conta ── -->
+<!-- ── Scan para pedir a conta ── -->
 <div id="checkout-scan-screen" class="scan-screen hidden">
   <h2>Escaneie seu cartão</h2>
-  <p class="hint">Aponte a câmera para o QR do seu cartão para ver sua conta.</p>
+  <p class="hint">Aponte a câmera para o QR do seu cartão para pedir a conta.</p>
   <div id="qr-reader-checkout"></div>
   <div class="manual-entry">
     <input type="text" id="manual-code-checkout" placeholder="Código do cartão" autocomplete="off">
@@ -250,25 +242,11 @@
   </div>
 </div>
 
-<!-- ── Fechamento (PDV self-service) ── -->
-<div id="checkout-screen" class="hidden">
-  <h2 id="checkout-title">Sua conta</h2>
-  <div class="close-items" id="checkout-items"></div>
-  <div class="close-total" id="checkout-total">R$ 0,00</div>
-  <div class="side-title" style="text-align:center">Formas de pagamento</div>
-  <div id="pay-rows"></div>
-  <div class="close-remaining pending" id="close-remaining"></div>
-  <div class="modal-actions">
-    <button class="btn btn-secondary" onclick="resetToMenu()">Cancelar</button>
-    <button class="btn btn-primary" id="confirm-close-btn" onclick="confirmClose()" disabled>Confirmar pagamento</button>
-  </div>
-</div>
-
-<!-- ── Sucesso fechamento ── -->
+<!-- ── Sucesso: conta solicitada ── -->
 <div id="checkout-success-screen" class="success-screen hidden">
-  <div class="icon">✅</div>
-  <h2>Conta fechada!</h2>
-  <p>Obrigado pela visita 🎉</p>
+  <div class="icon">🧾</div>
+  <h2>Conta solicitada!</h2>
+  <p>O garçom já foi avisado e vai até sua mesa receber o pagamento 🙂</p>
   <button class="btn btn-primary" onclick="resetToMenu()" style="margin-top:20px">Voltar ao cardápio</button>
 </div>
 
@@ -279,7 +257,6 @@
 
 <script>
 const API = '';
-const PAY_METHODS = [['pix','💠 Pix'],['cartao_credito','💳 Crédito'],['cartao_debito','💳 Débito'],['dinheiro','💵 Dinheiro']];
 
 let menu = [];
 let activeCategory = null;
@@ -395,7 +372,7 @@ async function confirmMesaChange() {
   }
 }
 
-const SUB_SCREENS = ['order-scan-screen','order-success-screen','checkout-scan-screen','checkout-screen','checkout-success-screen','history-scan-screen','history-screen'];
+const SUB_SCREENS = ['order-scan-screen','order-success-screen','checkout-scan-screen','checkout-success-screen','history-scan-screen','history-screen'];
 
 function hideSubScreens() {
   SUB_SCREENS.forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -842,7 +819,7 @@ async function resolveCode(code) {
     }
     if (scanPurpose === 'order') await submitOrder();
     else if (scanPurpose === 'history') showHistoryScreen();
-    else showCheckoutScreen();
+    else await requestClose();
   } catch (e) {
     errEl.textContent = 'Erro de conexão';
     resolvingCode = false;
@@ -889,65 +866,25 @@ async function submitOrder() {
   }
 }
 
-// ── Fechamento (fluxo "Minha conta") ─────────────────
-function showCheckoutScreen() {
+// ── Pedido de conta (fluxo "Minha conta") ────────────
+// O cliente só solicita — não escolhe forma de pagamento aqui. Imprime o pré-fechamento
+// no caixa; o garçom recebe o pagamento na mesa e informa o operador do caixa, que fecha
+// de fato pelo comanda.html.
+async function requestClose() {
   stopScanner();
-  showSubScreen('checkout-screen');
-  document.getElementById('checkout-title').textContent = `Conta de ${comanda.label || comanda.code}`;
-
-  const items = comanda.items || [];
-  document.getElementById('checkout-items').innerHTML = items.map(i => `
-    <div class="launched-item">
-      <div class="row"><span class="name">${i.quantity}× ${i.product_name}</span><span>${fmt(i.subtotal)}</span></div>
-    </div>
-  `).join('') || '<div class="launched-empty">Nenhum item lançado</div>';
-  document.getElementById('checkout-total').textContent = fmt(comanda.total);
-
-  document.getElementById('pay-rows').innerHTML = PAY_METHODS.map(([val,label]) => `
-    <div class="pay-row">
-      <span class="pay-name">${label}</span>
-      <input type="number" step="0.01" min="0" placeholder="0,00" data-method="${val}" oninput="updateCloseRemaining()">
-    </div>
-  `).join('');
-  updateCloseRemaining();
-}
-
-function collectPayments() {
-  return Array.from(document.querySelectorAll('#pay-rows input'))
-    .map(inp => ({ method: inp.dataset.method, amount: parseFloat(inp.value) || 0 }))
-    .filter(p => p.amount > 0);
-}
-
-function updateCloseRemaining() {
-  const paid = collectPayments().reduce((s, p) => s + p.amount, 0);
-  const remaining = parseFloat(comanda.total) - paid;
-  const el = document.getElementById('close-remaining');
-  const ok = Math.abs(remaining) < 0.01;
-  el.textContent = ok ? 'Valor completo ✓' : `Restante: ${fmt(remaining)}`;
-  el.className = 'close-remaining ' + (ok ? 'ok' : 'pending');
-  document.getElementById('confirm-close-btn').disabled = !ok;
-}
-
-async function confirmClose() {
-  const payments = collectPayments();
-  if (!payments.length) return;
-  const btn = document.getElementById('confirm-close-btn');
-  btn.disabled = true;
-  btn.textContent = 'Fechando...';
   try {
-    const res = await fetch(`${API}/api/comandas/${comanda.id}/close`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payments }),
-    });
+    const res = await fetch(`${API}/api/comandas/${comanda.id}/request-close`, { method: 'POST' });
     const data = await res.json();
-    if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = 'Confirmar pagamento'; return; }
+    if (!res.ok) {
+      document.getElementById('scan-error-checkout').textContent = data.error || 'Erro ao solicitar a conta';
+      startScanner();
+      return;
+    }
     showSubScreen('checkout-success-screen');
-    setTimeout(resetToMenu, 6000);
+    setTimeout(resetToMenu, 3000);
   } catch (e) {
-    alert('Erro de conexão ao fechar comanda');
-    btn.disabled = false;
-    btn.textContent = 'Confirmar pagamento';
+    document.getElementById('scan-error-checkout').textContent = 'Erro de conexão ao solicitar a conta';
+    startScanner();
   }
 }
 
