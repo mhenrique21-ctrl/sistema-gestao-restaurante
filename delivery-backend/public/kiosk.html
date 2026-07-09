@@ -100,6 +100,12 @@
   .modal-qty button { background: var(--border); color: var(--cream); border: none; width: 36px; height: 36px; border-radius: 8px; font-size: 1.1rem; font-weight: 700; }
   .modal-note { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--cream); font-size: .88rem; margin-top: 10px; }
   .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+
+  /* Modal de produto: cabeçalho + lista de adicionais rolam, botão Adicionar fica fixo embaixo */
+  .modal-sheet.product-sheet { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .product-sheet .modal-scroll-body { overflow-y: auto; padding: 20px; }
+  .product-sheet .modal-sticky-footer { flex-shrink: 0; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--card); }
+  .product-sheet .modal-actions { margin-top: 0; }
   .modal-actions .btn { flex: 1; }
   .side-title { font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
   .cart-item, .launched-item { background: var(--surface); border-radius: 10px; padding: 10px; margin-bottom: 8px; font-size: .85rem; }
@@ -481,6 +487,19 @@ function openProductModal(productId) {
   renderProductModal();
 }
 
+function modalCurrentTotal() {
+  const p = modalProduct;
+  const unitPrice = parseFloat(p.promo_price ?? p.price);
+  let addonsTotal = 0;
+  for (const g of (p.addon_groups || [])) {
+    for (const optId of (modalSelections[g.id] || [])) {
+      const opt = g.options.find(o => o.id === optId);
+      if (opt) addonsTotal += parseFloat(opt.price || 0);
+    }
+  }
+  return (unitPrice + addonsTotal) * modalQty;
+}
+
 function renderProductModal() {
   const p = modalProduct;
   const groups = (p.addon_groups || []).filter(g => g.options && g.options.length);
@@ -488,29 +507,33 @@ function renderProductModal() {
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'product-modal-backdrop';
   backdrop.innerHTML = `
-    <div class="modal-sheet">
-      <h3>${p.name}</h3>
-      <div style="color:#94a3b8;font-size:.85rem">${fmt(p.promo_price ?? p.price)}</div>
-      ${groups.map(g => `
-        <div class="addon-group">
-          <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:#64748b;font-weight:400">(até ${g.max_select})</span></div>
-          ${g.options.map(o => `
-            <div class="addon-opt ${modalSelections[g.id]?.includes(o.id) ? 'selected' : ''}" onclick="toggleAddon('${g.id}','${o.id}',${g.max_select})">
-              <span>${o.name}</span>
-              <span class="opt-price">${o.price > 0 ? '+' + fmt(o.price) : ''}</span>
-            </div>
-          `).join('')}
-        </div>
-      `).join('')}
-      <div class="modal-qty">
-        <button onclick="changeModalQty(-1)">−</button>
-        <span id="modal-qty-val" style="font-size:1.2rem;font-weight:700">${modalQty}</span>
-        <button onclick="changeModalQty(1)">+</button>
+    <div class="modal-sheet product-sheet">
+      <div class="modal-scroll-body">
+        <h3>${p.name}</h3>
+        <div style="color:var(--muted);font-size:.85rem">${fmt(p.promo_price ?? p.price)}</div>
+        ${groups.map(g => `
+          <div class="addon-group">
+            <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--muted);font-weight:400">(até ${g.max_select})</span></div>
+            ${g.options.map(o => `
+              <div class="addon-opt ${modalSelections[g.id]?.includes(o.id) ? 'selected' : ''}" onclick="toggleAddon('${g.id}','${o.id}',${g.max_select})">
+                <span>${o.name}</span>
+                <span class="opt-price">${o.price > 0 ? '+' + fmt(o.price) : ''}</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+        <textarea class="modal-note" id="modal-note" placeholder="Observação (opcional)" rows="2"></textarea>
       </div>
-      <textarea class="modal-note" id="modal-note" placeholder="Observação (opcional)" rows="2"></textarea>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeProductModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="confirmAddToCart()">Adicionar</button>
+      <div class="modal-sticky-footer">
+        <div class="modal-qty">
+          <button onclick="changeModalQty(-1)">−</button>
+          <span id="modal-qty-val" style="font-size:1.2rem;font-weight:700">${modalQty}</span>
+          <button onclick="changeModalQty(1)">+</button>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeProductModal()">Cancelar</button>
+          <button class="btn btn-primary" id="modal-add-btn" onclick="confirmAddToCart()">Adicionar — ${fmt(modalCurrentTotal())}</button>
+        </div>
       </div>
     </div>
   `;
@@ -534,6 +557,8 @@ function changeModalQty(delta) {
   modalQty = Math.max(1, modalQty + delta);
   const el = document.getElementById('modal-qty-val');
   if (el) el.textContent = modalQty;
+  const btn = document.getElementById('modal-add-btn');
+  if (btn) btn.textContent = `Adicionar — ${fmt(modalCurrentTotal())}`;
 }
 
 function closeProductModal() {
