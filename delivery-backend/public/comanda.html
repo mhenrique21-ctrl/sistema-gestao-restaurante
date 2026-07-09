@@ -139,6 +139,8 @@
   </div>
   <div id="scan-error"></div>
 
+  <button class="btn btn-primary" style="width:100%;margin-top:16px" onclick="openBalcaoSale()">🏪 Venda balcão (sem cartão)</button>
+
   <div id="pending-section" style="margin-top:32px;text-align:left">
     <div class="side-title" style="display:flex;justify-content:space-between;align-items:center">
       <span>🧾 Aguardando fechamento</span>
@@ -263,6 +265,24 @@ async function resolveCode(code) {
       return;
     }
     comanda = await res.json();
+    cart = [];
+    await loadMenuIfNeeded();
+    showComandaScreen();
+  } catch (e) {
+    document.getElementById('scan-error').textContent = 'Erro de conexão';
+  }
+}
+
+// Venda de balcão: abre uma comanda avulsa na hora (sem cartão físico) pra lançar e
+// fechar direto, sem passar pela fila de fechamento — pro cliente que compra no balcão.
+async function openBalcaoSale() {
+  document.getElementById('scan-error').textContent = '';
+  try {
+    const res = await fetch(`${API}/api/comandas/balcao`, { method: 'POST', headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    const data = await res.json();
+    if (!res.ok) { document.getElementById('scan-error').textContent = data.error || 'Erro ao abrir venda de balcão'; return; }
+    comanda = data;
     cart = [];
     await loadMenuIfNeeded();
     showComandaScreen();

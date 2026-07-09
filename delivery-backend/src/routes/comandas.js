@@ -107,6 +107,24 @@ router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), 
   }
 });
 
+// POST /api/comandas/balcao — abre uma venda avulsa de balcão (equipe), sem cartão físico.
+// Diferente do cadastro de cartão (admin only): qualquer atendente pode abrir, pra vender
+// direto no balcão e fechar na hora, sem passar pela fila de fechamento.
+router.post('/balcao', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  try {
+    const code = `balcao_${crypto.randomBytes(6).toString('hex')}`;
+    const label = `Balcão ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    const result = await pool.query(
+      `INSERT INTO comandas (code, label, opened_by) VALUES ($1,$2,$3) RETURNING *`,
+      [code, label, req.user.id]
+    );
+    res.status(201).json({ ...result.rows[0], items: [] });
+  } catch (err) {
+    console.error('[comandas/balcao]', err.message);
+    res.status(500).json({ error: 'Erro ao abrir venda de balcão' });
+  }
+});
+
 // POST /api/comandas — cadastra um cartão físico (admin)
 router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   const { code, label } = req.body;
