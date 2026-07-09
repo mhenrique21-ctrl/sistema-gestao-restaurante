@@ -845,7 +845,7 @@ async function submitOrder() {
     }
     cart = [];
     showSubScreen('order-success-screen');
-    setTimeout(resetToMenu, 6000);
+    setTimeout(resetToMenu, 3000);
   } catch (e) {
     document.getElementById('scan-error').textContent = 'Erro de conexão ao enviar pedido';
     startScanner();
