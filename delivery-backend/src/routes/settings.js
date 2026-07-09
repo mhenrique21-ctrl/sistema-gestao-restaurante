@@ -3,17 +3,19 @@ const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 // Chaves conhecidas expostas publicamente (nada sensível)
-const PUBLIC_KEYS = ['store_whatsapp_number', 'pix_key', 'store_name', 'banner_image_url', 'logo_url', 'primary_color', 'business_hours', 'special_dates', 'free_delivery'];
+const PUBLIC_KEYS = ['store_whatsapp_number', 'pix_key', 'store_name', 'banner_image_url', 'logo_url', 'primary_color', 'business_hours', 'special_dates', 'free_delivery', 'kiosk_idle_seconds'];
 const JSON_KEYS = ['business_hours', 'special_dates'];
 
-const PUBLIC_KEYS_PLACEHOLDERS = PUBLIC_KEYS.map((_, i) => `$${i + 1}`).join(',');
+// Lista fixa (definida no código, não vem de input do usuário) — interpolada direto na
+// query em vez de $N porque o driver pg deste projeto não suporta $10 ou mais (ver memória
+// "Bug pg driver VPS — parâmetros $10+"), e PUBLIC_KEYS já passou de 9 itens.
+const PUBLIC_KEYS_SQL_LIST = PUBLIC_KEYS.map((k) => `'${k.replace(/'/g, "''")}'`).join(',');
 
 // GET /api/settings — configurações da loja (público, usado no checkout/WhatsApp)
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN (${PUBLIC_KEYS_PLACEHOLDERS})`,
-      PUBLIC_KEYS
+      `SELECT key, value FROM settings WHERE key IN (${PUBLIC_KEYS_SQL_LIST})`
     );
     const settings = {};
     for (const key of PUBLIC_KEYS) settings[key] = JSON_KEYS.includes(key) ? null : '';
@@ -48,7 +50,7 @@ router.patch('/', authMiddleware, requireRole('admin'), async (req, res) => {
         [key, stored]
       );
     }
-    const result = await pool.query(`SELECT key, value FROM settings WHERE key IN (${PUBLIC_KEYS_PLACEHOLDERS})`, PUBLIC_KEYS);
+    const result = await pool.query(`SELECT key, value FROM settings WHERE key IN (${PUBLIC_KEYS_SQL_LIST})`);
     const settings = {};
     for (const row of result.rows) settings[row.key] = row.value || '';
     res.json(settings);

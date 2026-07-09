@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Autoatendimento — Confraria</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #0F0F0F;
+    --surface: #1A1208;
+    --card: #221810;
+    --card-active: #2c2013;
+    --border: #2E2218;
+    --gold: #C9A25E;
+    --gold-dim: #8B6B35;
+    --cream: #F8F4ED;
+    --muted: #7A6548;
+    --danger: #E05252;
+    --green: #4CAF80;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--cream); min-height: 100vh; overflow: hidden; }
+  button { font-family: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  #header { background: var(--surface); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); height: 61px; }
+  #header .brand { display: flex; align-items: center; gap: 10px; font-size: 1.15rem; font-weight: 800; color: var(--gold); }
+  .btn { border: none; border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: .9rem; }
+  .btn-primary { background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: var(--surface); }
+  .btn-primary:disabled { background: var(--border); color: var(--muted); }
+  .btn-secondary { background: var(--card); color: var(--cream); border: 1px solid var(--border); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  #header-actions { display: flex; align-items: center; gap: 10px; }
+
+  /* ── Tela de scan ────────────────────────────────── */
+  .scan-screen { max-width: 480px; margin: 40px auto; padding: 0 20px; text-align: center; }
+  .scan-screen h2 { font-size: 1.3rem; margin-bottom: 6px; }
+  .scan-screen p.hint { color: var(--muted); font-size: .88rem; margin-bottom: 20px; }
+  #qr-reader { border-radius: 16px; overflow: hidden; margin-bottom: 20px; }
+  .manual-entry { display: flex; gap: 8px; margin-top: 12px; }
+  .manual-entry input { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--cream); font-size: 1rem; }
+  #scan-error { color: var(--danger); font-size: .85rem; margin-top: 10px; min-height: 20px; }
+  .scan-back { margin-top: 16px; }
+
+  /* ── Cardápio (tela padrão) ───────────────────────── */
+  #app-screen { display: flex; height: calc(100vh - 61px); }
+  #cat-sidebar { width: 130px; min-width: 130px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 6px; }
+  .cat-btn { width: 100%; background: transparent; border: none; color: var(--muted); padding: 14px 6px; border-radius: 12px; font-size: .78rem; font-weight: 700; text-align: center; margin-bottom: 4px; }
+  .cat-btn .cat-thumb { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; margin: 0 auto 6px; display: block; background: var(--card); }
+  .cat-btn.active { background: var(--gold); color: var(--surface); }
+  #menu-col { flex: 1; overflow-y: auto; }
+  #cat-banner { height: 140px; background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 16px 20px; background-color: var(--card); }
+  #cat-banner h2 { font-size: 1.4rem; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
+  #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; padding: 16px 20px 100px; }
+  .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; text-align: left; color: var(--cream); display: flex; flex-direction: column; }
+  .product-card:active { background: var(--card-active); }
+  .product-card .thumb { width: 100%; height: 110px; object-fit: cover; background: var(--bg); }
+  .product-card .body { padding: 10px 12px 12px; flex: 1; display: flex; flex-direction: column; }
+  .product-card .name { font-size: .92rem; font-weight: 700; margin-bottom: 4px; }
+  .product-card .desc { font-size: .75rem; color: var(--muted); margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+  .price-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
+  .price-old { font-size: .75rem; color: var(--muted); text-decoration: line-through; }
+  .price-new { font-size: .95rem; color: var(--gold); font-weight: 800; }
+  .add-pill { align-self: flex-end; background: var(--gold); color: var(--surface); border: none; border-radius: 999px; padding: 6px 16px; font-size: .78rem; font-weight: 700; }
+
+  /* ── Carrinho flutuante ───────────────────────────── */
+  #cart-bar { position: fixed; left: 130px; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; transform: translateY(100%); transition: transform .25s ease; }
+  #cart-bar.show { transform: translateY(0); }
+  #cart-bar .cart-info { font-size: .9rem; }
+  #cart-bar .cart-info strong { color: var(--gold); font-size: 1.1rem; }
+
+  /* ── Modal genérico (carrinho / adicionais) ────────── */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: flex; align-items: flex-end; justify-content: center; z-index: 100; }
+  .modal-sheet { background: var(--card); width: 100%; max-width: 560px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 88vh; overflow-y: auto; }
+  .modal-sheet h3 { font-size: 1.1rem; margin-bottom: 4px; }
+  .addon-group { margin: 14px 0; }
+  .addon-group .g-title { font-size: .85rem; font-weight: 700; margin-bottom: 6px; }
+  .addon-group .g-title .req { color: var(--danger); font-size: .72rem; font-weight: 600; }
+  .addon-opt { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--surface); border-radius: 10px; margin-bottom: 6px; border: 2px solid transparent; }
+  .addon-opt.selected { border-color: var(--gold); }
+  .addon-opt .opt-price { color: var(--muted); font-size: .8rem; }
+  .modal-qty { display: flex; align-items: center; gap: 14px; margin: 16px 0; }
+  .modal-qty button { background: var(--border); color: var(--cream); border: none; width: 36px; height: 36px; border-radius: 8px; font-size: 1.1rem; font-weight: 700; }
+  .modal-note { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--cream); font-size: .88rem; margin-top: 10px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .modal-actions .btn { flex: 1; }
+  .side-title { font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+  .cart-item, .launched-item { background: var(--surface); border-radius: 10px; padding: 10px; margin-bottom: 8px; font-size: .85rem; }
+  .cart-item .row, .launched-item .row { display: flex; justify-content: space-between; align-items: center; }
+  .cart-item .name, .launched-item .name { font-weight: 700; }
+  .cart-item small, .launched-item small { color: var(--muted); display: block; margin-top: 2px; }
+  .cart-empty, .launched-empty { color: var(--muted); font-size: .82rem; text-align: center; padding: 20px 0; }
+
+  /* ── Checkout ─────────────────────────────────────── */
+  #checkout-screen { max-width: 560px; margin: 20px auto; padding: 0 20px 40px; overflow-y: auto; max-height: calc(100vh - 100px); }
+  #checkout-screen h2 { font-size: 1.3rem; margin-bottom: 14px; text-align: center; }
+  .close-items { max-height: 26vh; overflow-y: auto; margin: 10px 0; }
+  .close-total { font-size: 1.8rem; font-weight: 800; color: var(--gold); text-align: center; margin: 10px 0; }
+  .pay-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; }
+  .pay-row .pay-name { font-weight: 700; }
+  .pay-row input { width: 110px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--cream); font-size: .95rem; text-align: right; }
+  .close-remaining { text-align: center; font-size: .9rem; font-weight: 700; margin-bottom: 12px; }
+  .close-remaining.ok { color: var(--green); }
+  .close-remaining.pending { color: var(--danger); }
+
+  /* ── Sucesso ──────────────────────────────────────── */
+  .success-screen { min-height: calc(100vh - 61px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; gap: 12px; }
+  .success-screen .icon { font-size: 4rem; }
+  .success-screen h2 { font-size: 1.4rem; }
+  .success-screen p { color: var(--muted); }
+
+  /* ── Tela de descanso ─────────────────────────────── */
+  #screensaver-screen { position: fixed; inset: 0; background: #000; z-index: 200; display: flex; align-items: center; justify-content: center; }
+  #screensaver-screen .slide { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity 1s ease; }
+  #screensaver-screen .slide.active { opacity: 1; }
+  #screensaver-screen .overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.1) 0%, rgba(0,0,0,.75) 100%); }
+  #screensaver-screen .info { position: absolute; left: 0; right: 0; bottom: 60px; text-align: center; padding: 0 30px; }
+  #screensaver-screen .info h2 { font-size: 2rem; margin-bottom: 8px; color: var(--cream); }
+  #screensaver-screen .info .promo { display: inline-block; background: var(--danger); color: #fff; font-weight: 800; padding: 4px 14px; border-radius: 999px; font-size: .85rem; margin-bottom: 10px; }
+  #screensaver-screen .info .price { font-size: 1.6rem; font-weight: 800; color: var(--gold); }
+  #screensaver-screen .tap-hint { position: absolute; top: 30px; left: 0; right: 0; text-align: center; color: var(--cream); font-size: .9rem; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="brand">☕ Confraria Café</div>
+  <div id="header-actions">
+    <button class="btn btn-secondary" onclick="goHistoryScan()">🧾 Meus pedidos</button>
+    <button class="btn btn-primary" onclick="goCheckoutScan()">💳 Minha conta</button>
+  </div>
+  <button class="btn btn-secondary hidden" id="back-to-menu-btn" onclick="resetToMenu()">← Voltar ao cardápio</button>
+</div>
+
+<!-- ── Cardápio (tela padrão / sempre visível) ── -->
+<div id="app-screen">
+  <div id="cat-sidebar"></div>
+  <div id="menu-col">
+    <div id="cat-banner"><h2 id="cat-banner-title"></h2></div>
+    <div id="product-grid"></div>
+  </div>
+</div>
+
+<div id="cart-bar">
+  <div class="cart-info"><span id="cart-count">0 itens</span> — <strong id="cart-total-inline">R$ 0,00</strong></div>
+  <button class="btn btn-primary" onclick="openCartModal()">Ver pedido</button>
+</div>
+
+<!-- ── Scan para confirmar pedido ── -->
+<div id="order-scan-screen" class="scan-screen hidden">
+  <h2>Escaneie seu cartão</h2>
+  <p class="hint">Aponte a câmera para o QR do seu cartão para confirmar o pedido.</p>
+  <div id="qr-reader"></div>
+  <div class="manual-entry">
+    <input type="text" id="manual-code" placeholder="Código do cartão" autocomplete="off">
+    <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Confirmar</button>
+  </div>
+  <div id="scan-error"></div>
+  <button class="btn btn-secondary scan-back" onclick="resetToMenu()">← Voltar ao cardápio</button>
+</div>
+
+<!-- ── Sucesso pedido ── -->
+<div id="order-success-screen" class="success-screen hidden">
+  <div class="icon">✅</div>
+  <h2>Pedido enviado!</h2>
+  <p>Já mandamos pra cozinha. Obrigado 🎉</p>
+  <button class="btn btn-primary" onclick="resetToMenu()" style="margin-top:20px">Voltar ao cardápio</button>
+</div>
+
+<!-- ── Scan para fechar conta ── -->
+<div id="checkout-scan-screen" class="scan-screen hidden">
+  <h2>Escaneie seu cartão</h2>
+  <p class="hint">Aponte a câmera para o QR do seu cartão para ver sua conta.</p>
+  <div id="qr-reader-checkout"></div>
+  <div class="manual-entry">
+    <input type="text" id="manual-code-checkout" placeholder="Código do cartão" autocomplete="off">
+    <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code-checkout').value)">Confirmar</button>
+  </div>
+  <div id="scan-error-checkout"></div>
+  <button class="btn btn-secondary scan-back" onclick="resetToMenu()">← Voltar</button>
+</div>
+
+<!-- ── Scan para ver meus pedidos ── -->
+<div id="history-scan-screen" class="scan-screen hidden">
+  <h2>Escaneie seu cartão</h2>
+  <p class="hint">Aponte a câmera para o QR do seu cartão para ver o que você já pediu.</p>
+  <div id="qr-reader-history"></div>
+  <div class="manual-entry">
+    <input type="text" id="manual-code-history" placeholder="Código do cartão" autocomplete="off">
+    <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code-history').value)">Confirmar</button>
+  </div>
+  <div id="scan-error-history"></div>
+  <button class="btn btn-secondary scan-back" onclick="resetToMenu()">← Voltar</button>
+</div>
+
+<!-- ── Meus pedidos (histórico, somente leitura) ── -->
+<div id="history-screen" class="hidden">
+  <h2 id="history-title" style="text-align:center;margin:20px 0 14px">Meus pedidos</h2>
+  <div class="close-items" id="history-items" style="max-width:560px;margin:0 auto"></div>
+  <div class="close-total" id="history-total">R$ 0,00</div>
+  <div style="max-width:560px;margin:20px auto;padding:0 20px">
+    <button class="btn btn-primary" style="width:100%" onclick="resetToMenu()">← Voltar ao cardápio</button>
+  </div>
+</div>
+
+<!-- ── Fechamento (PDV self-service) ── -->
+<div id="checkout-screen" class="hidden">
+  <h2 id="checkout-title">Sua conta</h2>
+  <div class="close-items" id="checkout-items"></div>
+  <div class="close-total" id="checkout-total">R$ 0,00</div>
+  <div class="side-title" style="text-align:center">Formas de pagamento</div>
+  <div id="pay-rows"></div>
+  <div class="close-remaining pending" id="close-remaining"></div>
+  <div class="modal-actions">
+    <button class="btn btn-secondary" onclick="resetToMenu()">Cancelar</button>
+    <button class="btn btn-primary" id="confirm-close-btn" onclick="confirmClose()" disabled>Confirmar pagamento</button>
+  </div>
+</div>
+
+<!-- ── Sucesso fechamento ── -->
+<div id="checkout-success-screen" class="success-screen hidden">
+  <div class="icon">✅</div>
+  <h2>Conta fechada!</h2>
+  <p>Obrigado pela visita 🎉</p>
+  <button class="btn btn-primary" onclick="resetToMenu()" style="margin-top:20px">Voltar ao cardápio</button>
+</div>
+
+<!-- ── Tela de descanso ── -->
+<div id="screensaver-screen" class="hidden" onclick="wakeUp()">
+  <div class="tap-hint">Toque na tela para pedir</div>
+</div>
+
+<script>
+const API = '';
+const PAY_METHODS = [['pix','💠 Pix'],['cartao_credito','💳 Crédito'],['cartao_debito','💳 Débito'],['dinheiro','💵 Dinheiro']];
+
+let menu = [];
+let activeCategory = null;
+let cart = [];
+let comanda = null;
+let scanPurpose = null; // 'order' | 'checkout' | 'history'
+let qrScanner = null;
+let resolvingCode = false;
+let idleSeconds = 60;
+let idleTimer = null;
+let screensaverTimer = null;
+
+function fmt(v) { return 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ','); }
+
+const SUB_SCREENS = ['order-scan-screen','order-success-screen','checkout-scan-screen','checkout-screen','checkout-success-screen','history-scan-screen','history-screen'];
+
+function hideSubScreens() {
+  SUB_SCREENS.forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('app-screen').classList.add('hidden');
+  document.getElementById('cart-bar').classList.remove('show');
+}
+
+function showAppScreen() {
+  hideSubScreens();
+  document.getElementById('app-screen').classList.remove('hidden');
+  document.getElementById('header-actions').classList.remove('hidden');
+  document.getElementById('back-to-menu-btn').classList.add('hidden');
+  renderCartBar();
+}
+
+function showSubScreen(id) {
+  hideSubScreens();
+  document.getElementById(id).classList.remove('hidden');
+  document.getElementById('header-actions').classList.add('hidden');
+  document.getElementById('back-to-menu-btn').classList.remove('hidden');
+}
+
+function resetToMenu() {
+  stopScanner();
+  cart = [];
+  comanda = null;
+  showAppScreen();
+}
+
+// ── Cardápio ─────────────────────────────────────────
+async function loadMenuIfNeeded() {
+  if (menu.length) return;
+  const res = await fetch(`${API}/api/menu`);
+  menu = await res.json();
+  activeCategory = menu[0]?.id || null;
+}
+
+function renderCategorySidebar() {
+  const el = document.getElementById('cat-sidebar');
+  el.innerHTML = menu.map(c => `
+    <button class="cat-btn ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">
+      ${c.image_url ? `<img class="cat-thumb" src="${c.image_url}">` : ''}
+      ${c.name}
+    </button>
+  `).join('');
+}
+
+function selectCategory(id) {
+  activeCategory = id;
+  renderCategorySidebar();
+  renderCategoryBanner();
+  renderProductGrid();
+}
+
+function renderCategoryBanner() {
+  const cat = menu.find(c => c.id === activeCategory);
+  const banner = document.getElementById('cat-banner');
+  banner.style.backgroundImage = cat?.image_url ? `url('${cat.image_url}')` : '';
+  document.getElementById('cat-banner-title').textContent = cat?.name || '';
+}
+
+function renderProductGrid() {
+  const cat = menu.find(c => c.id === activeCategory);
+  const el = document.getElementById('product-grid');
+  const products = (cat?.products || []).filter(p => p.available);
+  if (!products.length) { el.innerHTML = '<div class="launched-empty">Sem produtos nesta categoria</div>'; return; }
+  el.innerHTML = products.map(p => `
+    <button class="product-card" onclick="openProductModal('${p.id}')">
+      ${p.image_url ? `<img class="thumb" src="${p.image_url}">` : ''}
+      <div class="body">
+        <div class="name">${p.name}</div>
+        ${p.description ? `<div class="desc">${p.description}</div>` : ''}
+        <div class="price-row">
+          ${p.promo_price != null ? `<span class="price-old">${fmt(p.price)}</span><span class="price-new">${fmt(p.promo_price)}</span>` : `<span class="price-new">${fmt(p.price)}</span>`}
+        </div>
+        <span class="add-pill">Adicionar</span>
+      </div>
+    </button>
+  `).join('');
+}
+
+// ── Modal de produto (quantidade + adicionais + obs) ──
+let modalProduct = null;
+let modalSelections = {};
+let modalQty = 1;
+
+function findProduct(id) {
+  for (const c of menu) { const p = c.products.find(x => x.id === id); if (p) return p; }
+  return null;
+}
+
+function openProductModal(productId) {
+  modalProduct = findProduct(productId);
+  if (!modalProduct) return;
+  modalSelections = {};
+  modalQty = 1;
+  (modalProduct.addon_groups || []).forEach(g => { modalSelections[g.id] = []; });
+  renderProductModal();
+}
+
+function renderProductModal() {
+  const p = modalProduct;
+  const groups = (p.addon_groups || []).filter(g => g.options && g.options.length);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'product-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet">
+      <h3>${p.name}</h3>
+      <div style="color:#94a3b8;font-size:.85rem">${fmt(p.promo_price ?? p.price)}</div>
+      ${groups.map(g => `
+        <div class="addon-group">
+          <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:#64748b;font-weight:400">(até ${g.max_select})</span></div>
+          ${g.options.map(o => `
+            <div class="addon-opt ${modalSelections[g.id]?.includes(o.id) ? 'selected' : ''}" onclick="toggleAddon('${g.id}','${o.id}',${g.max_select})">
+              <span>${o.name}</span>
+              <span class="opt-price">${o.price > 0 ? '+' + fmt(o.price) : ''}</span>
+            </div>
+          `).join('')}
+        </div>
+      `).join('')}
+      <div class="modal-qty">
+        <button onclick="changeModalQty(-1)">−</button>
+        <span id="modal-qty-val" style="font-size:1.2rem;font-weight:700">${modalQty}</span>
+        <button onclick="changeModalQty(1)">+</button>
+      </div>
+      <textarea class="modal-note" id="modal-note" placeholder="Observação (opcional)" rows="2"></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeProductModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmAddToCart()">Adicionar</button>
+      </div>
+    </div>
+  `;
+  closeProductModal();
+  document.body.appendChild(backdrop);
+}
+
+function toggleAddon(groupId, optionId, maxSelect) {
+  const sel = modalSelections[groupId] || (modalSelections[groupId] = []);
+  const idx = sel.indexOf(optionId);
+  if (idx >= 0) { sel.splice(idx, 1); }
+  else {
+    if (maxSelect === 1) sel.length = 0;
+    else if (sel.length >= maxSelect) return;
+    sel.push(optionId);
+  }
+  renderProductModal();
+}
+
+function changeModalQty(delta) {
+  modalQty = Math.max(1, modalQty + delta);
+  const el = document.getElementById('modal-qty-val');
+  if (el) el.textContent = modalQty;
+}
+
+function closeProductModal() {
+  const el = document.getElementById('product-modal-backdrop');
+  if (el) el.remove();
+}
+
+function confirmAddToCart() {
+  const p = modalProduct;
+  for (const g of (p.addon_groups || [])) {
+    const count = (modalSelections[g.id] || []).length;
+    if (g.required && count < g.min_select) {
+      alert(`Selecione ao menos ${g.min_select} opção(ões) em "${g.name}"`);
+      return;
+    }
+  }
+  const addons = [];
+  for (const g of (p.addon_groups || [])) {
+    for (const optId of (modalSelections[g.id] || [])) {
+      const opt = g.options.find(o => o.id === optId);
+      if (opt) addons.push({ addon_option_id: opt.id, quantity: 1 });
+    }
+  }
+  const note = document.getElementById('modal-note')?.value?.trim() || null;
+  const unitPrice = p.promo_price ?? p.price;
+  const addonsTotal = addons.reduce((s, a) => {
+    const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id));
+    const o = g?.options.find(o => o.id === a.addon_option_id);
+    return s + (o?.price || 0);
+  }, 0);
+  cart.push({
+    product_id: p.id, product_name: p.name, quantity: modalQty, notes: note, addons,
+    subtotal: (parseFloat(unitPrice) + addonsTotal) * modalQty,
+    addon_labels: addons.map(a => { const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id)); const o = g?.options.find(o => o.id === a.addon_option_id); return o?.name; }).filter(Boolean),
+  });
+  closeProductModal();
+  renderCartBar();
+}
+
+// ── Carrinho ─────────────────────────────────────────
+function renderCartBar() {
+  const bar = document.getElementById('cart-bar');
+  const total = cart.reduce((s, i) => s + i.subtotal, 0);
+  document.getElementById('cart-count').textContent = cart.length + (cart.length === 1 ? ' item' : ' itens');
+  document.getElementById('cart-total-inline').textContent = fmt(total);
+  bar.classList.toggle('show', cart.length > 0);
+}
+
+function openCartModal() {
+  if (!cart.length) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'cart-modal-backdrop';
+  const total = cart.reduce((s, i) => s + i.subtotal, 0);
+  backdrop.innerHTML = `
+    <div class="modal-sheet">
+      <h3>Seu pedido</h3>
+      <div id="cart-modal-list" style="margin-top:12px"></div>
+      <div class="close-total">${fmt(total)}</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeCartModal()">Continuar pedindo</button>
+        <button class="btn btn-primary" onclick="goConfirmScan()">ENVIAR PEDIDO</button>
+      </div>
+    </div>
+  `;
+  closeCartModal();
+  document.body.appendChild(backdrop);
+  renderCartModalList();
+}
+
+function renderCartModalList() {
+  const el = document.getElementById('cart-modal-list');
+  if (!el) return;
+  el.innerHTML = cart.map((item, i) => `
+    <div class="cart-item">
+      <div class="row">
+        <span class="name">${item.quantity}× ${item.product_name}</span>
+        <button class="btn btn-secondary" style="padding:4px 10px" onclick="removeCartItem(${i})">✕</button>
+      </div>
+      ${item.addon_labels?.length ? `<small>${item.addon_labels.join(', ')}</small>` : ''}
+      ${item.notes ? `<small>📝 ${item.notes}</small>` : ''}
+    </div>
+  `).join('');
+}
+
+function closeCartModal() {
+  const el = document.getElementById('cart-modal-backdrop');
+  if (el) el.remove();
+}
+
+function removeCartItem(i) {
+  cart.splice(i, 1);
+  renderCartBar();
+  if (cart.length) renderCartModalList(); else closeCartModal();
+}
+
+// ── Scan (compartilhado entre pedido, fechamento e histórico) ─
+const READER_IDS = { order: 'qr-reader', checkout: 'qr-reader-checkout', history: 'qr-reader-history' };
+const ERROR_IDS = { order: 'scan-error', checkout: 'scan-error-checkout', history: 'scan-error-history' };
+
+function startScanner() {
+  if (qrScanner) return;
+  resolvingCode = false;
+  const readerId = READER_IDS[scanPurpose] || 'qr-reader';
+  const errEl = document.getElementById(ERROR_IDS[scanPurpose] || 'scan-error');
+  errEl.textContent = '';
+  qrScanner = new Html5Qrcode(readerId);
+  // Abre a câmera direto (sem botão extra de "pedir permissão") — o próprio toque
+  // que trouxe o usuário até aqui (Enviar pedido / Minha conta / Meus pedidos) já
+  // conta como o gesto exigido pelo navegador para liberar a câmera.
+  qrScanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 240 }, onScanSuccess, () => {})
+    .catch(() => { errEl.textContent = 'Não foi possível abrir a câmera. Digite o código abaixo.'; });
+}
+
+function stopScanner() {
+  if (!qrScanner) return;
+  const s = qrScanner;
+  qrScanner = null;
+  s.stop().then(() => s.clear()).catch(() => {});
+}
+
+function onScanSuccess(decodedText) {
+  resolveCode(decodedText);
+}
+
+function goConfirmScan() {
+  if (!cart.length) return;
+  closeCartModal();
+  scanPurpose = 'order';
+  showSubScreen('order-scan-screen');
+  startScanner();
+}
+
+function goCheckoutScan() {
+  scanPurpose = 'checkout';
+  showSubScreen('checkout-scan-screen');
+  startScanner();
+}
+
+function goHistoryScan() {
+  scanPurpose = 'history';
+  showSubScreen('history-scan-screen');
+  startScanner();
+}
+
+async function resolveCode(code) {
+  code = (code || '').trim();
+  if (!code || resolvingCode) return;
+  resolvingCode = true;
+  const errEl = document.getElementById(ERROR_IDS[scanPurpose] || 'scan-error');
+  errEl.textContent = '';
+  try {
+    const res = await fetch(`${API}/api/comandas/resolve/${encodeURIComponent(code)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errEl.textContent = err.error || 'Cartão não encontrado';
+      resolvingCode = false;
+      return;
+    }
+    comanda = await res.json();
+    // Histórico pode ser consultado mesmo com a comanda já fechada/paga.
+    if (scanPurpose !== 'history' && comanda.status !== 'aberta') {
+      errEl.textContent = 'Esta comanda já está fechada. Chame um atendente.';
+      resolvingCode = false;
+      return;
+    }
+    if (scanPurpose === 'order') await submitOrder();
+    else if (scanPurpose === 'history') showHistoryScreen();
+    else showCheckoutScreen();
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão';
+    resolvingCode = false;
+  }
+}
+
+// ── Meus pedidos (histórico, somente leitura) ────────
+function showHistoryScreen() {
+  stopScanner();
+  showSubScreen('history-screen');
+  document.getElementById('history-title').textContent = `Pedidos de ${comanda.label || comanda.code}`;
+  const items = comanda.items || [];
+  document.getElementById('history-items').innerHTML = items.map(i => `
+    <div class="launched-item">
+      <div class="row"><span class="name">${i.quantity}× ${i.product_name}</span><span>${fmt(i.subtotal)}</span></div>
+      ${i.addons?.length ? `<small>${i.addons.map(a => a.name).join(', ')}</small>` : ''}
+      ${i.notes ? `<small>📝 ${i.notes}</small>` : ''}
+    </div>
+  `).join('') || '<div class="launched-empty">Nenhum pedido ainda</div>';
+  document.getElementById('history-total').textContent = fmt(comanda.total);
+}
+
+// ── Envio do pedido (fluxo "Fazer pedido") ───────────
+async function submitOrder() {
+  stopScanner();
+  try {
+    const res = await fetch(`${API}/api/comandas/${comanda.id}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: cart.map(({ product_id, quantity, notes, addons }) => ({ product_id, quantity, notes, addons })) }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById('scan-error').textContent = data.error || 'Erro ao enviar pedido';
+      startScanner();
+      return;
+    }
+    cart = [];
+    showSubScreen('order-success-screen');
+    setTimeout(resetToMenu, 6000);
+  } catch (e) {
+    document.getElementById('scan-error').textContent = 'Erro de conexão ao enviar pedido';
+    startScanner();
+  }
+}
+
+// ── Fechamento (fluxo "Minha conta") ─────────────────
+function showCheckoutScreen() {
+  stopScanner();
+  showSubScreen('checkout-screen');
+  document.getElementById('checkout-title').textContent = `Conta de ${comanda.label || comanda.code}`;
+
+  const items = comanda.items || [];
+  document.getElementById('checkout-items').innerHTML = items.map(i => `
+    <div class="launched-item">
+      <div class="row"><span class="name">${i.quantity}× ${i.product_name}</span><span>${fmt(i.subtotal)}</span></div>
+    </div>
+  `).join('') || '<div class="launched-empty">Nenhum item lançado</div>';
+  document.getElementById('checkout-total').textContent = fmt(comanda.total);
+
+  document.getElementById('pay-rows').innerHTML = PAY_METHODS.map(([val,label]) => `
+    <div class="pay-row">
+      <span class="pay-name">${label}</span>
+      <input type="number" step="0.01" min="0" placeholder="0,00" data-method="${val}" oninput="updateCloseRemaining()">
+    </div>
+  `).join('');
+  updateCloseRemaining();
+}
+
+function collectPayments() {
+  return Array.from(document.querySelectorAll('#pay-rows input'))
+    .map(inp => ({ method: inp.dataset.method, amount: parseFloat(inp.value) || 0 }))
+    .filter(p => p.amount > 0);
+}
+
+function updateCloseRemaining() {
+  const paid = collectPayments().reduce((s, p) => s + p.amount, 0);
+  const remaining = parseFloat(comanda.total) - paid;
+  const el = document.getElementById('close-remaining');
+  const ok = Math.abs(remaining) < 0.01;
+  el.textContent = ok ? 'Valor completo ✓' : `Restante: ${fmt(remaining)}`;
+  el.className = 'close-remaining ' + (ok ? 'ok' : 'pending');
+  document.getElementById('confirm-close-btn').disabled = !ok;
+}
+
+async function confirmClose() {
+  const payments = collectPayments();
+  if (!payments.length) return;
+  const btn = document.getElementById('confirm-close-btn');
+  btn.disabled = true;
+  btn.textContent = 'Fechando...';
+  try {
+    const res = await fetch(`${API}/api/comandas/${comanda.id}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payments }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = 'Confirmar pagamento'; return; }
+    showSubScreen('checkout-success-screen');
+    setTimeout(resetToMenu, 6000);
+  } catch (e) {
+    alert('Erro de conexão ao fechar comanda');
+    btn.disabled = false;
+    btn.textContent = 'Confirmar pagamento';
+  }
+}
+
+// ── Tela de descanso ──────────────────────────────────
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(showScreensaver, idleSeconds * 1000);
+}
+
+function showScreensaver() {
+  const promoProducts = [];
+  menu.forEach(c => (c.products || []).forEach(p => {
+    if (p.promo_price != null && p.image_url) promoProducts.push(p);
+  }));
+  const el = document.getElementById('screensaver-screen');
+  if (!promoProducts.length) return; // nada em oferta com foto — não interrompe o cliente à toa
+
+  // Reseta qualquer fluxo em andamento (tablet compartilhado, sessão abandonada)
+  stopScanner();
+  cart = [];
+  comanda = null;
+  closeCartModal();
+  closeProductModal();
+
+  el.innerHTML = `<div class="tap-hint">Toque na tela para pedir</div>` +
+    promoProducts.map((p, i) => `
+      <div class="slide ${i === 0 ? 'active' : ''}" data-i="${i}" style="background-image:url('${p.image_url}')"></div>
+    `).join('') +
+    `<div class="overlay"></div>
+     <div class="info">
+       <span class="promo">${p_label(promoProducts[0])}</span>
+       <h2 id="ss-name">${promoProducts[0].name}</h2>
+       <div class="price" id="ss-price">${fmt(promoProducts[0].promo_price)}</div>
+     </div>`;
+  el.classList.remove('hidden');
+
+  let idx = 0;
+  if (screensaverTimer) clearInterval(screensaverTimer);
+  screensaverTimer = setInterval(() => {
+    idx = (idx + 1) % promoProducts.length;
+    el.querySelectorAll('.slide').forEach(s => s.classList.toggle('active', +s.dataset.i === idx));
+    document.getElementById('ss-name').textContent = promoProducts[idx].name;
+    document.getElementById('ss-price').textContent = fmt(promoProducts[idx].promo_price);
+  }, 5000);
+}
+
+function p_label(p) { return p.promo_label || 'Oferta'; }
+
+function wakeUp() {
+  document.getElementById('screensaver-screen').classList.add('hidden');
+  if (screensaverTimer) { clearInterval(screensaverTimer); screensaverTimer = null; }
+  resetToMenu();
+  resetIdleTimer();
+}
+
+['click','touchstart','keydown'].forEach(evt => document.addEventListener(evt, () => {
+  if (document.getElementById('screensaver-screen').classList.contains('hidden')) resetIdleTimer();
+}));
+
+// ── Init ─────────────────────────────────────────────
+async function init() {
+  try {
+    const s = await fetch(`${API}/api/settings`).then(r => r.json());
+    idleSeconds = parseInt(s.kiosk_idle_seconds) || 60;
+  } catch (e) {}
+  await loadMenuIfNeeded();
+  renderCategorySidebar();
+  renderCategoryBanner();
+  renderProductGrid();
+  showAppScreen();
+  resetIdleTimer();
+}
+init();
+</script>
+</body>
+</html>

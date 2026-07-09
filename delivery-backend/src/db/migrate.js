@@ -206,6 +206,62 @@ CREATE TRIGGER trg_products_updated BEFORE UPDATE ON products FOR EACH ROW EXECU
 
 DROP TRIGGER IF EXISTS trg_orders_updated ON orders;
 CREATE TRIGGER trg_orders_updated BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ── Comandas físicas (QR code) ──────────────────────────
+-- Módulo aditivo e independente do fluxo de delivery: cada cartão físico
+-- tem um código de QR único cadastrado aqui; o tablet resolve o código,
+-- lança pedidos (que somam ao total corrente) e depois fecha a conta.
+DO $$ BEGIN
+  CREATE TYPE comanda_status_enum AS ENUM ('aberta', 'fechada', 'cancelada');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS comandas (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  code VARCHAR(100) NOT NULL UNIQUE,
+  label VARCHAR(50),
+  status comanda_status_enum NOT NULL DEFAULT 'aberta',
+  subtotal NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  payment_method VARCHAR(30) CHECK (payment_method IN ('pix','cartao_credito','cartao_debito','dinheiro')),
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  closed_at TIMESTAMPTZ,
+  opened_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  closed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS comanda_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  comanda_id UUID NOT NULL REFERENCES comandas(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+  quantity INT NOT NULL CHECK (quantity > 0),
+  unit_price NUMERIC(10,2) NOT NULL,
+  subtotal NUMERIC(10,2) NOT NULL,
+  notes TEXT,
+  added_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS comanda_item_addons (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  comanda_item_id UUID NOT NULL REFERENCES comanda_items(id) ON DELETE CASCADE,
+  addon_option_id UUID REFERENCES addon_options(id) ON DELETE SET NULL,
+  name VARCHAR(150) NOT NULL,
+  price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  quantity INT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_comandas_code ON comandas(code);
+CREATE INDEX IF NOT EXISTS idx_comandas_status ON comandas(status);
+CREATE INDEX IF NOT EXISTS idx_comanda_items_comanda ON comanda_items(comanda_id);
+CREATE INDEX IF NOT EXISTS idx_comanda_item_addons_item ON comanda_item_addons(comanda_item_id);
+
+DROP TRIGGER IF EXISTS trg_comandas_updated ON comandas;
+CREATE TRIGGER trg_comandas_updated BEFORE UPDATE ON comandas FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 `;
 
 async function migrate() {

@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Admin Confraria">
 <link rel="icon" type="image/png" href="/admin-icon.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="apple-touch-icon" href="/admin-icon.png">
 <title>Admin — Confraria Café</title>
 <style>
@@ -180,6 +181,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
     <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
     <button class="nav-btn" data-page="financeiro" onclick="showPage('financeiro',this)">💰 Financeiro</button>
+    <button class="nav-btn" data-page="comandas" onclick="showPage('comandas',this)">📇 Comandas</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
 </div>
@@ -507,9 +509,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', comandas:'Comandas' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, comandas: pageComandas };
   pages[page]?.();
 }
 
@@ -3560,6 +3562,82 @@ async function toggleBairroAtivo(id, current) {
   pageBairros();
 }
 
+// ── Comandas ──────────────────────────────────────────────────────
+let COMANDAS = [];
+
+const COMANDA_STATUS_LABEL = { aberta: 'Aberta', fechada: 'Fechada', cancelada: 'Cancelada' };
+const COMANDA_STATUS_BADGE = { aberta: 'badge-green', fechada: 'badge-red', cancelada: 'badge-gray' };
+
+async function pageComandas() {
+  document.getElementById('content').innerHTML = '<p style="color:#64748b">Carregando...</p>';
+  try {
+    COMANDAS = await api('GET', '/comandas');
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="card"><p style="color:#ef4444">❌ Erro ao carregar comandas: ${e.message}</p></div>`;
+    return;
+  }
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="modalNovaComanda()">+ Novo cartão</button>
+    </div>
+    <div class="card">
+      <h3>Comandas (${COMANDAS.length})</h3>
+      <table>
+        <tr><th>Código</th><th>Nome</th><th>Status</th><th>Total</th><th>Aberta desde</th><th>Ações</th></tr>
+        ${COMANDAS.map(c => `
+          <tr>
+            <td style="font-family:monospace;font-weight:600">${c.code}</td>
+            <td>${c.label || '—'}</td>
+            <td><span class="badge ${COMANDA_STATUS_BADGE[c.status] || 'badge-gray'}">${COMANDA_STATUS_LABEL[c.status] || c.status}</span></td>
+            <td class="price">R$ ${parseFloat(c.total).toFixed(2).replace('.',',')}</td>
+            <td>${new Date(c.opened_at).toLocaleString('pt-BR')}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-secondary btn-sm" onclick="modalVerQR('${c.code}')">📱 QR</button>
+              ${c.status === 'fechada' ? `<button class="btn btn-secondary btn-sm" onclick="reabrirComanda('${c.id}')">🔓 Reabrir</button>` : ''}
+            </td>
+          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#475569;padding:20px">Nenhuma comanda cadastrada</td></tr>'}
+      </table>
+    </div>`;
+}
+
+function modalNovaComanda() {
+  openModal('Novo Cartão de Comanda', `
+    <div class="form-grid">
+      <div>
+        <label>Código do QR <small style="color:#94a3b8">(opcional)</small></label>
+        <input id="cm-code" placeholder="Deixe em branco para gerar um código seguro automaticamente" />
+      </div>
+      <div><label>Nome / identificação</label><input id="cm-label" placeholder="Ex: Mesa 1 ou nome do cliente" /></div>
+    </div>`, async () => {
+    await api('POST', '/comandas', { code: v('cm-code').trim() || undefined, label: v('cm-label') || null });
+    toast('Cartão cadastrado!'); closeModal(); pageComandas();
+  });
+}
+
+async function reabrirComanda(id) {
+  if (!confirm('Reabrir esta comanda? O fechamento anterior será desfeito.')) return;
+  try {
+    await api('POST', `/comandas/${id}/reopen`, {});
+    toast('Comanda reaberta');
+    pageComandas();
+  } catch (e) {
+    toast(e.message || 'Erro ao reabrir', true);
+  }
+}
+
+function modalVerQR(code) {
+  openModal('QR da Comanda', `
+    <div style="text-align:center">
+      <div id="cm-qr-box" style="display:inline-block;background:#fff;padding:12px;border-radius:12px"></div>
+      <p style="margin-top:10px;font-family:monospace;font-size:1.1rem;font-weight:700">${code}</p>
+      <button class="btn btn-primary" style="margin-top:14px" onclick="window.print()">🖨 Imprimir</button>
+    </div>`, null);
+  setTimeout(() => {
+    const box = document.getElementById('cm-qr-box');
+    if (box && window.QRCode) new QRCode(box, { text: code, width: 220, height: 220 });
+  }, 0);
+}
+
 // ── Configurações ─────────────────────────────────────────────────
 function cfgImageHtml(idPrefix, label, url, folder, previewStyle) {
   return `
@@ -3695,6 +3773,13 @@ async function pageConfiguracoes() {
       <button class="btn btn-secondary btn-sm" onclick="addSpecialDate()" style="margin-top:8px">+ Adicionar data</button>
     </div>
 
+    <div class="card" style="margin-top:16px">
+      <h3>🖥 Autoatendimento (tablet do cliente)</h3>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Depois de quanto tempo parado o tablet mostra a tela de descanso com fotos das ofertas.</div>
+      <div class="form-grid">
+        <div><label>Tempo até a tela de descanso (segundos)</label><input id="cfg-idle" type="number" min="10" value="${s.kiosk_idle_seconds || 60}" /></div>
+      </div>
+    </div>
     <div style="margin-top:16px">
       <button class="btn btn-primary" onclick="salvarConfiguracoes()">💾 Salvar configurações</button>
     </div>`;
@@ -3753,6 +3838,7 @@ async function salvarConfiguracoes() {
     primary_color: v('cfg-color'),
     business_hours,
     special_dates,
+    kiosk_idle_seconds: parseInt(v('cfg-idle')) || 60,
   });
   toast('Configurações salvas!');
 }
