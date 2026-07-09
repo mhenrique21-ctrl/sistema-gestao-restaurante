@@ -71,7 +71,9 @@
   #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; padding: 16px 20px 100px; }
   .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; text-align: left; color: var(--cream); display: flex; flex-direction: column; }
   .product-card:active { background: var(--card-active); }
-  .product-card .thumb { width: 100%; height: 110px; object-fit: cover; background: var(--bg); }
+  .thumb-wrap { position: relative; }
+  .product-card .thumb { width: 100%; height: 110px; object-fit: cover; background: var(--bg); display: block; }
+  .off-badge { position: absolute; top: 6px; left: 6px; width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg,#ff4d4d,#ff8c00); box-shadow: 0 2px 8px rgba(255,77,77,.55); color: #fff; font-weight: 900; font-size: 9px; line-height: 1.1; text-align: center; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
   .product-card .body { padding: 10px 12px 12px; flex: 1; display: flex; flex-direction: column; }
   .product-card .name { font-size: .92rem; font-weight: 700; margin-bottom: 4px; }
   .product-card .desc { font-size: .75rem; color: var(--muted); margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
@@ -423,21 +425,45 @@ function resetToMenu() {
 }
 
 // ── Cardápio ─────────────────────────────────────────
+// Mesmo mapeamento usado em delivery-app/src/pages/MenuPage.jsx
+const CAT_ICONS = {
+  'Café': '☕', 'Cafés': '☕', 'Bebidas': '🥤', 'Bolos': '🎂', 'Bolos e Tortas': '🎂',
+  'Tortas': '🎂', 'Salgados': '🥐', 'Doces': '🍬', 'Tapiocas': '🫓',
+  'Crepiocas': '🥞', 'Croissant': '🥐', 'Cuscuz': '🌽', 'Sanduíches': '🥪',
+};
+
 async function loadMenuIfNeeded() {
   if (menu.length) return;
   const res = await fetch(`${API}/api/menu`);
   menu = await res.json();
-  activeCategory = menu[0]?.id || null;
+  const offers = getOffers();
+  activeCategory = offers.length > 0 ? 'ofertas' : (visibleCategories()[0]?.id || null);
+}
+
+// Ofertas não é uma categoria fixa: agrega produtos com promo_price ativo de
+// qualquer categoria, igual à MenuPage.jsx do app de delivery.
+function getOffers() {
+  return menu.flatMap(c => c.products.filter(p => p.promo_price != null).map(p => ({ ...p, categoryName: c.name })));
+}
+
+function visibleCategories() {
+  return menu.filter(c => c.name !== 'Ofertas');
 }
 
 function renderCategorySidebar() {
   const el = document.getElementById('cat-sidebar');
-  el.innerHTML = menu.map(c => `
+  const offers = getOffers();
+  let html = '';
+  if (offers.length > 0) {
+    html += `<button class="cat-btn ${activeCategory === 'ofertas' ? 'active' : ''}" onclick="selectCategory('ofertas')">🔥 Ofertas</button>`;
+  }
+  html += visibleCategories().map(c => `
     <button class="cat-btn ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">
       ${c.image_url ? `<img class="cat-thumb" src="${c.image_url}">` : ''}
-      ${c.name}
+      ${CAT_ICONS[c.name] || '🍽'} ${c.name}
     </button>
   `).join('');
+  el.innerHTML = html;
 }
 
 function selectCategory(id) {
@@ -448,20 +474,30 @@ function selectCategory(id) {
 }
 
 function renderCategoryBanner() {
-  const cat = menu.find(c => c.id === activeCategory);
   const banner = document.getElementById('cat-banner');
+  const title = document.getElementById('cat-banner-title');
+  if (activeCategory === 'ofertas') {
+    banner.style.backgroundImage = '';
+    title.textContent = '🔥 Ofertas';
+    return;
+  }
+  const cat = menu.find(c => c.id === activeCategory);
   banner.style.backgroundImage = cat?.image_url ? `url('${cat.image_url}')` : '';
-  document.getElementById('cat-banner-title').textContent = cat?.name || '';
+  title.textContent = cat ? `${CAT_ICONS[cat.name] || '🍽'} ${cat.name}` : '';
 }
 
 function renderProductGrid() {
-  const cat = menu.find(c => c.id === activeCategory);
   const el = document.getElementById('product-grid');
-  const products = (cat?.products || []).filter(p => p.available);
+  const products = activeCategory === 'ofertas'
+    ? getOffers().filter(p => p.available)
+    : (menu.find(c => c.id === activeCategory)?.products || []).filter(p => p.available);
   if (!products.length) { el.innerHTML = '<div class="launched-empty">Sem produtos nesta categoria</div>'; return; }
   el.innerHTML = products.map(p => `
     <button class="product-card" onclick="openProductModal('${p.id}')">
-      ${p.image_url ? `<img class="thumb" src="${p.image_url}">` : ''}
+      <div class="thumb-wrap">
+        ${p.image_url ? `<img class="thumb" src="${p.image_url}">` : ''}
+        ${p.promo_price != null ? `<span class="off-badge">${Math.round((1 - p.promo_price / p.price) * 100)}%<br>OFF</span>` : ''}
+      </div>
       <div class="body">
         <div class="name">${p.name}</div>
         ${p.description ? `<div class="desc">${p.description}</div>` : ''}
