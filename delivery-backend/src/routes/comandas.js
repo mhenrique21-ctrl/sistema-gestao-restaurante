@@ -60,7 +60,7 @@ async function insertItemAddons(comandaItemId, addons) {
 async function loadComandaItems(comandaId) {
   const items = await pool.query(
     `SELECT ci.id, ci.product_id, p.name AS product_name, p.print_target, ci.quantity,
-            ci.unit_price, ci.subtotal, ci.notes, ci.created_at
+            ci.unit_price, ci.subtotal, ci.notes, ci.mesa, ci.created_at
      FROM comanda_items ci
      JOIN products p ON p.id = ci.product_id
      WHERE ci.comanda_id = $1
@@ -127,7 +127,7 @@ router.get('/resolve/:code', async (req, res) => {
 
 // POST /api/comandas/:id/orders — registra pedido na comanda (soma ao total corrente)
 router.post('/:id/orders', async (req, res) => {
-  const { items, notes } = req.body;
+  const { items, notes, mesa } = req.body;
   if (!items?.length) return res.status(400).json({ error: 'Itens vazios' });
 
   try {
@@ -160,9 +160,9 @@ router.post('/:id/orders', async (req, res) => {
 
     for (const item of resolvedItems) {
       const itemResult = await pool.query(
-        `INSERT INTO comanda_items (comanda_id, product_id, quantity, unit_price, subtotal, notes, added_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-        [comanda.id, item.product_id, item.quantity, item.unit_price, item.subtotal, item.notes || null, req.user?.id || null]
+        `INSERT INTO comanda_items (comanda_id, product_id, quantity, unit_price, subtotal, notes, added_by, mesa)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [comanda.id, item.product_id, item.quantity, item.unit_price, item.subtotal, item.notes || null, req.user?.id || null, mesa || null]
       );
       await insertItemAddons(itemResult.rows[0].id, item.addons);
     }
@@ -175,7 +175,7 @@ router.post('/:id/orders', async (req, res) => {
 
     // Envia para cozinha/balcão em tempo real e imprime, reaproveitando o mesmo
     // pipeline usado em routes/orders.js (getStationsForOrder + printOrderTicket).
-    const pseudoOrder = { id: comanda.id, customer_name: comanda.label || comanda.code, notes: notes || null };
+    const pseudoOrder = { id: comanda.id, customer_name: comanda.label || comanda.code, notes: notes || null, mesa: mesa || null };
     broadcastOrderUpdate({ event: 'new_comanda_order', comanda: updatedComanda, items: resolvedItems });
     try {
       const stationMap = getStationsForOrder(resolvedItems);
@@ -271,6 +271,7 @@ router.post('/:id/close', async (req, res) => {
     }
 
     const items = await loadComandaItems(comanda.id);
+    const lastMesa = [...items].reverse().find((i) => i.mesa)?.mesa || null;
 
     const caixaCfg = STATION_ROUTES.caixa;
     printOrderTicket(caixaCfg.printer, {
@@ -283,6 +284,7 @@ router.post('/:id/close', async (req, res) => {
         total_amount: closedComanda.total,
         payment_method: summaryMethod,
         notes: closedComanda.notes,
+        mesa: lastMesa,
       },
       items,
     }).catch((e) => console.error('[print/comanda/close]', e.message));

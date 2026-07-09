@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Autoatendimento — Confraria</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
@@ -19,7 +19,9 @@
     --danger: #E05252;
     --green: #4CAF80;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  input, textarea { -webkit-user-select: text; user-select: text; }
+  html, body { overscroll-behavior: none; }
   body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--cream); min-height: 100vh; overflow: hidden; }
   button { font-family: inherit; cursor: pointer; }
   .hidden { display: none !important; }
@@ -32,6 +34,20 @@
   .btn-secondary { background: var(--card); color: var(--cream); border: 1px solid var(--border); }
   .btn-danger { background: var(--danger); color: #fff; }
   #header-actions { display: flex; align-items: center; gap: 10px; }
+  #mesa-tag { background: var(--card); border: 1px solid var(--border); color: var(--muted); font-size: .78rem; font-weight: 700; padding: 6px 12px; border-radius: 999px; }
+
+  /* ── Configuração da mesa (uma vez por tablet) ────── */
+  #mesa-setup-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  #mesa-setup-box { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; text-align: center; margin: 16px; }
+  #mesa-setup-box .icon { font-size: 2.5rem; margin-bottom: 8px; }
+  #mesa-setup-box h2 { font-size: 1.2rem; font-weight: 800; margin-bottom: 4px; }
+  #mesa-setup-box p.hint { color: var(--muted); font-size: .8rem; margin-bottom: 24px; }
+  #mesa-setup-box input { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--cream); border-radius: 10px; padding: 14px; font-size: 1.4rem; text-align: center; margin-bottom: 16px; }
+
+  /* ── Modal de opções de mesa (segurar o botão da mesa) ── */
+  .mesa-field { text-align: left; margin-bottom: 12px; }
+  .mesa-field label { color: var(--muted); font-size: .75rem; font-weight: 600; display: block; margin-bottom: 4px; }
+  .mesa-field input { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--cream); border-radius: 8px; padding: 10px 12px; font-size: .95rem; }
 
   /* ── Tela de scan ────────────────────────────────── */
   .scan-screen { max-width: 480px; margin: 40px auto; padding: 0 20px; text-align: center; }
@@ -127,11 +143,25 @@
 
 <div id="header">
   <div class="brand">☕ Confraria Café</div>
+  <button id="mesa-tag" class="hidden"
+    onmousedown="startMesaHold()" onmouseup="cancelMesaHold()" onmouseleave="cancelMesaHold()"
+    ontouchstart="startMesaHold()" ontouchend="cancelMesaHold()" ontouchcancel="cancelMesaHold()"></button>
   <div id="header-actions">
     <button class="btn btn-secondary" onclick="goHistoryScan()">🧾 Meus pedidos</button>
     <button class="btn btn-primary" onclick="goCheckoutScan()">💳 Minha conta</button>
   </div>
   <button class="btn btn-secondary hidden" id="back-to-menu-btn" onclick="resetToMenu()">← Voltar ao cardápio</button>
+</div>
+
+<!-- ── Configuração da mesa (só aparece uma vez, na primeira vez que o tablet liga) ── -->
+<div id="mesa-setup-screen" class="hidden">
+  <div id="mesa-setup-box">
+    <div class="icon">🪑</div>
+    <h2>Configurar este tablet</h2>
+    <p class="hint">Qual é o número desta mesa? (só precisa fazer isso uma vez)</p>
+    <input type="number" id="mesa-setup-input" placeholder="Ex: 5" inputmode="numeric">
+    <button class="btn btn-primary" style="width:100%" onclick="saveMesaConfig()">Salvar</button>
+  </div>
 </div>
 
 <!-- ── Cardápio (tela padrão / sempre visível) ── -->
@@ -246,8 +276,109 @@ let resolvingCode = false;
 let idleSeconds = 60;
 let idleTimer = null;
 let screensaverTimer = null;
+let mesaNumber = localStorage.getItem('kiosk_mesa') || null;
 
 function fmt(v) { return 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ','); }
+
+// ── Configuração da mesa (persiste no tablet) ────────
+function checkMesaConfig() {
+  if (mesaNumber) { renderMesaTag(); return true; }
+  document.getElementById('mesa-setup-screen').classList.remove('hidden');
+  return false;
+}
+
+function renderMesaTag() {
+  const tag = document.getElementById('mesa-tag');
+  if (!mesaNumber) { tag.classList.add('hidden'); return; }
+  tag.textContent = `🪑 Mesa ${mesaNumber}`;
+  tag.classList.remove('hidden');
+}
+
+function saveMesaConfig() {
+  const val = document.getElementById('mesa-setup-input').value.trim();
+  if (!val) return;
+  mesaNumber = val;
+  localStorage.setItem('kiosk_mesa', val);
+  document.getElementById('mesa-setup-screen').classList.add('hidden');
+  renderMesaTag();
+  requestFullscreenSafe(); // clique em "Salvar" já conta como o gesto exigido pelo navegador
+  init();
+}
+
+// Tela cheia exige um gesto do usuário — pede assim que a mesa já está configurada
+// e o cliente toca em qualquer lugar pela primeira vez (ex: reabrindo o tablet).
+function requestFullscreenSafe() {
+  const el = document.documentElement;
+  const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (request && !document.fullscreenElement) request.call(el).catch(() => {});
+}
+document.addEventListener('click', requestFullscreenSafe, { once: true });
+document.addEventListener('touchstart', requestFullscreenSafe, { once: true });
+
+// ── Segurar o botão da mesa → configurações (protegido por senha de operador) ──
+let mesaHoldTimer = null;
+
+function startMesaHold() {
+  mesaHoldTimer = setTimeout(openMesaSettings, 800);
+}
+
+function cancelMesaHold() {
+  if (mesaHoldTimer) { clearTimeout(mesaHoldTimer); mesaHoldTimer = null; }
+}
+
+function openMesaSettings() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'mesa-settings-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet">
+      <h3>Opções de mesa</h3>
+      <p style="color:var(--muted);font-size:.8rem;margin-bottom:16px">Trocar a mesa deste tablet exige usuário e senha de um atendente/admin.</p>
+      <div class="mesa-field"><label>Número da mesa</label><input type="number" id="ms-mesa" value="${mesaNumber || ''}"></div>
+      <div class="mesa-field"><label>Usuário</label><input type="text" id="ms-user" placeholder="Nome de usuário" autocomplete="off"></div>
+      <div class="mesa-field"><label>Senha</label><input type="password" id="ms-pass" placeholder="Senha"></div>
+      <div id="ms-error" style="color:var(--danger);font-size:.8rem;min-height:16px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeMesaSettings()">Sair</button>
+        <button class="btn btn-primary" onclick="confirmMesaChange()">Trocar de mesa</button>
+      </div>
+    </div>
+  `;
+  closeMesaSettings();
+  document.body.appendChild(backdrop);
+}
+
+function closeMesaSettings() {
+  const el = document.getElementById('mesa-settings-backdrop');
+  if (el) el.remove();
+}
+
+async function confirmMesaChange() {
+  const newMesa = document.getElementById('ms-mesa').value.trim();
+  const user = document.getElementById('ms-user').value.trim();
+  const pass = document.getElementById('ms-pass').value;
+  const errEl = document.getElementById('ms-error');
+  errEl.textContent = '';
+  if (!newMesa || !user || !pass) { errEl.textContent = 'Preencha todos os campos'; return; }
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: user, password: pass }),
+    });
+    const data = await res.json();
+    if (!res.ok || !['admin', 'atendente'].includes(data.user?.role)) {
+      errEl.textContent = 'Usuário ou senha inválidos';
+      return;
+    }
+    mesaNumber = newMesa;
+    localStorage.setItem('kiosk_mesa', newMesa);
+    renderMesaTag();
+    closeMesaSettings();
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão';
+  }
+}
 
 const SUB_SCREENS = ['order-scan-screen','order-success-screen','checkout-scan-screen','checkout-screen','checkout-success-screen','history-scan-screen','history-screen'];
 
@@ -601,7 +732,7 @@ async function submitOrder() {
     const res = await fetch(`${API}/api/comandas/${comanda.id}/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: cart.map(({ product_id, quantity, notes, addons }) => ({ product_id, quantity, notes, addons })) }),
+      body: JSON.stringify({ items: cart.map(({ product_id, quantity, notes, addons }) => ({ product_id, quantity, notes, addons })), mesa: mesaNumber }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -738,6 +869,7 @@ function wakeUp() {
 
 // ── Init ─────────────────────────────────────────────
 async function init() {
+  if (!checkMesaConfig()) return; // aguarda o "Salvar" da tela de configuração da mesa
   try {
     const s = await fetch(`${API}/api/settings`).then(r => r.json());
     idleSeconds = parseInt(s.kiosk_idle_seconds) || 60;

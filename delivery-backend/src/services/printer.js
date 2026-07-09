@@ -43,6 +43,9 @@ async function printCaixaTicket(interfaceStr, { order, items }) {
     p.alignLeft();
     p.bold(true); p.println(tag); p.bold(false);
     p.println(fmtTime());
+    if (order.mesa) {
+      p.bold(true); p.setTextSize(1, 1); p.println(`MESA ${order.mesa}`); p.bold(false); p.setTextSize(0, 0);
+    }
 
     if (order.customer_name) p.println(`Cliente: ${order.customer_name}`);
     if (order.customer_phone) p.println(`Fone: ${order.customer_phone}`);
@@ -92,7 +95,7 @@ async function printStationTicket(interfaceStr, { stationName, emoji, order, ite
   const tag = `PEDIDO #${(order.id || '').slice(-6).toUpperCase()}`;
 
   if (!interfaceStr) {
-    console.log(`[${stationName.toUpperCase()}] ${tag}`);
+    console.log(`[${stationName.toUpperCase()}] ${tag}${order.mesa ? ` — MESA ${order.mesa}` : ''}`);
     items.forEach(i => console.log(`  ${i.quantity}x ${i.product_name} ${i.notes ? `(${i.notes})` : ''}`));
     return;
   }
@@ -107,6 +110,9 @@ async function printStationTicket(interfaceStr, { stationName, emoji, order, ite
 
     p.alignLeft(); p.bold(true); p.println(tag); p.bold(false);
     p.println(fmtTime());
+    if (order.mesa) {
+      p.bold(true); p.setTextSize(1, 1); p.println(`MESA ${order.mesa}`); p.bold(false); p.setTextSize(0, 0);
+    }
     if (order.delivery_type === 'retirada') {
       p.bold(true); p.println('** RETIRADA NO LOCAL **'); p.bold(false);
     } else if (order.customer_name) {
