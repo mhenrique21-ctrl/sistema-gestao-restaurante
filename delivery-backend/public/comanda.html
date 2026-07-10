@@ -31,7 +31,6 @@
   .hidden { display: none !important; }
 
   #header { background: var(--surface); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
-  #header .sub { font-size: .78rem; color: var(--muted); margin-top: 2px; }
   #brand { display: flex; align-items: center; gap: 10px; }
   .brand-icon { width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); display: flex; align-items: center; justify-content: center; color: var(--surface); }
   .brand-icon svg { width: 21px; height: 21px; }
@@ -213,7 +212,6 @@
         <span class="brand-tag">PDV</span>
       </div>
     </div>
-    <div class="sub" id="header-sub">Digite o código do cartão</div>
   </div>
   <button class="btn btn-secondary hidden" id="switch-comanda-btn" onclick="resetToScan()">🔁 Trocar</button>
 </div>
@@ -503,7 +501,6 @@ function resetToScan() {
   document.getElementById('comanda-screen').classList.add('hidden');
   document.getElementById('switch-comanda-btn').classList.add('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
-  document.getElementById('header-sub').textContent = 'Digite o código do cartão';
   showTab('comandas');
   document.getElementById('manual-code').value = '';
   document.getElementById('manual-code').focus();
@@ -822,7 +819,6 @@ function showComandaScreen() {
   document.getElementById('tab-bar').classList.add('hidden');
   document.getElementById('comanda-screen').classList.remove('hidden');
   document.getElementById('switch-comanda-btn').classList.remove('hidden');
-  document.getElementById('header-sub').textContent = comanda.code;
   renderComandaBar();
   renderCategoryTabs();
   renderProductGrid();
