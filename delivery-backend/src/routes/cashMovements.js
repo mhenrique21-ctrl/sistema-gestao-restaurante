@@ -4,7 +4,7 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 
 router.use(authMiddleware, requireRole('admin', 'atendente'));
 
-// GET /api/cash-movements?date=YYYY-MM-DD — sangrias/suprimentos do dia (padrão: hoje)
+// GET /api/cash-movements?date=YYYY-MM-DD — abertura/sangrias/suprimentos do dia (padrão: hoje)
 router.get('/', async (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
   try {
@@ -14,28 +14,44 @@ router.get('/', async (req, res) => {
        FROM cash_movements cm
        LEFT JOIN users u ON u.id = cm.created_by
        WHERE DATE(cm.created_at AT TIME ZONE 'America/Belem') = $1
-       ORDER BY cm.created_at DESC`,
+       ORDER BY cm.created_at ASC`,
       [date]
     );
+    const abertura = result.rows.filter((r) => r.type === 'abertura').reduce((s, r) => s + parseFloat(r.amount), 0);
     const sangrias = result.rows.filter((r) => r.type === 'sangria').reduce((s, r) => s + parseFloat(r.amount), 0);
     const suprimentos = result.rows.filter((r) => r.type === 'suprimento').reduce((s, r) => s + parseFloat(r.amount), 0);
-    res.json({ date, movements: result.rows, totals: { sangrias, suprimentos } });
+    const saldo = abertura + suprimentos - sangrias;
+    res.json({
+      date,
+      movements: [...result.rows].reverse(),
+      totals: { abertura, sangrias, suprimentos, saldo },
+    });
   } catch (err) {
     console.error('[cash-movements/GET]', err.message);
     res.status(500).json({ error: 'Erro ao buscar movimentações' });
   }
 });
 
-// POST /api/cash-movements — registrar sangria ou suprimento
+// POST /api/cash-movements — registrar abertura (fundo de caixa), sangria ou suprimento
 router.post('/', async (req, res) => {
   const { type, amount, reason } = req.body;
-  if (!['sangria', 'suprimento'].includes(type)) {
-    return res.status(400).json({ error: 'Tipo inválido (use "sangria" ou "suprimento")' });
+  if (!['sangria', 'suprimento', 'abertura'].includes(type)) {
+    return res.status(400).json({ error: 'Tipo inválido' });
   }
   if (!(parseFloat(amount) > 0)) {
     return res.status(400).json({ error: 'Valor inválido' });
   }
   try {
+    if (type === 'abertura') {
+      const today = new Date().toISOString().slice(0, 10);
+      const existing = await pool.query(
+        `SELECT id FROM cash_movements WHERE type = 'abertura' AND DATE(created_at AT TIME ZONE 'America/Belem') = $1`,
+        [today]
+      );
+      if (existing.rows.length) {
+        return res.status(400).json({ error: 'Já existe uma abertura de caixa registrada hoje' });
+      }
+    }
     const result = await pool.query(
       `INSERT INTO cash_movements (type, amount, reason, created_by) VALUES ($1, $2, $3, $4) RETURNING *`,
       [type, parseFloat(amount), reason || null, req.user?.id || null]

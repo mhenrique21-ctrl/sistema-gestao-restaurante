@@ -128,11 +128,14 @@
   .field-group input, .field-group textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: .92rem; font-family: inherit; }
 
   /* ── Financeiro ───────────────────────────────────── */
-  #financeiro-screen { max-width: 560px; margin: 0 auto; padding: 20px; }
-  .fin-summary { display: flex; gap: 12px; margin-bottom: 20px; }
-  .fin-summary-card { flex: 1; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; }
-  .fin-summary-card .label { display: block; font-size: .78rem; color: #64748b; font-weight: 700; margin-bottom: 6px; }
-  .fin-summary-card .value { display: block; font-size: 1.3rem; font-weight: 800; }
+  #financeiro-screen { max-width: 640px; margin: 0 auto; padding: 20px; }
+  .fin-subtab-bar { display: flex; gap: 6px; margin-bottom: 18px; }
+  .fin-subtab { background: #f1f5f9; border: none; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: .82rem; color: #64748b; }
+  .fin-subtab.active { background: #0f172a; color: #fff; }
+  .fin-summary { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .fin-summary-card { flex: 1; min-width: 120px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; }
+  .fin-summary-card .label { display: block; font-size: .74rem; color: #64748b; font-weight: 700; margin-bottom: 6px; }
+  .fin-summary-card .value { display: block; font-size: 1.15rem; font-weight: 800; color: #0f172a; }
   .fin-summary-card .value.negative { color: #dc2626; }
   .fin-summary-card .value.positive { color: #059669; }
   .fin-form { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
@@ -146,6 +149,7 @@
   .fin-item .amount { font-weight: 800; }
   .fin-item .amount.sangria { color: #dc2626; }
   .fin-item .amount.suprimento { color: #059669; }
+  .fin-item .amount.abertura { color: #0f172a; }
 </style>
 </head>
 <body>
@@ -248,36 +252,64 @@
 
 <!-- ── Aba: Financeiro ── -->
 <div id="financeiro-screen" class="hidden">
-  <div class="fin-summary">
-    <div class="fin-summary-card">
-      <span class="label">🔻 Sangrias hoje</span>
-      <span class="value negative" id="fin-total-sangrias">R$ 0,00</span>
-    </div>
-    <div class="fin-summary-card">
-      <span class="label">🔺 Suprimentos hoje</span>
-      <span class="value positive" id="fin-total-suprimentos">R$ 0,00</span>
-    </div>
+  <div id="fin-subtab-bar" class="fin-subtab-bar">
+    <button class="fin-subtab active" data-subtab="caixa" onclick="showFinSubtab('caixa')">💵 Caixa</button>
   </div>
 
-  <div class="fin-form">
-    <div class="fin-form-tabs">
-      <button class="fin-form-tab active" data-type="sangria" onclick="setFinType('sangria')">🔻 Sangria (retirada)</button>
-      <button class="fin-form-tab" data-type="suprimento" onclick="setFinType('suprimento')">🔺 Suprimento (reforço)</button>
+  <div id="fin-subtab-caixa">
+    <div class="fin-summary">
+      <div class="fin-summary-card">
+        <span class="label">🏦 Fundo de caixa</span>
+        <span class="value" id="fin-total-abertura">R$ 0,00</span>
+      </div>
+      <div class="fin-summary-card">
+        <span class="label">🔻 Sangrias hoje</span>
+        <span class="value negative" id="fin-total-sangrias">R$ 0,00</span>
+      </div>
+      <div class="fin-summary-card">
+        <span class="label">🔺 Suprimentos hoje</span>
+        <span class="value positive" id="fin-total-suprimentos">R$ 0,00</span>
+      </div>
+      <div class="fin-summary-card">
+        <span class="label">💰 Saldo esperado</span>
+        <span class="value" id="fin-total-saldo">R$ 0,00</span>
+      </div>
     </div>
-    <div class="field-group">
-      <label>Valor (R$)</label>
-      <input type="number" step="0.01" min="0" id="fin-amount" placeholder="0,00">
-    </div>
-    <div class="field-group">
-      <label>Motivo</label>
-      <input type="text" id="fin-reason" placeholder="Ex: troco pro entregador, depósito no banco...">
-    </div>
-    <div id="fin-error" style="color:#dc2626;font-size:.82rem;min-height:18px"></div>
-    <button class="btn btn-primary" style="width:100%" id="fin-submit-btn" onclick="submitCashMovement()">Registrar sangria</button>
-  </div>
 
-  <div class="side-title" style="margin-top:24px">Movimentações de hoje</div>
-  <div id="fin-list"><div class="cart-empty">Carregando...</div></div>
+    <div class="fin-form">
+      <div class="fin-form-tabs">
+        <button class="fin-form-tab active" data-type="sangria" onclick="setFinType('sangria')">🔻 Sangria (retirada)</button>
+        <button class="fin-form-tab" data-type="suprimento" onclick="setFinType('suprimento')">🔺 Suprimento (reforço)</button>
+      </div>
+      <div class="field-group">
+        <label>Valor (R$)</label>
+        <input type="number" step="0.01" min="0" id="fin-amount" placeholder="0,00">
+      </div>
+      <div class="field-group">
+        <label>Motivo</label>
+        <input type="text" id="fin-reason" placeholder="Ex: troco pro entregador, depósito no banco...">
+      </div>
+      <div id="fin-error" style="color:#dc2626;font-size:.82rem;min-height:18px"></div>
+      <button class="btn btn-primary" style="width:100%" id="fin-submit-btn" onclick="submitCashMovement()">Registrar sangria</button>
+    </div>
+
+    <div class="side-title" style="margin-top:24px">Movimentações de hoje</div>
+    <div id="fin-list"><div class="cart-empty">Carregando...</div></div>
+  </div>
+</div>
+
+<!-- ── Modal: abertura de caixa (obrigatória ao logar) ── -->
+<div id="abertura-modal-backdrop" class="modal-backdrop hidden">
+  <div class="modal-sheet" style="max-width:420px">
+    <h3>🏦 Abertura de caixa</h3>
+    <p style="color:#64748b;font-size:.85rem;margin:6px 0 16px">Informe o fundo de caixa (dinheiro inicial na gaveta) para começar a operar hoje.</p>
+    <div class="field-group">
+      <label>Fundo de caixa (R$)</label>
+      <input type="number" step="0.01" min="0" id="abertura-amount" placeholder="0,00">
+    </div>
+    <div id="abertura-error" style="color:#dc2626;font-size:.82rem;min-height:18px"></div>
+    <button class="btn btn-primary" style="width:100%" id="abertura-submit-btn" onclick="submitAbertura()">Confirmar abertura</button>
+  </div>
 </div>
 
 <script>
@@ -305,6 +337,7 @@ function showLoginScreen() {
   document.getElementById('comanda-screen').classList.add('hidden');
   document.getElementById('estoque-screen').classList.add('hidden');
   document.getElementById('financeiro-screen').classList.add('hidden');
+  document.getElementById('abertura-modal-backdrop').classList.add('hidden');
   document.getElementById('switch-comanda-btn').classList.add('hidden');
   document.getElementById('tab-bar').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
@@ -333,8 +366,7 @@ async function doLogin() {
     localStorage.setItem(TOKEN_KEY, TOKEN);
     localStorage.setItem(ROLE_KEY, ROLE);
     document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('tab-bar').classList.remove('hidden');
-    resetToScan();
+    checkAberturaCaixa();
   } catch (err) {
     erro.textContent = err.message;
   } finally {
@@ -544,6 +576,8 @@ function setFinType(type) {
   document.getElementById('fin-error').textContent = '';
 }
 
+const FIN_TYPE_LABELS = { sangria: '🔻 Sangria', suprimento: '🔺 Suprimento', abertura: '🏦 Abertura de caixa' };
+
 async function loadFinanceiro() {
   const el = document.getElementById('fin-list');
   el.innerHTML = '<div class="cart-empty">Carregando...</div>';
@@ -553,8 +587,10 @@ async function loadFinanceiro() {
     const data = await res.json();
     if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>'; return; }
 
+    document.getElementById('fin-total-abertura').textContent = fmt(data.totals.abertura);
     document.getElementById('fin-total-sangrias').textContent = fmt(data.totals.sangrias);
     document.getElementById('fin-total-suprimentos').textContent = fmt(data.totals.suprimentos);
+    document.getElementById('fin-total-saldo').textContent = fmt(data.totals.saldo);
 
     if (!data.movements.length) {
       el.innerHTML = '<div class="cart-empty">Nenhuma movimentação hoje</div>';
@@ -563,7 +599,7 @@ async function loadFinanceiro() {
     el.innerHTML = data.movements.map(m => `
       <div class="fin-item">
         <div>
-          <div class="desc">${m.type === 'sangria' ? '🔻 Sangria' : '🔺 Suprimento'}${m.reason ? ' — ' + m.reason : ''}</div>
+          <div class="desc">${FIN_TYPE_LABELS[m.type] || m.type}${m.reason ? ' — ' + m.reason : ''}</div>
           <small>${m.created_by_name || '—'} · ${new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
@@ -611,6 +647,59 @@ async function deleteCashMovement(id) {
     loadFinanceiro();
   } catch (e) {
     alert('Erro de conexão');
+  }
+}
+
+function showFinSubtab(subtab) {
+  document.querySelectorAll('.fin-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === subtab));
+  document.getElementById('fin-subtab-caixa').classList.toggle('hidden', subtab !== 'caixa');
+}
+
+// ── Abertura de caixa (obrigatória ao logar, uma vez por dia) ──
+async function checkAberturaCaixa() {
+  try {
+    const res = await fetch(`${API}/api/cash-movements`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    const data = await res.json();
+    const hasAbertura = res.ok && (data.movements || []).some(m => m.type === 'abertura');
+    if (hasAbertura) {
+      document.getElementById('abertura-modal-backdrop').classList.add('hidden');
+      document.getElementById('tab-bar').classList.remove('hidden');
+      resetToScan();
+    } else {
+      document.getElementById('abertura-modal-backdrop').classList.remove('hidden');
+      document.getElementById('abertura-amount').focus();
+    }
+  } catch (e) {
+    // sem conexão pra checar: não trava o atendimento, segue normalmente
+    document.getElementById('tab-bar').classList.remove('hidden');
+    resetToScan();
+  }
+}
+
+async function submitAbertura() {
+  const amount = parseFloat(document.getElementById('abertura-amount').value);
+  const errEl = document.getElementById('abertura-error');
+  errEl.textContent = '';
+  if (!(amount > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
+  const btn = document.getElementById('abertura-submit-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/cash-movements`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ type: 'abertura', amount, reason: 'Fundo de caixa' }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar abertura'; return; }
+    document.getElementById('abertura-amount').value = '';
+    document.getElementById('abertura-modal-backdrop').classList.add('hidden');
+    document.getElementById('tab-bar').classList.remove('hidden');
+    resetToScan();
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão';
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -1037,10 +1126,7 @@ document.getElementById('manual-code').addEventListener('keydown', e => {
 if (!TOKEN) {
   showLoginScreen();
 } else {
-  document.getElementById('tab-bar').classList.remove('hidden');
-  document.getElementById('scan-screen').classList.remove('hidden');
-  document.getElementById('manual-code').focus();
-  loadPendingQueue();
+  checkAberturaCaixa();
 }
 </script>
 </body>
