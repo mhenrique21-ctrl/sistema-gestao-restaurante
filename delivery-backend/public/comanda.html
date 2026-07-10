@@ -705,7 +705,6 @@ function closeCloseModal() {
 async function confirmClose() {
   const entered = collectPayments();
   if (!entered.length) return;
-  const troco = entered.reduce((s, p) => s + p.amount, 0) - parseFloat(comanda.total);
   const payments = buildFinalPayments();
   const btn = document.getElementById('confirm-close-btn');
   btn.disabled = true;
@@ -719,7 +718,6 @@ async function confirmClose() {
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = 'Confirmar fechamento'; return; }
     closeCloseModal();
-    alert(troco > 0.01 ? `Comanda fechada com sucesso!\nTroco: ${fmt(troco)}` : 'Comanda fechada com sucesso!');
     resetToScan();
   } catch (e) {
     alert('Erro de conexão ao fechar comanda');
