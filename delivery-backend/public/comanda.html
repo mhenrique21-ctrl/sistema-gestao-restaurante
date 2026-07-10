@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Comandas — Confraria</title>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { font-family: system-ui, sans-serif; background: #ffffff; color: #0f172a; min-height: 100vh; }
@@ -35,13 +34,16 @@
   #login-error { color: #dc2626; font-size: .8rem; margin-bottom: 12px; min-height: 16px; }
 
   /* ── Tela de scan ────────────────────────────────── */
-  #scan-screen { max-width: 480px; margin: 40px auto; padding: 0 20px; text-align: center; }
+  #scan-screen { max-width: 480px; margin: 40px auto; padding: 0 20px; text-align: center; position: relative; }
   #scan-screen h2 { font-size: 1.3rem; margin-bottom: 6px; color: #0f172a; }
   #scan-screen p.hint { color: #64748b; font-size: .88rem; margin-bottom: 20px; }
-  #qr-reader { border-radius: 16px; overflow: hidden; margin-bottom: 20px; border: 1px solid #e2e8f0; }
   .manual-entry { display: flex; gap: 8px; margin-top: 12px; }
-  .manual-entry input { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: 1rem; }
+  .manual-entry input { flex: 1; padding: 14px 16px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: 1.1rem; letter-spacing: .02em; }
   #scan-error { color: #dc2626; font-size: .85rem; margin-top: 10px; min-height: 20px; }
+
+  #balcao-btn { position: fixed; top: 76px; right: 20px; display: flex; align-items: center; gap: 8px; background: #0f172a; color: #fff; border: none; padding: 10px 16px 10px 14px; border-radius: 999px; font-weight: 700; font-size: .85rem; box-shadow: 0 2px 10px rgba(15,23,42,.18); z-index: 10; }
+  #balcao-btn:hover { background: #1e293b; }
+  #balcao-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
 
   /* ── Tela da comanda ─────────────────────────────── */
   #comanda-screen { display: flex; flex-direction: column; height: calc(100vh - 61px); }
@@ -106,7 +108,7 @@
 <div id="header">
   <div>
     <h1>📇 Comandas</h1>
-    <div class="sub" id="header-sub">Escaneie ou digite o código do cartão</div>
+    <div class="sub" id="header-sub">Digite o código do cartão</div>
   </div>
   <button class="btn btn-secondary hidden" id="switch-comanda-btn" onclick="resetToScan()">🔁 Trocar</button>
 </div>
@@ -132,16 +134,18 @@
 
 <!-- ── Tela 1: scan/resolve ── -->
 <div id="scan-screen" class="hidden">
+  <button id="balcao-btn" onclick="openBalcaoSale()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 7V5a4 4 0 0 0-8 0v2"></path><line x1="12" y1="12" x2="12" y2="16"></line><line x1="10" y1="14" x2="14" y2="14"></line></svg>
+    Venda balcão
+  </button>
+
   <h2>Identificar comanda</h2>
-  <p class="hint">Aponte a câmera para o QR do cartão físico, ou digite o código manualmente.</p>
-  <div id="qr-reader"></div>
+  <p class="hint">Digite o código do cartão da comanda.</p>
   <div class="manual-entry">
-    <input type="text" id="manual-code" placeholder="Código da comanda" autocomplete="off">
+    <input type="text" id="manual-code" placeholder="Código da comanda" autocomplete="off" autofocus>
     <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
   </div>
   <div id="scan-error"></div>
-
-  <button class="btn btn-primary" style="width:100%;margin-top:16px" onclick="openBalcaoSale()">🏪 Venda balcão (sem cartão)</button>
 
   <div id="pending-section" style="margin-top:32px;text-align:left">
     <div class="side-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -191,7 +195,6 @@ let comanda = null;      // comanda atual (com items já lançados)
 let menu = [];            // cardápio completo
 let activeCategory = null;
 let cart = [];             // itens desta rodada, ainda não enviados
-let qrScanner = null;
 
 function authHeaders(extra) {
   return Object.assign({ Authorization: 'Bearer ' + TOKEN }, extra || {});
@@ -235,23 +238,6 @@ async function doLogin() {
     btn.textContent = 'Entrar';
     btn.disabled = false;
   }
-}
-
-// ── QR scanner ──────────────────────────────────────
-function startScanner() {
-  if (qrScanner) return;
-  qrScanner = new Html5QrcodeScanner('qr-reader', { fps: 10, qrbox: 240 }, false);
-  qrScanner.render(onScanSuccess, () => {});
-}
-
-function stopScanner() {
-  if (!qrScanner) return;
-  qrScanner.clear().catch(() => {});
-  qrScanner = null;
-}
-
-function onScanSuccess(decodedText) {
-  resolveCode(decodedText);
 }
 
 // ── Resolver comanda ────────────────────────────────
@@ -307,9 +293,9 @@ function resetToScan() {
   document.getElementById('comanda-screen').classList.add('hidden');
   document.getElementById('scan-screen').classList.remove('hidden');
   document.getElementById('switch-comanda-btn').classList.add('hidden');
-  document.getElementById('header-sub').textContent = 'Escaneie ou digite o código do cartão';
+  document.getElementById('header-sub').textContent = 'Digite o código do cartão';
   document.getElementById('manual-code').value = '';
-  startScanner();
+  document.getElementById('manual-code').focus();
   loadPendingQueue();
 }
 
@@ -341,7 +327,6 @@ async function loadPendingQueue() {
 
 // ── Tela da comanda ─────────────────────────────────
 function showComandaScreen() {
-  stopScanner();
   document.getElementById('scan-screen').classList.add('hidden');
   document.getElementById('comanda-screen').classList.remove('hidden');
   document.getElementById('switch-comanda-btn').classList.remove('hidden');
@@ -727,7 +712,17 @@ async function confirmClose() {
 }
 
 // ── Init ─────────────────────────────────────────────
-if (!TOKEN) { showLoginScreen(); } else { document.getElementById('scan-screen').classList.remove('hidden'); startScanner(); loadPendingQueue(); }
+document.getElementById('manual-code').addEventListener('keydown', e => {
+  if (e.key === 'Enter') resolveCode(document.getElementById('manual-code').value);
+});
+
+if (!TOKEN) {
+  showLoginScreen();
+} else {
+  document.getElementById('scan-screen').classList.remove('hidden');
+  document.getElementById('manual-code').focus();
+  loadPendingQueue();
+}
 </script>
 </body>
 </html>
