@@ -225,6 +225,10 @@
     </div>
   </div>
   <div id="header-actions" class="hidden">
+    <button class="header-cta" id="comanda-btn" onclick="showTab('comandas')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
+      Comanda
+    </button>
     <button class="header-cta" id="delivery-btn" onclick="openDeliveryOrders()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg>
       Delivery
@@ -239,7 +243,6 @@
 
 <div id="app-layout">
 <div id="tab-bar" class="hidden">
-  <button class="tab-tile active" data-tab="comandas" onclick="showTab('comandas')"><span class="icon">🧾</span>Comandas</button>
   <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon">📦</span>Estoque</button>
   <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg></span>Financeiro</button>
   <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="7" rx="7" ry="3"/><line x1="12" y1="7" x2="12" y2="18"/><line x1="7" y1="19" x2="17" y2="19"/></svg></span>Mesas</button>
