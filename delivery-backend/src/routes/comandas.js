@@ -92,13 +92,15 @@ router.get('/', authMiddleware, requireRole('admin'), async (req, res) => {
   }
 });
 
-// GET /api/comandas/pending-close — fila de comandas aguardando o caixa fechar (equipe)
+// GET /api/comandas/pending-close — comandas abertas com pedido em andamento (equipe).
+// Mostra toda comanda aberta que já tem itens lançados, não só as que o cliente
+// pediu a conta — a equipe pode abrir e fechar qualquer uma a qualquer momento.
 router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, code, label, total, closing_requested_at
-       FROM comandas WHERE status = 'aberta' AND closing_requested_at IS NOT NULL
-       ORDER BY closing_requested_at ASC`
+      `SELECT id, code, label, total, closing_requested_at, opened_at
+       FROM comandas WHERE status = 'aberta' AND total > 0
+       ORDER BY COALESCE(closing_requested_at, opened_at) DESC`
     );
     res.json(result.rows);
   } catch (err) {
