@@ -170,6 +170,7 @@
       <div id="cart-section">
         <div class="side-title">Pedido atual (não enviado)</div>
         <div id="cart-list"><div class="cart-empty">Toque em um produto para adicionar</div></div>
+        <div id="cart-total" style="text-align:right;font-size:1.15rem;font-weight:800;color:#10b981;margin-top:8px"></div>
       </div>
       <button class="btn btn-primary" id="send-order-btn" onclick="sendOrder()" disabled>Enviar pedido para a cozinha</button>
       <div id="launched-section" style="flex:1">
@@ -482,7 +483,14 @@ function confirmAddToCart() {
     }
   }
   const note = document.getElementById('modal-note')?.value?.trim() || null;
+  const unitPrice = parseFloat(p.promo_price ?? p.price);
+  const addonsUnitTotal = addons.reduce((s, a) => {
+    const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id));
+    const o = g?.options.find(o => o.id === a.addon_option_id);
+    return s + parseFloat(o?.price || 0);
+  }, 0);
   cart.push({ product_id: p.id, product_name: p.name, quantity: modalQty, notes: note, addons,
+    subtotal: (unitPrice + addonsUnitTotal) * modalQty,
     addon_labels: addons.map(a => { const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id)); const o = g?.options.find(o => o.id === a.addon_option_id); return o?.name; }).filter(Boolean) });
   closeProductModal();
   renderCart();
@@ -505,6 +513,8 @@ function renderCart() {
       </div>
     `).join('');
   }
+  const cartTotal = cart.reduce((s, item) => s + (item.subtotal || 0), 0);
+  document.getElementById('cart-total').textContent = cart.length ? fmt(cartTotal) : '';
   document.getElementById('send-order-btn').disabled = comanda.status !== 'aberta' || cart.length === 0;
 }
 
