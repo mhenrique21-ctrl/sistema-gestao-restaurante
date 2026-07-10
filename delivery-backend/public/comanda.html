@@ -55,7 +55,8 @@
     background: var(--card); border: 2px solid var(--border); color: var(--muted);
     font-weight: 700; font-size: .66rem; letter-spacing: .01em; text-align: center;
   }
-  .tab-tile .icon { font-size: 1.35rem; line-height: 1; }
+  .tab-tile .icon { font-size: 1.35rem; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .tab-tile .icon svg { width: 22px; height: 22px; }
   .tab-tile.active { background: var(--card-active); border-color: var(--gold); color: var(--gold); box-shadow: 0 2px 10px rgba(201,162,94,.2); }
   .tab-tile:active { background: var(--card-active); }
 
@@ -203,10 +204,10 @@
 <div id="tab-bar" class="hidden">
   <button class="tab-tile active" data-tab="comandas" onclick="showTab('comandas')"><span class="icon">🧾</span>Comandas</button>
   <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon">📦</span>Estoque</button>
-  <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon">💰</span>Financeiro</button>
-  <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon">🪑</span>Mesas</button>
-  <button class="tab-tile" data-tab="clientes" onclick="showTab('clientes')"><span class="icon">👥</span>Clientes</button>
-  <button class="tab-tile" data-tab="relatorios" onclick="showTab('relatorios')"><span class="icon">📊</span>Relatórios</button>
+  <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg></span>Financeiro</button>
+  <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="7" rx="7" ry="3"/><line x1="12" y1="7" x2="12" y2="18"/><line x1="7" y1="19" x2="17" y2="19"/></svg></span>Mesas</button>
+  <button class="tab-tile" data-tab="clientes" onclick="showTab('clientes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M2 21v-1.3A3.3 3.3 0 0 1 5.3 16.4"/><path d="M22 21v-1.3a3.3 3.3 0 0 0-3.3-3.3"/></svg></span>Clientes</button>
+  <button class="tab-tile" data-tab="relatorios" onclick="showTab('relatorios')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M8 12h3M8 16h4"/><circle cx="16.5" cy="15.5" r="2.3"/><line x1="18.3" y1="17.3" x2="20" y2="19"/></svg></span>Relatórios</button>
   <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon">⚙️</span>Config.</button>
   <button class="tab-tile" data-tab="usuarios" onclick="showTab('usuarios')"><span class="icon">🔐</span>Usuários</button>
   <button class="tab-tile" data-tab="pedido" onclick="showTab('pedido')"><span class="icon">🔒</span>Pedido</button>
