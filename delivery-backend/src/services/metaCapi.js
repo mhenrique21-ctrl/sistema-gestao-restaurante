@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const PIXEL_ID = '1061008356398242';
 const ACCESS_TOKEN = process.env.META_CAPI_ACCESS_TOKEN;
 const CAPI_URL = `https://graph.facebook.com/v20.0/${PIXEL_ID}/events`;
+// Remover TEST_EVENT_CODE (ou deixar null) após validar no Gerenciador de Eventos
+const TEST_EVENT_CODE = 'TEST4922';
 
 function sha256(value) {
   if (!value) return undefined;
@@ -15,6 +17,7 @@ async function sendCapiEvent({ eventName, eventId, userData = {}, customData = {
     return;
   }
   const payload = {
+    ...(TEST_EVENT_CODE ? { test_event_code: TEST_EVENT_CODE } : {}),
     data: [{
       event_name: eventName,
       event_id: eventId,
