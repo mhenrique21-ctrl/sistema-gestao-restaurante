@@ -83,16 +83,12 @@
   #login-error { color: var(--danger); font-size: .8rem; margin-bottom: 12px; min-height: 16px; }
 
   /* ── Tela de scan ────────────────────────────────── */
-  #scan-screen { max-width: 480px; margin: 40px auto 0; padding: 54px 20px 20px; text-align: center; position: relative; }
+  #scan-screen { max-width: 480px; margin: 40px auto; padding: 0 20px 20px; text-align: center; position: relative; }
   #scan-screen h2 { font-size: 1.3rem; margin-bottom: 6px; color: var(--c-text); }
   #scan-screen p.hint { color: var(--c-muted); font-size: .88rem; margin-bottom: 20px; }
   .manual-entry { display: flex; gap: 8px; margin-top: 12px; }
   .manual-entry input { flex: 1; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: 1.1rem; letter-spacing: .02em; }
   #scan-error { color: var(--danger); font-size: .85rem; margin-top: 10px; min-height: 20px; }
-
-  #balcao-btn { position: absolute; top: 0; right: 20px; display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: var(--surface); border: none; padding: 10px 16px 10px 14px; border-radius: 999px; font-weight: 700; font-size: .85rem; box-shadow: 0 2px 10px rgba(42,35,24,.2); z-index: 10; }
-  #balcao-btn:hover { filter: brightness(1.08); }
-  #balcao-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
 
   /* ── Tela da comanda ─────────────────────────────── */
   #comanda-screen { display: flex; flex-direction: column; height: 100%; }
@@ -268,11 +264,6 @@
 
 <!-- ── Tela 1: scan/resolve ── -->
 <div id="scan-screen" class="hidden">
-  <button id="balcao-btn" onclick="openBalcaoSale()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 7V5a4 4 0 0 0-8 0v2"></path><line x1="12" y1="12" x2="12" y2="16"></line><line x1="10" y1="14" x2="14" y2="14"></line></svg>
-    Venda balcão
-  </button>
-
   <h2>Identificar comanda</h2>
   <p class="hint">Digite o código do cartão da comanda.</p>
   <div class="manual-entry">
