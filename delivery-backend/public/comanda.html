@@ -102,10 +102,22 @@
   .close-remaining.pending { color: #dc2626; }
   .close-items { max-height: 30vh; overflow-y: auto; margin: 10px 0; }
 
-  /* ── Abas ─────────────────────────────────────────── */
-  #tab-bar { display: flex; gap: 4px; background: #ffffff; padding: 0 20px; border-bottom: 2px solid #e2e8f0; }
-  .tab-btn { background: none; border: none; padding: 12px 18px; font-weight: 700; font-size: .88rem; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; }
-  .tab-btn.active { color: #059669; border-bottom-color: #059669; }
+  .placeholder-screen { max-width: 480px; margin: 60px auto; padding: 0 20px; text-align: center; }
+  .placeholder-screen .icon { font-size: 2.8rem; display: block; margin-bottom: 10px; }
+  .placeholder-screen h2 { color: #0f172a; font-size: 1.2rem; margin-bottom: 6px; }
+  .placeholder-screen p { color: #64748b; font-size: .88rem; }
+
+  /* ── Abas (menu superior em tiles) ────────────────── */
+  #tab-bar { display: flex; gap: 10px; background: #ffffff; padding: 12px 20px; border-bottom: 2px solid #e2e8f0; overflow-x: auto; }
+  .tab-tile {
+    flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; width: 84px; height: 74px; border-radius: 14px;
+    background: #fdfaf5; border: 2px solid #e7dcc8; color: #7a5a2e;
+    font-weight: 700; font-size: .68rem; letter-spacing: .01em; text-align: center;
+  }
+  .tab-tile .icon { font-size: 1.35rem; line-height: 1; }
+  .tab-tile.active { background: #fbf0da; border-color: #b8863d; color: #8a5a15; box-shadow: 0 2px 8px rgba(184,134,61,.25); }
+  .tab-tile:active { background: #f5ead2; }
 
   /* ── Estoque ──────────────────────────────────────── */
   #estoque-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
@@ -163,9 +175,15 @@
 </div>
 
 <div id="tab-bar" class="hidden">
-  <button class="tab-btn active" data-tab="comandas" onclick="showTab('comandas')">🧾 Comandas</button>
-  <button class="tab-btn" data-tab="estoque" onclick="showTab('estoque')">📦 Estoque</button>
-  <button class="tab-btn" data-tab="financeiro" onclick="showTab('financeiro')">💰 Financeiro</button>
+  <button class="tab-tile active" data-tab="comandas" onclick="showTab('comandas')"><span class="icon">🧾</span>Comandas</button>
+  <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon">📦</span>Estoque</button>
+  <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon">💰</span>Financeiro</button>
+  <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon">🪑</span>Mesas</button>
+  <button class="tab-tile" data-tab="clientes" onclick="showTab('clientes')"><span class="icon">👥</span>Clientes</button>
+  <button class="tab-tile" data-tab="relatorios" onclick="showTab('relatorios')"><span class="icon">📊</span>Relatórios</button>
+  <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon">⚙️</span>Config.</button>
+  <button class="tab-tile" data-tab="usuarios" onclick="showTab('usuarios')"><span class="icon">🔐</span>Usuários</button>
+  <button class="tab-tile" data-tab="pedido" onclick="showTab('pedido')"><span class="icon">🔒</span>Pedido</button>
 </div>
 
 <!-- ── Tela 0: login ── -->
@@ -312,6 +330,14 @@
   </div>
 </div>
 
+<!-- ── Abas em construção ── -->
+<div id="mesas-screen" class="hidden placeholder-screen"><span class="icon">🪑</span><h2>Mesas</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="clientes-screen" class="hidden placeholder-screen"><span class="icon">👥</span><h2>Clientes</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="relatorios-screen" class="hidden placeholder-screen"><span class="icon">📊</span><h2>Relatórios</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="configuracoes-screen" class="hidden placeholder-screen"><span class="icon">⚙️</span><h2>Configurações</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="usuarios-screen" class="hidden placeholder-screen"><span class="icon">🔐</span><h2>Usuários</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="pedido-screen" class="hidden placeholder-screen"><span class="icon">🔒</span><h2>Pedido</h2><p>Em construção — em breve por aqui.</p></div>
+
 <script>
 const API = '';
 const TOKEN_KEY = 'comanda_token';
@@ -435,11 +461,21 @@ function resetToScan() {
   loadPendingQueue();
 }
 
-// ── Abas: Comandas / Estoque / Financeiro ────────────
-const TAB_SCREENS = { comandas: 'scan-screen', estoque: 'estoque-screen', financeiro: 'financeiro-screen' };
+// ── Abas do menu superior ─────────────────────────────
+const TAB_SCREENS = {
+  comandas: 'scan-screen',
+  estoque: 'estoque-screen',
+  financeiro: 'financeiro-screen',
+  mesas: 'mesas-screen',
+  clientes: 'clientes-screen',
+  relatorios: 'relatorios-screen',
+  configuracoes: 'configuracoes-screen',
+  usuarios: 'usuarios-screen',
+  pedido: 'pedido-screen',
+};
 
 function showTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-tile').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   for (const [key, screenId] of Object.entries(TAB_SCREENS)) {
     document.getElementById(screenId).classList.toggle('hidden', key !== tab);
   }
