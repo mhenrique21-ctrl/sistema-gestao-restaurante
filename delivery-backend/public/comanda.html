@@ -83,12 +83,20 @@
   #login-error { color: var(--danger); font-size: .8rem; margin-bottom: 12px; min-height: 16px; }
 
   /* ── Tela de scan ────────────────────────────────── */
-  #scan-screen { max-width: 480px; margin: 40px auto; padding: 0 20px 20px; text-align: center; position: relative; }
-  #scan-screen h2 { font-size: 1.3rem; margin-bottom: 6px; color: var(--c-text); }
-  #scan-screen p.hint { color: var(--c-muted); font-size: .88rem; margin-bottom: 20px; }
-  .manual-entry { display: flex; gap: 8px; margin-top: 12px; }
-  .manual-entry input { flex: 1; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: 1.1rem; letter-spacing: .02em; }
+  #scan-screen { display: flex; gap: 20px; align-items: flex-start; padding: 20px; }
+  #scan-main { flex: 1; min-width: 0; text-align: left; }
+  #scan-identify-box { width: 300px; flex-shrink: 0; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 14px; padding: 18px; text-align: left; box-shadow: 0 1px 3px rgba(42,35,24,.05); }
+  #scan-identify-box h2 { font-size: 1.05rem; margin-bottom: 4px; color: var(--c-text); }
+  #scan-identify-box p.hint { color: var(--c-muted); font-size: .8rem; margin-bottom: 14px; }
+  .manual-entry { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .manual-entry input { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: 1rem; letter-spacing: .02em; }
+  .manual-entry .btn { width: 100%; }
   #scan-error { color: var(--danger); font-size: .85rem; margin-top: 10px; min-height: 20px; }
+
+  @media (max-width: 720px) {
+    #scan-screen { flex-direction: column; }
+    #scan-identify-box { width: 100%; }
+  }
 
   /* ── Tela da comanda ─────────────────────────────── */
   #comanda-screen { display: flex; flex-direction: column; height: 100%; }
@@ -264,20 +272,24 @@
 
 <!-- ── Tela 1: scan/resolve ── -->
 <div id="scan-screen" class="hidden">
-  <h2>Identificar comanda</h2>
-  <p class="hint">Digite o código do cartão da comanda.</p>
-  <div class="manual-entry">
-    <input type="text" id="manual-code" placeholder="Código da comanda" autocomplete="off" autofocus>
-    <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
-  </div>
-  <div id="scan-error"></div>
-
-  <div id="pending-section" style="margin-top:32px;text-align:left">
-    <div class="side-title" style="display:flex;justify-content:space-between;align-items:center">
-      <span>🧾 Aguardando fechamento</span>
-      <button class="btn btn-secondary" style="padding:4px 10px;font-size:.75rem" onclick="loadPendingQueue()">🔄</button>
+  <div id="scan-main">
+    <div id="pending-section">
+      <div class="side-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>🧾 Aguardando fechamento</span>
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:.75rem" onclick="loadPendingQueue()">🔄</button>
+      </div>
+      <div id="pending-list"><div class="cart-empty">Carregando...</div></div>
     </div>
-    <div id="pending-list"><div class="cart-empty">Carregando...</div></div>
+  </div>
+
+  <div id="scan-identify-box">
+    <h2>Identificar comanda</h2>
+    <p class="hint">Digite o código do cartão da comanda.</p>
+    <div class="manual-entry">
+      <input type="text" id="manual-code" placeholder="Código da comanda" autocomplete="off" autofocus>
+      <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
+    </div>
+    <div id="scan-error"></div>
   </div>
 </div>
 
@@ -541,6 +553,10 @@ function showTab(tab) {
   for (const [key, screenId] of Object.entries(TAB_SCREENS)) {
     document.getElementById(screenId).classList.toggle('hidden', key !== tab);
   }
+  // sai da comanda aberta se o atendente clicar em outra aba do menu lateral
+  document.getElementById('comanda-screen').classList.add('hidden');
+  document.getElementById('switch-comanda-btn').classList.add('hidden');
+  document.getElementById('header-actions').classList.remove('hidden');
   if (tab === 'estoque') loadEstoque();
   if (tab === 'financeiro') loadFinanceiro();
 }
@@ -836,7 +852,6 @@ function showComandaScreen() {
   document.getElementById('estoque-screen').classList.add('hidden');
   document.getElementById('financeiro-screen').classList.add('hidden');
   document.getElementById('header-actions').classList.add('hidden');
-  document.getElementById('tab-bar').classList.add('hidden');
   document.getElementById('comanda-screen').classList.remove('hidden');
   document.getElementById('switch-comanda-btn').classList.remove('hidden');
   renderComandaBar();
