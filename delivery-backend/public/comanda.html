@@ -101,6 +101,31 @@
   .close-remaining.ok { color: #059669; }
   .close-remaining.pending { color: #dc2626; }
   .close-items { max-height: 30vh; overflow-y: auto; margin: 10px 0; }
+
+  /* ── Abas ─────────────────────────────────────────── */
+  #tab-bar { display: flex; gap: 4px; background: #ffffff; padding: 0 20px; border-bottom: 2px solid #e2e8f0; }
+  .tab-btn { background: none; border: none; padding: 12px 18px; font-weight: 700; font-size: .88rem; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  .tab-btn.active { color: #059669; border-bottom-color: #059669; }
+
+  /* ── Estoque ──────────────────────────────────────── */
+  #estoque-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
+  .estoque-toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .estoque-toolbar input, .estoque-toolbar select { padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: .9rem; }
+  .estoque-toolbar input { flex: 1; }
+  .estoque-item { display: flex; align-items: center; justify-content: space-between; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  .estoque-item.unavailable { opacity: .6; background: #f8fafc; }
+  .estoque-item .name { font-weight: 700; color: #0f172a; font-size: .92rem; }
+  .estoque-item small { color: #64748b; }
+  .estoque-item-actions { display: flex; align-items: center; gap: 10px; }
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; border-radius: 999px; transition: .15s; }
+  .switch .slider::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+  .switch input:checked + .slider { background: #059669; }
+  .switch input:checked + .slider::before { transform: translateX(20px); }
+  .field-group { text-align: left; margin-bottom: 12px; }
+  .field-group label { display: block; font-size: .75rem; font-weight: 700; color: #475569; margin-bottom: 4px; }
+  .field-group input, .field-group textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: .92rem; font-family: inherit; }
 </style>
 </head>
 <body>
@@ -111,6 +136,11 @@
     <div class="sub" id="header-sub">Digite o código do cartão</div>
   </div>
   <button class="btn btn-secondary hidden" id="switch-comanda-btn" onclick="resetToScan()">🔁 Trocar</button>
+</div>
+
+<div id="tab-bar" class="hidden">
+  <button class="tab-btn active" data-tab="comandas" onclick="showTab('comandas')">🧾 Comandas</button>
+  <button class="tab-btn" data-tab="estoque" onclick="showTab('estoque')">📦 Estoque</button>
 </div>
 
 <!-- ── Tela 0: login ── -->
@@ -186,15 +216,27 @@
   </div>
 </div>
 
+<!-- ── Aba: Estoque ── -->
+<div id="estoque-screen" class="hidden">
+  <div class="estoque-toolbar">
+    <input type="text" id="estoque-search" placeholder="🔍 Buscar produto..." oninput="renderEstoque()">
+    <select id="estoque-cat-filter" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
+  </div>
+  <div id="estoque-list"><div class="cart-empty">Carregando...</div></div>
+</div>
+
 <script>
 const API = '';
 const TOKEN_KEY = 'comanda_token';
+const ROLE_KEY = 'comanda_role';
 let TOKEN = localStorage.getItem(TOKEN_KEY) || null;
+let ROLE = localStorage.getItem(ROLE_KEY) || null;
 
 let comanda = null;      // comanda atual (com items já lançados)
 let menu = [];            // cardápio completo
 let activeCategory = null;
 let cart = [];             // itens desta rodada, ainda não enviados
+let estoqueCats = [];      // produtos (todas as categorias) pra aba Estoque
 
 function authHeaders(extra) {
   return Object.assign({ Authorization: 'Bearer ' + TOKEN }, extra || {});
@@ -206,7 +248,9 @@ function fmt(v) { return 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ',')
 function showLoginScreen() {
   document.getElementById('scan-screen').classList.add('hidden');
   document.getElementById('comanda-screen').classList.add('hidden');
+  document.getElementById('estoque-screen').classList.add('hidden');
   document.getElementById('switch-comanda-btn').classList.add('hidden');
+  document.getElementById('tab-bar').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('login-senha')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 }
@@ -229,8 +273,11 @@ async function doLogin() {
     if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
     if (!['admin', 'atendente'].includes(data.user?.role)) throw new Error('Este login não tem acesso a comandas');
     TOKEN = data.token;
+    ROLE = data.user.role;
     localStorage.setItem(TOKEN_KEY, TOKEN);
+    localStorage.setItem(ROLE_KEY, ROLE);
     document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('tab-bar').classList.remove('hidden');
     resetToScan();
   } catch (err) {
     erro.textContent = err.message;
@@ -291,12 +338,147 @@ function resetToScan() {
   comanda = null;
   cart = [];
   document.getElementById('comanda-screen').classList.add('hidden');
+  document.getElementById('estoque-screen').classList.add('hidden');
   document.getElementById('scan-screen').classList.remove('hidden');
   document.getElementById('switch-comanda-btn').classList.add('hidden');
+  document.getElementById('tab-bar').classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'comandas'));
   document.getElementById('header-sub').textContent = 'Digite o código do cartão';
   document.getElementById('manual-code').value = '';
   document.getElementById('manual-code').focus();
   loadPendingQueue();
+}
+
+// ── Aba: Estoque ─────────────────────────────────────
+function showTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  if (tab === 'estoque') {
+    document.getElementById('scan-screen').classList.add('hidden');
+    document.getElementById('estoque-screen').classList.remove('hidden');
+    loadEstoque();
+  } else {
+    document.getElementById('estoque-screen').classList.add('hidden');
+    document.getElementById('scan-screen').classList.remove('hidden');
+  }
+}
+
+async function loadEstoque() {
+  const el = document.getElementById('estoque-list');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/menu/admin`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    estoqueCats = await res.json();
+    const sel = document.getElementById('estoque-cat-filter');
+    const prevVal = sel.value;
+    sel.innerHTML = '<option value="">Todas categorias</option>' + estoqueCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    sel.value = prevVal;
+    renderEstoque();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro ao carregar produtos</div>';
+  }
+}
+
+function renderEstoque() {
+  const search = (document.getElementById('estoque-search')?.value || '').toLowerCase().trim();
+  const catFilter = document.getElementById('estoque-cat-filter')?.value || '';
+  const el = document.getElementById('estoque-list');
+  const rows = [];
+  for (const cat of estoqueCats) {
+    if (catFilter && cat.id !== catFilter) continue;
+    for (const p of cat.products) {
+      if (search && !p.name.toLowerCase().includes(search)) continue;
+      rows.push({ ...p, category_name: cat.name });
+    }
+  }
+  if (!rows.length) { el.innerHTML = '<div class="cart-empty">Nenhum produto encontrado</div>'; return; }
+  el.innerHTML = rows.map(p => `
+    <div class="estoque-item ${p.available ? '' : 'unavailable'}">
+      <div>
+        <div class="name">${p.name}</div>
+        <small>${p.category_name} · ${fmt(p.price)}</small>
+      </div>
+      <div class="estoque-item-actions">
+        ${ROLE === 'admin' ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openEditProduct('${p.id}')">✏️ Editar</button>` : ''}
+        <label class="switch">
+          <input type="checkbox" ${p.available ? 'checked' : ''} onchange="toggleAvailable('${p.id}', this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function toggleAvailable(id, available) {
+  try {
+    const res = await fetch(`${API}/api/menu/products/${id}/available`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ available }),
+    });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (!res.ok) { alert('Erro ao atualizar produto'); loadEstoque(); return; }
+    for (const cat of estoqueCats) {
+      const p = cat.products.find(x => x.id === id);
+      if (p) p.available = available;
+    }
+    renderEstoque();
+  } catch (e) {
+    alert('Erro de conexão');
+    loadEstoque();
+  }
+}
+
+function openEditProduct(id) {
+  const p = estoqueCats.flatMap(c => c.products).find(x => x.id === id);
+  if (!p) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'edit-product-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet">
+      <h3>Editar produto</h3>
+      <div class="field-group">
+        <label>Nome</label>
+        <input type="text" id="edit-p-name" value="${(p.name || '').replace(/"/g, '&quot;')}">
+      </div>
+      <div class="field-group">
+        <label>Preço (R$)</label>
+        <input type="number" step="0.01" id="edit-p-price" value="${p.price}">
+      </div>
+      <div class="field-group">
+        <label>Descrição</label>
+        <textarea id="edit-p-desc" rows="3">${(p.description || '').replace(/</g, '&lt;')}</textarea>
+      </div>
+      <div id="edit-p-error" style="color:#dc2626;font-size:.82rem;min-height:18px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('edit-product-backdrop').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEditProduct('${id}')">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+}
+
+async function saveEditProduct(id) {
+  const name = document.getElementById('edit-p-name').value.trim();
+  const price = parseFloat(document.getElementById('edit-p-price').value);
+  const description = document.getElementById('edit-p-desc').value.trim();
+  const errEl = document.getElementById('edit-p-error');
+  if (!name || !(price > 0)) { errEl.textContent = 'Nome e preço válido são obrigatórios'; return; }
+  try {
+    const res = await fetch(`${API}/api/menu/products/${id}`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name, price, description }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+    document.getElementById('edit-product-backdrop').remove();
+    loadEstoque();
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão';
+  }
 }
 
 // Comandas com "conta solicitada" pelo cliente (kiosk.html), aguardando o caixa fechar
@@ -328,6 +510,8 @@ async function loadPendingQueue() {
 // ── Tela da comanda ─────────────────────────────────
 function showComandaScreen() {
   document.getElementById('scan-screen').classList.add('hidden');
+  document.getElementById('estoque-screen').classList.add('hidden');
+  document.getElementById('tab-bar').classList.add('hidden');
   document.getElementById('comanda-screen').classList.remove('hidden');
   document.getElementById('switch-comanda-btn').classList.remove('hidden');
   document.getElementById('header-sub').textContent = comanda.code;
@@ -719,6 +903,7 @@ document.getElementById('manual-code').addEventListener('keydown', e => {
 if (!TOKEN) {
   showLoginScreen();
 } else {
+  document.getElementById('tab-bar').classList.remove('hidden');
   document.getElementById('scan-screen').classList.remove('hidden');
   document.getElementById('manual-code').focus();
   loadPendingQueue();

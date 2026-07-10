@@ -211,6 +211,25 @@ router.post('/products', authMiddleware, requireRole('admin'), async (req, res) 
   }
 });
 
+// PATCH /api/menu/products/:id/available — pausar/ativar produto por falta de estoque
+// (admin ou atendente — ação rápida de operação, não é edição de cadastro)
+router.patch('/products/:id/available', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  if (typeof req.body.available !== 'boolean') {
+    return res.status(400).json({ error: 'Campo "available" (boolean) é obrigatório' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE products SET available = $1 WHERE id = $2 RETURNING *`,
+      [req.body.available, req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[menu/products/available]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PATCH /api/menu/products/:id — atualizar produto (admin)
 router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   const fields = ['name', 'description', 'price', 'image_url', 'available', 'sort_order', 'category_id', 'featured', 'promo_price', 'promo_label', 'print_target'];
