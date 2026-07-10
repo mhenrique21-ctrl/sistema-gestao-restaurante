@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart, itemLineTotal } from '../store/cart'
 import { api } from '../api'
+import { trackPurchase } from '../utils/metaPixel'
 
 const PAYMENT_METHODS = [
   { id: 'pix',            label: 'PIX',              icon: '⚡', desc: 'Pague via PIX após confirmar' },
@@ -229,6 +230,24 @@ export default function CheckoutPage() {
       })
       clear()
       const BASE = import.meta.env.VITE_API_URL || ''
+      // Meta Pixel — browser
+      const eventId = trackPurchase(order.id, parseFloat(order.total) || 0, items)
+      // Meta CAPI — servidor (dedup pelo mesmo eventId)
+      fetch(`${BASE}/api/meta/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_id: eventId,
+          order_id: order.id,
+          total: order.total,
+          currency: 'BRL',
+          content_ids: items.map(i => i.product.id),
+          num_items: items.reduce((s, i) => s + i.qty, 0),
+          phone: phone.replace(/\D/g, ''),
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+        }),
+      }).catch(() => {})
       if (deliveryType === 'delivery') {
         const customerId = foundCustomer?.id || order.customer_id
         if (customerId && (addingNewAddress || !selectedAddressId || !foundCustomer)) {

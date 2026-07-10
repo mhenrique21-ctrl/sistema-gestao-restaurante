@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useCart } from '../store/cart'
 import { useNavigate } from 'react-router-dom'
+import { trackAddToCart } from '../utils/metaPixel'
 
 function money(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -57,6 +58,7 @@ export default function ProductModal({ product, onClose }) {
   function handleAdd() {
     if (!canAdd) return
     addItem(product, qty, selectedAddons, notes)
+    trackAddToCart(product, qty, unitPrice)
     setAdded(true)
   }
 

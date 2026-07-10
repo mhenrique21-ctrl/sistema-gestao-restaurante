@@ -3,6 +3,7 @@ import { useCart, itemLineTotal, itemUnitPrice } from '../store/cart'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { checkStoreOpen } from '../utils/storeStatus'
+import { trackInitiateCheckout } from '../utils/metaPixel'
 
 function money(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -125,7 +126,7 @@ export default function CartPage() {
           </div>
         )}
         <button
-          onClick={() => storeStatus.open && navigate('/checkout')}
+          onClick={() => { if (!storeStatus.open) return; trackInitiateCheckout(items, subtotal); navigate('/checkout') }}
           disabled={!storeStatus.open}
           className="btn-gold w-full py-4 flex items-center justify-between px-5"
           style={!storeStatus.open ? { opacity: 0.4, cursor: 'not-allowed' } : {}}>

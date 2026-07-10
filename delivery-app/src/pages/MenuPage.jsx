@@ -5,6 +5,7 @@ import { useCart, itemLineTotal } from '../store/cart'
 import { useNavigate } from 'react-router-dom'
 import hero from '../assets/hero.png'
 import { checkStoreOpen } from '../utils/storeStatus'
+import { trackViewOferta } from '../utils/metaPixel'
 
 const CAT_ICONS = {
   'Café': '☕', 'Cafés': '☕', 'Bebidas': '🥤', 'Bolos': '🎂', 'Bolos e Tortas': '🎂',
@@ -233,7 +234,7 @@ export default function MenuPage() {
               <div ref={(el) => (catRefs.current['ofertas'] = el)} className="px-4 pt-4">
                 <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--gold)' }}>🔥 Ofertas</p>
                 {offers.map((p) => (
-                  <ProductCard key={p.id} product={p} catName={p.categoryName} onClick={() => setSelected({ product: p, category: p.categoryName })} />
+                  <ProductCard key={p.id} product={p} catName={p.categoryName} onClick={() => { trackViewOferta(p); setSelected({ product: p, category: p.categoryName }) }} />
                 ))}
               </div>
             )}
