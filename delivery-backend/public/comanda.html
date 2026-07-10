@@ -649,13 +649,52 @@ function collectPayments() {
 }
 
 function updateCloseRemaining() {
-  const paid = collectPayments().reduce((s, p) => s + p.amount, 0);
-  const remaining = parseFloat(comanda.total) - paid;
+  const payments = collectPayments();
+  const paid = payments.reduce((s, p) => s + p.amount, 0);
+  const dinheiroTotal = payments.filter(p => p.method === 'dinheiro').reduce((s, p) => s + p.amount, 0);
+  const nonCashTotal = paid - dinheiroTotal;
+  const total = parseFloat(comanda.total);
+  const diff = total - paid; // > 0 falta, < 0 sobra
   const el = document.getElementById('close-remaining');
-  const ok = Math.abs(remaining) < 0.01;
-  el.textContent = ok ? 'Valor completo ✓' : `Restante: ${fmt(remaining)}`;
-  el.className = 'close-remaining ' + (ok ? 'ok' : 'pending');
+  let ok = false;
+
+  if (Math.abs(diff) < 0.01) {
+    ok = true;
+    el.textContent = 'Valor completo ✓';
+    el.className = 'close-remaining ok';
+  } else if (diff < 0) {
+    const troco = -diff;
+    // só é possível dar troco se o excedente vier de dinheiro (pix/cartão não dão troco)
+    if (nonCashTotal <= total + 0.01 && dinheiroTotal >= troco - 0.01) {
+      ok = true;
+      el.textContent = `Troco: ${fmt(troco)}`;
+      el.className = 'close-remaining ok';
+    } else {
+      el.textContent = `Excedeu o total em ${fmt(troco)} (só é possível dar troco em dinheiro)`;
+      el.className = 'close-remaining pending';
+    }
+  } else {
+    el.textContent = `Restante: ${fmt(diff)}`;
+    el.className = 'close-remaining pending';
+  }
   document.getElementById('confirm-close-btn').disabled = !ok;
+}
+
+// Ajusta os pagamentos em dinheiro para o valor efetivamente retido (desconta o troco),
+// já que o backend exige que a soma dos pagamentos bata exatamente com o total da comanda.
+function buildFinalPayments() {
+  const payments = collectPayments();
+  const total = parseFloat(comanda.total);
+  let troco = payments.reduce((s, p) => s + p.amount, 0) - total;
+  if (troco <= 0.01) return payments;
+  const result = payments.map(p => ({ ...p }));
+  for (let i = result.length - 1; i >= 0 && troco > 0.01; i--) {
+    if (result[i].method !== 'dinheiro') continue;
+    const reduce = Math.min(result[i].amount, troco);
+    result[i].amount = parseFloat((result[i].amount - reduce).toFixed(2));
+    troco = parseFloat((troco - reduce).toFixed(2));
+  }
+  return result.filter(p => p.amount > 0.001);
 }
 
 function closeCloseModal() {
@@ -664,8 +703,10 @@ function closeCloseModal() {
 }
 
 async function confirmClose() {
-  const payments = collectPayments();
-  if (!payments.length) return;
+  const entered = collectPayments();
+  if (!entered.length) return;
+  const troco = entered.reduce((s, p) => s + p.amount, 0) - parseFloat(comanda.total);
+  const payments = buildFinalPayments();
   const btn = document.getElementById('confirm-close-btn');
   btn.disabled = true;
   btn.textContent = 'Fechando...';
@@ -678,7 +719,7 @@ async function confirmClose() {
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = 'Confirmar fechamento'; return; }
     closeCloseModal();
-    alert('Comanda fechada com sucesso!');
+    alert(troco > 0.01 ? `Comanda fechada com sucesso!\nTroco: ${fmt(troco)}` : 'Comanda fechada com sucesso!');
     resetToScan();
   } catch (e) {
     alert('Erro de conexão ao fechar comanda');
