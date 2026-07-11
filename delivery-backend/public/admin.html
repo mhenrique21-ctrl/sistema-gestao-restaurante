@@ -32,24 +32,23 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 /* Sidebar */
 html.embed-mode #sidebar, html.embed-mode #topbar { display: none !important; }
 html.embed-mode #content { padding: 12px; }
-html.embed-mode .pedido-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+html.embed-mode .pedido-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
 html.embed-mode .pedido-card {
-  aspect-ratio: 1 / 1; margin-bottom: 0 !important; padding: 10px !important; display: flex; flex-direction: column;
-  justify-content: flex-start; overflow: hidden; gap: 6px;
+  aspect-ratio: 1 / 1; margin-bottom: 0 !important; padding: 14px !important; display: flex; flex-direction: column;
+  justify-content: flex-start; overflow: hidden; gap: 8px;
 }
 /* Esconde infos secundárias (data/hora, tipo de entrega, telefone, taxa) pra caber tudo sem rolagem */
 html.embed-mode .pedido-card-secondary { display: none !important; }
-html.embed-mode .pedido-card-header { gap: 4px !important; font-size: .68rem; }
-html.embed-mode .pedido-card-header span { font-size: .68rem !important; padding: 1px 6px !important; }
-html.embed-mode .pedido-card-header span[style*="1.15rem"] { font-size: .85rem !important; }
-html.embed-mode .pedido-card-header span[style*="1.1rem"] { font-size: .8rem !important; }
-html.embed-mode .pedido-card-meta { gap: 6px !important; margin-top: 0 !important; font-size: .72rem; }
+html.embed-mode .pedido-card-header { gap: 6px !important; font-size: .74rem; }
+html.embed-mode .pedido-card-header span { font-size: .74rem !important; padding: 2px 8px !important; }
+html.embed-mode .pedido-card-header span[style*="1.15rem"] { font-size: .95rem !important; }
+html.embed-mode .pedido-card-header span[style*="1.1rem"] { font-size: .9rem !important; }
+html.embed-mode .pedido-card-meta { gap: 8px !important; margin-top: 0 !important; font-size: .78rem; }
 html.embed-mode .pedido-card-addr { min-width: 0; flex: 1 1 100%; }
-html.embed-mode .pedido-card-addr-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: inline-block; vertical-align: bottom; }
+html.embed-mode .pedido-card-addr-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; display: inline-block; vertical-align: bottom; }
 html.embed-mode .addr-copy-btn { display: none !important; }
-html.embed-mode .pedido-card-actions { gap: 4px !important; margin-top: 0 !important; }
-html.embed-mode .pedido-card .btn-label { display: none; }
-html.embed-mode .pedido-card .btn-sm { font-size: .8rem; padding: 4px 6px; line-height: 1; min-width: 26px; text-align: center; }
+html.embed-mode .pedido-card-actions { gap: 6px !important; margin-top: 0 !important; }
+html.embed-mode .pedido-card .btn-sm { font-size: .74rem; padding: 5px 9px; line-height: 1.2; }
 #sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 #sidebar .logo { padding: 20px 16px; border-bottom: 1px solid var(--border); }
 #sidebar .logo h1 { font-size: 1.1rem; font-weight: 800; }
