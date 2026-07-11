@@ -108,6 +108,7 @@
   .pending-card:active { background: var(--c-bg); }
   .pending-card .badge-conta { position: absolute; top: 10px; right: 10px; background: var(--gold); color: var(--surface); font-size: .62rem; font-weight: 800; padding: 3px 7px; border-radius: 999px; letter-spacing: .02em; }
   .pending-card .name { font-weight: 800; color: var(--c-text); font-size: .95rem; line-height: 1.2; padding-right: 50px; }
+  .pending-card .pending-meta { display: flex; flex-direction: column; gap: 2px; font-size: .74rem; font-weight: 600; color: var(--c-muted); }
   .pending-card .total { font-size: 1.3rem; font-weight: 800; color: var(--gold-dim); }
 
   @media (max-width: 720px) {
@@ -498,6 +499,7 @@ function showToast(html) {
 
 // ── Login ────────────────────────────────────────────
 function showLoginScreen() {
+  if (pendingListTimer) { clearInterval(pendingListTimer); pendingListTimer = null; }
   document.getElementById('scan-screen').classList.add('hidden');
   document.getElementById('comanda-screen').classList.add('hidden');
   document.getElementById('estoque-screen').classList.add('hidden');
@@ -895,26 +897,48 @@ async function submitAbertura() {
 
 // Comandas com "conta solicitada" pelo cliente (kiosk.html), aguardando o caixa fechar
 // com a forma de pagamento recebida na mesa pelo garçom.
+let pendingListData = [];
+let pendingListTimer = null;
+
+function elapsedLabel(openedAt) {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(openedAt).getTime()) / 60000));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return `${h}h${m > 0 ? m + 'm' : ''}`;
+}
+
 async function loadPendingQueue() {
   const el = document.getElementById('pending-list');
   try {
     const res = await fetch(`${API}/api/comandas/pending-close`, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     const list = await res.json();
-    if (!res.ok || !Array.isArray(list) || !list.length) {
-      el.innerHTML = '<div class="cart-empty">Nenhuma comanda aberta</div>';
-      return;
-    }
-    el.innerHTML = list.map(c => `
-      <button class="pending-card" onclick="resolveCode('${c.code}')">
-        ${c.closing_requested_at ? '<span class="badge-conta">💳 conta pedida</span>' : ''}
-        <span class="name">${c.label || c.code}</span>
-        <span class="total">${fmt(c.total)}</span>
-      </button>
-    `).join('');
+    if (!res.ok || !Array.isArray(list)) { el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>'; return; }
+    pendingListData = list;
+    renderPendingList();
+    if (!pendingListTimer) pendingListTimer = setInterval(renderPendingList, 30000);
   } catch (e) {
     el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>';
   }
+}
+
+function renderPendingList() {
+  const el = document.getElementById('pending-list');
+  if (!pendingListData.length) {
+    el.innerHTML = '<div class="cart-empty">Nenhuma comanda aberta</div>';
+    return;
+  }
+  el.innerHTML = pendingListData.map(c => `
+    <button class="pending-card" onclick="resolveCode('${c.code}')">
+      ${c.closing_requested_at ? '<span class="badge-conta">💳 conta pedida</span>' : ''}
+      <span class="name">${c.label || c.code}</span>
+      <span class="pending-meta">
+        ${c.mesa ? `<span>🪑 Mesa ${c.mesa}</span>` : '<span></span>'}
+        <span>⏱ ${elapsedLabel(c.opened_at)}</span>
+      </span>
+      <span class="total">${fmt(c.total)}</span>
+    </button>
+  `).join('');
 }
 
 // ── Tela da comanda ─────────────────────────────────

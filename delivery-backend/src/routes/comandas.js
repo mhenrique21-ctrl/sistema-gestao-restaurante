@@ -98,9 +98,12 @@ router.get('/', authMiddleware, requireRole('admin'), async (req, res) => {
 router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, code, label, total, closing_requested_at, opened_at
-       FROM comandas WHERE status = 'aberta' AND total > 0
-       ORDER BY COALESCE(closing_requested_at, opened_at) DESC`
+      `SELECT c.id, c.code, c.label, c.total, c.closing_requested_at, c.opened_at,
+              (SELECT ci.mesa FROM comanda_items ci
+               WHERE ci.comanda_id = c.id AND ci.mesa IS NOT NULL
+               ORDER BY ci.created_at DESC LIMIT 1) AS mesa
+       FROM comandas c WHERE c.status = 'aberta' AND c.total > 0
+       ORDER BY COALESCE(c.closing_requested_at, c.opened_at) DESC`
     );
     res.json(result.rows);
   } catch (err) {
