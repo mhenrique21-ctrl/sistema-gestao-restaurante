@@ -50,11 +50,18 @@
   .toast { background: var(--surface); border: 1px solid var(--gold-dim); color: var(--cream); padding: 12px 16px; border-radius: 10px; font-size: .88rem; font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,.35); max-width: 320px; animation: toast-in .2s ease-out; }
   .toast strong { color: var(--gold); }
   @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-  .header-cta { display: flex; align-items: center; gap: 8px; border: 2px solid var(--gold-dim); background: transparent; color: var(--gold); padding: 10px 18px; border-radius: 10px; font-weight: 800; font-size: .88rem; letter-spacing: .01em; }
+  .header-cta { position: relative; display: flex; align-items: center; gap: 8px; border: 2px solid var(--gold-dim); background: transparent; color: var(--gold); padding: 10px 18px; border-radius: 10px; font-weight: 800; font-size: .88rem; letter-spacing: .01em; }
   .header-cta svg { width: 18px; height: 18px; flex-shrink: 0; }
   .header-cta:active { background: rgba(201,162,94,.12); }
   .header-cta.primary { border-color: var(--gold); background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: var(--surface); }
   .header-cta.primary:active { filter: brightness(1.08); }
+  .notif-bell {
+    position: absolute; top: -8px; right: -8px; background: var(--danger); color: #fff;
+    font-size: .68rem; font-weight: 800; min-width: 19px; height: 19px; padding: 0 4px;
+    border-radius: 999px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--surface); animation: bell-pop .25s ease-out; line-height: 1;
+  }
+  @keyframes bell-pop { from { transform: scale(0); } to { transform: scale(1); } }
   .status-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .75rem; font-weight: 700; }
   .status-badge.aberta { background: rgba(76,175,128,.15); color: #2f8f63; }
   .status-badge.fechada { background: rgba(224,82,82,.15); color: #c23c3c; }
@@ -249,10 +256,12 @@
   </div>
   <div id="header-actions" class="hidden">
     <button class="header-cta" id="comanda-btn" onclick="showTab('comandas')">
+      <span class="notif-bell hidden" id="comanda-notif">0</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
       Comanda
     </button>
     <button class="header-cta" id="delivery-btn" onclick="showTab('delivery')">
+      <span class="notif-bell hidden" id="delivery-notif">0</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg>
       Delivery
     </button>
@@ -472,18 +481,46 @@ function connectWS() {
     if (msg.type === 'station_order' && msg.event === 'new_comanda_order') {
       handleNewComandaOrder(msg.comanda, msg.items);
     }
+    if (msg.type === 'order_update' && msg.event === 'new_order') {
+      handleNewDeliveryOrder(msg.order);
+    }
   };
   ws.onclose = () => { ws = null; if (TOKEN) setTimeout(connectWS, 3000); };
   ws.onerror = () => { try { ws.close(); } catch (e) {} };
 }
 
+// ── Sino de notificação nos botões Comanda / Delivery ────────────────
+let comandaNotifCount = 0;
+let deliveryNotifCount = 0;
+
+function bumpNotif(kind) {
+  if (kind === 'comanda') comandaNotifCount++; else deliveryNotifCount++;
+  const count = kind === 'comanda' ? comandaNotifCount : deliveryNotifCount;
+  const el = document.getElementById(kind + '-notif');
+  if (!el) return;
+  el.textContent = count > 99 ? '99+' : count;
+  el.classList.remove('hidden');
+}
+
+function clearNotif(kind) {
+  if (kind === 'comanda') comandaNotifCount = 0; else deliveryNotifCount = 0;
+  const el = document.getElementById(kind + '-notif');
+  if (el) el.classList.add('hidden');
+}
+
 function handleNewComandaOrder(comandaData, items) {
   const itemsDesc = (items || []).map(i => `${i.quantity}x ${i.product_name}`).join(', ');
   showToast(`🧾 Novo pedido — <strong>${comandaData.label || comandaData.code}</strong><br>${itemsDesc}`);
+  bumpNotif('comanda');
   if (!document.getElementById('scan-screen').classList.contains('hidden')) loadPendingQueue();
   // Se essa comanda já está aberta na tela, atualiza o "já lançado" sem mexer
   // no carrinho local (não enviado) que o atendente esteja montando.
   if (comanda && comanda.id === comandaData.id) refreshOpenComanda();
+}
+
+function handleNewDeliveryOrder(order) {
+  showToast(`🛵 Novo pedido delivery — <strong>#${order?.order_number || (order?.id || '').slice(-4)}</strong>${order?.customer_name ? ' — ' + order.customer_name : ''}`);
+  bumpNotif('delivery');
 }
 
 async function refreshOpenComanda() {
@@ -638,6 +675,8 @@ function showTab(tab) {
   if (tab === 'estoque') loadEstoque();
   if (tab === 'financeiro') loadFinanceiro();
   if (tab === 'delivery') loadDeliveryOrders();
+  if (tab === 'comandas') clearNotif('comanda');
+  if (tab === 'delivery') clearNotif('delivery');
 }
 
 // Aba "Delivery": mostra os pedidos do app (admin.html, aba Pedidos) embutidos
