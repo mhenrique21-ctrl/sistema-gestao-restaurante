@@ -32,6 +32,13 @@ body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--t
 /* Sidebar */
 html.embed-mode #sidebar, html.embed-mode #topbar { display: none !important; }
 html.embed-mode #content { padding: 12px; }
+html.embed-mode .pedido-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+html.embed-mode .pedido-card {
+  aspect-ratio: 1 / 1; margin-bottom: 0 !important; display: flex; flex-direction: column;
+  justify-content: space-between; overflow-y: auto; gap: 6px;
+}
+html.embed-mode .pedido-card > div:last-child { flex-wrap: wrap; }
+html.embed-mode .pedido-card .btn-sm { font-size: .72rem; padding: 5px 9px; }
 #sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 #sidebar .logo { padding: 20px 16px; border-bottom: 1px solid var(--border); }
 #sidebar .logo h1 { font-size: 1.1rem; font-weight: 800; }
@@ -1533,7 +1540,7 @@ function renderPedidos(orders) {
     const num = o.order_number || o.id.slice(-4);
     const addr = o.delivery_address ? (typeof o.delivery_address === 'string' ? o.delivery_address : `${o.delivery_address.street||''}, ${o.delivery_address.number||''} — ${o.delivery_address.neighborhood||''}`) : '';
     return `
-    <div style="background:var(--surface);border:1px solid var(--border);border-left:5px solid ${cor};border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.15)">
+    <div class="pedido-card" style="background:var(--surface);border:1px solid var(--border);border-left:5px solid ${cor};border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.15)">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span style="font-family:monospace;font-weight:900;font-size:1.15rem;color:var(--text)">#${num}</span>
@@ -1571,6 +1578,7 @@ function renderPedidos(orders) {
       </div>
     </div>`;
       }).join('');
+      const cardsWrapped = `<div class="pedido-cards-grid">${cardsHtml}</div>`;
 
       return `
         <div style="margin-bottom:24px">
@@ -1578,7 +1586,7 @@ function renderPedidos(orders) {
             <span style="font-size:.95rem;font-weight:800;color:var(--text)">${labelData(dateKey)}</span>
             <span style="background:var(--hover);color:var(--muted);font-size:.75rem;padding:2px 10px;border-radius:999px">${dayOrders.length} pedido${dayOrders.length > 1 ? 's' : ''}</span>
           </div>
-          ${cardsHtml}
+          ${cardsWrapped}
         </div>`;
     }).join('');
 }
