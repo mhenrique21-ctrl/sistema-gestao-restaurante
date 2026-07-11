@@ -30,6 +30,8 @@ body.light {
 body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; transition: background .2s, color .2s; }
 
 /* Sidebar */
+html.embed-mode #sidebar, html.embed-mode #topbar { display: none !important; }
+html.embed-mode #content { padding: 12px; }
 #sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 #sidebar .logo { padding: 20px 16px; border-bottom: 1px solid var(--border); }
 #sidebar .logo h1 { font-size: 1.1rem; font-weight: 800; }
@@ -160,6 +162,11 @@ textarea { resize: vertical; min-height: 70px; }
 </style>
 </head>
 <body>
+<script>
+  if (new URLSearchParams(location.search).get('embed')) {
+    document.documentElement.classList.add('embed-mode');
+  }
+</script>
 
 <div id="sidebar">
   <div class="logo">
