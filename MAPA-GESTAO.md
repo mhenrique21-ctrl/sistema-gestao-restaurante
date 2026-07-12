@@ -67,6 +67,7 @@ dados/<empresa>.json   (arquivo local no VPS — NÃO é banco SQL)
 | Fluxo de Caixa | 💵 | — |
 | Gestão | ⚙️ | RH, Fichas, DRE, Relatórios, Versus, Backups |
 | Encomenda | 📦 | Encomendas, Cadastradas*, Anotações* |
+| **Produtos** | 🍽️ | Produtos, Categorias — catálogo real (delivery-backend), não é dado local |
 | Configurações | 🔧 | Empresa, Financeiro, Compras, NF-e, **Usuários**, Integrações |
 
 `*` = só aparece pra role `admin`. Roles não-admin (`op`, `op_lista`,
@@ -134,6 +135,7 @@ Campos: `{ id, nome, senha, role, empresa?, corTexto, pdv? }`.
 | WhatsApp | `abrirWhatsApp`/`compartilharWhatsAppRapido` (frontend) | Links `wa.me` pra compartilhar pedidos de produção/encomenda — não é API oficial |
 | Web Push | `/api/push-*` | Notificações push no navegador |
 | **PDV (delivery-backend)** | `/api/pdv-user` (proxy) → `delivery-backend` `/api/pdv-provision` | Provisiona login real do PDV a partir do cadastro de usuários daqui (feature implementada nesta sessão — ver `PDV_PROVISION_SECRET` no `.env` dos dois backends) |
+| **Catálogo (delivery-backend)** | `/api/menu-produtos*`, `/api/menu-categorias*` (proxy) → `delivery-backend` `/api/menu/*`, `/api/categories/*` | Aba "Produtos" edita o catálogo real do PDV/Delivery. Autenticado via token de serviço (`GET`/`POST` `/api/service-token` no delivery-backend, segredo `GESTAO_SERVICE_SECRET`) — o backend do Gestão troca o segredo por um JWT admin de 1h, cacheado em memória (`getServiceToken()` em `new_server.js`), e usa esse JWT pra falar com `menu.js`/`categories.js` sem precisar de login de usuário real. |
 
 ## Rotas do `new_server.js` (inventário)
 

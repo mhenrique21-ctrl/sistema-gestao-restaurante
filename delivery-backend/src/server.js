@@ -62,6 +62,7 @@ app.use('/api/cash-movements', require('./routes/cashMovements'));
 app.use('/api/meta', require('./routes/meta'));
 app.use('/api/mesas', require('./routes/mesas'));
 app.use('/api/pdv-provision', require('./routes/pdvProvision'));
+app.use('/api/service-token', require('./routes/serviceToken'));
 
 // Health check
 app.get('/health', (req, res) => {
