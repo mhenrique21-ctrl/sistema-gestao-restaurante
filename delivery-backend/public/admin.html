@@ -197,6 +197,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="clientes" onclick="showPage('clientes',this)">👥 Clientes</button>
     <button class="nav-btn" data-page="usuarios" onclick="showPage('usuarios',this)">🔐 Usuários</button>
     <button class="nav-btn" data-page="bairros" onclick="showPage('bairros',this)">📍 Bairros</button>
+    <button class="nav-btn" data-page="mesas" onclick="showPage('mesas',this)">🪑 Mesas</button>
     <button class="nav-btn" data-page="configuracoes" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
     <button class="nav-btn" data-page="pagamentos" onclick="showPage('pagamentos',this)">💳 Pagamentos</button>
     <button class="nav-btn" data-page="adicionais" onclick="showPage('adicionais',this)">➕ Adicionais</button>
@@ -532,9 +533,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', comandas:'Comandas' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', mesas:'Mesas', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', comandas:'Comandas' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, comandas: pageComandas };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, mesas: pageMesas, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, comandas: pageComandas };
   pages[page]?.();
 }
 
@@ -3584,6 +3585,104 @@ async function toggleBairroAtivo(id, current) {
   await api('PATCH', '/neighborhoods/' + id, { active: !current });
   toast(current ? 'Bairro desativado' : 'Bairro ativado');
   pageBairros();
+}
+
+// ── Mesas ─────────────────────────────────────────────────────────
+let MESAS = [];
+const MESA_STATUS_LABEL = { livre: 'Livre', ocupada: 'Ocupada', reservada: 'Reservada' };
+
+async function pageMesas() {
+  document.getElementById('content').innerHTML = '<p style="color:var(--muted)">Carregando...</p>';
+  try {
+    MESAS = await api('GET', '/mesas');
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="card"><p style="color:#ef4444">❌ Erro ao carregar mesas: ${e.message}</p></div>`;
+    return;
+  }
+  const internas = MESAS.filter(m => m.area === 'interna');
+  const externas = MESAS.filter(m => m.area === 'externa');
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="modalNovaMesa()">+ Nova mesa</button>
+    </div>
+
+    ${mesaGrupoHtml('🏠 Área interna', internas)}
+    ${mesaGrupoHtml('🌤 Área externa', externas)}
+  `;
+}
+
+function mesaGrupoHtml(titulo, lista) {
+  return `
+    <div class="card">
+      <h3>${titulo} (${lista.length})</h3>
+      <table>
+        <tr><th>Mesa</th><th>Capacidade</th><th>Status</th><th>Ações</th></tr>
+        ${lista.map(m => `
+          <tr>
+            <td style="font-weight:700">Mesa ${m.numero}</td>
+            <td>${m.capacidade} lugares</td>
+            <td>
+              <select onchange="mudarStatusMesa('${m.id}', this.value)" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;background:var(--surface);color:var(--text);font-size:.82rem">
+                ${Object.entries(MESA_STATUS_LABEL).map(([k, v]) => `<option value="${k}" ${m.status === k ? 'selected' : ''}>${v}</option>`).join('')}
+              </select>
+            </td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-secondary btn-sm" onclick="modalEditarMesa('${m.id}')">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="excluirMesa('${m.id}')">🗑</button>
+            </td>
+          </tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Nenhuma mesa nesta área</td></tr>`}
+      </table>
+    </div>`;
+}
+
+function mesaForm(m = {}) {
+  return `
+    <div class="form-grid">
+      <div><label>Número da mesa</label><input id="m-numero" type="number" value="${m.numero ?? ''}" /></div>
+      <div><label>Área</label>
+        <select id="m-area">
+          <option value="interna" ${m.area === 'interna' ? 'selected' : ''}>Interna</option>
+          <option value="externa" ${m.area === 'externa' ? 'selected' : ''}>Externa</option>
+        </select>
+      </div>
+      <div><label>Capacidade (lugares)</label><input id="m-capacidade" type="number" value="${m.capacidade ?? 4}" /></div>
+    </div>`;
+}
+
+function modalNovaMesa() {
+  openModal('Nova Mesa', mesaForm(), async () => {
+    await api('POST', '/mesas', { numero: parseInt(v('m-numero')), area: v('m-area'), capacidade: parseInt(v('m-capacidade')) || 4 });
+    toast('Mesa cadastrada!'); closeModal(); pageMesas();
+  });
+}
+
+function modalEditarMesa(id) {
+  const m = MESAS.find(x => x.id === id);
+  if (!m) return;
+  openModal('Editar Mesa', mesaForm(m), async () => {
+    await api('PATCH', '/mesas/' + id, { numero: parseInt(v('m-numero')), area: v('m-area'), capacidade: parseInt(v('m-capacidade')) || 4 });
+    toast('Mesa atualizada!'); closeModal(); pageMesas();
+  });
+}
+
+async function mudarStatusMesa(id, status) {
+  try {
+    await api('PATCH', '/mesas/' + id, { status });
+    toast('Status da mesa atualizado');
+  } catch (e) {
+    toast('Erro ao atualizar status', true);
+  }
+}
+
+async function excluirMesa(id) {
+  if (!confirm('Excluir esta mesa?')) return;
+  try {
+    await api('DELETE', '/mesas/' + id);
+    toast('Mesa excluída');
+    pageMesas();
+  } catch (e) {
+    toast(e.message || 'Erro ao excluir', true);
+  }
 }
 
 // ── Comandas ──────────────────────────────────────────────────────

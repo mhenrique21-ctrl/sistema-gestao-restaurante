@@ -60,6 +60,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/comandas', require('./routes/comandas'));
 app.use('/api/cash-movements', require('./routes/cashMovements'));
 app.use('/api/meta', require('./routes/meta'));
+app.use('/api/mesas', require('./routes/mesas'));
 
 // Health check
 app.get('/health', (req, res) => {
