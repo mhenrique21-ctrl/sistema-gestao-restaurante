@@ -19,6 +19,8 @@
     --muted: #7A6548;
     --danger: #E05252;
     --green: #4CAF80;
+    --orange: #F28C1D;
+    --orange-dim: #C96F0F;
     /* área neutra central (onde ficam as comandas) */
     --c-bg: #F2EFE9;
     --c-surface: #FFFFFF;
@@ -33,6 +35,7 @@
 
   #header { background: var(--surface); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
   #brand { display: flex; align-items: center; gap: 10px; }
+  .brand-logo-img { height: 36px; width: auto; display: block; mix-blend-mode: screen; }
   .brand-icon { width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); display: flex; align-items: center; justify-content: center; color: var(--surface); }
   .brand-icon svg { width: 21px; height: 21px; }
   .brand-text { display: flex; align-items: baseline; gap: 6px; line-height: 1; }
@@ -45,17 +48,24 @@
   .btn-danger { background: var(--danger); color: #fff; }
   #switch-comanda-btn.btn-secondary { background: var(--card); color: var(--cream); border: 1px solid var(--border); }
 
-  #header-actions { display: flex; gap: 10px; }
+  #header-actions { display: flex; gap: 12px; flex: 1; justify-content: flex-end; }
 
   #toast-container { position: fixed; top: 76px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
   .toast { background: var(--surface); border: 1px solid var(--gold-dim); color: var(--cream); padding: 12px 16px; border-radius: 10px; font-size: .88rem; font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,.35); max-width: 320px; animation: toast-in .2s ease-out; }
   .toast strong { color: var(--gold); }
   @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-  .header-cta { position: relative; display: flex; align-items: center; gap: 8px; border: 2px solid var(--gold-dim); background: transparent; color: var(--gold); padding: 10px 18px; border-radius: 10px; font-weight: 800; font-size: .88rem; letter-spacing: .01em; }
-  .header-cta svg { width: 18px; height: 18px; flex-shrink: 0; }
-  .header-cta:active { background: rgba(201,162,94,.12); }
-  .header-cta.primary { border-color: var(--gold); background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: var(--surface); }
-  .header-cta.primary:active { filter: brightness(1.08); }
+  .header-cta {
+    position: relative; display: flex; align-items: center; justify-content: center; gap: 10px;
+    border: none; background: var(--card); color: var(--cream);
+    padding: 14px 22px; border-radius: 12px; font-weight: 800; font-size: .92rem; letter-spacing: .01em;
+    flex: 1; min-width: 150px; max-width: 210px; transition: background .15s, color .15s;
+  }
+  .header-cta svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .header-cta:active { background: var(--card-active); }
+  .header-cta.active-tab, .header-cta.primary {
+    background: linear-gradient(135deg, var(--orange) 0%, var(--orange-dim) 100%); color: #fff;
+  }
+  .header-cta.active-tab:active, .header-cta.primary:active { filter: brightness(1.08); }
   .notif-bell {
     position: absolute; top: -8px; right: -8px; background: var(--danger); color: #fff;
     font-size: .68rem; font-weight: 800; min-width: 19px; height: 19px; padding: 0 4px;
@@ -72,17 +82,26 @@
   #main-content { flex: 1; overflow-y: auto; background: var(--c-bg); position: relative; }
 
   /* ── Menu lateral (faixa escura) ───────────────────── */
-  #tab-bar { display: flex; flex-direction: column; gap: 10px; width: 100px; min-width: 100px; background: var(--surface); padding: 16px 10px; border-right: 1px solid var(--border); overflow-y: auto; }
+  #tab-bar { display: flex; flex-direction: column; width: 230px; min-width: 230px; background: var(--surface); padding: 18px 14px; border-right: 1px solid var(--border); overflow-y: auto; }
+  #tab-bar-items { display: flex; flex-direction: column; gap: 8px; flex: 1; }
   .tab-tile {
-    flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 7px; width: 100%; height: 82px; border-radius: 14px;
-    background: var(--card); border: 2px solid var(--border); color: var(--muted);
-    font-weight: 700; font-size: .66rem; letter-spacing: .01em; text-align: center;
+    flex: none; display: flex; flex-direction: row; align-items: center;
+    gap: 12px; width: 100%; padding: 13px 14px; border-radius: 12px;
+    background: transparent; border: none; color: var(--muted);
+    font-weight: 700; font-size: .92rem; letter-spacing: .01em; text-align: left;
   }
-  .tab-tile .icon { font-size: 1.75rem; line-height: 1; display: flex; align-items: center; justify-content: center; }
-  .tab-tile .icon svg { width: 30px; height: 30px; }
-  .tab-tile.active { background: var(--card-active); border-color: var(--gold); color: var(--gold); box-shadow: 0 2px 10px rgba(201,162,94,.2); }
-  .tab-tile:active { background: var(--card-active); }
+  .tab-tile .icon { font-size: 1.3rem; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .tab-tile .icon svg { width: 22px; height: 22px; }
+  .tab-tile.active { background: var(--card-active); color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
+  .tab-tile:active { background: var(--card); }
+  #tab-bar-footer { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 10px; }
+  #tab-bar-logout {
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border-radius: 12px;
+    background: transparent; border: none; color: var(--muted); font-weight: 700; font-size: .92rem; margin-bottom: 12px;
+  }
+  #tab-bar-logout:active { background: var(--card); color: var(--danger); }
+  #tab-bar-meta { color: var(--muted); font-size: .76rem; display: flex; flex-direction: column; gap: 4px; }
+  #tab-bar-meta span { display: flex; align-items: center; gap: 6px; }
 
   /* ── Tela de login ───────────────────────────────── */
   #login-screen { min-height: 100%; display: flex; align-items: center; justify-content: center; }
@@ -95,34 +114,44 @@
   #login-box input { width: 100%; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text); border-radius: 8px; padding: 12px 14px; font-size: .95rem; outline: none; }
   #login-error { color: var(--danger); font-size: .8rem; margin-bottom: 12px; min-height: 16px; }
 
-  /* ── Tela de scan ────────────────────────────────── */
-  #scan-screen { display: flex; gap: 20px; align-items: flex-start; padding: 20px; }
-  #scan-main { flex: 1; min-width: 0; text-align: left; }
-  #scan-identify-box { width: 300px; flex-shrink: 0; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 14px; padding: 18px; text-align: left; box-shadow: 0 1px 3px rgba(42,35,24,.05); }
-  #scan-identify-box h2 { font-size: 1.05rem; margin-bottom: 4px; color: var(--c-text); }
-  #scan-identify-box p.hint { color: var(--c-muted); font-size: .8rem; margin-bottom: 14px; }
+  /* ── Modal "abrir por código" ─────────────────────── */
   .manual-entry { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
   .manual-entry input { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: 1rem; letter-spacing: .02em; }
   .manual-entry .btn { width: 100%; }
   #scan-error { color: var(--danger); font-size: .85rem; margin-top: 10px; min-height: 20px; }
 
-  .pending-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; }
-  .pending-card {
-    aspect-ratio: 1 / 1; display: flex; flex-direction: column; justify-content: space-between;
-    background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 14px; padding: 14px;
-    text-align: left; box-shadow: 0 1px 3px rgba(42,35,24,.05); position: relative; overflow: hidden;
-    width: 100%; font-family: inherit; cursor: pointer;
+  /* ── Comandas (board) ────────────────────────────── */
+  #board-screen { padding: 24px; }
+  .board-header h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: .01em; color: var(--c-text); margin-bottom: 18px; }
+  .board-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
+  .board-pills { display: flex; gap: 8px; }
+  .board-pill { background: var(--c-surface); border: 1px solid var(--c-border); color: var(--c-text); padding: 10px 18px; border-radius: 999px; font-weight: 700; font-size: .88rem; }
+  .board-pill.active { background: var(--orange); border-color: var(--orange); color: #fff; }
+  .board-actions { display: flex; align-items: center; gap: 10px; }
+  #board-search { padding: 11px 16px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .88rem; min-width: 260px; }
+  .board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .board-card {
+    background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px;
+    text-align: left; box-shadow: 0 1px 3px rgba(42,35,24,.06); font-family: inherit; cursor: pointer;
+    display: flex; flex-direction: column; gap: 10px;
   }
-  .pending-card:active { background: var(--c-bg); }
-  .pending-card .badge-conta { position: absolute; top: 10px; right: 10px; background: var(--gold); color: var(--surface); font-size: .62rem; font-weight: 800; padding: 3px 7px; border-radius: 999px; letter-spacing: .02em; }
-  .pending-card .name { font-weight: 800; color: var(--c-text); font-size: .95rem; line-height: 1.2; padding-right: 50px; }
-  .pending-card .pending-meta { display: flex; flex-direction: column; gap: 2px; font-size: .74rem; font-weight: 600; color: var(--c-muted); }
-  .pending-card .total { font-size: 1.3rem; font-weight: 800; color: var(--gold-dim); }
-
-  @media (max-width: 720px) {
-    #scan-screen { flex-direction: column; }
-    #scan-identify-box { width: 100%; }
-  }
+  .board-card:active { background: var(--c-bg); }
+  .board-card-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .board-card-head strong { font-size: 1.05rem; color: var(--c-text); }
+  .board-card-head span { font-size: .85rem; font-weight: 600; color: var(--c-muted); }
+  .board-status { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+  .board-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+  .board-status.aberta { background: rgba(76,175,128,.15); color: #2f8f63; }
+  .board-status.aberta::before { background: #2f8f63; }
+  .board-status.fechada { background: var(--c-border); color: var(--c-muted); }
+  .board-status.fechada::before { background: var(--c-muted); }
+  .board-items { display: flex; flex-direction: column; gap: 4px; min-height: 22px; }
+  .board-item-row { display: flex; justify-content: space-between; font-size: .84rem; color: var(--c-text); }
+  .board-item-row span:last-child { color: var(--c-muted); font-weight: 600; }
+  .board-card-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--c-border); padding-top: 10px; }
+  .board-card-foot > span { display: flex; align-items: center; gap: 5px; font-size: .8rem; color: var(--c-muted); }
+  .board-card-foot strong { font-size: 1.1rem; color: var(--c-text); }
+  #board-empty-code-btn { margin-top: 4px; }
 
   /* ── Tela da comanda ─────────────────────────────── */
   #comanda-screen { display: flex; flex-direction: column; height: 100%; }
@@ -250,34 +279,27 @@
 <div id="header">
   <div>
     <div id="brand">
-      <span class="brand-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 8h13v6a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8z"/>
-          <path d="M16 9h2a3 3 0 0 1 0 6h-1.5"/>
-          <path d="M6 3c0 1-1 1.2-1 2.2S6 6.4 6 7.4"/>
-          <path d="M10.5 3c0 1-1 1.2-1 2.2s1 1.2 1 2.2"/>
-        </svg>
-      </span>
-      <div class="brand-text">
-        <span class="brand-name">Confraria</span>
-        <span class="brand-tag">PDV</span>
-      </div>
+      <img class="brand-logo-img" src="/logo-confraria-pdv.png" alt="Confraria Café PDV">
     </div>
   </div>
   <div id="header-actions" class="hidden">
-    <button class="header-cta" id="comanda-btn" onclick="showTab('comandas')">
-      <span class="notif-bell hidden" id="comanda-notif">0</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
-      Comanda
+    <button class="header-cta" id="fazer-pedido-btn" onclick="openBalcaoSale()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.4"/><circle cx="19" cy="21" r="1.4"/><path d="M1 1h3l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L22 6H6"/></svg>
+      Fazer Pedido
     </button>
     <button class="header-cta" id="delivery-btn" onclick="showTab('delivery')">
       <span class="notif-bell hidden" id="delivery-notif">0</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg>
       Delivery
     </button>
-    <button class="header-cta primary" id="fazer-pedido-btn" onclick="openBalcaoSale()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Fazer pedido
+    <button class="header-cta" id="comanda-btn" onclick="showTab('comandas')">
+      <span class="notif-bell hidden" id="comanda-notif">0</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
+      Comandas
+    </button>
+    <button class="header-cta" id="caixa-btn" onclick="showTab('financeiro')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="18" y1="15" x2="18" y2="15"/></svg>
+      Caixa
     </button>
   </div>
   <button class="btn btn-secondary hidden" id="switch-comanda-btn" onclick="resetToScan()">🔁 Trocar</button>
@@ -285,14 +307,23 @@
 
 <div id="app-layout">
 <div id="tab-bar" class="hidden">
+  <div id="tab-bar-items">
   <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 7.5 3 12.5S7 22 12 22s9-4.5 9-9.5S17 3 12 3z"/><path d="M9 19c0-4 1-6 2-7.5S13 8 13 5"/></svg></span>Estoque</button>
-  <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h7v6a3.5 3.5 0 0 1-3.5 3.5h0A3.5 3.5 0 0 1 3 15V9z"/><path d="M10 10h2a2 2 0 0 1 0 4h-1.3"/><path d="M5.5 9V7M7.5 9V7"/><path d="M14 20v-4M17.3 20v-7M20.6 20v-3"/></svg></span>Financeiro</button>
   <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9" rx="7" ry="2.6"/><line x1="12" y1="9" x2="12" y2="18"/><line x1="7" y1="19" x2="17" y2="19"/><path d="M9.3 4.8c.7-.9.7-1.4 0-2.3M12.7 4.8c.7-.9.7-1.4 0-2.3"/></svg></span>Mesas</button>
-  <button class="tab-tile" data-tab="clientes" onclick="showTab('clientes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M2 21v-1.3A3.3 3.3 0 0 1 5.3 16.4"/><path d="M22 21v-1.3a3.3 3.3 0 0 0-3.3-3.3"/></svg></span>Clientes</button>
-  <button class="tab-tile" data-tab="relatorios" onclick="showTab('relatorios')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M8 12h3M8 16h4"/><circle cx="16.5" cy="15.5" r="2.3"/><line x1="18.3" y1="17.3" x2="20" y2="19"/></svg></span>Relatórios</button>
-  <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/><circle cx="12" cy="12" r="6"/><path d="M9 11h5v2a2.5 2.5 0 0 1-2.5 2.5A2.5 2.5 0 0 1 9 13v-2z"/><path d="M14 11.6h.8a1 1 0 1 1 0 2h-.5"/></svg></span>Config.</button>
-  <button class="tab-tile" data-tab="usuarios" onclick="showTab('usuarios')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/><path d="M9.5 16.3h5v1.4a2.5 2.5 0 0 1-2.5 2.5h0a2.5 2.5 0 0 1-2.5-2.5v-1.4z"/></svg></span>Usuários</button>
-  <button class="tab-tile" data-tab="impressora" onclick="showTab('impressora')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 12.5h1.2"/><path d="M6 17h12v4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4z"/></svg></span>Impressora</button>
+  <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/><circle cx="12" cy="12" r="6"/><path d="M9 11h5v2a2.5 2.5 0 0 1-2.5 2.5A2.5 2.5 0 0 1 9 13v-2z"/><path d="M14 11.6h.8a1 1 0 1 1 0 2h-.5"/></svg></span>Configurações</button>
+  <button class="tab-tile" data-tab="impressora" onclick="showTab('impressora')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 12.5h1.2"/><path d="M6 17h12v4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4z"/></svg></span>Impressoras</button>
+  </div>
+  <div id="tab-bar-footer">
+    <button id="tab-bar-logout" onclick="doLogout()">
+      <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+      Sair
+    </button>
+    <div id="tab-bar-meta">
+      <span>📅 <span id="tab-bar-date">—</span></span>
+      <span>🕐 <span id="tab-bar-time">—</span></span>
+      <span>👤 Operador: <span id="tab-bar-operador">—</span></span>
+    </div>
+  </div>
 </div>
 
 <div id="main-content">
@@ -315,26 +346,25 @@
   </div>
 </div>
 
-<!-- ── Tela 1: scan/resolve ── -->
+<!-- ── Tela 1: Comandas (board) ── -->
 <div id="scan-screen" class="hidden">
-  <div id="scan-main">
-    <div id="pending-section">
-      <div class="side-title" style="display:flex;justify-content:space-between;align-items:center">
-        <span>🧾 Comandas abertas</span>
-        <button class="btn btn-secondary" style="padding:4px 10px;font-size:.75rem" onclick="loadPendingQueue()">🔄</button>
+  <div id="board-screen">
+    <div class="board-header"><h2>COMANDAS</h2></div>
+    <div class="board-toolbar">
+      <div class="board-pills">
+        <button class="board-pill active" data-boardfilter="todas" onclick="setBoardFilter('todas')">Todas <span id="board-count-todas">(0)</span></button>
+        <button class="board-pill" data-boardfilter="aberta" onclick="setBoardFilter('aberta')">Abertas <span id="board-count-aberta">(0)</span></button>
+        <button class="board-pill" data-boardfilter="fechada" onclick="setBoardFilter('fechada')">Fechadas <span id="board-count-fechada">(0)</span></button>
       </div>
-      <div id="pending-list" class="pending-grid"><div class="cart-empty">Carregando...</div></div>
+      <div class="board-actions">
+        <input type="text" id="board-search" placeholder="🔍 Buscar comanda ou mesa..." oninput="renderBoard()">
+        <button class="btn btn-secondary" onclick="openCodeModal()">🔑 Código</button>
+      </div>
     </div>
-  </div>
-
-  <div id="scan-identify-box">
-    <h2>Identificar comanda</h2>
-    <p class="hint">Digite o código do cartão da comanda.</p>
-    <div class="manual-entry">
-      <input type="text" id="manual-code" placeholder="Código da comanda" autocomplete="off" autofocus>
-      <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
+    <div id="board-grid" class="board-grid"><div class="cart-empty">Carregando...</div></div>
+    <div style="text-align:center;margin-top:20px">
+      <button class="btn btn-secondary" onclick="loadBoard()">🔄 Atualizar</button>
     </div>
-    <div id="scan-error"></div>
   </div>
 </div>
 
@@ -442,11 +472,12 @@
   <div class="side-title" style="margin-top:18px">🌤 Área externa</div>
   <div id="mesas-externa-list"><div class="cart-empty">Carregando...</div></div>
 </div>
-<div id="clientes-screen" class="hidden placeholder-screen"><span class="icon">👥</span><h2>Clientes</h2><p>Em construção — em breve por aqui.</p></div>
-<div id="relatorios-screen" class="hidden placeholder-screen"><span class="icon">📊</span><h2>Relatórios</h2><p>Em construção — em breve por aqui.</p></div>
 <div id="configuracoes-screen" class="hidden">
   <div id="cfg-section-tabs" class="fin-subtab-bar">
     <button class="fin-subtab active" data-cfgtab="comandas" onclick="showCfgSubtab('comandas')">📇 Cadastro de comandas</button>
+    <button class="fin-subtab" data-cfgtab="clientes" onclick="showCfgSubtab('clientes')">👥 Clientes</button>
+    <button class="fin-subtab" data-cfgtab="relatorios" onclick="showCfgSubtab('relatorios')">📊 Relatórios</button>
+    <button class="fin-subtab" data-cfgtab="usuarios" onclick="showCfgSubtab('usuarios')">🔐 Usuários</button>
   </div>
 
   <div id="cfg-subtab-comandas">
@@ -456,8 +487,10 @@
     </div>
     <div id="cfg-comandas-list"><div class="cart-empty">Carregando...</div></div>
   </div>
+  <div id="cfg-subtab-clientes" class="hidden placeholder-screen"><span class="icon">👥</span><h2>Clientes</h2><p>Em construção — em breve por aqui.</p></div>
+  <div id="cfg-subtab-relatorios" class="hidden placeholder-screen"><span class="icon">📊</span><h2>Relatórios</h2><p>Em construção — em breve por aqui.</p></div>
+  <div id="cfg-subtab-usuarios" class="hidden placeholder-screen"><span class="icon">🔐</span><h2>Usuários</h2><p>Em construção — em breve por aqui.</p></div>
 </div>
-<div id="usuarios-screen" class="hidden placeholder-screen"><span class="icon">🔐</span><h2>Usuários</h2><p>Em construção — em breve por aqui.</p></div>
 <div id="impressora-screen" class="hidden placeholder-screen"><span class="icon">🖨️</span><h2>Impressora</h2><p>Em construção — em breve por aqui.</p></div>
 
 </div><!-- /#main-content -->
@@ -481,8 +514,10 @@
 const API = '';
 const TOKEN_KEY = 'comanda_token';
 const ROLE_KEY = 'comanda_role';
+const NAME_KEY = 'comanda_name';
 let TOKEN = localStorage.getItem(TOKEN_KEY) || null;
 let ROLE = localStorage.getItem(ROLE_KEY) || null;
+let USER_NAME = localStorage.getItem(NAME_KEY) || null;
 
 let comanda = null;      // comanda atual (com items já lançados)
 let menu = [];            // cardápio completo
@@ -544,7 +579,7 @@ function handleNewComandaOrder(comandaData, items) {
   const itemsDesc = (items || []).map(i => `${i.quantity}x ${i.product_name}`).join(', ');
   showToast(`🧾 Novo pedido — <strong>${comandaData.label || comandaData.code}</strong><br>${itemsDesc}`);
   bumpNotif('comanda');
-  if (!document.getElementById('scan-screen').classList.contains('hidden')) loadPendingQueue();
+  if (!document.getElementById('scan-screen').classList.contains('hidden')) loadBoard();
   // Se essa comanda já está aberta na tela, atualiza o "já lançado" sem mexer
   // no carrinho local (não enviado) que o atendente esteja montando.
   if (comanda && comanda.id === comandaData.id) refreshOpenComanda();
@@ -608,9 +643,13 @@ async function doLogin() {
     if (!['admin', 'atendente'].includes(data.user?.role)) throw new Error('Este login não tem acesso a comandas');
     TOKEN = data.token;
     ROLE = data.user.role;
+    USER_NAME = data.user.name || nome;
     localStorage.setItem(TOKEN_KEY, TOKEN);
     localStorage.setItem(ROLE_KEY, ROLE);
+    localStorage.setItem(NAME_KEY, USER_NAME);
+    localStorage.setItem('pdv_staff', JSON.stringify({ name: USER_NAME }));
     document.getElementById('login-screen').classList.add('hidden');
+    startTabBarClock();
     connectWS();
     checkAberturaCaixa();
   } catch (err) {
@@ -622,43 +661,52 @@ async function doLogin() {
 }
 
 // ── Resolver comanda ────────────────────────────────
+// #scan-error só existe quando o modal "Abrir por código" está aberto (openCodeModal);
+// fora dele (ex: card clicado direto no board), cai no toast.
+function setScanError(msg) {
+  const el = document.getElementById('scan-error');
+  if (el) { el.textContent = msg; return; }
+  if (msg) showToast(msg);
+}
+
 async function resolveCode(code) {
   code = (code || '').trim();
   if (!code) return;
-  document.getElementById('scan-error').textContent = '';
+  setScanError('');
   try {
     const res = await fetch(`${API}/api/comandas/resolve/${encodeURIComponent(code)}`, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      document.getElementById('scan-error').textContent = err.error || 'Comanda não encontrada';
+      setScanError(err.error || 'Comanda não encontrada');
       return;
     }
     comanda = await res.json();
     cart = [];
     await loadMenuIfNeeded();
+    document.querySelector('.modal-backdrop')?.remove();
     showComandaScreen();
     if (comandaPrecisaDeMesa()) openMesaPickerModal();
   } catch (e) {
-    document.getElementById('scan-error').textContent = 'Erro de conexão';
+    setScanError('Erro de conexão');
   }
 }
 
 // Venda de balcão: abre uma comanda avulsa na hora (sem cartão físico) pra lançar e
 // fechar direto, sem passar pela fila de fechamento — pro cliente que compra no balcão.
 async function openBalcaoSale() {
-  document.getElementById('scan-error').textContent = '';
+  setScanError('');
   try {
     const res = await fetch(`${API}/api/comandas/balcao`, { method: 'POST', headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     const data = await res.json();
-    if (!res.ok) { document.getElementById('scan-error').textContent = data.error || 'Erro ao abrir venda de balcão'; return; }
+    if (!res.ok) { setScanError(data.error || 'Erro ao abrir venda de balcão'); return; }
     comanda = data;
     cart = [];
     await loadMenuIfNeeded();
     showComandaScreen();
   } catch (e) {
-    document.getElementById('scan-error').textContent = 'Erro de conexão';
+    setScanError('Erro de conexão');
   }
 }
 
@@ -677,9 +725,6 @@ function resetToScan() {
   document.getElementById('header-actions').classList.remove('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
   showTab('comandas');
-  document.getElementById('manual-code').value = '';
-  document.getElementById('manual-code').focus();
-  loadPendingQueue();
 }
 
 // ── Abas do menu superior ─────────────────────────────
@@ -689,15 +734,19 @@ const TAB_SCREENS = {
   financeiro: 'financeiro-screen',
   delivery: 'delivery-screen',
   mesas: 'mesas-screen',
-  clientes: 'clientes-screen',
-  relatorios: 'relatorios-screen',
   configuracoes: 'configuracoes-screen',
-  usuarios: 'usuarios-screen',
   impressora: 'impressora-screen',
 };
 
+// Abas que hoje ficam nos botões grandes do topo (Fazer Pedido/Delivery/Comandas/Caixa)
+// em vez da lista lateral — 'financeiro' é a aba real por trás do botão "Caixa".
+const HEADER_CTA_TABS = { comandas: 'comanda-btn', delivery: 'delivery-btn', financeiro: 'caixa-btn' };
+
 function showTab(tab) {
   document.querySelectorAll('.tab-tile').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.header-cta').forEach(b => b.classList.remove('active-tab'));
+  const ctaId = HEADER_CTA_TABS[tab];
+  if (ctaId) document.getElementById(ctaId)?.classList.add('active-tab');
   for (const [key, screenId] of Object.entries(TAB_SCREENS)) {
     document.getElementById(screenId).classList.toggle('hidden', key !== tab);
   }
@@ -708,9 +757,9 @@ function showTab(tab) {
   if (tab === 'estoque') loadEstoque();
   if (tab === 'financeiro') loadFinanceiro();
   if (tab === 'delivery') loadDeliveryOrders();
-  if (tab === 'configuracoes') loadCfgComandas();
+  if (tab === 'configuracoes') { loadCfgComandas(); }
   if (tab === 'mesas') loadMesas();
-  if (tab === 'comandas') clearNotif('comanda');
+  if (tab === 'comandas') { clearNotif('comanda'); loadBoard(); }
   if (tab === 'delivery') clearNotif('delivery');
 }
 
@@ -724,8 +773,19 @@ function loadDeliveryOrders() {
 
 // ── Aba Configurações → Cadastro de comandas (cartões físicos) ──────
 // Só admin tem acesso (mesma regra do admin.html: GET/POST /comandas exigem role admin).
+const CFG_SUBTAB_SCREENS = {
+  comandas: 'cfg-subtab-comandas',
+  clientes: 'cfg-subtab-clientes',
+  relatorios: 'cfg-subtab-relatorios',
+  usuarios: 'cfg-subtab-usuarios',
+};
+
 function showCfgSubtab(tab) {
   document.querySelectorAll('#cfg-section-tabs .fin-subtab').forEach(b => b.classList.toggle('active', b.dataset.cfgtab === tab));
+  for (const [key, screenId] of Object.entries(CFG_SUBTAB_SCREENS)) {
+    document.getElementById(screenId).classList.toggle('hidden', key !== tab);
+  }
+  if (tab === 'comandas') loadCfgComandas();
 }
 
 let cfgComandasData = [];
@@ -1257,48 +1317,90 @@ async function submitAbertura() {
 
 // Comandas com "conta solicitada" pelo cliente (kiosk.html), aguardando o caixa fechar
 // com a forma de pagamento recebida na mesa pelo garçom.
-let pendingListData = [];
+let boardData = [];
+let boardFilter = 'todas';
 let pendingListTimer = null;
 
-function elapsedLabel(openedAt) {
-  const mins = Math.max(0, Math.round((Date.now() - new Date(openedAt).getTime()) / 60000));
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60), m = mins % 60;
-  return `${h}h${m > 0 ? m + 'm' : ''}`;
-}
-
-async function loadPendingQueue() {
-  const el = document.getElementById('pending-list');
+async function loadBoard() {
+  const el = document.getElementById('board-grid');
   try {
-    const res = await fetch(`${API}/api/comandas/pending-close`, { headers: authHeaders() });
+    const res = await fetch(`${API}/api/comandas/board`, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     const list = await res.json();
     if (!res.ok || !Array.isArray(list)) { el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>'; return; }
-    pendingListData = list;
-    renderPendingList();
-    if (!pendingListTimer) pendingListTimer = setInterval(renderPendingList, 30000);
+    boardData = list;
+    renderBoard();
+    if (!pendingListTimer) pendingListTimer = setInterval(loadBoard, 30000);
   } catch (e) {
     el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>';
   }
 }
 
-function renderPendingList() {
-  const el = document.getElementById('pending-list');
-  if (!pendingListData.length) {
-    el.innerHTML = '<div class="cart-empty">Nenhuma comanda aberta</div>';
-    return;
+function setBoardFilter(f) {
+  boardFilter = f;
+  document.querySelectorAll('.board-pill').forEach(b => b.classList.toggle('active', b.dataset.boardfilter === f));
+  renderBoard();
+}
+
+function renderBoard() {
+  const search = (document.getElementById('board-search')?.value || '').toLowerCase().trim();
+  document.getElementById('board-count-todas').textContent = `(${boardData.length})`;
+  document.getElementById('board-count-aberta').textContent = `(${boardData.filter(c => c.status === 'aberta').length})`;
+  document.getElementById('board-count-fechada').textContent = `(${boardData.filter(c => c.status === 'fechada').length})`;
+
+  let rows = boardData;
+  if (boardFilter !== 'todas') rows = rows.filter(c => c.status === boardFilter);
+  if (search) {
+    rows = rows.filter(c =>
+      (c.label || c.code || '').toLowerCase().includes(search) ||
+      (c.mesa != null && String(c.mesa).includes(search))
+    );
   }
-  el.innerHTML = pendingListData.map(c => `
-    <button class="pending-card" onclick="resolveCode('${c.code}')">
-      ${c.closing_requested_at ? '<span class="badge-conta">💳 conta pedida</span>' : ''}
-      <span class="name">${c.label || c.code}</span>
-      <span class="pending-meta">
-        ${c.mesa ? `<span>🪑 Mesa ${c.mesa}</span>` : '<span></span>'}
-        <span>⏱ ${elapsedLabel(c.opened_at)}</span>
-      </span>
-      <span class="total">${fmt(c.total)}</span>
+
+  const el = document.getElementById('board-grid');
+  if (!rows.length) { el.innerHTML = '<div class="cart-empty">Nenhuma comanda encontrada</div>'; return; }
+
+  el.innerHTML = rows.map(c => `
+    <button class="board-card" onclick="resolveCode('${c.code}')">
+      <div class="board-card-head">
+        <strong>${c.label || ('#' + c.code.slice(-4).toUpperCase())}</strong>
+        <span>${c.mesa != null ? 'Mesa ' + c.mesa : 'Balcão'}</span>
+      </div>
+      <span class="board-status ${c.status}">${c.status === 'aberta' ? 'Aberta' : 'Fechada'}</span>
+      <div class="board-items">
+        ${(c.items || []).length
+          ? c.items.slice(0, 5).map(it => `<div class="board-item-row"><span>${it.quantity}x ${it.product_name}</span><span>${fmt(it.unit_price * it.quantity)}</span></div>`).join('')
+          : '<div class="board-item-row" style="color:var(--c-muted)">Sem itens</div>'}
+      </div>
+      <div class="board-card-foot">
+        <span>🕐 ${new Date(c.opened_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+        <strong>${fmt(c.total)}</strong>
+      </div>
     </button>
   `).join('');
+}
+
+// Modal de "abrir por código" — mantém os ids scan-error/manual-code pra reaproveitar
+// resolveCode()/setScanError() sem duplicar lógica.
+function openCodeModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:380px">
+      <h3>Abrir por código</h3>
+      <p class="hint" style="color:var(--c-muted);font-size:.82rem;margin:4px 0 14px">Digite o código do cartão da comanda.</p>
+      <div class="manual-entry">
+        <input type="text" id="manual-code" placeholder="Código da comanda" autocomplete="off" autofocus>
+        <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
+      </div>
+      <div id="scan-error"></div>
+      <button class="btn btn-secondary" style="width:100%;margin-top:6px" onclick="this.closest('.modal-backdrop').remove()">Cancelar</button>
+    </div>`;
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  document.body.appendChild(backdrop);
+  const input = document.getElementById('manual-code');
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') resolveCode(input.value); });
+  input.focus();
 }
 
 // ── Tela da comanda ─────────────────────────────────
@@ -1759,14 +1861,37 @@ async function confirmClose() {
   }
 }
 
-// ── Init ─────────────────────────────────────────────
-document.getElementById('manual-code').addEventListener('keydown', e => {
-  if (e.key === 'Enter') resolveCode(document.getElementById('manual-code').value);
-});
+// ── Rodapé da sidebar: relógio + data ao vivo ─────────
+function startTabBarClock() {
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function tick() {
+    const now = new Date();
+    const d = document.getElementById('tab-bar-date');
+    const t = document.getElementById('tab-bar-time');
+    const o = document.getElementById('tab-bar-operador');
+    if (d) d.textContent = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+    if (t) t.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    if (o) o.textContent = USER_NAME || '—';
+  }
+  tick();
+  setInterval(tick, 30000);
+}
 
+function doLogout() {
+  if (ws) { try { ws.close(); } catch (e) {} }
+  TOKEN = null; ROLE = null; USER_NAME = null;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ROLE_KEY);
+  localStorage.removeItem(NAME_KEY);
+  localStorage.removeItem('pdv_staff');
+  showLoginScreen();
+}
+
+// ── Init ─────────────────────────────────────────────
 if (!TOKEN) {
   showLoginScreen();
 } else {
+  startTabBarClock();
   connectWS();
   checkAberturaCaixa();
 }

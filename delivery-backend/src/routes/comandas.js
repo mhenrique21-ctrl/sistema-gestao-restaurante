@@ -112,6 +112,37 @@ router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), 
   }
 });
 
+// GET /api/comandas/board — comandas abertas/fechadas de hoje com itens, pra tela
+// "Comandas" do PDV (cards com itens, status e total, filtráveis por Todas/Abertas/Fechadas).
+router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT c.id, c.code, c.label, c.status, c.total, c.opened_at, c.closed_at,
+              (SELECT ci.mesa FROM comanda_items ci
+               WHERE ci.comanda_id = c.id AND ci.mesa IS NOT NULL
+               ORDER BY ci.created_at DESC LIMIT 1) AS mesa
+       FROM comandas c
+       WHERE c.opened_at >= CURRENT_DATE
+       ORDER BY c.opened_at DESC
+       LIMIT 60`
+    );
+    const list = result.rows;
+    for (const c of list) {
+      const items = await pool.query(
+        `SELECT p.name AS product_name, ci.quantity, ci.unit_price
+         FROM comanda_items ci JOIN products p ON p.id = ci.product_id
+         WHERE ci.comanda_id = $1 ORDER BY ci.created_at ASC`,
+        [c.id]
+      );
+      c.items = items.rows;
+    }
+    res.json(list);
+  } catch (err) {
+    console.error('[comandas/board]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // POST /api/comandas/balcao — abre uma venda avulsa de balcão (equipe), sem cartão físico.
 // Diferente do cadastro de cartão (admin only): qualquer atendente pode abrir, pra vender
 // direto no balcão e fechar na hora, sem passar pela fila de fechamento.
