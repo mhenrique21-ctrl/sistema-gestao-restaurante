@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Comandas — Confraria</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
     /* faixas escuras (header + menu lateral) */
@@ -189,10 +190,15 @@
   #delivery-iframe { width: 100%; height: 100%; border: none; display: block; background: var(--c-bg); }
 
   /* ── Estoque ──────────────────────────────────────── */
-  #estoque-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
+  #estoque-screen, #configuracoes-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
   .estoque-toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
   .estoque-toolbar input, .estoque-toolbar select { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .9rem; }
   .estoque-toolbar input { flex: 1; }
+  .status-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+  .status-tag.aberta { background: rgba(76,175,128,.15); color: #2f8f63; }
+  .status-tag.fechada { background: rgba(224,82,82,.15); color: #c23c3c; }
+  .status-tag.cancelada { background: var(--c-border); color: var(--c-muted); }
+  #cm-qr-box { display: inline-block; background: #fff; padding: 14px; border-radius: 12px; }
   .estoque-item { display: flex; align-items: center; justify-content: space-between; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
   .estoque-item.unavailable { opacity: .55; }
   .estoque-item .name { font-weight: 700; color: var(--c-text); font-size: .92rem; }
@@ -424,7 +430,19 @@
 <div id="mesas-screen" class="hidden placeholder-screen"><span class="icon">🪑</span><h2>Mesas</h2><p>Em construção — em breve por aqui.</p></div>
 <div id="clientes-screen" class="hidden placeholder-screen"><span class="icon">👥</span><h2>Clientes</h2><p>Em construção — em breve por aqui.</p></div>
 <div id="relatorios-screen" class="hidden placeholder-screen"><span class="icon">📊</span><h2>Relatórios</h2><p>Em construção — em breve por aqui.</p></div>
-<div id="configuracoes-screen" class="hidden placeholder-screen"><span class="icon">⚙️</span><h2>Configurações</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="configuracoes-screen" class="hidden">
+  <div id="cfg-section-tabs" class="fin-subtab-bar">
+    <button class="fin-subtab active" data-cfgtab="comandas" onclick="showCfgSubtab('comandas')">📇 Cadastro de comandas</button>
+  </div>
+
+  <div id="cfg-subtab-comandas">
+    <div class="estoque-toolbar">
+      <input type="text" id="cfg-comanda-search" placeholder="🔍 Buscar código ou nome..." oninput="renderCfgComandas()">
+      <button class="btn btn-primary" onclick="openNovoCartaoModal()">+ Novo cartão</button>
+    </div>
+    <div id="cfg-comandas-list"><div class="cart-empty">Carregando...</div></div>
+  </div>
+</div>
 <div id="usuarios-screen" class="hidden placeholder-screen"><span class="icon">🔐</span><h2>Usuários</h2><p>Em construção — em breve por aqui.</p></div>
 <div id="impressora-screen" class="hidden placeholder-screen"><span class="icon">🖨️</span><h2>Impressora</h2><p>Em construção — em breve por aqui.</p></div>
 
@@ -675,6 +693,7 @@ function showTab(tab) {
   if (tab === 'estoque') loadEstoque();
   if (tab === 'financeiro') loadFinanceiro();
   if (tab === 'delivery') loadDeliveryOrders();
+  if (tab === 'configuracoes') loadCfgComandas();
   if (tab === 'comandas') clearNotif('comanda');
   if (tab === 'delivery') clearNotif('delivery');
 }
@@ -685,6 +704,131 @@ function loadDeliveryOrders() {
   if (TOKEN) localStorage.setItem('admin_token', TOKEN);
   const iframe = document.getElementById('delivery-iframe');
   if (!iframe.src) iframe.src = `${API}/admin.html?embed=1`;
+}
+
+// ── Aba Configurações → Cadastro de comandas (cartões físicos) ──────
+// Só admin tem acesso (mesma regra do admin.html: GET/POST /comandas exigem role admin).
+function showCfgSubtab(tab) {
+  document.querySelectorAll('#cfg-section-tabs .fin-subtab').forEach(b => b.classList.toggle('active', b.dataset.cfgtab === tab));
+}
+
+let cfgComandasData = [];
+
+async function loadCfgComandas() {
+  const el = document.getElementById('cfg-comandas-list');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  if (ROLE !== 'admin') {
+    el.innerHTML = '<div class="cart-empty">Apenas administradores podem gerenciar o cadastro de comandas.</div>';
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/api/comandas`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar comandas</div>'; return; }
+    cfgComandasData = await res.json();
+    renderCfgComandas();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function renderCfgComandas() {
+  const search = (document.getElementById('cfg-comanda-search')?.value || '').toLowerCase().trim();
+  const el = document.getElementById('cfg-comandas-list');
+  const rows = cfgComandasData.filter(c =>
+    !search || c.code.toLowerCase().includes(search) || (c.label || '').toLowerCase().includes(search)
+  );
+  if (!rows.length) { el.innerHTML = '<div class="cart-empty">Nenhuma comanda encontrada</div>'; return; }
+  el.innerHTML = rows.map(c => `
+    <div class="estoque-item">
+      <div>
+        <div class="name">${c.label || '—'} <span class="status-tag ${c.status}">${c.status}</span></div>
+        <small>${c.code} · ${fmt(c.total)} · aberta em ${new Date(c.opened_at).toLocaleString('pt-BR')}</small>
+      </div>
+      <div class="estoque-item-actions">
+        <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openQRModal('${c.code}')">📱 QR</button>
+        ${c.status === 'fechada' ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="reabrirCartao('${c.id}')">🔓 Reabrir</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function openNovoCartaoModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'novo-cartao-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:420px">
+      <h3>Novo cartão de comanda</h3>
+      <div class="field-group">
+        <label>Código do QR (opcional)</label>
+        <input type="text" id="nc-code" placeholder="Deixe em branco para gerar automaticamente">
+      </div>
+      <div class="field-group">
+        <label>Nome / identificação</label>
+        <input type="text" id="nc-label" placeholder="Ex: Mesa 1 ou nome do cliente">
+      </div>
+      <div id="nc-error" style="color:var(--danger);font-size:.82rem;min-height:18px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('novo-cartao-backdrop').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitNovoCartao()">Cadastrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+}
+
+async function submitNovoCartao() {
+  const code = document.getElementById('nc-code').value.trim();
+  const label = document.getElementById('nc-label').value.trim();
+  const errEl = document.getElementById('nc-error');
+  try {
+    const res = await fetch(`${API}/api/comandas`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ code: code || undefined, label: label || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao cadastrar'; return; }
+    document.getElementById('novo-cartao-backdrop').remove();
+    loadCfgComandas();
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão';
+  }
+}
+
+function openQRModal(code) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'qr-cartao-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:360px;text-align:center">
+      <h3>QR da comanda</h3>
+      <div id="cm-qr-box"></div>
+      <p style="margin-top:10px;font-family:monospace;font-size:1.05rem;font-weight:700;color:var(--c-text)">${code}</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('qr-cartao-backdrop').remove()">Fechar</button>
+        <button class="btn btn-primary" onclick="window.print()">🖨 Imprimir</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  setTimeout(() => {
+    const box = document.getElementById('cm-qr-box');
+    if (box && window.QRCode) new QRCode(box, { text: code, width: 200, height: 200 });
+  }, 0);
+}
+
+async function reabrirCartao(id) {
+  if (!confirm('Reabrir esta comanda? O fechamento anterior será desfeito.')) return;
+  try {
+    const res = await fetch(`${API}/api/comandas/${id}/reopen`, { method: 'POST', headers: authHeaders() });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Erro ao reabrir'); return; }
+    loadCfgComandas();
+  } catch (e) {
+    alert('Erro de conexão');
+  }
 }
 
 async function loadEstoque() {
