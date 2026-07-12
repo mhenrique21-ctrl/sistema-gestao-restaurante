@@ -9,7 +9,7 @@ router.get('/', async (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
   try {
     const result = await pool.query(
-      `SELECT cm.id, cm.type, cm.amount, cm.reason, cm.created_at,
+      `SELECT cm.id, cm.type, cm.amount, cm.reason, cm.breakdown, cm.created_at,
               u.name AS created_by_name
        FROM cash_movements cm
        LEFT JOIN users u ON u.id = cm.created_by
@@ -32,9 +32,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/cash-movements — registrar abertura (fundo de caixa), sangria ou suprimento
+// POST /api/cash-movements — registrar abertura (fundo de caixa), sangria ou suprimento.
+// "breakdown" (opcional, só faz sentido em type=abertura) guarda a composição do valor
+// inicial por forma de pagamento: { dinheiro: {qtd, valor}, cartao_debito: {...}, ... }.
 router.post('/', async (req, res) => {
-  const { type, amount, reason } = req.body;
+  const { type, amount, reason, breakdown } = req.body;
   if (!['sangria', 'suprimento', 'abertura'].includes(type)) {
     return res.status(400).json({ error: 'Tipo inválido' });
   }
@@ -52,9 +54,12 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Já existe uma abertura de caixa registrada hoje' });
       }
     }
+    // O pool.query deste projeto faz substituição de string, não parametrização real —
+    // um objeto JS vira "[object Object]" se passado direto. Precisa serializar antes.
+    const breakdownJson = breakdown && typeof breakdown === 'object' ? JSON.stringify(breakdown) : null;
     const result = await pool.query(
-      `INSERT INTO cash_movements (type, amount, reason, created_by) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [type, parseFloat(amount), reason || null, req.user?.id || null]
+      `INSERT INTO cash_movements (type, amount, reason, created_by, breakdown) VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING *`,
+      [type, parseFloat(amount), reason || null, req.user?.id || null, breakdownJson]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

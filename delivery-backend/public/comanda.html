@@ -275,6 +275,65 @@
   .close2-confirm:disabled { background: var(--c-border); color: var(--c-muted); }
   .close2-note { display: flex; align-items: center; gap: 8px; background: rgba(76,175,128,.1); color: #2f8f63; font-size: .82rem; font-weight: 600; padding: 12px 26px; }
 
+  /* ── Modal: Abertura de caixa ──────────────────────── */
+  .ab-sheet { max-width: 900px; }
+  .ab-head { display: flex; align-items: flex-start; gap: 14px; padding: 22px 26px 0; }
+  .ab-head .ic { width: 44px; height: 44px; border-radius: 12px; background: var(--c-bg); border: 1px solid var(--c-border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--gold-dim); }
+  .ab-head .ic svg { width: 22px; height: 22px; }
+  .ab-head h3 { font-size: 1.25rem; font-weight: 800; color: var(--c-text); }
+  .ab-head p { color: var(--c-muted); font-size: .84rem; margin-top: 2px; }
+  .ab-head .close-x { margin-left: auto; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 8px; width: 32px; height: 32px; color: var(--c-muted); font-size: 1rem; flex-shrink: 0; }
+
+  .ab-info-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 20px 26px 0; }
+  .ab-info-card { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 12px; padding: 14px 16px; }
+  .ab-info-card .label { display: flex; align-items: center; gap: 6px; font-size: .76rem; font-weight: 700; color: var(--c-muted); margin-bottom: 6px; }
+  .ab-info-card .value { font-size: 1.1rem; font-weight: 800; color: var(--c-text); }
+  .ab-info-card .sub { font-size: .74rem; color: var(--c-muted); margin-top: 2px; }
+
+  .ab-section { padding: 20px 26px 0; }
+  .ab-section-title { font-size: .95rem; font-weight: 800; color: var(--c-text); margin-bottom: 3px; }
+  .ab-section-hint { font-size: .8rem; color: var(--c-muted); margin-bottom: 14px; }
+
+  .ab-valor-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px; align-items: start; }
+  @media (max-width: 720px) { .ab-valor-grid { grid-template-columns: 1fr; } }
+  #ab-valor-input { width: 100%; padding: 16px; border-radius: 12px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--gold-dim); font-size: 1.5rem; font-weight: 800; }
+  .ab-suggest-label { font-size: .78rem; font-weight: 700; color: var(--c-muted); margin-bottom: 8px; }
+  .ab-suggest-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .ab-suggest-btn { padding: 12px 8px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-weight: 700; font-size: .85rem; }
+  .ab-suggest-btn.active { background: linear-gradient(135deg, #7A3E12 0%, #5C2E0D 100%); border-color: transparent; color: #fff; }
+  .ab-suggest-btn.outro { grid-column: span 3; }
+
+  .ab-comp-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; margin-top: 14px; }
+  @media (max-width: 820px) { .ab-comp-grid { grid-template-columns: 1fr; } }
+  .ab-comp-table { border: 1px solid var(--c-border); border-radius: 12px; overflow: hidden; }
+  .ab-comp-head, .ab-comp-row, .ab-comp-total { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; align-items: center; padding: 10px 14px; }
+  .ab-comp-head { background: var(--c-bg); font-size: .7rem; font-weight: 800; letter-spacing: .05em; color: var(--c-muted); text-transform: uppercase; }
+  .ab-comp-row { border-top: 1px solid var(--c-border); }
+  .ab-comp-row .method { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: .86rem; color: var(--c-text); }
+  .ab-comp-row .method .ic { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+  .ab-comp-row .method .ic svg { width: 12px; height: 12px; }
+  .ab-comp-row .qtd-cell { display: flex; align-items: center; gap: 6px; }
+  .ab-comp-row .qtd-cell input { width: 56px; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .85rem; text-align: center; }
+  .ab-comp-row .qtd-cell span { font-size: .74rem; color: var(--c-muted); }
+  .ab-comp-row .valor-cell { text-align: right; font-weight: 700; font-size: .88rem; color: var(--c-text); }
+  .ab-comp-total { background: var(--c-bg); border-top: 1px solid var(--c-border); font-weight: 800; font-size: .88rem; }
+  .ab-comp-total .valor-cell { color: var(--gold-dim); }
+
+  .ab-resumo-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px; overflow: hidden; }
+  .ab-resumo-head { background: var(--c-bg); padding: 12px 16px; font-size: .84rem; font-weight: 800; color: var(--c-text); }
+  .ab-resumo-body { padding: 14px 16px; }
+  .ab-resumo-line { display: flex; justify-content: space-between; font-size: .85rem; color: var(--c-text); padding: 5px 0; }
+  .ab-resumo-line .val { font-weight: 700; }
+  .ab-resumo-line.diff .val.ok { color: #2f8f63; }
+  .ab-resumo-line.diff .val.bad { color: var(--danger); }
+  .ab-validation { margin-top: 12px; border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; font-size: .8rem; }
+  .ab-validation.ok { background: rgba(76,175,128,.1); color: #2f8f63; }
+  .ab-validation.bad { background: rgba(224,82,82,.1); color: var(--danger); }
+  .ab-validation strong { display: block; margin-bottom: 2px; }
+
+  .ab-textarea { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: .88rem; font-family: inherit; resize: vertical; min-height: 70px; }
+  .ab-charcount { text-align: right; font-size: .72rem; color: var(--c-muted); margin-top: 4px; }
+
   .placeholder-screen { max-width: 480px; margin: 60px auto; padding: 0 20px; text-align: center; }
   .placeholder-screen .icon { font-size: 2.8rem; display: block; margin-bottom: 10px; }
   .placeholder-screen h2 { color: var(--gold-dim); font-size: 1.2rem; margin-bottom: 6px; }
@@ -563,15 +622,90 @@
 
 <!-- ── Modal: abertura de caixa (obrigatória ao logar) ── -->
 <div id="abertura-modal-backdrop" class="modal-backdrop hidden">
-  <div class="modal-sheet" style="max-width:420px">
-    <h3>🏦 Abertura de caixa</h3>
-    <p style="color:var(--c-muted);font-size:.85rem;margin:6px 0 16px">Informe o fundo de caixa (dinheiro inicial na gaveta) para começar a operar hoje.</p>
-    <div class="field-group">
-      <label>Fundo de caixa (R$)</label>
-      <input type="number" step="0.01" min="0" id="abertura-amount" placeholder="0,00">
+  <div class="close2-sheet ab-sheet">
+    <div class="ab-head">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1"/></svg></span>
+      <div>
+        <h3>Abertura de Caixa</h3>
+        <p>Inicie um novo caixa informando o valor inicial.</p>
+      </div>
     </div>
-    <div id="abertura-error" style="color:var(--danger);font-size:.82rem;min-height:18px"></div>
-    <button class="btn btn-primary" style="width:100%" id="abertura-submit-btn" onclick="submitAbertura()">Confirmar abertura</button>
+
+    <div class="ab-info-row">
+      <div class="ab-info-card">
+        <div class="label">📅 Data</div>
+        <div class="value" id="ab-info-data">—</div>
+        <div class="sub" id="ab-info-dia">—</div>
+      </div>
+      <div class="ab-info-card">
+        <div class="label">🕐 Horário</div>
+        <div class="value" id="ab-info-hora">—</div>
+        <div class="sub">Abertura</div>
+      </div>
+      <div class="ab-info-card">
+        <div class="label">👤 Operador</div>
+        <div class="value" id="ab-info-operador">—</div>
+        <div class="sub">Atendente</div>
+      </div>
+    </div>
+
+    <div class="ab-section">
+      <div class="ab-section-title">1. Valor inicial do caixa</div>
+      <div class="ab-section-hint">Informe o valor com que o caixa será aberto.</div>
+      <div class="ab-valor-grid">
+        <input type="number" step="0.01" min="0" id="ab-valor-input" placeholder="0,00" oninput="onValorInicialInput()">
+        <div>
+          <div class="ab-suggest-label">Sugestões rápidas</div>
+          <div class="ab-suggest-grid">
+            <button class="ab-suggest-btn" data-cents="10000" onclick="selectSuggestion(10000)">R$ 100,00</button>
+            <button class="ab-suggest-btn" data-cents="30000" onclick="selectSuggestion(30000)">R$ 300,00</button>
+            <button class="ab-suggest-btn" data-cents="50000" onclick="selectSuggestion(50000)">R$ 500,00</button>
+            <button class="ab-suggest-btn" data-cents="100000" onclick="selectSuggestion(100000)">R$ 1.000,00</button>
+            <button class="ab-suggest-btn outro" onclick="document.getElementById('ab-valor-input').focus()">Outro valor</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ab-section">
+      <div class="ab-section-title">2. Composição do valor inicial (opcional)</div>
+      <div class="ab-section-hint">Informe a composição do valor por forma de pagamento.</div>
+      <div class="ab-comp-grid">
+        <div>
+          <div class="ab-comp-table">
+            <div class="ab-comp-head"><span>Forma de pagamento</span><span>Quantidade</span><span style="text-align:right">Valor total</span></div>
+            <div id="ab-comp-rows"></div>
+            <div class="ab-comp-total"><span>Total informado</span><span></span><span class="valor-cell" id="ab-comp-total-valor">R$ 0,00</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="ab-resumo-card">
+            <div class="ab-resumo-head">Resumo da Abertura</div>
+            <div class="ab-resumo-body">
+              <div class="ab-resumo-line"><span>Valor Inicial</span><span class="val" id="ab-resumo-inicial">R$ 0,00</span></div>
+              <div class="ab-resumo-line"><span>Total por formas</span><span class="val" id="ab-resumo-total">R$ 0,00</span></div>
+              <div class="ab-resumo-line diff"><span>Diferença</span><span class="val ok" id="ab-resumo-diff">R$ 0,00</span></div>
+            </div>
+          </div>
+          <div class="ab-validation ok" id="ab-validation">
+            <span>✅</span>
+            <div><strong id="ab-validation-title">Tudo certo!</strong><span id="ab-validation-text">Informe o valor inicial pra continuar.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ab-section" style="padding-bottom:20px">
+      <div class="ab-section-title">3. Observação (opcional)</div>
+      <textarea class="ab-textarea" id="ab-observacao" maxlength="150" placeholder="Ex.: Troco inicial, responsável pelo caixa, observações gerais..." oninput="document.getElementById('ab-charcount').textContent = this.value.length + '/150'"></textarea>
+      <div class="ab-charcount" id="ab-charcount">0/150</div>
+    </div>
+
+    <div id="abertura-error" style="color:var(--danger);font-size:.82rem;padding:0 26px;min-height:18px"></div>
+    <div class="close2-actions">
+      <button class="close2-cancel" onclick="closeAberturaModal()">✕ Cancelar</button>
+      <button class="close2-confirm" id="abertura-submit-btn" onclick="submitAbertura()" disabled>🏦 Abrir Caixa</button>
+    </div>
   </div>
 </div>
 
@@ -1342,8 +1476,7 @@ async function checkAberturaCaixa() {
   document.getElementById('tab-bar').classList.remove('hidden');
       resetToScan();
     } else {
-      document.getElementById('abertura-modal-backdrop').classList.remove('hidden');
-      document.getElementById('abertura-amount').focus();
+      openAberturaModal();
     }
   } catch (e) {
     // sem conexão pra checar: não trava o atendimento, segue normalmente
@@ -1353,30 +1486,147 @@ async function checkAberturaCaixa() {
   }
 }
 
+// ── Abertura de caixa ────────────────────────────────
+const AB_METHODS = [
+  { method: 'dinheiro', label: 'Dinheiro', unit: 'cédulas/moedas', color: '#2f8f63' },
+  { method: 'cartao_debito', label: 'Cartão Débito', unit: 'cartões', color: '#2563a8' },
+  { method: 'cartao_credito', label: 'Cartão Crédito', unit: 'cartões', color: '#7C3AED' },
+  { method: 'pix', label: 'PIX', unit: 'transações', color: '#0D9488' },
+  { method: 'pendura', label: 'Pendura / Fiado', unit: 'registros', color: '#F28C1D' },
+];
+const AB_ICONS = {
+  dinheiro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>',
+  cartao_debito: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+  cartao_credito: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+  pix: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l4.5 4.5-4.5 4.5-4.5-4.5z"/><path d="M12 12l4.5 4.5-4.5 4.5-4.5-4.5z"/></svg>',
+  pendura: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>',
+};
+
+let abValorInicialCents = 0;
+let abComposicao = {}; // { method: { qtd, valorCents } }
+
+function openAberturaModal() {
+  abValorInicialCents = 0;
+  abComposicao = {};
+  AB_METHODS.forEach(m => { abComposicao[m.method] = { qtd: 0, valorCents: 0 }; });
+
+  const now = new Date();
+  document.getElementById('ab-info-data').textContent = now.toLocaleDateString('pt-BR');
+  document.getElementById('ab-info-dia').textContent = now.toLocaleDateString('pt-BR', { weekday: 'long' }).replace(/^\w/, c => c.toUpperCase());
+  document.getElementById('ab-info-hora').textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('ab-info-operador').textContent = USER_NAME || '—';
+
+  document.getElementById('ab-valor-input').value = '';
+  document.getElementById('ab-observacao').value = '';
+  document.getElementById('ab-charcount').textContent = '0/150';
+  document.getElementById('abertura-error').textContent = '';
+  document.querySelectorAll('.ab-suggest-btn').forEach(b => b.classList.remove('active'));
+
+  document.getElementById('ab-comp-rows').innerHTML = AB_METHODS.map(m => `
+    <div class="ab-comp-row">
+      <span class="method"><span class="ic" style="background:${m.color}">${AB_ICONS[m.method]}</span>${m.label}</span>
+      <span class="qtd-cell"><input type="number" min="0" step="1" value="0" onchange="onCompQtdChange('${m.method}', this.value)"><span>${m.unit}</span></span>
+      <span class="valor-cell"><input type="number" min="0" step="0.01" value="0.00" style="width:90px;text-align:right;border:1px solid var(--c-border);border-radius:7px;padding:5px 8px;background:var(--c-surface);color:var(--c-text);font-weight:700" onchange="onCompValorChange('${m.method}', this.value)"></span>
+    </div>
+  `).join('');
+
+  recomputeAbertura();
+  document.getElementById('abertura-modal-backdrop').classList.remove('hidden');
+  document.getElementById('ab-valor-input').focus();
+}
+
+function closeAberturaModal() {
+  document.getElementById('abertura-modal-backdrop').classList.add('hidden');
+}
+
+function selectSuggestion(cents) {
+  abValorInicialCents = cents;
+  document.getElementById('ab-valor-input').value = (cents / 100).toFixed(2);
+  document.querySelectorAll('.ab-suggest-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.cents) === cents));
+  recomputeAbertura();
+}
+
+function onValorInicialInput() {
+  abValorInicialCents = parseValueToCents(document.getElementById('ab-valor-input').value);
+  document.querySelectorAll('.ab-suggest-btn').forEach(b => b.classList.remove('active'));
+  recomputeAbertura();
+}
+
+function onCompQtdChange(method, value) {
+  abComposicao[method].qtd = Math.max(0, parseInt(value, 10) || 0);
+}
+
+function onCompValorChange(method, value) {
+  abComposicao[method].valorCents = parseValueToCents(value);
+  recomputeAbertura();
+}
+
+function recomputeAbertura() {
+  const totalPorFormasCents = Object.values(abComposicao).reduce((s, r) => s + r.valorCents, 0);
+  const diffCents = abValorInicialCents - totalPorFormasCents;
+
+  document.getElementById('ab-comp-total-valor').textContent = centsToFmt(totalPorFormasCents);
+  document.getElementById('ab-resumo-inicial').textContent = centsToFmt(abValorInicialCents);
+  document.getElementById('ab-resumo-total').textContent = centsToFmt(totalPorFormasCents);
+  const diffEl = document.getElementById('ab-resumo-diff');
+  diffEl.textContent = centsToFmt(diffCents);
+  diffEl.className = 'val ' + (diffCents === 0 ? 'ok' : 'bad');
+
+  const validation = document.getElementById('ab-validation');
+  const vTitle = document.getElementById('ab-validation-title');
+  const vText = document.getElementById('ab-validation-text');
+  let compostoOk = true;
+  if (totalPorFormasCents === 0) {
+    validation.className = 'ab-validation ok';
+    vTitle.textContent = 'Composição opcional';
+    vText.textContent = 'Você pode informar só o valor inicial e pular a composição por forma de pagamento.';
+  } else if (diffCents === 0) {
+    validation.className = 'ab-validation ok';
+    vTitle.textContent = 'Tudo certo!';
+    vText.textContent = 'O valor das formas de pagamento confere com o valor inicial do caixa.';
+  } else {
+    compostoOk = false;
+    validation.className = 'ab-validation bad';
+    vTitle.textContent = 'Valores não conferem';
+    vText.textContent = `A composição está ${diffCents > 0 ? 'faltando' : 'excedendo'} ${centsToFmt(Math.abs(diffCents))} em relação ao valor inicial.`;
+  }
+
+  document.getElementById('abertura-submit-btn').disabled = !(abValorInicialCents > 0 && compostoOk);
+}
+
 async function submitAbertura() {
-  const amount = parseFloat(document.getElementById('abertura-amount').value);
   const errEl = document.getElementById('abertura-error');
   errEl.textContent = '';
-  if (!(amount > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
+  if (!(abValorInicialCents > 0)) { errEl.textContent = 'Informe um valor inicial válido'; return; }
   const btn = document.getElementById('abertura-submit-btn');
   btn.disabled = true;
+  btn.textContent = 'Abrindo...';
+  const breakdown = {};
+  for (const [method, r] of Object.entries(abComposicao)) {
+    if (r.qtd > 0 || r.valorCents > 0) breakdown[method] = { qtd: r.qtd, valor: r.valorCents / 100 };
+  }
+  const observacao = document.getElementById('ab-observacao').value.trim();
   try {
     const res = await fetch(`${API}/api/cash-movements`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ type: 'abertura', amount, reason: 'Fundo de caixa' }),
+      body: JSON.stringify({
+        type: 'abertura',
+        amount: abValorInicialCents / 100,
+        reason: observacao || 'Fundo de caixa',
+        breakdown: Object.keys(breakdown).length ? breakdown : null,
+      }),
     });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar abertura'; return; }
-    document.getElementById('abertura-amount').value = '';
-    document.getElementById('abertura-modal-backdrop').classList.add('hidden');
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar abertura'; btn.disabled = false; btn.textContent = '🏦 Abrir Caixa'; return; }
+    closeAberturaModal();
     document.getElementById('header-actions').classList.remove('hidden');
-  document.getElementById('tab-bar').classList.remove('hidden');
+    document.getElementById('tab-bar').classList.remove('hidden');
     resetToScan();
   } catch (e) {
     errEl.textContent = 'Erro de conexão';
-  } finally {
     btn.disabled = false;
+    btn.textContent = '🏦 Abrir Caixa';
   }
 }
 
@@ -1805,6 +2055,9 @@ const PAY_LABELS = { dinheiro: 'Dinheiro', cartao_debito: 'Cartão Débito', car
 
 let closePayments = []; // [{ method, amountCents }]
 let closeTotalCents = 0;
+let closeSubtotalCents = 0;
+let closeIsBalcao = false;
+let closeIncludeTaxa = true; // taxa de serviço é opcional por lei — o cliente pode recusar
 
 function centsToFmt(cents) { return fmt(cents / 100); }
 function parseValueToCents(str) {
@@ -1825,15 +2078,36 @@ function clampPaymentCents(method, desiredCents, excludeIndex) {
   return Math.min(Math.max(0, desiredCents), maxAllowed);
 }
 
+// Recalcula o total a partir do subtotal + taxa (se aplicável e ligada) e reseta
+// os pagamentos já lançados, já que mudar o total invalidaria a divisão anterior.
+function recomputeCloseTotal() {
+  const taxaCents = (closeIsBalcao || !closeIncludeTaxa) ? 0 : Math.round(closeSubtotalCents * 0.10);
+  closeTotalCents = closeSubtotalCents + taxaCents;
+  closePayments = [];
+  const taxaValueEl = document.getElementById('close2-taxa-value');
+  if (taxaValueEl) taxaValueEl.textContent = centsToFmt(taxaCents);
+  const totalValueEl = document.getElementById('close2-total-value');
+  if (totalValueEl) totalValueEl.textContent = centsToFmt(closeTotalCents);
+  const input = document.getElementById('pay-value-input');
+  if (input) input.value = (closeRestanteCents() / 100).toFixed(2);
+  renderCloseDetail();
+}
+
+function toggleCloseTaxa() {
+  closeIncludeTaxa = document.getElementById('close2-taxa-toggle').checked;
+  recomputeCloseTotal();
+}
+
 function openCloseModal() {
   if (comanda.status !== 'aberta') return;
-  const isBalcao = (comanda.code || '').startsWith('balcao_');
-  const subtotalCents = Math.round(parseFloat(comanda.total || 0) * 100);
-  const taxaCents = isBalcao ? 0 : Math.round(subtotalCents * 0.10);
-  closeTotalCents = subtotalCents + taxaCents;
+  closeIsBalcao = (comanda.code || '').startsWith('balcao_');
+  closeSubtotalCents = Math.round(parseFloat(comanda.total || 0) * 100);
+  closeIncludeTaxa = true;
+  const taxaCents = closeIsBalcao ? 0 : Math.round(closeSubtotalCents * 0.10);
+  closeTotalCents = closeSubtotalCents + taxaCents;
   closePayments = [];
 
-  const mesaLabel = isBalcao ? 'Balcão' : (comanda.mesa_numero ? `Mesa ${comanda.mesa_numero}` : '—');
+  const mesaLabel = closeIsBalcao ? 'Balcão' : (comanda.mesa_numero ? `Mesa ${comanda.mesa_numero}` : '—');
   const observacoes = (comanda.items || []).map(i => i.notes).filter(Boolean).join('; ');
 
   const backdrop = document.createElement('div');
@@ -1859,11 +2133,19 @@ function openCloseModal() {
             `).join('') || '<div class="launched-empty">Nenhum item lançado</div>'}
           </div>
           <div class="close2-divider"></div>
-          <div class="close2-line"><span>Subtotal</span><span>${centsToFmt(subtotalCents)}</span></div>
-          ${!isBalcao ? `<div class="close2-line muted"><span>Taxa de serviço (10%)</span><span>${centsToFmt(taxaCents)}</span></div>` : ''}
+          <div class="close2-line"><span>Subtotal</span><span>${centsToFmt(closeSubtotalCents)}</span></div>
+          ${!closeIsBalcao ? `
+            <div class="close2-line muted">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:inherit">
+                <input type="checkbox" id="close2-taxa-toggle" checked onchange="toggleCloseTaxa()">
+                Taxa de serviço (10%)
+              </label>
+              <span id="close2-taxa-value">${centsToFmt(taxaCents)}</span>
+            </div>
+          ` : ''}
           <div class="close2-total-row">
             <div class="label">Total da comanda</div>
-            <div class="value">${centsToFmt(closeTotalCents)}</div>
+            <div class="value" id="close2-total-value">${centsToFmt(closeTotalCents)}</div>
           </div>
 
           <div class="close2-info-card">
@@ -1991,7 +2273,7 @@ async function confirmClose() {
     const res = await fetch(`${API}/api/comandas/${comanda.id}/close`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ payments }),
+      body: JSON.stringify({ payments, includeTaxa: closeIncludeTaxa }),
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = '✓ Finalizar Pagamento'; return; }

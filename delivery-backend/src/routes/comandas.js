@@ -388,7 +388,7 @@ router.delete('/:id/items/:itemId', authMiddleware, requireRole('admin', 'atende
 // pelo operador do caixa (comanda.html), depois de receber o pagamento na mesa via garçom —
 // não é mais chamado pelo cliente direto (kiosk.html só solicita, via /request-close).
 router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
-  const { payments } = req.body;
+  const { payments, includeTaxa = true } = req.body;
   const validMethods = ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro'];
 
   if (!Array.isArray(payments) || !payments.length) {
@@ -406,11 +406,12 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
     if (comanda.status !== 'aberta') return res.status(400).json({ error: 'Comanda já está fechada' });
 
     // Taxa de serviço de 10% só se aplica a comandas de mesa (não a vendas de balcão,
-    // que têm code prefixado com "balcao_" — ver POST /balcao). Calculada em centavos
-    // pra não acumular erro de ponto flutuante.
+    // que têm code prefixado com "balcao_" — ver POST /balcao) e só quando o cliente
+    // não recusou (é opcional por lei — includeTaxa vem do toggle no modal do PDV).
+    // Calculada em centavos pra não acumular erro de ponto flutuante.
     const isBalcao = comanda.code.startsWith('balcao_');
     const subtotalCents = Math.round(parseFloat(comanda.total) * 100);
-    const taxaCents = isBalcao ? 0 : Math.round(subtotalCents * 0.10);
+    const taxaCents = (isBalcao || !includeTaxa) ? 0 : Math.round(subtotalCents * 0.10);
     const totalComTaxaCents = subtotalCents + taxaCents;
     const totalComTaxa = totalComTaxaCents / 100;
 
