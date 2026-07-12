@@ -103,16 +103,86 @@
   #tab-bar-meta { color: var(--muted); font-size: .76rem; display: flex; flex-direction: column; gap: 4px; }
   #tab-bar-meta span { display: flex; align-items: center; gap: 6px; }
 
-  /* ── Tela de login ───────────────────────────────── */
-  #login-screen { min-height: 100%; display: flex; align-items: center; justify-content: center; }
-  #login-box { background: var(--c-surface); border: 1px solid var(--c-border); box-shadow: 0 4px 16px rgba(42,35,24,.08); border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; text-align: center; margin: 16px; }
-  #login-box .icon { font-size: 2.5rem; margin-bottom: 8px; }
-  #login-box h2 { color: var(--gold-dim); font-size: 1.2rem; font-weight: 800; margin-bottom: 4px; }
-  #login-box p.hint { color: var(--c-muted); font-size: .8rem; margin-bottom: 24px; }
-  #login-box .field { text-align: left; margin-bottom: 14px; }
-  #login-box label { color: var(--c-muted); font-size: .75rem; font-weight: 600; display: block; margin-bottom: 4px; }
-  #login-box input { width: 100%; background: var(--c-bg); border: 1px solid var(--c-border); color: var(--c-text); border-radius: 8px; padding: 12px 14px; font-size: .95rem; outline: none; }
-  #login-error { color: var(--danger); font-size: .8rem; margin-bottom: 12px; min-height: 16px; }
+  /* ── Tela de login (Abertura do PDV) ──────────────── */
+  #login-screen { min-height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+  #login-main { flex: 1; display: flex; min-height: 0; }
+  @media (max-width: 860px) { #login-main { flex-direction: column; } }
+
+  #login-hero {
+    width: 38%; min-width: 300px; flex-shrink: 0; position: relative; overflow: hidden;
+    background: linear-gradient(160deg, #1A1208 0%, #0F0F0F 70%);
+    padding: 40px 36px; display: flex; flex-direction: column; color: var(--cream);
+  }
+  @media (max-width: 860px) { #login-hero { width: 100%; min-width: 0; padding: 28px 24px; } }
+  #login-hero::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 500px 400px at 20% 15%, rgba(201,162,94,.14), transparent 60%),
+                radial-gradient(ellipse 400px 400px at 90% 90%, rgba(139,107,53,.12), transparent 60%);
+    pointer-events: none;
+  }
+  #login-hero > * { position: relative; z-index: 1; }
+  .login-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; }
+  .login-logo .ic { width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .login-logo .ic svg { width: 26px; height: 26px; color: var(--surface); }
+  .login-logo .txt { display: flex; flex-direction: column; line-height: 1.1; }
+  .login-logo .txt .top { font-size: .7rem; font-weight: 700; letter-spacing: .22em; color: var(--gold-dim); }
+  .login-logo .txt .bottom { font-size: 1.5rem; font-weight: 800; color: var(--gold); }
+  #login-hero h1 { font-size: 1.7rem; font-weight: 800; margin-bottom: 8px; }
+  #login-hero h1 b { color: var(--gold); }
+  #login-hero .sub { color: var(--cream-dim, #B8A98F); font-size: .92rem; margin-bottom: 32px; }
+  .login-feature { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
+  .login-feature .ic { width: 34px; height: 34px; border-radius: 9px; background: rgba(201,162,94,.12); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.05rem; }
+  .login-feature .txt strong { display: block; font-size: .88rem; font-weight: 700; color: var(--cream); }
+  .login-feature .txt span { font-size: .78rem; color: var(--muted); }
+  #login-hero .cup { margin-top: auto; text-align: center; opacity: .85; padding-top: 24px; }
+  #login-hero .cup svg { width: 84px; height: 84px; color: var(--gold-dim); }
+
+  #login-cardwrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; background: var(--c-bg); }
+  #login-card { background: var(--c-surface); border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.12); width: 100%; max-width: 620px; padding: 28px 32px; }
+  .login-card-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
+  .login-card-head .ic { width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #8A4A1F 0%, #6B3410 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .login-card-head .ic svg { width: 22px; height: 22px; color: #fff; }
+  .login-card-head h2 { font-size: 1.35rem; font-weight: 800; color: var(--c-text); }
+  .login-card-head p { font-size: .85rem; color: var(--c-muted); margin-top: 2px; }
+  #login-troca-btn { margin-left: auto; display: flex; align-items: center; gap: 6px; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 9px; padding: 8px 14px; font-size: .82rem; font-weight: 700; color: var(--c-text); flex-shrink: 0; }
+
+  .login-section-title { font-size: .88rem; font-weight: 800; color: var(--c-text); margin-bottom: 10px; }
+  #op-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .op-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px; border-radius: 12px; border: 2px solid var(--c-border); background: var(--c-surface); text-align: center; }
+  .op-card .av { width: 44px; height: 44px; border-radius: 50%; background: var(--c-bg); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: .95rem; color: var(--c-muted); }
+  .op-card .nm { font-size: .82rem; font-weight: 800; color: var(--c-text); line-height: 1.2; }
+  .op-card .rl { font-size: .68rem; color: var(--c-muted); }
+  .op-card.selected { border-color: var(--gold-dim); background: #FBF3E2; }
+  .op-card.selected .av { background: var(--gold-dim); color: #fff; }
+  .op-card.add .av { background: var(--c-bg); color: var(--gold-dim); font-size: 1.3rem; }
+  .op-card.add { border-style: dashed; }
+
+  #op-outro-wrap { margin-bottom: 14px; }
+  #op-outro-wrap input { width: 100%; padding: 11px 14px; border-radius: 9px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: .92rem; }
+
+  .login-pass-wrap { position: relative; margin-bottom: 14px; }
+  .login-pass-wrap .lic { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--c-muted); pointer-events: none; }
+  .login-pass-wrap .lic svg { width: 17px; height: 17px; }
+  #login-senha { width: 100%; padding: 13px 44px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: 1rem; letter-spacing: .04em; }
+  .login-pass-wrap .eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--c-muted); padding: 6px; }
+  .login-pass-wrap .eye svg { width: 18px; height: 18px; }
+
+  #keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .kp-btn { padding: 14px 0; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-bg); font-weight: 800; font-size: 1.05rem; color: var(--c-text); }
+  .kp-btn small { display: block; font-size: .58rem; font-weight: 700; color: var(--c-muted); letter-spacing: .06em; }
+  .kp-btn.kp-fp svg { width: 20px; height: 20px; }
+
+  #login-error { color: var(--danger); font-size: .82rem; margin-bottom: 10px; min-height: 16px; text-align: center; }
+  #login-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 15px; border-radius: 10px; border: none; background: linear-gradient(135deg, #8A4A1F 0%, #6B3410 100%); color: #fff; font-weight: 800; font-size: .96rem; }
+  #login-btn:disabled { opacity: .55; }
+
+  .login-footlinks { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--c-border); }
+  .login-footlinks a { display: flex; align-items: center; gap: 6px; color: var(--c-muted); font-size: .8rem; font-weight: 600; text-decoration: none; cursor: pointer; }
+
+  #login-statusbar { display: flex; align-items: center; gap: 20px; padding: 10px 24px; background: var(--surface); border-top: 1px solid var(--border); color: var(--muted); font-size: .78rem; flex-wrap: wrap; }
+  #login-statusbar .sep { opacity: .4; }
+  #login-statusbar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 5px; }
+  #login-statusbar .push { margin-left: auto; }
 
   /* ── Modal "abrir por código" ─────────────────────── */
   .manual-entry { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
@@ -453,20 +523,86 @@
 <div id="main-content">
 <!-- ── Tela 0: login ── -->
 <div id="login-screen" class="hidden">
-  <div id="login-box">
-    <div class="icon">☕</div>
-    <h2>Confraria Café</h2>
-    <p class="hint">Comandas — login de atendente</p>
-    <div class="field">
-      <label>Nome</label>
-      <input id="login-nome" type="text" placeholder="Seu nome de usuário" autocomplete="username">
+  <div id="login-main">
+    <div id="login-hero">
+      <div class="login-logo">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13v6a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8z"/><path d="M16 9h2a3 3 0 0 1 0 6h-1.5"/></svg></span>
+        <div class="txt"><span class="top">CONFRARIA</span><span class="bottom">CAFÉ</span></div>
+      </div>
+      <h1>Bem-vindo ao <b>PDV</b></h1>
+      <div class="sub">Selecione seu usuário e digite sua senha para iniciar o atendimento.</div>
+      <div class="login-feature"><span class="ic">🔒</span><div class="txt"><strong>Sistema Seguro</strong><span>Acesso restrito por operador</span></div></div>
+      <div class="login-feature"><span class="ic">🛡️</span><div class="txt"><strong>Controle Inteligente</strong><span>Gestão completa do seu negócio</span></div></div>
+      <div class="login-feature"><span class="ic">⚡</span><div class="txt"><strong>Rápido e Fácil</strong><span>Mais agilidade no atendimento</span></div></div>
+      <div class="cup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 8h13v6a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8z"/><path d="M16 9h2a3 3 0 0 1 0 6h-1.5"/><path d="M6 3c0 1-1 1.2-1 2.2S6 6.4 6 7.4"/><path d="M10.5 3c0 1-1 1.2-1 2.2s1 1.2 1 2.2"/></svg></div>
     </div>
-    <div class="field">
-      <label>Senha</label>
-      <input id="login-senha" type="password" placeholder="••••••••" autocomplete="current-password">
+
+    <div id="login-cardwrap">
+      <div id="login-card">
+        <div class="login-card-head">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <div><h2>Abertura do PDV</h2><p>Informe suas credenciais para acessar o sistema</p></div>
+          <button id="login-troca-btn" onclick="resetOperatorSelection()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            Trocar usuário
+          </button>
+        </div>
+
+        <div class="login-section-title">Selecione o operador</div>
+        <div id="op-grid"><div class="cart-empty">Carregando...</div></div>
+        <div id="op-outro-wrap" class="hidden">
+          <input id="login-nome" type="text" placeholder="Nome do usuário" autocomplete="username">
+        </div>
+
+        <div class="login-section-title" style="margin-top:6px">Senha de acesso</div>
+        <div class="login-pass-wrap">
+          <span class="lic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <input id="login-senha" type="password" placeholder="Digite sua senha" autocomplete="current-password">
+          <button class="eye" onclick="toggleSenhaVisivel()" id="login-eye-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+
+        <div id="keypad">
+          <button class="kp-btn" onclick="keypadPress('1')">1</button>
+          <button class="kp-btn" onclick="keypadPress('2')">2<small>ABC</small></button>
+          <button class="kp-btn" onclick="keypadPress('3')">3<small>DEF</small></button>
+          <button class="kp-btn" onclick="keypadPress('4')">4<small>GHI</small></button>
+          <button class="kp-btn" onclick="keypadPress('5')">5<small>JKL</small></button>
+          <button class="kp-btn" onclick="keypadPress('6')">6<small>MNO</small></button>
+          <button class="kp-btn" onclick="keypadPress('7')">7<small>PQRS</small></button>
+          <button class="kp-btn" onclick="keypadPress('8')">8<small>TUV</small></button>
+          <button class="kp-btn" onclick="keypadPress('9')">9<small>WXYZ</small></button>
+          <button class="kp-btn" onclick="keypadBackspace()">⌫</button>
+          <button class="kp-btn" onclick="keypadPress('0')">0</button>
+          <button class="kp-btn kp-fp" onclick="showToast('🔒 Login biométrico em breve')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5v2"/><path d="M7 13v3a5 5 0 0 0 10 0v-6a5 5 0 0 0-3-4.6"/><path d="M12 9v6"/><path d="M9 9v6a3 3 0 0 0 6 0"/></svg>
+          </button>
+        </div>
+
+        <div id="login-error"></div>
+        <button id="login-btn" onclick="doLogin()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Acessar PDV
+        </button>
+
+        <div class="login-footlinks">
+          <a onclick="showToast('Contate um administrador para redefinir sua senha.')">❓ Esqueci minha senha</a>
+          <a onclick="location.reload()">⏻ Sair do sistema</a>
+        </div>
+      </div>
     </div>
-    <div id="login-error"></div>
-    <button class="btn btn-primary" id="login-btn" style="width:100%" onclick="doLogin()">Entrar</button>
+  </div>
+
+  <div id="login-statusbar">
+    <span id="login-status-date">—</span>
+    <span class="sep">·</span>
+    <span id="login-status-time">—</span>
+    <span class="sep">·</span>
+    <span>Versão 2.5.1</span>
+    <span class="push"><span class="dot"></span>Sistema Online</span>
+    <span class="sep">·</span>
+    <span>Confraria Café</span>
   </div>
 </div>
 
@@ -809,6 +945,9 @@ function showToast(html) {
 }
 
 // ── Login ────────────────────────────────────────────
+let loginStatusTimer = null;
+let selectedOperator = null; // nome do operador escolhido no grid, ou null se "Outro operador"
+
 function showLoginScreen() {
   if (pendingListTimer) { clearInterval(pendingListTimer); pendingListTimer = null; }
   document.getElementById('scan-screen').classList.add('hidden');
@@ -821,16 +960,100 @@ function showLoginScreen() {
   document.getElementById('tab-bar').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('login-senha')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  loadPdvOperators();
+  if (!loginStatusTimer) {
+    const tick = () => {
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const d = document.getElementById('login-status-date');
+      const t = document.getElementById('login-status-time');
+      if (d) d.textContent = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+      if (t) t.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    };
+    tick();
+    loginStatusTimer = setInterval(tick, 30000);
+  }
+}
+
+// ── Seleção de operador (só quem tem acesso ao PDV: admin/atendente ativos) ──
+function initials(name) {
+  return (name || '').trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('');
+}
+const ROLE_LABELS = { admin: 'Administrador', atendente: 'Atendente' };
+
+async function loadPdvOperators() {
+  const grid = document.getElementById('op-grid');
+  try {
+    const res = await fetch(`${API}/api/auth/pdv-operators`);
+    const list = await res.json();
+    if (!res.ok || !Array.isArray(list)) { grid.innerHTML = '<div class="cart-empty">Erro ao carregar operadores</div>'; return; }
+    grid.innerHTML = list.map(op => `
+      <button class="op-card" data-name="${op.name}" onclick="selectOperator('${op.name.replace(/'/g, "\\'")}')">
+        <span class="av">${initials(op.name)}</span>
+        <span class="nm">${op.name}</span>
+        <span class="rl">${ROLE_LABELS[op.role] || op.role}</span>
+      </button>
+    `).join('') + `
+      <button class="op-card add" onclick="selectOutroOperador()">
+        <span class="av">+</span>
+        <span class="nm">Outro operador</span>
+      </button>
+    `;
+  } catch (e) {
+    grid.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function selectOperator(name) {
+  selectedOperator = name;
+  document.getElementById('op-outro-wrap').classList.add('hidden');
+  document.querySelectorAll('.op-card').forEach(c => c.classList.toggle('selected', c.dataset.name === name));
+  document.getElementById('login-senha').focus();
+}
+
+function selectOutroOperador() {
+  selectedOperator = null;
+  document.querySelectorAll('.op-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('op-outro-wrap').classList.remove('hidden');
+  document.getElementById('login-nome').value = '';
+  document.getElementById('login-nome').focus();
+}
+
+function resetOperatorSelection() {
+  selectedOperator = null;
+  document.querySelectorAll('.op-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('op-outro-wrap').classList.add('hidden');
+  document.getElementById('login-senha').value = '';
+  document.getElementById('login-error').textContent = '';
+}
+
+function toggleSenhaVisivel() {
+  const input = document.getElementById('login-senha');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function keypadPress(digit) {
+  const input = document.getElementById('login-senha');
+  input.value += digit;
+  input.focus();
+}
+function keypadBackspace() {
+  const input = document.getElementById('login-senha');
+  input.value = input.value.slice(0, -1);
+  input.focus();
 }
 
 async function doLogin() {
-  const nome = document.getElementById('login-nome').value.trim();
+  const nome = selectedOperator || document.getElementById('login-nome').value.trim();
   const senha = document.getElementById('login-senha').value;
   const erro = document.getElementById('login-error');
   const btn = document.getElementById('login-btn');
   erro.textContent = '';
-  if (!nome || !senha) { erro.textContent = 'Preencha nome e senha'; return; }
-  btn.textContent = 'Entrando...'; btn.disabled = true;
+  if (!nome) { erro.textContent = 'Selecione um operador'; return; }
+  if (!senha) { erro.textContent = 'Digite sua senha'; return; }
+  btn.disabled = true;
+  const originalHtml = btn.innerHTML;
+  btn.textContent = 'Entrando...';
   try {
     const res = await fetch(`${API}/api/auth/login`, {
       method: 'POST',
@@ -840,6 +1063,7 @@ async function doLogin() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
     if (!['admin', 'atendente'].includes(data.user?.role)) throw new Error('Este login não tem acesso a comandas');
+    if (loginStatusTimer) { clearInterval(loginStatusTimer); loginStatusTimer = null; }
     TOKEN = data.token;
     ROLE = data.user.role;
     USER_NAME = data.user.name || nome;
@@ -854,7 +1078,7 @@ async function doLogin() {
   } catch (err) {
     erro.textContent = err.message;
   } finally {
-    btn.textContent = 'Entrar';
+    btn.innerHTML = originalHtml;
     btn.disabled = false;
   }
 }

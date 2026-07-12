@@ -46,6 +46,20 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// GET /api/auth/pdv-operators — lista pública (sem JWT, é a tela de login) dos
+// operadores com acesso ao PDV. Só nome e cargo — nunca email/senha/permissões.
+router.get('/pdv-operators', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT name, role FROM users WHERE role IN ('admin', 'atendente') AND active = true ORDER BY name`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[auth/pdv-operators]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req, res) => {
   try {
