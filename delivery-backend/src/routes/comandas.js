@@ -183,6 +183,7 @@ router.patch('/:id/mesa', authMiddleware, requireRole('admin', 'atendente'), asy
       [mesa_id, req.params.id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Comanda não encontrada ou não está aberta' });
+    await pool.query(`UPDATE mesas SET status = 'ocupada' WHERE id = $1 AND status = 'livre' RETURNING id`, [mesa_id]);
     res.json(result.rows[0]);
   } catch (err) {
     console.error('[comandas/mesa]', err.message);
@@ -250,6 +251,10 @@ router.post('/:id/orders', async (req, res) => {
       [addedTotal, comanda.id]
     );
     const updatedComanda = updateResult.rows[0];
+
+    if (updatedComanda.mesa_id) {
+      await pool.query(`UPDATE mesas SET status = 'ocupada' WHERE id = $1 AND status = 'livre' RETURNING id`, [updatedComanda.mesa_id]);
+    }
 
     // Envia para cozinha/balcão em tempo real e imprime, reaproveitando o mesmo
     // pipeline usado em routes/orders.js (getStationsForOrder + printOrderTicket).
@@ -394,6 +399,17 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
       `INSERT INTO comandas (code, label, opened_by) VALUES ($1,$2,$3) RETURNING id`,
       [originalCode, comanda.label, req.user?.id || null]
     );
+
+    // Libera a mesa se essa era a última comanda aberta vinculada a ela.
+    if (comanda.mesa_id) {
+      const outrasAbertas = await pool.query(
+        `SELECT id FROM comandas WHERE mesa_id = $1 AND status = 'aberta'`,
+        [comanda.mesa_id]
+      );
+      if (!outrasAbertas.rows.length) {
+        await pool.query(`UPDATE mesas SET status = 'livre' WHERE id = $1 AND status = 'ocupada' RETURNING id`, [comanda.mesa_id]);
+      }
+    }
 
     for (const p of payments) {
       await pool.query(
