@@ -112,31 +112,29 @@ router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), 
   }
 });
 
-// GET /api/comandas/board — comandas abertas/fechadas de hoje com itens, pra tela
-// "Comandas" do PDV (cards com itens, status e total, filtráveis por Todas/Abertas/Fechadas).
+// GET /api/comandas/board — comandas com atividade real de hoje (abertas com pedido
+// lançado, ou fechadas hoje), com itens — pra tela "Comandas" do PDV. Não lista os
+// cartões físicos parados/vazios (a maioria dos códigos cadastrados fica "aberta"
+// por padrão até alguém usar, e não deve poluir esse board).
 router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT c.id, c.code, c.label, c.status, c.total, c.opened_at, c.closed_at,
               (SELECT ci.mesa FROM comanda_items ci
                WHERE ci.comanda_id = c.id AND ci.mesa IS NOT NULL
-               ORDER BY ci.created_at DESC LIMIT 1) AS mesa
+               ORDER BY ci.created_at DESC LIMIT 1) AS mesa,
+              COALESCE((
+                SELECT json_agg(json_build_object('product_name', p.name, 'quantity', ci.quantity, 'unit_price', ci.unit_price) ORDER BY ci.created_at ASC)
+                FROM comanda_items ci JOIN products p ON p.id = ci.product_id
+                WHERE ci.comanda_id = c.id
+              ), '[]') AS items
        FROM comandas c
-       WHERE c.opened_at >= CURRENT_DATE
-       ORDER BY c.opened_at DESC
+       WHERE (c.status = 'aberta' AND c.total > 0)
+          OR (c.status = 'fechada' AND c.closed_at >= CURRENT_DATE)
+       ORDER BY COALESCE(c.closed_at, c.opened_at) DESC
        LIMIT 60`
     );
-    const list = result.rows;
-    for (const c of list) {
-      const items = await pool.query(
-        `SELECT p.name AS product_name, ci.quantity, ci.unit_price
-         FROM comanda_items ci JOIN products p ON p.id = ci.product_id
-         WHERE ci.comanda_id = $1 ORDER BY ci.created_at ASC`,
-        [c.id]
-      );
-      c.items = items.rows;
-    }
-    res.json(list);
+    res.json(result.rows);
   } catch (err) {
     console.error('[comandas/board]', err.message);
     res.status(500).json({ error: 'Erro interno' });
