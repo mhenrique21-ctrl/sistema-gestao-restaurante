@@ -194,6 +194,12 @@
   .card:hover .card-btn { filter: brightness(1.12); box-shadow: 0 8px 22px rgba(139,107,53,.5); }
   .card:hover .card-btn svg { transform: translateX(3px); }
 
+  .card.disabled { cursor: default; opacity: .55; }
+  .card.disabled:hover { transform: none; border-color: var(--border); box-shadow: none; }
+  .card.disabled:hover .card-icon-ring { transform: none; border-color: var(--gold-dim); box-shadow: none; }
+  .card.disabled .card-btn { background: rgba(255,255,255,.06); color: var(--cream-dim); box-shadow: none; }
+  .card.disabled:hover .card-btn { filter: none; box-shadow: none; }
+
   /* ── FOOTER ───────────────────────────────────── */
   footer {
     position: relative; z-index: 2;
@@ -301,16 +307,16 @@
     { key: 'pdv',      title: 'PDV',            desc: 'Acesse o ponto de venda e realize pedidos no salão.',                 href: 'https://pedidos.confrariacafe.com/comanda.html' },
     { key: 'gestao',   title: 'GESTÃO',         desc: 'Gerencie vendas, produtos, relatórios e desempenho do negócio.',      href: 'https://gestao.confrariacafe.com/' },
     { key: 'delivery', title: 'DELIVERY',       desc: 'Gerencie pedidos, entregas e integrações de delivery.',               href: 'https://pedidos.confrariacafe.com/admin.html' },
-    { key: 'config',   title: 'CONFIGURAÇÕES',  desc: 'Ajuste as preferências do sistema e da empresa.',                     href: 'https://pedidos.confrariacafe.com/admin.html#configuracoes' },
+    { key: 'config',   title: 'CONFIGURAÇÕES',  desc: 'Ajuste as preferências do sistema e da empresa.',                     href: null },
   ];
 
   const grid = document.getElementById('cardsGrid');
   grid.innerHTML = CARDS.map(c => `
-    <a class="card" href="${c.href}" data-key="${c.key}">
+    <a class="card${c.href ? '' : ' disabled'}" ${c.href ? `href="${c.href}"` : 'href="javascript:void(0)" aria-disabled="true"'} data-key="${c.key}">
       <div class="card-icon-ring">${ICONS[c.key]}</div>
       <div class="card-title">${c.title}</div>
       <div class="card-desc">${c.desc}</div>
-      <span class="card-btn">Acessar ${ICONS.arrow}</span>
+      <span class="card-btn">${c.href ? `Acessar ${ICONS.arrow}` : 'Em breve'}</span>
     </a>
   `).join('');
 
