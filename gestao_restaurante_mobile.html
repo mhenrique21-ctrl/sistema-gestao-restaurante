@@ -1138,7 +1138,7 @@ function addLanc(){
   const desc=document.getElementById('lDesc').value;
   const data=document.getElementById('lData').value;
   if(!v||!desc||!data) return;
-  lancamentos.unshift({data,desc,cat:document.getElementById('lCat').value,forma:document.getElementById('lForma').value,emp:parseInt(document.getElementById('lEmp').value),valor:v,tipo:document.getElementById('lTipo').value,status:'pago'});
+  lancamentos.unshift({id:crypto.randomUUID(),data,desc,cat:document.getElementById('lCat').value,forma:document.getElementById('lForma').value,emp:parseInt(document.getElementById('lEmp').value),valor:v,tipo:document.getElementById('lTipo').value,status:'pago'});
   saveData();
   document.getElementById('lDesc').value=''; document.getElementById('lValor').value='';
   renderLancamentos();
@@ -1148,7 +1148,7 @@ function addLancModal(){
   const desc=document.getElementById('mlDesc').value;
   const data=document.getElementById('mlData').value;
   if(!v||!desc||!data) return;
-  lancamentos.unshift({data,desc,cat:document.getElementById('mlCat').value,forma:document.getElementById('mlForma').value,emp:parseInt(document.getElementById('mlEmp').value),valor:v,tipo:document.getElementById('mlTipo').value,status:'pago'});
+  lancamentos.unshift({id:crypto.randomUUID(),data,desc,cat:document.getElementById('mlCat').value,forma:document.getElementById('mlForma').value,emp:parseInt(document.getElementById('mlEmp').value),valor:v,tipo:document.getElementById('mlTipo').value,status:'pago'});
   saveData();
   closeModal('modalLanc'); renderAll();
 }
@@ -1161,7 +1161,7 @@ function renderLancamentos(){
     <td><span class="co-badge ${l.emp===1?'co1':'co2'}">${l.emp===1?'Confraria Café':'Cantina Seama'}</span></td>
     <td style="text-align:right;font-family:var(--mono);font-weight:600;color:${l.tipo==='entrada'?'var(--green)':'var(--red)'}">${l.tipo==='entrada'?'+':'-'}${fmt(l.valor)}</td>
     <td><span class="tag tag-green">Pago</span></td>
-    <td><button class="btn btn-sm" onclick="lancamentos.splice(${i},1);saveData();renderLancamentos()"><i class="ti ti-trash"></i></button></td></tr>`).join('');
+    <td><button class="btn btn-sm" onclick="deleteRecord('lancamentos','${l.id}');lancamentos.splice(${i},1);renderLancamentos()"><i class="ti ti-trash"></i></button></td></tr>`).join('');
 }
 
 // ── COMPRAS ───────────────────────────────────────────
@@ -1200,7 +1200,7 @@ function addCompra(){
   const total=parseFloat(document.getElementById('mcTotal').value);
   const forn=document.getElementById('mcForn').value;
   if(!total||!forn) return;
-  compras.unshift({id:Date.now(),forn,data:document.getElementById('mcData').value,cat:document.getElementById('mcCat').value,emp:parseInt(document.getElementById('mcEmp').value),total,status:document.getElementById('mcStatus').value,itens:1});
+  compras.unshift({id:crypto.randomUUID(),forn,data:document.getElementById('mcData').value,cat:document.getElementById('mcCat').value,emp:parseInt(document.getElementById('mcEmp').value),total,status:document.getElementById('mcStatus').value,itens:1});
   saveData();
   closeModal('modalCompra'); renderAll();
 }
@@ -1218,7 +1218,7 @@ function renderCompras(){
     <td onclick="${Array.isArray(c.itens)&&c.itens.length?'mostrarDetalheCupom('+i+');':''}" style="${Array.isArray(c.itens)&&c.itens.length?'cursor:pointer;color:var(--gold);font-weight:600':''}">${Array.isArray(c.itens)?c.itens.length+' itens':(c.itens||0)+' itens'}</td>
     <td style="font-family:var(--mono);font-weight:600">${fmt(c.total)}</td>
     <td><span class="tag tag-${c.status==='pago'?'green':'amber'}">${c.status}</span></td>
-    <td><button class="btn btn-sm" onclick="if(confirm('Apagar esta compra?')){compras.splice(${i},1);saveData();renderAll()}"><i class="ti ti-trash"></i></button></td></tr>`).join('');
+    <td><button class="btn btn-sm" onclick="if(confirm('Apagar esta compra?')){deleteRecord('compras','${c.id}');compras.splice(${i},1);renderAll()}"><i class="ti ti-trash"></i></button></td></tr>`).join('');
 }
 
 // ── CUPOM IA ─────────────────────────────────────────
@@ -1293,7 +1293,7 @@ async function scanCupom(){
 }
 function salvarCupom(){
   if(!pendingCupom) return;
-  compras.unshift({id:Date.now(),forn:pendingCupom.fornecedor||'Cupom',data:pendingCupom.data||new Date().toLocaleDateString('pt-BR'),cat:'Vários',cnpj:pendingCupom.cnpj||'',emp:parseInt(document.getElementById('cupomEmp')?.value)||1,total:pendingCupom.total,status:'pago',itens:pendingCupom.itens||[]});
+  compras.unshift({id:crypto.randomUUID(),forn:pendingCupom.fornecedor||'Cupom',data:pendingCupom.data||new Date().toLocaleDateString('pt-BR'),cat:'Vários',cnpj:pendingCupom.cnpj||'',emp:parseInt(document.getElementById('cupomEmp')?.value)||1,total:pendingCupom.total,status:'pago',itens:pendingCupom.itens||[]});
   saveData();
   pendingCupom=null; resetCupom(); goto('compras');
 }
@@ -1330,7 +1330,7 @@ function addFicha(){
   if(!nome||!preco||!custo) return;
   const linhas=document.getElementById('mfIngr').value.split('\n').filter(Boolean);
   const ingr=linhas.map(l=>{const p=l.split('—');return{n:(p[0]||'').trim(),q:(p[1]||'').trim(),c:parseFloat((p[2]||'0').replace(/[R$\s]/g,'').replace(',','.'))||0};});
-  fichas.push({nome,cat:document.getElementById('mfCat').value,preco,custo,ingr,preparo:document.getElementById('mfPreparo').value});
+  fichas.push({id:crypto.randomUUID(),nome,cat:document.getElementById('mfCat').value,preco,custo,ingr,preparo:document.getElementById('mfPreparo').value});
   saveData();
   document.getElementById('mfNome').value='';document.getElementById('mfPreco').value='';
   document.getElementById('mfCusto').value='';document.getElementById('mfIngr').value='';
@@ -1495,7 +1495,7 @@ function addFunc(){
   const nome=document.getElementById('mfuNome').value;
   const sal=parseFloat(document.getElementById('mfuSal').value);
   if(!nome||!sal) return;
-  funcionarios.push({nome,cargo:document.getElementById('mfuCargo').value,emp:parseInt(document.getElementById('mfuEmp').value),sal,adm:document.getElementById('mfuAdm').value,status:document.getElementById('mfuStatus').value});
+  funcionarios.push({id:crypto.randomUUID(),nome,cargo:document.getElementById('mfuCargo').value,emp:parseInt(document.getElementById('mfuEmp').value),sal,adm:document.getElementById('mfuAdm').value,status:document.getElementById('mfuStatus').value});
   saveData();
   closeModal('modalFunc'); renderRH();
 }
@@ -1513,10 +1513,10 @@ function renderRH(){
     ? `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text3)"><i class="ti ti-users" style="font-size:28px;display:block;margin-bottom:8px"></i>Nenhum funcionário cadastrado. Clique em "Novo funcionário".</td></tr>`
     : funcionarios.map((f,i)=>{
     const [bg,tc]=colors[i%colors.length].split(' ');
-    const faltasFunc=faltas.filter(fa=>fa.funcIdx===i);
+    const faltasFunc=faltas.filter(fa=>fa.funcionario_id===f.id);
     const totalFaltas=faltasFunc.reduce((s,fa)=>s+fa.qtd,0);
     const totalDesc=faltasFunc.filter(fa=>fa.tipo!=='atestado').reduce((s,fa)=>s+fa.desconto,0);
-    const totalAdiantFunc=adiantamentos.filter(a=>a.funcIdx===i).reduce((s,a)=>s+a.valor,0);
+    const totalAdiantFunc=adiantamentos.filter(a=>a.funcionario_id===f.id).reduce((s,a)=>s+a.valor,0);
     const salLiq=f.sal-totalDesc-totalAdiantFunc;
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="background:${bg};color:${tc}">${initials(f.nome)}</div>${f.nome}</div></td>
@@ -1528,7 +1528,7 @@ function renderRH(){
       <td style="font-family:var(--mono);color:${totalAdiantFunc>0?'var(--amber)':'var(--text3)'}">${totalAdiantFunc>0?`-${fmt(totalAdiantFunc)}`:'—'}</td>
       <td style="font-family:var(--mono);font-weight:600;color:${salLiq<f.sal*0.5?'var(--red)':'var(--green)'}">${fmt(salLiq)}</td>
       <td><span class="tag tag-${f.status==='ativo'?'green':f.status==='ferias'?'amber':'red'}">${f.status}</span></td>
-      <td><button class="btn btn-sm" onclick="funcionarios.splice(${i},1);faltas=faltas.filter(fa=>fa.funcIdx!==${i});adiantamentos=adiantamentos.filter(a=>a.funcIdx!==${i});saveData();renderRH()"><i class="ti ti-trash"></i></button></td></tr>`;
+      <td><button class="btn btn-sm" onclick="deleteRecord('funcionarios','${f.id}');funcionarios.splice(${i},1);faltas=faltas.filter(fa=>fa.funcionario_id!=='${f.id}');adiantamentos=adiantamentos.filter(a=>a.funcionario_id!=='${f.id}');renderRH()"><i class="ti ti-trash"></i></button></td></tr>`;
   }).join('');
   renderFaltas();
   renderAdiantamentos();
@@ -1551,7 +1551,7 @@ function showAdiantInfo(){
   const idx=parseInt(sel.value)||0;
   const f=funcionarios[idx];
   if(!f){document.getElementById('madSalInfo').style.display='none';return;}
-  const jaAdiant=adiantamentos.filter(a=>a.funcIdx===idx).reduce((s,a)=>s+a.valor,0);
+  const jaAdiant=adiantamentos.filter(a=>a.funcionario_id===f.id).reduce((s,a)=>s+a.valor,0);
   document.getElementById('madSalValor').textContent=fmt(f.sal);
   document.getElementById('madAntValor').textContent=fmt(jaAdiant);
   document.getElementById('madSalInfo').style.display='block';
@@ -1575,7 +1575,8 @@ function addAdiant(){
   const valor=parseFloat(document.getElementById('madValor').value);
   if(!valor||valor<=0){alert('Informe o valor do adiantamento.');return;}
   adiantamentos.unshift({
-    funcIdx,
+    id:crypto.randomUUID(),
+    funcionario_id:f.id,
     funcNome:f.nome,
     data:document.getElementById('madData').value,
     valor,
@@ -1603,7 +1604,7 @@ function renderAdiantamentos(){
       <td>${a.forma}</td>
       <td style="font-size:12px;color:var(--text2);max-width:180px">${a.obs||'—'}</td>
       <td><span class="tag tag-${a.status==='pago'?'green':'amber'}">${a.status==='pago'?'Pago':'A descontar'}</span></td>
-      <td><button class="btn btn-sm" onclick="adiantamentos.splice(${i},1);saveData();renderRH()"><i class="ti ti-trash"></i></button></td>
+      <td><button class="btn btn-sm" onclick="deleteRecord('adiantamentos','${a.id}');adiantamentos.splice(${i},1);renderRH()"><i class="ti ti-trash"></i></button></td>
     </tr>`).join('');
 }
 function populateFaltaModal(){
@@ -1651,7 +1652,7 @@ function addFalta(){
   if(tipo==='injustificada') desc=valDia*qtd;
   else if(tipo==='meio') desc=(valDia/2)*qtd;
   else if(tipo==='atraso') desc=(f.sal/(30*8))*qtd;
-  faltas.unshift({funcIdx,funcNome:f.nome,data:document.getElementById('mfaData').value,tipo,qtd,desconto:desc,obs:document.getElementById('mfaObs').value});
+  faltas.unshift({id:crypto.randomUUID(),funcionario_id:f.id,funcNome:f.nome,data:document.getElementById('mfaData').value,tipo,qtd,desconto:desc,obs:document.getElementById('mfaObs').value});
   saveData();
   closeModal('modalFalta'); renderRH();
 }
@@ -1670,7 +1671,7 @@ function renderFaltas(){
         ${fa.tipo==='atestado'?'<span class="tag tag-green">Sem desconto</span>':`-${fmt(fa.desconto)}`}
       </td>
       <td style="font-size:12px;color:var(--text2)">${fa.obs||'—'}</td>
-      <td><button class="btn btn-sm" onclick="faltas.splice(${i},1);saveData();renderRH()"><i class="ti ti-trash"></i></button></td>
+      <td><button class="btn btn-sm" onclick="deleteRecord('faltas','${fa.id}');faltas.splice(${i},1);renderRH()"><i class="ti ti-trash"></i></button></td>
     </tr>`).join('');
 }
 
@@ -1679,7 +1680,7 @@ function addEvento(){
   const titulo=document.getElementById('mevTitulo').value;
   const data=document.getElementById('mevData').value;
   if(!titulo||!data) return;
-  eventos.push({titulo,data,hora:document.getElementById('mevHora').value,tipo:document.getElementById('mevTipo').value,emp:parseInt(document.getElementById('mevEmp').value),nota:document.getElementById('mevNota').value});
+  eventos.push({id:crypto.randomUUID(),titulo,data,hora:document.getElementById('mevHora').value,tipo:document.getElementById('mevTipo').value,emp:parseInt(document.getElementById('mevEmp').value),nota:document.getElementById('mevNota').value});
   eventos.sort((a,b)=>a.data.localeCompare(b.data));
   saveData();
   closeModal('modalEvento'); renderAgenda();
@@ -1961,8 +1962,8 @@ function gerarPDF(tipo){
     const funcRows=funcionarios.length===0
       ?'<tr><td colspan="7" style="text-align:center;padding:16px;color:#A8A69E">Nenhum funcionário cadastrado</td></tr>'
       :funcionarios.map((f,i)=>{
-        const desc=faltas.filter(fa=>fa.funcIdx===i&&fa.tipo!=='atestado').reduce((s,fa)=>s+fa.desconto,0);
-        const adiant=adiantamentos.filter(a=>a.funcIdx===i).reduce((s,a)=>s+a.valor,0);
+        const desc=faltas.filter(fa=>fa.funcionario_id===f.id&&fa.tipo!=='atestado').reduce((s,fa)=>s+fa.desconto,0);
+        const adiant=adiantamentos.filter(a=>a.funcionario_id===f.id).reduce((s,a)=>s+a.valor,0);
         return`<tr>
           <td style="font-weight:500">${f.nome}</td><td>${f.cargo}</td>
           <td>${f.emp===1?'Confraria':'Seama'}</td>
@@ -2109,6 +2110,10 @@ async function loadData(){
 }
 function saveData(){
   fetch('/dados',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lancamentos,compras,fichas,funcionarios,eventos,faltas,adiantamentos,categorias:categoriasLanc})}).catch(()=>{});
+}
+function deleteRecord(entidade,id){
+  if(!id) return;
+  fetch('/dados/'+entidade+'/'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{});
 }
 
 // ── INIT ─────────────────────────────────────────────
