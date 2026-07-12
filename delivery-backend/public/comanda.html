@@ -190,7 +190,7 @@
   #delivery-iframe { width: 100%; height: 100%; border: none; display: block; background: var(--c-bg); }
 
   /* ── Estoque ──────────────────────────────────────── */
-  #estoque-screen, #configuracoes-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
+  #estoque-screen, #configuracoes-screen, #mesas-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
   .estoque-toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
   .estoque-toolbar input, .estoque-toolbar select { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .9rem; }
   .estoque-toolbar input { flex: 1; }
@@ -198,6 +198,10 @@
   .status-tag.aberta { background: rgba(76,175,128,.15); color: #2f8f63; }
   .status-tag.fechada { background: rgba(224,82,82,.15); color: #c23c3c; }
   .status-tag.cancelada { background: var(--c-border); color: var(--c-muted); }
+  .status-tag.livre { background: rgba(76,175,128,.15); color: #2f8f63; }
+  .status-tag.ocupada { background: rgba(224,82,82,.15); color: #c23c3c; }
+  .status-tag.reservada { background: rgba(201,162,94,.2); color: var(--gold-dim); }
+  #mesas-screen select.mesa-status-select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .8rem; }
   #cm-qr-box { display: inline-block; background: #fff; padding: 14px; border-radius: 12px; }
   .estoque-item { display: flex; align-items: center; justify-content: space-between; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
   .estoque-item.unavailable { opacity: .55; }
@@ -427,7 +431,16 @@
 </div>
 
 <!-- ── Abas em construção ── -->
-<div id="mesas-screen" class="hidden placeholder-screen"><span class="icon">🪑</span><h2>Mesas</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="mesas-screen" class="hidden">
+  <div class="estoque-toolbar" style="justify-content:space-between;align-items:center">
+    <span class="side-title" style="margin:0">🪑 Mesas da loja</span>
+    <button class="btn btn-primary" onclick="openNovaMesaModal()">+ Nova mesa</button>
+  </div>
+  <div class="side-title" style="margin-top:18px">🏠 Área interna</div>
+  <div id="mesas-interna-list"><div class="cart-empty">Carregando...</div></div>
+  <div class="side-title" style="margin-top:18px">🌤 Área externa</div>
+  <div id="mesas-externa-list"><div class="cart-empty">Carregando...</div></div>
+</div>
 <div id="clientes-screen" class="hidden placeholder-screen"><span class="icon">👥</span><h2>Clientes</h2><p>Em construção — em breve por aqui.</p></div>
 <div id="relatorios-screen" class="hidden placeholder-screen"><span class="icon">📊</span><h2>Relatórios</h2><p>Em construção — em breve por aqui.</p></div>
 <div id="configuracoes-screen" class="hidden">
@@ -694,6 +707,7 @@ function showTab(tab) {
   if (tab === 'financeiro') loadFinanceiro();
   if (tab === 'delivery') loadDeliveryOrders();
   if (tab === 'configuracoes') loadCfgComandas();
+  if (tab === 'mesas') loadMesas();
   if (tab === 'comandas') clearNotif('comanda');
   if (tab === 'delivery') clearNotif('delivery');
 }
@@ -826,6 +840,155 @@ async function reabrirCartao(id) {
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao reabrir'); return; }
     loadCfgComandas();
+  } catch (e) {
+    alert('Erro de conexão');
+  }
+}
+
+// ── Aba Mesas ─────────────────────────────────────────────────────
+const MESA_STATUS_LABEL = { livre: 'Livre', ocupada: 'Ocupada', reservada: 'Reservada' };
+let mesasData = [];
+
+async function loadMesas() {
+  document.getElementById('mesas-interna-list').innerHTML = '<div class="cart-empty">Carregando...</div>';
+  document.getElementById('mesas-externa-list').innerHTML = '';
+  try {
+    const res = await fetch(`${API}/api/mesas`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (!res.ok) { document.getElementById('mesas-interna-list').innerHTML = '<div class="cart-empty">Erro ao carregar mesas</div>'; return; }
+    mesasData = await res.json();
+    renderMesas();
+  } catch (e) {
+    document.getElementById('mesas-interna-list').innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function renderMesas() {
+  const grupos = { interna: document.getElementById('mesas-interna-list'), externa: document.getElementById('mesas-externa-list') };
+  for (const [area, el] of Object.entries(grupos)) {
+    const lista = mesasData.filter(m => m.area === area).sort((a, b) => a.numero - b.numero);
+    el.innerHTML = lista.length ? lista.map(m => `
+      <div class="estoque-item">
+        <div>
+          <div class="name">Mesa ${m.numero} <span class="status-tag ${m.status}">${MESA_STATUS_LABEL[m.status]}</span></div>
+          <small>${m.capacidade} lugares</small>
+        </div>
+        <div class="estoque-item-actions">
+          <select class="mesa-status-select" onchange="mudarStatusMesa('${m.id}', this.value)">
+            ${Object.entries(MESA_STATUS_LABEL).map(([k, v]) => `<option value="${k}" ${m.status === k ? 'selected' : ''}>${v}</option>`).join('')}
+          </select>
+          ${ROLE === 'admin' ? `
+            <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openEditarMesaModal('${m.id}')">✏️</button>
+            <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="excluirMesaPDV('${m.id}')">🗑</button>
+          ` : ''}
+        </div>
+      </div>
+    `).join('') : '<div class="cart-empty">Nenhuma mesa nesta área</div>';
+  }
+}
+
+function mesaFormHtml(m = {}) {
+  return `
+    <div class="field-group">
+      <label>Número da mesa</label>
+      <input type="number" id="mm-numero" value="${m.numero ?? ''}">
+    </div>
+    <div class="field-group">
+      <label>Área</label>
+      <select id="mm-area">
+        <option value="interna" ${m.area === 'interna' ? 'selected' : ''}>Interna</option>
+        <option value="externa" ${m.area === 'externa' ? 'selected' : ''}>Externa</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label>Capacidade (lugares)</label>
+      <input type="number" id="mm-capacidade" value="${m.capacidade ?? 4}">
+    </div>
+    <div id="mm-error" style="color:var(--danger);font-size:.82rem;min-height:18px"></div>
+  `;
+}
+
+function openNovaMesaModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'mesa-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:380px">
+      <h3>Nova mesa</h3>
+      ${mesaFormHtml()}
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('mesa-modal-backdrop').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitMesa()">Cadastrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+}
+
+function openEditarMesaModal(id) {
+  const m = mesasData.find(x => x.id === id);
+  if (!m) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'mesa-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:380px">
+      <h3>Editar mesa</h3>
+      ${mesaFormHtml(m)}
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('mesa-modal-backdrop').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitMesa('${id}')">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+}
+
+async function submitMesa(id) {
+  const numero = parseInt(document.getElementById('mm-numero').value);
+  const area = document.getElementById('mm-area').value;
+  const capacidade = parseInt(document.getElementById('mm-capacidade').value) || 4;
+  const errEl = document.getElementById('mm-error');
+  if (!numero) { errEl.textContent = 'Informe o número da mesa'; return; }
+  try {
+    const res = await fetch(`${API}/api/mesas${id ? '/' + id : ''}`, {
+      method: id ? 'PATCH' : 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ numero, area, capacidade }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+    document.getElementById('mesa-modal-backdrop').remove();
+    loadMesas();
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão';
+  }
+}
+
+async function mudarStatusMesa(id, status) {
+  try {
+    const res = await fetch(`${API}/api/mesas/${id}`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) { alert('Erro ao atualizar status'); loadMesas(); return; }
+    const updated = await res.json();
+    const idx = mesasData.findIndex(m => m.id === id);
+    if (idx >= 0) mesasData[idx] = updated;
+    renderMesas();
+  } catch (e) {
+    alert('Erro de conexão');
+    loadMesas();
+  }
+}
+
+async function excluirMesaPDV(id) {
+  if (!confirm('Excluir esta mesa?')) return;
+  try {
+    const res = await fetch(`${API}/api/mesas/${id}`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) { alert('Erro ao excluir'); return; }
+    loadMesas();
   } catch (e) {
     alert('Erro de conexão');
   }
