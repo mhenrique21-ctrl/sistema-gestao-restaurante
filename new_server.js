@@ -1071,6 +1071,35 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
     return;
   }
 
+  // Provisiona login do PDV (delivery-backend) a partir do cadastro de usuários
+  // daqui — o segredo compartilhado fica só neste backend, nunca no navegador.
+  if (req.method === 'POST' && urlPath === '/api/pdv-user') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { name, password } = JSON.parse(body);
+        if (!name || !password) { res.writeHead(400); res.end(JSON.stringify({ error: 'Nome e senha são obrigatórios' })); return; }
+        const secret = process.env.PDV_PROVISION_SECRET;
+        if (!secret) { res.writeHead(500); res.end(JSON.stringify({ error: 'PDV_PROVISION_SECRET não configurado neste servidor' })); return; }
+        const base = process.env.DELIVERY_BACKEND_URL || 'http://localhost:4000';
+        const upstream = await fetch(`${base}/api/pdv-provision`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-provision-secret': secret },
+          body: JSON.stringify({ name, password }),
+        });
+        const data = await upstream.json().catch(() => ({}));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(upstream.status);
+        res.end(JSON.stringify(data));
+      } catch (e) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Erro ao provisionar login do PDV: ' + e.message }));
+      }
+    });
+    return;
+  }
+
   // NF-e sync via SEFAZ
   if (req.method === 'POST' && urlPath === '/api/nfe-sync') {
     let body = '';

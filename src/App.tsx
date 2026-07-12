@@ -264,6 +264,19 @@ const fmtPct    = (v) => `${(parseFloat(v)||0).toFixed(1)}%`;
 const TZ        = "America/Sao_Paulo";
 const today     = () => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(new Date());
 const uid       = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
+// Cria/atualiza o login real do PDV (delivery-backend) a partir de um usuário
+// cadastrado aqui — proxied pelo new_server.js, que guarda a credencial de
+// serviço; o browser nunca vê o segredo. Retorna {ok, message}.
+async function provisionPdvUser(nome:string, senha:string){
+  try{
+    const r=await fetch("/api/pdv-user",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:nome,password:senha})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) return {ok:false,message:d.error||`Erro ao criar acesso PDV (HTTP ${r.status})`};
+    return {ok:true,message:d.message||"Acesso ao PDV criado/atualizado."};
+  }catch(e:any){
+    return {ok:false,message:"Erro de conexão ao criar acesso PDV: "+(e?.message||e)};
+  }
+}
 const normalizarNome=(nome:string,norms:any[])=>{
   if(!nome||!norms?.length)return nome;
   const nl=nome.toLowerCase().trim();
@@ -8187,11 +8200,12 @@ function Gestao({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPend
 // ===================== USUÁRIOS =====================
 function UsuariosPanel({state,setState}:{state:any,setState:any}){
   const usuarios:any[]=state.CONFRARIA?.usuarios||[];
-  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op"|"op_lista"|"op_producao",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0"};
+  const EMPTY={nome:"",senha:"",role:"op" as "admin"|"op"|"op_lista"|"op_producao",empresa:"CONFRARIA" as string,corTexto:"#e8eaf0",pdv:false};
   const [form,setForm]=useState(EMPTY);
   const [editId,setEditId]=useState<string|null>(null);
   const formRef=useRef<HTMLDivElement>(null);
   const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
+  const [pdvSaving,setPdvSaving]=useState(false);
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
 
@@ -8205,7 +8219,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
     });
   };
 
-  const save=()=>{
+  const save=async ()=>{
     const nome=form.nome.trim();
     const senha=form.senha.trim();
     if(!nome)return alert("Informe o nome.");
@@ -8213,11 +8227,17 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
     if(!editId&&usuarios.some((u:any)=>u.senha===senha))return alert("Esta senha já está em uso por outro usuário.");
     if(editId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editId))return alert("Esta senha já está em uso por outro usuário.");
     if(editId){
-      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"}:u));
+      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0",pdv:form.pdv}:u));
       setEditId(null);
     }else{
-      const novo={id:uid(),nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0"};
+      const novo={id:uid(),nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0",pdv:form.pdv};
       setBoth(arr=>[...arr,novo]);
+    }
+    if(form.pdv){
+      setPdvSaving(true);
+      const res=await provisionPdvUser(nome,senha);
+      setPdvSaving(false);
+      if(!res.ok) alert("Usuário salvo aqui, mas o acesso ao PDV falhou: "+res.message);
     }
     setForm(EMPTY);
   };
@@ -8229,7 +8249,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
   };
 
   const startEdit=(u:any)=>{
-    setForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0"});
+    setForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0",pdv:!!u.pdv});
     setEditId(u.id);
     setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);
   };
@@ -8262,9 +8282,13 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
             style={{width:22,height:22,borderRadius:"50%",border:"none",padding:0,cursor:"pointer",background:"none"}} title="Cor personalizada"/>
         </div>
       </div>
+      <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:"var(--bg4)",borderRadius:10,padding:"8px 14px",border:"1.5px solid var(--border2)",cursor:"pointer"}}>
+        <input type="checkbox" checked={!!form.pdv} onChange={e=>setF("pdv",e.target.checked)} style={{width:16,height:16,cursor:"pointer"}}/>
+        <span style={{fontSize:13,color:"var(--text2)"}}>🖥️ Também criar/atualizar login no PDV (atendente) — mesmo nome e senha</span>
+      </label>
       <div style={{display:"flex",gap:8}}>
-        <button className="btn" onClick={save} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"11px",fontSize:13}}>
-          {editId?"💾 Salvar Alterações":"➕ Criar Usuário"}
+        <button className="btn" onClick={save} disabled={pdvSaving} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"11px",fontSize:13,opacity:pdvSaving?0.6:1}}>
+          {pdvSaving?"⏳ Criando acesso PDV...":editId?"💾 Salvar Alterações":"➕ Criar Usuário"}
         </button>
         {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(EMPTY);}} style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
       </div>
@@ -8287,6 +8311,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
                 {({admin:"Admin",op:"Lista + Produção",op_lista:"Lista",op_producao:"Produção"})[u.role]||"Operador"}
               </span>
               {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)"}}>{u.empresa}</span>}
+              {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#4ade80",border:"1px solid #2a5a3a"}}>🖥️ PDV</span>}
               <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
                 {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver senha"}
               </button>
@@ -8341,23 +8366,30 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
 
   // ---- Usuários ----
   const usuarios:any[]=state.CONFRARIA?.usuarios||[];
-  const [userForm,setUserForm]=useState({nome:"",senha:"",role:"op" as string,empresa:"CONFRARIA",corTexto:"#e8eaf0"});
+  const [userForm,setUserForm]=useState({nome:"",senha:"",role:"op" as string,empresa:"CONFRARIA",corTexto:"#e8eaf0",pdv:false});
   const [editUserId,setEditUserId]=useState<string|null>(null);
   const formRefUser=useRef<HTMLDivElement>(null);
   const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
+  const [pdvSaving,setPdvSaving]=useState(false);
   const setBothUsers=(fn:(arr:any[])=>any[])=>{
     setState((s:any)=>{const next={...s};["CONFRARIA","SEAMA"].forEach(emp=>{next[emp]={...next[emp],usuarios:fn(next[emp]?.usuarios||[])};});return next;});
   };
-  const saveUser=()=>{
+  const saveUser=async ()=>{
     const nome=userForm.nome.trim();const senha=userForm.senha.trim();
     if(!nome)return alert("Informe o nome.");if(!senha)return alert("Informe a senha.");
     if(!editUserId&&usuarios.some((u:any)=>u.senha===senha))return alert("Senha já em uso.");
     if(editUserId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editUserId))return alert("Senha já em uso.");
-    if(editUserId){setBothUsers(arr=>arr.map((u:any)=>u.id===editUserId?{...u,nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0"}:u));setEditUserId(null);}
-    else{setBothUsers(arr=>[...arr,{id:uid(),nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0"}]);}
-    setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0"});
+    if(editUserId){setBothUsers(arr=>arr.map((u:any)=>u.id===editUserId?{...u,nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0",pdv:userForm.pdv}:u));setEditUserId(null);}
+    else{setBothUsers(arr=>[...arr,{id:uid(),nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0",pdv:userForm.pdv}]);}
+    if(userForm.pdv){
+      setPdvSaving(true);
+      const res=await provisionPdvUser(nome,senha);
+      setPdvSaving(false);
+      if(!res.ok) alert("Usuário salvo aqui, mas o acesso ao PDV falhou: "+res.message);
+    }
+    setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0",pdv:false});
   };
-  const startEditUser=(u:any)=>{setUserForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0"});setEditUserId(u.id);setTimeout(()=>formRefUser.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+  const startEditUser=(u:any)=>{setUserForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0",pdv:!!u.pdv});setEditUserId(u.id);setTimeout(()=>formRefUser.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delUser=(id:string,nome:string)=>{if(!confirm(`Excluir "${nome}"?`))return;_listaDeletados.add(id);setBothUsers(arr=>arr.filter((u:any)=>u.id!==id));};
 
   // ---- Integrações ----
@@ -8692,11 +8724,15 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             ))}
           </div>
         </div>
+        <label style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:"var(--bg4)",borderRadius:10,padding:"8px 14px",border:"1.5px solid var(--border)",cursor:"pointer"}}>
+          <input type="checkbox" checked={!!userForm.pdv} onChange={e=>setUserForm(f=>({...f,pdv:e.target.checked}))} style={{width:16,height:16,cursor:"pointer"}}/>
+          <span style={{fontSize:12,color:"var(--text2)"}}>🖥️ Também criar/atualizar login no PDV (atendente) — mesmo nome e senha</span>
+        </label>
         <div style={{display:"flex",gap:8}}>
-          <button className="btn" onClick={saveUser} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"10px",fontSize:13}}>
-            {editUserId?"💾 Salvar Alterações":"➕ Criar Usuário"}
+          <button className="btn" onClick={saveUser} disabled={pdvSaving} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"10px",fontSize:13,opacity:pdvSaving?0.6:1}}>
+            {pdvSaving?"⏳ Criando acesso PDV...":editUserId?"💾 Salvar Alterações":"➕ Criar Usuário"}
           </button>
-          {editUserId&&<button className="btn" onClick={()=>{setEditUserId(null);setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0"});}}
+          {editUserId&&<button className="btn" onClick={()=>{setEditUserId(null);setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0",pdv:false});}}
             style={{background:"var(--border)",color:"#888",padding:"10px",fontSize:13}}>Cancelar</button>}
         </div>
       </div>
@@ -8715,6 +8751,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
                   {({admin:"Admin",op:"Lista+Prod",op_lista:"Lista",op_producao:"Produção"})[u.role as string]||"Op"}
                 </span>
                 {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)"}}>{u.empresa}</span>}
+                {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#4ade80"}}>🖥️ PDV</span>}
                 <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))}
                   style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
                   {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver"}
