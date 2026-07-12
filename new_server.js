@@ -30,6 +30,12 @@ const DIST = path.join(__dirname, 'dist');
 const LOGOS_DIR = path.join(__dirname, 'logos');
 const CERTS_DIR = path.join(__dirname, 'certs');
 const DADOS_DIR = path.join(__dirname, 'dados');
+
+// Token de serviço (JWT admin do delivery-backend) usado pra proxiar as rotas
+// de catálogo (produtos/categorias) — ver getServiceToken() e as rotas
+// /api/menu-produtos* / /api/menu-categorias* mais abaixo.
+let _serviceToken = null;
+let _serviceTokenExpiry = 0;
 const CACHE_FILE = path.join(CERTS_DIR, 'sefaz_cache.json');
 fs.mkdirSync(DADOS_DIR, { recursive: true });
 
@@ -743,6 +749,21 @@ async function sefazSync(emp) {
   return result;
 }
 
+// Obtém (e cacheia) um JWT admin do delivery-backend, via segredo compartilhado
+// GESTAO_SERVICE_SECRET, pra proxiar as rotas de catálogo (produtos/categorias).
+async function getServiceToken() {
+  if (_serviceToken && Date.now() < _serviceTokenExpiry) return _serviceToken;
+  const base = process.env.DELIVERY_BACKEND_URL || 'http://localhost:4000';
+  const secret = process.env.GESTAO_SERVICE_SECRET;
+  if (!secret) throw new Error('GESTAO_SERVICE_SECRET não configurado neste servidor');
+  const r = await fetch(`${base}/api/service-token`, { method: 'POST', headers: { 'x-service-secret': secret } });
+  if (!r.ok) throw new Error(`Falha ao obter token de serviço (HTTP ${r.status})`);
+  const data = await r.json();
+  _serviceToken = data.token;
+  _serviceTokenExpiry = Date.now() + Math.max(0, (data.expiresIn || 3600) - 60) * 1000; // renova 1min antes de expirar
+  return _serviceToken;
+}
+
 // ---- HTTP Server ----
 
 const server = http.createServer((req, res) => {
@@ -1095,6 +1116,52 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
       } catch (e) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: 'Erro ao provisionar login do PDV: ' + e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── Catálogo real (produtos/categorias do delivery-backend) ──────────
+  // Proxy autenticado por token de serviço — o navegador nunca vê o JWT
+  // nem o segredo, só fala com este backend.
+  if (
+    (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias')) ||
+    (req.method === 'POST' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/menu-produtos/upload')) ||
+    (req.method === 'PATCH' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/menu-categorias/'))) ||
+    (req.method === 'DELETE' && urlPath.startsWith('/api/menu-produtos/'))
+  ) {
+    const isUpload = urlPath === '/api/menu-produtos/upload';
+    const idFromPath = () => urlPath.split('/')[3]; // /api/menu-produtos/:id[...] ou /api/menu-categorias/:id
+    let upstreamPath = null;
+    if (isUpload) upstreamPath = '/api/menu/upload';
+    else if (urlPath === '/api/menu-produtos') upstreamPath = req.method === 'GET' ? '/api/menu/admin' : '/api/menu/products';
+    else if (urlPath === '/api/menu-categorias') upstreamPath = '/api/categories';
+    else if (req.method === 'PATCH' && urlPath.endsWith('/available')) upstreamPath = `/api/menu/products/${idFromPath()}/available`;
+    else if (urlPath.startsWith('/api/menu-produtos/')) upstreamPath = `/api/menu/products/${idFromPath()}`;
+    else if (urlPath.startsWith('/api/menu-categorias/')) upstreamPath = `/api/categories/${idFromPath()}`;
+
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const token = await getServiceToken();
+        const base = process.env.DELIVERY_BACKEND_URL || 'http://localhost:4000';
+        const buf = Buffer.concat(chunks);
+        const upstream = await fetch(`${base}${upstreamPath}`, {
+          method: req.method,
+          headers: {
+            'Content-Type': isUpload ? req.headers['content-type'] : 'application/json',
+            Authorization: 'Bearer ' + token,
+          },
+          body: buf.length ? buf : undefined,
+        });
+        const data = await upstream.json().catch(() => ({}));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(upstream.status);
+        res.end(JSON.stringify(data));
+      } catch (e) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Erro ao falar com o catálogo: ' + e.message }));
       }
     });
     return;
