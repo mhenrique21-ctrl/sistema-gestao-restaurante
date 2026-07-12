@@ -795,6 +795,7 @@ export default function App() {
     _listaDeletados.clear();
     setLogin(null);
     setTab("dashboard");
+    window.location.href="https://confrariacafe.com/";
   };
 
   if(!login)return <LoginScreen onLogin={doLogin} usuarios={state.CONFRARIA?.usuarios||[]}/>;
