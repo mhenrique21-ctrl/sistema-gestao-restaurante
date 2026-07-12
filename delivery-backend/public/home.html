@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confraria Café — Início</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0F0F0F;
+    --surface: #1A1208;
+    --surface-2: #241A0E;
+    --border: rgba(201,162,94,.16);
+    --cream: #F5EFE3;
+    --cream-dim: #B8A98F;
+    --gold: #C9A25E;
+    --gold-dim: #8B6B35;
+    --gold-bright: #E8C382;
+    --radius: 16px;
+    --transition: 250ms cubic-bezier(.4,0,.2,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--cream);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* fundo com textura de "prateleira de café" toda em CSS — sem imagens */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 900px 500px at 15% 20%, rgba(201,162,94,.10), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 85% 75%, rgba(139,107,53,.12), transparent 60%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.015) 0 2px, transparent 2px 90px),
+      linear-gradient(180deg, #0B0B0B 0%, #0F0D0A 50%, #0B0906 100%);
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(circle at 50% 0%, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 100%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ── HEADER ───────────────────────────────────── */
+  header {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px;
+    padding: 22px clamp(20px, 4vw, 48px);
+    background: rgba(26,18,8,.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand-logo {
+    width: 54px; height: 54px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--gold-bright) 0%, var(--gold-dim) 100%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 18px rgba(201,162,94,.35);
+    flex-shrink: 0;
+  }
+  .brand-logo svg { width: 30px; height: 30px; color: var(--surface); }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+  .brand-text .top { font-size: .68rem; font-weight: 700; letter-spacing: .28em; color: var(--gold-dim); }
+  .brand-text .bottom { font-size: 1.5rem; font-weight: 800; letter-spacing: .04em; color: var(--gold-bright); }
+  .divider { width: 1px; align-self: stretch; background: var(--border); display: none; }
+  .welcome .h1 { font-size: 1.5rem; font-weight: 700; color: var(--cream); }
+  .welcome .sub { font-size: .88rem; color: var(--cream-dim); margin-top: 2px; }
+
+  .header-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .meta-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 9px 14px;
+    font-size: .82rem; font-weight: 600; color: var(--cream-dim);
+    white-space: nowrap;
+  }
+  .meta-pill svg { width: 16px; height: 16px; color: var(--gold); flex-shrink: 0; }
+  .meta-pill span { color: var(--cream); }
+
+  /* ── MAIN ─────────────────────────────────────── */
+  main {
+    position: relative; z-index: 2;
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center;
+    padding: 48px clamp(20px, 4vw, 48px) 32px;
+  }
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 26px;
+    width: 100%;
+    max-width: 1280px;
+  }
+
+  .card {
+    position: relative;
+    background: linear-gradient(165deg, rgba(36,26,14,.75) 0%, rgba(15,15,15,.75) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 38px 28px 28px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    text-decoration: none; color: inherit;
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+    animation: card-in .5s cubic-bezier(.4,0,.2,1) backwards;
+  }
+  .card:nth-child(1) { animation-delay: .05s; }
+  .card:nth-child(2) { animation-delay: .12s; }
+  .card:nth-child(3) { animation-delay: .19s; }
+  .card:nth-child(4) { animation-delay: .26s; }
+  @keyframes card-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* efeito de iluminação que segue o hover */
+  .card::before {
+    content: '';
+    position: absolute; inset: -1px;
+    border-radius: inherit;
+    background: radial-gradient(320px circle at var(--mx,50%) var(--my,50%), rgba(232,195,130,.16), transparent 60%);
+    opacity: 0;
+    transition: opacity var(--transition);
+    pointer-events: none;
+  }
+  .card:hover::before { opacity: 1; }
+
+  .card:hover {
+    transform: translateY(-6px);
+    border-color: var(--gold-dim);
+    box-shadow: 0 20px 40px rgba(0,0,0,.45), 0 0 0 1px rgba(201,162,94,.15);
+  }
+  .card:active { transform: translateY(-2px) scale(.98); }
+
+  .card-icon-ring {
+    width: 92px; height: 92px; border-radius: 50%;
+    border: 1.5px solid var(--gold-dim);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 22px;
+    position: relative;
+    transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+  }
+  .card:hover .card-icon-ring {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 6px rgba(201,162,94,.08);
+    transform: scale(1.06);
+  }
+  .card-icon-ring svg { width: 38px; height: 38px; color: var(--gold-bright); stroke-width: 1.6; }
+
+  .card-title {
+    font-size: 1.3rem; font-weight: 800; letter-spacing: .03em;
+    color: var(--gold-bright);
+    margin-bottom: 10px;
+  }
+  .card-desc {
+    font-size: .88rem; color: var(--cream-dim);
+    line-height: 1.55; min-height: 42px;
+    margin-bottom: 26px;
+    max-width: 220px;
+  }
+
+  .card-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, #B5824A 0%, var(--gold-dim) 100%);
+    color: #FFF6E9;
+    font-weight: 700; font-size: .9rem;
+    padding: 12px 26px;
+    border-radius: 11px;
+    border: none;
+    box-shadow: 0 6px 16px rgba(139,107,53,.35);
+    transition: transform var(--transition), box-shadow var(--transition), filter var(--transition);
+    width: 100%;
+    justify-content: center;
+  }
+  .card-btn svg { width: 16px; height: 16px; transition: transform var(--transition); }
+  .card:hover .card-btn { filter: brightness(1.12); box-shadow: 0 8px 22px rgba(139,107,53,.5); }
+  .card:hover .card-btn svg { transform: translateX(3px); }
+
+  /* ── FOOTER ───────────────────────────────────── */
+  footer {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    padding: 18px clamp(20px, 4vw, 48px);
+    background: rgba(26,18,8,.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+    font-size: .8rem; color: var(--cream-dim);
+  }
+  .footer-left { display: flex; align-items: center; gap: 10px; }
+  .footer-left svg { width: 20px; height: 20px; color: var(--gold); }
+  .footer-left .version { color: var(--cream-dim); opacity: .75; }
+  .footer-right { display: flex; align-items: center; gap: 22px; }
+  .footer-link {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--cream-dim); text-decoration: none;
+    font-weight: 600;
+    transition: color var(--transition);
+  }
+  .footer-link svg { width: 16px; height: 16px; }
+  .footer-link:hover { color: var(--gold); }
+  .footer-link.exit:hover { color: #E06A5E; }
+
+  @media (max-width: 640px) {
+    header { padding: 16px 18px; }
+    .brand-text .bottom { font-size: 1.2rem; }
+    .header-meta { width: 100%; justify-content: flex-start; }
+    main { padding: 28px 18px 20px; }
+    footer { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="2" x2="6" y2="4"/><line x1="10" y1="2" x2="10" y2="4"/><line x1="14" y1="2" x2="14" y2="4"/></svg>
+      </div>
+      <div class="brand-text">
+        <span class="top">CONFRARIA</span>
+        <span class="bottom">CAFÉ</span>
+      </div>
+      <div class="divider"></div>
+    </div>
+
+    <div class="welcome" style="flex:1;min-width:200px;padding-left:6px">
+      <div class="h1">Bem-vindo(a)!</div>
+      <div class="sub">Selecione uma opção para acessar o sistema da cafeteria.</div>
+    </div>
+
+    <div class="header-meta">
+      <div class="meta-pill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Operador: <span id="operadorNome">Admin</span>
+      </div>
+      <div class="meta-pill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="dataAtual">—</span>
+      </div>
+      <div class="meta-pill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span id="horaAtual">—</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="cards-grid" id="cardsGrid"></div>
+  </main>
+
+  <footer>
+    <div class="footer-left">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      <div>
+        <div>Sistema de Gestão Confraria Café</div>
+        <div class="version">Versão 2.5.1</div>
+      </div>
+    </div>
+    <div class="footer-right">
+      <a class="footer-link" href="#" onclick="return false;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11a9 9 0 0 1 18 0"/><path d="M21 12v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"/><path d="M3 12v5a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3Z"/></svg>
+        Suporte
+      </a>
+      <a class="footer-link exit" href="#" onclick="sairSistema()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sair do sistema
+      </a>
+    </div>
+  </footer>
+
+<script>
+  const ICONS = {
+    pdv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2"/><path d="M4 9h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><line x1="8" y1="13" x2="8" y2="13"/><line x1="12" y1="13" x2="12" y2="13"/><line x1="16" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="8" y2="17"/><line x1="12" y1="17" x2="12" y2="17"/><path d="M9 5V3h6v2"/></svg>',
+    gestao: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+    delivery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M15 6a1 1 0 0 1 1 1v5h1.5l3 3.5V17a1 1 0 0 1-1 1H18"/><path d="M9 17H7.5"/><path d="M13 17H16"/><path d="M8 6h4l3 5H5l-1.5-2.5"/><path d="M8 6V3H5"/></svg>',
+    config: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
+  };
+
+  const CARDS = [
+    { key: 'pdv',      title: 'PDV',            desc: 'Acesse o ponto de venda e realize pedidos no salão.',                 href: '/comanda.html' },
+    { key: 'gestao',   title: 'GESTÃO',         desc: 'Gerencie vendas, produtos, relatórios e desempenho do negócio.',      href: 'https://gestao.confrariacafe.com/' },
+    { key: 'delivery', title: 'DELIVERY',       desc: 'Gerencie pedidos, entregas e integrações de delivery.',               href: '/admin.html' },
+    { key: 'config',   title: 'CONFIGURAÇÕES',  desc: 'Ajuste as preferências do sistema e da empresa.',                     href: '/admin.html#configuracoes' },
+  ];
+
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = CARDS.map(c => `
+    <a class="card" href="${c.href}" data-key="${c.key}">
+      <div class="card-icon-ring">${ICONS[c.key]}</div>
+      <div class="card-title">${c.title}</div>
+      <div class="card-desc">${c.desc}</div>
+      <span class="card-btn">Acessar ${ICONS.arrow}</span>
+    </a>
+  `).join('');
+
+  // efeito de iluminação seguindo o cursor
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+      card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+    });
+  });
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function tick() {
+    const now = new Date();
+    document.getElementById('dataAtual').textContent = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
+    document.getElementById('horaAtual').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+  tick();
+  setInterval(tick, 30000);
+
+  // nome do operador logado (se existir sessão do PDV salva neste navegador)
+  try {
+    const staff = JSON.parse(localStorage.getItem('pdv_staff') || 'null');
+    if (staff && staff.name) document.getElementById('operadorNome').textContent = staff.name;
+  } catch (e) {}
+
+  function sairSistema() {
+    if (!confirm('Deseja sair do sistema?')) return;
+    localStorage.removeItem('pdv_staff');
+    localStorage.removeItem('pdv_token');
+    location.reload();
+  }
+</script>
+</body>
+</html>
