@@ -199,16 +199,81 @@
   .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
   .modal-actions .btn { flex: 1; }
 
-  .pay-row { display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 12px; margin-bottom: 8px; }
-  .pay-row select { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .9rem; }
-  .pay-row input { width: 110px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .95rem; text-align: right; }
-  .pay-row .btn { padding: 6px 10px; flex: none; }
-  #add-pay-row-btn { width: 100%; margin-bottom: 12px; }
-  .close-total { font-size: 1.8rem; font-weight: 800; color: var(--gold-dim); text-align: center; margin: 10px 0; }
-  .close-remaining { text-align: center; font-size: .9rem; font-weight: 700; margin-bottom: 12px; }
-  .close-remaining.ok { color: var(--green); }
-  .close-remaining.pending { color: var(--danger); }
-  .close-items { max-height: 30vh; overflow-y: auto; margin: 10px 0; }
+  /* ── Modal: Fechamento de comanda ─────────────────── */
+  .close2-backdrop { align-items: center; }
+  .close2-sheet {
+    background: var(--c-surface); width: 100%; max-width: 900px; border-radius: 18px; padding: 0;
+    max-height: 92vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.35); text-align: left;
+  }
+  .close2-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 22px 26px 0; }
+  .close2-head h3 { font-size: 1.3rem; font-weight: 800; color: var(--c-text); letter-spacing: .01em; }
+  .close2-head button { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 8px; width: 32px; height: 32px; color: var(--c-muted); font-size: 1rem; }
+  .close2-sub { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 26px 18px; border-bottom: 1px solid var(--c-border); }
+  .close2-sub .code { color: var(--gold-dim); font-weight: 800; font-size: 1.02rem; }
+  .close2-sub .mesa { color: var(--c-muted); font-weight: 700; font-size: .92rem; }
+
+  .close2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; padding: 20px 26px; }
+  @media (max-width: 720px) { .close2-grid { grid-template-columns: 1fr; } }
+  .close2-section-title { font-size: .76rem; font-weight: 800; letter-spacing: .06em; color: var(--c-muted); text-transform: uppercase; margin-bottom: 10px; }
+  .close2-items-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .close2-item-row { display: flex; justify-content: space-between; font-size: .9rem; color: var(--c-text); }
+  .close2-item-row .qty { font-weight: 700; margin-right: 6px; color: var(--c-muted); }
+  .close2-divider { border-top: 1px solid var(--c-border); margin: 10px 0; }
+  .close2-line { display: flex; justify-content: space-between; font-size: .9rem; color: var(--c-text); padding: 3px 0; }
+  .close2-line.muted { color: var(--c-muted); }
+  .close2-total-row { margin-top: 10px; }
+  .close2-total-row .label { font-size: .8rem; font-weight: 800; letter-spacing: .04em; color: var(--c-muted); text-transform: uppercase; }
+  .close2-total-row .value { font-size: 1.9rem; font-weight: 800; color: var(--gold-dim); }
+
+  .close2-info-card { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 12px; padding: 14px 16px; margin-top: 16px; }
+  .close2-info-card .close2-section-title { margin-bottom: 8px; }
+  .close2-info-row { display: flex; gap: 8px; font-size: .84rem; color: var(--c-text); padding: 3px 0; align-items: flex-start; }
+  .close2-info-row .ic { flex-shrink: 0; opacity: .7; }
+
+  .close2-hint { color: var(--c-muted); font-size: .78rem; margin-bottom: 12px; }
+  .pay-value-input {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--c-border);
+    background: var(--c-bg); color: var(--c-text); font-size: 1.05rem; font-weight: 700; text-align: right;
+    margin-bottom: 14px;
+  }
+  .pay-method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .pay-method-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 10px;
+    background: var(--c-surface); border: 2px solid var(--c-border); border-radius: 12px;
+    font-weight: 800; font-size: .82rem; letter-spacing: .02em; color: var(--c-text);
+  }
+  .pay-method-btn .ic { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .pay-method-btn .ic svg { width: 15px; height: 15px; }
+  .pay-method-btn[data-method="dinheiro"] .ic { background: #2f8f63; }
+  .pay-method-btn[data-method="dinheiro"]:active { border-color: #2f8f63; background: rgba(76,175,128,.08); }
+  .pay-method-btn[data-method="cartao_debito"] .ic { background: #2563a8; }
+  .pay-method-btn[data-method="cartao_debito"]:active { border-color: #2563a8; background: rgba(37,99,168,.08); }
+  .pay-method-btn[data-method="cartao_credito"] .ic { background: #7C3AED; }
+  .pay-method-btn[data-method="cartao_credito"]:active { border-color: #7C3AED; background: rgba(124,58,237,.08); }
+  .pay-method-btn[data-method="pix"] .ic { background: #0D9488; }
+  .pay-method-btn[data-method="pix"]:active { border-color: #0D9488; background: rgba(13,148,136,.08); }
+
+  .close2-detail-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 10px; margin-bottom: 8px; }
+  .close2-detail-row .ic { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+  .close2-detail-row .ic svg { width: 12px; height: 12px; }
+  .close2-detail-row .name { flex: 1; font-weight: 700; font-size: .86rem; color: var(--c-text); }
+  .close2-detail-row input { width: 100px; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .88rem; text-align: right; }
+  .close2-detail-row button { background: transparent; border: none; color: var(--c-muted); font-size: .95rem; padding: 4px; flex-shrink: 0; }
+  .close2-add-btn { width: 100%; padding: 12px; border-radius: 10px; border: 2px dashed var(--c-border); background: transparent; color: var(--c-muted); font-weight: 700; font-size: .84rem; margin-top: 4px; }
+
+  .close2-footer { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; background: var(--c-bg); border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border); padding: 16px 26px; }
+  .close2-footer-col { text-align: center; }
+  .close2-footer-col .label { font-size: .7rem; font-weight: 800; letter-spacing: .06em; color: var(--c-muted); text-transform: uppercase; margin-bottom: 4px; }
+  .close2-footer-col .value { font-size: 1.25rem; font-weight: 800; color: var(--c-text); }
+  .close2-footer-col .value.ok { color: #2f8f63; }
+  .close2-footer-col .value.pending { color: var(--danger); }
+
+  .close2-actions { display: flex; gap: 12px; padding: 18px 26px; }
+  .close2-actions button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 10px; font-weight: 800; font-size: .92rem; border: none; }
+  .close2-cancel { background: var(--c-surface); border: 1px solid var(--c-border) !important; color: var(--c-text); }
+  .close2-confirm { background: linear-gradient(135deg, #7A3E12 0%, #5C2E0D 100%); color: #fff; }
+  .close2-confirm:disabled { background: var(--c-border); color: var(--c-muted); }
+  .close2-note { display: flex; align-items: center; gap: 8px; background: rgba(76,175,128,.1); color: #2f8f63; font-size: .82rem; font-weight: 600; padding: 12px 26px; }
 
   .placeholder-screen { max-width: 480px; margin: 60px auto; padding: 0 20px; text-align: center; }
   .placeholder-screen .icon { font-size: 2.8rem; display: block; margin-bottom: 10px; }
@@ -1729,107 +1794,186 @@ async function removeLaunchedItem(itemId) {
 }
 
 // ── Fechamento (PDV) ────────────────────────────────
-const PAY_METHODS = [['pix','💠 Pix'],['cartao_credito','💳 Crédito'],['cartao_debito','💳 Débito'],['dinheiro','💵 Dinheiro']];
+// Ícones dos métodos de pagamento (SVG inline, sem libs externas).
+const PAY_ICONS = {
+  dinheiro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>',
+  cartao_debito: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+  cartao_credito: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+  pix: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l4.5 4.5-4.5 4.5-4.5-4.5z"/><path d="M12 12l4.5 4.5-4.5 4.5-4.5-4.5z"/></svg>',
+};
+const PAY_LABELS = { dinheiro: 'Dinheiro', cartao_debito: 'Cartão Débito', cartao_credito: 'Cartão Crédito', pix: 'Pix' };
+
+let closePayments = []; // [{ method, amountCents }]
+let closeTotalCents = 0;
+
+function centsToFmt(cents) { return fmt(cents / 100); }
+function parseValueToCents(str) {
+  const v = parseFloat(String(str).replace(',', '.'));
+  return Number.isFinite(v) && v > 0 ? Math.round(v * 100) : 0;
+}
+
+function closeRecebidoCents() { return closePayments.reduce((s, p) => s + p.amountCents, 0); }
+function closeRestanteCents() { return Math.max(0, closeTotalCents - closeRecebidoCents()); }
+function closeTrocoCents() { return Math.max(0, closeRecebidoCents() - closeTotalCents); }
+
+// Cartão/Pix nunca podem ultrapassar o restante (não geram troco); dinheiro pode
+// (gera troco). excludeIndex serve pra reclampar uma linha já existente ao editar.
+function clampPaymentCents(method, desiredCents, excludeIndex) {
+  if (method === 'dinheiro') return Math.max(0, desiredCents);
+  const others = closePayments.reduce((s, p, i) => (i === excludeIndex ? s : s + p.amountCents), 0);
+  const maxAllowed = Math.max(0, closeTotalCents - others);
+  return Math.min(Math.max(0, desiredCents), maxAllowed);
+}
 
 function openCloseModal() {
   if (comanda.status !== 'aberta') return;
+  const isBalcao = (comanda.code || '').startsWith('balcao_');
+  const subtotalCents = Math.round(parseFloat(comanda.total || 0) * 100);
+  const taxaCents = isBalcao ? 0 : Math.round(subtotalCents * 0.10);
+  closeTotalCents = subtotalCents + taxaCents;
+  closePayments = [];
+
+  const mesaLabel = isBalcao ? 'Balcão' : (comanda.mesa_numero ? `Mesa ${comanda.mesa_numero}` : '—');
+  const observacoes = (comanda.items || []).map(i => i.notes).filter(Boolean).join('; ');
+
   const backdrop = document.createElement('div');
-  backdrop.className = 'modal-backdrop';
+  backdrop.className = 'modal-backdrop close2-backdrop';
   backdrop.id = 'close-modal-backdrop';
   backdrop.innerHTML = `
-    <div class="modal-sheet">
-      <h3>Fechar comanda — ${comanda.label || comanda.code}</h3>
-      <div class="close-items">
-        ${(comanda.items || []).map(i => `
-          <div class="launched-item">
-            <div class="row"><span class="name">${i.quantity}× ${i.product_name}</span><span>${fmt(i.subtotal)}</span></div>
+    <div class="close2-sheet">
+      <div class="close2-head">
+        <h3>FECHAMENTO DE COMANDA</h3>
+        <button onclick="closeCloseModal()">✕</button>
+      </div>
+      <div class="close2-sub">
+        <span class="code">${comanda.label || comanda.code}</span>
+        <span class="mesa">${mesaLabel}</span>
+      </div>
+
+      <div class="close2-grid">
+        <div>
+          <div class="close2-section-title">Itens consumidos</div>
+          <div class="close2-items-list">
+            ${(comanda.items || []).map(i => `
+              <div class="close2-item-row"><span><span class="qty">${i.quantity}x</span>${i.product_name}</span><span>${fmt(i.subtotal)}</span></div>
+            `).join('') || '<div class="launched-empty">Nenhum item lançado</div>'}
           </div>
-        `).join('') || '<div class="launched-empty">Nenhum item lançado</div>'}
+          <div class="close2-divider"></div>
+          <div class="close2-line"><span>Subtotal</span><span>${centsToFmt(subtotalCents)}</span></div>
+          ${!isBalcao ? `<div class="close2-line muted"><span>Taxa de serviço (10%)</span><span>${centsToFmt(taxaCents)}</span></div>` : ''}
+          <div class="close2-total-row">
+            <div class="label">Total da comanda</div>
+            <div class="value">${centsToFmt(closeTotalCents)}</div>
+          </div>
+
+          <div class="close2-info-card">
+            <div class="close2-section-title">Informações</div>
+            <div class="close2-info-row"><span class="ic">🕐</span><span>Abertura: ${comanda.opened_at ? new Date(comanda.opened_at).toLocaleString('pt-BR') : '—'}</span></div>
+            <div class="close2-info-row"><span class="ic">👤</span><span>Atendente: ${USER_NAME || '—'}</span></div>
+            ${observacoes ? `<div class="close2-info-row"><span class="ic">📝</span><span>Observação: ${observacoes}</span></div>` : ''}
+          </div>
+        </div>
+
+        <div>
+          <div class="close2-section-title">Formas de pagamento</div>
+          <div class="close2-hint">Selecione uma ou mais formas de pagamento.</div>
+          <input type="number" step="0.01" min="0" class="pay-value-input" id="pay-value-input" value="${(closeRestanteCents() / 100).toFixed(2)}">
+          <div class="pay-method-grid">
+            ${['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'].map(m => `
+              <button class="pay-method-btn" data-method="${m}" onclick="addClosePayment('${m}')">
+                <span class="ic">${PAY_ICONS[m]}</span>${PAY_LABELS[m].toUpperCase()}
+              </button>
+            `).join('')}
+          </div>
+
+          <div class="close2-section-title" style="margin-top:16px">Detalhamento do pagamento</div>
+          <div id="close2-detail-list"></div>
+          <div id="close2-detail-empty" class="cart-empty" style="padding:10px 0"></div>
+        </div>
       </div>
-      <div class="close-total">${fmt(comanda.total)}</div>
-      <div class="side-title" style="text-align:center">Formas de pagamento</div>
-      <p style="text-align:center;color:var(--c-muted);font-size:.78rem;margin-bottom:10px">Pode adicionar mais de um pagamento da mesma forma (ex: 2 Pix de clientes diferentes)</p>
-      <div id="pay-rows"></div>
-      <button class="btn btn-secondary" id="add-pay-row-btn" onclick="addPaymentRow()">+ Adicionar pagamento</button>
-      <div class="close-remaining pending" id="close-remaining">Restante: ${fmt(comanda.total)}</div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeCloseModal()">Cancelar</button>
-        <button class="btn btn-primary" id="confirm-close-btn" onclick="confirmClose()" disabled>Confirmar fechamento</button>
+
+      <div class="close2-footer">
+        <div class="close2-footer-col"><div class="label">Valor recebido</div><div class="value" id="close2-recebido">R$ 0,00</div></div>
+        <div class="close2-footer-col"><div class="label">Troco</div><div class="value" id="close2-troco">R$ 0,00</div></div>
+        <div class="close2-footer-col"><div class="label">Restante</div><div class="value pending" id="close2-restante">${centsToFmt(closeTotalCents)}</div></div>
       </div>
+      <div class="close2-actions">
+        <button class="close2-cancel" onclick="closeCloseModal()">✕ Cancelar</button>
+        <button class="close2-confirm" id="confirm-close-btn" onclick="confirmClose()" disabled>✓ Finalizar Pagamento</button>
+      </div>
+      <div class="close2-note">✓ Ao finalizar, a comanda será encerrada e não poderá ser editada.</div>
     </div>
   `;
   closeCloseModal();
   document.body.appendChild(backdrop);
-  addPaymentRow();
+  renderCloseDetail();
 }
 
-function addPaymentRow() {
-  const row = document.createElement('div');
-  row.className = 'pay-row';
-  row.innerHTML = `
-    <select onchange="updateCloseRemaining()">
-      ${PAY_METHODS.map(([val,label]) => `<option value="${val}">${label}</option>`).join('')}
-    </select>
-    <input type="number" step="0.01" min="0" placeholder="0,00" oninput="updateCloseRemaining()">
-    <button class="btn btn-secondary" onclick="this.closest('.pay-row').remove(); updateCloseRemaining()">✕</button>
-  `;
-  document.getElementById('pay-rows').appendChild(row);
+function addClosePayment(method) {
+  const input = document.getElementById('pay-value-input');
+  const raw = parseValueToCents(input.value);
+  const desired = raw > 0 ? raw : closeRestanteCents();
+  const amountCents = clampPaymentCents(method, desired, -1);
+  if (amountCents <= 0) return;
+  closePayments.push({ method, amountCents });
+  input.value = (closeRestanteCents() / 100).toFixed(2);
+  renderCloseDetail();
 }
 
-function collectPayments() {
-  return Array.from(document.querySelectorAll('#pay-rows .pay-row')).map(row => ({
-    method: row.querySelector('select').value,
-    amount: parseFloat(row.querySelector('input').value) || 0,
-  })).filter(p => p.amount > 0);
+function editClosePayment(index, value) {
+  const p = closePayments[index];
+  if (!p) return;
+  p.amountCents = clampPaymentCents(p.method, parseValueToCents(value), index);
+  renderCloseDetail();
 }
 
-function updateCloseRemaining() {
-  const payments = collectPayments();
-  const paid = payments.reduce((s, p) => s + p.amount, 0);
-  const dinheiroTotal = payments.filter(p => p.method === 'dinheiro').reduce((s, p) => s + p.amount, 0);
-  const nonCashTotal = paid - dinheiroTotal;
-  const total = parseFloat(comanda.total);
-  const diff = total - paid; // > 0 falta, < 0 sobra
-  const el = document.getElementById('close-remaining');
-  let ok = false;
+function removeClosePayment(index) {
+  closePayments.splice(index, 1);
+  document.getElementById('pay-value-input').value = (closeRestanteCents() / 100).toFixed(2);
+  renderCloseDetail();
+}
 
-  if (Math.abs(diff) < 0.01) {
-    ok = true;
-    el.textContent = 'Valor completo ✓';
-    el.className = 'close-remaining ok';
-  } else if (diff < 0) {
-    const troco = -diff;
-    // só é possível dar troco se o excedente vier de dinheiro (pix/cartão não dão troco)
-    if (nonCashTotal <= total + 0.01 && dinheiroTotal >= troco - 0.01) {
-      ok = true;
-      el.textContent = `Troco: ${fmt(troco)}`;
-      el.className = 'close-remaining ok';
-    } else {
-      el.textContent = `Excedeu o total em ${fmt(troco)} (só é possível dar troco em dinheiro)`;
-      el.className = 'close-remaining pending';
-    }
+function renderCloseDetail() {
+  const list = document.getElementById('close2-detail-list');
+  const empty = document.getElementById('close2-detail-empty');
+  if (!closePayments.length) {
+    list.innerHTML = '';
+    empty.textContent = 'Nenhum pagamento adicionado ainda';
   } else {
-    el.textContent = `Restante: ${fmt(diff)}`;
-    el.className = 'close-remaining pending';
+    empty.textContent = '';
+    list.innerHTML = closePayments.map((p, i) => `
+      <div class="close2-detail-row">
+        <span class="ic" style="background:${{dinheiro:'#2f8f63',cartao_debito:'#2563a8',cartao_credito:'#7C3AED',pix:'#0D9488'}[p.method]}">${PAY_ICONS[p.method]}</span>
+        <span class="name">${PAY_LABELS[p.method]}</span>
+        <input type="number" step="0.01" min="0" value="${(p.amountCents / 100).toFixed(2)}" onchange="editClosePayment(${i}, this.value)">
+        <button onclick="removeClosePayment(${i})">✕</button>
+      </div>
+    `).join('');
   }
-  document.getElementById('confirm-close-btn').disabled = !ok;
+
+  const recebido = closeRecebidoCents();
+  const troco = closeTrocoCents();
+  const restante = closeRestanteCents();
+  document.getElementById('close2-recebido').textContent = centsToFmt(recebido);
+  document.getElementById('close2-troco').textContent = centsToFmt(troco);
+  const restanteEl = document.getElementById('close2-restante');
+  restanteEl.textContent = centsToFmt(restante);
+  restanteEl.className = 'value ' + (restante === 0 ? 'ok' : 'pending');
+  document.getElementById('confirm-close-btn').disabled = !(restante === 0 && closePayments.length > 0);
 }
 
-// Ajusta os pagamentos em dinheiro para o valor efetivamente retido (desconta o troco),
-// já que o backend exige que a soma dos pagamentos bata exatamente com o total da comanda.
+// Ajusta os pagamentos em dinheiro pro valor efetivamente retido (desconta o troco),
+// já que o backend exige que a soma dos pagamentos bata exatamente com o total.
 function buildFinalPayments() {
-  const payments = collectPayments();
-  const total = parseFloat(comanda.total);
-  let troco = payments.reduce((s, p) => s + p.amount, 0) - total;
-  if (troco <= 0.01) return payments;
-  const result = payments.map(p => ({ ...p }));
-  for (let i = result.length - 1; i >= 0 && troco > 0.01; i--) {
+  let troco = closeTrocoCents();
+  const result = closePayments.map(p => ({ ...p }));
+  for (let i = result.length - 1; i >= 0 && troco > 0; i--) {
     if (result[i].method !== 'dinheiro') continue;
-    const reduce = Math.min(result[i].amount, troco);
-    result[i].amount = parseFloat((result[i].amount - reduce).toFixed(2));
-    troco = parseFloat((troco - reduce).toFixed(2));
+    const reduce = Math.min(result[i].amountCents, troco);
+    result[i].amountCents -= reduce;
+    troco -= reduce;
   }
-  return result.filter(p => p.amount > 0.001);
+  return result.filter(p => p.amountCents > 0).map(p => ({ method: p.method, amount: p.amountCents / 100 }));
 }
 
 function closeCloseModal() {
@@ -1838,8 +1982,7 @@ function closeCloseModal() {
 }
 
 async function confirmClose() {
-  const entered = collectPayments();
-  if (!entered.length) return;
+  if (!closePayments.length || closeRestanteCents() !== 0) return;
   const payments = buildFinalPayments();
   const btn = document.getElementById('confirm-close-btn');
   btn.disabled = true;
@@ -1851,13 +1994,13 @@ async function confirmClose() {
       body: JSON.stringify({ payments }),
     });
     const data = await res.json();
-    if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = 'Confirmar fechamento'; return; }
+    if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = '✓ Finalizar Pagamento'; return; }
     closeCloseModal();
     resetToScan();
   } catch (e) {
     alert('Erro de conexão ao fechar comanda');
     btn.disabled = false;
-    btn.textContent = 'Confirmar fechamento';
+    btn.textContent = '✓ Finalizar Pagamento';
   }
 }
 

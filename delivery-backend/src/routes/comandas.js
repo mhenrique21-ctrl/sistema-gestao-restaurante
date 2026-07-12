@@ -405,9 +405,18 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
     if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
     if (comanda.status !== 'aberta') return res.status(400).json({ error: 'Comanda já está fechada' });
 
-    const paidTotal = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
-    if (Math.abs(paidTotal - parseFloat(comanda.total)) > 0.01) {
-      return res.status(400).json({ error: `Soma dos pagamentos (${paidTotal.toFixed(2)}) não bate com o total (${parseFloat(comanda.total).toFixed(2)})` });
+    // Taxa de serviço de 10% só se aplica a comandas de mesa (não a vendas de balcão,
+    // que têm code prefixado com "balcao_" — ver POST /balcao). Calculada em centavos
+    // pra não acumular erro de ponto flutuante.
+    const isBalcao = comanda.code.startsWith('balcao_');
+    const subtotalCents = Math.round(parseFloat(comanda.total) * 100);
+    const taxaCents = isBalcao ? 0 : Math.round(subtotalCents * 0.10);
+    const totalComTaxaCents = subtotalCents + taxaCents;
+    const totalComTaxa = totalComTaxaCents / 100;
+
+    const paidTotalCents = payments.reduce((s, p) => s + Math.round(parseFloat(p.amount) * 100), 0);
+    if (paidTotalCents !== totalComTaxaCents) {
+      return res.status(400).json({ error: `Soma dos pagamentos (${(paidTotalCents / 100).toFixed(2)}) não bate com o total (${totalComTaxa.toFixed(2)})` });
     }
 
     const summaryMethod = payments.length === 1 ? payments[0].method : 'misto';
@@ -418,9 +427,9 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
     const archivedCode = `${originalCode}__closed_${Date.now()}`;
 
     const updateResult = await pool.query(
-      `UPDATE comandas SET status = 'fechada', payment_method = $1, closed_at = NOW(), closed_by = $2, code = $3
-       WHERE id = $4 RETURNING *`,
-      [summaryMethod, req.user?.id || null, archivedCode, comanda.id]
+      `UPDATE comandas SET status = 'fechada', payment_method = $1, closed_at = NOW(), closed_by = $2, code = $3, total = $4
+       WHERE id = $5 RETURNING *`,
+      [summaryMethod, req.user?.id || null, archivedCode, totalComTaxa, comanda.id]
     );
     const closedComanda = { ...updateResult.rows[0], code: originalCode };
 
