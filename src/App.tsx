@@ -809,7 +809,7 @@ export default function App() {
       {id:"compras-nfe",label:"NF-e",icon:"📄",sub:"nfe"},
       {id:"compras-hist",label:"Histórico",icon:"📋",sub:"lista"},
       {id:"compras-forn",label:"Fornecedores",icon:"🏭",sub:"forn"},
-      {id:"compras-prod",label:"Produtos",icon:"📦",sub:"produtos"},
+      {id:"compras-prod",label:"Insumos",icon:"📦",sub:"produtos"},
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
       {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
@@ -3259,8 +3259,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       {prodSubTab==="catalogo"&&<div>
         {/* Add/Edit form */}
         <div className="card" style={{marginBottom:12,border:`1px solid ${prodEdit?"#7c8fff55":"var(--border)"}`}}>
-          <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{prodEdit?"✏️ Editar Produto":"➕ Novo Produto"}</div>
-          <input placeholder="Nome do produto *" value={prodForm.nome} onChange={e=>setProdForm(p=>({...p,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{prodEdit?"✏️ Editar Insumo":"➕ Novo Insumo"}</div>
+          <input placeholder="Nome do insumo *" value={prodForm.nome} onChange={e=>setProdForm(p=>({...p,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
           <div className="row" style={{marginBottom:8}}>
             <select value={prodForm.categoria} onChange={e=>setProdForm(p=>({...p,categoria:e.target.value}))} className="inp">
               {cats.map(c=><option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
@@ -3312,7 +3312,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
         {/* Search bar */}
         <div style={{position:"relative",marginBottom:12}}>
-          <input placeholder="🔍 Buscar produto..." value={buscaProd} onChange={e=>setBuscaProd(e.target.value)} className="inp" style={{paddingRight:buscaProd?36:14}}/>
+          <input placeholder="🔍 Buscar insumo..." value={buscaProd} onChange={e=>setBuscaProd(e.target.value)} className="inp" style={{paddingRight:buscaProd?36:14}}/>
           {buscaProd&&<button onClick={()=>setBuscaProd("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
         </div>
 
@@ -3360,9 +3360,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             </div>}
           </div>;
         })}
-        {!(db.materiasPrimas||[]).length&&<EmptyState msg="Nenhum produto cadastrado. Importe via NF-e, Cupom IA ou cadastre manualmente."/>}
+        {!(db.materiasPrimas||[]).length&&<EmptyState msg="Nenhum insumo cadastrado. Importe via NF-e, Cupom IA ou cadastre manualmente."/>}
         {buscaProd&&cats.every(cat=>(db.materiasPrimas||[]).filter(m=>m.categoria===cat&&m.nome.toLowerCase().includes(buscaProd.toLowerCase())).length===0)&&(
-          <div className="muted" style={{textAlign:"center",padding:"20px",fontSize:13}}>Nenhum produto encontrado para "<strong>{buscaProd}</strong>"</div>
+          <div className="muted" style={{textAlign:"center",padding:"20px",fontSize:13}}>Nenhum insumo encontrado para "<strong>{buscaProd}</strong>"</div>
         )}
       </div>}
 
