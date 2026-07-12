@@ -196,10 +196,20 @@ router.post('/:id/orders', async (req, res) => {
   if (!items?.length) return res.status(400).json({ error: 'Itens vazios' });
 
   try {
-    const comandaResult = await pool.query(`SELECT * FROM comandas WHERE id = $1`, [req.params.id]);
-    const comanda = comandaResult.rows[0];
+    let comandaResult = await pool.query(`SELECT * FROM comandas WHERE id = $1`, [req.params.id]);
+    let comanda = comandaResult.rows[0];
     if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
     if (comanda.status !== 'aberta') return res.status(400).json({ error: 'Comanda não está aberta' });
+
+    // O tablet (kiosk.html) fica fixo numa mesa e já manda o número dela — usa isso pra
+    // vincular a comanda automaticamente, sem depender de um atendente fazer isso manualmente.
+    if (!comanda.mesa_id && mesa) {
+      const mesaResult = await pool.query(`SELECT id FROM mesas WHERE numero = $1`, [parseInt(mesa)]);
+      if (mesaResult.rows[0]) {
+        const updated = await pool.query(`UPDATE comandas SET mesa_id = $1 WHERE id = $2 RETURNING *`, [mesaResult.rows[0].id, comanda.id]);
+        comanda = updated.rows[0];
+      }
+    }
     if (!comanda.mesa_id && !comanda.code.startsWith('balcao_')) {
       return res.status(400).json({ error: 'Selecione uma mesa antes de lançar pedidos nesta comanda' });
     }
