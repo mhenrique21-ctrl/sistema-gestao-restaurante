@@ -151,7 +151,12 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
 // GET /api/comandas/resolve/:code — tablet escaneia o QR e identifica a comanda
 router.get('/resolve/:code', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM comandas WHERE code = $1`, [req.params.code.trim()]);
+    const result = await pool.query(
+      `SELECT c.*, m.numero AS mesa_numero, m.area AS mesa_area
+       FROM comandas c LEFT JOIN mesas m ON m.id = c.mesa_id
+       WHERE c.code = $1`,
+      [req.params.code.trim()]
+    );
     const comanda = result.rows[0];
     if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
 
@@ -159,6 +164,28 @@ router.get('/resolve/:code', async (req, res) => {
     res.json({ ...comanda, items });
   } catch (err) {
     console.error('[comandas/resolve]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// PATCH /api/comandas/:id/mesa — vincula a comanda a uma mesa cadastrada (equipe).
+// Obrigatório pra qualquer comanda aberta por cartão físico antes de lançar pedido —
+// só venda balcão (código começando com "balcao_") fica isenta.
+router.patch('/:id/mesa', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  const { mesa_id } = req.body;
+  if (!mesa_id) return res.status(400).json({ error: 'mesa_id é obrigatório' });
+  try {
+    const mesaResult = await pool.query(`SELECT id FROM mesas WHERE id = $1`, [mesa_id]);
+    if (!mesaResult.rows[0]) return res.status(404).json({ error: 'Mesa não encontrada' });
+
+    const result = await pool.query(
+      `UPDATE comandas SET mesa_id = $1 WHERE id = $2 AND status = 'aberta' RETURNING *`,
+      [mesa_id, req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Comanda não encontrada ou não está aberta' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[comandas/mesa]', err.message);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -173,6 +200,9 @@ router.post('/:id/orders', async (req, res) => {
     const comanda = comandaResult.rows[0];
     if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
     if (comanda.status !== 'aberta') return res.status(400).json({ error: 'Comanda não está aberta' });
+    if (!comanda.mesa_id && !comanda.code.startsWith('balcao_')) {
+      return res.status(400).json({ error: 'Selecione uma mesa antes de lançar pedidos nesta comanda' });
+    }
 
     let addedTotal = 0;
     const resolvedItems = [];

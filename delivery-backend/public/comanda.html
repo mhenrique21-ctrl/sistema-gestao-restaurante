@@ -344,6 +344,7 @@
     <div>
       <strong id="comanda-label">—</strong>
       <span class="status-badge" id="comanda-status-badge"></span>
+      <button class="btn btn-secondary" id="comanda-mesa-btn" style="padding:4px 10px;font-size:.78rem;margin-left:8px" onclick="openMesaPickerModal()"></button>
     </div>
     <div class="total" id="comanda-total">R$ 0,00</div>
   </div>
@@ -637,6 +638,7 @@ async function resolveCode(code) {
     cart = [];
     await loadMenuIfNeeded();
     showComandaScreen();
+    if (comandaPrecisaDeMesa()) openMesaPickerModal();
   } catch (e) {
     document.getElementById('scan-error').textContent = 'Erro de conexão';
   }
@@ -1314,6 +1316,14 @@ function showComandaScreen() {
   renderLaunched();
 }
 
+function comandaEhBalcao() {
+  return (comanda?.code || '').startsWith('balcao_');
+}
+
+function comandaPrecisaDeMesa() {
+  return comanda && !comanda.mesa_id && !comandaEhBalcao();
+}
+
 function renderComandaBar() {
   document.getElementById('comanda-label').textContent = comanda.label || comanda.code;
   const badge = document.getElementById('comanda-status-badge');
@@ -1321,7 +1331,69 @@ function renderComandaBar() {
   badge.className = 'status-badge ' + comanda.status;
   document.getElementById('comanda-total').textContent = fmt(comanda.total);
   document.getElementById('close-comanda-btn').disabled = comanda.status !== 'aberta';
-  document.getElementById('send-order-btn').disabled = comanda.status !== 'aberta' || cart.length === 0;
+  document.getElementById('send-order-btn').disabled = comanda.status !== 'aberta' || cart.length === 0 || comandaPrecisaDeMesa();
+
+  const mesaBtn = document.getElementById('comanda-mesa-btn');
+  if (comandaEhBalcao()) {
+    mesaBtn.classList.add('hidden');
+  } else {
+    mesaBtn.classList.remove('hidden');
+    mesaBtn.textContent = comanda.mesa_numero ? `🪑 Mesa ${comanda.mesa_numero}` : '🪑 Selecionar mesa';
+    mesaBtn.style.color = comanda.mesa_numero ? '' : 'var(--danger)';
+    mesaBtn.style.borderColor = comanda.mesa_numero ? '' : 'var(--danger)';
+  }
+}
+
+// ── Vínculo comanda ↔ mesa (obrigatório pra comandas normais) ──────
+async function openMesaPickerModal() {
+  if (comandaEhBalcao()) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'mesa-picker-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:420px">
+      <h3>Selecionar mesa</h3>
+      <p style="color:var(--c-muted);font-size:.85rem;margin:6px 0 16px">Toda comanda precisa estar vinculada a uma mesa antes de lançar pedidos.</p>
+      <div id="mesa-picker-list"><div class="cart-empty">Carregando...</div></div>
+      ${comandaPrecisaDeMesa() ? '' : '<div class="modal-actions"><button class="btn btn-secondary" onclick="document.getElementById(\'mesa-picker-backdrop\').remove()">Fechar</button></div>'}
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  try {
+    const res = await fetch(`${API}/api/mesas`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    const mesas = await res.json();
+    const listEl = document.getElementById('mesa-picker-list');
+    if (!res.ok || !mesas.length) { listEl.innerHTML = '<div class="cart-empty">Nenhuma mesa cadastrada</div>'; return; }
+    const grupos = { interna: mesas.filter(m => m.area === 'interna').sort((a,b) => a.numero - b.numero), externa: mesas.filter(m => m.area === 'externa').sort((a,b) => a.numero - b.numero) };
+    listEl.innerHTML = Object.entries(grupos).map(([area, lista]) => !lista.length ? '' : `
+      <div class="side-title" style="margin-top:10px">${area === 'interna' ? '🏠 Interna' : '🌤 Externa'}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:8px">
+        ${lista.map(m => `
+          <button class="btn ${comanda.mesa_id === m.id ? 'btn-primary' : 'btn-secondary'}" style="padding:10px 4px" onclick="selecionarMesa('${m.id}')">${m.numero}</button>
+        `).join('')}
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('mesa-picker-list').innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+async function selecionarMesa(mesaId) {
+  try {
+    const res = await fetch(`${API}/api/comandas/${comanda.id}/mesa`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ mesa_id: mesaId }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Erro ao vincular mesa'); return; }
+    await refreshOpenComanda();
+    document.getElementById('mesa-picker-backdrop')?.remove();
+  } catch (e) {
+    alert('Erro de conexão');
+  }
 }
 
 function renderCategoryTabs() {
