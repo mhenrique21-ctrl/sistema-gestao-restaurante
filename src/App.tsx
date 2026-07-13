@@ -8396,7 +8396,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
   });
 
   // ---- Modal Produto ----
-  const PROD_EMPTY={id:"",name:"",price:"",category_id:"",description:"",image_url:"",promo_price:"",featured:false,promo_days:[] as number[],active_days:[] as number[],all_days:true,print_target:""};
+  const PROD_EMPTY={id:"",name:"",price:"",category_id:"",description:"",image_url:"",promo_price:"",featured:false,promo_days:[] as number[],active_days:[] as number[],all_days:true,print_target:"",show_kiosk:true,show_delivery:true};
   const [prodModal,setProdModal]=useState<any>(null); // null = fechado
   const [uploading,setUploading]=useState(false);
 
@@ -8405,7 +8405,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
     id:p.id,name:p.name,price:String(p.price),category_id:p.category_id,description:p.description||"",
     image_url:p.image_url||"",promo_price:p.promo_price!=null?String(p.promo_price):"",featured:!!p.featured,
     promo_days:p.promo_days||[],active_days:p.active_days||[],all_days:!p.active_days||p.active_days.length===0,
-    print_target:p.print_target||"",
+    print_target:p.print_target||"",show_kiosk:p.show_kiosk!==false,show_delivery:p.show_delivery!==false,
   });
 
   const uploadImagem=async(file:File)=>{
@@ -8430,7 +8430,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
       name:m.name.trim(),price,category_id:m.category_id,description:m.description||null,
       image_url:m.image_url||null,promo_price:m.promo_price?parseMoney(m.promo_price):null,
       promo_days:m.promo_days,featured:m.featured,active_days:m.all_days?[]:m.active_days,
-      print_target:m.print_target||null,
+      print_target:m.print_target||null,show_kiosk:m.show_kiosk,show_delivery:m.show_delivery,
     };
     try{
       const r=await fetch(m.id?`/api/menu-produtos/${m.id}`:"/api/menu-produtos",{
@@ -8627,6 +8627,16 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
           <span style={{fontSize:13,color:"var(--text2)"}}>Dias ativos no cardápio: Todos os dias</span>
         </label>
         {!prodModal.all_days&&<div style={{marginBottom:10,opacity:1}}><PmDayPicker selected={prodModal.active_days} onChange={d=>setProdModal((f:any)=>({...f,active_days:d}))}/></div>}
+
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:6}}>📱 Onde aparece</div>
+        <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,cursor:"pointer"}}>
+          <input type="checkbox" checked={prodModal.show_kiosk} onChange={e=>setProdModal((f:any)=>({...f,show_kiosk:e.target.checked}))}/>
+          <span style={{fontSize:13}}>🖥️ Cardápio do tablet (autoatendimento)</span>
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,cursor:"pointer"}}>
+          <input type="checkbox" checked={prodModal.show_delivery} onChange={e=>setProdModal((f:any)=>({...f,show_delivery:e.target.checked}))}/>
+          <span style={{fontSize:13}}>🛵 Cardápio do Delivery</span>
+        </label>
 
         <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>🖨 Destino de impressão</div>
         <select value={prodModal.print_target} onChange={e=>setProdModal((f:any)=>({...f,print_target:e.target.value}))} className="inp" style={{marginBottom:4}}>
