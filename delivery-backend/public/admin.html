@@ -723,6 +723,20 @@ function getPromoDays() {
   return checked.length > 0 ? checked : [];
 }
 
+function channelToggleHtml(showKiosk = true, showDelivery = true) {
+  return `<div>
+    <label>📱 Onde aparece</label>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-weight:400">
+      <input type="checkbox" id="f-show-kiosk" ${showKiosk ? 'checked' : ''} style="width:auto">
+      🖥️ Cardápio do tablet (autoatendimento)
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+      <input type="checkbox" id="f-show-delivery" ${showDelivery ? 'checked' : ''} style="width:auto">
+      🛵 Cardápio do Delivery
+    </label>
+  </div>`;
+}
+
 function modalNovoProduto() {
   const opts = categorias.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
   openModal('Novo Produto', `
@@ -743,6 +757,7 @@ function modalNovoProduto() {
       </div>
       ${promoDaysHtml(null)}
       ${activeDaysHtml(null)}
+      ${channelToggleHtml(true, true)}
       <div><label>🖨 Destino de impressão</label>
         <select id="f-print">
           <option value="">Somente Caixa (padrão)</option>
@@ -763,6 +778,8 @@ function modalNovoProduto() {
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
       active_days: getActiveDays(),
       print_target: v('f-print') || null,
+      show_kiosk: document.getElementById('f-show-kiosk').checked,
+      show_delivery: document.getElementById('f-show-delivery').checked,
     });
     toast('Produto criado!'); closeModal(); pageProdutos();
   });
@@ -790,6 +807,7 @@ function modalEditarProduto(id) {
       </div>
       ${promoDaysHtml(p.promo_days || null)}
       ${activeDaysHtml(p.active_days || null)}
+      ${channelToggleHtml(p.show_kiosk !== false, p.show_delivery !== false)}
       <div><label>🖨 Destino de impressão</label>
         <select id="f-print">
           <option value="" ${!p.print_target?'selected':''}>Somente Caixa (padrão)</option>
@@ -812,6 +830,8 @@ function modalEditarProduto(id) {
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
       active_days: getActiveDays(),
       print_target: v('f-print') || null,
+      show_kiosk: document.getElementById('f-show-kiosk').checked,
+      show_delivery: document.getElementById('f-show-delivery').checked,
     });
     toast('Produto atualizado!'); closeModal(); pageProdutos();
   });

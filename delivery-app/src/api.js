@@ -27,7 +27,7 @@ export const api = {
   register: (name, phone, email) => request('POST', '/auth/register-customer', { name, phone, email }),
 
   // Menu
-  menu: () => request('GET', '/menu'),
+  menu: () => request('GET', '/menu?channel=delivery'),
 
   // Bairros e configurações
   neighborhoods: () => request('GET', '/neighborhoods'),

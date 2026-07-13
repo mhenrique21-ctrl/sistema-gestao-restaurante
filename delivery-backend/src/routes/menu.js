@@ -37,9 +37,14 @@ router.post('/upload', authMiddleware, requireRole('admin'), upload.single('imag
 });
 
 // GET /api/menu — cardápio completo agrupado por categoria
+// ?channel=kiosk|delivery filtra por show_kiosk/show_delivery — sem o
+// parâmetro (ex: PDV fazendo venda de balcão), mostra tudo que está
+// disponível, sem restrição de canal.
 router.get('/', async (req, res) => {
   try {
     const todayJs = new Date().getDay(); // 0=Dom, 1=Seg … 6=Sáb
+    const channelCol = req.query.channel === 'kiosk' ? 'show_kiosk' : req.query.channel === 'delivery' ? 'show_delivery' : null;
+    const channelSql = channelCol ? `AND p.${channelCol} = true` : '';
     const result = await pool.query(`
       SELECT
         c.id AS category_id,
@@ -61,6 +66,7 @@ router.get('/', async (req, res) => {
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id AND p.available = true
         AND (p.active_days IS NULL OR $1 = ANY(p.active_days))
+        ${channelSql}
       WHERE c.active = true
       ORDER BY c.sort_order, p.sort_order, p.name
     `, [todayJs]);
@@ -145,7 +151,8 @@ router.get('/admin', authMiddleware, async (req, res) => {
         c.id AS category_id, c.name AS category_name, c.sort_order AS category_sort,
         p.id AS product_id, p.name AS product_name, p.description, p.price,
         p.image_url AS product_image, p.available, p.featured, p.promo_price,
-        p.promo_label, p.sort_order AS product_sort, p.active_days, p.print_target
+        p.promo_label, p.sort_order AS product_sort, p.active_days, p.print_target,
+        p.show_kiosk, p.show_delivery
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id
       WHERE c.active = true
@@ -161,6 +168,8 @@ router.get('/admin', authMiddleware, async (req, res) => {
         sort_order: row.product_sort, category_id: row.category_id, category_name: row.category_name,
         active_days: row.active_days,
         print_target: row.print_target,
+        show_kiosk: row.show_kiosk,
+        show_delivery: row.show_delivery,
       });
     }
     res.json(Object.values(cats));
@@ -187,7 +196,7 @@ router.get('/products/:id', async (req, res) => {
 
 // POST /api/menu/products — criar produto (admin)
 router.post('/products', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days } = req.body;
+  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery } = req.body;
   if (!category_id || !name || price === undefined) {
     return res.status(400).json({ error: 'category_id, name e price são obrigatórios' });
   }
@@ -197,10 +206,15 @@ router.post('/products', authMiddleware, requireRole('admin'), async (req, res) 
   const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
   const targetSql = target ? `'${target}'` : 'NULL';
   const promoDaysSql = promoArr ? `'{${promoArr.join(',')}}'::int[]` : 'NULL';
+  // show_kiosk/show_delivery entram como literal SQL (não como $N) de propósito —
+  // este projeto tem um bug conhecido de driver no VPS com parâmetros $10+
+  // (a substituição de string do wrapper corrompe o "$1" embutido em "$10").
+  const showKioskSql = show_kiosk === false ? 'FALSE' : 'TRUE';
+  const showDeliverySql = show_delivery === false ? 'FALSE' : 'TRUE';
   try {
     const result = await pool.query(
-      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}, ${promoDaysSql}) RETURNING *`,
+      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}, ${promoDaysSql}, ${showKioskSql}, ${showDeliverySql}) RETURNING *`,
       [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null]
     );
     res.status(201).json(result.rows[0]);
@@ -259,6 +273,11 @@ router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, 
     const sql = pdays ? `'{${pdays.join(',')}}'::int[]` : 'NULL';
     updates.push(`promo_days = ${sql}`);
   }
+
+  // Literal SQL (não $N) de propósito — mesmo motivo do active_days/promo_days
+  // acima: evitar estourar $9 parâmetros (bug do driver no VPS com $10+).
+  if (req.body.show_kiosk !== undefined) updates.push(`show_kiosk = ${req.body.show_kiosk ? 'TRUE' : 'FALSE'}`);
+  if (req.body.show_delivery !== undefined) updates.push(`show_delivery = ${req.body.show_delivery ? 'TRUE' : 'FALSE'}`);
 
   if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
 

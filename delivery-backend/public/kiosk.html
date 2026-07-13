@@ -412,7 +412,7 @@ const CAT_ICONS = {
 
 async function loadMenuIfNeeded() {
   if (menu.length) return;
-  const res = await fetch(`${API}/api/menu`);
+  const res = await fetch(`${API}/api/menu?channel=kiosk`);
   menu = await res.json();
   const offers = getOffers();
   activeCategory = offers.length > 0 ? 'ofertas' : (visibleCategories()[0]?.id || null);
