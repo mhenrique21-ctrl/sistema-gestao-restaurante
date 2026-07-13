@@ -959,7 +959,7 @@ async function renderAddonsSection(productId, reopen) {
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <strong style="font-size:.83rem;color:var(--text)">${g.name}</strong>
-            <span style="background:${g.required?'#dc2626':'#475569'};color:#fff;font-size:.65rem;padding:1px 7px;border-radius:999px">${g.required ? 'obrigatório' : 'opcional'}</span>
+            <button type="button" onclick="toggleGrupoObrigatorio('${productId}','${g.id}',${!g.required},${g.min_select})" title="Clique para tornar ${g.required ? 'opcional' : 'obrigatório'}" style="background:${g.required?'#dc2626':'#475569'};color:#fff;font-size:.65rem;padding:1px 7px;border-radius:999px;border:none;cursor:pointer;font-weight:600">${g.required ? '🔒 obrigatório' : 'opcional'}</button>
             <span style="color:var(--muted);font-size:.72rem">máx ${g.max_select}</span>
             ${g.active_days && g.active_days.length > 0 ? `<span style="background:#0f172a;border:1px solid var(--border);color:#94a3b8;font-size:.65rem;padding:1px 7px;border-radius:999px">📅 ${g.active_days.map(v=>DAYS_WEEK.find(d=>d.v===v)?.l||v).join(', ')}</span>` : ''}
           </div>
@@ -1080,6 +1080,16 @@ async function removerGrupoAddon(productId, groupId) {
   await api('DELETE', '/menu/addon-groups/' + groupId);
   toast('Grupo removido');
   renderAddonsSection(productId);
+}
+
+async function toggleGrupoObrigatorio(productId, groupId, required, minSelect) {
+  try {
+    const payload = { required };
+    if (required && (!minSelect || minSelect < 1)) payload.min_select = 1;
+    await api('PATCH', `/menu/addon-groups/${groupId}`, payload);
+    toast(required ? 'Grupo marcado como obrigatório' : 'Grupo marcado como opcional');
+    renderAddonsSection(productId);
+  } catch(e) { toast('Erro: ' + e.message, true); }
 }
 
 function modalNovaOpcaoAddon(productId, groupId) {
