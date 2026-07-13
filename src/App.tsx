@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { flushSync } from "react-dom";
 
 // ===================== STORAGE =====================
@@ -8338,6 +8338,20 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
 // Fala com o delivery-backend via proxy do próprio new_server.js (rotas
 // /api/menu-produtos* e /api/menu-categorias*), autenticado por um token de
 // serviço guardado no backend — editar aqui reflete direto no PDV/Delivery.
+const PM_DAYS=[{v:1,l:"Seg"},{v:2,l:"Ter"},{v:3,l:"Qua"},{v:4,l:"Qui"},{v:5,l:"Sex"},{v:6,l:"Sáb"},{v:0,l:"Dom"}];
+
+function PmDayPicker({selected,onChange,pill}:{selected:number[],onChange:(d:number[])=>void,pill?:boolean}){
+  const toggle=(v:number)=>onChange(selected.includes(v)?selected.filter(x=>x!==v):[...selected,v]);
+  return <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+    {PM_DAYS.map(d=>(
+      <label key={d.v} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,cursor:"pointer",
+        padding:pill?"4px 10px":"4px 8px",borderRadius:pill?20:6,border:pill?"1px solid var(--border2)":"none",background:"var(--bg4)"}}>
+        <input type="checkbox" checked={selected.includes(d.v)} onChange={()=>toggle(d.v)} style={{width:"auto"}}/>{d.l}
+      </label>
+    ))}
+  </div>;
+}
+
 function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,setPendingSub?:(s:string|null)=>void}){
   const [subTab,setSubTabState]=useState(pendingSub==="categorias"?"categorias":"produtos");
   const setSubTab=(s:string)=>{setSubTabState(s);setPendingSub?.(null);};
@@ -8347,7 +8361,6 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
   const [catalogo,setCatalogo]=useState<any[]>([]); // categorias com produtos aninhados (vem de /api/menu-produtos)
   const [loading,setLoading]=useState(true);
   const [erro,setErro]=useState("");
-  const [busca,setBusca]=useState("");
 
   const load=async()=>{
     setLoading(true);setErro("");
@@ -8362,19 +8375,38 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
   };
   useEffect(()=>{load();},[]);
 
-  // ---- Produtos ----
-  const PROD_EMPTY={id:"",name:"",price:"",category_id:"",description:"",image_url:""};
-  const [prodForm,setProdForm]=useState<any>(PROD_EMPTY);
-  const [prodEditId,setProdEditId]=useState<string|null>(null);
-  const [uploading,setUploading]=useState(false);
-  const prodFormRef=useRef<HTMLDivElement>(null);
+  const produtosFlat=useMemo(()=>catalogo.flatMap((c:any)=>c.products||[]),[catalogo]);
 
-  const startEditProduto=(p:any)=>{
-    setProdForm({id:p.id,name:p.name,price:String(p.price),category_id:p.category_id,description:p.description||"",image_url:p.image_url||""});
-    setProdEditId(p.id);
-    setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);
-  };
-  const cancelEditProduto=()=>{setProdForm(PROD_EMPTY);setProdEditId(null);};
+  // ---- Produtos: filtros (igual ADMIN-03) ----
+  const [busca,setBusca]=useState("");
+  const [filtroCat,setFiltroCat]=useState("");
+  const [precoMin,setPrecoMin]=useState("");
+  const [precoMax,setPrecoMax]=useState("");
+  const [statusFiltro,setStatusFiltro]=useState<"todos"|"ativos"|"inativos">("todos");
+  const inativosCount=produtosFlat.filter((p:any)=>!p.available).length;
+
+  const listaFiltrada=produtosFlat.filter((p:any)=>{
+    if(busca&&!p.name.toLowerCase().includes(busca.toLowerCase()))return false;
+    if(statusFiltro==="ativos"&&!p.available)return false;
+    if(statusFiltro==="inativos"&&p.available)return false;
+    if(filtroCat&&p.category_id!==filtroCat)return false;
+    if(precoMin&&parseFloat(p.price)<parseFloat(precoMin))return false;
+    if(precoMax&&parseFloat(p.price)>parseFloat(precoMax))return false;
+    return true;
+  });
+
+  // ---- Modal Produto ----
+  const PROD_EMPTY={id:"",name:"",price:"",category_id:"",description:"",image_url:"",promo_price:"",featured:false,promo_days:[] as number[],active_days:[] as number[],all_days:true,print_target:""};
+  const [prodModal,setProdModal]=useState<any>(null); // null = fechado
+  const [uploading,setUploading]=useState(false);
+
+  const openNovoProduto=()=>setProdModal({...PROD_EMPTY});
+  const openEditarProduto=(p:any)=>setProdModal({
+    id:p.id,name:p.name,price:String(p.price),category_id:p.category_id,description:p.description||"",
+    image_url:p.image_url||"",promo_price:p.promo_price!=null?String(p.promo_price):"",featured:!!p.featured,
+    promo_days:p.promo_days||[],active_days:p.active_days||[],all_days:!p.active_days||p.active_days.length===0,
+    print_target:p.print_target||"",
+  });
 
   const uploadImagem=async(file:File)=>{
     setUploading(true);
@@ -8383,24 +8415,30 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
       const r=await fetch("/api/menu-produtos/upload",{method:"POST",body:fd});
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao enviar imagem");
-      setProdForm((f:any)=>({...f,image_url:d.url}));
+      setProdModal((f:any)=>({...f,image_url:d.url}));
     }catch(e:any){alert(e.message||"Erro ao enviar imagem");}
     setUploading(false);
   };
 
   const saveProduto=async()=>{
-    if(!prodForm.name.trim())return alert("Nome é obrigatório.");
-    if(!prodForm.category_id)return alert("Selecione uma categoria.");
-    const price=parseMoney(prodForm.price);
+    const m=prodModal;
+    if(!m.name.trim())return alert("Nome é obrigatório.");
+    if(!m.category_id)return alert("Selecione uma categoria.");
+    const price=parseMoney(m.price);
     if(!(price>0))return alert("Informe um preço válido.");
-    const payload={name:prodForm.name.trim(),price,category_id:prodForm.category_id,description:prodForm.description||null,image_url:prodForm.image_url||null};
+    const payload:any={
+      name:m.name.trim(),price,category_id:m.category_id,description:m.description||null,
+      image_url:m.image_url||null,promo_price:m.promo_price?parseMoney(m.promo_price):null,
+      promo_days:m.promo_days,featured:m.featured,active_days:m.all_days?[]:m.active_days,
+      print_target:m.print_target||null,
+    };
     try{
-      const r=await fetch(prodEditId?`/api/menu-produtos/${prodEditId}`:"/api/menu-produtos",{
-        method:prodEditId?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
+      const r=await fetch(m.id?`/api/menu-produtos/${m.id}`:"/api/menu-produtos",{
+        method:m.id?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
       });
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao salvar produto");
-      cancelEditProduto();
+      setProdModal(null);
       await load();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
@@ -8414,7 +8452,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
   };
 
   const delProduto=async(p:any)=>{
-    if(!confirm(`Excluir o produto "${p.name}"?`))return;
+    if(!confirm(`Excluir o produto "${p.name}"? Essa ação não pode ser desfeita.`))return;
     try{
       const r=await fetch(`/api/menu-produtos/${p.id}`,{method:"DELETE"});
       const d=await r.json();
@@ -8423,34 +8461,26 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
 
-  const produtosFiltrados=catalogo.map(c=>({
-    ...c,
-    products:(c.products||[]).filter((p:any)=>!busca||p.name.toLowerCase().includes(busca.toLowerCase())),
-  })).filter(c=>c.products.length>0||!busca);
-
-  // ---- Categorias ----
-  const CAT_EMPTY={id:"",name:"",sort_order:"0",printer:""};
-  const [catForm,setCatForm]=useState<any>(CAT_EMPTY);
-  const [catEditId,setCatEditId]=useState<string|null>(null);
-  const catFormRef=useRef<HTMLDivElement>(null);
-
-  const startEditCategoria=(c:any)=>{
-    setCatForm({id:c.id,name:c.name,sort_order:String(c.sort_order??0),printer:c.printer||""});
-    setCatEditId(c.id);
-    setTimeout(()=>catFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);
-  };
-  const cancelEditCategoria=()=>{setCatForm(CAT_EMPTY);setCatEditId(null);};
+  // ---- Modal Categoria ----
+  const CAT_EMPTY={id:"",name:"",description:"",sort_order:"0",printer:"",applyPrinter:true};
+  const [catModal,setCatModal]=useState<any>(null);
+  const openNovaCategoria=()=>setCatModal({...CAT_EMPTY});
+  const openEditarCategoria=(c:any)=>setCatModal({id:c.id,name:c.name,description:c.description||"",sort_order:String(c.sort_order??0),printer:c.printer||"",applyPrinter:true});
 
   const saveCategoria=async()=>{
-    if(!catForm.name.trim())return alert("Nome é obrigatório.");
-    const payload={name:catForm.name.trim(),sort_order:parseInt(catForm.sort_order)||0,printer:catForm.printer||null};
+    const m=catModal;
+    if(!m.name.trim())return alert("Nome é obrigatório.");
+    const payload={name:m.name.trim(),description:m.description||null,sort_order:parseInt(m.sort_order)||0,printer:m.printer||null};
     try{
-      const r=await fetch(catEditId?`/api/menu-categorias/${catEditId}`:"/api/menu-categorias",{
-        method:catEditId?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
+      const r=await fetch(m.id?`/api/menu-categorias/${m.id}`:"/api/menu-categorias",{
+        method:m.id?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
       });
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao salvar categoria");
-      cancelEditCategoria();
+      if(m.id&&m.applyPrinter){
+        await fetch(`/api/menu-categorias/${m.id}/apply-printer`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({printer:m.printer||null})});
+      }
+      setCatModal(null);
       await load();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
@@ -8463,9 +8493,12 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
 
+  const ptLabel=(t:string)=>t==="cozinha"?"🍳 Cozinha":t==="balcao"?"🏪 Balcão":"🧾 Caixa";
+  const ptColor=(t:string)=>t==="cozinha"?"#f59e0b":t==="balcao"?"#3b82f6":"#64748b";
+
   return <div>
     <div className="section-title">🍽️ Produtos do Cardápio</div>
-    <div className="muted" style={{fontSize:11,marginBottom:12}}>Catálogo real — o que você mudar aqui aparece direto no PDV e no Delivery.</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Catálogo real — o que você mudar aqui aparece direto no PDV e no Delivery (mesmo cadastro do Admin).</div>
 
     <div style={{display:"flex",gap:5,marginBottom:14}}>
       <button className="pill" onClick={()=>setSubTab("produtos")} style={{background:subTab==="produtos"?"#7c8fff":"var(--bg4)",color:subTab==="produtos"?"#fff":"#777"}}>🍽️ Produtos</button>
@@ -8476,77 +8509,55 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
     {loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
 
     {subTab==="produtos"&&<div>
-      <div ref={prodFormRef} className="card" style={{marginBottom:12,border:`1px solid ${prodEditId?"#7c8fff55":"var(--border)"}`}}>
-        <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{prodEditId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
-        <input placeholder="Nome do produto *" value={prodForm.name} onChange={e=>setProdForm((f:any)=>({...f,name:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <div className="row" style={{marginBottom:8}}>
-          <select value={prodForm.category_id} onChange={e=>setProdForm((f:any)=>({...f,category_id:e.target.value}))} className="inp">
-            <option value="">Categoria...</option>
-            {cats.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <MoneyInput value={prodForm.price} onChange={(v:string)=>setProdForm((f:any)=>({...f,price:v}))} placeholder="Preço *" className="inp"/>
-        </div>
-        <input placeholder="Descrição (opcional)" value={prodForm.description} onChange={e=>setProdForm((f:any)=>({...f,description:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          {prodForm.image_url&&<img src={prodForm.image_url} alt="" style={{width:44,height:44,borderRadius:8,objectFit:"cover"}}/>}
-          <label className="btn" style={{background:"var(--bg4)",color:"var(--text2)",fontSize:12,cursor:"pointer"}}>
-            {uploading?"Enviando...":"📷 "+(prodForm.image_url?"Trocar imagem":"Adicionar imagem")}
-            <input type="file" accept="image/*" style={{display:"none"}} disabled={uploading}
-              onChange={e=>{const f=e.target.files?.[0];if(f)uploadImagem(f);e.target.value="";}}/>
-          </label>
-        </div>
-        <div className="row">
-          <button className="btn" onClick={saveProduto} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
-            {prodEditId?"💾 Atualizar":"➕ Cadastrar"}
-          </button>
-          {prodEditId&&<button className="btn" onClick={cancelEditProduto} style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
-        </div>
+      {/* Toolbar de filtros — igual ADMIN-03 */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap" as const,marginBottom:12,alignItems:"center"}}>
+        <input placeholder="🔍 Buscar por nome..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{flex:2,minWidth:160,marginBottom:0}}/>
+        <select value={filtroCat} onChange={e=>setFiltroCat(e.target.value)} className="inp" style={{marginBottom:0,width:"auto"}}>
+          <option value="">Todas categorias</option>
+          {cats.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <input type="number" placeholder="R$ mín" value={precoMin} onChange={e=>setPrecoMin(e.target.value)} className="inp" style={{width:80,marginBottom:0}}/>
+        <input type="number" placeholder="R$ máx" value={precoMax} onChange={e=>setPrecoMax(e.target.value)} className="inp" style={{width:80,marginBottom:0}}/>
+        <button className="pill" onClick={()=>setStatusFiltro("todos")} style={{background:statusFiltro==="todos"?"#7c8fff":"var(--bg4)",color:statusFiltro==="todos"?"#fff":"#777"}}>Todos</button>
+        <button className="pill" onClick={()=>setStatusFiltro("ativos")} style={{background:statusFiltro==="ativos"?"#22c55e":"var(--bg4)",color:statusFiltro==="ativos"?"#fff":"#777"}}>✅ Ativos</button>
+        <button className="pill" onClick={()=>setStatusFiltro("inativos")} style={{background:statusFiltro==="inativos"?"#ef4444":"var(--bg4)",color:statusFiltro==="inativos"?"#fff":"#777"}}>🚫 Indisponíveis{inativosCount>0?` (${inativosCount})`:""}</button>
+        <button className="btn" onClick={openNovoProduto} style={{background:"#7c8fff",color:"#fff",fontSize:13,marginLeft:"auto"}}>+ Novo produto</button>
       </div>
 
-      <input placeholder="🔍 Buscar produto..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{marginBottom:12}}/>
-
-      {produtosFiltrados.map((cat:any)=>(
-        <div key={cat.id} style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:"var(--acc)",marginBottom:6}}>{cat.name} <span className="muted">({cat.products.length})</span></div>
-          {cat.products.map((p:any)=>(
-            <div key={p.id} className="card" style={{marginBottom:6,opacity:p.available?1:.55}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                {p.image_url?<img src={p.image_url} alt="" style={{width:36,height:36,borderRadius:7,objectFit:"cover",flexShrink:0}}/>:<div style={{width:36,height:36,borderRadius:7,background:"var(--bg4)",flexShrink:0}}/>}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:600,fontSize:13}}>{p.name}</div>
-                  <div className="muted" style={{fontSize:11}}>{fmtMoney(p.price)}{!p.available&&" · pausado"}</div>
-                </div>
-                <button onClick={()=>toggleDisponivel(p)} title={p.available?"Pausar":"Ativar"} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12}}>{p.available?"⏸️":"▶️"}</button>
-                <button onClick={()=>startEditProduto(p)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
-                <button onClick={()=>delProduto(p)} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ))}
-      {!loading&&!produtosFiltrados.length&&<EmptyState msg="Nenhum produto encontrado."/>}
+      <div className="card" style={{padding:0,overflowX:"auto" as const}}>
+        <div style={{padding:"10px 14px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--border)"}}>Produtos ({listaFiltrada.length})</div>
+        <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:13}}>
+          <thead><tr style={{textAlign:"left" as const,color:"var(--text2)",fontSize:11,textTransform:"uppercase" as const}}>
+            <th style={{padding:"8px 14px"}}>Nome</th><th>Categoria</th><th>Preço</th><th>Impressora</th><th>Status</th><th>Ações</th>
+          </tr></thead>
+          <tbody>
+            {listaFiltrada.map((p:any)=>(
+              <tr key={p.id} style={{borderTop:"1px solid var(--border)",opacity:p.available?1:.6}}>
+                <td style={{padding:"8px 14px"}}>{p.name}</td>
+                <td><span className="tag" style={{background:"#1e2a5e44",color:"#7c8fff"}}>{p.category_name}</span></td>
+                <td style={{fontFamily:"monospace"}}>{fmtMoney(p.price)}</td>
+                <td><span style={{color:ptColor(p.print_target),fontSize:11,fontWeight:700}}>{ptLabel(p.print_target)}</span></td>
+                <td>
+                  <button onClick={()=>toggleDisponivel(p)} style={{padding:"4px 10px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                    background:p.available?"#d1fae5":"#fee2e2",color:p.available?"#065f46":"#991b1b"}}>{p.available?"✅ Disponível":"🚫 Indisponível"}</button>
+                </td>
+                <td style={{display:"flex",gap:5,padding:"8px 14px"}}>
+                  <button onClick={()=>openEditarProduto(p)} title="Editar" style={{background:"var(--bg4)",border:"none",borderRadius:6,cursor:"pointer",padding:"5px 8px",fontSize:12}}>✏️</button>
+                  <button onClick={()=>toggleDisponivel(p)} title={p.available?"Tornar indisponível":"Tornar disponível"} style={{background:p.available?"#f59e0b":"#10b981",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",padding:"5px 8px",fontSize:12}}>{p.available?"🚫":"✅"}</button>
+                  <button onClick={()=>delProduto(p)} title="Excluir" style={{background:"#ef444422",color:"#ef4444",border:"none",borderRadius:6,cursor:"pointer",padding:"5px 8px",fontSize:12}}>🗑️</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!loading&&!listaFiltrada.length&&<div style={{padding:20}}><EmptyState msg="Nenhum produto encontrado."/></div>}
+      </div>
     </div>}
 
     {subTab==="categorias"&&<div>
-      <div ref={catFormRef} className="card" style={{marginBottom:12,border:`1px solid ${catEditId?"#7c8fff55":"var(--border)"}`}}>
-        <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{catEditId?"✏️ Editar Categoria":"➕ Nova Categoria"}</div>
-        <input placeholder="Nome da categoria *" value={catForm.name} onChange={e=>setCatForm((f:any)=>({...f,name:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <div className="row" style={{marginBottom:8}}>
-          <input type="number" placeholder="Ordem" value={catForm.sort_order} onChange={e=>setCatForm((f:any)=>({...f,sort_order:e.target.value}))} className="inp"/>
-          <select value={catForm.printer} onChange={e=>setCatForm((f:any)=>({...f,printer:e.target.value}))} className="inp">
-            <option value="">Impressora: padrão</option>
-            <option value="cozinha">Impressora: Cozinha</option>
-            <option value="balcao">Impressora: Balcão</option>
-          </select>
-        </div>
-        <div className="row">
-          <button className="btn" onClick={saveCategoria} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
-            {catEditId?"💾 Atualizar":"➕ Cadastrar"}
-          </button>
-          {catEditId&&<button className="btn" onClick={cancelEditCategoria} style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
-        </div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+        <button className="btn" onClick={openNovaCategoria} style={{background:"#7c8fff",color:"#fff",fontSize:13}}>+ Nova categoria</button>
       </div>
-
       {cats.map((c:any)=>(
         <div key={c.id} className="card" style={{marginBottom:6,opacity:c.active?1:.55}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -8555,11 +8566,108 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
               <div className="muted" style={{fontSize:11}}>Ordem {c.sort_order}{c.printer?` · 🖨️ ${c.printer}`:""}{!c.active&&" · inativa"}</div>
             </div>
             <button onClick={()=>toggleCategoriaAtiva(c)} title={c.active?"Desativar":"Ativar"} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12}}>{c.active?"⏸️":"▶️"}</button>
-            <button onClick={()=>startEditCategoria(c)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+            <button onClick={()=>openEditarCategoria(c)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
           </div>
         </div>
       ))}
       {!loading&&!cats.length&&<EmptyState msg="Nenhuma categoria encontrada."/>}
+    </div>}
+
+    {/* ===== Modal Produto (igual ADMIN-03) ===== */}
+    {prodModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto" as const}}>
+      <div className="card" style={{width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto" as const}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>{prodModal.id?"✏️ Editar Produto":"➕ Novo Produto"}</div>
+
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Nome</div>
+        <input value={prodModal.name} onChange={e=>setProdModal((f:any)=>({...f,name:e.target.value}))} className="inp" style={{marginBottom:10}}/>
+
+        <div className="row" style={{marginBottom:10}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Preço (R$)</div>
+            <MoneyInput value={prodModal.price} onChange={(v:string)=>setProdModal((f:any)=>({...f,price:v}))} className="inp"/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Categoria</div>
+            <select value={prodModal.category_id} onChange={e=>setProdModal((f:any)=>({...f,category_id:e.target.value}))} className="inp">
+              <option value="">Selecione...</option>
+              {cats.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Descrição</div>
+        <textarea value={prodModal.description} onChange={e=>setProdModal((f:any)=>({...f,description:e.target.value}))} className="inp" style={{marginBottom:10,minHeight:60}}/>
+
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Imagem do produto</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          {prodModal.image_url&&<img src={prodModal.image_url} alt="" style={{width:52,height:52,borderRadius:8,objectFit:"cover"}}/>}
+          <label className="btn" style={{background:"var(--bg4)",color:"var(--text2)",fontSize:12,cursor:"pointer"}}>
+            {uploading?"Enviando...":"📷 "+(prodModal.image_url?"Trocar imagem":"Escolher imagem")}
+            <input type="file" accept="image/*" style={{display:"none"}} disabled={uploading}
+              onChange={e=>{const f=e.target.files?.[0];if(f)uploadImagem(f);e.target.value="";}}/>
+          </label>
+        </div>
+
+        <div className="row" style={{marginBottom:10,alignItems:"center"}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Preço promocional (R$, opcional)</div>
+            <MoneyInput value={prodModal.promo_price} onChange={(v:string)=>setProdModal((f:any)=>({...f,promo_price:v}))} className="inp"/>
+          </div>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",flex:1,paddingTop:16}}>
+            <input type="checkbox" checked={prodModal.featured} onChange={e=>setProdModal((f:any)=>({...f,featured:e.target.checked}))}/>
+            <span style={{fontSize:13}}>Produto em destaque</span>
+          </label>
+        </div>
+
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:6}}>🏷 Dias da promoção <span style={{fontWeight:400,color:"var(--text2)"}}>(vazio = sempre ativa)</span></div>
+        <div style={{marginBottom:10}}><PmDayPicker selected={prodModal.promo_days} onChange={d=>setProdModal((f:any)=>({...f,promo_days:d}))} pill/></div>
+
+        <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,cursor:"pointer"}}>
+          <input type="checkbox" checked={prodModal.all_days} onChange={e=>setProdModal((f:any)=>({...f,all_days:e.target.checked}))}/>
+          <span style={{fontSize:13,color:"var(--text2)"}}>Dias ativos no cardápio: Todos os dias</span>
+        </label>
+        {!prodModal.all_days&&<div style={{marginBottom:10,opacity:1}}><PmDayPicker selected={prodModal.active_days} onChange={d=>setProdModal((f:any)=>({...f,active_days:d}))}/></div>}
+
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>🖨 Destino de impressão</div>
+        <select value={prodModal.print_target} onChange={e=>setProdModal((f:any)=>({...f,print_target:e.target.value}))} className="inp" style={{marginBottom:4}}>
+          <option value="">Somente Caixa (padrão)</option>
+          <option value="cozinha">🍳 Cozinha</option>
+          <option value="balcao">🏪 Balcão</option>
+        </select>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:14}}>Independente do destino, todos os itens sempre saem no Caixa.</div>
+
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn" onClick={()=>setProdModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
+          <button className="btn" onClick={saveProduto} style={{background:"#7c8fff",color:"#fff",flex:1}}>Salvar</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* ===== Modal Categoria ===== */}
+    {catModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div className="card" style={{width:"100%",maxWidth:400}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>{catModal.id?"✏️ Editar Categoria":"➕ Nova Categoria"}</div>
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Nome</div>
+        <input value={catModal.name} onChange={e=>setCatModal((f:any)=>({...f,name:e.target.value}))} className="inp" style={{marginBottom:10}}/>
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Descrição</div>
+        <input value={catModal.description} onChange={e=>setCatModal((f:any)=>({...f,description:e.target.value}))} className="inp" style={{marginBottom:10}}/>
+        {!catModal.id&&<><div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Ordem de exibição</div>
+        <input type="number" value={catModal.sort_order} onChange={e=>setCatModal((f:any)=>({...f,sort_order:e.target.value}))} className="inp" style={{marginBottom:10}}/></>}
+        <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Impressora</div>
+        <select value={catModal.printer} onChange={e=>setCatModal((f:any)=>({...f,printer:e.target.value}))} className="inp" style={{marginBottom:catModal.id?6:14}}>
+          <option value="">Padrão (Caixa)</option>
+          <option value="cozinha">🍳 Cozinha</option>
+          <option value="balcao">🏪 Balcão</option>
+        </select>
+        {catModal.id&&<label style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,cursor:"pointer"}}>
+          <input type="checkbox" checked={catModal.applyPrinter} onChange={e=>setCatModal((f:any)=>({...f,applyPrinter:e.target.checked}))}/>
+          <span style={{fontSize:12,color:"var(--text2)"}}>Aplicar impressora a todos os produtos desta categoria</span>
+        </label>}
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn" onClick={()=>setCatModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
+          <button className="btn" onClick={saveCategoria} style={{background:"#7c8fff",color:"#fff",flex:1}}>Salvar</button>
+        </div>
+      </div>
     </div>}
   </div>;
 }
