@@ -673,7 +673,7 @@ export default function App() {
   const [empresa,setEmpresa] = useState(()=>{
     try{const l=JSON.parse(sessionStorage.getItem("app_login")||"null");return l?.empresa||"CONFRARIA";}catch{return "CONFRARIA";}
   });
-  const [theme,setTheme]   = useState<"dark"|"light">(()=>(localStorage.getItem("app_theme")||"dark") as "dark"|"light");
+  const [theme,setTheme]   = useState<"dark"|"light">(()=>(localStorage.getItem("app_theme")||"light") as "dark"|"light");
   const [menuLayout,setMenuLayout]=useState<"bottom"|"top"|"fab">(()=>(localStorage.getItem("app_menu_layout")||"bottom") as "bottom"|"top"|"fab");
   const [menuPickerOpen,setMenuPickerOpen]=useState(false);
   const [fabOpen,setFabOpen]=useState(false);
