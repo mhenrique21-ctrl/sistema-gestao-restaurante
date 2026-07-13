@@ -11,7 +11,7 @@ const WS_STATION = 'caixa';
 const PRINTERS   = {
   caixa:   process.env.PRINTER_CAIXA   || 'CAIXA PRINCIPAL',
   cozinha: process.env.PRINTER_COZINHA || 'ELGIN I8 COZINHA',
-  balcao:  process.env.PRINTER_BALCAO  || 'MP-4200 TH',
+  balcao:  process.env.PRINTER_BALCAO  || 'CAIXA PRINCIPAL',
 };
 const PS_SCRIPT    = 'C:\\print-agent\\rawprint.ps1';
 const RECONNECT_MS = 5000;
@@ -19,6 +19,16 @@ const RECONNECT_MS = 5000;
 function fmt(v) { return 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',','); }
 function fmtTime() {
   return new Date().toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'2-digit'});
+}
+
+function listLocalPrinters() {
+  try {
+    const out = execSync('powershell -NoProfile -Command "Get-Printer | Select-Object -ExpandProperty Name"', { timeout: 5000 }).toString();
+    return out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  } catch (e) {
+    console.error('[agent] Erro ao listar impressoras:', e.message);
+    return [];
+  }
 }
 
 function rawPrint(printerName, buffer) {
@@ -41,24 +51,31 @@ async function buildCaixa(order, items) {
 
   const tag = `PEDIDO #${(order.order_number||order.id||'').toString().slice(-6).toUpperCase()}`;
 
-  // Margem superior (~1,5 cm = ~2 linhas em branco)
-  p.println(''); p.println('');
+  // Margem superior (~1,5 cm = ~4 linhas em branco)
+  p.println(''); p.println(''); p.println(''); p.println('');
 
   // Cabeçalho
   p.alignCenter();
   p.bold(true); p.setTextSize(1,1); p.println('CONFRARIA CAFE'); p.setTextSize(0,0); p.bold(false);
+  p.println('');
   p.println('Av Almirante Barroso, 746 - Centro');
   p.println('WhatsApp: (96) 97400-7410');
+  p.println('');
   p.drawLine();
 
   // Número do pedido (grande)
+  p.println('');
+  p.alignCenter();
   p.bold(true); p.setTextSize(1,1); p.println(tag); p.setTextSize(0,0); p.bold(false);
+  p.println('');
   p.alignLeft();
   p.println(fmtTime());
+  p.println('');
 
   // Nome do cliente (maior)
   if (order.customer_name) {
     p.bold(true); p.setTextSize(1,0); p.println(`Cliente: ${order.customer_name}`); p.setTextSize(0,0); p.bold(false);
+    p.println('');
   }
 
   // Endereço de entrega ou retirada
@@ -70,8 +87,11 @@ async function buildCaixa(order, items) {
     p.println(`Entrega: ${addr}`);
   }
 
+  p.println('');
   p.drawLine();
+  p.println('');
   p.bold(true); p.println('ITENS'); p.bold(false);
+  p.println('');
 
   for (const item of items) {
     const tot = item.subtotal != null ? parseFloat(item.subtotal) : parseFloat(item.unit_price||0) * item.quantity;
@@ -84,28 +104,38 @@ async function buildCaixa(order, items) {
       }
     }
     p.alignRight(); p.println(fmt(tot)); p.alignLeft();
+    p.println('');
   }
 
   p.drawLine();
+  p.println('');
   const sub = items.reduce((s,i) => s + (i.subtotal != null ? parseFloat(i.subtotal) : parseFloat(i.unit_price||0)*i.quantity), 0);
   p.println(`Subtotal:    ${fmt(sub)}`);
   if (parseFloat(order.delivery_fee||0) > 0) p.println(`Entrega:     ${fmt(order.delivery_fee)}`);
   if (parseFloat(order.discount||0) > 0)     p.println(`Desconto:   -${fmt(order.discount)}`);
+  p.println('');
   p.bold(true); p.println(`TOTAL:       ${fmt(order.total||order.total_amount)}`); p.bold(false);
+  p.println('');
   if (order.payment_method) p.println(`Pagamento: ${order.payment_method}`);
-  if (order.notes) { p.drawLine(); p.println(`OBS: ${order.notes}`); }
+  if (order.notes) { p.println(''); p.drawLine(); p.println(`OBS: ${order.notes}`); }
 
   // Rodapé
+  p.println('');
   p.drawLine();
+  p.println('');
   p.alignCenter();
   p.println('Obrigado pela preferencia!');
+  p.println('');
   p.bold(true); p.println('--- CUPOM DE DESCONTO ---'); p.bold(false);
+  p.println('');
   p.bold(true); p.setTextSize(1,1); p.println('VALE5'); p.setTextSize(0,0); p.bold(false);
+  p.println('');
   p.println('5% de desconto no proximo pedido');
   p.println('Informe o codigo ao realizar seu pedido');
+  p.println('');
 
-  // Margem inferior (~2 cm = ~3 linhas em branco)
-  p.println(''); p.println(''); p.println('');
+  // Margem inferior (~2 cm = ~5 linhas em branco)
+  p.println(''); p.println(''); p.println(''); p.println(''); p.println('');
 
   p.cut(); await p.execute();
   return fs.readFileSync(tmp);
@@ -136,38 +166,74 @@ async function buildEstacao(nome, order, items) {
   return fs.readFileSync(tmp);
 }
 
-async function buildBalcao(order, items) {
-  const tmp = path.join(os.tmpdir(), `build_${Date.now()}.prn`);
+async function buildRelatorio(date, report) {
+  const tmp = path.join(os.tmpdir(), `relatorio_${Date.now()}.prn`);
   const p = new ThermalPrinter({ type: PrinterTypes.EPSON, interface: tmp,
-    characterSet: CharacterSet.PC858_EURO, removeSpecialCharacters: false, width: 48 });
+    characterSet: CharacterSet.PC858_EURO, removeSpecialCharacters: false, width: 42 });
 
-  const tag = `PEDIDO #${(order.order_number||order.id||'').toString().slice(-6).toUpperCase()}`;
+  const STATUS_PT = { pendente:'Pendente', confirmado:'Confirmado', em_preparo:'Em Preparo',
+    pronto:'Pronto', em_entrega:'Em Entrega', entregue:'Entregue',
+    finalizado:'Finalizado', cancelado:'Cancelado' };
 
+  p.println(''); p.println('');
   p.alignCenter();
-  p.bold(true); p.setTextSize(1,1); p.println('BALCAO'); p.setTextSize(0,0); p.bold(false);
-  p.println('');
-  p.bold(true); p.setTextSize(1,1); p.println(tag); p.setTextSize(0,0); p.bold(false);
-  p.println('');
-  p.alignLeft();
-  p.println(fmtTime());
-  if (order.delivery_type === 'retirada') { p.bold(true); p.println('** RETIRADA **'); p.bold(false); }
-  else if (order.customer_name) { p.bold(true); p.setTextSize(1,0); p.println(`Cliente: ${order.customer_name}`); p.setTextSize(0,0); p.bold(false); }
-  p.println('');
+  p.bold(true); p.setTextSize(1,1); p.println('CONFRARIA CAFE'); p.setTextSize(0,0); p.bold(false);
+  p.println('RELATORIO FINANCEIRO');
+  p.println(date || new Date().toLocaleDateString('pt-BR'));
+  p.println('Emitido: ' + fmtTime());
   p.drawLine();
-  p.println('');
 
-  for (const item of items) {
-    p.bold(true); p.setTextSize(1,1); p.println(`${item.quantity}x ${item.product_name}`); p.setTextSize(0,0); p.bold(false);
-    p.println('');
-    if (item.notes) { p.println(`-> ${item.notes}`); p.println(''); }
-    if (item.addons && item.addons.length) {
-      for (const a of item.addons) { p.bold(true); p.println(`+ ${a.name}`); p.bold(false); }
-      p.println('');
+  // Totais gerais
+  const t = report.totals || {};
+  p.alignLeft();
+  p.bold(true); p.println('RESUMO GERAL'); p.bold(false);
+  p.println(`Pedidos:      ${t.total_pedidos || 0}`);
+  p.println(`Cancelados:   ${t.cancelados || 0}`);
+  p.println(`Descontos:   -${fmt(t.total_descontos)}`);
+  p.println(`Frete:        ${fmt(t.total_entregas)}`);
+  p.bold(true); p.println(`RECEITA:      ${fmt(t.receita)}`); p.bold(false);
+  p.drawLine();
+
+  // Por forma de pagamento
+  if (report.by_payment && report.by_payment.length) {
+    p.bold(true); p.println('POR PAGAMENTO'); p.bold(false);
+    for (const row of report.by_payment) {
+      const label = (row.payment_method || 'Nao informado').substring(0, 20);
+      const val = fmt(row.total);
+      p.println(`${label.padEnd(22)}${val.padStart(10)}`);
+      p.println(`  ${row.qty} pedido(s)`);
     }
+    p.drawLine();
   }
 
-  if (order.notes) { p.drawLine(); p.println(''); p.bold(true); p.println(`OBS: ${order.notes}`); p.bold(false); p.println(''); }
-  p.drawLine(); p.cut(); await p.execute();
+  // Por status
+  if (report.by_status && report.by_status.length) {
+    p.bold(true); p.println('POR STATUS'); p.bold(false);
+    for (const row of report.by_status) {
+      const label = (STATUS_PT[row.status] || row.status).substring(0, 20);
+      const val = fmt(row.total);
+      p.println(`${label.padEnd(22)}${val.padStart(10)}`);
+    }
+    p.drawLine();
+  }
+
+  // Lista de pedidos
+  if (report.orders && report.orders.length) {
+    p.bold(true); p.println('PEDIDOS DO DIA'); p.bold(false);
+    for (const o of report.orders) {
+      const num = String(o.order_number || '').slice(-6).toUpperCase();
+      const st  = (STATUS_PT[o.status] || o.status || '').substring(0, 12);
+      p.println(`#${num} ${st.padEnd(13)}${fmt(o.total).padStart(10)}`);
+      if (o.payment_method) p.println(`  ${o.payment_method}`);
+    }
+    p.drawLine();
+  }
+
+  p.println('');
+  p.alignCenter();
+  p.println('Fim do relatorio');
+  p.println(''); p.println(''); p.println('');
+  p.cut(); await p.execute();
   return fs.readFileSync(tmp);
 }
 
@@ -186,13 +252,13 @@ async function handleNewOrder(order, items) {
 
   const balItems = items.filter(i => i.print_target === 'balcao');
   if (balItems.length) {
-    try { rawPrint(PRINTERS.caixa, await buildBalcao(order, balItems)); }
+    try { rawPrint(PRINTERS.balcao, await buildEstacao('Balcao', order, balItems)); }
     catch(e) { console.error('[PRINT][Balcao]', e.message); }
   }
 }
 
 function connect() {
-  const url = `${WS_URL}?token=${WS_TOKEN}&station=${WS_STATION}`;
+  const url = `${WS_URL}?token=${WS_TOKEN}&station=${WS_STATION}&role=printer`;
   console.log('[agent] Conectando...');
   const ws = new WebSocket(url);
   ws.on('open', () => console.log('[agent] Conectado ao VPS OK'));
@@ -203,6 +269,17 @@ function connect() {
       if ((msg.event === 'new_order' || msg.type === 'order_update') && msg.order && msg.items) {
         console.log('[agent] NOVO PEDIDO - imprimindo...');
         handleNewOrder(msg.order, msg.items).catch(e => console.error('[agent]', e.message));
+      }
+      if (msg.event === 'print_report' && msg.report) {
+        console.log('[agent] RELATORIO - imprimindo...');
+        buildRelatorio(msg.date, msg.report)
+          .then(buf => rawPrint(PRINTERS.caixa, buf))
+          .catch(e => console.error('[PRINT][Relatorio]', e.message));
+      }
+      if (msg.type === 'list_printers') {
+        const printers = listLocalPrinters();
+        console.log('[agent] Impressoras detectadas:', printers.join(', ') || '(nenhuma)');
+        ws.send(JSON.stringify({ type: 'printer_list', requestId: msg.requestId, printers }));
       }
     } catch(e) { console.error('[agent] Parse error:', e.message); }
   });

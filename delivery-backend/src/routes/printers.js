@@ -1,34 +1,20 @@
 const router = require('express').Router();
-const { exec } = require('child_process');
 const { authMiddleware, requireRole } = require('../middleware/auth');
-const { broadcastToStation } = require('../websocket/hub');
+const { broadcastToStation, requestPrinterList } = require('../websocket/hub');
 const pool = require('../db/pool');
 
 const PRINTER_KEYS = ['printer_caixa', 'printer_cozinha', 'printer_balcao'];
 
 router.use(authMiddleware);
 
-// GET /api/printers — lista impressoras instaladas no servidor
-router.get('/', requireRole('admin'), (req, res) => {
-  const isWin = process.platform === 'win32';
-  const cmd = isWin
-    ? 'wmic printer get name /format:list'
-    : "lpstat -a 2>/dev/null | awk '{print $1}' || echo ''";
-
-  exec(cmd, { timeout: 5000 }, (err, stdout) => {
-    if (err) return res.json({ printers: [] });
-
-    let printers = [];
-    if (isWin) {
-      printers = stdout.split(/\r?\n/)
-        .map(l => l.replace(/^Name=/, '').trim())
-        .filter(l => l.length > 0);
-    } else {
-      printers = stdout.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    }
-
+// GET /api/printers — pede ao agente local (Windows, conectado via WS) a lista de impressoras instaladas
+router.get('/', requireRole('admin'), async (req, res) => {
+  try {
+    const printers = await requestPrinterList();
     res.json({ printers });
-  });
+  } catch (e) {
+    res.json({ printers: [], error: e.message });
+  }
 });
 
 // GET /api/printers/config — lê config de impressoras salva no banco
