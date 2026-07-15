@@ -1519,6 +1519,7 @@ async function pagePedidos() {
           </button>`).join('')}
       </div>
       <button class="btn btn-secondary btn-sm" onclick="carregarPedidos()">🔄 Atualizar</button>
+      <button class="btn btn-sm" style="background:#7f1d1d;color:#fff;border:none;font-weight:700" onclick="fecharCaixa()">🔒 Fechar Caixa</button>
       <button class="btn btn-sm" style="background:#16a34a;color:#fff;border:none;font-weight:700" onclick="novoPedidoAdmin()">＋ Novo Pedido</button>
     </div>
     <div id="pedidos-lista"><p style="color:#64748b">Carregando...</p></div>`;
@@ -1606,6 +1607,7 @@ function renderPedidos(orders) {
       <div class="pedido-card-actions" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="verPedido('${o.id}')" title="Ver itens">👁<span class="btn-label"> Ver itens</span></button>
         <button class="btn btn-secondary btn-sm" onclick="imprimirPedido('${o.id}')" title="Imprimir">🖨<span class="btn-label"> Imprimir</span></button>
+        ${o.status !== 'cancelado' ? `<button class="btn btn-sm" style="background:#065f46;color:#fff;border:none" onclick="finalizarPedido('${o.id}')" title="Finalizar (imprime recibo de conferência)">🏁<span class="btn-label"> Finalizar</span></button>` : ''}
         ${o.customer_phone && (o.status==='aguardando_pagamento'||o.status==='pago') ? `<button class="btn btn-sm" style="background:#25D366;color:#fff;border:none" onclick="confirmarEEnviarWA('${o.id}')" title="Confirmar + WA">📲<span class="btn-label"> Confirmar + WA</span></button>` : ''}
         ${o.customer_phone && o.status!=='aguardando_pagamento' && o.status!=='pago' && o.status!=='cancelado' && o.status!=='entregue' ? `<button class="btn btn-sm" style="background:#25D366;color:#fff;border:none" onclick="reenviarWA('${o.id}')" title="WA">📲<span class="btn-label"> WA</span></button>` : ''}
         ${!o.customer_phone && (o.status==='aguardando_pagamento'||o.status==='pago') ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border:none" onclick="avancarStatus('${o.id}','confirmado')" title="Confirmar">✅<span class="btn-label"> Confirmar</span></button>` : ''}
@@ -4128,6 +4130,25 @@ async function imprimirRelatorioTermica() {
   try {
     await api('POST', '/printers/print-report', { date, report: r });
     toast('Enviado para impressora térmica!');
+  } catch(e) {
+    toast('Erro: ' + e.message, true);
+  }
+}
+
+async function finalizarPedido(id) {
+  try {
+    await api('POST', `/printers/finalize-order/${id}`);
+    toast('Recibo de conferência enviado para impressão!');
+  } catch(e) {
+    toast('Erro: ' + e.message, true);
+  }
+}
+
+async function fecharCaixa() {
+  if (!confirm('Fechar caixa agora? Isso imprime o resumo de todas as vendas do dia (só valores).')) return;
+  try {
+    await api('POST', '/printers/close-register', {});
+    toast('Fechamento de caixa enviado para impressão!');
   } catch(e) {
     toast('Erro: ' + e.message, true);
   }

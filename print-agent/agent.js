@@ -237,6 +237,77 @@ async function buildRelatorio(date, report) {
   return fs.readFileSync(tmp);
 }
 
+async function buildFinalizeOrder(order) {
+  const tmp = path.join(os.tmpdir(), `finalize_${Date.now()}.prn`);
+  const p = new ThermalPrinter({ type: PrinterTypes.EPSON, interface: tmp,
+    characterSet: CharacterSet.PC858_EURO, removeSpecialCharacters: false, width: 42 });
+
+  p.println(''); p.println('');
+  p.alignCenter();
+  p.bold(true); p.setTextSize(1,1); p.println('CONFRARIA CAFE'); p.setTextSize(0,0); p.bold(false);
+  p.println('Av Almirante Barroso, 746 - Centro');
+  p.drawLine();
+  p.bold(true); p.println('CONFERENCIA DE VENDA'); p.bold(false);
+  p.drawLine();
+  p.alignLeft();
+  p.println(`Pedido: #${(order.order_number||'').toString().slice(-6).toUpperCase()}`);
+  if (order.customer_name) p.println(`Cliente: ${order.customer_name}`);
+  p.println(`Hora: ${fmtTime()}`);
+  p.println(`Pagamento: ${order.payment_method || '-'}`);
+  p.drawLine();
+  p.println(`Subtotal:    ${fmt(order.subtotal)}`);
+  if (parseFloat(order.delivery_fee||0) > 0) p.println(`Entrega:     ${fmt(order.delivery_fee)}`);
+  if (parseFloat(order.discount||0) > 0)     p.println(`Desconto:   -${fmt(order.discount)}`);
+  p.bold(true); p.setTextSize(1,1); p.println(`TOTAL: ${fmt(order.total)}`); p.setTextSize(0,0); p.bold(false);
+  p.drawLine();
+  p.alignCenter();
+  p.println('Confira o valor recebido');
+  p.println('antes de finalizar');
+  p.println(''); p.println(''); p.println('');
+
+  p.cut(); await p.execute();
+  return fs.readFileSync(tmp);
+}
+
+async function buildCloseRegister(summary) {
+  const tmp = path.join(os.tmpdir(), `close_${Date.now()}.prn`);
+  const p = new ThermalPrinter({ type: PrinterTypes.EPSON, interface: tmp,
+    characterSet: CharacterSet.PC858_EURO, removeSpecialCharacters: false, width: 42 });
+
+  const t = summary.totals || {};
+  p.println(''); p.println('');
+  p.alignCenter();
+  p.bold(true); p.setTextSize(1,1); p.println('CONFRARIA CAFE'); p.setTextSize(0,0); p.bold(false);
+  p.drawLine();
+  p.bold(true); p.println('FECHAMENTO DE CAIXA'); p.bold(false);
+  p.println(summary.date || '');
+  p.println('Emitido: ' + fmtTime());
+  p.drawLine();
+  p.alignLeft();
+  p.println(`Total de pedidos: ${t.total_pedidos || 0}`);
+  p.println(`Cancelados:       ${t.cancelados || 0}`);
+  p.drawLine();
+  if (summary.by_payment && summary.by_payment.length) {
+    p.bold(true); p.println('POR PAGAMENTO'); p.bold(false);
+    for (const row of summary.by_payment) {
+      const label = (row.payment_method || 'Nao informado').substring(0, 20);
+      p.println(`${label.padEnd(22)}${fmt(row.total).padStart(10)}`);
+    }
+    p.drawLine();
+  }
+  p.println(`Taxas de entrega: ${fmt(t.total_entregas)}`);
+  p.println(`Descontos:       -${fmt(t.total_descontos)}`);
+  p.bold(true); p.setTextSize(1,1); p.println(`RECEITA: ${fmt(t.receita)}`); p.setTextSize(0,0); p.bold(false);
+  p.drawLine();
+  p.alignCenter();
+  p.println('Confira o dinheiro em caixa');
+  p.println('com o valor acima');
+  p.println(''); p.println(''); p.println('');
+
+  p.cut(); await p.execute();
+  return fs.readFileSync(tmp);
+}
+
 async function handleNewOrder(order, items) {
   if (!order || !items || !items.length) { console.log('[agent] Pedido sem itens'); return; }
   console.log(`[agent] Imprimindo pedido #${order.order_number||order.id} - ${items.length} item(s)`);
@@ -280,6 +351,18 @@ function connect() {
         const printers = listLocalPrinters();
         console.log('[agent] Impressoras detectadas:', printers.join(', ') || '(nenhuma)');
         ws.send(JSON.stringify({ type: 'printer_list', requestId: msg.requestId, printers }));
+      }
+      if (msg.event === 'finalize_order' && msg.order) {
+        console.log('[agent] FINALIZAR PEDIDO - imprimindo conferência...');
+        buildFinalizeOrder(msg.order)
+          .then(buf => rawPrint(PRINTERS.caixa, buf))
+          .catch(e => console.error('[PRINT][Finalizar]', e.message));
+      }
+      if (msg.event === 'close_register' && msg.summary) {
+        console.log('[agent] FECHAR CAIXA - imprimindo fechamento...');
+        buildCloseRegister(msg.summary)
+          .then(buf => rawPrint(PRINTERS.caixa, buf))
+          .catch(e => console.error('[PRINT][Fechamento]', e.message));
       }
     } catch(e) { console.error('[agent] Parse error:', e.message); }
   });

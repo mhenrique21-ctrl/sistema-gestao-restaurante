@@ -60,4 +60,52 @@ router.post('/print-report', requireRole('admin'), (req, res) => {
   res.json({ ok: true });
 });
 
+// POST /api/printers/finalize-order/:id — imprime recibo de conferência (resumo + valor) do pedido
+router.post('/finalize-order/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT order_number, payment_method, subtotal, delivery_fee, discount, total, created_at,
+              (SELECT name FROM customers c WHERE c.id = orders.customer_id) AS customer_name
+       FROM orders WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
+    broadcastToStation('caixa', { event: 'finalize_order', order: r.rows[0] });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/printers/close-register — imprime fechamento de caixa (totais do dia, sem lista de pedidos)
+router.post('/close-register', requireRole('admin'), async (req, res) => {
+  const date = req.body.date || new Date().toISOString().slice(0, 10);
+  try {
+    const totals = await pool.query(
+      `SELECT
+         COUNT(*) AS total_pedidos,
+         SUM(CASE WHEN status != 'cancelado' THEN total ELSE 0 END) AS receita,
+         SUM(CASE WHEN status = 'cancelado' THEN 1 ELSE 0 END) AS cancelados,
+         SUM(COALESCE(discount, 0)) AS total_descontos,
+         SUM(COALESCE(delivery_fee, 0)) AS total_entregas
+       FROM orders
+       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1`,
+      [date]
+    );
+    const byPayment = await pool.query(
+      `SELECT COALESCE(payment_method, 'Não informado') AS payment_method, COUNT(*) AS qty, SUM(total) AS total
+       FROM orders
+       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND status NOT IN ('cancelado')
+       GROUP BY payment_method
+       ORDER BY total DESC`,
+      [date]
+    );
+    const summary = { date, totals: totals.rows[0], by_payment: byPayment.rows };
+    broadcastToStation('caixa', { event: 'close_register', summary });
+    res.json({ ok: true, summary });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
