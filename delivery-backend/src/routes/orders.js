@@ -121,11 +121,14 @@ router.post('/guest', async (req, res) => {
     const resolvedItems = [];
     for (const item of items) {
       const prod = await pool.query(
-        `SELECT id, name, price, promo_price, available, print_target FROM products WHERE id = $1`,
+        `SELECT id, name, price, promo_price, promo_max_qty, available, print_target FROM products WHERE id = $1`,
         [item.product_id]
       );
       if (!prod.rows[0]) throw { status: 400, message: 'Produto não encontrado' };
       if (!prod.rows[0].available) throw { status: 400, message: `"${prod.rows[0].name}" indisponível` };
+      if (prod.rows[0].promo_price !== null && prod.rows[0].promo_max_qty && item.quantity > prod.rows[0].promo_max_qty) {
+        throw { status: 400, message: `"${prod.rows[0].name}": máximo ${prod.rows[0].promo_max_qty} unidade(s) na promoção` };
+      }
       const unitPrice = prod.rows[0].promo_price !== null ? parseFloat(prod.rows[0].promo_price) : parseFloat(prod.rows[0].price);
 
       const resolvedAddons = await resolveAddons(item.product_id, item.addons);
@@ -425,12 +428,15 @@ router.post('/', async (req, res) => {
         throw { status: 400, message: 'Cada item precisa de product_id e quantity > 0' };
       }
       const prod = await client.query(
-        `SELECT p.id, p.name, p.price, p.promo_price, p.available, p.print_target, c.name AS category_name
+        `SELECT p.id, p.name, p.price, p.promo_price, p.promo_max_qty, p.available, p.print_target, c.name AS category_name
          FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = $1`,
         [item.product_id]
       );
       if (!prod.rows[0]) throw { status: 400, message: `Produto ${item.product_id} não encontrado` };
       if (!prod.rows[0].available) throw { status: 400, message: `Produto "${prod.rows[0].name}" indisponível` };
+      if (prod.rows[0].promo_price !== null && prod.rows[0].promo_max_qty && item.quantity > prod.rows[0].promo_max_qty) {
+        throw { status: 400, message: `"${prod.rows[0].name}": máximo ${prod.rows[0].promo_max_qty} unidade(s) na promoção` };
+      }
 
       const unitPrice = prod.rows[0].promo_price !== null ? parseFloat(prod.rows[0].promo_price) : parseFloat(prod.rows[0].price);
       const resolvedAddons = await resolveAddons(item.product_id, item.addons, client);

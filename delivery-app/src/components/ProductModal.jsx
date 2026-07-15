@@ -10,6 +10,7 @@ function money(v) {
 export default function ProductModal({ product, onClose }) {
   const navigate = useNavigate()
   const addItem = useCart((s) => s.addItem)
+  const cartItems = useCart((s) => s.items)
   const [qty, setQty] = useState(1)
   const [selected, setSelected] = useState({})
   const [notes, setNotes] = useState('')
@@ -53,7 +54,15 @@ export default function ProductModal({ product, onClose }) {
   }, [selected, groups])
 
   const missingRequired = groups.filter((g) => g.required && (selected[g.id] || []).length < g.min_select)
-  const canAdd = missingRequired.length === 0
+
+  const promoLimit = product.promo_price != null ? product.promo_max_qty : null
+  const alreadyInCart = promoLimit
+    ? cartItems.filter((i) => i.product.id === product.id).reduce((s, i) => s + i.qty, 0)
+    : 0
+  const remainingPromo = promoLimit ? Math.max(0, promoLimit - alreadyInCart) : Infinity
+  const qtyExceedsPromo = promoLimit != null && qty > remainingPromo
+
+  const canAdd = missingRequired.length === 0 && !qtyExceedsPromo
 
   function handleAdd() {
     if (!canAdd) return
@@ -190,16 +199,24 @@ export default function ProductModal({ product, onClose }) {
                   className="w-8 h-8 flex items-center justify-center text-xl font-bold press"
                   style={{ color: 'var(--muted)' }}>−</button>
                 <span className="w-6 text-center font-black" style={{ color: 'var(--cream)' }}>{qty}</span>
-                <button onClick={() => setQty((q) => q + 1)}
+                <button onClick={() => setQty((q) => Math.min(remainingPromo, q + 1))}
+                  disabled={qty >= remainingPromo}
                   className="w-8 h-8 flex items-center justify-center text-xl font-bold press"
-                  style={{ color: 'var(--gold)' }}>+</button>
+                  style={{ color: qty >= remainingPromo ? 'var(--muted)' : 'var(--gold)', opacity: qty >= remainingPromo ? 0.4 : 1 }}>+</button>
               </div>
               <button onClick={handleAdd} disabled={!canAdd}
                 className="btn-gold flex-1 py-4 flex items-center justify-between px-4 text-sm">
-                <span>{canAdd ? 'Adicionar' : 'Escolha opções'}</span>
+                <span>{!canAdd && missingRequired.length ? 'Escolha opções' : qtyExceedsPromo ? 'Limite da promoção' : 'Adicionar'}</span>
                 <span className="font-black">{money(total)}</span>
               </button>
             </div>
+          )}
+          {promoLimit != null && !added && (
+            <p className="text-xs mt-2 text-center" style={{ color: remainingPromo > 0 ? 'var(--muted)' : 'var(--danger)' }}>
+              {remainingPromo > 0
+                ? `Máx. ${promoLimit} unidade(s) no preço promocional${alreadyInCart > 0 ? ` (${alreadyInCart} já no carrinho)` : ''}`
+                : `Limite de ${promoLimit} unidade(s) na promoção já atingido no carrinho`}
+            </p>
           )}
         </div>
       </div>

@@ -83,11 +83,26 @@ export default function CartPage() {
                     className="w-7 h-7 flex items-center justify-center press text-lg font-bold"
                     style={{ color: 'var(--muted)' }}>−</button>
                   <span className="w-5 text-center font-black text-sm" style={{ color: 'var(--cream)' }}>{item.qty}</span>
-                  <button onClick={() => updateQty(item.key, item.qty + 1)}
-                    className="w-7 h-7 flex items-center justify-center press text-lg font-bold"
-                    style={{ color: 'var(--gold)' }}>+</button>
+                  {(() => {
+                    const promoLimit = item.product.promo_price != null ? item.product.promo_max_qty : null
+                    const otherQty = promoLimit
+                      ? items.filter((i) => i.key !== item.key && i.product.id === item.product.id).reduce((s, i) => s + i.qty, 0)
+                      : 0
+                    const atLimit = promoLimit != null && (otherQty + item.qty) >= promoLimit
+                    return (
+                      <button onClick={() => { if (!atLimit) updateQty(item.key, item.qty + 1) }}
+                        disabled={atLimit}
+                        className="w-7 h-7 flex items-center justify-center press text-lg font-bold"
+                        style={{ color: atLimit ? 'var(--muted)' : 'var(--gold)', opacity: atLimit ? 0.4 : 1 }}>+</button>
+                    )
+                  })()}
                 </div>
               </div>
+              {item.product.promo_price != null && item.product.promo_max_qty != null && (
+                <p className="text-[11px] mt-1.5 text-right" style={{ color: 'var(--muted)' }}>
+                  Máx. {item.product.promo_max_qty} unidade(s) no preço promocional
+                </p>
+              )}
             </div>
           ))}
         </div>

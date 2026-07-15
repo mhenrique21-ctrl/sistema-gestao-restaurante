@@ -62,6 +62,7 @@ router.get('/', async (req, res) => {
         p.promo_price,
         p.promo_label,
         p.promo_days,
+        p.promo_max_qty,
         p.sort_order AS product_sort
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id AND p.available = true
@@ -131,6 +132,7 @@ router.get('/', async (req, res) => {
           featured: row.featured,
           promo_price: activePromo ? parseFloat(row.promo_price) : null,
           promo_label: row.promo_label,
+          promo_max_qty: activePromo ? row.promo_max_qty : null,
           addon_groups: Object.values(addonsByProduct[row.product_id] || {}),
         });
       }
@@ -151,7 +153,7 @@ router.get('/admin', authMiddleware, async (req, res) => {
         c.id AS category_id, c.name AS category_name, c.sort_order AS category_sort,
         p.id AS product_id, p.name AS product_name, p.description, p.price,
         p.image_url AS product_image, p.available, p.featured, p.promo_price,
-        p.promo_label, p.sort_order AS product_sort, p.active_days, p.print_target,
+        p.promo_label, p.promo_max_qty, p.sort_order AS product_sort, p.active_days, p.print_target,
         p.show_kiosk, p.show_delivery
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id
@@ -165,6 +167,7 @@ router.get('/admin', authMiddleware, async (req, res) => {
         id: row.product_id, name: row.product_name, description: row.description,
         price: row.price, image_url: row.product_image, available: row.available,
         featured: row.featured, promo_price: row.promo_price, promo_label: row.promo_label,
+        promo_max_qty: row.promo_max_qty,
         sort_order: row.product_sort, category_id: row.category_id, category_name: row.category_name,
         active_days: row.active_days,
         print_target: row.print_target,
@@ -196,7 +199,7 @@ router.get('/products/:id', async (req, res) => {
 
 // POST /api/menu/products — criar produto (admin)
 router.post('/products', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery } = req.body;
+  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery, promo_max_qty } = req.body;
   if (!category_id || !name || price === undefined) {
     return res.status(400).json({ error: 'category_id, name e price são obrigatórios' });
   }
@@ -206,15 +209,17 @@ router.post('/products', authMiddleware, requireRole('admin'), async (req, res) 
   const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
   const targetSql = target ? `'${target}'` : 'NULL';
   const promoDaysSql = promoArr ? `'{${promoArr.join(',')}}'::int[]` : 'NULL';
-  // show_kiosk/show_delivery entram como literal SQL (não como $N) de propósito —
+  // show_kiosk/show_delivery/promo_max_qty entram como literal SQL (não como $N) de propósito —
   // este projeto tem um bug conhecido de driver no VPS com parâmetros $10+
   // (a substituição de string do wrapper corrompe o "$1" embutido em "$10").
   const showKioskSql = show_kiosk === false ? 'FALSE' : 'TRUE';
   const showDeliverySql = show_delivery === false ? 'FALSE' : 'TRUE';
+  const maxQtyNum = parseInt(promo_max_qty, 10);
+  const promoMaxQtySql = Number.isInteger(maxQtyNum) && maxQtyNum > 0 ? maxQtyNum : 'NULL';
   try {
     const result = await pool.query(
-      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}, ${promoDaysSql}, ${showKioskSql}, ${showDeliverySql}) RETURNING *`,
+      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery, promo_max_qty)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}, ${promoDaysSql}, ${showKioskSql}, ${showDeliverySql}, ${promoMaxQtySql}) RETURNING *`,
       [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null]
     );
     res.status(201).json(result.rows[0]);
@@ -278,6 +283,11 @@ router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, 
   // acima: evitar estourar $9 parâmetros (bug do driver no VPS com $10+).
   if (req.body.show_kiosk !== undefined) updates.push(`show_kiosk = ${req.body.show_kiosk ? 'TRUE' : 'FALSE'}`);
   if (req.body.show_delivery !== undefined) updates.push(`show_delivery = ${req.body.show_delivery ? 'TRUE' : 'FALSE'}`);
+
+  if (req.body.promo_max_qty !== undefined) {
+    const n = parseInt(req.body.promo_max_qty, 10);
+    updates.push(`promo_max_qty = ${Number.isInteger(n) && n > 0 ? n : 'NULL'}`);
+  }
 
   if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
 

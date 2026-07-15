@@ -748,8 +748,9 @@ function modalNovoProduto() {
       </div>
       <div><label>Descrição</label><textarea id="f-desc"></textarea></div>
       ${imagePickerHtml()}
-      <div class="form-grid cols-2">
+      <div class="form-grid cols-3">
         <div><label>Preço promocional (R$, opcional)</label><input id="f-promo" type="number" step="0.01" /></div>
+        <div><label>Qtd. máx. na promoção</label><input id="f-promo-max-qty" type="number" step="1" min="1" placeholder="Sem limite" /></div>
         <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
           <button type="button" class="toggle" id="f-featured-toggle" onclick="this.classList.toggle('on')"></button>
           <label style="margin:0">Produto em destaque</label>
@@ -774,6 +775,7 @@ function modalNovoProduto() {
       description: v('f-desc'),
       image_url: v('f-image') || undefined,
       promo_price: v('f-promo') ? parseFloat(v('f-promo')) : undefined,
+      promo_max_qty: v('f-promo-max-qty') ? parseInt(v('f-promo-max-qty'), 10) : undefined,
       promo_days: getPromoDays(),
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
       active_days: getActiveDays(),
@@ -798,8 +800,9 @@ function modalEditarProduto(id) {
       </div>
       <div><label>Descrição</label><textarea id="f-desc">${p.description || ''}</textarea></div>
       ${imagePickerHtml(p.image_url || '')}
-      <div class="form-grid cols-2">
+      <div class="form-grid cols-3">
         <div><label>Preço promocional (R$, opcional)</label><input id="f-promo" type="number" step="0.01" value="${p.promo_price ?? ''}" /></div>
+        <div><label>Qtd. máx. na promoção</label><input id="f-promo-max-qty" type="number" step="1" min="1" placeholder="Sem limite" value="${p.promo_max_qty ?? ''}" /></div>
         <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
           <button type="button" class="toggle ${p.featured ? 'on' : ''}" id="f-featured-toggle" onclick="this.classList.toggle('on')"></button>
           <label style="margin:0">Produto em destaque</label>
@@ -826,6 +829,7 @@ function modalEditarProduto(id) {
       description: v('f-desc'),
       image_url: v('f-image'),
       promo_price: v('f-promo') ? parseFloat(v('f-promo')) : null,
+      promo_max_qty: v('f-promo-max-qty') ? parseInt(v('f-promo-max-qty'), 10) : null,
       promo_days: getPromoDays(),
       featured: document.getElementById('f-featured-toggle').classList.contains('on'),
       active_days: getActiveDays(),
@@ -3022,7 +3026,7 @@ async function renderPromoProdutos() {
   el.innerHTML = `
     <div class="table-wrap">
       <table>
-        <tr><th>Produto</th><th>Preço normal</th><th>Preço promo</th><th>Desconto</th><th>Label</th><th>Dias</th><th>Ações</th></tr>
+        <tr><th>Produto</th><th>Preço normal</th><th>Preço promo</th><th>Desconto</th><th>Label</th><th>Dias</th><th>Qtd. máx.</th><th>Ações</th></tr>
         ${comPromo.map(p => {
           const pct = Math.round((1 - p.promo_price / p.price) * 100);
           const dias = p.promo_days && p.promo_days.length ? p.promo_days.map(d => DAYS[d]).join(', ') : 'Sempre';
@@ -3033,6 +3037,7 @@ async function renderPromoProdutos() {
             <td><span style="background:#fee2e2;color:#dc2626;font-weight:700;padding:2px 8px;border-radius:20px;font-size:.78rem">${pct}% OFF</span></td>
             <td>${p.promo_label || '<span style="color:var(--muted)">—</span>'}</td>
             <td style="font-size:.8rem;color:var(--muted)">${dias}</td>
+            <td style="font-size:.8rem;color:var(--muted)">${p.promo_max_qty != null ? p.promo_max_qty : 'Sem limite'}</td>
             <td style="display:flex;gap:6px">
               <button class="btn btn-secondary btn-sm" onclick="modalEditarPromoPreco(${JSON.stringify(p).split('"').join('&quot;')})">✏️</button>
               <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:none" onclick="removerPromoPreco('${p.id}','${p.name}')">🗑</button>
@@ -3052,6 +3057,7 @@ function modalPromoPreco(prod = null) {
       <div style="display:flex;gap:12px">
         <div style="flex:1"><label>Preço normal (R$)</label><input id="pp-preco" type="number" step="0.01" value="${prod ? prod.price : ''}" ${prod ? 'readonly style="opacity:.6"' : ''}/></div>
         <div style="flex:1"><label>Preço promocional (R$)</label><input id="pp-promo" type="number" step="0.01" value="${prod && prod.promo_price != null ? prod.promo_price : ''}"/></div>
+        <div style="flex:1"><label>Qtd. máx. por pedido</label><input id="pp-max-qty" type="number" step="1" min="1" placeholder="Sem limite" value="${prod && prod.promo_max_qty != null ? prod.promo_max_qty : ''}"/></div>
       </div>
       <div><label>Label da tag (ex: 50% OFF • Sábado)</label><input id="pp-label" value="${prod && prod.promo_label ? prod.promo_label : ''}" placeholder="Ex: 50% OFF" /></div>
       <div>
@@ -3067,9 +3073,11 @@ function modalPromoPreco(prod = null) {
     const promo_price = parseFloat(document.getElementById('pp-promo').value);
     const promo_label = document.getElementById('pp-label').value.trim() || null;
     const promo_days = Array.from(document.querySelectorAll('.pp-day:checked')).map(c => parseInt(c.value));
+    const maxQtyRaw = document.getElementById('pp-max-qty').value;
+    const promo_max_qty = maxQtyRaw ? parseInt(maxQtyRaw, 10) : null;
     if (!prodId) { toast('Selecione um produto', true); return; }
     if (isNaN(promo_price)) { toast('Informe o preço promocional', true); return; }
-    await api('PATCH', `/products/${prodId}`, { promo_price, promo_label, promo_days: promo_days.length ? promo_days : null });
+    await api('PATCH', `/menu/products/${prodId}`, { promo_price, promo_label, promo_days: promo_days.length ? promo_days : null, promo_max_qty });
     toast('Promoção salva!'); closeModal(); pagePromocoes();
   });
   if (!prod) {
@@ -3089,7 +3097,7 @@ function modalEditarPromoPreco(prod) {
 
 async function removerPromoPreco(id, nome) {
   if (!confirm(`Remover promoção de "${nome}"?`)) return;
-  await api('PATCH', `/products/${id}`, { promo_price: null, promo_label: null, promo_days: null });
+  await api('PATCH', `/menu/products/${id}`, { promo_price: null, promo_label: null, promo_days: null, promo_max_qty: null });
   toast('Promoção removida!'); pagePromocoes();
 }
 
