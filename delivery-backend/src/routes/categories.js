@@ -73,10 +73,10 @@ router.post('/:id/apply-printer', requireRole('admin'), async (req, res) => {
   const targetSql = target ? `'${target}'` : 'NULL';
   try {
     const r = await pool.query(
-      `UPDATE products SET print_target = ${targetSql} WHERE category_id = $1`,
+      `UPDATE products SET print_target = ${targetSql} WHERE category_id = $1 RETURNING id`,
       [req.params.id]
     );
-    res.json({ updated: r.rowCount });
+    res.json({ updated: r.rows.length });
   } catch (err) {
     res.status(500).json({ error: 'Erro interno' });
   }
