@@ -3,14 +3,14 @@
 * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 
 :root {
-  --bg:       #1A1512;
-  --surface:  #241C13;
-  --card:     #2D2318;
-  --border:   #3D2F20;
+  --bg:       #2B241D;
+  --surface:  #372E23;
+  --card:     #453829;
+  --border:   #5C4B37;
   --gold:     #C9A25E;
   --gold-dim: #8B6B35;
   --cream:    #F8F4ED;
-  --muted:    #90805F;
+  --muted:    #A89478;
   --danger:   #E05252;
   --green:    #4CAF80;
   --radius:   16px;
@@ -60,7 +60,7 @@ body {
   100% { background-position:  200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #241C13 25%, #362A1B 50%, #241C13 75%);
+  background: linear-gradient(90deg, #372E23 25%, #4E3F2E 50%, #372E23 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
   border-radius: 12px;
