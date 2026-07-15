@@ -60,13 +60,49 @@ router.post('/print-report', requireRole('admin'), (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/printers/finalize-order/:id — imprime recibo de conferência (resumo + valor) do pedido
+// POST /api/printers/reprint-order/:id — reimprime o cupom de venda do caixa (mesmo formato da impressão automática)
+router.post('/reprint-order/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const order = await pool.query(
+      `SELECT o.*, c.name AS customer_name, c.phone AS customer_phone
+       FROM orders o JOIN customers c ON c.id = o.customer_id
+       WHERE o.id = $1`,
+      [req.params.id]
+    );
+    if (!order.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    const items = await pool.query(
+      `SELECT oi.*, p.name AS product_name
+       FROM order_items oi JOIN products p ON p.id = oi.product_id
+       WHERE oi.order_id = $1`,
+      [req.params.id]
+    );
+    const itemAddons = await pool.query(
+      `SELECT a.* FROM order_item_addons a
+       JOIN order_items oi ON oi.id = a.order_item_id
+       WHERE oi.order_id = $1`,
+      [req.params.id]
+    );
+    for (const item of items.rows) {
+      item.addons = itemAddons.rows.filter((a) => a.order_item_id === item.id);
+    }
+
+    if (!items.rows.length) return res.status(400).json({ error: 'Pedido sem itens' });
+
+    broadcastToStation('caixa', { event: 'reprint_order', order: order.rows[0], items: items.rows });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/printers/finalize-order/:id — imprime recibo de conferência (resumo + valor) e marca o pedido como finalizado
 router.post('/finalize-order/:id', requireRole('admin'), async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT order_number, payment_method, subtotal, delivery_fee, discount, total, created_at,
-              (SELECT name FROM customers c WHERE c.id = orders.customer_id) AS customer_name
-       FROM orders WHERE id = $1`,
+      `UPDATE orders SET finalized_at = NOW() WHERE id = $1
+       RETURNING order_number, payment_method, subtotal, delivery_fee, discount, total, created_at,
+         (SELECT name FROM customers c WHERE c.id = orders.customer_id) AS customer_name`,
       [req.params.id]
     );
     if (!r.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });

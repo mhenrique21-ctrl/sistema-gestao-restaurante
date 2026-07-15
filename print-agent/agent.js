@@ -352,6 +352,12 @@ function connect() {
         console.log('[agent] Impressoras detectadas:', printers.join(', ') || '(nenhuma)');
         ws.send(JSON.stringify({ type: 'printer_list', requestId: msg.requestId, printers }));
       }
+      if (msg.event === 'reprint_order' && msg.order && msg.items) {
+        console.log('[agent] REIMPRIMIR CUPOM - imprimindo...');
+        buildCaixa(msg.order, msg.items)
+          .then(buf => rawPrint(PRINTERS.caixa, buf))
+          .catch(e => console.error('[PRINT][Reimprimir]', e.message));
+      }
       if (msg.event === 'finalize_order' && msg.order) {
         console.log('[agent] FINALIZAR PEDIDO - imprimindo conferência...');
         buildFinalizeOrder(msg.order)
