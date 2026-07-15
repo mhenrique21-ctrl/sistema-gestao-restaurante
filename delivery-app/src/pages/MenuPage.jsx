@@ -150,7 +150,7 @@ export default function MenuPage() {
         {/* Banner */}
         <div className="mx-4 mb-3 rounded-2xl overflow-hidden relative h-32">
           <img src={bannerUrl || hero} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(15,10,5,0.7) 0%, transparent 60%)' }} />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(15,10,5,0.55) 0%, transparent 55%)' }} />
           <div className="absolute bottom-3 left-4">
             <p className="text-xs font-semibold" style={{ color: 'var(--gold)' }}>Cardápio completo</p>
             <p className="text-sm font-black" style={{ color: 'var(--cream)' }}>Peça agora 🛵</p>
