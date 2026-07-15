@@ -2,8 +2,7 @@ const crypto = require('crypto');
 
 const PIXEL_ID = '1061008356398242';
 const CAPI_URL = `https://graph.facebook.com/v20.0/${PIXEL_ID}/events`;
-// Remover TEST_EVENT_CODE (ou deixar null) após validar no Gerenciador de Eventos
-const TEST_EVENT_CODE = 'TEST4922';
+const TEST_EVENT_CODE = null;
 
 function sha256(value) {
   if (!value) return undefined;
