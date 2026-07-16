@@ -321,7 +321,7 @@ router.use(authMiddleware);
 
 // GET /api/orders — listar pedidos (com filtros)
 router.get('/', async (req, res) => {
-  const { status, date, page = 1, limit = 30 } = req.query;
+  const { status, date, page = 1, limit = 30, archived } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
   const values = [];
   const conditions = [];
@@ -332,6 +332,7 @@ router.get('/', async (req, res) => {
     conditions.push(`DATE(o.created_at) = $${idx++}`);
     values.push(date);
   }
+  conditions.push(archived === 'true' ? `o.archived_at IS NOT NULL` : `o.archived_at IS NULL`);
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   values.push(parseInt(limit), offset);
@@ -356,6 +357,48 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('[orders/GET]', err.message);
     res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// POST /api/orders/close-register — arquiva as vendas do dia (somem do painel de Pedidos,
+// ficam disponíveis em ARQUIVO) e manda o resumo pra impressão térmica
+router.post('/close-register', requireRole('admin'), async (req, res) => {
+  const date = req.body.date || new Date().toISOString().slice(0, 10);
+  try {
+    const totals = await pool.query(
+      `SELECT
+         COUNT(*) AS total_pedidos,
+         SUM(CASE WHEN status != 'cancelado' THEN total ELSE 0 END) AS receita,
+         SUM(CASE WHEN status = 'cancelado' THEN 1 ELSE 0 END) AS cancelados,
+         SUM(COALESCE(discount, 0)) AS total_descontos,
+         SUM(COALESCE(delivery_fee, 0)) AS total_entregas
+       FROM orders
+       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND archived_at IS NULL`,
+      [date]
+    );
+    const byPayment = await pool.query(
+      `SELECT COALESCE(payment_method, 'Não informado') AS payment_method, COUNT(*) AS qty, SUM(total) AS total
+       FROM orders
+       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND archived_at IS NULL AND status NOT IN ('cancelado')
+       GROUP BY payment_method
+       ORDER BY total DESC`,
+      [date]
+    );
+    const archived = await pool.query(
+      `UPDATE orders SET archived_at = NOW()
+       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND archived_at IS NULL
+       RETURNING id`,
+      [date]
+    );
+
+    const summary = { date, totals: totals.rows[0], by_payment: byPayment.rows };
+    broadcastToStation('caixa', { event: 'close_register', summary });
+    broadcastOrderUpdate({ event: 'register_closed', date });
+
+    res.json({ ok: true, archived_count: archived.rowCount, summary });
+  } catch (e) {
+    console.error('[orders/close-register]', e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 

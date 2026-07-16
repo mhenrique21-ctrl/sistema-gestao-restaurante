@@ -205,6 +205,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
     <button class="nav-btn" data-page="financeiro" onclick="showPage('financeiro',this)">💰 Financeiro</button>
     <button class="nav-btn" data-page="comandas" onclick="showPage('comandas',this)">📇 Comandas</button>
+    <button class="nav-btn" data-page="arquivo" onclick="showPage('arquivo',this)">🗄 Arquivo</button>
   </nav>
   <div class="bottom" id="user-info">Carregando...</div>
 </div>
@@ -532,9 +533,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', comandas:'Comandas' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', comandas:'Comandas', arquivo:'Arquivo' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, comandas: pageComandas };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, comandas: pageComandas, arquivo: pageArquivo };
   pages[page]?.();
 }
 
@@ -3573,6 +3574,52 @@ let COMANDAS = [];
 const COMANDA_STATUS_LABEL = { aberta: 'Aberta', fechada: 'Fechada', cancelada: 'Cancelada' };
 const COMANDA_STATUS_BADGE = { aberta: 'badge-green', fechada: 'badge-red', cancelada: 'badge-gray' };
 
+async function pageArquivo() {
+  document.getElementById('content').innerHTML = '<p style="color:#64748b">Carregando...</p>';
+  let orders;
+  try {
+    orders = await api('GET', '/orders?archived=true&limit=500');
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="card"><p style="color:#ef4444">❌ Erro ao carregar arquivo: ${e.message}</p></div>`;
+    return;
+  }
+
+  const groups = {};
+  for (const o of orders) {
+    const d = new Date(o.created_at).toLocaleDateString('pt-BR');
+    (groups[d] = groups[d] || []).push(o);
+  }
+  const dates = Object.keys(groups).sort((a, b) => {
+    const [da,ma,ya] = a.split('/'); const [db,mb,yb] = b.split('/');
+    return new Date(yb,mb-1,db) - new Date(ya,ma-1,da);
+  });
+
+  document.getElementById('content').innerHTML = `
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:14px">📁 Vendas arquivadas ao fechar o caixa, separadas por data. Somem do painel de Pedidos assim que arquivadas.</p>
+    ${!dates.length ? '<div class="card"><p style="color:#64748b">Nenhuma venda arquivada ainda.</p></div>' : dates.map(d => {
+      const os = groups[d];
+      const total = os.reduce((s,o) => s + parseFloat(o.total||0), 0);
+      return `
+      <details class="card" style="margin-bottom:10px">
+        <summary style="cursor:pointer;font-weight:700;color:var(--text);display:flex;justify-content:space-between;align-items:center">
+          <span>📅 ${d} — ${os.length} venda(s)</span>
+          <span style="color:#7c3aed">R$ ${total.toFixed(2).replace('.',',')}</span>
+        </summary>
+        <table style="margin-top:10px">
+          <tr><th>Pedido</th><th>Cliente</th><th>Status</th><th>Pagamento</th><th>Total</th></tr>
+          ${os.map(o => `
+            <tr>
+              <td>#${(o.order_number||'').toString().slice(-6).toUpperCase()}</td>
+              <td>${o.customer_name||'-'}</td>
+              <td>${STATUS_LABEL[o.status]||o.status}</td>
+              <td>${o.payment_method||'-'}</td>
+              <td>R$ ${parseFloat(o.total||0).toFixed(2).replace('.',',')}</td>
+            </tr>`).join('')}
+        </table>
+      </details>`;
+    }).join('')}`;
+}
+
 async function pageComandas() {
   document.getElementById('content').innerHTML = '<p style="color:#64748b">Carregando...</p>';
   try {
@@ -4088,10 +4135,11 @@ async function finalizarPedido(id) {
 }
 
 async function fecharCaixa() {
-  if (!confirm('Fechar caixa agora? Isso imprime o resumo de todas as vendas do dia (só valores).')) return;
+  if (!confirm('Fechar caixa agora? Isso arquiva as vendas de hoje (somem do painel de Pedidos, ficam em ARQUIVO) e imprime o resumo (só valores).')) return;
   try {
-    await api('POST', '/printers/close-register', {});
-    toast('Fechamento de caixa enviado para impressão!');
+    const r = await api('POST', '/orders/close-register', {});
+    toast(`Caixa fechado! ${r.archived_count} venda(s) arquivada(s).`);
+    carregarPedidos();
   } catch(e) {
     toast('Erro: ' + e.message, true);
   }
