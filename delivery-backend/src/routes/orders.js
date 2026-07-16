@@ -397,6 +397,46 @@ router.post('/close-register', requireRole('admin'), async (req, res) => {
   }
 });
 
+// POST /api/orders/:id/finalize — marca o pedido como finalizado (esmaece o card, some do
+// fluxo de ação) e imprime o recibo de conferência (resumo + valor)
+router.post('/:id/finalize', requireRole('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE orders SET finalized_at = NOW() WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    const order = await pool.query(
+      `SELECT order_number, payment_method, subtotal, delivery_fee, discount, total, created_at,
+              (SELECT name FROM customers c WHERE c.id = orders.customer_id) AS customer_name
+       FROM orders WHERE id = $1`,
+      [req.params.id]
+    );
+    broadcastToStation('caixa', { event: 'finalize_order', order: order.rows[0] });
+    broadcastOrderUpdate({ event: 'order_finalized', order_id: req.params.id });
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/orders/:id/unfinalize — reabre um pedido finalizado (some o esmaecido)
+router.post('/:id/unfinalize', requireRole('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE orders SET finalized_at = NULL WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
+    broadcastOrderUpdate({ event: 'order_unfinalized', order_id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/orders/:id — pedido completo com itens
 router.get('/:id', async (req, res) => {
   try {
