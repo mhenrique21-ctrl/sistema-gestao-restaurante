@@ -360,10 +360,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/orders/close-register — arquiva as vendas do dia (somem do painel de Pedidos,
-// ficam disponíveis em ARQUIVO) e manda o resumo pra impressão térmica
+// POST /api/orders/close-register — arquiva TODAS as vendas ainda não fechadas (somem do
+// painel de Pedidos, ficam disponíveis em ARQUIVO) e manda o resumo pra impressão térmica
 router.post('/close-register', requireRole('admin'), async (req, res) => {
-  const date = req.body.date || new Date().toISOString().slice(0, 10);
+  const date = new Date().toISOString().slice(0, 10);
   try {
     const totals = await pool.query(
       `SELECT
@@ -373,29 +373,24 @@ router.post('/close-register', requireRole('admin'), async (req, res) => {
          SUM(COALESCE(discount, 0)) AS total_descontos,
          SUM(COALESCE(delivery_fee, 0)) AS total_entregas
        FROM orders
-       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND archived_at IS NULL`,
-      [date]
+       WHERE archived_at IS NULL`
     );
     const byPayment = await pool.query(
       `SELECT COALESCE(payment_method, 'Não informado') AS payment_method, COUNT(*) AS qty, SUM(total) AS total
        FROM orders
-       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND archived_at IS NULL AND status NOT IN ('cancelado')
+       WHERE archived_at IS NULL AND status NOT IN ('cancelado')
        GROUP BY payment_method
-       ORDER BY total DESC`,
-      [date]
+       ORDER BY total DESC`
     );
     const archived = await pool.query(
-      `UPDATE orders SET archived_at = NOW()
-       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND archived_at IS NULL
-       RETURNING id`,
-      [date]
+      `UPDATE orders SET archived_at = NOW() WHERE archived_at IS NULL RETURNING id`
     );
 
     const summary = { date, totals: totals.rows[0], by_payment: byPayment.rows };
     broadcastToStation('caixa', { event: 'close_register', summary });
     broadcastOrderUpdate({ event: 'register_closed', date });
 
-    res.json({ ok: true, archived_count: archived.rowCount, summary });
+    res.json({ ok: true, archived_count: archived.rows.length, summary });
   } catch (e) {
     console.error('[orders/close-register]', e.message);
     res.status(500).json({ error: e.message });
