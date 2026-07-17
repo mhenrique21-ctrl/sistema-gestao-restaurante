@@ -224,6 +224,7 @@ export default function CheckoutPage() {
 
   const discount = couponApplied ? (couponApplied.discount ?? 0) : promoDiscount
   const total = subtotal + deliveryFee - discount
+  const totalRef = useRef(total)
 
   async function applyCoupon() {
     setCouponError('')
@@ -306,10 +307,11 @@ export default function CheckoutPage() {
     await finishOrder(undefined)
   }
 
-  // Botão Apple Pay (Stripe Payment Request Button)
+  // Botão Apple Pay (Stripe Payment Request Button) — cria uma única vez ao entrar nessa forma de pagamento
   useEffect(() => {
     if (payment !== 'apple_pay' || !stripePromise || !applePayButtonRef.current) return
     let cancelled = false
+    let mountedButton = null
     setApplePayError('')
     setApplePayAvailable(null)
     stripePromise.then(stripe => {
@@ -318,25 +320,17 @@ export default function CheckoutPage() {
       const paymentRequest = stripe.paymentRequest({
         country: 'BR',
         currency: 'brl',
-        total: { label: 'Confraria Café', amount: Math.round(total * 100) },
+        total: { label: 'Confraria Café', amount: Math.round(totalRef.current * 100) },
         requestPayerName: true,
         requestPayerPhone: true,
       })
-      paymentRequest.canMakePayment().then(result => { if (!cancelled) setApplePayAvailable(!!result) })
-
-      const elements = stripe.elements()
-      const prButton = elements.create('paymentRequestButton', {
-        paymentRequest,
-        style: { paymentRequestButton: { type: 'default', theme: 'dark', height: '48px' } },
-      })
-      if (applePayButtonRef.current) prButton.mount(applePayButtonRef.current)
 
       paymentRequest.on('paymentmethod', async (ev) => {
         const fieldError = validateFields()
         if (fieldError) { ev.complete('fail'); setApplePayError(fieldError); return }
         setLoading(true)
         try {
-          const intentRes = await api.createCardIntent(total)
+          const intentRes = await api.createCardIntent(totalRef.current)
           const { paymentIntent, error: confirmError } = await stripe.confirmCardPayment(
             intentRes.clientSecret,
             { payment_method: ev.paymentMethod.id },
@@ -354,9 +348,34 @@ export default function CheckoutPage() {
       })
 
       paymentRequestRef.current = paymentRequest
+
+      paymentRequest.canMakePayment().then(result => {
+        if (cancelled) return
+        setApplePayAvailable(!!result)
+        if (!result || !applePayButtonRef.current) return
+        const elements = stripe.elements()
+        const prButton = elements.create('paymentRequestButton', {
+          paymentRequest,
+          style: { paymentRequestButton: { type: 'default', theme: 'dark', height: '48px' } },
+        })
+        prButton.mount(applePayButtonRef.current)
+        mountedButton = prButton
+      })
     })
-    return () => { cancelled = true }
-  }, [payment, total])
+    return () => {
+      cancelled = true
+      if (mountedButton) mountedButton.unmount()
+      paymentRequestRef.current = null
+    }
+  }, [payment])
+
+  // Mantém o valor do pedido sincronizado no botão do Apple Pay sem recriar o botão
+  useEffect(() => {
+    totalRef.current = total
+    if (paymentRequestRef.current) {
+      paymentRequestRef.current.update({ total: { label: 'Confraria Café', amount: Math.round(total * 100) } })
+    }
+  }, [total])
 
   // Tela de sucesso
   if (success) {
