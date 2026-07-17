@@ -40,7 +40,10 @@ export default function CartPage() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <h1 className="flex-1 font-display text-xl font-bold" style={{ color: 'var(--brown)' }}>Meu Carrinho</h1>
-          <button onClick={clear} className="text-xs font-bold press px-3 py-2" style={{ color: 'var(--danger)' }}>Limpar</button>
+          <button onClick={clear} title="Limpar carrinho" className="press w-11 h-11 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--card)', color: 'var(--danger)', boxShadow: 'var(--shadow-soft)' }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
         </div>
       </div>
 
@@ -146,6 +149,10 @@ export default function CartPage() {
           style={!storeStatus.open ? { opacity: 0.4, cursor: 'not-allowed' } : {}}>
           <span className="text-sm font-black">Finalizar pedido</span>
           <span className="text-sm font-black">{money(subtotal)}</span>
+        </button>
+        <button onClick={() => navigate('/')} className="btn-outline press w-full py-3 mt-2 text-sm flex items-center justify-center gap-1.5">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Continuar comprando
         </button>
       </div>
     </div>

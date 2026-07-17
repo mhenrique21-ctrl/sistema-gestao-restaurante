@@ -260,11 +260,23 @@ export default function MenuPage() {
       {count > 0 && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md px-5 z-30">
           <button onClick={() => navigate('/cart')}
-            className="btn-gold w-full py-4 flex items-center justify-between px-5 text-sm scale-in">
-            <span className="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs"
-              style={{ background: 'rgba(255,255,255,0.22)' }}>{count}</span>
-            <span className="font-black">Ver carrinho</span>
-            <span className="font-bold">{money(total)}</span>
+            className="btn-gold w-full py-3.5 flex items-center justify-between px-5 text-sm scale-in">
+            <span className="relative">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              </svg>
+              <span className="absolute -top-2 -right-2 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black"
+                style={{ background: '#fff', color: 'var(--brown)' }}>{count > 9 ? '9+' : count}</span>
+            </span>
+            <span className="flex flex-col items-center leading-tight">
+              <span className="font-black">Ver carrinho</span>
+              <span className="text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>{count} {count === 1 ? 'item' : 'itens'}</span>
+            </span>
+            <span className="flex items-center gap-1 font-black">
+              {money(total)}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
           </button>
         </div>
       )}

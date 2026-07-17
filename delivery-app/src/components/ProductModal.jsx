@@ -191,22 +191,23 @@ export default function ProductModal({ product, onClose }) {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-2 rounded-full"
-                style={{ background: 'var(--bg)', border: '1px solid var(--border)', height: 52 }}>
-                <button onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
-                  style={{ color: 'var(--muted)' }}>−</button>
-                <span className="w-6 text-center font-black text-base" style={{ color: 'var(--brown)' }}>{qty}</span>
-                <button onClick={() => setQty((q) => Math.min(remainingPromo, q + 1))}
-                  disabled={qty >= remainingPromo}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
-                  style={{ color: qty >= remainingPromo ? 'var(--muted)' : 'var(--gold-dim)', opacity: qty >= remainingPromo ? 0.4 : 1 }}>+</button>
+            <div className="space-y-3">
+              <div className="flex justify-center">
+                <div className="flex items-center gap-2 px-2 rounded-full"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', height: 52 }}>
+                  <button onClick={() => setQty((q) => Math.max(1, q - 1))}
+                    className="w-11 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
+                    style={{ color: 'var(--muted)' }}>−</button>
+                  <span className="w-8 text-center font-black text-base" style={{ color: 'var(--brown)' }}>{qty}</span>
+                  <button onClick={() => setQty((q) => Math.min(remainingPromo, q + 1))}
+                    disabled={qty >= remainingPromo}
+                    className="w-11 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
+                    style={{ color: qty >= remainingPromo ? 'var(--muted)' : 'var(--gold-dim)', opacity: qty >= remainingPromo ? 0.4 : 1 }}>+</button>
+                </div>
               </div>
               <button onClick={handleAdd} disabled={!canAdd}
-                className="btn-gold flex-1 py-4 flex items-center justify-between px-5 text-sm">
-                <span>{!canAdd && missingRequired.length ? 'Escolha opções' : qtyExceedsPromo ? 'Limite da promoção' : 'Adicionar'}</span>
-                <span className="font-black">{money(total)}</span>
+                className="btn-gold w-full py-4 text-sm font-black">
+                {!canAdd && missingRequired.length ? 'Escolha as opções obrigatórias' : qtyExceedsPromo ? 'Limite da promoção atingido' : `Adicionar ao carrinho — ${money(total)}`}
               </button>
             </div>
           )}
