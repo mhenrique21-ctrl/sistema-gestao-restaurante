@@ -154,8 +154,8 @@ export default function MenuPage() {
 
         {/* ── Hero banner ── */}
         <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
-          style={{ height: 148, boxShadow: 'var(--shadow-lift)' }}>
-          <img src={bannerUrl || hero} alt="" className="w-full h-full object-cover" />
+          style={{ boxShadow: 'var(--shadow-lift)' }}>
+          <img src={bannerUrl || hero} alt="" className="w-full h-auto block" />
         </div>
 
         {/* ── Busca + WhatsApp ── */}
