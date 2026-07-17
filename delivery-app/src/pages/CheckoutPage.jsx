@@ -10,12 +10,11 @@ const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   : null
 
 const PAYMENT_METHODS = [
-  { id: 'pix',                   label: 'PIX',                    icon: '⚡', desc: 'Pague via PIX após confirmar' },
-  { id: 'dinheiro',              label: 'Dinheiro',                icon: '💵', desc: 'Pague na entrega / retirada' },
-  { id: 'cartao_credito_online', label: 'Cartão de Crédito',       icon: '💳', desc: 'Cobrança online, na hora' },
-  { id: 'cartao_debito_online',  label: 'Cartão de Débito',        icon: '🏦', desc: 'Cobrança online, na hora' },
-  { id: 'cartao_credito',        label: 'Cartão (na entrega)',     icon: '🚚', desc: 'Maquininha na entrega' },
-  { id: 'cartao_debito',         label: 'Cartão débito (na entrega)', icon: '🚚', desc: 'Maquininha na entrega' },
+  { id: 'pix',            label: 'PIX',              icon: '⚡', desc: 'Pague via PIX após confirmar' },
+  { id: 'dinheiro',       label: 'Dinheiro',          icon: '💵', desc: 'Pague na entrega / retirada' },
+  { id: 'cartao_credito', label: 'Cartão de Crédito', icon: '💳', desc: 'Maquininha na entrega' },
+  { id: 'cartao_debito',  label: 'Cartão de Débito',  icon: '🏦', desc: 'Maquininha na entrega' },
+  { id: 'apple_pay',      label: 'Apple Pay',         icon: '🍎', desc: 'Cobrança online, na hora' },
 ]
 
 function brl(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
@@ -144,12 +143,11 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState([])
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addingNewAddress, setAddingNewAddress] = useState(false)
-  const [cardError, setCardError] = useState('')
-  const [cardReady, setCardReady] = useState(false)
-  const cardElementRef = useRef(null)
-  const cardElRef = useRef(null)
+  const [applePayError, setApplePayError] = useState('')
+  const [applePayAvailable, setApplePayAvailable] = useState(null)
+  const applePayButtonRef = useRef(null)
+  const paymentRequestRef = useRef(null)
   const stripeRef = useRef(null)
-  const elementsRef = useRef(null)
   const [lookingUp, setLookingUp] = useState(false)
   const [activePromo, setActivePromo] = useState(null)
 
@@ -158,31 +156,6 @@ export default function CheckoutPage() {
     api.settings().then(setSettings).catch(() => {})
     api.getPromotions().then(setActivePromo).catch(() => {})
   }, [])
-
-  const isCardPayment = payment === 'cartao_credito_online' || payment === 'cartao_debito_online'
-
-  useEffect(() => {
-    if (!isCardPayment || !stripePromise || !cardElementRef.current) return
-    let cancelled = false
-    setCardReady(false)
-    setCardError('')
-    stripePromise.then(stripe => {
-      if (cancelled || !stripe) return
-      stripeRef.current = stripe
-      const elements = stripe.elements()
-      elementsRef.current = elements
-      const card = elements.create('card', {
-        style: { base: { fontSize: '15px', color: '#F8F4ED', '::placeholder': { color: '#8A7561' } }, invalid: { color: '#E05252' } },
-      })
-      card.mount(cardElementRef.current)
-      card.on('change', (e) => { setCardError(e.error?.message || ''); setCardReady(e.complete) })
-      cardElRef.current = card
-    })
-    return () => {
-      cancelled = true
-      if (cardElRef.current) { cardElRef.current.unmount(); cardElRef.current = null }
-    }
-  }, [isCardPayment])
 
   async function lookupByPhone(phoneVal) {
     const digits = phoneVal.replace(/\D/g, '')
@@ -270,31 +243,17 @@ export default function CheckoutPage() {
     }
   }
 
-  async function handleSubmit() {
-    setError('')
-    if (!firstName.trim()) return setError('Informe seu nome')
-    if (!lastName.trim()) return setError('Informe seu sobrenome')
-    if (!phone.trim()) return setError('Informe seu WhatsApp')
-    if (deliveryType === 'delivery' && !neighborhood) return setError('Selecione o bairro')
-    if (deliveryType === 'delivery' && !street.trim()) return setError('Informe a rua')
-    if (isCardPayment && !cardReady) return setError('Preencha os dados do cartão')
-    setLoading(true)
-    try {
-      let stripePaymentIntentId
-      if (isCardPayment) {
-        if (!stripeRef.current || !cardElRef.current) throw new Error('Pagamento por cartão indisponível no momento')
-        const intentRes = await api.createCardIntent(total)
-        const { paymentIntent, error: confirmError } = await stripeRef.current.confirmCardPayment(intentRes.clientSecret, {
-          payment_method: {
-            card: cardElRef.current,
-            billing_details: { name: `${firstName.trim()} ${lastName.trim()}`, phone: phone.replace(/\D/g, '') },
-          },
-        })
-        if (confirmError) throw new Error(confirmError.message || 'Pagamento recusado')
-        if (paymentIntent.status !== 'succeeded') throw new Error('Pagamento não foi aprovado')
-        stripePaymentIntentId = paymentIntent.id
-      }
+  function validateFields() {
+    if (!firstName.trim()) return 'Informe seu nome'
+    if (!lastName.trim()) return 'Informe seu sobrenome'
+    if (!phone.trim()) return 'Informe seu WhatsApp'
+    if (deliveryType === 'delivery' && !neighborhood) return 'Selecione o bairro'
+    if (deliveryType === 'delivery' && !street.trim()) return 'Informe a rua'
+    return ''
+  }
 
+  async function finishOrder(stripePaymentIntentId) {
+    try {
       const order = await api.guestOrder({
         name: `${firstName.trim()} ${lastName.trim()}`,
         phone: phone.replace(/\D/g, ''),
@@ -338,6 +297,66 @@ export default function CheckoutPage() {
     } catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
+
+  async function handleSubmit() {
+    setError('')
+    const fieldError = validateFields()
+    if (fieldError) return setError(fieldError)
+    setLoading(true)
+    await finishOrder(undefined)
+  }
+
+  // Botão Apple Pay (Stripe Payment Request Button)
+  useEffect(() => {
+    if (payment !== 'apple_pay' || !stripePromise || !applePayButtonRef.current) return
+    let cancelled = false
+    setApplePayError('')
+    setApplePayAvailable(null)
+    stripePromise.then(stripe => {
+      if (cancelled || !stripe) return
+      stripeRef.current = stripe
+      const paymentRequest = stripe.paymentRequest({
+        country: 'BR',
+        currency: 'brl',
+        total: { label: 'Confraria Café', amount: Math.round(total * 100) },
+        requestPayerName: true,
+        requestPayerPhone: true,
+      })
+      paymentRequest.canMakePayment().then(result => { if (!cancelled) setApplePayAvailable(!!result) })
+
+      const elements = stripe.elements()
+      const prButton = elements.create('paymentRequestButton', {
+        paymentRequest,
+        style: { paymentRequestButton: { type: 'default', theme: 'dark', height: '48px' } },
+      })
+      if (applePayButtonRef.current) prButton.mount(applePayButtonRef.current)
+
+      paymentRequest.on('paymentmethod', async (ev) => {
+        const fieldError = validateFields()
+        if (fieldError) { ev.complete('fail'); setApplePayError(fieldError); return }
+        setLoading(true)
+        try {
+          const intentRes = await api.createCardIntent(total)
+          const { paymentIntent, error: confirmError } = await stripe.confirmCardPayment(
+            intentRes.clientSecret,
+            { payment_method: ev.paymentMethod.id },
+            { handleActions: false }
+          )
+          if (confirmError) { ev.complete('fail'); setApplePayError(confirmError.message || 'Pagamento recusado'); setLoading(false); return }
+          ev.complete('success')
+          if (paymentIntent.status !== 'succeeded') { setApplePayError('Pagamento não foi aprovado'); setLoading(false); return }
+          await finishOrder(paymentIntent.id)
+        } catch (e) {
+          ev.complete('fail')
+          setApplePayError(e.message)
+          setLoading(false)
+        }
+      })
+
+      paymentRequestRef.current = paymentRequest
+    })
+    return () => { cancelled = true }
+  }, [payment, total])
 
   // Tela de sucesso
   if (success) {
@@ -562,11 +581,13 @@ export default function CheckoutPage() {
 
           {payment === 'pix' && settings.pix_key && <PixBox pixKey={settings.pix_key} />}
 
-          {isCardPayment && (
+          {payment === 'apple_pay' && (
             <div style={{ marginTop: 10 }}>
-              <label style={LABEL}>Dados do cartão</label>
-              <div ref={cardElementRef} style={{ ...INPUT, padding: '12px 14px' }} />
-              {cardError && <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>{cardError}</p>}
+              <div ref={applePayButtonRef} />
+              {applePayAvailable === false && (
+                <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>Apple Pay não está disponível neste dispositivo/navegador. Use o Safari num iPhone/Mac com cartão configurado.</p>
+              )}
+              {applePayError && <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>{applePayError}</p>}
               <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>🔒 Pagamento processado com segurança pela Stripe</p>
             </div>
           )}
@@ -685,13 +706,15 @@ export default function CheckoutPage() {
       </div>
 
       {/* Botão fixo */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-4 safe-bottom z-50"
-        style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-        <button onClick={handleSubmit} disabled={loading} className="btn-gold w-full py-4 flex items-center justify-between px-5">
-          <span className="text-sm font-black">{loading ? '⏳ Enviando...' : '✅ Confirmar pedido'}</span>
-          <span className="text-sm font-black">{brl(total)}</span>
-        </button>
-      </div>
+      {payment !== 'apple_pay' && (
+        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-4 safe-bottom z-50"
+          style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <button onClick={handleSubmit} disabled={loading} className="btn-gold w-full py-4 flex items-center justify-between px-5">
+            <span className="text-sm font-black">{loading ? '⏳ Enviando...' : '✅ Confirmar pedido'}</span>
+            <span className="text-sm font-black">{brl(total)}</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -170,7 +170,10 @@ router.post('/guest', async (req, res) => {
     const discountLabel = couponDiscount >= promoDiscount ? (appliedCoupon?.description || coupon_code) : appliedPromo?.name;
     const total = subtotal + fee - finalDiscount;
 
-    // Verifica no servidor (nunca confia no cliente) que o pagamento por cartão foi realmente aprovado
+    // Verifica no servidor (nunca confia no cliente) que o pagamento por cartão/Apple Pay foi realmente aprovado
+    if (payment_method === 'apple_pay' && !stripe_payment_intent_id) {
+      throw { status: 400, message: 'Pagamento não confirmado' };
+    }
     let cardVerified = false;
     if (stripe_payment_intent_id) {
       try {
