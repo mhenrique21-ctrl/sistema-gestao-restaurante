@@ -156,17 +156,6 @@ export default function MenuPage() {
         <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
           style={{ height: 148, boxShadow: 'var(--shadow-lift)' }}>
           <img src={bannerUrl || hero} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(46,42,38,0.55) 0%, transparent 60%)' }} />
-          <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: '#EAD9BC' }}>Cardápio completo</p>
-              <p className="font-display text-lg font-bold" style={{ color: '#fff' }}>Peça agora, chega quentinho</p>
-            </div>
-            <span className="press flex-shrink-0 text-xs font-black px-4 py-2 rounded-full"
-              style={{ background: '#fff', color: 'var(--brown)', boxShadow: '0 4px 12px rgba(0,0,0,0.25)' }}>
-              Pedir 🛵
-            </span>
-          </div>
         </div>
 
         {/* ── Busca + WhatsApp ── */}
