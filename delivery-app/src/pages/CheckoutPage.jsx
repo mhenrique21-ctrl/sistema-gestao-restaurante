@@ -1,14 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { loadStripe } from '@stripe/stripe-js'
 import { useCart, itemLineTotal } from '../store/cart'
 import { api } from '../api'
 import { trackPurchase } from '../utils/metaPixel'
 
+const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
+  : null
+
 const PAYMENT_METHODS = [
-  { id: 'pix',            label: 'PIX',              icon: '⚡', desc: 'Pague via PIX após confirmar' },
-  { id: 'dinheiro',       label: 'Dinheiro',          icon: '💵', desc: 'Pague na entrega / retirada' },
-  { id: 'cartao_credito', label: 'Cartão de Crédito', icon: '💳', desc: 'Maquininha na entrega' },
-  { id: 'cartao_debito',  label: 'Cartão de Débito',  icon: '🏦', desc: 'Maquininha na entrega' },
+  { id: 'pix',                   label: 'PIX',                    icon: '⚡', desc: 'Pague via PIX após confirmar' },
+  { id: 'dinheiro',              label: 'Dinheiro',                icon: '💵', desc: 'Pague na entrega / retirada' },
+  { id: 'cartao_credito_online', label: 'Cartão de Crédito',       icon: '💳', desc: 'Cobrança online, na hora' },
+  { id: 'cartao_debito_online',  label: 'Cartão de Débito',        icon: '🏦', desc: 'Cobrança online, na hora' },
+  { id: 'cartao_credito',        label: 'Cartão (na entrega)',     icon: '🚚', desc: 'Maquininha na entrega' },
+  { id: 'cartao_debito',         label: 'Cartão débito (na entrega)', icon: '🚚', desc: 'Maquininha na entrega' },
 ]
 
 function brl(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
@@ -137,6 +144,12 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState([])
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addingNewAddress, setAddingNewAddress] = useState(false)
+  const [cardError, setCardError] = useState('')
+  const [cardReady, setCardReady] = useState(false)
+  const cardElementRef = useRef(null)
+  const cardElRef = useRef(null)
+  const stripeRef = useRef(null)
+  const elementsRef = useRef(null)
   const [lookingUp, setLookingUp] = useState(false)
   const [activePromo, setActivePromo] = useState(null)
 
@@ -145,6 +158,31 @@ export default function CheckoutPage() {
     api.settings().then(setSettings).catch(() => {})
     api.getPromotions().then(setActivePromo).catch(() => {})
   }, [])
+
+  const isCardPayment = payment === 'cartao_credito_online' || payment === 'cartao_debito_online'
+
+  useEffect(() => {
+    if (!isCardPayment || !stripePromise || !cardElementRef.current) return
+    let cancelled = false
+    setCardReady(false)
+    setCardError('')
+    stripePromise.then(stripe => {
+      if (cancelled || !stripe) return
+      stripeRef.current = stripe
+      const elements = stripe.elements()
+      elementsRef.current = elements
+      const card = elements.create('card', {
+        style: { base: { fontSize: '15px', color: '#F8F4ED', '::placeholder': { color: '#8A7561' } }, invalid: { color: '#E05252' } },
+      })
+      card.mount(cardElementRef.current)
+      card.on('change', (e) => { setCardError(e.error?.message || ''); setCardReady(e.complete) })
+      cardElRef.current = card
+    })
+    return () => {
+      cancelled = true
+      if (cardElRef.current) { cardElRef.current.unmount(); cardElRef.current = null }
+    }
+  }, [isCardPayment])
 
   async function lookupByPhone(phoneVal) {
     const digits = phoneVal.replace(/\D/g, '')
@@ -239,8 +277,24 @@ export default function CheckoutPage() {
     if (!phone.trim()) return setError('Informe seu WhatsApp')
     if (deliveryType === 'delivery' && !neighborhood) return setError('Selecione o bairro')
     if (deliveryType === 'delivery' && !street.trim()) return setError('Informe a rua')
+    if (isCardPayment && !cardReady) return setError('Preencha os dados do cartão')
     setLoading(true)
     try {
+      let stripePaymentIntentId
+      if (isCardPayment) {
+        if (!stripeRef.current || !cardElRef.current) throw new Error('Pagamento por cartão indisponível no momento')
+        const intentRes = await api.createCardIntent(total)
+        const { paymentIntent, error: confirmError } = await stripeRef.current.confirmCardPayment(intentRes.clientSecret, {
+          payment_method: {
+            card: cardElRef.current,
+            billing_details: { name: `${firstName.trim()} ${lastName.trim()}`, phone: phone.replace(/\D/g, '') },
+          },
+        })
+        if (confirmError) throw new Error(confirmError.message || 'Pagamento recusado')
+        if (paymentIntent.status !== 'succeeded') throw new Error('Pagamento não foi aprovado')
+        stripePaymentIntentId = paymentIntent.id
+      }
+
       const order = await api.guestOrder({
         name: `${firstName.trim()} ${lastName.trim()}`,
         phone: phone.replace(/\D/g, ''),
@@ -251,6 +305,7 @@ export default function CheckoutPage() {
         notes: [notes, payment === 'dinheiro' && troco ? `Troco para R$ ${troco}` : ''].filter(Boolean).join(' | ') || null,
         coupon_code: couponApplied?.code || undefined,
         coupon_subtotal: couponApplied ? subtotalSemPromo : undefined,
+        stripe_payment_intent_id: stripePaymentIntentId,
         items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
       })
       clear()
@@ -506,6 +561,15 @@ export default function CheckoutPage() {
           </div>
 
           {payment === 'pix' && settings.pix_key && <PixBox pixKey={settings.pix_key} />}
+
+          {isCardPayment && (
+            <div style={{ marginTop: 10 }}>
+              <label style={LABEL}>Dados do cartão</label>
+              <div ref={cardElementRef} style={{ ...INPUT, padding: '12px 14px' }} />
+              {cardError && <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>{cardError}</p>}
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>🔒 Pagamento processado com segurança pela Stripe</p>
+            </div>
+          )}
 
           {payment === 'dinheiro' && (
             <div style={{ marginTop: 10 }}>

@@ -98,7 +98,7 @@ async function insertItemAddons(orderItemId, addons, client = pool) {
 // POST /api/orders/guest — pedido sem autenticação (app cliente)
 router.post('/guest', async (req, res) => {
   const { name, phone, delivery_type, delivery_address,
-          payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal } = req.body;
+          payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal, stripe_payment_intent_id } = req.body;
 
   if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
   if (!items?.length) return res.status(400).json({ error: 'Carrinho vazio' });
@@ -170,10 +170,24 @@ router.post('/guest', async (req, res) => {
     const discountLabel = couponDiscount >= promoDiscount ? (appliedCoupon?.description || coupon_code) : appliedPromo?.name;
     const total = subtotal + fee - finalDiscount;
 
+    // Verifica no servidor (nunca confia no cliente) que o pagamento por cartão foi realmente aprovado
+    let cardVerified = false;
+    if (stripe_payment_intent_id) {
+      try {
+        const pi = await stripeService.stripe.paymentIntents.retrieve(stripe_payment_intent_id);
+        cardVerified = pi.status === 'succeeded' && Math.abs(pi.amount - Math.round(total * 100)) < 2;
+      } catch (e) {
+        console.error('[orders/guest/card-verify]', e.message);
+      }
+      if (!cardVerified) throw { status: 400, message: 'Pagamento não confirmado' };
+    }
+    const paymentStatus = cardVerified ? 'pago' : 'pendente';
+    const piSql = cardVerified ? `'${stripe_payment_intent_id.replace(/'/g,"''")}'` : 'NULL';
+
     const orderResult = await pool.query(
       `INSERT INTO orders (customer_id, user_id, delivery_type, delivery_address, subtotal,
-        delivery_fee, discount, total, payment_method, notes, coupon_code, status)
-       VALUES ($1,$2,$3,$4,$5,$6,${finalDiscount},$7,$8,$9,${appliedCoupon ? `'${appliedCoupon.code.replace(/'/g,"''")}'` : 'NULL'},'aguardando_pagamento') RETURNING *`,
+        delivery_fee, discount, total, payment_method, notes, coupon_code, status, stripe_payment_intent_id, payment_status)
+       VALUES ($1,$2,$3,$4,$5,$6,${finalDiscount},$7,$8,$9,${appliedCoupon ? `'${appliedCoupon.code.replace(/'/g,"''")}'` : 'NULL'},'aguardando_pagamento',${piSql},'${paymentStatus}') RETURNING *`,
       [customer.id, adminId, delivery_type || 'delivery',
        delivery_address ? JSON.stringify(delivery_address) : null,
        subtotal, fee, total, payment_method, notes || null]
@@ -280,6 +294,23 @@ router.post('/guest', async (req, res) => {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[orders/guest]', err.message);
     res.status(500).json({ error: 'Erro ao criar pedido' });
+  }
+});
+
+// POST /api/orders/create-card-intent — cria PaymentIntent pra cobrança de cartão no checkout
+router.post('/create-card-intent', async (req, res) => {
+  const amount = parseFloat(req.body.amount);
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'Valor inválido' });
+  try {
+    const paymentIntent = await stripeService.stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: 'brl',
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+    });
+    res.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
+  } catch (err) {
+    console.error('[orders/create-card-intent]', err.message);
+    res.status(500).json({ error: 'Não foi possível iniciar o pagamento' });
   }
 });
 

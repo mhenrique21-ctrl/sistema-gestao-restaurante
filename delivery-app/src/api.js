@@ -40,6 +40,7 @@ export const api = {
 
   // Orders
   guestOrder: (data) => request('POST', '/orders/guest', data),
+  createCardIntent: (amount) => request('POST', '/orders/create-card-intent', { amount }),
   createOrder: (data) => request('POST', '/orders', data),
   getOrder: (id) => request('GET', `/orders/public/${id}`),
   getOrders: (params = '') => request('GET', `/orders${params}`),
