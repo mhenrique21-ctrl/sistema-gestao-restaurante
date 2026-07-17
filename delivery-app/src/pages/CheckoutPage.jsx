@@ -145,6 +145,7 @@ export default function CheckoutPage() {
   const [addingNewAddress, setAddingNewAddress] = useState(false)
   const [applePayError, setApplePayError] = useState('')
   const [applePayAvailable, setApplePayAvailable] = useState(null)
+  const [applePayDebug, setApplePayDebug] = useState('')
   const applePayButtonRef = useRef(null)
   const paymentRequestRef = useRef(null)
   const stripeRef = useRef(null)
@@ -351,6 +352,7 @@ export default function CheckoutPage() {
 
       paymentRequest.canMakePayment().then(result => {
         if (cancelled) return
+        setApplePayDebug(JSON.stringify(result))
         setApplePayAvailable(!!result)
         if (!result || !applePayButtonRef.current) return
         const elements = stripe.elements()
@@ -360,8 +362,10 @@ export default function CheckoutPage() {
         })
         prButton.mount(applePayButtonRef.current)
         mountedButton = prButton
-      })
-    })
+      }).catch(e => { if (!cancelled) setApplePayError('canMakePayment: ' + e.message) })
+
+      paymentRequest.on('cancel', () => setApplePayError('Folha do Apple Pay foi cancelada/fechada'))
+    }).catch(e => setApplePayError('Erro ao carregar Stripe: ' + e.message))
     return () => {
       cancelled = true
       if (mountedButton) mountedButton.unmount()
@@ -607,6 +611,7 @@ export default function CheckoutPage() {
                 <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>Apple Pay não está disponível neste dispositivo/navegador. Use o Safari num iPhone/Mac com cartão configurado.</p>
               )}
               {applePayError && <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>{applePayError}</p>}
+              {applePayDebug && <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6, fontFamily: 'monospace' }}>debug: {applePayDebug}</p>}
               <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>🔒 Pagamento processado com segurança pela Stripe</p>
             </div>
           )}
