@@ -105,6 +105,12 @@ router.post('/guest', async (req, res) => {
   if (!payment_method) return res.status(400).json({ error: 'Forma de pagamento é obrigatória' });
 
   try {
+    // Bloqueia forma de pagamento desativada pelo admin (aba Pagamentos)
+    const pmCheck = await pool.query(`SELECT active FROM payment_methods WHERE code = $1`, [payment_method]);
+    if (pmCheck.rows[0] && pmCheck.rows[0].active === false) {
+      return res.status(400).json({ error: 'Forma de pagamento indisponível no momento' });
+    }
+
     const custResult = await pool.query(
       `INSERT INTO customers (name, phone, active) VALUES ($1, $2, true)
        ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, active = true

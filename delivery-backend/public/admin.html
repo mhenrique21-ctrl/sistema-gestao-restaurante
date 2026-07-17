@@ -2828,7 +2828,7 @@ function renderPagamentos(methods) {
       ${methods.map(m => `
         <tr>
           <td style="color:#94a3b8">${m.sort_order}</td>
-          <td style="font-weight:600">${m.name}</td>
+          <td style="font-weight:600">${m.name}${m.code ? `<div style="font-size:.68rem;color:#64748b;font-family:monospace">${m.code}</div>` : ''}</td>
           <td style="color:#64748b">${m.description || '—'}</td>
           <td style="font-size:.8rem">${m.pix_key || '—'}</td>
           <td>${m.requires_change ? '<span class="badge badge-blue">Sim</span>' : '—'}</td>

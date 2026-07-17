@@ -150,12 +150,27 @@ export default function CheckoutPage() {
   const stripeRef = useRef(null)
   const [lookingUp, setLookingUp] = useState(false)
   const [activePromo, setActivePromo] = useState(null)
+  const [enabledCodes, setEnabledCodes] = useState(null) // null = ainda não carregou (mostra tudo)
 
   useEffect(() => {
     api.neighborhoods().then(setNeighborhoods).catch(() => setNeighborhoods([]))
     api.settings().then(setSettings).catch(() => {})
     api.getPromotions().then(setActivePromo).catch(() => {})
+    api.paymentMethods()
+      .then(list => setEnabledCodes(list.filter(m => m.active && m.code).map(m => m.code)))
+      .catch(() => setEnabledCodes(null))
   }, [])
+
+  const availableMethods = enabledCodes === null
+    ? PAYMENT_METHODS
+    : PAYMENT_METHODS.filter(m => enabledCodes.includes(m.id))
+
+  // Se a forma selecionada foi desativada pelo admin, troca pra primeira disponível
+  useEffect(() => {
+    if (availableMethods.length && !availableMethods.some(m => m.id === payment)) {
+      setPayment(availableMethods[0].id)
+    }
+  }, [enabledCodes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function lookupByPhone(phoneVal) {
     const digits = phoneVal.replace(/\D/g, '')
@@ -583,7 +598,7 @@ export default function CheckoutPage() {
         {/* Pagamento */}
         <Section title="💳 Forma de pagamento">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {PAYMENT_METHODS.map(m => (
+            {availableMethods.map(m => (
               <button key={m.id} onClick={() => setPayment(m.id)} className="press"
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, cursor: 'pointer', textAlign: 'left',
                   background: payment === m.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
