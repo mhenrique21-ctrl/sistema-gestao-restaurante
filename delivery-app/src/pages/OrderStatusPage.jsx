@@ -100,7 +100,7 @@ export default function OrderStatusPage() {
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 transition-all`}
                         style={{
                           background: done ? 'var(--gold)' : 'var(--surface)',
-                          color: done ? '#0F0F0F' : 'var(--muted)',
+                          color: done ? '#FFFFFF' : 'var(--muted)',
                           boxShadow: current ? '0 0 0 4px rgba(201,162,94,0.2)' : 'none',
                         }}>
                         {done ? step.icon : '○'}

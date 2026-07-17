@@ -53,7 +53,7 @@ function PixBox({ pixKey, total }) {
       {total && <p style={{ fontSize: 18, fontWeight: 900, color: 'var(--gold)', marginBottom: 10 }}>{brl(total)}</p>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', borderRadius: 10, padding: '8px 12px', border: '1px solid var(--border)' }}>
         <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 13, color: 'var(--cream)', wordBreak: 'break-all' }}>{pixKey}</span>
-        <button onClick={copy} className="press" style={{ background: 'var(--gold)', color: '#0F0F0F', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+        <button onClick={copy} className="press" style={{ background: 'var(--gold)', color: '#FFFFFF', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
           {copied ? '✅ Copiado!' : '📋 Copiar'}
         </button>
       </div>
@@ -77,7 +77,7 @@ function StripePixBox({ qrCodeUrl, qrCodeData, total }) {
       {qrCodeData && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', borderRadius: 10, padding: '8px 12px', border: '1px solid var(--border)' }}>
           <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 11, color: 'var(--cream)', wordBreak: 'break-all', maxHeight: 60, overflow: 'auto' }}>{qrCodeData}</span>
-          <button onClick={copy} className="press" style={{ background: 'var(--gold)', color: '#0F0F0F', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={copy} className="press" style={{ background: 'var(--gold)', color: '#FFFFFF', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
             {copied ? '✅ Copiado!' : '📋 Copiar código'}
           </button>
         </div>

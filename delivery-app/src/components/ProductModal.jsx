@@ -76,9 +76,9 @@ export default function ProductModal({ product, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
-      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.75)' }} />
+      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(46,42,38,0.45)' }} />
       <div className="slide-up relative w-full max-w-md rounded-t-3xl max-h-[92vh] overflow-y-auto no-scrollbar"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        style={{ background: 'var(--card)', boxShadow: '0 -12px 40px rgba(93,64,55,0.18)' }}
         onClick={(e) => e.stopPropagation()}>
 
         {/* Handle */}
@@ -88,21 +88,21 @@ export default function ProductModal({ product, onClose }) {
 
         {/* Product image */}
         {product.image_url && !imgBroken ? (
-          <div className="mx-4 mt-2 rounded-2xl overflow-hidden h-48">
+          <div className="mx-5 mt-2 rounded-3xl overflow-hidden" style={{ height: 220, boxShadow: 'var(--shadow-soft)' }}>
             <img src={product.image_url} alt={product.name} onError={() => setImgBroken(true)}
               className="w-full h-full object-cover" />
           </div>
         ) : (
-          <div className="mx-4 mt-2 rounded-2xl h-36 flex items-center justify-center text-6xl"
-            style={{ background: 'var(--card)' }}>☕</div>
+          <div className="mx-5 mt-2 rounded-3xl h-36 flex items-center justify-center text-6xl"
+            style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>☕</div>
         )}
 
         <div className="px-5 pt-4 pb-6">
           {/* Title + price */}
           <div className="flex items-start justify-between gap-3 mb-1">
-            <h2 className="text-xl font-black leading-tight flex-1" style={{ color: 'var(--cream)' }}>{product.name}</h2>
-            <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--card)', color: 'var(--muted)' }}>✕</button>
+            <h2 className="font-display text-2xl font-bold leading-tight flex-1" style={{ color: 'var(--brown)' }}>{product.name}</h2>
+            <button onClick={onClose} className="press w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'var(--bg)', color: 'var(--muted)', border: '1px solid var(--border)' }}>✕</button>
           </div>
 
           {product.description && (
@@ -113,14 +113,11 @@ export default function ProductModal({ product, onClose }) {
             {product.promo_price != null ? (
               <>
                 <span className="text-sm line-through" style={{ color: 'var(--muted)' }}>{money(product.price)}</span>
-                <span className="text-xl font-black" style={{ color: 'var(--gold)' }}>{money(product.promo_price)}</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: 'rgba(201,162,94,0.15)', color: 'var(--gold)' }}>
-                  {product.promo_label || 'OFERTA'}
-                </span>
+                <span className="text-2xl font-black" style={{ color: 'var(--gold-dim)' }}>{money(product.promo_price)}</span>
+                <span className="badge-soft badge-offer">{product.promo_label || 'Oferta'}</span>
               </>
             ) : (
-              <span className="text-xl font-black" style={{ color: 'var(--gold)' }}>{money(product.price)}</span>
+              <span className="text-2xl font-black" style={{ color: 'var(--brown)' }}>{money(product.price)}</span>
             )}
           </div>
 
@@ -152,15 +149,18 @@ export default function ProductModal({ product, onClose }) {
                     const isSel = countThis > 0
                     return (
                       <button key={opt.id} onClick={() => toggleOption(group, opt)}
-                        className="px-3 py-2 rounded-xl text-xs font-semibold press transition-all"
+                        className="px-4 py-2.5 rounded-full text-xs font-semibold press"
                         style={{
-                          background: isSel ? 'var(--gold)' : 'var(--card)',
-                          color: isSel ? '#0F0F0F' : 'var(--cream)',
-                          border: `1px solid ${isSel ? 'var(--gold)' : 'var(--border)'}`,
+                          background: isSel ? 'linear-gradient(135deg,#C89B5A,#A97142)' : 'var(--bg)',
+                          color: isSel ? '#fff' : 'var(--cream)',
+                          border: `1px solid ${isSel ? 'transparent' : 'var(--border)'}`,
+                          boxShadow: isSel ? '0 4px 12px rgba(169,113,66,0.3)' : 'none',
+                          transition: 'background .2s, color .2s, box-shadow .2s, transform .15s',
+                          minHeight: 44,
                         }}>
                         {opt.name}{countThis > 1 ? ` ×${countThis}` : ''}
                         {opt.price > 0 && (
-                          <span style={{ color: isSel ? '#3B2418' : 'var(--muted)' }}> +{money(opt.price)}</span>
+                          <span style={{ color: isSel ? 'rgba(255,255,255,0.85)' : 'var(--muted)' }}> +{money(opt.price)}</span>
                         )}
                       </button>
                     )
@@ -175,37 +175,36 @@ export default function ProductModal({ product, onClose }) {
             <p className="text-sm font-bold mb-2" style={{ color: 'var(--cream)' }}>Observação</p>
             <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
               placeholder="Ex: sem açúcar, capricha no leite..."
-              className="w-full text-sm px-4 py-3 rounded-xl outline-none"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--cream)' }} />
+              className="w-full text-sm px-5 py-3.5 rounded-2xl outline-none"
+              style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--cream)', minHeight: 48 }} />
           </div>
 
           {/* Qty + Add */}
           {added ? (
-            <div className="space-y-3 fade-in">
-              <p className="text-center text-sm font-semibold" style={{ color: 'var(--green)' }}>✅ Adicionado ao carrinho!</p>
+            <div className="space-y-3 scale-in">
+              <p className="text-center text-sm font-bold" style={{ color: 'var(--green)' }}>✓ Adicionado ao carrinho!</p>
               <button onClick={() => { onClose(); navigate('/checkout') }} className="btn-gold w-full py-4 text-sm">
                 Finalizar Pedido
               </button>
-              <button onClick={onClose} className="w-full py-3 rounded-xl text-sm font-semibold press"
-                style={{ background: 'var(--card)', color: 'var(--cream)', border: '1px solid var(--border)' }}>
+              <button onClick={onClose} className="btn-outline press w-full py-3.5 text-sm">
                 Continuar Comprando
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-3 px-3 py-2 rounded-xl"
-                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2 px-2 rounded-full"
+                style={{ background: 'var(--bg)', border: '1px solid var(--border)', height: 52 }}>
                 <button onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  className="w-8 h-8 flex items-center justify-center text-xl font-bold press"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
                   style={{ color: 'var(--muted)' }}>−</button>
-                <span className="w-6 text-center font-black" style={{ color: 'var(--cream)' }}>{qty}</span>
+                <span className="w-6 text-center font-black text-base" style={{ color: 'var(--brown)' }}>{qty}</span>
                 <button onClick={() => setQty((q) => Math.min(remainingPromo, q + 1))}
                   disabled={qty >= remainingPromo}
-                  className="w-8 h-8 flex items-center justify-center text-xl font-bold press"
-                  style={{ color: qty >= remainingPromo ? 'var(--muted)' : 'var(--gold)', opacity: qty >= remainingPromo ? 0.4 : 1 }}>+</button>
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
+                  style={{ color: qty >= remainingPromo ? 'var(--muted)' : 'var(--gold-dim)', opacity: qty >= remainingPromo ? 0.4 : 1 }}>+</button>
               </div>
               <button onClick={handleAdd} disabled={!canAdd}
-                className="btn-gold flex-1 py-4 flex items-center justify-between px-4 text-sm">
+                className="btn-gold flex-1 py-4 flex items-center justify-between px-5 text-sm">
                 <span>{!canAdd && missingRequired.length ? 'Escolha opções' : qtyExceedsPromo ? 'Limite da promoção' : 'Adicionar'}</span>
                 <span className="font-black">{money(total)}</span>
               </button>
