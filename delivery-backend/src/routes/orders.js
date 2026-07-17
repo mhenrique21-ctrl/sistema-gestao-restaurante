@@ -261,7 +261,21 @@ router.post('/guest', async (req, res) => {
       }
     } catch(e) { console.error('[print/guest]', e.message); }
 
-    res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems });
+    // Pagamento PIX via Stripe
+    let pixData = null;
+    if (payment_method === 'pix') {
+      try {
+        pixData = await stripeService.createPixPayment(order.id, total);
+        await pool.query(
+          `UPDATE orders SET stripe_payment_intent_id=$1, stripe_pix_qr_code=$2, stripe_pix_qr_code_url=$3 WHERE id=$4 RETURNING id`,
+          [pixData.paymentIntentId, pixData.qrCode, pixData.qrCodeUrl, order.id]
+        );
+      } catch (stripeErr) {
+        console.error('[stripe/pix/guest]', stripeErr.message);
+      }
+    }
+
+    res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems, pix: pixData });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[orders/guest]', err.message);

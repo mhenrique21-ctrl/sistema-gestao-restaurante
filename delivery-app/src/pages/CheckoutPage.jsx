@@ -56,6 +56,31 @@ function PixBox({ pixKey, total }) {
   )
 }
 
+function StripePixBox({ qrCodeUrl, qrCodeData, total }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard.writeText(qrCodeData).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000) })
+  }
+  return (
+    <div style={{ background: 'rgba(201,162,94,0.08)', border: '1px solid rgba(201,162,94,0.25)', borderRadius: 12, padding: 14, marginTop: 12 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 6 }}>⚡ Pague com PIX</p>
+      {total && <p style={{ fontSize: 18, fontWeight: 900, color: 'var(--gold)', marginBottom: 10 }}>{brl(total)}</p>}
+      {qrCodeUrl && (
+        <img src={qrCodeUrl} alt="QR Code PIX" style={{ width: 200, height: 200, margin: '0 auto 10px', display: 'block', borderRadius: 8, background: '#fff', padding: 8 }} />
+      )}
+      {qrCodeData && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', borderRadius: 10, padding: '8px 12px', border: '1px solid var(--border)' }}>
+          <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 11, color: 'var(--cream)', wordBreak: 'break-all', maxHeight: 60, overflow: 'auto' }}>{qrCodeData}</span>
+          <button onClick={copy} className="press" style={{ background: 'var(--gold)', color: '#0F0F0F', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+            {copied ? '✅ Copiado!' : '📋 Copiar código'}
+          </button>
+        </div>
+      )}
+      <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Escaneie o QR ou copie o código — a confirmação é automática</p>
+    </div>
+  )
+}
+
 function buildWhatsAppMessage({ order, items, deliveryType, address, payment, total, deliveryFee, storeName, customerName, customerPhone }) {
   const sep = '─────────────────────'
   const lines = [
@@ -283,7 +308,10 @@ export default function CheckoutPage() {
             ))}
           </div>
 
-          {success.payment_method === 'pix' && settings.pix_key && (
+          {success.payment_method === 'pix' && success.pix?.qrCode && (
+            <StripePixBox qrCodeUrl={success.pix.qrCodeUrl} qrCodeData={success.pix.qrCode} total={parseFloat(success.total)} />
+          )}
+          {success.payment_method === 'pix' && !success.pix?.qrCode && settings.pix_key && (
             <PixBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
           )}
 
