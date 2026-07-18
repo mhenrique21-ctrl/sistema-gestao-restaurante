@@ -98,7 +98,8 @@ router.post('/:id/sync', requireRole('admin'), async (req, res) => {
     }
     res.json({ updated: groupsRes.rows.length });
   } catch (err) {
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('[addon-templates/sync]', err.message);
+    res.status(500).json({ error: err.message || 'Erro interno' });
   }
 });
 
