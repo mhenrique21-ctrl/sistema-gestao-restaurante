@@ -177,8 +177,15 @@ router.post('/guest', async (req, res) => {
     }
 
     // Usa o maior desconto entre promoção e cupom
-    const finalDiscount = Math.max(promoDiscount, couponDiscount);
+    let finalDiscount = Math.max(promoDiscount, couponDiscount);
     const discountLabel = couponDiscount >= promoDiscount ? (appliedCoupon?.description || coupon_code) : appliedPromo?.name;
+
+    // Desconto adicional de 5% pra pagamento via PIX
+    if (payment_method === 'pix') {
+      const pixDiscount = Math.round((subtotal + fee - finalDiscount) * 0.05 * 100) / 100;
+      finalDiscount += pixDiscount;
+    }
+
     const total = subtotal + fee - finalDiscount;
 
     // Verifica no servidor (nunca confia no cliente) que o pagamento por cartão/Apple Pay foi realmente aprovado

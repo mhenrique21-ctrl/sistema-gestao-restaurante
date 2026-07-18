@@ -290,7 +290,10 @@ export default function CheckoutPage() {
     : 0
 
   const discount = couponApplied ? (couponApplied.discount ?? 0) : promoDiscount
-  const total = subtotal + deliveryFee - discount
+  const preDiscountTotal = subtotal + deliveryFee - discount
+  const pixDiscountAmount = Math.round(preDiscountTotal * 0.05 * 100) / 100
+  const pixFinalTotal = preDiscountTotal - pixDiscountAmount
+  const total = payment === 'pix' ? pixFinalTotal : preDiscountTotal
   const totalRef = useRef(total)
 
   async function applyCoupon() {
@@ -658,17 +661,33 @@ export default function CheckoutPage() {
         <Section title="💳 Forma de pagamento">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {availableMethods.map(m => (
-              <div key={m.id}>
+              <div key={m.id} style={m.id === 'pix' ? { position: 'relative', marginTop: 14 } : undefined}>
+                {m.id === 'pix' && (
+                  <span style={{
+                    position: 'absolute', top: -11, left: 16, zIndex: 1,
+                    background: '#E53935', color: '#fff', fontSize: 10, fontWeight: 800,
+                    padding: '3px 10px', borderRadius: 999, letterSpacing: 0.2,
+                  }}>
+                    5% de desconto no PIX
+                  </span>
+                )}
                 <button onClick={() => setPayment(m.id)} className="press"
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, cursor: 'pointer', textAlign: 'left', width: '100%',
                     background: payment === m.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
-                    border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}` }}>
+                    border: `2px solid ${m.id === 'pix' ? '#C89B5A' : (payment === m.id ? 'var(--gold)' : 'var(--border)')}` }}>
                   <span style={{ display: 'flex', color: payment === m.id ? 'var(--gold)' : 'var(--muted)', flexShrink: 0 }}>
                     <PaymentIcon id={m.id} />
                   </span>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{m.label}</p>
-                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>{m.desc}</p>
+                    {m.id === 'pix' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <span style={{ fontSize: 11, color: 'var(--muted)', textDecoration: 'line-through' }}>{brl(preDiscountTotal)}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--green)' }}>{brl(pixFinalTotal)}</span>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: 11, color: 'var(--muted)' }}>{m.desc}</p>
+                    )}
                   </div>
                   <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {payment === m.id && <div style={{ width: 10, height: 10, background: 'var(--gold)', borderRadius: '50%' }} />}
@@ -781,6 +800,7 @@ export default function CheckoutPage() {
               { label: 'Entrega', value: deliveryFee === 0 ? 'Grátis' : brl(deliveryFee) },
               applicablePromo && !couponApplied ? { label: `🎉 ${applicablePromo.name}`, value: `- ${brl(promoDiscount)}`, green: true } : null,
               couponApplied ? { label: `🎟️ ${couponApplied.code}`, value: `- ${brl(discount)}`, green: true } : null,
+              payment === 'pix' ? { label: '⚡ Desconto PIX (5%)', value: `- ${brl(pixDiscountAmount)}`, green: true } : null,
             ].filter(Boolean).map(row => (
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)' }}>{row.label}</span>
