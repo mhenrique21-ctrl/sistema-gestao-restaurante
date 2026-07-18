@@ -131,6 +131,7 @@ export default function CheckoutPage() {
   const [complement, setComplement] = useState('')
   const [notes, setNotes] = useState('')
   const [troco, setTroco] = useState('')
+  const [cpf, setCpf] = useState('')
   const [coupon, setCoupon] = useState('')
   const [couponApplied, setCouponApplied] = useState(null)
   const [couponError, setCouponError] = useState('')
@@ -265,6 +266,7 @@ export default function CheckoutPage() {
     if (!phone.trim()) return 'Informe seu WhatsApp'
     if (deliveryType === 'delivery' && !neighborhood) return 'Selecione o bairro'
     if (deliveryType === 'delivery' && !street.trim()) return 'Informe a rua'
+    if (payment === 'pix' && onlyDigits(cpf).length !== 11) return 'Informe um CPF válido para pagar via PIX'
     return ''
   }
 
@@ -281,6 +283,7 @@ export default function CheckoutPage() {
         coupon_code: couponApplied?.code || undefined,
         coupon_subtotal: couponApplied ? subtotalSemPromo : undefined,
         stripe_payment_intent_id: stripePaymentIntentId,
+        cpf: payment === 'pix' ? onlyDigits(cpf) : undefined,
         items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
       })
       clear()
@@ -614,6 +617,13 @@ export default function CheckoutPage() {
               </button>
             ))}
           </div>
+
+          {payment === 'pix' && (
+            <div style={{ marginTop: 10 }}>
+              <label style={LABEL}>CPF (necessário para gerar o PIX)</label>
+              <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" style={INPUT} maxLength={14} />
+            </div>
+          )}
 
           {payment === 'pix' && settings.pix_key && <PixBox pixKey={settings.pix_key} />}
 

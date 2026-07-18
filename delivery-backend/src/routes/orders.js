@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub');
 const stripeService = require('../services/stripe');
+const asaasService = require('../services/asaas');
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
 const https = require('https');
@@ -98,11 +99,12 @@ async function insertItemAddons(orderItemId, addons, client = pool) {
 // POST /api/orders/guest — pedido sem autenticação (app cliente)
 router.post('/guest', async (req, res) => {
   const { name, phone, delivery_type, delivery_address,
-          payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal, stripe_payment_intent_id } = req.body;
+          payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal, stripe_payment_intent_id, cpf } = req.body;
 
   if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
   if (!items?.length) return res.status(400).json({ error: 'Carrinho vazio' });
   if (!payment_method) return res.status(400).json({ error: 'Forma de pagamento é obrigatória' });
+  if (payment_method === 'pix' && !cpf) return res.status(400).json({ error: 'Informe o CPF para pagar via PIX' });
 
   try {
     // Bloqueia forma de pagamento desativada pelo admin (aba Pagamentos)
@@ -284,17 +286,22 @@ router.post('/guest', async (req, res) => {
       }
     } catch(e) { console.error('[print/guest]', e.message); }
 
-    // Pagamento PIX via Stripe
+    // Pagamento PIX via Asaas
     let pixData = null;
     if (payment_method === 'pix') {
       try {
-        pixData = await stripeService.createPixPayment(order.id, total);
+        const asaasPix = await asaasService.createPixCharge({
+          name, cpfCnpj: cpf, phone, value: total,
+          description: `Pedido #${order.order_number} — Confraria Café`,
+          externalReference: order.id,
+        });
+        pixData = { qrCode: asaasPix.qrCode, qrCodeUrl: asaasPix.qrCodeUrl };
         await pool.query(
-          `UPDATE orders SET stripe_payment_intent_id=$1, stripe_pix_qr_code=$2, stripe_pix_qr_code_url=$3 WHERE id=$4 RETURNING id`,
-          [pixData.paymentIntentId, pixData.qrCode, pixData.qrCodeUrl, order.id]
+          `UPDATE orders SET asaas_payment_id=$1 WHERE id=$2 RETURNING id`,
+          [asaasPix.paymentId, order.id]
         );
-      } catch (stripeErr) {
-        console.error('[stripe/pix/guest]', stripeErr.message);
+      } catch (asaasErr) {
+        console.error('[asaas/pix/guest]', asaasErr.message);
       }
     }
 
@@ -971,6 +978,44 @@ router.post('/webhook/stripe', async (req, res) => {
     res.json({ received: true });
   } catch (err) {
     console.error('[webhook/stripe]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/orders/webhook/asaas — webhook Asaas (confirmação de pagamento PIX)
+router.post('/webhook/asaas', async (req, res) => {
+  try {
+    const token = req.headers['asaas-access-token'];
+    if (process.env.ASAAS_WEBHOOK_TOKEN && token !== process.env.ASAAS_WEBHOOK_TOKEN) {
+      return res.status(401).json({ error: 'Token inválido' });
+    }
+
+    const { event, payment } = req.body || {};
+    if ((event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') && payment?.id) {
+      const result = await pool.query(
+        `UPDATE orders SET payment_status='pago', status='pago'
+         WHERE asaas_payment_id=$1 RETURNING id`,
+        [payment.id]
+      );
+      if (result.rows[0]) {
+        await pool.query(
+          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'pago') RETURNING id`,
+          [result.rows[0].id]
+        );
+        broadcastOrderUpdate({ event: 'payment_confirmed', order_id: result.rows[0].id });
+      }
+    }
+
+    if (event === 'PAYMENT_OVERDUE' && payment?.id) {
+      await pool.query(
+        `UPDATE orders SET payment_status='falhou' WHERE asaas_payment_id=$1 RETURNING id`,
+        [payment.id]
+      );
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('[webhook/asaas]', err.message);
     res.status(400).json({ error: err.message });
   }
 });
