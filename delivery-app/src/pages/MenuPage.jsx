@@ -29,11 +29,15 @@ function ProductCard({ product, catName, onClick }) {
     <button onClick={onClick}
       className="press card-soft w-full text-left flex gap-4 p-4 mb-3">
       <div className="flex-1 min-w-0 flex flex-col">
-        {product.promo_price != null && (
+        {product.promo_price != null ? (
           <span className="badge-soft badge-offer self-start mb-1.5">
             {product.promo_label || 'Oferta'}
           </span>
-        )}
+        ) : product.featured ? (
+          <span className="badge-soft badge-offer self-start mb-1.5">
+            ⭐ Destaque
+          </span>
+        ) : null}
         <p className="font-bold text-[15px] leading-snug" style={{ color: 'var(--cream)' }}>
           {product.name}
         </p>
@@ -120,6 +124,7 @@ export default function MenuPage() {
     : menuSemOfertas
 
   const offers = menu.flatMap((c) => c.products.map((p) => ({ ...p, categoryName: c.name }))).filter((p) => p.promo_price != null)
+  const destaques = menu.flatMap((c) => c.products.map((p) => ({ ...p, categoryName: c.name }))).filter((p) => p.featured)
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -223,6 +228,14 @@ export default function MenuPage() {
           </div>
         ) : (
           <>
+            {!search && destaques.length > 0 && (
+              <div className="px-5 pt-6">
+                <h2 className="font-display text-lg font-bold mb-3" style={{ color: 'var(--brown)' }}>⭐ Destaques</h2>
+                {destaques.map((p) => (
+                  <ProductCard key={p.id} product={p} catName={p.categoryName} onClick={() => setSelected({ product: p, category: p.categoryName })} />
+                ))}
+              </div>
+            )}
             {!search && offers.length > 0 && (
               <div ref={(el) => (catRefs.current['ofertas'] = el)} className="px-5 pt-6">
                 <h2 className="font-display text-lg font-bold mb-3" style={{ color: 'var(--brown)' }}>🔥 Ofertas da semana</h2>
