@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS orders (
   stripe_payment_intent_id VARCHAR(255),
   stripe_pix_qr_code TEXT,
   stripe_pix_qr_code_url VARCHAR(500),
+  asaas_payment_id VARCHAR(255),
   notes TEXT,
   estimated_minutes INT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -262,6 +263,10 @@ CREATE INDEX IF NOT EXISTS idx_comanda_item_addons_item ON comanda_item_addons(c
 
 DROP TRIGGER IF EXISTS trg_comandas_updated ON comandas;
 CREATE TRIGGER trg_comandas_updated BEFORE UPDATE ON comandas FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- Colunas adicionadas depois da criação inicial da tabela orders (CREATE TABLE IF NOT EXISTS
+-- não altera tabelas já existentes, então precisam de ALTER TABLE explícito aqui).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS asaas_payment_id VARCHAR(255);
 `;
 
 async function migrate() {

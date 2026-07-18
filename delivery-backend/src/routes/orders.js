@@ -387,12 +387,13 @@ router.get('/public/:id', async (req, res) => {
 // de fato: avisa cozinha/impressora e cliente.
 router.post('/webhook/asaas', async (req, res) => {
   try {
-    const token = req.headers['asaas-access-token'];
-    const envToken = process.env.ASAAS_WEBHOOK_TOKEN;
-    console.log('[webhook/asaas][DEBUG] recebido:', JSON.stringify(token), 'tamanho', token?.length);
-    console.log('[webhook/asaas][DEBUG] esperado:', JSON.stringify(envToken), 'tamanho', envToken?.length);
-    console.log('[webhook/asaas][DEBUG] bate:', token === envToken);
+    // .trim() nos dois lados: o token colado no .env do Railway costuma vir com
+    // espaço/quebra de linha invisível no fim, fazendo essa comparação falhar
+    // mesmo com os valores "parecendo" iguais.
+    const token = (req.headers['asaas-access-token'] || '').trim();
+    const envToken = (process.env.ASAAS_WEBHOOK_TOKEN || '').trim();
     if (envToken && token !== envToken) {
+      console.error('[webhook/asaas] token inválido — tamanho recebido:', token.length, 'tamanho esperado:', envToken.length);
       return res.status(401).json({ error: 'Token inválido' });
     }
 
