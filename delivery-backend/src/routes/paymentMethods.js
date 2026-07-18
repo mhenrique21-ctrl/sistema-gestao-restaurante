@@ -4,6 +4,7 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 
 // GET público — usado pelo checkout
 router.get('/', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   try {
     const r = await pool.query('SELECT * FROM payment_methods ORDER BY sort_order, id');
     res.json(r.rows);

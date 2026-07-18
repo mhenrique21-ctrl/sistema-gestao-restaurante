@@ -32,7 +32,7 @@ export const api = {
   // Bairros e configurações
   neighborhoods: () => request('GET', '/neighborhoods'),
   settings: () => request('GET', '/settings'),
-  paymentMethods: () => request('GET', '/payment-methods'),
+  paymentMethods: () => request('GET', `/payment-methods?t=${Date.now()}`),
 
   // Customers
   getCustomer: (id) => request('GET', `/customers/${id}`),
