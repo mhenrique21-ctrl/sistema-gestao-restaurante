@@ -9,6 +9,10 @@ const { printOrderTicket } = require('../services/printer');
 const https = require('https');
 const http = require('http');
 
+// CPF fixo usado em todas as cobranças PIX da Asaas — a Asaas exige um CPF/CNPJ
+// pra criar o cliente vinculado à cobrança, mas não pedimos isso do cliente final.
+const ASAAS_FIXED_CPF = '81608730263';
+
 async function applyPromotion(subtotal, deliveryFee, neighborhoodName) {
   const nowDay = new Date().getDay();
   // Busca zona do bairro se informado
@@ -99,7 +103,7 @@ async function insertItemAddons(orderItemId, addons, client = pool) {
 // POST /api/orders/guest — pedido sem autenticação (app cliente)
 router.post('/guest', async (req, res) => {
   const { name, phone, delivery_type, delivery_address,
-          payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal, stripe_payment_intent_id, cpf } = req.body;
+          payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal, stripe_payment_intent_id } = req.body;
 
   if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
   if (!items?.length) return res.status(400).json({ error: 'Carrinho vazio' });
@@ -227,7 +231,7 @@ router.post('/guest', async (req, res) => {
       if (pixAutoEnabled) {
         try {
           const asaasPix = await asaasService.createPixCharge({
-            name, cpfCnpj: cpf, phone, value: total,
+            name, cpfCnpj: ASAAS_FIXED_CPF, phone, value: total,
             description: `Pedido #${order.order_number} — Confraria Café`,
             externalReference: order.id,
           });
