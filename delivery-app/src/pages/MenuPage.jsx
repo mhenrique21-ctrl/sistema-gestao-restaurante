@@ -35,7 +35,7 @@ function ProductCard({ product, catName, onClick }) {
           </span>
         ) : product.featured ? (
           <span className="badge-soft badge-offer self-start mb-1.5">
-            ⭐ Destaque
+            🎉 Promoção
           </span>
         ) : null}
         <p className="font-bold text-[15px] leading-snug" style={{ color: 'var(--cream)' }}>
