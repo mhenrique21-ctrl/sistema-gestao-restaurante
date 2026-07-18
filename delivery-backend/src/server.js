@@ -55,6 +55,7 @@ app.use('/api/delivery', require('./routes/delivery'));
 app.use('/api/promotions', require('./routes/promotions'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/templates', require('./routes/templates'));
+app.use('/api/addon-templates', require('./routes/addonTemplates'));
 app.use('/api/printers', require('./routes/printers'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/comandas', require('./routes/comandas'));

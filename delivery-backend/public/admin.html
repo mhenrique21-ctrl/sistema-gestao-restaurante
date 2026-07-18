@@ -721,6 +721,15 @@ function applyTemplatePicker(selectId) {
   toast(`Dias do template "${t.name}" aplicados!`);
 }
 
+// Cache dos modelos de adicionais (substitui a antiga lista fixa ADDON_TEMPLATES)
+let _addonTemplatesCache = null;
+async function ensureAddonTemplatesLoaded(force) {
+  if (!_addonTemplatesCache || force) {
+    try { _addonTemplatesCache = await api('GET', '/addon-templates'); } catch { _addonTemplatesCache = []; }
+  }
+  return _addonTemplatesCache;
+}
+
 function activeDaysHtml(selected = null) {
   const all = selected === null || selected.length === 0;
   return `<div>
@@ -908,71 +917,8 @@ function modalAdicionaisProduto(id) {
 }
 
 // ── Adicionais de um produto ─────────────────────────────────────
-// Templates pré-definidos de grupos de adicionais
-const ADDON_TEMPLATES = [
-  { name: 'Observações', min_select: 0, max_select: 5, required: false, options: [
-    { name: 'Preciso de talher', price: 0 },
-    { name: 'Embrulho para presente', price: 0 },
-    { name: 'Sem embalagem plástica', price: 0 },
-  ]},
-  { name: 'Açúcar', min_select: 0, max_select: 1, required: false, options: [
-    { name: 'Sem açúcar', price: 0 },
-    { name: 'Pouco açúcar', price: 0 },
-    { name: 'Açúcar normal', price: 0 },
-    { name: 'Adoçante', price: 0 },
-  ]},
-  { name: 'Molhos', min_select: 0, max_select: 2, required: false, options: [
-    { name: 'Maionese', price: 0 },
-    { name: 'Ketchup', price: 0 },
-  ]},
-  { name: 'Ponto da Carne', min_select: 0, max_select: 1, required: false, options: [
-    { name: 'Mal passada', price: 0 },
-    { name: 'Ao ponto', price: 0 },
-    { name: 'Bem passada', price: 0 },
-  ]},
-  { name: 'Temperatura', min_select: 0, max_select: 1, required: false, options: [
-    { name: 'Gelado', price: 0 },
-    { name: 'Natural', price: 0 },
-    { name: 'Quente', price: 0 },
-  ]},
-  { name: 'Descartáveis', min_select: 0, max_select: 1, required: false, options: [
-    { name: 'Com descartável', price: 0 },
-    { name: 'Sem descartável', price: 0 },
-  ]},
-  { name: 'Adicionais', min_select: 0, max_select: 10, required: false, options: [] },
-  { name: 'Croissant doce', min_select: 1, max_select: 1, required: true, active_days: null, options: [
-    { name: 'Croissant de chocolate', price: 0 },
-    { name: 'Croissant de pistache', price: 0 },
-    { name: 'Croissant de doce de leite', price: 0 },
-  ]},
-  { name: 'Bebidas', min_select: 0, max_select: 1, required: false, options: [
-    { name: 'Coca-Cola', price: 0 },
-    { name: 'Coca-Cola Zero', price: 0 },
-    { name: 'Guaraná Antarctica', price: 0 },
-    { name: 'Guaraná Antarctica Zero', price: 0 },
-    { name: 'Fanta Uva', price: 0 },
-    { name: 'Fanta Laranja', price: 0 },
-  ]},
-  { name: 'Dose Extra', min_select: 0, max_select: 10, required: false, options: [
-    { name: 'Manteiga', price: 3 },
-    { name: 'Cream Cheese', price: 5 },
-    { name: 'Requeijão Catupiry', price: 5 },
-    { name: 'Queijo Mussarela', price: 4 },
-    { name: 'Presunto', price: 4 },
-    { name: 'Salame', price: 8 },
-    { name: 'Bacon', price: 8 },
-    { name: 'Ovo', price: 4 },
-    { name: 'Ovo Cremoso', price: 14 },
-    { name: 'Frango Desfiado', price: 8 },
-    { name: 'Frango Cremoso', price: 12 },
-    { name: 'Patê de Queijo Cuia', price: 13 },
-    { name: 'Filé Mignon', price: 23 },
-    { name: 'Camarão Rosa', price: 38 },
-    { name: 'Carne Seca', price: 18 },
-    { name: 'Alface', price: 1 },
-    { name: 'Tomate', price: 1 },
-  ]},
-];
+// Os modelos de grupos de adicionais agora vêm do banco (tabela addon_templates,
+// editável na página Templates) — ver ensureAddonTemplatesLoaded() acima.
 
 let addonsReopen = null;
 async function renderAddonsSection(productId, reopen) {
@@ -980,6 +926,7 @@ async function renderAddonsSection(productId, reopen) {
   const el = document.getElementById('addons-section');
   if (!el) return;
   const groups = await api('GET', `/menu/products/${productId}/addon-groups`);
+  const modelos = (await ensureAddonTemplatesLoaded()).filter(t => t.active !== false);
   const dbTemplates = await ensureTemplatesLoaded();
   el.innerHTML = `
     <hr style="border-color:var(--border);margin:12px 0">
@@ -991,18 +938,18 @@ async function renderAddonsSection(productId, reopen) {
       </div>
     </div>
     <div style="margin-bottom:10px">
-      <p style="color:var(--muted);font-size:.75rem;margin-bottom:6px">📋 <strong>Modelos prontos</strong> — clique para aplicar:</p>
+      <p style="color:var(--muted);font-size:.75rem;margin-bottom:6px">📋 <strong>Modelos de adicionais</strong> (editáveis na página Templates) — clique para aplicar:</p>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
         <button type="button" onclick="aplicarTodosTemplates('${productId}')"
           style="background:#7c3aed;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;color:#fff;font-size:.76rem;font-weight:700">
           ⚡ Aplicar Todos
         </button>
-        ${ADDON_TEMPLATES.map((t, i) => `
-          <button type="button" onclick="aplicarTemplate('${productId}',${i})"
+        ${modelos.map(t => `
+          <button type="button" onclick="aplicarModeloAdicional('${productId}','${t.id}')"
             style="background:var(--hover);border:1px solid var(--border);border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--text);font-size:.76rem;text-align:left">
             <span style="font-weight:700">${t.name}</span>
             <span style="color:var(--muted);margin-left:4px">(${t.options.length} opções)</span>
-          </button>`).join('')}
+          </button>`).join('') || `<span style="color:var(--muted);font-size:.76rem">Nenhum modelo ativo — crie em Templates</span>`}
       </div>
       ${dbTemplates.length > 0 ? `
         <p style="color:var(--muted);font-size:.75rem;margin:10px 0 6px">📁 <strong>Seus templates</strong> (da página Templates) — clique para aplicar como grupo de adicionais:</p>
@@ -1041,12 +988,13 @@ async function renderAddonsSection(productId, reopen) {
 }
 
 async function modalTemplateAddon(productId) {
+  const modelos = (await ensureAddonTemplatesLoaded()).filter(t => t.active !== false);
   const dbTemplates = await ensureTemplatesLoaded();
   openModal('Adicionar Template de Grupo', `
     <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Escolha um modelo pronto. Você poderá editar as opções depois.</p>
     <div style="display:grid;gap:8px">
-      ${ADDON_TEMPLATES.map((t, i) => `
-        <button type="button" onclick="aplicarTemplate('${productId}',${i})" style="text-align:left;background:var(--hover);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;color:var(--text)">
+      ${modelos.map(t => `
+        <button type="button" onclick="aplicarModeloAdicional('${productId}','${t.id}')" style="text-align:left;background:var(--hover);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;color:var(--text)">
           <div style="font-weight:700">${t.name}</div>
           <div style="color:var(--muted);font-size:.76rem;margin-top:2px">${t.options.length > 0 ? t.options.map(o=>o.name).join(' · ') : 'Grupo vazio — adicione opções manualmente'}</div>
         </button>`).join('')}
@@ -1059,15 +1007,16 @@ async function modalTemplateAddon(productId) {
   document.getElementById('modal-confirm').style.display = 'none';
 }
 
-async function aplicarTemplate(productId, templateIndex) {
-  const t = ADDON_TEMPLATES[templateIndex];
+async function aplicarModeloAdicional(productId, modeloId) {
+  const modelos = await ensureAddonTemplatesLoaded();
+  const t = modelos.find(x => x.id === modeloId);
+  if (!t) return;
   closeModal();
   try {
     const group = await api('POST', `/menu/products/${productId}/addon-groups`, {
       name: t.name, min_select: t.min_select, max_select: t.max_select, required: t.required,
-      active_days: t.active_days || [],
     });
-    for (const op of t.options) {
+    for (const op of (t.options || [])) {
       await api('POST', `/menu/addon-groups/${group.id}/options`, { name: op.name, price: op.price });
     }
     toast(`Grupo "${t.name}" adicionado!`);
@@ -1095,11 +1044,12 @@ async function aplicarTodosTemplates(productId) {
   closeModal();
   toast('Aplicando todos os templates...');
   try {
-    for (const t of ADDON_TEMPLATES) {
+    const modelos = (await ensureAddonTemplatesLoaded()).filter(t => t.active !== false);
+    for (const t of modelos) {
       const group = await api('POST', `/menu/products/${productId}/addon-groups`, {
         name: t.name, min_select: t.min_select, max_select: t.max_select, required: t.required,
       });
-      for (const op of t.options) {
+      for (const op of (t.options || [])) {
         await api('POST', `/menu/addon-groups/${group.id}/options`, { name: op.name, price: op.price });
       }
     }
@@ -4271,6 +4221,7 @@ async function pageTemplates() {
   document.getElementById('content').innerHTML = '<p style="color:var(--muted)">Carregando...</p>';
   let list = [];
   try { list = await api('GET', '/templates'); _templatesCache = list; } catch(e) { toast('Erro ao carregar templates', true); }
+  const modelos = await ensureAddonTemplatesLoaded(true);
   document.getElementById('content').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-primary" onclick="modalNovoTemplate()">+ Novo Template</button>
@@ -4279,7 +4230,132 @@ async function pageTemplates() {
       ${list.length === 0
         ? '<div class="card" style="text-align:center;color:var(--muted)">Nenhum template criado ainda.</div>'
         : list.map(t => templateCard(t)).join('')}
+    </div>
+
+    <hr style="border-color:var(--border);margin:28px 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0">📋 Modelos de Adicionais</h3>
+      <button class="btn btn-primary" onclick="modalNovoModeloAdicional()">+ Novo Modelo</button>
+    </div>
+    <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Grupos de adicionais prontos (com preço, mínimo/máximo e obrigatoriedade) pra aplicar rápido em qualquer produto. Desative os que não usa sem precisar excluir.</p>
+    <div id="addon-templates-list">
+      ${modelos.length === 0
+        ? '<div class="card" style="text-align:center;color:var(--muted)">Nenhum modelo criado ainda.</div>'
+        : modelos.map(t => addonTemplateCard(t)).join('')}
     </div>`;
+}
+
+function addonTemplateCard(t) {
+  const inactive = t.active === false;
+  return `
+    <div class="card" style="margin-bottom:12px;${inactive ? 'opacity:.55' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <h3 style="margin:0">${t.name}</h3>
+            <span style="background:${inactive ? '#475569' : '#16a34a'};color:#fff;font-size:.65rem;padding:2px 9px;border-radius:999px;font-weight:700">${inactive ? 'Inativo' : 'Ativo'}</span>
+            ${t.required ? '<span style="background:#dc2626;color:#fff;font-size:.65rem;padding:2px 9px;border-radius:999px;font-weight:700">obrigatório</span>' : ''}
+            <span style="color:var(--muted);font-size:.75rem">mín ${t.min_select} · máx ${t.max_select}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${(t.options || []).map(o => `<span style="background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:.82rem">${o.name}${parseFloat(o.price) > 0 ? ` <strong style="color:#7c3aed">+R$ ${parseFloat(o.price).toFixed(2).replace('.',',')}</strong>` : ''}</span>`).join('') || '<span style="color:var(--muted);font-size:.82rem">Sem opções</span>'}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button class="btn btn-secondary btn-sm" onclick="toggleModeloAdicional('${t.id}',${inactive})">${inactive ? '▶️ Ativar' : '⏸ Desativar'}</button>
+          <button class="btn btn-secondary btn-sm" onclick="modalEditarModeloAdicional('${t.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="excluirModeloAdicional('${t.id}')">🗑</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function toggleModeloAdicional(id, active) {
+  await api('PATCH', `/addon-templates/${id}`, { active });
+  toast(active ? 'Modelo ativado!' : 'Modelo desativado!');
+  pageTemplates();
+}
+
+async function excluirModeloAdicional(id) {
+  if (!confirm('Excluir este modelo de adicionais?')) return;
+  await api('DELETE', `/addon-templates/${id}`);
+  toast('Modelo excluído!');
+  pageTemplates();
+}
+
+function modeloOptionsRowsHtml(options = []) {
+  const rows = options.length ? options : [{ name: '', price: 0 }];
+  return rows.map(o => `
+    <div class="modelo-opt-row" style="display:flex;gap:6px;margin-bottom:6px">
+      <input class="modelo-opt-name" placeholder="Nome da opção" value="${o.name || ''}" style="flex:1" />
+      <input class="modelo-opt-price" type="number" step="0.01" placeholder="0,00" value="${o.price || ''}" style="width:100px" />
+      <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.modelo-opt-row').remove()">✕</button>
+    </div>`).join('');
+}
+
+function addModeloOptionRow() {
+  const wrap = document.getElementById('modelo-options-wrap');
+  wrap.insertAdjacentHTML('beforeend', modeloOptionsRowsHtml([{ name: '', price: 0 }]));
+}
+
+function getModeloOptions() {
+  return Array.from(document.querySelectorAll('.modelo-opt-row')).map(row => ({
+    name: row.querySelector('.modelo-opt-name').value.trim(),
+    price: parseFloat(row.querySelector('.modelo-opt-price').value) || 0,
+  })).filter(o => o.name);
+}
+
+function modeloAdicionalForm(t = {}) {
+  return `
+    <div class="form-grid">
+      <div><label>Nome do modelo</label><input id="modelo-name" value="${t.name || ''}" placeholder="Ex: Molhos, Dose Extra" /></div>
+      <div class="form-grid cols-3">
+        <div><label>Mínimo</label><input id="modelo-min" type="number" value="${t.min_select ?? 0}" /></div>
+        <div><label>Máximo</label><input id="modelo-max" type="number" value="${t.max_select ?? 1}" /></div>
+        <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
+          <button type="button" class="toggle ${t.required ? 'on' : ''}" id="modelo-required-toggle" onclick="this.classList.toggle('on')"></button>
+          <label style="margin:0">Obrigatório</label>
+        </div>
+      </div>
+      <div>
+        <label>Opções</label>
+        <div id="modelo-options-wrap">${modeloOptionsRowsHtml(t.options || [])}</div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addModeloOptionRow()">+ Adicionar opção</button>
+      </div>
+    </div>`;
+}
+
+function modalNovoModeloAdicional() {
+  openModal('Novo Modelo de Adicionais', modeloAdicionalForm(), async () => {
+    const name = v('modelo-name').trim();
+    if (!name) throw new Error('Informe o nome do modelo');
+    await api('POST', '/addon-templates', {
+      name,
+      min_select: parseInt(v('modelo-min')) || 0,
+      max_select: parseInt(v('modelo-max')) || 1,
+      required: document.getElementById('modelo-required-toggle').classList.contains('on'),
+      options: getModeloOptions(),
+    });
+    toast('Modelo criado!'); closeModal(); pageTemplates();
+  });
+}
+
+async function modalEditarModeloAdicional(id) {
+  const modelos = await ensureAddonTemplatesLoaded();
+  const t = modelos.find(x => x.id === id);
+  if (!t) return;
+  openModal('Editar Modelo de Adicionais', modeloAdicionalForm(t), async () => {
+    const name = v('modelo-name').trim();
+    if (!name) throw new Error('Informe o nome do modelo');
+    await api('PATCH', `/addon-templates/${id}`, {
+      name,
+      min_select: parseInt(v('modelo-min')) || 0,
+      max_select: parseInt(v('modelo-max')) || 1,
+      required: document.getElementById('modelo-required-toggle').classList.contains('on'),
+      options: getModeloOptions(),
+    });
+    toast('Modelo atualizado!'); closeModal(); pageTemplates();
+  });
 }
 
 function templateCard(t) {
