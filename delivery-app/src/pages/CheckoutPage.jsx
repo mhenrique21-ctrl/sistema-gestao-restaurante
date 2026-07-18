@@ -197,6 +197,18 @@ export default function CheckoutPage() {
       .catch(() => setEnabledCodes(null))
   }, [])
 
+  // Na tela de sucesso do PIX, o pedido fica "aguardando_pagamento" até o webhook da
+  // Asaas confirmar — sem isso o cliente via o QR parado, sem saber que já pagou.
+  useEffect(() => {
+    if (!success?.id || success.payment_method !== 'pix' || success.status !== 'aguardando_pagamento') return
+    const poll = setInterval(() => {
+      api.getOrder(success.id).then((fresh) => {
+        if (fresh.status !== 'aguardando_pagamento') setSuccess((prev) => prev ? { ...prev, status: fresh.status } : prev)
+      }).catch(() => {})
+    }, 5000)
+    return () => clearInterval(poll)
+  }, [success?.id, success?.payment_method, success?.status])
+
   const availableMethods = enabledCodes === null
     ? PAYMENT_METHODS
     : PAYMENT_METHODS.filter(m => enabledCodes.includes(m.id))
@@ -458,10 +470,15 @@ export default function CheckoutPage() {
             ))}
           </div>
 
-          {success.payment_method === 'pix' && pixAutoEnabled && success.pix?.qrCode && (
+          {success.payment_method === 'pix' && success.status !== 'aguardando_pagamento' && (
+            <div className="rounded-2xl p-4 mb-2 text-center" style={{ background: 'rgba(76,175,128,0.1)', border: '1px solid rgba(76,175,128,0.3)' }}>
+              <p className="font-black text-sm" style={{ color: 'var(--green)' }}>✅ Pagamento confirmado!</p>
+            </div>
+          )}
+          {success.payment_method === 'pix' && success.status === 'aguardando_pagamento' && pixAutoEnabled && success.pix?.qrCode && (
             <StripePixBox qrCodeUrl={success.pix.qrCodeUrl} qrCodeData={success.pix.qrCode} total={parseFloat(success.total)} />
           )}
-          {success.payment_method === 'pix' && settings.pix_key && (
+          {success.payment_method === 'pix' && success.status === 'aguardando_pagamento' && settings.pix_key && (
             <div style={{ marginTop: 10 }}>
               <PixBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
             </div>

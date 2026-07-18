@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { onMessage, connectWS } from '../ws'
 
+const TERMINAL_STATUSES = ['entregue', 'cancelado']
+
 const STEPS = [
   { status: 'aguardando_pagamento', label: 'Aguardando pagamento', icon: '⏳' },
   { status: 'pago',                 label: 'Pagamento confirmado', icon: '✅' },
@@ -32,7 +34,19 @@ export default function OrderStatusPage() {
       if (msg.event === 'payment_confirmed' && msg.order_id === id)
         api.getOrder(id).then(setOrder)
     })
-    return unsub
+
+    // Pedidos de convidado não têm token de login, então o WS acima nunca conecta —
+    // sem polling a tela ficava travada em "aguardando pagamento" pra sempre depois
+    // do cliente pagar. Busca de novo a cada 5s até o pedido sair de um status final.
+    const poll = setInterval(() => {
+      setOrder((prev) => {
+        if (prev && TERMINAL_STATUSES.includes(prev.status)) return prev
+        api.getOrder(id).then(setOrder).catch(() => {})
+        return prev
+      })
+    }, 5000)
+
+    return () => { unsub(); clearInterval(poll) }
   }, [id])
 
   if (loading) {
