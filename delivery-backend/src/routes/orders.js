@@ -389,9 +389,6 @@ router.post('/webhook/asaas', async (req, res) => {
   try {
     const token = req.headers['asaas-access-token'];
     const envToken = process.env.ASAAS_WEBHOOK_TOKEN;
-    console.log('[webhook/asaas][DEBUG] recebido:', JSON.stringify(token), 'tamanho', token?.length);
-    console.log('[webhook/asaas][DEBUG] esperado:', JSON.stringify(envToken), 'tamanho', envToken?.length);
-    console.log('[webhook/asaas][DEBUG] bate:', token === envToken);
     if (envToken && token !== envToken) {
       return res.status(401).json({ error: 'Token inválido' });
     }
