@@ -4333,13 +4333,20 @@ function modeloAdicionalForm(t = {}) {
     </div>`;
 }
 
+function modeloMinSelect() {
+  const required = document.getElementById('modelo-required-toggle').classList.contains('on');
+  const min = parseInt(v('modelo-min')) || 0;
+  // "Obrigatório" com mínimo 0 nunca bloqueia nada — força mínimo 1 nesse caso
+  return required && min < 1 ? 1 : min;
+}
+
 function modalNovoModeloAdicional() {
   openModal('Novo Modelo de Adicionais', modeloAdicionalForm(), async () => {
     const name = v('modelo-name').trim();
     if (!name) throw new Error('Informe o nome do modelo');
     await api('POST', '/addon-templates', {
       name,
-      min_select: parseInt(v('modelo-min')) || 0,
+      min_select: modeloMinSelect(),
       max_select: parseInt(v('modelo-max')) || 1,
       required: document.getElementById('modelo-required-toggle').classList.contains('on'),
       options: getModeloOptions(),
@@ -4357,7 +4364,7 @@ async function modalEditarModeloAdicional(id) {
     if (!name) throw new Error('Informe o nome do modelo');
     await api('PATCH', `/addon-templates/${id}`, {
       name,
-      min_select: parseInt(v('modelo-min')) || 0,
+      min_select: modeloMinSelect(),
       max_select: parseInt(v('modelo-max')) || 1,
       required: document.getElementById('modelo-required-toggle').classList.contains('on'),
       options: getModeloOptions(),
