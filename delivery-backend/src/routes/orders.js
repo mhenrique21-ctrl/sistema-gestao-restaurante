@@ -387,6 +387,7 @@ router.get('/public/:id', async (req, res) => {
 // de fato: avisa cozinha/impressora e cliente.
 router.post('/webhook/asaas', async (req, res) => {
   try {
+    console.log('[webhook/asaas][DEBUG] headers:', JSON.stringify(req.headers));
     const token = req.headers['asaas-access-token'];
     if (process.env.ASAAS_WEBHOOK_TOKEN && token !== process.env.ASAAS_WEBHOOK_TOKEN) {
       return res.status(401).json({ error: 'Token inválido' });
