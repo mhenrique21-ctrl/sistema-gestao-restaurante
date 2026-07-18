@@ -9,12 +9,48 @@ const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
   : null
 
+function PaymentIcon({ id }) {
+  const common = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  if (id === 'pix') return (
+    <svg {...common}>
+      <rect x="7" y="7" width="10" height="10" rx="3" transform="rotate(45 12 12)" />
+    </svg>
+  )
+  if (id === 'dinheiro') return (
+    <svg {...common}>
+      <rect x="2" y="6" width="20" height="12" rx="2.5" />
+      <circle cx="12" cy="12" r="2.6" />
+      <path d="M5.5 9v0M18.5 15v0" />
+    </svg>
+  )
+  if (id === 'cartao_credito') return (
+    <svg {...common}>
+      <rect x="2" y="5" width="20" height="14" rx="2.5" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+    </svg>
+  )
+  if (id === 'cartao_debito') return (
+    <svg {...common}>
+      <path d="M12 3l9 6.5H3L12 3z" />
+      <path d="M4 21h16" />
+      <path d="M6 10v8M11 10v8M13 10v8M18 10v8" />
+    </svg>
+  )
+  if (id === 'apple_pay') return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M16.365 1.43c0 1.14-.462 2.16-1.203 2.883-.813.822-2.13 1.446-3.246 1.362-.14-1.107.437-2.269 1.145-2.966.79-.833 2.144-1.474 3.304-1.279zm4.632 16.18c-.518 1.176-1.145 2.352-2.03 3.394-.782.918-1.607 1.82-2.878 1.845-1.246.024-1.652-.72-3.081-.72-1.43 0-1.884.696-3.06.744-1.226.048-2.16-1.014-2.946-1.926-1.607-1.87-2.833-5.293-1.19-7.598.814-1.14 2.266-1.865 3.845-1.89 1.203-.024 2.335.792 3.06.792.727 0 2.098-.98 3.539-.836.603.024 2.297.24 3.386 1.82-.088.06-2.023 1.19-2 3.517.024 2.78 2.43 3.71 2.455 3.858z" />
+    </svg>
+  )
+  return null
+}
+
 const PAYMENT_METHODS = [
-  { id: 'pix',            label: 'PIX',              icon: '⚡', desc: 'Pague via PIX após confirmar' },
-  { id: 'dinheiro',       label: 'Dinheiro',          icon: '💵', desc: 'Pague na entrega / retirada' },
-  { id: 'cartao_credito', label: 'Cartão de Crédito', icon: '💳', desc: 'Maquininha na entrega' },
-  { id: 'cartao_debito',  label: 'Cartão de Débito',  icon: '🏦', desc: 'Maquininha na entrega' },
-  { id: 'apple_pay',      label: 'Apple Pay',         icon: '🍎', desc: 'Cobrança online, na hora' },
+  { id: 'pix',            label: 'PIX',              desc: 'Pague via PIX após confirmar' },
+  { id: 'dinheiro',       label: 'Dinheiro',          desc: 'Pague na entrega / retirada' },
+  { id: 'cartao_credito', label: 'Cartão de Crédito', desc: 'Maquininha na entrega' },
+  { id: 'cartao_debito',  label: 'Cartão de Débito',  desc: 'Maquininha na entrega' },
+  { id: 'apple_pay',      label: 'Apple Pay',         desc: 'Cobrança online, na hora' },
 ]
 
 function brl(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
@@ -602,41 +638,44 @@ export default function CheckoutPage() {
         <Section title="💳 Forma de pagamento">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {availableMethods.map(m => (
-              <button key={m.id} onClick={() => setPayment(m.id)} className="press"
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, cursor: 'pointer', textAlign: 'left',
-                  background: payment === m.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
-                  border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}` }}>
-                <span style={{ fontSize: 22 }}>{m.icon}</span>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{m.label}</p>
-                  <p style={{ fontSize: 11, color: 'var(--muted)' }}>{m.desc}</p>
-                </div>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {payment === m.id && <div style={{ width: 10, height: 10, background: 'var(--gold)', borderRadius: '50%' }} />}
-                </div>
-              </button>
+              <div key={m.id}>
+                <button onClick={() => setPayment(m.id)} className="press"
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, cursor: 'pointer', textAlign: 'left', width: '100%',
+                    background: payment === m.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
+                    border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}` }}>
+                  <span style={{ display: 'flex', color: payment === m.id ? 'var(--gold)' : 'var(--muted)', flexShrink: 0 }}>
+                    <PaymentIcon id={m.id} />
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{m.label}</p>
+                    <p style={{ fontSize: 11, color: 'var(--muted)' }}>{m.desc}</p>
+                  </div>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${payment === m.id ? 'var(--gold)' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {payment === m.id && <div style={{ width: 10, height: 10, background: 'var(--gold)', borderRadius: '50%' }} />}
+                  </div>
+                </button>
+
+                {m.id === 'pix' && payment === 'pix' && (
+                  <div style={{ marginTop: 8, padding: 12, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                    <label style={LABEL}>CPF (necessário para gerar o PIX)</label>
+                    <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" style={INPUT} maxLength={14} />
+                    {settings.pix_key && <div style={{ marginTop: 10 }}><PixBox pixKey={settings.pix_key} /></div>}
+                  </div>
+                )}
+
+                {m.id === 'apple_pay' && payment === 'apple_pay' && (
+                  <div style={{ marginTop: 8, padding: 12, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                    <div ref={applePayButtonRef} />
+                    {applePayAvailable === false && (
+                      <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>Apple Pay não está disponível neste dispositivo/navegador. Use o Safari num iPhone/Mac com cartão configurado.</p>
+                    )}
+                    {applePayError && <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>{applePayError}</p>}
+                    <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>🔒 Pagamento processado com segurança pela Stripe</p>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
-
-          {payment === 'pix' && (
-            <div style={{ marginTop: 10 }}>
-              <label style={LABEL}>CPF (necessário para gerar o PIX)</label>
-              <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" style={INPUT} maxLength={14} />
-            </div>
-          )}
-
-          {payment === 'pix' && settings.pix_key && <PixBox pixKey={settings.pix_key} />}
-
-          {payment === 'apple_pay' && (
-            <div style={{ marginTop: 10 }}>
-              <div ref={applePayButtonRef} />
-              {applePayAvailable === false && (
-                <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>Apple Pay não está disponível neste dispositivo/navegador. Use o Safari num iPhone/Mac com cartão configurado.</p>
-              )}
-              {applePayError && <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>{applePayError}</p>}
-              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>🔒 Pagamento processado com segurança pela Stripe</p>
-            </div>
-          )}
 
           {payment === 'dinheiro' && (
             <div style={{ marginTop: 10 }}>
