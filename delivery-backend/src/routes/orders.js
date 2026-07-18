@@ -381,6 +381,115 @@ router.get('/public/:id', async (req, res) => {
   }
 });
 
+// POST /api/orders/webhook/asaas — webhook Asaas (confirmação de pagamento PIX)
+// Rota pública (Asaas chama direto, sem JWT de usuário) — por isso fica ANTES do
+// router.use(authMiddleware) abaixo. Só aqui a venda PIX é considerada confirmada
+// de fato: avisa cozinha/impressora e cliente.
+router.post('/webhook/asaas', async (req, res) => {
+  try {
+    const token = req.headers['asaas-access-token'];
+    if (process.env.ASAAS_WEBHOOK_TOKEN && token !== process.env.ASAAS_WEBHOOK_TOKEN) {
+      return res.status(401).json({ error: 'Token inválido' });
+    }
+
+    const { event, payment } = req.body || {};
+    if ((event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') && payment?.id) {
+      const result = await pool.query(
+        `UPDATE orders SET payment_status='pago', status='confirmado'
+         WHERE asaas_payment_id=$1 AND status != 'confirmado' RETURNING id`,
+        [payment.id]
+      );
+      if (result.rows[0]) {
+        const orderId = result.rows[0].id;
+        await pool.query(
+          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'confirmado') RETURNING id`,
+          [orderId]
+        );
+
+        const orderRes = await pool.query(
+          `SELECT o.*, c.name AS customer_name, c.phone AS customer_phone
+           FROM orders o JOIN customers c ON c.id = o.customer_id
+           WHERE o.id = $1`,
+          [orderId]
+        );
+        const order = orderRes.rows[0];
+
+        const itemsRes = await pool.query(
+          `SELECT oi.*, p.name AS product_name, p.print_target
+           FROM order_items oi JOIN products p ON p.id = oi.product_id
+           WHERE oi.order_id = $1`,
+          [orderId]
+        );
+        const itemAddons = await pool.query(
+          `SELECT a.* FROM order_item_addons a
+           JOIN order_items oi ON oi.id = a.order_item_id
+           WHERE oi.order_id = $1`,
+          [orderId]
+        );
+        const resolvedItems = itemsRes.rows.map((item) => ({
+          ...item,
+          addons: itemAddons.rows.filter((a) => a.order_item_id === item.id),
+        }));
+
+        // "Pagamento: PIX Online" só na impressão/mensagem — o campo payment_method no
+        // banco continua 'pix' pra não quebrar filtros/telas que comparam por esse valor.
+        broadcastOrderUpdate({
+          event: 'new_order',
+          order: { ...order, customer_name: order.customer_name, item_count: resolvedItems.length, payment_method: 'PIX Online' },
+          items: resolvedItems,
+        });
+
+        try {
+          const customerPhone = (order.customer_phone || '').replace(/\D/g, '');
+          if (customerPhone) {
+            const nome = order.customer_name.split(' ')[0];
+            const itemsList = resolvedItems.map(i => {
+              const sub = (parseFloat(i.unit_price) * i.quantity).toFixed(2).replace('.', ',');
+              const addonsLines = (i.addons || []).map(a => {
+                const addonTotal = (parseFloat(a.price || 0) * (a.quantity || 1)).toFixed(2).replace('.', ',');
+                return parseFloat(a.price || 0) > 0 ? `   ➕ ${a.name} — R$ ${addonTotal}` : `   ➕ ${a.name}`;
+              }).join('\n');
+              const obsItem = i.notes ? `\n   📝 ${i.notes}` : '';
+              return `• ${i.quantity}x ${i.product_name} — R$ ${sub}${addonsLines ? '\n' + addonsLines : ''}${obsItem}`;
+            }).join('\n');
+            const addr = order.delivery_address
+              ? (typeof order.delivery_address === 'string' ? order.delivery_address
+                : `${order.delivery_address.street || ''}, ${order.delivery_address.number || ''} - ${order.delivery_address.neighborhood || ''}`)
+              : '';
+            const tipo = order.delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
+            const msgCliente =
+              `☕ *Confraria Café*\n` +
+              `📍 Av Almirante Barroso, 746 - Centro\n` +
+              `📞 96 97400-7410\n` +
+              `─────────────────\n` +
+              `✅ *Pagamento PIX confirmado! Pedido #${order.order_number}*\n\n` +
+              `Olá ${nome}! Recebemos seu pagamento e já estamos preparando ☕\n\n` +
+              `*🛒 Itens:*\n${itemsList}\n\n` +
+              `${tipo}\n` +
+              `─────────────────\n` +
+              `💰 *Total: R$ ${parseFloat(order.total).toFixed(2).replace('.', ',')}*\n` +
+              `💳 Pagamento: PIX Online\n\n` +
+              `Em breve ficará pronto! 🎉`;
+            sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/asaas_confirm] status:', code));
+          }
+        } catch (e) { console.error('[whatsapp/asaas_confirm]', e.message); }
+      }
+    }
+
+    if (event === 'PAYMENT_OVERDUE' && payment?.id) {
+      await pool.query(
+        `UPDATE orders SET payment_status='falhou' WHERE asaas_payment_id=$1 RETURNING id`,
+        [payment.id]
+      );
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('[webhook/asaas]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.use(authMiddleware);
 
 // GET /api/orders — listar pedidos (com filtros)
@@ -981,113 +1090,6 @@ router.post('/webhook/stripe', async (req, res) => {
     res.json({ received: true });
   } catch (err) {
     console.error('[webhook/stripe]', err.message);
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// POST /api/orders/webhook/asaas — webhook Asaas (confirmação de pagamento PIX)
-// Só aqui a venda é considerada confirmada de fato: avisa cozinha/impressora e cliente.
-router.post('/webhook/asaas', async (req, res) => {
-  try {
-    const token = req.headers['asaas-access-token'];
-    if (process.env.ASAAS_WEBHOOK_TOKEN && token !== process.env.ASAAS_WEBHOOK_TOKEN) {
-      return res.status(401).json({ error: 'Token inválido' });
-    }
-
-    const { event, payment } = req.body || {};
-    if ((event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') && payment?.id) {
-      const result = await pool.query(
-        `UPDATE orders SET payment_status='pago', status='confirmado'
-         WHERE asaas_payment_id=$1 AND status != 'confirmado' RETURNING id`,
-        [payment.id]
-      );
-      if (result.rows[0]) {
-        const orderId = result.rows[0].id;
-        await pool.query(
-          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'confirmado') RETURNING id`,
-          [orderId]
-        );
-
-        const orderRes = await pool.query(
-          `SELECT o.*, c.name AS customer_name, c.phone AS customer_phone
-           FROM orders o JOIN customers c ON c.id = o.customer_id
-           WHERE o.id = $1`,
-          [orderId]
-        );
-        const order = orderRes.rows[0];
-
-        const itemsRes = await pool.query(
-          `SELECT oi.*, p.name AS product_name, p.print_target
-           FROM order_items oi JOIN products p ON p.id = oi.product_id
-           WHERE oi.order_id = $1`,
-          [orderId]
-        );
-        const itemAddons = await pool.query(
-          `SELECT a.* FROM order_item_addons a
-           JOIN order_items oi ON oi.id = a.order_item_id
-           WHERE oi.order_id = $1`,
-          [orderId]
-        );
-        const resolvedItems = itemsRes.rows.map((item) => ({
-          ...item,
-          addons: itemAddons.rows.filter((a) => a.order_item_id === item.id),
-        }));
-
-        // "Pagamento: PIX Online" só na impressão/mensagem — o campo payment_method no
-        // banco continua 'pix' pra não quebrar filtros/telas que comparam por esse valor.
-        broadcastOrderUpdate({
-          event: 'new_order',
-          order: { ...order, customer_name: order.customer_name, item_count: resolvedItems.length, payment_method: 'PIX Online' },
-          items: resolvedItems,
-        });
-
-        try {
-          const customerPhone = (order.customer_phone || '').replace(/\D/g, '');
-          if (customerPhone) {
-            const nome = order.customer_name.split(' ')[0];
-            const itemsList = resolvedItems.map(i => {
-              const sub = (parseFloat(i.unit_price) * i.quantity).toFixed(2).replace('.', ',');
-              const addonsLines = (i.addons || []).map(a => {
-                const addonTotal = (parseFloat(a.price || 0) * (a.quantity || 1)).toFixed(2).replace('.', ',');
-                return parseFloat(a.price || 0) > 0 ? `   ➕ ${a.name} — R$ ${addonTotal}` : `   ➕ ${a.name}`;
-              }).join('\n');
-              const obsItem = i.notes ? `\n   📝 ${i.notes}` : '';
-              return `• ${i.quantity}x ${i.product_name} — R$ ${sub}${addonsLines ? '\n' + addonsLines : ''}${obsItem}`;
-            }).join('\n');
-            const addr = order.delivery_address
-              ? (typeof order.delivery_address === 'string' ? order.delivery_address
-                : `${order.delivery_address.street || ''}, ${order.delivery_address.number || ''} - ${order.delivery_address.neighborhood || ''}`)
-              : '';
-            const tipo = order.delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
-            const msgCliente =
-              `☕ *Confraria Café*\n` +
-              `📍 Av Almirante Barroso, 746 - Centro\n` +
-              `📞 96 97400-7410\n` +
-              `─────────────────\n` +
-              `✅ *Pagamento PIX confirmado! Pedido #${order.order_number}*\n\n` +
-              `Olá ${nome}! Recebemos seu pagamento e já estamos preparando ☕\n\n` +
-              `*🛒 Itens:*\n${itemsList}\n\n` +
-              `${tipo}\n` +
-              `─────────────────\n` +
-              `💰 *Total: R$ ${parseFloat(order.total).toFixed(2).replace('.', ',')}*\n` +
-              `💳 Pagamento: PIX Online\n\n` +
-              `Em breve ficará pronto! 🎉`;
-            sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/asaas_confirm] status:', code));
-          }
-        } catch (e) { console.error('[whatsapp/asaas_confirm]', e.message); }
-      }
-    }
-
-    if (event === 'PAYMENT_OVERDUE' && payment?.id) {
-      await pool.query(
-        `UPDATE orders SET payment_status='falhou' WHERE asaas_payment_id=$1 RETURNING id`,
-        [payment.id]
-      );
-    }
-
-    res.json({ received: true });
-  } catch (err) {
-    console.error('[webhook/asaas]', err.message);
     res.status(400).json({ error: err.message });
   }
 });
