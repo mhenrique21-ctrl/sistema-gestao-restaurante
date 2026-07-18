@@ -46,7 +46,7 @@ function PaymentIcon({ id }) {
 }
 
 const PAYMENT_METHODS = [
-  { id: 'pix',            label: 'PIX',              desc: 'Pague via PIX após confirmar' },
+  { id: 'pix',            label: 'PIX Online / Automático', desc: 'Pague via PIX após confirmar' },
   { id: 'dinheiro',       label: 'Dinheiro',          desc: 'Pague na entrega / retirada' },
   { id: 'cartao_credito', label: 'Cartão de Crédito', desc: 'Maquininha na entrega' },
   { id: 'cartao_debito',  label: 'Cartão de Débito',  desc: 'Maquininha na entrega' },
