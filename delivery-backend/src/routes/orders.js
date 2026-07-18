@@ -104,7 +104,6 @@ router.post('/guest', async (req, res) => {
   if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone são obrigatórios' });
   if (!items?.length) return res.status(400).json({ error: 'Carrinho vazio' });
   if (!payment_method) return res.status(400).json({ error: 'Forma de pagamento é obrigatória' });
-  if (payment_method === 'pix' && !cpf) return res.status(400).json({ error: 'Informe o CPF para pagar via PIX' });
 
   try {
     // Bloqueia forma de pagamento desativada pelo admin (aba Pagamentos)
