@@ -219,74 +219,7 @@ router.post('/guest', async (req, res) => {
       [order.id, adminId]
     );
 
-    // Auto-confirmar pedido
-    try {
-      await pool.query(`UPDATE orders SET status = 'confirmado' WHERE id = $1 RETURNING id`, [order.id]);
-      await pool.query(
-        `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'confirmado',$2) RETURNING id`,
-        [order.id, adminId]
-      );
-      order.status = 'confirmado';
-    } catch(e) { console.error('[auto-confirm]', e.message); }
-
-    // Envia cupom completo ao cliente via Evolution API (automático)
-    try {
-      const customerPhone = customer.phone.replace(/\D/g, '');
-      if (customerPhone) {
-        const nome = customer.name.split(' ')[0];
-        const itemsList = resolvedItems.map(i => {
-          const sub = (i.unit_price * i.quantity).toFixed(2).replace('.', ',');
-          const addonsLines = (i.addons || []).map(a => {
-            const addonTotal = (parseFloat(a.price || 0) * (a.quantity || 1)).toFixed(2).replace('.', ',');
-            return parseFloat(a.price || 0) > 0 ? `   ➕ ${a.name} — R$ ${addonTotal}` : `   ➕ ${a.name}`;
-          }).join('\n');
-          const obsItem = i.notes ? `\n   📝 ${i.notes}` : '';
-          return `• ${i.quantity}x ${i.product_name} — R$ ${sub}${addonsLines ? '\n' + addonsLines : ''}${obsItem}`;
-        }).join('\n');
-        const addr = delivery_address
-          ? (typeof delivery_address === 'string' ? delivery_address
-            : `${delivery_address.street || ''}, ${delivery_address.number || ''} - ${delivery_address.neighborhood || ''}`)
-          : '';
-        const tipo = delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
-        const promoLine = finalDiscount > 0 ? `\n🎉 Desconto (${discountLabel}): -R$ ${finalDiscount.toFixed(2).replace('.', ',')}` : '';
-        const taxaLine = fee > 0 ? `\nTaxa entrega: R$ ${fee.toFixed(2).replace('.', ',')}${(appliedCoupon?.discount_type === 'free_delivery' || appliedPromo?.discount_type === 'free_delivery') ? ' ✅ Grátis!' : ''}` : '';
-        const subtotalLine = parseFloat(delivery_fee) > 0 ? `\nSubtotal: R$ ${subtotal.toFixed(2).replace('.', ',')}` : '';
-        const obsGeral = notes ? `\n\n📝 *Obs:* ${notes}` : '';
-        const msgCliente =
-          `☕ *Confraria Café*\n` +
-          `📍 Av Almirante Barroso, 746 - Centro\n` +
-          `📞 96 97400-7410\n` +
-          `─────────────────\n` +
-          `✅ *Pedido #${order.order_number} confirmado!*\n\n` +
-          `Olá ${nome}! Seu pedido foi recebido e já estamos preparando ☕\n\n` +
-          `*🛒 Itens:*\n${itemsList}${obsGeral}\n\n` +
-          `${tipo}${subtotalLine}${taxaLine}${promoLine}\n` +
-          `─────────────────\n` +
-          `💰 *Total: R$ ${total.toFixed(2).replace('.', ',')}*\n` +
-          `💳 Pagamento: ${payment_method}\n\n` +
-          `Em breve ficará pronto! 🎉`;
-        sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/confirm_cliente] status:', code));
-      }
-    } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
-
-    broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, items: resolvedItems });
-
-    // Impressão automática em todas as impressoras
-    try {
-      const stationMap = getStationsForOrder(resolvedItems);
-      for (const [stationKey, stationItems] of Object.entries(stationMap)) {
-        const stationCfg = STATION_ROUTES[stationKey];
-        printOrderTicket(stationCfg.printer, {
-          stationName: stationCfg.name,
-          emoji: stationCfg.emoji,
-          fullReceipt: stationCfg.fullReceipt || false,
-          order: { ...order, customer_name: customer.name },
-          items: stationItems,
-        }).catch((e) => console.error(`[print/${stationKey}]`, e.message));
-      }
-    } catch(e) { console.error('[print/guest]', e.message); }
-
-    // Pagamento PIX via Asaas
+    // Pagamento PIX via Asaas — pedido fica "aguardando_pagamento" até o webhook confirmar
     let pixData = null;
     if (payment_method === 'pix') {
       try {
@@ -303,6 +236,76 @@ router.post('/guest', async (req, res) => {
       } catch (asaasErr) {
         console.error('[asaas/pix/guest]', asaasErr.message);
       }
+    }
+
+    // Para os demais métodos (dinheiro, maquininha na entrega, cartão/Apple Pay já
+    // confirmados de forma síncrona antes de criar o pedido), confirma e avisa na hora.
+    // PIX só passa por aqui quando o webhook da Asaas confirmar o pagamento.
+    if (payment_method !== 'pix') {
+      try {
+        await pool.query(`UPDATE orders SET status = 'confirmado' WHERE id = $1 RETURNING id`, [order.id]);
+        await pool.query(
+          `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'confirmado',$2) RETURNING id`,
+          [order.id, adminId]
+        );
+        order.status = 'confirmado';
+      } catch(e) { console.error('[auto-confirm]', e.message); }
+
+      try {
+        const customerPhone = customer.phone.replace(/\D/g, '');
+        if (customerPhone) {
+          const nome = customer.name.split(' ')[0];
+          const itemsList = resolvedItems.map(i => {
+            const sub = (i.unit_price * i.quantity).toFixed(2).replace('.', ',');
+            const addonsLines = (i.addons || []).map(a => {
+              const addonTotal = (parseFloat(a.price || 0) * (a.quantity || 1)).toFixed(2).replace('.', ',');
+              return parseFloat(a.price || 0) > 0 ? `   ➕ ${a.name} — R$ ${addonTotal}` : `   ➕ ${a.name}`;
+            }).join('\n');
+            const obsItem = i.notes ? `\n   📝 ${i.notes}` : '';
+            return `• ${i.quantity}x ${i.product_name} — R$ ${sub}${addonsLines ? '\n' + addonsLines : ''}${obsItem}`;
+          }).join('\n');
+          const addr = delivery_address
+            ? (typeof delivery_address === 'string' ? delivery_address
+              : `${delivery_address.street || ''}, ${delivery_address.number || ''} - ${delivery_address.neighborhood || ''}`)
+            : '';
+          const tipo = delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
+          const promoLine = finalDiscount > 0 ? `\n🎉 Desconto (${discountLabel}): -R$ ${finalDiscount.toFixed(2).replace('.', ',')}` : '';
+          const taxaLine = fee > 0 ? `\nTaxa entrega: R$ ${fee.toFixed(2).replace('.', ',')}${(appliedCoupon?.discount_type === 'free_delivery' || appliedPromo?.discount_type === 'free_delivery') ? ' ✅ Grátis!' : ''}` : '';
+          const subtotalLine = parseFloat(delivery_fee) > 0 ? `\nSubtotal: R$ ${subtotal.toFixed(2).replace('.', ',')}` : '';
+          const obsGeral = notes ? `\n\n📝 *Obs:* ${notes}` : '';
+          const msgCliente =
+            `☕ *Confraria Café*\n` +
+            `📍 Av Almirante Barroso, 746 - Centro\n` +
+            `📞 96 97400-7410\n` +
+            `─────────────────\n` +
+            `✅ *Pedido #${order.order_number} confirmado!*\n\n` +
+            `Olá ${nome}! Seu pedido foi recebido e já estamos preparando ☕\n\n` +
+            `*🛒 Itens:*\n${itemsList}${obsGeral}\n\n` +
+            `${tipo}${subtotalLine}${taxaLine}${promoLine}\n` +
+            `─────────────────\n` +
+            `💰 *Total: R$ ${total.toFixed(2).replace('.', ',')}*\n` +
+            `💳 Pagamento: ${payment_method}\n\n` +
+            `Em breve ficará pronto! 🎉`;
+          sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/confirm_cliente] status:', code));
+        }
+      } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
+
+      broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, items: resolvedItems });
+
+      // Impressão automática em todas as impressoras
+      try {
+        const stationMap = getStationsForOrder(resolvedItems);
+        for (const [stationKey, stationItems] of Object.entries(stationMap)) {
+          const stationCfg = STATION_ROUTES[stationKey];
+          printOrderTicket(stationCfg.printer, {
+            stationName: stationCfg.name,
+            emoji: stationCfg.emoji,
+            fullReceipt: stationCfg.fullReceipt || false,
+            order: { ...order, customer_name: customer.name },
+            items: stationItems,
+          }).catch((e) => console.error(`[print/${stationKey}]`, e.message));
+        }
+      } catch(e) { console.error('[print/guest]', e.message); }
     }
 
     res.status(201).json({ ...order, customer_name: customer.name, items: resolvedItems, pix: pixData });
@@ -983,6 +986,7 @@ router.post('/webhook/stripe', async (req, res) => {
 });
 
 // POST /api/orders/webhook/asaas — webhook Asaas (confirmação de pagamento PIX)
+// Só aqui a venda é considerada confirmada de fato: avisa cozinha/impressora e cliente.
 router.post('/webhook/asaas', async (req, res) => {
   try {
     const token = req.headers['asaas-access-token'];
@@ -993,16 +997,84 @@ router.post('/webhook/asaas', async (req, res) => {
     const { event, payment } = req.body || {};
     if ((event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') && payment?.id) {
       const result = await pool.query(
-        `UPDATE orders SET payment_status='pago', status='pago'
-         WHERE asaas_payment_id=$1 RETURNING id`,
+        `UPDATE orders SET payment_status='pago', status='confirmado'
+         WHERE asaas_payment_id=$1 AND status != 'confirmado' RETURNING id`,
         [payment.id]
       );
       if (result.rows[0]) {
+        const orderId = result.rows[0].id;
         await pool.query(
-          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'pago') RETURNING id`,
-          [result.rows[0].id]
+          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'confirmado') RETURNING id`,
+          [orderId]
         );
-        broadcastOrderUpdate({ event: 'payment_confirmed', order_id: result.rows[0].id });
+
+        const orderRes = await pool.query(
+          `SELECT o.*, c.name AS customer_name, c.phone AS customer_phone
+           FROM orders o JOIN customers c ON c.id = o.customer_id
+           WHERE o.id = $1`,
+          [orderId]
+        );
+        const order = orderRes.rows[0];
+
+        const itemsRes = await pool.query(
+          `SELECT oi.*, p.name AS product_name, p.print_target
+           FROM order_items oi JOIN products p ON p.id = oi.product_id
+           WHERE oi.order_id = $1`,
+          [orderId]
+        );
+        const itemAddons = await pool.query(
+          `SELECT a.* FROM order_item_addons a
+           JOIN order_items oi ON oi.id = a.order_item_id
+           WHERE oi.order_id = $1`,
+          [orderId]
+        );
+        const resolvedItems = itemsRes.rows.map((item) => ({
+          ...item,
+          addons: itemAddons.rows.filter((a) => a.order_item_id === item.id),
+        }));
+
+        // "Pagamento: PIX Online" só na impressão/mensagem — o campo payment_method no
+        // banco continua 'pix' pra não quebrar filtros/telas que comparam por esse valor.
+        broadcastOrderUpdate({
+          event: 'new_order',
+          order: { ...order, customer_name: order.customer_name, item_count: resolvedItems.length, payment_method: 'PIX Online' },
+          items: resolvedItems,
+        });
+
+        try {
+          const customerPhone = (order.customer_phone || '').replace(/\D/g, '');
+          if (customerPhone) {
+            const nome = order.customer_name.split(' ')[0];
+            const itemsList = resolvedItems.map(i => {
+              const sub = (parseFloat(i.unit_price) * i.quantity).toFixed(2).replace('.', ',');
+              const addonsLines = (i.addons || []).map(a => {
+                const addonTotal = (parseFloat(a.price || 0) * (a.quantity || 1)).toFixed(2).replace('.', ',');
+                return parseFloat(a.price || 0) > 0 ? `   ➕ ${a.name} — R$ ${addonTotal}` : `   ➕ ${a.name}`;
+              }).join('\n');
+              const obsItem = i.notes ? `\n   📝 ${i.notes}` : '';
+              return `• ${i.quantity}x ${i.product_name} — R$ ${sub}${addonsLines ? '\n' + addonsLines : ''}${obsItem}`;
+            }).join('\n');
+            const addr = order.delivery_address
+              ? (typeof order.delivery_address === 'string' ? order.delivery_address
+                : `${order.delivery_address.street || ''}, ${order.delivery_address.number || ''} - ${order.delivery_address.neighborhood || ''}`)
+              : '';
+            const tipo = order.delivery_type === 'retirada' ? '🏪 Retirada na loja' : `🛵 Entrega${addr ? '\n📍 ' + addr : ''}`;
+            const msgCliente =
+              `☕ *Confraria Café*\n` +
+              `📍 Av Almirante Barroso, 746 - Centro\n` +
+              `📞 96 97400-7410\n` +
+              `─────────────────\n` +
+              `✅ *Pagamento PIX confirmado! Pedido #${order.order_number}*\n\n` +
+              `Olá ${nome}! Recebemos seu pagamento e já estamos preparando ☕\n\n` +
+              `*🛒 Itens:*\n${itemsList}\n\n` +
+              `${tipo}\n` +
+              `─────────────────\n` +
+              `💰 *Total: R$ ${parseFloat(order.total).toFixed(2).replace('.', ',')}*\n` +
+              `💳 Pagamento: PIX Online\n\n` +
+              `Em breve ficará pronto! 🎉`;
+            sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/asaas_confirm] status:', code));
+          }
+        } catch (e) { console.error('[whatsapp/asaas_confirm]', e.message); }
       }
     }
 
