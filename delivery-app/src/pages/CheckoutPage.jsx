@@ -656,10 +656,9 @@ export default function CheckoutPage() {
                 </button>
 
                 {m.id === 'pix' && payment === 'pix' && (
-                  <div style={{ marginTop: 8, padding: 12, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  <div style={{ marginTop: 6, padding: '0 12px' }}>
                     <label style={LABEL}>CPF (necessário para gerar o PIX)</label>
                     <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" style={INPUT} maxLength={14} />
-                    {settings.pix_key && <div style={{ marginTop: 10 }}><PixBox pixKey={settings.pix_key} /></div>}
                   </div>
                 )}
 
