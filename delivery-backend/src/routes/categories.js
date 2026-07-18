@@ -82,4 +82,20 @@ router.post('/:id/apply-printer', requireRole('admin'), async (req, res) => {
   }
 });
 
+// POST /api/categories/:id/apply-template-days — aplica active_days de um template a todos os produtos da categoria
+router.post('/:id/apply-template-days', requireRole('admin'), async (req, res) => {
+  const { active_days } = req.body;
+  const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
+  const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
+  try {
+    const r = await pool.query(
+      `UPDATE products SET active_days = ${daysSql} WHERE category_id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    res.json({ updated: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

@@ -529,6 +529,7 @@ let currentPage = 'dashboard';
 let modalCallback = null;
 
 function showPage(page, btn) {
+  if (page !== 'pedidos') { clearInterval(pedidosTimer); pedidosTimer = null; }
   currentPage = page;
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -678,6 +679,48 @@ const DAYS_WEEK = [
   { v: 4, l: 'Qui' }, { v: 5, l: 'Sex' }, { v: 6, l: 'Sáb' }, { v: 0, l: 'Dom' }
 ];
 
+// Cache dos templates (página Templates) — reusado pelo seletor rápido no modal de Produto/Categoria
+let _templatesCache = null;
+async function ensureTemplatesLoaded() {
+  if (!_templatesCache) {
+    try { _templatesCache = await api('GET', '/templates'); } catch { _templatesCache = []; }
+  }
+  return _templatesCache;
+}
+
+function templatePickerHtml(selectId) {
+  return `<div>
+    <label>📋 Aplicar dias de um template</label>
+    <div style="display:flex;gap:6px">
+      <select id="${selectId}" style="flex:1"><option value="">Carregando templates...</option></select>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="applyTemplatePicker('${selectId}')">Aplicar</button>
+    </div>
+    <small style="color:var(--muted)">Marca automaticamente os mesmos dias ativos do template escolhido — você ainda pode ajustar antes de salvar.</small>
+  </div>`;
+}
+
+async function populateTemplatePicker(selectId) {
+  const templates = await ensureTemplatesLoaded();
+  const el = document.getElementById(selectId);
+  if (!el) return;
+  el.innerHTML = templates.length
+    ? `<option value="">— Selecione —</option>` + templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+    : `<option value="">Nenhum template criado</option>`;
+}
+
+function applyTemplatePicker(selectId) {
+  const id = document.getElementById(selectId)?.value;
+  if (!id) return toast('Escolha um template primeiro', true);
+  const t = (_templatesCache || []).find(x => x.id === id);
+  if (!t) return;
+  const days = t.active_days || [];
+  const all = days.length === 0;
+  const alldaysCb = document.getElementById('f-alldays');
+  if (alldaysCb) { alldaysCb.checked = all; alldaysCb.dispatchEvent(new Event('change')); }
+  document.querySelectorAll('.f-day-cb').forEach(c => { c.checked = !all && days.includes(parseInt(c.value)); });
+  toast(`Dias do template "${t.name}" aplicados!`);
+}
+
 function activeDaysHtml(selected = null) {
   const all = selected === null || selected.length === 0;
   return `<div>
@@ -810,6 +853,7 @@ function modalEditarProduto(id) {
         </div>
       </div>
       ${promoDaysHtml(p.promo_days || null)}
+      ${templatePickerHtml('f-tpl-picker')}
       ${activeDaysHtml(p.active_days || null)}
       ${channelToggleHtml(p.show_kiosk !== false, p.show_delivery !== false)}
       <div><label>🖨 Destino de impressão</label>
@@ -841,6 +885,7 @@ function modalEditarProduto(id) {
     toast('Produto atualizado!'); closeModal(); pageProdutos();
   });
   renderAddonsSection(id, () => modalEditarProduto(id));
+  populateTemplatePicker('f-tpl-picker');
 }
 
 async function excluirProduto(id) {
@@ -1201,18 +1246,35 @@ function modalEditarCategoria(id, name, desc, printer) {
           Aplicar impressora a todos os produtos desta categoria
         </label>
       </div>
+      <div>
+        ${templatePickerHtml('f-tpl-picker-cat')}
+        <label style="display:flex;align-items:center;gap:8px;margin-top:6px;cursor:pointer;font-size:.83rem;color:var(--muted)">
+          <input type="checkbox" id="f-apply-tpl-days">
+          Ao salvar, aplicar os dias do template escolhido a todos os produtos desta categoria
+        </label>
+      </div>
     </div>`, async () => {
     const newPrinter = document.getElementById('f-printer').value || null;
     const applyProdutos = document.getElementById('f-apply-produtos').checked;
+    const applyTplDays = document.getElementById('f-apply-tpl-days').checked;
+    const tplId = document.getElementById('f-tpl-picker-cat').value;
     await api('PATCH', '/categories/' + id, { name: document.getElementById('f-name').value, description: document.getElementById('f-desc').value, printer: newPrinter });
+    let msg = 'Categoria atualizada!';
     if (applyProdutos) {
       const r = await api('POST', `/categories/${id}/apply-printer`, { printer: newPrinter });
-      toast(`Categoria atualizada e ${r.updated} produto(s) atualizados!`);
-    } else {
-      toast('Categoria atualizada!');
+      msg = `Categoria atualizada e ${r.updated} produto(s) com impressora atualizada!`;
     }
+    if (applyTplDays && tplId) {
+      const t = (_templatesCache || []).find(x => x.id === tplId);
+      const r2 = await api('POST', `/categories/${id}/apply-template-days`, { active_days: t?.active_days || [] });
+      msg += ` ${r2.updated} produto(s) com dias do template "${t?.name || ''}" aplicados!`;
+    } else if (applyTplDays && !tplId) {
+      toast('Selecione um template pra aplicar os dias', true);
+    }
+    toast(msg);
     closeModal(); pageCategorias();
   });
+  populateTemplatePicker('f-tpl-picker-cat');
 }
 
 // ── Clientes ──────────────────────────────────────────────────────
@@ -4175,7 +4237,7 @@ carregarBairrosCache().then(() => {
 async function pageTemplates() {
   document.getElementById('content').innerHTML = '<p style="color:var(--muted)">Carregando...</p>';
   let list = [];
-  try { list = await api('GET', '/templates'); } catch(e) { toast('Erro ao carregar templates', true); }
+  try { list = await api('GET', '/templates'); _templatesCache = list; } catch(e) { toast('Erro ao carregar templates', true); }
   document.getElementById('content').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-primary" onclick="modalNovoTemplate()">+ Novo Template</button>
