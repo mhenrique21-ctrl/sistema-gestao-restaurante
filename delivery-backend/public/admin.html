@@ -980,6 +980,7 @@ async function renderAddonsSection(productId, reopen) {
   const el = document.getElementById('addons-section');
   if (!el) return;
   const groups = await api('GET', `/menu/products/${productId}/addon-groups`);
+  const dbTemplates = await ensureTemplatesLoaded();
   el.innerHTML = `
     <hr style="border-color:var(--border);margin:12px 0">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
@@ -1003,6 +1004,16 @@ async function renderAddonsSection(productId, reopen) {
             <span style="color:var(--muted);margin-left:4px">(${t.options.length} opções)</span>
           </button>`).join('')}
       </div>
+      ${dbTemplates.length > 0 ? `
+        <p style="color:var(--muted);font-size:.75rem;margin:10px 0 6px">📁 <strong>Seus templates</strong> (da página Templates) — clique para aplicar como grupo de adicionais:</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${dbTemplates.map(t => `
+            <button type="button" onclick="aplicarTemplateDB('${productId}','${t.id}')"
+              style="background:var(--hover);border:1px solid #7c3aed;border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--text);font-size:.76rem;text-align:left">
+              <span style="font-weight:700">${t.name}</span>
+              <span style="color:var(--muted);margin-left:4px">(${t.items.length} itens)</span>
+            </button>`).join('')}
+        </div>` : ''}
     </div>
     ${groups.map(g => `
       <div style="background:var(--hover);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
@@ -1030,6 +1041,7 @@ async function renderAddonsSection(productId, reopen) {
 }
 
 async function modalTemplateAddon(productId) {
+  const dbTemplates = await ensureTemplatesLoaded();
   openModal('Adicionar Template de Grupo', `
     <p style="color:var(--muted);font-size:.82rem;margin-bottom:12px">Escolha um modelo pronto. Você poderá editar as opções depois.</p>
     <div style="display:grid;gap:8px">
@@ -1037,6 +1049,11 @@ async function modalTemplateAddon(productId) {
         <button type="button" onclick="aplicarTemplate('${productId}',${i})" style="text-align:left;background:var(--hover);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;color:var(--text)">
           <div style="font-weight:700">${t.name}</div>
           <div style="color:var(--muted);font-size:.76rem;margin-top:2px">${t.options.length > 0 ? t.options.map(o=>o.name).join(' · ') : 'Grupo vazio — adicione opções manualmente'}</div>
+        </button>`).join('')}
+      ${dbTemplates.map(t => `
+        <button type="button" onclick="aplicarTemplateDB('${productId}','${t.id}')" style="text-align:left;background:var(--hover);border:1px solid #7c3aed;border-radius:8px;padding:10px 14px;cursor:pointer;color:var(--text)">
+          <div style="font-weight:700">📁 ${t.name}</div>
+          <div style="color:var(--muted);font-size:.76rem;margin-top:2px">${t.items.join(' · ')}</div>
         </button>`).join('')}
     </div>`, null);
   document.getElementById('modal-confirm').style.display = 'none';
@@ -1054,6 +1071,22 @@ async function aplicarTemplate(productId, templateIndex) {
       await api('POST', `/menu/addon-groups/${group.id}/options`, { name: op.name, price: op.price });
     }
     toast(`Grupo "${t.name}" adicionado!`);
+    renderAddonsSection(productId);
+  } catch(e) { toast('Erro: ' + e.message, true); }
+}
+
+async function aplicarTemplateDB(productId, templateId) {
+  const t = (_templatesCache || []).find(x => x.id === templateId);
+  if (!t) return;
+  closeModal();
+  try {
+    const group = await api('POST', `/menu/products/${productId}/addon-groups`, {
+      name: t.name, min_select: 0, max_select: t.items.length, required: false,
+    });
+    for (const item of t.items) {
+      await api('POST', `/menu/addon-groups/${group.id}/options`, { name: item, price: 0 });
+    }
+    toast(`Grupo "${t.name}" adicionado com ${t.items.length} opção(ões)!`);
     renderAddonsSection(productId);
   } catch(e) { toast('Erro: ' + e.message, true); }
 }
