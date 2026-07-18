@@ -202,6 +202,10 @@ export default function CheckoutPage() {
     ? PAYMENT_METHODS
     : PAYMENT_METHODS.filter(m => enabledCodes.includes(m.id))
 
+  // "pix_auto" não é um método selecionável — é só um toggle admin pra ligar/desligar
+  // o QR dinâmico da Asaas. Com ele desativado, o PIX usa só a chave manual.
+  const pixAutoEnabled = enabledCodes?.includes('pix_auto') ?? false
+
   // Se a forma selecionada foi desativada pelo admin, troca pra primeira disponível
   useEffect(() => {
     if (availableMethods.length && !availableMethods.some(m => m.id === payment)) {
@@ -302,7 +306,7 @@ export default function CheckoutPage() {
     if (!phone.trim()) return 'Informe seu WhatsApp'
     if (deliveryType === 'delivery' && !neighborhood) return 'Selecione o bairro'
     if (deliveryType === 'delivery' && !street.trim()) return 'Informe a rua'
-    if (payment === 'pix' && onlyDigits(cpf).length !== 11) return 'Informe um CPF válido para pagar via PIX'
+    if (payment === 'pix' && pixAutoEnabled && onlyDigits(cpf).length !== 11) return 'Informe um CPF válido para pagar via PIX'
     return ''
   }
 
@@ -319,7 +323,7 @@ export default function CheckoutPage() {
         coupon_code: couponApplied?.code || undefined,
         coupon_subtotal: couponApplied ? subtotalSemPromo : undefined,
         stripe_payment_intent_id: stripePaymentIntentId,
-        cpf: payment === 'pix' ? onlyDigits(cpf) : undefined,
+        cpf: payment === 'pix' && pixAutoEnabled ? onlyDigits(cpf) : undefined,
         items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
       })
       clear()
@@ -457,14 +461,11 @@ export default function CheckoutPage() {
             ))}
           </div>
 
-          {success.payment_method === 'pix' && success.pix?.qrCode && (
+          {success.payment_method === 'pix' && pixAutoEnabled && success.pix?.qrCode && (
             <StripePixBox qrCodeUrl={success.pix.qrCodeUrl} qrCodeData={success.pix.qrCode} total={parseFloat(success.total)} />
           )}
           {success.payment_method === 'pix' && settings.pix_key && (
             <div style={{ marginTop: 10 }}>
-              {success.pix?.qrCode && (
-                <p style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 8 }}>QR não funcionou? Pague manualmente com a chave abaixo:</p>
-              )}
               <PixBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
             </div>
           )}
@@ -660,7 +661,7 @@ export default function CheckoutPage() {
                   </div>
                 </button>
 
-                {m.id === 'pix' && payment === 'pix' && (
+                {m.id === 'pix' && payment === 'pix' && pixAutoEnabled && (
                   <div style={{ marginTop: 6, padding: '0 12px' }}>
                     <label style={LABEL}>CPF (necessário para gerar o PIX)</label>
                     <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" style={INPUT} maxLength={14} />

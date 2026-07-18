@@ -219,22 +219,27 @@ router.post('/guest', async (req, res) => {
       [order.id, adminId]
     );
 
-    // Pagamento PIX via Asaas — pedido fica "aguardando_pagamento" até o webhook confirmar
+    // Pagamento PIX via Asaas — pedido fica "aguardando_pagamento" até o webhook confirmar.
+    // Só tenta se o admin tiver o método "pix_auto" ativado (Formas de Pagamento no admin).
     let pixData = null;
     if (payment_method === 'pix') {
-      try {
-        const asaasPix = await asaasService.createPixCharge({
-          name, cpfCnpj: cpf, phone, value: total,
-          description: `Pedido #${order.order_number} — Confraria Café`,
-          externalReference: order.id,
-        });
-        pixData = { qrCode: asaasPix.qrCode, qrCodeUrl: asaasPix.qrCodeUrl };
-        await pool.query(
-          `UPDATE orders SET asaas_payment_id=$1 WHERE id=$2 RETURNING id`,
-          [asaasPix.paymentId, order.id]
-        );
-      } catch (asaasErr) {
-        console.error('[asaas/pix/guest]', asaasErr.message);
+      const pixAutoRow = await pool.query(`SELECT active FROM payment_methods WHERE code = 'pix_auto'`);
+      const pixAutoEnabled = pixAutoRow.rows[0]?.active === true;
+      if (pixAutoEnabled) {
+        try {
+          const asaasPix = await asaasService.createPixCharge({
+            name, cpfCnpj: cpf, phone, value: total,
+            description: `Pedido #${order.order_number} — Confraria Café`,
+            externalReference: order.id,
+          });
+          pixData = { qrCode: asaasPix.qrCode, qrCodeUrl: asaasPix.qrCodeUrl };
+          await pool.query(
+            `UPDATE orders SET asaas_payment_id=$1 WHERE id=$2 RETURNING id`,
+            [asaasPix.paymentId, order.id]
+          );
+        } catch (asaasErr) {
+          console.error('[asaas/pix/guest]', asaasErr.message);
+        }
       }
     }
 
