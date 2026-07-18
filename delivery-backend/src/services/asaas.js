@@ -11,6 +11,7 @@ function request(method, path, body) {
       method,
       headers: {
         'Content-Type': 'application/json',
+        'User-Agent': 'ConfrariaCafe-Delivery',
         'access_token': process.env.ASAAS_API_KEY,
         ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}),
       },
