@@ -73,4 +73,33 @@ router.delete('/:id', requireRole('admin'), async (req, res) => {
   }
 });
 
+// POST /api/addon-templates/:id/sync — propaga as opções atuais do modelo pra
+// todos os grupos de produtos que foram criados a partir dele (template_id)
+router.post('/:id/sync', requireRole('admin'), async (req, res) => {
+  try {
+    const tRes = await pool.query('SELECT * FROM addon_templates WHERE id = $1', [req.params.id]);
+    const template = tRes.rows[0];
+    if (!template) return res.status(404).json({ error: 'Modelo não encontrado' });
+
+    const groupsRes = await pool.query('SELECT id FROM addon_groups WHERE template_id = $1', [req.params.id]);
+    for (const g of groupsRes.rows) {
+      await pool.query(
+        `UPDATE addon_groups SET name=$1, min_select=$2, max_select=$3, required=$4 WHERE id=$5 RETURNING id`,
+        [template.name, template.min_select, template.max_select, template.required, g.id]
+      );
+      await pool.query('DELETE FROM addon_options WHERE group_id = $1 RETURNING id', [g.id]);
+      let i = 0;
+      for (const op of (template.options || [])) {
+        await pool.query(
+          'INSERT INTO addon_options (group_id, name, price, sort_order) VALUES ($1,$2,$3,$4)',
+          [g.id, op.name, op.price || 0, i++]
+        );
+      }
+    }
+    res.json({ updated: groupsRes.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

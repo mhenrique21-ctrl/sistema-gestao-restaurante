@@ -346,15 +346,17 @@ router.get('/products/:id/addon-groups', authMiddleware, requireRole('admin'), a
 
 // POST /api/menu/products/:id/addon-groups — criar grupo (admin)
 router.post('/products/:id/addon-groups', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { name, min_select = 0, max_select = 1, required = false, sort_order = 0, active_days } = req.body;
+  const { name, min_select = 0, max_select = 1, required = false, sort_order = 0, active_days, template_id } = req.body;
   if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
   const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
   const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
+  const params = [req.params.id, name, min_select, max_select, required, sort_order];
+  const templateIdSql = template_id ? `$${params.push(template_id)}` : 'NULL';
   try {
     const result = await pool.query(
-      `INSERT INTO addon_groups (product_id, name, min_select, max_select, required, sort_order, active_days)
-       VALUES ($1,$2,$3,$4,$5,$6,${daysSql}) RETURNING *`,
-      [req.params.id, name, min_select, max_select, required, sort_order]
+      `INSERT INTO addon_groups (product_id, name, min_select, max_select, required, sort_order, active_days, template_id)
+       VALUES ($1,$2,$3,$4,$5,$6,${daysSql},${templateIdSql}) RETURNING *`,
+      params
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

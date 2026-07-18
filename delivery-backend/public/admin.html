@@ -1014,7 +1014,7 @@ async function aplicarModeloAdicional(productId, modeloId) {
   closeModal();
   try {
     const group = await api('POST', `/menu/products/${productId}/addon-groups`, {
-      name: t.name, min_select: t.min_select, max_select: t.max_select, required: t.required,
+      name: t.name, min_select: t.min_select, max_select: t.max_select, required: t.required, template_id: t.id,
     });
     for (const op of (t.options || [])) {
       await api('POST', `/menu/addon-groups/${group.id}/options`, { name: op.name, price: op.price });
@@ -1047,7 +1047,7 @@ async function aplicarTodosTemplates(productId) {
     const modelos = (await ensureAddonTemplatesLoaded()).filter(t => t.active !== false);
     for (const t of modelos) {
       const group = await api('POST', `/menu/products/${productId}/addon-groups`, {
-        name: t.name, min_select: t.min_select, max_select: t.max_select, required: t.required,
+        name: t.name, min_select: t.min_select, max_select: t.max_select, required: t.required, template_id: t.id,
       });
       for (const op of (t.options || [])) {
         await api('POST', `/menu/addon-groups/${group.id}/options`, { name: op.name, price: op.price });
@@ -4262,6 +4262,7 @@ function addonTemplateCard(t) {
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
+          <button class="btn btn-secondary btn-sm" onclick="sincronizarModeloAdicional('${t.id}')" title="Atualiza os produtos que já usam esse modelo com as opções atuais">🔄 Atualizar produtos</button>
           <button class="btn btn-secondary btn-sm" onclick="toggleModeloAdicional('${t.id}',${inactive})">${inactive ? '▶️ Ativar' : '⏸ Desativar'}</button>
           <button class="btn btn-secondary btn-sm" onclick="modalEditarModeloAdicional('${t.id}')">✏️</button>
           <button class="btn btn-danger btn-sm" onclick="excluirModeloAdicional('${t.id}')">🗑</button>
@@ -4281,6 +4282,13 @@ async function excluirModeloAdicional(id) {
   await api('DELETE', `/addon-templates/${id}`);
   toast('Modelo excluído!');
   pageTemplates();
+}
+
+async function sincronizarModeloAdicional(id) {
+  try {
+    const r = await api('POST', `/addon-templates/${id}/sync`, {});
+    toast(r.updated > 0 ? `✅ ${r.updated} produto(s) atualizado(s)!` : 'Nenhum produto usa esse modelo ainda — aplique nos produtos primeiro.');
+  } catch (e) { toast('Erro: ' + e.message, true); }
 }
 
 function modeloOptionsRowsHtml(options = []) {
