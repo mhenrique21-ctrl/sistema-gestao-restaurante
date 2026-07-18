@@ -460,8 +460,13 @@ export default function CheckoutPage() {
           {success.payment_method === 'pix' && success.pix?.qrCode && (
             <StripePixBox qrCodeUrl={success.pix.qrCodeUrl} qrCodeData={success.pix.qrCode} total={parseFloat(success.total)} />
           )}
-          {success.payment_method === 'pix' && !success.pix?.qrCode && settings.pix_key && (
-            <PixBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
+          {success.payment_method === 'pix' && settings.pix_key && (
+            <div style={{ marginTop: 10 }}>
+              {success.pix?.qrCode && (
+                <p style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginBottom: 8 }}>QR não funcionou? Pague manualmente com a chave abaixo:</p>
+              )}
+              <PixBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
+            </div>
           )}
 
           <a href="https://wa.me/5596974007410" target="_blank" rel="noopener noreferrer"
