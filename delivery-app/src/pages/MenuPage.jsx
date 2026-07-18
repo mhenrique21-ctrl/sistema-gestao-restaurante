@@ -34,7 +34,7 @@ function ProductCard({ product, catName, onClick }) {
             {product.promo_label || 'Oferta'}
           </span>
         ) : product.featured ? (
-          <span className="badge-soft badge-offer self-start mb-1.5">
+          <span className="badge-soft badge-green self-start mb-1.5">
             🎉 Promoção
           </span>
         ) : null}
