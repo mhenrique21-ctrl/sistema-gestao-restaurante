@@ -91,7 +91,7 @@ router.post('/:id/sync', requireRole('admin'), async (req, res) => {
       let i = 0;
       for (const op of (template.options || [])) {
         await pool.query(
-          'INSERT INTO addon_options (group_id, name, price, sort_order) VALUES ($1,$2,$3,$4)',
+          'INSERT INTO addon_options (group_id, name, price, sort_order) VALUES ($1,$2,$3,$4) RETURNING id',
           [g.id, op.name, op.price || 0, i++]
         );
       }
