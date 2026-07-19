@@ -744,9 +744,11 @@ export default function App() {
     saveSeqRef.current++;
     syncTimer.current=setTimeout(async()=>{
       try{
-        await Promise.all(changed.map(emp=>
-          fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(state[emp])})
-        ));
+        await Promise.all(changed.map(async emp=>{
+          const merged=await mergeWithServerBeforePost(emp);
+          const body=merged!=null?JSON.stringify(merged):JSON.stringify(state[emp]);
+          await fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body});
+        }));
         setSyncStatus("ok");
       }catch{setSyncStatus("erro");}finally{
         syncTimer.current=null;
@@ -756,25 +758,52 @@ export default function App() {
 
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
+
+  // Busca o estado mais recente do servidor e funde com o local (mesma lógica do poll,
+  // incluindo o filtro de itens excluídos/arquivados) ANTES de sobrescrever o servidor.
+  // Sem isso, um dispositivo com dados desatualizados podia "ressuscitar" itens que
+  // outro dispositivo já tinha arquivado/excluído, ao salvar por cima logo em seguida.
+  const mergeWithServerBeforePost=async(emp:string):Promise<any>=>{
+    try{
+      const r=await fetch(`/api/dados/${emp}?_=${Date.now()}`);
+      const serverData=await r.json();
+      if(!serverData)return null;
+      let mergedEmp:any=null;
+      fromPollRef.current=true;
+      flushSync(()=>{
+        setState(prev=>{
+          const merged=mergeFromServer(prev,{[emp]:serverData});
+          mergedEmp=merged[emp];
+          return merged;
+        });
+      });
+      return mergedEmp;
+    }catch{return null;}
+  };
+
   const setDbAndSave=(fn:(d:any)=>any)=>{
     directSaveRef.current=true;
     const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
-    let bodyToSave="";
-    flushSync(()=>{
-      setState(prev=>{
-        const next={...prev,[empresa]:fn(prev[empresa])};
-        saveSeqRef.current++;
-        clearTimeout(syncTimer.current);
-        syncTimer.current=null;
-        bodyToSave=JSON.stringify(next[empresa]);
-        return next;
+    (async()=>{
+      const merged=await mergeWithServerBeforePost(empresa);
+      let bodyToSave="";
+      flushSync(()=>{
+        setState(prev=>{
+          const base=merged!=null?{...prev,[empresa]:merged}:prev;
+          const next={...base,[empresa]:fn(base[empresa])};
+          saveSeqRef.current++;
+          clearTimeout(syncTimer.current);
+          syncTimer.current=null;
+          bodyToSave=JSON.stringify(next[empresa]);
+          return next;
+        });
       });
-    });
-    setSyncStatus("sync");
-    fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
-      .then(r=>{if(!r.ok)throw new Error(r.status+"");setSyncStatus("ok");})
-      .catch(()=>setSyncStatus("erro"))
-      .finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
+      setSyncStatus("sync");
+      fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
+        .then(r=>{if(!r.ok)throw new Error(r.status+"");setSyncStatus("ok");})
+        .catch(()=>setSyncStatus("erro"))
+        .finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
+    })();
   };
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao"||login?.role==="op_enc";
