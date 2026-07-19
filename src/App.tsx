@@ -1910,15 +1910,15 @@ function Vendas({db,setDb,setDbAndSave,state}){
           <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(v.total)}</span>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-          {v.maquininha>0&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
+          {v.maquininha>0&&<span className="tag" style={{background:"#DCFCE7",color:"#15803D"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
           {v.dinheiro>0&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
-          {v.ifood>0&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>
+          {v.ifood>0&&<span className="tag" style={{background:"#FEE2E2",color:"#B91C1C"}}>
             iFood: {fmtMoney(v.ifood)}{v.ifoodTaxa>0?` (-${v.ifoodTaxa}%→${fmtMoney(v.ifoodLiq??v.ifood)})`:""}
           </span>}
-          {v["99food"]>0&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>
+          {v["99food"]>0&&<span className="tag" style={{background:"#FEF3C7",color:"#B45309"}}>
             99food: {fmtMoney(v["99food"])}{v.nfoodTaxa>0?` (-${v.nfoodTaxa}%→${fmtMoney(v.nfoodLiq??v["99food"])})`:""}
           </span>}
-          {v.delivery>0&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>delivery: {fmtMoney(v.delivery)}</span>}
+          {v.delivery>0&&<span className="tag" style={{background:"#F3E8DC",color:"#78350F"}}>delivery: {fmtMoney(v.delivery)}</span>}
         </div>
         <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
           <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>budget {budgetCmv}%: {fmtMoney(bDia)}</span>
