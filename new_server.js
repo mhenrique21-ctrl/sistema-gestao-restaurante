@@ -1948,31 +1948,12 @@ async function autoSyncSEFAZ() {
         .sort((a,b) => (b.data||'').localeCompare(a.data||''))
         .slice(0, 50);
       cache[key] = { nfes: merged, timestamp: new Date().toISOString(), ultNSU: result.ultNSU, empresa: emp };
-      // Also resolve any old resumos still in cache
-      const oldResumos = merged.filter(n => n.tipoDoc === 'resumo' && n.chNFe && n.chNFe.length === 44);
-      if (oldResumos.length > 0) {
-        console.log(`[AutoSync] ${emp}: resolvendo ${oldResumos.length} resumo(s) antigo(s) no cache...`);
-        for (const resumo of oldResumos) {
-          try {
-            await delay(1500);
-            try { await sefazManifestar(emp, resumo.chNFe); } catch (me) {
-              console.log(`[AutoSync] ${emp}: manifestação ${resumo.chNFe.slice(-8)}: ${me.message}`);
-            }
-            await delay(2000);
-            const completa = await sefazFetchByChave(emp, resumo.chNFe);
-            const idx = cache[key].nfes.findIndex(n => n.nsu === resumo.nsu);
-            if (idx >= 0) {
-              cache[key].nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo' };
-              console.log(`[AutoSync] ${emp}: ✅ resumo ${resumo.chNFe.slice(-8)} → completa (${(completa.itens||[]).length} itens)`);
-            }
-          } catch (e2) {
-            console.log(`[AutoSync] ${emp}: ⚠️ falha ao resolver resumo ${resumo.chNFe.slice(-8)}: ${e2.message}`);
-          }
-        }
-        saveCache(cache);
-      } else {
-        saveCache(cache);
-      }
+      // NOTA: a resolucao automatica de resumos antigos (manifestar + buscar de novo) foi
+      // desativada -- a manifestacao automatica esta com um bug de assinatura XML-DSig que
+      // sempre falha (SEFAZ responde com erro interno), e repetir isso pra cada resumo a
+      // cada 65min so gastava a cota de 20 consultas/hora a toa, ate bloquear o sync todo.
+      // O botao manual "Baixar" (⚡) continua disponivel pra tentar nota por nota.
+      saveCache(cache);
       if (novas.length > 0) {
         console.log(`[AutoSync] ${emp}: ${novas.length} nova(s) NF-e(s) adicionada(s) ao cache. Total: ${merged.length}.`);
       } else {
