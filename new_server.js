@@ -527,6 +527,7 @@ function sefazManifestar(emp, chNFe) {
           const cStatEvento = getTag(xml, 'cStat');
           const xMotivo = getTag(xml, 'xMotivo');
           console.log(`[SEFAZ ${emp}] Manifestação ${chNFe.slice(-8)}: cStat=${cStatEvento} ${xMotivo}`);
+          if (!cStatEvento) console.log(`[SEFAZ ${emp}] DEBUG resposta bruta (sem cStat): ${xml.slice(0, 1500)}`);
           if (['135','573'].includes(cStatEvento)) {
             resolve({ ok: true, cStat: cStatEvento, xMotivo });
           } else {
