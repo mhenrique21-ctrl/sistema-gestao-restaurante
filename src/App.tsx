@@ -412,7 +412,7 @@ function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]
   };
 
   return(
-    <div style={{minHeight:"100vh",background:"#F8FAFC",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
       <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}`}</style>
       <div style={{width:"100%",maxWidth:340}}>
         <div style={{textAlign:"center",marginBottom:36}}>
@@ -894,7 +894,7 @@ export default function App() {
     <div className="app-root" style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
-        :root{--bg:#FFFFFF;--bg2:#1E293B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F8FAFC;--sidebarHover:#334155;--border:#E5E7EB;--border2:#E5E7EB;--text:#1F2937;--text2:#64748B;--text3:#94A3B8;--acc:#6366F1;--accHover:#5558E8;--accLight:#EEF2FF;--success:#22C55E;--successBg:#DCFCE7;--successText:#15803D;--danger:#EF4444;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F59E0B;--warningBg:#FEF3C7;--warningText:#B45309;--info:#0EA5E9;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6;--categoryBg:#F3E8FF;--categoryText:#7C3AED;--pink:#EC4899}
+        :root{--bg:#FFFFFF;--bg2:#1E293B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F1F5F9;--sidebarHover:#334155;--border:#E5E7EB;--border2:#E5E7EB;--text:#1F2937;--text2:#64748B;--text3:#94A3B8;--acc:#6366F1;--accHover:#5558E8;--accLight:#EEF2FF;--success:#22C55E;--successBg:#DCFCE7;--successText:#15803D;--danger:#EF4444;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F59E0B;--warningBg:#FEF3C7;--warningText:#B45309;--info:#0EA5E9;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6;--categoryBg:#F3E8FF;--categoryText:#7C3AED;--pink:#EC4899}
         *{box-sizing:border-box;margin:0;padding:0} input,select,textarea{font-family:inherit}
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
         .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:10px;transition:all .15s}
@@ -6146,7 +6146,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
           </div>
           {itens.length?<>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-              <thead><tr style={{background:"#F8FAFC",borderBottom:"1px solid var(--border)"}}>
+              <thead><tr style={{background:"#F1F5F9",borderBottom:"1px solid var(--border)"}}>
                 <th style={{textAlign:"left",padding:"4px 6px",color:"#475569",fontWeight:600}}>Produto</th>
                 <th style={{textAlign:"right",padding:"4px 6px",color:"#475569",fontWeight:600}}>Qtd</th>
                 <th style={{textAlign:"right",padding:"4px 6px",color:"#475569",fontWeight:600}}>Unit.</th>
@@ -8550,7 +8550,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
       <div className="card" style={{padding:0,overflowX:"auto" as const}}>
         <div style={{padding:"10px 14px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--border)"}}>Produtos ({listaFiltrada.length})</div>
         <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:13}}>
-          <thead><tr style={{textAlign:"left" as const,background:"#F8FAFC",color:"#475569",fontSize:11,textTransform:"uppercase" as const}}>
+          <thead><tr style={{textAlign:"left" as const,background:"#F1F5F9",color:"#475569",fontSize:11,textTransform:"uppercase" as const}}>
             <th style={{padding:"8px 14px"}}>Nome</th><th>Categoria</th><th>Preço</th><th>Impressora</th><th>Status</th><th>Ações</th>
           </tr></thead>
           <tbody>
