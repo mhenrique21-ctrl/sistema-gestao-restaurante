@@ -3037,22 +3037,22 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           const temItens=(nfe.itens||[]).length>0;
           const isLoading=fetchingChave===nfe.chNFe;
           const isResumo=!temItens;
-          return <div key={nfe.nsu??i} style={{background:"var(--bg3)",border:`1px solid ${temItens?"#22C55E33":"#ffffff15"}`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+          return <div key={nfe.nsu??i} style={{background:"var(--bg3)",border:`1px solid ${temItens?"#22C55E44":"var(--border)"}`,borderRadius:10,padding:"10px 12px",marginBottom:10,boxShadow:"0 1px 2px rgba(15,23,42,0.04)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:13,color:temItens?"#22C55E":"var(--text2)",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+                <div style={{fontWeight:700,fontSize:13,color:temItens?"#22C55E":"var(--text)",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
                   {nfe.fornecedor?.nome||"Fornecedor desconhecido"}
                 </div>
-                <div style={{fontSize:11,color:"#6b7280"}}>
-                  {nfe.data?fmtDate(nfe.data):""}{nfe.nNF?` · NF #${nfe.nNF}`:""} · {isResumo?<span style={{color:"#f59e0b"}}>aguardando XML…</span>:<span style={{color:"#22C55E"}}>{(nfe.itens||[]).length} produto(s)</span>}
+                <div style={{fontSize:11,color:"var(--text2)",paddingTop:4,borderTop:"1px solid var(--border)"}}>
+                  {nfe.data?fmtDate(nfe.data):""}{nfe.nNF?` · NF #${nfe.nNF}`:""} · {isResumo?<span style={{color:"#F59E0B"}}>aguardando XML…</span>:<span style={{color:"#22C55E"}}>{(nfe.itens||[]).length} produto(s)</span>}
                 </div>
-                {nfe.totalCompra>0&&<div style={{fontSize:12,fontWeight:700,color:"#fff",marginTop:2}}>{fmtMoney(nfe.totalCompra)}</div>}
-                {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}>
-                  <span style={{fontSize:9,fontFamily:"monospace",color:"#3b4a6b",letterSpacing:"0.5px",wordBreak:"break-all" as const,flex:1}}>
+                {nfe.totalCompra>0&&<div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginTop:4}}>{fmtMoney(nfe.totalCompra)}</div>}
+                {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:4,marginTop:4,paddingTop:4,borderTop:"1px solid var(--border)"}}>
+                  <span style={{fontSize:9,fontFamily:"monospace",color:"var(--text2)",letterSpacing:"0.5px",wordBreak:"break-all" as const,flex:1}}>
                     {(nfe.chNFe as string).replace(/(.{4})/g,"$1 ").trim()}
                   </span>
                   <button onClick={()=>copiarChave(nfe.chNFe)} title="Copiar chave"
-                    style={{background:"none",border:"1px solid #3b4a6b",borderRadius:4,color:"#3b4a6b",cursor:"pointer",padding:"2px 5px",fontSize:9,flexShrink:0,whiteSpace:"nowrap" as const}}>
+                    style={{background:"none",border:"1px solid var(--border)",borderRadius:4,color:"var(--text2)",cursor:"pointer",padding:"2px 5px",fontSize:9,flexShrink:0,whiteSpace:"nowrap" as const}}>
                     📋 copiar
                   </button>
                 </div>}
