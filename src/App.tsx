@@ -577,7 +577,7 @@ const migrateDb=(m:any)=>{
 const _listaDeletados=new Set<string>(
   (()=>{try{return JSON.parse(localStorage.getItem("_delIds")||"[]");}catch{return[];}})()
 );
-const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-1000);localStorage.setItem("_delIds",JSON.stringify(arr));}catch{}};
+const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-5000);localStorage.setItem("_delIds",JSON.stringify(arr));}catch{}};
 const _origAdd=_listaDeletados.add.bind(_listaDeletados);
 _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
@@ -649,7 +649,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
     });
     next[emp].listaCompras=merged;
     // listaDeletedIds: unir local e servidor
-    next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-500);
+    next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-5000);
     // listaCategorias, listaRuas, ruaCatMap: unir
     next[emp].listaCategorias=[...new Set([...(s.listaCategorias||[]),...(p.listaCategorias||[])])];
     next[emp].listaRuas=[...new Set([...(s.listaRuas||[]),...(p.listaRuas||[])])];
@@ -3719,7 +3719,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     setDb((d:any)=>({
       ...d,
       listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-500),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-5000),
     }));
   };
   const limparComprados=()=>{
@@ -3732,7 +3732,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     setDb((d:any)=>({
       ...d,
       listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-500),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
     }));
   };
 
@@ -3747,7 +3747,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       ...d,
       pedidosLista:[pedido,...(d.pedidosLista||[])],
       listaCompras:[],
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000),
     }));
     alert("✅ Pedido salvo! Lista zerada para o próximo pedido.");
   };
@@ -3760,7 +3760,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         todosIds.forEach(id=>_listaDeletados.add(id));
         const itensArq=lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem}));
         const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
-        (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-500)}));
+        (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000)}));
         setAutoArchiveMsg("✅ Lista finalizada e arquivada automaticamente!");
         setTimeout(()=>setAutoArchiveMsg(""),4000);
       }
@@ -4018,7 +4018,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       return{
         ...d,
         listaCompras:[...novosItens,...jaComprados],
-        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...pendIds])].slice(-500),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...pendIds])].slice(-5000),
       };
     });
     setSubTab("nova");
