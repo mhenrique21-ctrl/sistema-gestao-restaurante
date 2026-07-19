@@ -3769,6 +3769,28 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     }
   },[lista.length,pendentes.length,comprados.length,naoTemList.length]);
 
+  // Arquivamento automático diário às 18h, independente de a lista estar completa —
+  // garante que a lista sempre comece zerada no dia seguinte.
+  useEffect(()=>{
+    const check18h=()=>{
+      const now=new Date();
+      const todayStr=today();
+      const jaArquivouHoje=db.config?.lastAutoArchive18h===todayStr;
+      if(now.getHours()>=18&&!jaArquivouHoje&&lista.length>0){
+        const todosIds=lista.map((i:any)=>i.id);
+        todosIds.forEach(id=>_listaDeletados.add(id));
+        const itensArq=lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem}));
+        const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
+        (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000),config:{...(d.config||{}),lastAutoArchive18h:todayStr}}));
+        setAutoArchiveMsg("✅ Lista arquivada automaticamente (18h)!");
+        setTimeout(()=>setAutoArchiveMsg(""),4000);
+      }
+    };
+    check18h();
+    const t=setInterval(check18h,60000);
+    return ()=>clearInterval(t);
+  },[lista.length,db.config?.lastAutoArchive18h]);
+
   const moverItem=(id:string,dir:-1|1)=>{
     setDb((d:any)=>{
       const arr=[...(d.listaCompras||[])];
