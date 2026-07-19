@@ -323,7 +323,7 @@ function SortCtrl({id,db,setDb,opts}:{id:string,db:any,setDb:any,opts:[string,st
 }
 
 function BackBar({label,onClick}:{label:string,onClick:()=>void}){
-  return <div style={{marginBottom:10}}><button onClick={onClick} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,color:"#7c8fff",cursor:"pointer",fontSize:13,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:15}}>←</span> {label}</button></div>;
+  return <div style={{marginBottom:10}}><button onClick={onClick} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,color:"#8B5A2B",cursor:"pointer",fontSize:13,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:15}}>←</span> {label}</button></div>;
 }
 
 function MoneyInput({value,onChange,placeholder,className,style}) {
@@ -381,7 +381,7 @@ function abrirRelatorio(html){const w=window.open("","_blank");if(w){w.document.
 function LogoEmpresa({empresa}) {
   return (
     <div>
-      <div style={{fontSize:9,color:"#7c8fff",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>App Gestão</div>
+      <div style={{fontSize:9,color:"#8B5A2B",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>App Gestão</div>
       <div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:800}}>{empresa}</div>
     </div>
   );
@@ -412,7 +412,7 @@ function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]
   };
 
   return(
-    <div style={{minHeight:"100vh",background:"#0a0c12",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#F7F5F2",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
       <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}`}</style>
       <div style={{width:"100%",maxWidth:340}}>
         <div style={{textAlign:"center",marginBottom:36}}>
@@ -430,12 +430,12 @@ function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]
             onChange={e=>{setPwd(e.target.value);setErro(false);}}
             onKeyDown={e=>{if(e.key==="Enter")tentar();}}
             autoFocus
-            style={{width:"100%",background:"#13161f",border:`1.5px solid ${erro?"#ff5c7a":"#1e2235"}`,borderRadius:12,color:"#e8eaf0",padding:"14px 16px",fontSize:18,letterSpacing:4,textAlign:"center",boxSizing:"border-box",marginBottom:12,outline:"none",fontFamily:"inherit"}}
+            style={{width:"100%",background:"#DBEAFE",border:`1.5px solid ${erro?"#EF4444":"#1e2235"}`,borderRadius:12,color:"#e8eaf0",padding:"14px 16px",fontSize:18,letterSpacing:4,textAlign:"center",boxSizing:"border-box",marginBottom:12,outline:"none",fontFamily:"inherit"}}
           />
-          {erro&&<div style={{color:"#ff5c7a",fontSize:13,textAlign:"center",marginBottom:12}}>Senha incorreta. Tente novamente.</div>}
+          {erro&&<div style={{color:"#EF4444",fontSize:13,textAlign:"center",marginBottom:12}}>Senha incorreta. Tente novamente.</div>}
           <button
             onClick={tentar}
-            style={{width:"100%",background:"#7c8fff",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:16,fontWeight:700,cursor:"pointer",letterSpacing:0.5}}>
+            style={{width:"100%",background:"#8B5A2B",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:16,fontWeight:700,cursor:"pointer",letterSpacing:0.5}}>
             Entrar
           </button>
         </div>
@@ -891,18 +891,17 @@ export default function App() {
   const navTo=(t:string,s?:string)=>{setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
 
   return (
-    <div className={`app-root${theme==="light"?" light-mode":""}`} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14}}>
+    <div className="app-root" style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
-        :root{--bg:#0a0c12;--bg2:#0d0f18;--bg3:#13161f;--bg4:#161922;--border:#1e2235;--border2:#252840;--text:#e8eaf0;--text2:#5a6080;--text3:#424668;--acc:#7c8fff}
-        .light-mode{--bg:#f0f2fc;--bg2:#ffffff;--bg3:#ffffff;--bg4:#f5f7ff;--border:#dde1f8;--border2:#c8ccee;--text:#1a1d35;--text2:#6b7099;--text3:#9098c0;--acc:#5b6fff}
+        :root{--bg:#F7F5F2;--bg2:#2B2B2B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F3F4F6;--border:#E5E7EB;--border2:#E5E7EB;--text:#1F2937;--text2:#6B7280;--text3:#9CA3AF;--acc:#8B5A2B;--accHover:#A35A2C;--success:#22C55E;--successBg:#DCFCE7;--successText:#15803D;--danger:#EF4444;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F59E0B;--warningBg:#FEF3C7;--warningText:#B45309;--info:#0EA5E9;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6}
         *{box-sizing:border-box;margin:0;padding:0} input,select,textarea{font-family:inherit}
-        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#2a2d45;border-radius:4px}
+        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
         .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:10px;transition:all .15s}
         .btn:active{transform:scale(.95)}
         .inp{background:var(--bg4);border:1.5px solid var(--border2);border-radius:10px;color:var(--text);padding:10px 14px;width:100%;font-size:14px;transition:border-color .15s}
         .inp:focus{outline:none;border-color:var(--acc)} select.inp option{background:var(--bg4)}
-        .card{background:var(--bg3);border-radius:16px;padding:16px;border:1px solid var(--border)}
+        .card{background:var(--bg3);border-radius:16px;padding:16px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(31,41,55,0.04),0 1px 2px rgba(31,41,55,0.03)}
         .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
         .pill{display:inline-flex;align-items:center;padding:6px 13px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
         .section-title{font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px}
@@ -934,10 +933,10 @@ export default function App() {
           {isAdmin&&<div style={{display:"flex",gap:5,marginTop:10}}>
             {["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
-                style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:10,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`,flex:1,justifyContent:"center",padding:"5px 6px"}}>{e}</button>
+                style={{background:empresa===e?"#8B5A2B":"rgba(255,255,255,0.08)",color:empresa===e?"#fff":"rgba(255,255,255,0.6)",fontSize:10,border:`1px solid ${empresa===e?"#8B5A2B":"rgba(255,255,255,0.15)"}`,flex:1,justifyContent:"center",padding:"5px 6px"}}>{e}</button>
             ))}
           </div>}
-          {isOp&&<div style={{marginTop:8,fontSize:11,color:"#5a6080",background:"var(--bg4)",borderRadius:8,padding:"6px 10px"}}>
+          {isOp&&<div style={{marginTop:8,fontSize:11,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.06)",borderRadius:8,padding:"6px 10px"}}>
             👤 <span style={{color:loginCorTexto,fontWeight:700}}>{login.label}</span>
           </div>}
         </div>
@@ -946,23 +945,23 @@ export default function App() {
             const estoqueBaixo=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
             const atrasadas=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
             const badge=(id:string)=>id==="estoque"&&estoqueBaixo>0?<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{estoqueBaixo}</span>
-              :id==="contas"&&atrasadas>0?<span style={{background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{atrasadas}</span>:null;
+              :id==="contas"&&atrasadas>0?<span style={{background:"#EF4444",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{atrasadas}</span>:null;
             return menuFiltered.map(m=>{
               const hasKids=!!m.children?.length;
               const isOpen=expandedMenu===m.id;
               const isActive=tab===m.id;
               return <div key={m.id}>
                 <button onClick={()=>{if(hasKids){setExpandedMenu(isOpen?null:m.id);if(!isActive)navTo(m.id,m.children![0].sub);}else navTo(m.id);}}
-                  style={{background:isActive?"var(--bg4)":"none",border:"none",borderLeft:isActive?"3px solid #7c8fff":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:isActive?"#7c8fff":"#4a5080",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:isActive?700:400,transition:"all .15s"}}>
+                  style={{background:isActive?"rgba(139,90,43,0.22)":"none",border:"none",borderLeft:isActive?"3px solid #8B5A2B":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:isActive?"#ffffff":"rgba(255,255,255,0.6)",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:isActive?700:400,transition:"all .15s"}}>
                   <span style={{fontSize:17}}>{m.icon}</span>
                   <span>{m.label}</span>
                   {badge(m.id)}
-                  {hasKids&&<span style={{marginLeft:badge(m.id)?"4px":"auto",fontSize:10,color:"#4a5080",transition:"transform .2s",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>▼</span>}
+                  {hasKids&&<span style={{marginLeft:badge(m.id)?"4px":"auto",fontSize:10,color:"rgba(255,255,255,0.5)",transition:"transform .2s",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>▼</span>}
                 </button>
-                {hasKids&&isOpen&&<div style={{background:"var(--bg4)",borderLeft:"3px solid #2a2f50"}}>
+                {hasKids&&isOpen&&<div style={{background:"rgba(255,255,255,0.04)",borderLeft:"3px solid rgba(255,255,255,0.12)"}}>
                   {m.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
                     <button key={c.id} onClick={()=>navTo(m.id,c.sub)}
-                      style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,color:tab===m.id&&pendingSub===null?"#5a6080":"#4a5080",padding:"8px 18px 8px 36px",width:"100%",fontSize:12,fontWeight:400,transition:"all .15s"}}>
+                      style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,color:tab===m.id&&pendingSub===null?"rgba(255,255,255,0.85)":"rgba(255,255,255,0.5)",padding:"8px 18px 8px 36px",width:"100%",fontSize:12,fontWeight:400,transition:"all .15s"}}>
                       <span style={{fontSize:13}}>{c.icon}</span>
                       <span>{c.label}</span>
                     </button>
@@ -974,53 +973,47 @@ export default function App() {
         </div>
         <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:11,color:syncStatus==="ok"?"#4ade80":syncStatus==="erro"?"#ff5c7a":syncStatus==="sync"?"#7c8fff":"var(--text3)"}}>
+            <span style={{fontSize:11,color:syncStatus==="ok"?"#22C55E":syncStatus==="erro"?"#F87171":syncStatus==="sync"?"#D4A574":"rgba(255,255,255,0.4)"}}>
               {syncStatus==="sync"?"⟳ Salvando...":syncStatus==="ok"?"✓ Sincronizado":syncStatus==="erro"?"⚠ Erro":"App Gestão v2.0"}
             </span>
-            <button onClick={toggleTheme} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
-              {theme==="dark"?"☀️":"🌙"}
-            </button>
           </div>
-          <button onClick={doLogout} style={{width:"100%",background:"#1a0a0a",border:"1px solid #3a1515",borderRadius:8,color:"#ff7a7a",fontSize:11,fontWeight:700,padding:"7px",cursor:"pointer",letterSpacing:0.3}}>
+          <button onClick={doLogout} style={{width:"100%",background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.35)",borderRadius:8,color:"#F87171",fontSize:11,fontWeight:700,padding:"7px",cursor:"pointer",letterSpacing:0.3}}>
             🔒 Sair ({login.label})
           </button>
         </div>
       </div>
 
       {/* HEADER */}
-      <div className="app-header" style={{background:"var(--bg2)",borderBottom:"1px solid #1e2235",position:"sticky",top:0,zIndex:90,padding:"10px 16px"}}>
+      <div className="app-header" style={{background:"var(--bg2)",borderBottom:"1px solid rgba(255,255,255,0.08)",position:"sticky",top:0,zIndex:90,padding:"10px 16px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <LogoEmpresa empresa={empresa}/>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            {syncStatus==="sync"&&<span style={{fontSize:11,color:"#7c8fff"}}>⟳</span>}
-            <button onClick={toggleTheme} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:16,padding:"4px 8px",lineHeight:1}} title={theme==="dark"?"Modo claro":"Modo escuro"}>
-              {theme==="dark"?"☀️":"🌙"}
-            </button>
+            {syncStatus==="sync"&&<span style={{fontSize:11,color:"#D4A574"}}>⟳</span>}
             {!isOp&&<div className="menu-picker-btn" style={{position:"relative"}}>
-              <button onClick={()=>setMenuPickerOpen(v=>!v)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:14,padding:"4px 8px",lineHeight:1}} title="Posição do menu">
+              <button onClick={()=>setMenuPickerOpen(v=>!v)} style={{background:"none",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:14,padding:"4px 8px",lineHeight:1}} title="Posição do menu">
                 {menuLayout==="bottom"?"▼":menuLayout==="top"?"▲":"⊕"}
               </button>
               {menuPickerOpen&&<>
                 <div onClick={()=>setMenuPickerOpen(false)} style={{position:"fixed",inset:0,zIndex:199}}/>
-                <div style={{position:"absolute",right:0,top:"110%",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:6,zIndex:200,minWidth:170,boxShadow:"0 8px 24px #0008"}}>
+                <div style={{position:"absolute",right:0,top:"110%",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:6,zIndex:200,minWidth:170,boxShadow:"0 8px 24px rgba(31,41,55,0.15)"}}>
                   {([["bottom","▼ Barra inferior","Menu fixo embaixo"],["top","▲ Abas no topo","Abas abaixo do header"],["fab","⊕ Botão flutuante","Botão redondo no canto"]] as const).map(([k,label,desc])=>(
                     <button key={k} onClick={()=>changeMenuLayout(k)}
-                      style={{display:"block",width:"100%",textAlign:"left",background:menuLayout===k?"#7c8fff22":"none",border:menuLayout===k?"1px solid #7c8fff55":"1px solid transparent",borderRadius:8,padding:"8px 10px",cursor:"pointer",marginBottom:2}}>
-                      <div style={{fontSize:12,fontWeight:600,color:menuLayout===k?"#7c8fff":"var(--text)"}}>{label}</div>
+                      style={{display:"block",width:"100%",textAlign:"left",background:menuLayout===k?"#8B5A2B22":"none",border:menuLayout===k?"1px solid #8B5A2B55":"1px solid transparent",borderRadius:8,padding:"8px 10px",cursor:"pointer",marginBottom:2}}>
+                      <div style={{fontSize:12,fontWeight:600,color:menuLayout===k?"#8B5A2B":"var(--text)"}}>{label}</div>
                       <div style={{fontSize:10,color:"var(--text2)"}}>{desc}</div>
                     </button>
                   ))}
                 </div>
               </>}
             </div>}
-            {isOp&&<span style={{fontSize:11,color:"#5a6080",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"4px 10px"}}>{empresa}</span>}
-            <button onClick={doLogout} title="Sair" style={{background:"none",border:"1px solid #3a1515",borderRadius:8,cursor:"pointer",color:"#ff7a7a",fontSize:13,padding:"4px 8px",lineHeight:1}}>🔒</button>
+            {isOp&&<span style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"4px 10px"}}>{empresa}</span>}
+            <button onClick={doLogout} title="Sair" style={{background:"none",border:"1px solid rgba(239,68,68,0.35)",borderRadius:8,cursor:"pointer",color:"#F87171",fontSize:13,padding:"4px 8px",lineHeight:1}}>🔒</button>
           </div>
         </div>
         {isAdmin&&<div style={{display:"flex",gap:6,marginTop:8,justifyContent:"center"}}>
           {["CONFRARIA","SEAMA"].map(e=>(
             <button key={e} onClick={()=>setEmpresa(e)} className="pill"
-              style={{background:empresa===e?"#7c8fff":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#7c8fff":"var(--border2)"}`,flex:1,maxWidth:140,justifyContent:"center",padding:"6px 10px"}}>{e}</button>
+              style={{background:empresa===e?"#8B5A2B":"var(--bg4)",color:empresa===e?"#fff":"#666",fontSize:11,border:`1px solid ${empresa===e?"#8B5A2B":"var(--border2)"}`,flex:1,maxWidth:140,justifyContent:"center",padding:"6px 10px"}}>{e}</button>
           ))}
         </div>}
 
@@ -1031,7 +1024,7 @@ export default function App() {
           {menuFiltered.map(m=>(
             <button key={m.id} onClick={()=>{if(m.children?.length){setExpandedMenu(expandedMenu===m.id?null:m.id);if(tab!==m.id)navTo(m.id,m.children[0].sub);}else{navTo(m.id);setExpandedMenu(null);}}}
               style={{flexShrink:0,display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:20,fontSize:11,fontWeight:tab===m.id?700:500,
-                background:tab===m.id?"#7c8fff":"var(--bg4)",color:tab===m.id?"#fff":"var(--text2)",border:"none",cursor:"pointer",position:"relative",whiteSpace:"nowrap"}}>
+                background:tab===m.id?"#8B5A2B":"var(--bg4)",color:tab===m.id?"#fff":"var(--text2)",border:"none",cursor:"pointer",position:"relative",whiteSpace:"nowrap"}}>
               <span style={{fontSize:14}}>{m.icon}</span>{m.label}
               {m.children?.length?<span style={{fontSize:8,marginLeft:2}}>▼</span>:null}
             </button>
@@ -1053,7 +1046,7 @@ export default function App() {
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px 10px",borderRadius:10,fontSize:12,fontWeight:tab===t.id?700:500,
-              background:tab===t.id?"#7c8fff":"var(--bg4)",color:tab===t.id?"#fff":"var(--text2)",border:"none",cursor:"pointer"}}>
+              background:tab===t.id?"#8B5A2B":"var(--bg4)",color:tab===t.id?"#fff":"var(--text2)",border:"none",cursor:"pointer"}}>
             <span style={{fontSize:16}}>{t.icon}</span>{t.label}
           </button>
         ))}
@@ -1093,7 +1086,7 @@ export default function App() {
       {!isOp&&menuLayout==="bottom"&&<>
         {expandedMenu&&<div onClick={()=>setExpandedMenu(null)} style={{position:"fixed",inset:0,zIndex:89}}/>}
         {expandedMenu&&menuFiltered.find(m=>m.id===expandedMenu)?.children&&<div style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg3)",borderTop:"1px solid var(--border2)",borderRadius:"16px 16px 0 0",padding:"10px 8px 6px",zIndex:91,boxShadow:"0 -4px 20px #0006"}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#7c8fff",padding:"0 8px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#8B5A2B",padding:"0 8px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span>{menuFiltered.find(m=>m.id===expandedMenu)?.icon} {menuFiltered.find(m=>m.id===expandedMenu)?.label}</span>
             <button onClick={()=>setExpandedMenu(null)} style={{background:"none",border:"none",color:"#666",fontSize:16,cursor:"pointer",padding:"0 4px"}}>✕</button>
           </div>
@@ -1115,12 +1108,12 @@ export default function App() {
           return menuFiltered.map(m=>(
             <button key={m.id} onClick={()=>{if(m.children?.length){if(tab===m.id&&expandedMenu===m.id){setExpandedMenu(null);}else{setExpandedMenu(m.id);if(tab!==m.id)navTo(m.id,m.children[0].sub);}}else{navTo(m.id);setExpandedMenu(null);}}}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                color:tab===m.id?"#7c8fff":"var(--text3)",padding:"4px 1px",transition:"color .15s",position:"relative"}}>
+                color:tab===m.id?"#8B5A2B":"var(--text3)",padding:"4px 1px",transition:"color .15s",position:"relative"}}>
               <span style={{fontSize:17}}>{m.icon}</span>
               <span style={{fontSize:8,fontWeight:700,letterSpacing:0.5}}>{m.label}</span>
               {m.id==="estoque"&&estoqueBaixoNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{estoqueBaixoNav}</span>}
-              {m.id==="contas"&&atrasadasNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#ff5c7a",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasNav}</span>}
-              {m.id==="lista"&&listaNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#7c8fff",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{listaNav}</span>}
+              {m.id==="contas"&&atrasadasNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#EF4444",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{atrasadasNav}</span>}
+              {m.id==="lista"&&listaNav>0&&<span style={{position:"absolute",top:0,right:"10%",background:"#8B5A2B",color:"#fff",borderRadius:20,fontSize:8,fontWeight:800,minWidth:12,height:12,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 2px"}}>{listaNav}</span>}
             </button>
           ));
         })()}
@@ -1139,7 +1132,7 @@ export default function App() {
               return <div key={m.id}>
                 <button onClick={()=>{if(hasKids){setExpandedMenu(fabExpanded?null:m.id);}else{navTo(m.id);setFabOpen(false);setExpandedMenu(null);}}}
                   style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:10,border:"none",cursor:"pointer",
-                    background:tab===m.id?"#7c8fff22":"none",color:tab===m.id?"#7c8fff":"var(--text)",fontSize:13,fontWeight:tab===m.id?700:400,textAlign:"left"}}>
+                    background:tab===m.id?"#8B5A2B22":"none",color:tab===m.id?"#8B5A2B":"var(--text)",fontSize:13,fontWeight:tab===m.id?700:400,textAlign:"left"}}>
                   <span style={{fontSize:18}}>{m.icon}</span><span style={{flex:1}}>{m.label}</span>
                   {hasKids&&<span style={{fontSize:9,color:"#4a5080",transition:"transform .2s",transform:fabExpanded?"rotate(180deg)":"none"}}>▼</span>}
                 </button>
@@ -1155,7 +1148,7 @@ export default function App() {
             })}
           </div>}
           <button onClick={()=>setFabOpen(v=>!v)}
-            style={{width:52,height:52,borderRadius:"50%",background:fabOpen?"#ff5c7a":"linear-gradient(135deg,#7c8fff,#5b6fff)",border:"none",cursor:"pointer",
+            style={{width:52,height:52,borderRadius:"50%",background:fabOpen?"#EF4444":"linear-gradient(135deg,#8B5A2B,#5b6fff)",border:"none",cursor:"pointer",
               boxShadow:"0 4px 16px #0006",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#fff",transition:"transform .2s",transform:fabOpen?"rotate(45deg)":"none"}}>
             ✚
           </button>
@@ -1190,7 +1183,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
   const comprasPeriodo=(db.compras||[]).filter((c:any)=>(c.data||"")>=ini&&(c.data||"")<=fim);
   const totalCompras=comprasPeriodo.reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
   const cmv=totalVendas>0?(totalCompras/totalVendas)*100:0;
-  const cmvColor=cmv<=30?"#4ade80":cmv<=40?"#fbbf24":"#ff5c7a";
+  const cmvColor=cmv<=30?"#22C55E":cmv<=40?"#F59E0B":"#EF4444";
 
   const contasPeriodo=(db.contas||[]).filter((c:any)=>(c.vencimento||"")>=ini&&(c.vencimento||"")<=fim);
   const pagasPeriodo=contasPeriodo.filter((c:any)=>c.status==="pago").reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
@@ -1227,7 +1220,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
 
   const periodoLabel=periodo==="semana"?"Esta Semana":periodo==="mes"?"Este Mês":`${fmtDate(customIni)} — ${fmtDate(customFim)}`;
   const btnStyle=(p:string)=>({padding:"6px 14px",fontSize:12,fontWeight:periodo===p?700:400,
-    background:periodo===p?"#7c8fff":"transparent",color:periodo===p?"#fff":"#888",
+    background:periodo===p?"#8B5A2B":"transparent",color:periodo===p?"#fff":"#888",
     border:periodo===p?"none":"1px solid #2a3260",borderRadius:8,cursor:"pointer" as const});
 
   return <div>
@@ -1236,36 +1229,36 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       background:contasAtrasadas.length>0?"linear-gradient(135deg,#1a0f0f,#0f1220)":"var(--bg3)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         <div className="section-title" style={{margin:0}}>Contas a Pagar</div>
-        <button onClick={irParaFinanceiro} style={{background:"none",border:"1px solid #2a3260",borderRadius:8,color:"#7c8fff",
+        <button onClick={irParaFinanceiro} style={{background:"none",border:"1px solid #2a3260",borderRadius:8,color:"#8B5A2B",
           fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todas</button>
       </div>
       {contasDash.length===0&&<div style={{textAlign:"center",padding:"10px 0"}}>
-        <span style={{color:"#4ade80",fontSize:13}}>Nenhuma conta pendente para hoje</span>
+        <span style={{color:"#22C55E",fontSize:13}}>Nenhuma conta pendente para hoje</span>
       </div>}
-      {contasAtrasadas.length>0&&<div style={{fontSize:11,color:"#ff5c7a",fontWeight:600,marginBottom:4}}>VENCIDAS ({contasAtrasadas.length}) — {fmtMoney(totalAtrasadas)}</div>}
+      {contasAtrasadas.length>0&&<div style={{fontSize:11,color:"#EF4444",fontWeight:600,marginBottom:4}}>VENCIDAS ({contasAtrasadas.length}) — {fmtMoney(totalAtrasadas)}</div>}
       {contasAtrasadas.map((c:any,i:number)=>(
         <div key={c.id||i} style={{display:"flex",alignItems:"center",padding:"7px 0",borderBottom:"1px solid #1e1020",fontSize:12,gap:8}}>
           <button onClick={()=>marcarPago(c.id)} title="Marcar como pago"
-            style={{background:"none",border:"1px solid #3a2030",borderRadius:6,color:"#4ade80",fontSize:14,
+            style={{background:"none",border:"1px solid #3a2030",borderRadius:6,color:"#22C55E",fontSize:14,
               padding:"2px 6px",cursor:"pointer",flexShrink:0}}>&#10003;</button>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
             <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""} · Venc: {fmtDate(c.vencimento)}</div>
           </div>
-          <span style={{fontWeight:700,color:"#ff5c7a",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+          <span style={{fontWeight:700,color:"#EF4444",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
         </div>
       ))}
-      {contasHoje.length>0&&<div style={{fontSize:11,color:"#fbbf24",fontWeight:600,marginBottom:4,marginTop:contasAtrasadas.length>0?10:0}}>HOJE ({contasHoje.length}) — {fmtMoney(totalHoje)}</div>}
+      {contasHoje.length>0&&<div style={{fontSize:11,color:"#F59E0B",fontWeight:600,marginBottom:4,marginTop:contasAtrasadas.length>0?10:0}}>HOJE ({contasHoje.length}) — {fmtMoney(totalHoje)}</div>}
       {contasHoje.map((c:any,i:number)=>(
         <div key={c.id||i} style={{display:"flex",alignItems:"center",padding:"7px 0",borderBottom:"1px solid #1e2235",fontSize:12,gap:8}}>
           <button onClick={()=>marcarPago(c.id)} title="Marcar como pago"
-            style={{background:"none",border:"1px solid #1a2a3a",borderRadius:6,color:"#4ade80",fontSize:14,
+            style={{background:"none",border:"1px solid #1a2a3a",borderRadius:6,color:"#22C55E",fontSize:14,
               padding:"2px 6px",cursor:"pointer",flexShrink:0}}>&#10003;</button>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.descricao||"Sem descrição"}</div>
             <div className="muted" style={{fontSize:10}}>{c.categoria||""}{c.fornecedor?` · ${c.fornecedor}`:""}</div>
           </div>
-          <span style={{fontWeight:700,color:"#fbbf24",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
+          <span style={{fontWeight:700,color:"#F59E0B",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
         </div>
       ))}
     </div>
@@ -1275,16 +1268,16 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
     {anotLembrete.length>0&&<div className="card" style={{marginBottom:14,border:"1px solid #1a3020",background:"var(--bg3)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         <div className="section-title" style={{margin:0}}>Lembretes</div>
-        <button onClick={irParaAgenda} style={{background:"none",border:"1px solid #2a3260",borderRadius:8,color:"#7c8fff",fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todos</button>
+        <button onClick={irParaAgenda} style={{background:"none",border:"1px solid #2a3260",borderRadius:8,color:"#8B5A2B",fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todos</button>
       </div>
       {anotLembrete.map((a:any)=>{
         const venceu=a.dataLembrete&&a.dataLembrete<hj;
         const hjNote=a.dataLembrete===hj;
         return <div key={a.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)",fontSize:12,display:"flex",gap:8,alignItems:"flex-start"}}>
-          {a.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:6,padding:"1px 5px",fontWeight:800,flexShrink:0,marginTop:2}}>!</span>}
+          {a.urgente&&<span style={{fontSize:9,background:"#EF4444",color:"#fff",borderRadius:6,padding:"1px 5px",fontWeight:800,flexShrink:0,marginTop:2}}>!</span>}
           <div style={{flex:1,minWidth:0}}>
             <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{a.texto}</div>
-            {a.dataLembrete&&<div style={{fontSize:10,color:venceu?"#ff5c7a":hjNote?"#fbbf24":"#555",marginTop:1}}>{venceu?"Venceu em":hjNote?"Hoje —":""} {fmtDate(a.dataLembrete)}</div>}
+            {a.dataLembrete&&<div style={{fontSize:10,color:venceu?"#EF4444":hjNote?"#F59E0B":"#555",marginTop:1}}>{venceu?"Venceu em":hjNote?"Hoje —":""} {fmtDate(a.dataLembrete)}</div>}
           </div>
         </div>;
       })}
@@ -1307,10 +1300,10 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
 
     {/* KPIs do período */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-      <StatCard label="Vendas" value={fmtMoney(totalVendas)} color="#4ade80" icon="💰"/>
+      <StatCard label="Vendas" value={fmtMoney(totalVendas)} color="#22C55E" icon="💰"/>
       <StatCard label="Compras" value={fmtMoney(totalCompras)} color="#60a5fa" icon="🛒"/>
-      <StatCard label="Contas Pagas" value={fmtMoney(pagasPeriodo)} color="#a78bfa" icon="✅"/>
-      <StatCard label="A Pagar" value={fmtMoney(pendentesPeriodo)} color="#ff5c7a" icon="⏰"/>
+      <StatCard label="Contas Pagas" value={fmtMoney(pagasPeriodo)} color="#8B5CF6" icon="✅"/>
+      <StatCard label="A Pagar" value={fmtMoney(pendentesPeriodo)} color="#EF4444" icon="⏰"/>
     </div>
 
     {/* CMV Gauge */}
@@ -1329,7 +1322,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
     <div className="card" style={{marginBottom:14}}>
       <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
         <span>Vendas Diárias</span>
-        <span style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{fmtMoney(totalVendas)}</span>
+        <span style={{fontSize:12,fontWeight:700,color:"#22C55E"}}>{fmtMoney(totalVendas)}</span>
       </div>
       {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
       {vendasDiarias.length>0&&(()=>{
@@ -1349,13 +1342,13 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
               <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
           })}
           <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#1e2235" strokeWidth={0.5}/>
-          <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4ade80" stopOpacity={0.3}/><stop offset="100%" stopColor="#4ade80" stopOpacity={0.02}/></linearGradient></defs>
+          <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22C55E" stopOpacity={0.3}/><stop offset="100%" stopColor="#22C55E" stopOpacity={0.02}/></linearGradient></defs>
           <path d={areaPath} fill="url(#dashVgr)"/>
-          <path d={linePath} fill="none" stroke="#4ade80" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
+          <path d={linePath} fill="none" stroke="#22C55E" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
           {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
-            {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?"#7c8fff":"#4ade80"} stroke="#0f1220" strokeWidth={1}/>}
+            {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?"#8B5A2B":"#22C55E"} stroke="#0f1220" strokeWidth={1}/>}
             {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
-            {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?"#7c8fff":"#555"} fontSize={7} fontWeight={isH?700:400}>
+            {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?"#8B5A2B":"#555"} fontSize={7} fontWeight={isH?700:400}>
               {dt.getDate()}/{dt.getMonth()+1}
             </text>}
           </g>;})}
@@ -1373,7 +1366,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             <span style={{fontWeight:600}}>{fmtMoney(v)}</span>
           </div>
           <div style={{background:"var(--border)",borderRadius:4,height:5}}>
-            <div style={{background:"#7c8fff",borderRadius:4,height:5,width:`${(v/maxV)*100}%`,transition:"width .4s"}}/>
+            <div style={{background:"#8B5A2B",borderRadius:4,height:5,width:`${(v/maxV)*100}%`,transition:"width .4s"}}/>
           </div>
         </div>
       ))}
@@ -1395,7 +1388,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const mcVal=totalVendas-totalCompras-imposto;
       const mcPct=totalVendas>0?(mcVal/totalVendas)*100:0;
       const pe=mcPct>0?(despFixas)/(mcPct/100):0;
-      const colMC=mcVal>=0?"#4ade80":"#ff5c7a";
+      const colMC=mcVal>=0?"#22C55E":"#EF4444";
       return <>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
           <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
@@ -1403,21 +1396,21 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             <div className="muted" style={{fontSize:10,marginTop:2}}>Margem Contrib.</div>
           </div>
           <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#fbbf24"}}>{fmtMoney(pe)}</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#F59E0B"}}>{fmtMoney(pe)}</div>
             <div className="muted" style={{fontSize:10,marginTop:2}}>Ponto Equilíbrio</div>
           </div>
           <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:mcVal>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(mcVal)}</div>
+            <div style={{fontSize:13,fontWeight:700,color:mcVal>=0?"#22C55E":"#EF4444"}}>{fmtMoney(mcVal)}</div>
             <div className="muted" style={{fontSize:10,marginTop:2}}>Sobra p/ Fixas</div>
           </div>
         </div>
         {totalVendas>0&&<div className="card">
           <div className="section-title">Por R$ 100 vendidos</div>
           {[
-            {label:"CMV",val:(totalCompras/totalVendas)*100,color:"#ff5c7a"},
+            {label:"CMV",val:(totalCompras/totalVendas)*100,color:"#EF4444"},
             {label:`Simples Nacional (${db.config?.snAliquota||6}%)`,val:sn*100,color:"#f59e0b"},
-            {label:"Despesas Pagas",val:(pagasPeriodo/totalVendas)*100,color:"#a78bfa"},
-            {label:"Margem",val:mcPct-(pagasPeriodo/totalVendas)*100,color:mcPct-(pagasPeriodo/totalVendas)*100>=0?"#4ade80":"#ff5c7a"},
+            {label:"Despesas Pagas",val:(pagasPeriodo/totalVendas)*100,color:"#8B5CF6"},
+            {label:"Margem",val:mcPct-(pagasPeriodo/totalVendas)*100,color:mcPct-(pagasPeriodo/totalVendas)*100>=0?"#22C55E":"#EF4444"},
           ].map(({label,val,color})=>(
             <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
               <span className="muted" style={{fontSize:12}}>{label}</span>
@@ -1431,7 +1424,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
 }
 function GaugeSVG({value,color}){const a=Math.min(value/60*180,180);return <svg width={82} height={52} viewBox="0 0 82 52"><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke="var(--border)" strokeWidth="9" strokeLinecap="round"/><path d="M8 48 A33 33 0 0 1 74 48" fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${a*0.576} 999`}/><text x="41" y="45" textAnchor="middle" fill={color} fontSize="11" fontWeight="800">{value.toFixed(0)}%</text></svg>;}
 function StatCard({label,value,color,icon}){return <div className="card" style={{textAlign:"center"}}><div style={{fontSize:22,marginBottom:4}}>{icon}</div><div style={{fontSize:15,fontWeight:700,color}}>{value}</div><div className="muted" style={{fontSize:11,marginTop:2}}>{label}</div></div>;}
-function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2235"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"var(--text)":positive?"#4ade80":"#ff5c7a"}}>{value}</span></div>;}
+function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2235"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"var(--text)":positive?"#22C55E":"#EF4444"}}>{value}</span></div>;}
 
 // ===================== VENDAS =====================
 function Vendas({db,setDb,setDbAndSave,state}){
@@ -1620,22 +1613,22 @@ function Vendas({db,setDb,setDbAndSave,state}){
         <div style={{fontSize:11,fontWeight:600,color:"var(--text2)",marginBottom:6,textAlign:"center",letterSpacing:1}}>📊 RELATÓRIO DA MAQUININHA (IA)</div>
         <div style={{display:"flex",gap:8,marginBottom:8}}>
           <button className="btn" type="button" onClick={()=>iaRelRef.current?.click()}
-            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #8B5A2B66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             🖼️ Galeria
           </button>
           <button className="btn" type="button" onClick={()=>iaRelCamRef.current?.click()}
-            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #7c8fff66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #8B5A2B66",color:"#a0a8ff",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             📷 Câmera
           </button>
         </div>
         {iaRelImages.length>0&&<div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>
             {iaRelImages.map((img,i)=>(
-              <div key={img.id} style={{position:"relative",borderRadius:8,overflow:"hidden",border:`1.5px solid ${img.status==="ok"?"#4ade80":img.status==="err"?"#f87171":img.status==="processing"?"#7c8fff":"var(--border2)"}`,background:"var(--bg3)"}}>
+              <div key={img.id} style={{position:"relative",borderRadius:8,overflow:"hidden",border:`1.5px solid ${img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#8B5A2B":"var(--border2)"}`,background:"var(--bg3)"}}>
                 <img src={img.preview} style={{width:"100%",height:80,objectFit:"cover",display:"block"}} alt={`rel ${i+1}`}/>
                 <div style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,0.7)",borderRadius:999,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:10}}
                   onClick={()=>setIaRelImages(imgs=>imgs.filter(x=>x.id!==img.id))}>✕</div>
-                <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:img.status==="ok"?"#4ade80":img.status==="err"?"#f87171":img.status==="processing"?"#a0a8ff":"#888"}}>
+                <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#a0a8ff":"#888"}}>
                   {img.status==="ok"?`R$ ${(img.maq||0).toFixed(2).replace(".",",")}`:img.status==="err"?"erro":img.status==="processing"?"…":`Rel. ${i+1}`}
                 </div>
               </div>
@@ -1643,7 +1636,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
           </div>
           <div style={{display:"flex",gap:6}}>
             <button className="btn" type="button" onClick={processarRelatorios} disabled={iaRelLoading||iaRelImages.every(x=>x.status!=="pending")}
-              style={{flex:1,background:iaRelLoading?"var(--bg3)":"#7c8fff",color:"#fff",fontSize:13,padding:"10px",borderRadius:10}}>
+              style={{flex:1,background:iaRelLoading?"var(--bg3)":"#8B5A2B",color:"#fff",fontSize:13,padding:"10px",borderRadius:10}}>
               {iaRelLoading?"⏳ Processando...":"🤖 Extrair e Somar"}
             </button>
             <button className="btn" type="button" onClick={()=>{setIaRelImages([]);setIaRelMsg("");}}
@@ -1652,7 +1645,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
             </button>
           </div>
         </div>}
-        {iaRelMsg&&<div style={{marginTop:6,fontSize:12,color:iaRelMsg.startsWith("✅")?"#4ade80":iaRelMsg.startsWith("⚠")?"#fbbf24":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaRelMsg}</div>}
+        {iaRelMsg&&<div style={{marginTop:6,fontSize:12,color:iaRelMsg.startsWith("✅")?"#22C55E":iaRelMsg.startsWith("⚠")?"#F59E0B":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaRelMsg}</div>}
       </div>
       {["maquininha","dinheiro"].map(m=>(
         <div key={m} style={{marginBottom:8}}>
@@ -1671,7 +1664,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
             <span style={{fontSize:11,color:"#888"}}>%</span>
           </div>
         </div>
-        {ifoodTaxaPct>0&&ifoodBruto>0&&<div style={{fontSize:11,color:"#4ade80",marginTop:3}}>Líquido: {fmtMoney(ifoodLiq)} (desc. {fmtMoney(ifoodBruto-ifoodLiq)})</div>}
+        {ifoodTaxaPct>0&&ifoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(ifoodLiq)} (desc. {fmtMoney(ifoodBruto-ifoodLiq)})</div>}
       </div>
       <div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>99Food (bruto)</label>
@@ -1684,7 +1677,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
             <span style={{fontSize:11,color:"#888"}}>%</span>
           </div>
         </div>
-        {nfoodTaxaPct>0&&nfoodBruto>0&&<div style={{fontSize:11,color:"#4ade80",marginTop:3}}>Líquido: {fmtMoney(nfoodLiq)} (desc. {fmtMoney(nfoodBruto-nfoodLiq)})</div>}
+        {nfoodTaxaPct>0&&nfoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(nfoodLiq)} (desc. {fmtMoney(nfoodBruto-nfoodLiq)})</div>}
       </div>
       <div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>Delivery</label>
@@ -1692,9 +1685,9 @@ function Vendas({db,setDb,setDbAndSave,state}){
       </div>
       <hr className="divider"/>
       <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 10px",fontWeight:700,fontSize:16}}>
-        <span>Total líquido</span><span style={{color:"#4ade80"}}>{fmtMoney(total)}</span>
+        <span>Total líquido</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
       </div>
-      <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Vendas"}</button>
+      <button className="btn" onClick={save} style={{background:"#8B5A2B",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Vendas"}</button>
       {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(emptyForm());}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>
 
@@ -1716,12 +1709,12 @@ function Vendas({db,setDb,setDbAndSave,state}){
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
           <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>💰 Vendas de</span>
           <input type="date" value={budgetRef} onChange={e=>setBudgetRef(e.target.value)}
-            style={{background:"#0d2040",border:"1px solid #2a4070",borderRadius:6,color:"#60a5fa",fontSize:11,padding:"2px 6px",cursor:"pointer"}}/>
+            style={{background:"#DBEAFE",border:"1px solid #2a4070",borderRadius:6,color:"#60a5fa",fontSize:11,padding:"2px 6px",cursor:"pointer"}}/>
           <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>→ Budget de compras de <strong style={{color:"#93c5fd"}}>{fmtDate(diaSeguinte)}</strong></span>
         </div>
         <div style={{fontSize:11,color:"#555",marginBottom:6}}>CONFRARIA + SEAMA</div>
-        <div style={{fontSize:32,fontWeight:800,color:saldoTotalHoje>=0?"#60a5fa":"#ff5c7a",lineHeight:1.1}}>{fmtMoney(Math.abs(saldoTotalHoje))}</div>
-        {saldoTotalHoje<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-saldoTotalHoje)}</div>}
+        <div style={{fontSize:32,fontWeight:800,color:saldoTotalHoje>=0?"#60a5fa":"#EF4444",lineHeight:1.1}}>{fmtMoney(Math.abs(saldoTotalHoje))}</div>
+        {saldoTotalHoje<0&&<div style={{fontSize:11,color:"#EF4444",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-saldoTotalHoje)}</div>}
         <div style={{fontSize:11,color:"#555",marginTop:6}}>
           {fmtMoney(vendasTotalHoje)} vendidos × {budgetCmv}% = {fmtMoney(budgetTotalHoje)} budget
           {comprasTotalHoje>0?` − ${fmtMoney(comprasTotalHoje)} já comprado`:""}
@@ -1732,10 +1725,10 @@ function Vendas({db,setDb,setDbAndSave,state}){
       {vendasTotalHoje>0&&<div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginBottom:10,border:"1px solid #353860"}}>
         <div style={{fontSize:11,color:"var(--acc)",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>🏢 Consolidado hoje — CONFRARIA + SEAMA</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Vendas hoje</div><div style={{fontWeight:700,color:"#4ade80",fontSize:14}}>{fmtMoney(vendasTotalHoje)}</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Vendas hoje</div><div style={{fontWeight:700,color:"#22C55E",fontSize:14}}>{fmtMoney(vendasTotalHoje)}</div></div>
           <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Budget ({budgetCmv}%)</div><div style={{fontWeight:700,color:"#60a5fa",fontSize:14}}>{fmtMoney(budgetTotalHoje)}</div></div>
-          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Compras hoje</div><div style={{fontWeight:700,color:"#fbbf24",fontSize:14}}>{fmtMoney(comprasTotalHoje)}</div></div>
-          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Saldo consolidado</div><div style={{fontWeight:800,fontSize:16,color:saldoTotalHoje>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoTotalHoje))}{saldoTotalHoje<0?" ⚠️":""}</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Compras hoje</div><div style={{fontWeight:700,color:"#F59E0B",fontSize:14}}>{fmtMoney(comprasTotalHoje)}</div></div>
+          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Saldo consolidado</div><div style={{fontWeight:800,fontSize:16,color:saldoTotalHoje>=0?"#22C55E":"#EF4444"}}>{fmtMoney(Math.abs(saldoTotalHoje))}{saldoTotalHoje<0?" ⚠️":""}</div></div>
         </div>
       </div>}
 
@@ -1745,7 +1738,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Venda do dia</div>
-            <div style={{fontWeight:700,color:"#4ade80"}}>{fmtMoney(vendasDia)}</div>
+            <div style={{fontWeight:700,color:"#22C55E"}}>{fmtMoney(vendasDia)}</div>
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget ({budgetCmv}%)</div>
@@ -1753,14 +1746,14 @@ function Vendas({db,setDb,setDbAndSave,state}){
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras realizadas</div>
-            <div style={{fontWeight:700,color:"#fbbf24"}}>{fmtMoney(comprasDia)}</div>
+            <div style={{fontWeight:700,color:"#F59E0B"}}>{fmtMoney(comprasDia)}</div>
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo disponível</div>
-            <div style={{fontWeight:700,color:saldoDia>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoDia))}{saldoDia<0?" ⚠️":""}</div>
+            <div style={{fontWeight:700,color:saldoDia>=0?"#22C55E":"#EF4444"}}>{fmtMoney(Math.abs(saldoDia))}{saldoDia<0?" ⚠️":""}</div>
           </div>
         </div>
-        {saldoDia<0&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:8,textAlign:"center"}}>⚠️ Compras excedem o budget do dia em {fmtMoney(-saldoDia)}</div>}
+        {saldoDia<0&&<div style={{fontSize:11,color:"#EF4444",marginTop:8,textAlign:"center"}}>⚠️ Compras excedem o budget do dia em {fmtMoney(-saldoDia)}</div>}
       </div>
 
       {/* Período selecionado */}
@@ -1770,7 +1763,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
           <div style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
             {(["semana","mes","trimestre","personalizado"] as const).map(t=>(
               <button key={t} onClick={()=>setPeriodoTipo(t)}
-                style={{background:periodoTipo===t?"#7c8fff":"#1a1d2e",color:periodoTipo===t?"#fff":"#666",border:`1px solid ${periodoTipo===t?"#7c8fff":"#2a2d4a"}`,borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",fontWeight:periodoTipo===t?700:400}}>
+                style={{background:periodoTipo===t?"#8B5A2B":"#1a1d2e",color:periodoTipo===t?"#fff":"#666",border:`1px solid ${periodoTipo===t?"#8B5A2B":"#2a2d4a"}`,borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",fontWeight:periodoTipo===t?700:400}}>
                 {t==="semana"?"Semana":t==="mes"?"Mês":t==="trimestre"?"Trimestre":"Personalizado"}
               </button>
             ))}
@@ -1778,14 +1771,14 @@ function Vendas({db,setDb,setDbAndSave,state}){
         </div>
         {periodoTipo==="personalizado"&&<div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
           <span style={{fontSize:11,color:"#888"}}>De</span>
-          <input type="date" value={periodoIni} onChange={e=>setPeriodoIni(e.target.value)} style={{flex:1,background:"#0d1020",border:"1px solid #2a2d4a",borderRadius:6,color:"#e8eaf0",fontSize:11,padding:"4px 6px"}}/>
+          <input type="date" value={periodoIni} onChange={e=>setPeriodoIni(e.target.value)} style={{flex:1,background:"#DBEAFE",border:"1px solid #2a2d4a",borderRadius:6,color:"#e8eaf0",fontSize:11,padding:"4px 6px"}}/>
           <span style={{fontSize:11,color:"#888"}}>até</span>
-          <input type="date" value={periodoFim} onChange={e=>setPeriodoFim(e.target.value)} style={{flex:1,background:"#0d1020",border:"1px solid #2a2d4a",borderRadius:6,color:"#e8eaf0",fontSize:11,padding:"4px 6px"}}/>
+          <input type="date" value={periodoFim} onChange={e=>setPeriodoFim(e.target.value)} style={{flex:1,background:"#DBEAFE",border:"1px solid #2a2d4a",borderRadius:6,color:"#e8eaf0",fontSize:11,padding:"4px 6px"}}/>
         </div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas no período</div>
-            <div style={{fontWeight:700,color:"#4ade80"}}>{fmtMoney(vendasMes)}</div>
+            <div style={{fontWeight:700,color:"#22C55E"}}>{fmtMoney(vendasMes)}</div>
           </div>
           <div style={{fontWeight:700,textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget ({budgetCmv}%)</div>
@@ -1793,20 +1786,20 @@ function Vendas({db,setDb,setDbAndSave,state}){
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras no período</div>
-            <div style={{fontWeight:700,color:"#fbbf24"}}>{fmtMoney(comprasMes)}</div>
+            <div style={{fontWeight:700,color:"#F59E0B"}}>{fmtMoney(comprasMes)}</div>
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo do período</div>
-            <div style={{fontWeight:700,color:saldoMes>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoMes))}{saldoMes<0?" ⚠️":""}</div>
+            <div style={{fontWeight:700,color:saldoMes>=0?"#22C55E":"#EF4444"}}>{fmtMoney(Math.abs(saldoMes))}{saldoMes<0?" ⚠️":""}</div>
           </div>
         </div>
         {vendasMes>0&&<div style={{marginTop:10}}>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#888",marginBottom:4}}>
             <span>Utilização do budget</span>
-            <span style={{color:comprasMes/budgetMes>1?"#ff5c7a":comprasMes/budgetMes>0.8?"#fbbf24":"#4ade80"}}>{budgetMes>0?((comprasMes/budgetMes)*100).toFixed(1):0}%</span>
+            <span style={{color:comprasMes/budgetMes>1?"#EF4444":comprasMes/budgetMes>0.8?"#F59E0B":"#22C55E"}}>{budgetMes>0?((comprasMes/budgetMes)*100).toFixed(1):0}%</span>
           </div>
-          <div style={{height:6,background:"#1a1d2e",borderRadius:3,overflow:"hidden"}}>
-            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasMes/budgetMes)*100,100)}%`,background:comprasMes/budgetMes>1?"#ff5c7a":comprasMes/budgetMes>0.8?"#fbbf24":"#4ade80",transition:"width .3s"}}/>
+          <div style={{height:6,background:"#DBEAFE",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasMes/budgetMes)*100,100)}%`,background:comprasMes/budgetMes>1?"#EF4444":comprasMes/budgetMes>0.8?"#F59E0B":"#22C55E",transition:"width .3s"}}/>
           </div>
         </div>}
       </div>
@@ -1821,15 +1814,15 @@ function Vendas({db,setDb,setDbAndSave,state}){
           const sE=bE-cE;
           return <div key={emp} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1e2235"}}>
             <span style={{fontSize:12,fontWeight:600,color:"#aaa",minWidth:90}}>{emp}</span>
-            <span style={{fontSize:12,color:"#4ade80"}}>{fmtMoney(vE)}</span>
+            <span style={{fontSize:12,color:"#22C55E"}}>{fmtMoney(vE)}</span>
             <span style={{fontSize:12,color:"#60a5fa"}}>budget: {fmtMoney(bE)}</span>
-            <span style={{fontSize:12,fontWeight:700,color:sE>=0?"#86efac":"#ff5c7a"}}>{sE>=0?"✓":"-"} {fmtMoney(Math.abs(sE))}</span>
+            <span style={{fontSize:12,fontWeight:700,color:sE>=0?"#86efac":"#EF4444"}}>{sE>=0?"✓":"-"} {fmtMoney(Math.abs(sE))}</span>
           </div>;
         })}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas totais</div>
-            <div style={{fontWeight:700,color:"#4ade80",fontSize:15}}>{fmtMoney(vendasTotal)}</div>
+            <div style={{fontWeight:700,color:"#22C55E",fontSize:15}}>{fmtMoney(vendasTotal)}</div>
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget total ({budgetCmv}%)</div>
@@ -1837,20 +1830,20 @@ function Vendas({db,setDb,setDbAndSave,state}){
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras totais</div>
-            <div style={{fontWeight:700,color:"#fbbf24",fontSize:15}}>{fmtMoney(comprasTotal)}</div>
+            <div style={{fontWeight:700,color:"#F59E0B",fontSize:15}}>{fmtMoney(comprasTotal)}</div>
           </div>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo consolidado</div>
-            <div style={{fontWeight:700,fontSize:15,color:saldoTotal>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(Math.abs(saldoTotal))}{saldoTotal<0?" ⚠️":""}</div>
+            <div style={{fontWeight:700,fontSize:15,color:saldoTotal>=0?"#22C55E":"#EF4444"}}>{fmtMoney(Math.abs(saldoTotal))}{saldoTotal<0?" ⚠️":""}</div>
           </div>
         </div>
         {vendasTotal>0&&<div style={{marginTop:10}}>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#888",marginBottom:4}}>
             <span>Utilização consolidada</span>
-            <span style={{color:comprasTotal/budgetTotal>1?"#ff5c7a":comprasTotal/budgetTotal>0.8?"#fbbf24":"#4ade80"}}>{budgetTotal>0?((comprasTotal/budgetTotal)*100).toFixed(1):0}%</span>
+            <span style={{color:comprasTotal/budgetTotal>1?"#EF4444":comprasTotal/budgetTotal>0.8?"#F59E0B":"#22C55E"}}>{budgetTotal>0?((comprasTotal/budgetTotal)*100).toFixed(1):0}%</span>
           </div>
-          <div style={{height:6,background:"#1a1d2e",borderRadius:3,overflow:"hidden"}}>
-            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasTotal/budgetTotal)*100,100)}%`,background:comprasTotal/budgetTotal>1?"#ff5c7a":comprasTotal/budgetTotal>0.8?"#fbbf24":"#4ade80",transition:"width .3s"}}/>
+          <div style={{height:6,background:"#DBEAFE",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasTotal/budgetTotal)*100,100)}%`,background:comprasTotal/budgetTotal>1?"#EF4444":comprasTotal/budgetTotal>0.8?"#F59E0B":"#22C55E",transition:"width .3s"}}/>
           </div>
         </div>}
       </div>
@@ -1877,7 +1870,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
             <tbody>${rows}</tbody>
             <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(total)}</td></tr></tfoot>
           </table>`));
-      }} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir Vendas</button>
+      }} style={{background:"#DBEAFE",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir Vendas</button>
     </div>
     {(()=>{const q=busca.toLowerCase();const sortKey=(db.config?.sortPrefs||{})['vendas']||'data-desc';const vendasFiltradas=sortList((db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))),db,'vendas','data-desc');return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
       const bDia=v.total*(budgetCmv/100);
@@ -1886,27 +1879,27 @@ function Vendas({db,setDb,setDbAndSave,state}){
       return <div key={v.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <span style={{fontWeight:700}}>{fmtDate(v.data)}</span>
-          <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(v.total)}</span>
+          <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(v.total)}</span>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-          {v.maquininha>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
-          {v.dinheiro>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
-          {v.ifood>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>
+          {v.maquininha>0&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
+          {v.dinheiro>0&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
+          {v.ifood>0&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa"}}>
             iFood: {fmtMoney(v.ifood)}{v.ifoodTaxa>0?` (-${v.ifoodTaxa}%→${fmtMoney(v.ifoodLiq??v.ifood)})`:""}
           </span>}
-          {v["99food"]>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>
+          {v["99food"]>0&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa"}}>
             99food: {fmtMoney(v["99food"])}{v.nfoodTaxa>0?` (-${v.nfoodTaxa}%→${fmtMoney(v.nfoodLiq??v["99food"])})`:""}
           </span>}
-          {v.delivery>0&&<span className="tag" style={{background:"#1a2540",color:"#60a5fa"}}>delivery: {fmtMoney(v.delivery)}</span>}
+          {v.delivery>0&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa"}}>delivery: {fmtMoney(v.delivery)}</span>}
         </div>
         <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-          <span className="tag" style={{background:"#1a2a10",color:"#4ade80"}}>budget {budgetCmv}%: {fmtMoney(bDia)}</span>
-          {cDia>0&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24"}}>comprado: {fmtMoney(cDia)}</span>}
-          <span className="tag" style={{background:sDia>=0?"#1a2a10":"#2a1020",color:sDia>=0?"#86efac":"#ff5c7a"}}>{sDia>=0?"saldo:":"excedido:"} {fmtMoney(Math.abs(sDia))}</span>
+          <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>budget {budgetCmv}%: {fmtMoney(bDia)}</span>
+          {cDia>0&&<span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>}
+          <span className="tag" style={{background:sDia>=0?"#1a2a10":"#2a1020",color:sDia>=0?"#86efac":"#EF4444"}}>{sDia>=0?"saldo:":"excedido:"} {fmtMoney(Math.abs(sDia))}</span>
         </div>
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-          <button className="btn" onClick={()=>del(v.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+          <button className="btn" onClick={()=>del(v.id)} style={{background:"#F3E8FF",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {v.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(v.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;
@@ -2747,7 +2740,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         </div>
         {["boleto","fiado","cartão crédito"].includes(formaPag)&&(
           <div>
-            <label style={{fontSize:11,color:"#fbbf24",display:"block",marginBottom:3}}>⏰ Vencimento</label>
+            <label style={{fontSize:11,color:"#F59E0B",display:"block",marginBottom:3}}>⏰ Vencimento</label>
             <input type="date" value={vencimento} onChange={e=>setVencimento(e.target.value)} className="inp"/>
           </div>
         )}
@@ -2780,8 +2773,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             {unds.map(u=><option key={u} value={u}>{u==="kg"?"kg (quilograma)":u==="un"?"un (unidade)":u==="L"?"L (litro)":u==="g"?"g (grama)":u==="ml"?"ml (mililitro)":"pct (pacote)"}</option>)}
           </select>
         </div>
-        {itemAtual.unidade==="pct"&&<div style={{background:"#0d1220",border:"1px solid #2a3260",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
-          <label style={{fontSize:11,color:"#7c8fff",display:"block",marginBottom:3}}>Qtd por pacote (para calcular valor unitário)</label>
+        {itemAtual.unidade==="pct"&&<div style={{background:"#DBEAFE",border:"1px solid #2a3260",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
+          <label style={{fontSize:11,color:"#8B5A2B",display:"block",marginBottom:3}}>Qtd por pacote (para calcular valor unitário)</label>
           <input type="number" placeholder="Ex: 12 (unidades por caixa)" value={itemAtual.qtdPorPacote}
             onChange={e=>setItemAtual(i=>({...i,qtdPorPacote:e.target.value}))}
             className="inp" style={{marginBottom:0}}/>
@@ -2812,10 +2805,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         <button className="btn" onClick={addItem} style={{background:"var(--border2)",color:"var(--text)",padding:"11px",width:"100%",fontSize:14}}>
           + Adicionar ao Carrinho
         </button>
-        <button onClick={()=>setShowCatMgmt(v=>!v)} style={{background:"none",border:"none",color:"#7c8fff",fontSize:11,cursor:"pointer",marginTop:6,padding:"2px 0"}}>
+        <button onClick={()=>setShowCatMgmt(v=>!v)} style={{background:"none",border:"none",color:"#8B5A2B",fontSize:11,cursor:"pointer",marginTop:6,padding:"2px 0"}}>
           ⚙️ Gerenciar categorias personalizadas
         </button>
-        {showCatMgmt&&<div style={{background:"#0d1220",border:"1px solid #2a3260",borderRadius:8,padding:10,marginTop:6}}>
+        {showCatMgmt&&<div style={{background:"#DBEAFE",border:"1px solid #2a3260",borderRadius:8,padding:10,marginTop:6}}>
           <div style={{display:"flex",gap:6,marginBottom:6}}>
             <input value={novaCat} onChange={e=>setNovaCat(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}/>
             <button className="btn" onClick={()=>{
@@ -2823,13 +2816,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               if(!n||cats.includes(n))return;
               setDb(d=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));
               setNovaCat("");
-            }} style={{background:"#7c8fff",color:"#fff",padding:"8px 12px",fontSize:13}}>+</button>
+            }} style={{background:"#8B5A2B",color:"#fff",padding:"8px 12px",fontSize:13}}>+</button>
           </div>
           {(db.config?.categoriasExtra||[]).map((c:string)=>(
             <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #1e2235"}}>
               <span style={{fontSize:12,color:"#aaa"}}>{c.charAt(0).toUpperCase()+c.slice(1)}</span>
               <button onClick={()=>setDb(d=>({...d,config:{...(d.config||{}),categoriasExtra:(d.config?.categoriasExtra||[]).filter((x:string)=>x!==c)}}))}
-                style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:13}}>🗑️</button>
+                style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:13}}>🗑️</button>
             </div>
           ))}
           {!(db.config?.categoriasExtra||[]).length&&<span style={{fontSize:11,color:"#555"}}>Nenhuma categoria extra cadastrada.</span>}
@@ -2845,30 +2838,30 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               <div style={{fontWeight:600,fontSize:13}}>{item.nomeProduto}</div>
               <div className="muted" style={{fontSize:12}}>{item.quantidade} {item.unidade}
                 {item.valorUnit&&` × ${fmtMoney(parseMoney(item.valorUnit))}`}
-                <span className="tag" style={{background:"#1a2520",color:"#4ade80",marginLeft:6,fontSize:10}}>{item.categoria}</span>
+                <span className="tag" style={{background:"#DCFCE7",color:"#22C55E",marginLeft:6,fontSize:10}}>{item.categoria}</span>
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontWeight:700,color:"#60a5fa",fontSize:14}}>{fmtMoney(parseMoney(item.valorTotal))}</span>
-              <button className="btn" onClick={()=>remItem(item.id)} style={{background:"transparent",color:"#ff5c7a",fontSize:18,padding:"0 4px"}}>✕</button>
+              <button className="btn" onClick={()=>remItem(item.id)} style={{background:"transparent",color:"#EF4444",fontSize:18,padding:"0 4px"}}>✕</button>
             </div>
           </div>
         ))}
         <hr className="divider"/>
         <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 12px",fontWeight:700,fontSize:16}}>
           <span>Total da Compra</span>
-          <span style={{color:"#4ade80"}}>{fmtMoney(totalCarrinho)}</span>
+          <span style={{color:"#22C55E"}}>{fmtMoney(totalCarrinho)}</span>
         </div>
         {/* resumo financeiro */}
-        <div style={{background:"#1a2030",borderRadius:10,padding:"12px",marginBottom:12,border:"1px solid #252860"}}>
-          <div style={{fontSize:12,color:"#7c8fff",fontWeight:700,marginBottom:6}}>📋 LANÇAMENTO NO FINANCEIRO</div>
+        <div style={{background:"#DBEAFE",borderRadius:10,padding:"12px",marginBottom:12,border:"1px solid #252860"}}>
+          <div style={{fontSize:12,color:"#8B5A2B",fontWeight:700,marginBottom:6}}>📋 LANÇAMENTO NO FINANCEIRO</div>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
             <span className="muted">Forma de pagamento</span>
             <span style={{fontWeight:600,textTransform:"capitalize"}}>{formaPag}</span>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginTop:4}}>
             <span className="muted">Status</span>
-            <span style={{fontWeight:600,color:["dinheiro","pix","cartão débito"].includes(formaPag)?"#4ade80":"#fbbf24"}}>
+            <span style={{fontWeight:600,color:["dinheiro","pix","cartão débito"].includes(formaPag)?"#22C55E":"#F59E0B"}}>
               {["dinheiro","pix","cartão débito"].includes(formaPag)?"✅ Pago":"⏰ A Pagar"}
             </span>
           </div>
@@ -2878,7 +2871,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           </div>}
         </div>
         <button className="btn" onClick={finalizarCompra}
-          style={{background:"linear-gradient(135deg,#4ade80,#22c55e)",color:"#051208",padding:"14px",width:"100%",fontSize:15,fontWeight:700}}>
+          style={{background:"linear-gradient(135deg,#22C55E,#22c55e)",color:"#051208",padding:"14px",width:"100%",fontSize:15,fontWeight:700}}>
           ✅ Finalizar Entrada — {fmtMoney(totalCarrinho)}
         </button>
       </div>}
@@ -2902,9 +2895,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               <div className="muted" style={{fontSize:12}}>Toque para escolher</div></div>}
           <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{display:"none"}}/>
         </div>
-        <div className="camera-zone" onClick={()=>xmlIaRef.current?.click()} style={{flex:1,marginBottom:0,background:"#0a1a10",borderColor:"#14532d"}}>
+        <div className="camera-zone" onClick={()=>xmlIaRef.current?.click()} style={{flex:1,marginBottom:0,background:"#DCFCE7",borderColor:"#14532d"}}>
           <div style={{fontSize:36,marginBottom:8}}>📄</div>
-          <div style={{fontWeight:600,marginBottom:4,color:"#4ade80"}}>XML NF-e</div>
+          <div style={{fontWeight:600,marginBottom:4,color:"#22C55E"}}>XML NF-e</div>
           <div className="muted" style={{fontSize:12}}>Anexar XML</div>
           <input ref={xmlIaRef} type="file" accept=".xml,text/xml,application/xml" onChange={handleXmlIA} style={{display:"none"}}/>
         </div>
@@ -2913,7 +2906,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         style={{background:"var(--border)",color:"#888",padding:"8px",width:"100%",fontSize:12,marginBottom:8}}>❌ Remover imagem</button>}
       {!imgBase64&&<textarea value={iaText} onChange={e=>setIaText(e.target.value)} placeholder="Ou cole o texto do cupom aqui..." className="inp" style={{marginBottom:8}}/>}
       {!iaResult&&<button className="btn" onClick={processarIA} disabled={iaLoading||!!nfeXml}
-        style={{background:iaLoading?"var(--border2)":"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15,marginBottom:14}}>
+        style={{background:iaLoading?"var(--border2)":"#8B5A2B",color:"#fff",padding:"13px",width:"100%",fontSize:15,marginBottom:14}}>
         {iaLoading?`⏳ Processando com IA...${iaAttempt>1?` (tentativa ${iaAttempt}/3)`:""}`:"🤖 Processar com IA"}
       </button>}
       {iaResult&&<div className="card" style={{marginBottom:12}}>
@@ -2929,15 +2922,15 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               <span style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(item.valorTotal||0)}</span>
             </div>
             <div className="muted">{item.quantidade} {item.unidade} •
-              <span className="tag" style={{background:"#1a2520",color:"#4ade80",marginLeft:6,fontSize:10}}>{item.categoria}</span>
+              <span className="tag" style={{background:"#DCFCE7",color:"#22C55E",marginLeft:6,fontSize:10}}>{item.categoria}</span>
             </div>
           </div>
         ))}
         <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",fontWeight:700}}>
-          <span>Total</span><span style={{color:"#4ade80"}}>{fmtMoney(iaResult.totalCompra||0)}</span>
+          <span>Total</span><span style={{color:"#22C55E"}}>{fmtMoney(iaResult.totalCompra||0)}</span>
         </div>
         <hr className="divider"/>
-        <div className="section-title" style={{marginTop:8}}>Pagamento {iaResult.formaPagamento&&<span style={{fontSize:10,color:"#4ade80",fontWeight:400}}>(detectado do cupom)</span>}</div>
+        <div className="section-title" style={{marginTop:8}}>Pagamento {iaResult.formaPagamento&&<span style={{fontSize:10,color:"#22C55E",fontWeight:400}}>(detectado do cupom)</span>}</div>
         <div className="row" style={{marginBottom:8}}>
           <select value={iaFormaPag} onChange={e=>setIaFormaPag(e.target.value)} className="inp">
             {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
@@ -2947,7 +2940,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <input type="date" value={iaVenc} onChange={e=>setIaVenc(e.target.value)} className="inp" style={{marginBottom:8}}/>
         )}
         <div style={{display:"flex",gap:8,marginTop:4}}>
-          <button className="btn" onClick={confirmarIA} style={{background:"#4ade80",color:"#051208",padding:"12px",flex:1,fontSize:14}}>✅ Confirmar</button>
+          <button className="btn" onClick={confirmarIA} style={{background:"#22C55E",color:"#051208",padding:"12px",flex:1,fontSize:14}}>✅ Confirmar</button>
           <button className="btn" onClick={()=>{setIaResult(null);setNfeXml("");}} style={{background:"var(--border)",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Descartar</button>
         </div>
       </div>}
@@ -2958,11 +2951,11 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     {subTab==="nfe"&&<div>
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       <div style={{background:"linear-gradient(135deg,#0a1a10,#0d2010)",border:"1px solid #14532d",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
-        <div style={{fontWeight:700,fontSize:14,color:"#4ade80",marginBottom:4}}>📄 Importação Automática via SEFAZ</div>
+        <div style={{fontWeight:700,fontSize:14,color:"#22C55E",marginBottom:4}}>📄 Importação Automática via SEFAZ</div>
         <div style={{fontSize:11,color:"#6b7280",marginBottom:10}}>CNPJ: 58.564.214/0001-70 · Certificado A1 configurado</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
           <button className="btn" onClick={()=>sincronizarSEFAZ(false)} disabled={sefazLoading||!waitOk}
-            style={{background:sefazLoading?"var(--border2)":"#4ade80",color:sefazLoading?"#888":"#051208",padding:"11px 18px",fontSize:13,fontWeight:700,flex:1}}>
+            style={{background:sefazLoading?"var(--border2)":"#22C55E",color:sefazLoading?"#888":"#051208",padding:"11px 18px",fontSize:13,fontWeight:700,flex:1}}>
             {sefazLoading?"⏳ Buscando NF-es...":"🔄 Sincronizar SEFAZ"}
           </button>
           {sefazList.length>0&&<button className="btn" onClick={()=>sincronizarSEFAZ(true)} disabled={sefazLoading}
@@ -2979,51 +2972,51 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         <input value={chaveConsultaInput} onChange={e=>{const v=e.target.value.replace(/\D/g,'').slice(0,44);setChaveConsultaInput(v);setChaveConsultaError("");setChaveConsultaResult(null);}}
           className="inp" placeholder="Cole aqui os 44 dígitos da chave de acesso" maxLength={44}
           style={{marginBottom:4,fontFamily:"monospace",fontSize:12,letterSpacing:"0.5px"}}/>
-        <div style={{fontSize:10,color:chaveConsultaInput.length===44?"#4ade80":"#6b7280",marginBottom:8}}>
+        <div style={{fontSize:10,color:chaveConsultaInput.length===44?"#22C55E":"#6b7280",marginBottom:8}}>
           {chaveConsultaInput.length}/44 dígitos{chaveConsultaInput.length===44?" ✅":""}
         </div>
         <button className="btn" onClick={consultarPorChave} disabled={chaveConsultaInput.length!==44||chaveConsultaLoading}
           style={{background:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#f59e0b":"var(--border2)",color:chaveConsultaInput.length===44&&!chaveConsultaLoading?"#000":"#888",width:"100%",padding:"12px",fontSize:14,fontWeight:700}}>
           {chaveConsultaLoading?"⏳ Baixando NF-e…":"⚡ Baixar Nota"}
         </button>
-        {chaveConsultaError&&<div style={{fontSize:12,color:"#f87171",marginTop:8,padding:"8px 10px",background:"#1a0a0a",borderRadius:6,border:"1px solid #7f1d1d"}}>{chaveConsultaError}</div>}
-        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length>0&&<div style={{marginTop:10,background:"var(--bg4)",borderRadius:8,padding:"10px 12px",border:"1px solid #4ade8033"}}>
-          <div style={{fontWeight:700,fontSize:13,color:"#4ade80",marginBottom:2}}>{chaveConsultaResult.fornecedor?.nome||"Fornecedor"}</div>
+        {chaveConsultaError&&<div style={{fontSize:12,color:"#f87171",marginTop:8,padding:"8px 10px",background:"#FEE2E2",borderRadius:6,border:"1px solid #7f1d1d"}}>{chaveConsultaError}</div>}
+        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length>0&&<div style={{marginTop:10,background:"var(--bg4)",borderRadius:8,padding:"10px 12px",border:"1px solid #22C55E33"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#22C55E",marginBottom:2}}>{chaveConsultaResult.fornecedor?.nome||"Fornecedor"}</div>
           <div style={{fontSize:11,color:"#6b7280",marginBottom:6}}>
             {chaveConsultaResult.data?fmtDate(chaveConsultaResult.data):""} · {(chaveConsultaResult.itens||[]).length} produto(s) · {fmtMoney(chaveConsultaResult.totalCompra||0)}
           </div>
           <div style={{display:"flex",gap:6}}>
             <button className="btn" onClick={()=>{importarNFeSefaz(chaveConsultaResult);setChaveConsultaResult(null);setChaveConsultaInput("");}}
-              style={{flex:1,background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",padding:"8px",fontSize:12,fontWeight:700}}>📥 Importar NF-e</button>
+              style={{flex:1,background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",padding:"8px",fontSize:12,fontWeight:700}}>📥 Importar NF-e</button>
             {chaveConsultaResult.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(chaveConsultaResult.rawXml,chaveConsultaResult.nNF||"",chaveConsultaResult.fornecedor?.nome||"")}
               style={{background:"var(--border)",color:"#aaa",padding:"8px 12px",fontSize:12}}>⬇ XML</button>}
           </div>
         </div>}
-        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length===0&&!chaveConsultaError&&<div style={{fontSize:12,color:"#f59e0b",marginTop:8,padding:"8px 10px",background:"#1a1000",borderRadius:6,border:"1px solid #f59e0b33"}}>
+        {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length===0&&!chaveConsultaError&&<div style={{fontSize:12,color:"#f59e0b",marginTop:8,padding:"8px 10px",background:"#FEF3C7",borderRadius:6,border:"1px solid #f59e0b33"}}>
           ⏳ SEFAZ ainda processando a nota. Aguarde alguns minutos e tente novamente.
         </div>}
       </div>
 
-      {sefazError&&<div style={{background:"#1a0a0a",border:"1px solid #7f1d1d",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12,color:"#f87171"}}>{sefazError}</div>}
+      {sefazError&&<div style={{background:"#FEE2E2",border:"1px solid #7f1d1d",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12,color:"#f87171"}}>{sefazError}</div>}
 
       {sefazList.length>0&&<>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{sefazList.length} NF-e(s) encontrada(s)</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#22C55E"}}>{sefazList.length} NF-e(s) encontrada(s)</div>
           <button className="btn" onClick={()=>{if(confirm(`Importar todas as ${sefazList.filter(n=>(n.itens||[]).length>0).length} NF-e(s) com itens?`)){importarTodasNFeSefaz();}}}
-            style={{background:"#7c8fff",color:"#fff",padding:"7px 14px",fontSize:12,fontWeight:700}}>📥 Importar Todas</button>
+            style={{background:"#8B5A2B",color:"#fff",padding:"7px 14px",fontSize:12,fontWeight:700}}>📥 Importar Todas</button>
         </div>
         {sefazList.map((nfe:any,i:number)=>{
           const temItens=(nfe.itens||[]).length>0;
           const isLoading=fetchingChave===nfe.chNFe;
           const isResumo=!temItens;
-          return <div key={nfe.nsu??i} style={{background:"var(--bg3)",border:`1px solid ${temItens?"#4ade8033":"#ffffff15"}`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+          return <div key={nfe.nsu??i} style={{background:"var(--bg3)",border:`1px solid ${temItens?"#22C55E33":"#ffffff15"}`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:13,color:temItens?"#4ade80":"var(--text2)",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+                <div style={{fontWeight:700,fontSize:13,color:temItens?"#22C55E":"var(--text2)",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
                   {nfe.fornecedor?.nome||"Fornecedor desconhecido"}
                 </div>
                 <div style={{fontSize:11,color:"#6b7280"}}>
-                  {nfe.data?fmtDate(nfe.data):""}{nfe.nNF?` · NF #${nfe.nNF}`:""} · {isResumo?<span style={{color:"#f59e0b"}}>aguardando XML…</span>:<span style={{color:"#4ade80"}}>{(nfe.itens||[]).length} produto(s)</span>}
+                  {nfe.data?fmtDate(nfe.data):""}{nfe.nNF?` · NF #${nfe.nNF}`:""} · {isResumo?<span style={{color:"#f59e0b"}}>aguardando XML…</span>:<span style={{color:"#22C55E"}}>{(nfe.itens||[]).length} produto(s)</span>}
                 </div>
                 {nfe.totalCompra>0&&<div style={{fontSize:12,fontWeight:700,color:"#fff",marginTop:2}}>{fmtMoney(nfe.totalCompra)}</div>}
                 {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}>
@@ -3042,7 +3035,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   {isLoading?"⏳ Baixando…":"⚡ Baixar"}
                 </button>}
                 {temItens&&<button className="btn" onClick={()=>importarNFeSefaz(nfe)}
-                  style={{background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",padding:"6px 10px",fontSize:11}}>📥 Importar</button>}
+                  style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",padding:"6px 10px",fontSize:11}}>📥 Importar</button>}
                 {temItens&&nfe.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfe.rawXml,nfe.nNF||"",nfe.fornecedor?.nome||"")}
                   style={{background:"var(--border)",color:"#aaa",padding:"6px 10px",fontSize:11}}>⬇ XML</button>}
                 <button onClick={()=>{setSefazList(l=>l.filter((_:any,j:number)=>j!==i));removeFromCache([nfe.nsu]);}}
@@ -3055,7 +3048,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
       {!sefazLoading&&sefazList.length===0&&!sefazError&&<div style={{textAlign:"center" as const,padding:"30px 20px",color:"#555"}}>
         <div style={{fontSize:32,marginBottom:8}}>📄</div>
-        <div style={{fontSize:13}}>Clique em <strong style={{color:"#4ade80"}}>Sincronizar SEFAZ</strong> para buscar NF-es onde a CONFRARIA é destinatária.</div>
+        <div style={{fontSize:13}}>Clique em <strong style={{color:"#22C55E"}}>Sincronizar SEFAZ</strong> para buscar NF-es onde a CONFRARIA é destinatária.</div>
       </div>}
     </div>}
 
@@ -3070,7 +3063,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           const compraGrupos=new Set((db.compras||[]).map(c=>c.grupoId).filter(Boolean));
           (setDbAndSave||setDb)((d:any)=>({...d,compras:[],contas:(d.contas||[]).filter((c:any)=>!compraGrupos.has(c.grupoId))}));
           alert("✅ Histórico de compras e lançamentos financeiros apagados.");
-        }} style={{background:"#2a1015",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
+        }} style={{background:"#FEE2E2",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
       </div>
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
         <div style={{position:"relative",flex:1}}><input placeholder="🔍 Buscar fornecedor ou produto..." value={buscaHist} onChange={e=>setBuscaHist(e.target.value)} className="inp" style={{paddingRight:buscaHist?36:14,marginBottom:0}}/>{buscaHist&&<button onClick={()=>setBuscaHist("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
@@ -3109,7 +3102,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             const num=String(seq[nota.grupoId]||1).padStart(3,"0");
             const hChanged=open&&(notaForn!==nota.fornecedor||notaData!==nota.data);
 
-            return <div key={nota.grupoId} style={{marginBottom:8,border:"1px solid",borderColor:open?"#7c8fff44":"#1e2235",borderRadius:12,overflow:"hidden",background:"var(--bg2)"}}>
+            return <div key={nota.grupoId} style={{marginBottom:8,border:"1px solid",borderColor:open?"#8B5A2B44":"#1e2235",borderRadius:12,overflow:"hidden",background:"var(--bg2)"}}>
 
               {/* ---- cabeçalho da pasta ---- */}
               <div style={{display:"flex",alignItems:"center",padding:"11px 14px",cursor:"pointer",gap:10}}
@@ -3119,15 +3112,15 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   <div style={{display:"flex",gap:6,alignItems:"baseline",flexWrap:"wrap"}}>
                     <span style={{fontWeight:700,fontSize:13}}>{nota.fornecedor}</span>
                     <span style={{fontSize:10,color:"#555",fontWeight:600}}>#{num}</span>
-                    {nota.nNF&&<span className="tag" style={{background:"#1a2040",color:"#93c5fd",fontSize:10,padding:"2px 6px"}}>NF {nota.nNF}</span>}
+                    {nota.nNF&&<span className="tag" style={{background:"#DBEAFE",color:"#93c5fd",fontSize:10,padding:"2px 6px"}}>NF {nota.nNF}</span>}
                   </div>
                   <div style={{fontSize:11,color:"#888",marginTop:2,display:"flex",gap:8}}>
                     <span>{fmtDate(nota.data)}</span>
                     <span>{nota.itens.length} {nota.itens.length===1?"item":"itens"}</span>
-                    {nota.origem==="ia"&&<span style={{color:"#a78bfa"}}>IA</span>}
+                    {nota.origem==="ia"&&<span style={{color:"#8B5CF6"}}>IA</span>}
                     {nota.origem==="nfe"&&<span style={{color:"#60a5fa"}}>NF-e</span>}
-                    {nota.origem==="sefaz"&&<span style={{color:"#7c8fff"}}>SEFAZ</span>}
-                    {nota.origem==="manual"&&<span style={{color:"#4ade80"}}>Manual</span>}
+                    {nota.origem==="sefaz"&&<span style={{color:"#8B5A2B"}}>SEFAZ</span>}
+                    {nota.origem==="manual"&&<span style={{color:"#22C55E"}}>Manual</span>}
                   </div>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
@@ -3145,7 +3138,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                     className="inp" style={{flex:1,minWidth:120,fontSize:12,padding:"6px 10px"}}/>
                   {hChanged&&<button className="btn" onClick={()=>{
                     (setDbAndSave||setDb)(d=>({...d,compras:d.compras.map(c=>(c.grupoId||c.id)===nota.grupoId?{...c,fornecedor:notaForn,data:notaData}:c),contas:(d.contas||[]).map(c=>c.grupoId===nota.grupoId?{...c,descricao:c.descricao.replace(/Compra.*?–\s*[^(]*/,`Compra – ${notaForn} `),vencimento:notaData}:c)}));
-                  }} style={{background:"#7c8fff",color:"#fff",padding:"6px 10px",fontSize:12}}>💾</button>}
+                  }} style={{background:"#8B5A2B",color:"#fff",padding:"6px 10px",fontSize:12}}>💾</button>}
                 </div>
 
                 {/* colunas */}
@@ -3181,7 +3174,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                               return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c)};
                             });
                             setEditItemId(null);
-                          }} style={{background:"#7c8fff",color:"#fff",padding:"8px",flex:1,fontSize:13}}>💾 Salvar</button>
+                          }} style={{background:"#8B5A2B",color:"#fff",padding:"8px",flex:1,fontSize:13}}>💾 Salvar</button>
                           <button className="btn" onClick={()=>setEditItemId(null)} style={{background:"var(--border)",color:"#888",padding:"8px",fontSize:13}}>Cancelar</button>
                         </div>
                       </div>
@@ -3195,7 +3188,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"#60a5fa",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
                         <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;_listaDeletados.add(item.id);const gid=nota.grupoId;(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c)};});}}
-                          style={{background:"none",border:"none",color:"#ff5c7a55",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
+                          style={{background:"none",border:"none",color:"#EF444455",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
                       </div>
                     )}
                   </div>
@@ -3203,7 +3196,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
                 {/* rodapé */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderTop:"2px solid #252840",background:"var(--bg3)",gap:8}}>
-                  <span style={{fontSize:13,fontWeight:700}}>Total: <span style={{color:"#4ade80"}}>{fmtMoney(totalVivo)}</span></span>
+                  <span style={{fontSize:13,fontWeight:700}}>Total: <span style={{color:"#22C55E"}}>{fmtMoney(totalVivo)}</span></span>
                   <div style={{display:"flex",gap:6}}>
                     <button className="btn" onClick={()=>{
                       const rows=itensVivos.map(it=>`<tr><td>${it.nomeProduto}</td><td>${it.categoria}</td><td>${it.quantidade||1} ${it.unidade}</td><td style="text-align:right">${fmtMoney(it.valorUnitario||0)}</td><td style="text-align:right;font-weight:700">${fmtMoney(parseMoney(it.valor))}</td></tr>`).join("");
@@ -3211,7 +3204,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         <p><b>Fornecedor:</b> ${nota.fornecedor} &nbsp;|&nbsp; <b>Data:</b> ${fmtDate(nota.data)}${nota.nNF?` &nbsp;|&nbsp; <b>NF:</b> ${nota.nNF}`:""} &nbsp;|&nbsp; <b>Origem:</b> ${nota.origem}</p>
                         <table><thead><tr><th>Produto</th><th>Categoria</th><th>Qtd</th><th>Vl. Unit.</th><th>Total</th></tr></thead><tbody>${rows}</tbody>
                         <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(totalVivo)}</td></tr></tfoot></table>`));
-                    }} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir</button>
+                    }} style={{background:"#DBEAFE",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir</button>
                     <button className="btn" onClick={()=>{
                       const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
                       if(!confirm(`Transferir compra #${num} para ${outra}?`))return;
@@ -3223,7 +3216,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       if(setState)setState((prev:any)=>({...prev,[outra]:{...prev[outra],compras:[...novosItens,...(prev[outra]?.compras||[])],contas:novaConta?[novaConta,...(prev[outra]?.contas||[])]:prev[outra]?.contas||[]}}));
                       fetch(`/api/dados/${outra}`,{method:"POST",headers:{"Content-Type":"application/json"},body:destBody}).catch(()=>{});
                       alert(`✅ Compra transferida para ${outra}`);
-                    }} style={{background:"#1a1a30",color:"#a78bfa",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
+                    }} style={{background:"#DBEAFE",color:"#8B5CF6",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={()=>{
                       if(!confirm("Excluir esta nota e todos os seus itens?"))return;
                       const cIds=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId).map(c=>c.id);
@@ -3231,7 +3224,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       [...cIds,...ctIds].forEach(id=>_listaDeletados.add(id));
                       (setDbAndSave||setDb)(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
                       setVerNota(null);
-                    }} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️ Excluir</button>
+                    }} style={{background:"#F3E8FF",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️ Excluir</button>
                   </div>
                 </div>
               </div>}
@@ -3259,7 +3252,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 <button className="btn" onClick={()=>{
                   setDb(d=>({...d,fornecedores:(d.fornecedores||[]).map(x=>x.id===f.id?{...x,...editFornForm}:x)}));
                   setEditFornId(null);
-                }} style={{background:"#7c8fff",color:"#fff",flex:1,padding:"8px",fontSize:13}}>✓ Salvar</button>
+                }} style={{background:"#8B5A2B",color:"#fff",flex:1,padding:"8px",fontSize:13}}>✓ Salvar</button>
                 <button className="btn" onClick={()=>setEditFornId(null)} style={{background:"var(--border2)",color:"var(--text)",flex:1,padding:"8px",fontSize:13}}>Cancelar</button>
               </div>
             </div>
@@ -3271,7 +3264,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 {f.endereco&&<div className="muted" style={{fontSize:11,marginTop:2}}>{f.endereco}</div>}
               </div>
               <button onClick={()=>{setEditFornId(f.id);setEditFornForm({nome:f.nome||"",cnpj:f.cnpj||"",endereco:f.endereco||""});}}
-                style={{background:"none",border:"none",color:"#7c8fff",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✏️</button>
+                style={{background:"none",border:"none",color:"#8B5A2B",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✏️</button>
             </div>
           )}
         </div>
@@ -3285,14 +3278,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       <div style={{display:"flex",gap:5,marginBottom:14}}>
         {[["catalogo","📦 Catálogo"],["substituicoes","🔄 Substituições"]].map(([k,l])=>(
           <button key={k} onClick={()=>setProdSubTab(k as any)} className="pill"
-            style={{background:prodSubTab===k?"#7c8fff":"var(--bg4)",color:prodSubTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
+            style={{background:prodSubTab===k?"#8B5A2B":"var(--bg4)",color:prodSubTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
         ))}
       </div>
 
       {/* ===== CATÁLOGO ===== */}
       {prodSubTab==="catalogo"&&<div>
         {/* Add/Edit form */}
-        <div className="card" style={{marginBottom:12,border:`1px solid ${prodEdit?"#7c8fff55":"var(--border)"}`}}>
+        <div className="card" style={{marginBottom:12,border:`1px solid ${prodEdit?"#8B5A2B55":"var(--border)"}`}}>
           <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{prodEdit?"✏️ Editar Insumo":"➕ Novo Insumo"}</div>
           <input placeholder="Nome do insumo *" value={prodForm.nome} onChange={e=>setProdForm(p=>({...p,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
           <div className="row" style={{marginBottom:8}}>
@@ -3311,10 +3304,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               return termos.some((t:string)=>(nl===t||nl.includes(t)||t.includes(nl)))&&n.nomePadrao!==prodForm.nome;
             });
             if(!norma)return null;
-            return <div style={{background:"#1a1230",border:"1px solid #4c1d95",borderRadius:8,padding:"8px 12px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+            return <div style={{background:"#F3E8FF",border:"1px solid #4c1d95",borderRadius:8,padding:"8px 12px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
               <span style={{fontSize:12,color:"#c4b5fd",flex:1}}>🔄 Substituição disponível: <strong>→ {norma.nomePadrao}</strong></span>
               <button className="btn" onClick={()=>setProdForm(p=>({...p,nome:norma.nomePadrao}))}
-                style={{background:"#7c3aed",color:"#fff",padding:"5px 10px",fontSize:11,flexShrink:0}}>Aplicar</button>
+                style={{background:"#8B5CF6",color:"#fff",padding:"5px 10px",fontSize:11,flexShrink:0}}>Aplicar</button>
             </div>;
           })()}
           <div className="row">
@@ -3336,7 +3329,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               });
               setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""});
               setProdEdit(null);
-            }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
+            }} style={{background:"#8B5A2B",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
               {prodEdit?"💾 Atualizar":"➕ Cadastrar"}
             </button>
             {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""}); }}
@@ -3364,7 +3357,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:16}}>{catIcons[cat]||"📦"}</span>
                 <span style={{fontSize:13,fontWeight:700,textTransform:"capitalize" as const}}>{cat}</span>
-                <span style={{fontSize:11,color:"#7c8fff",background:"#7c8fff18",borderRadius:20,padding:"1px 8px",fontWeight:700}}>{items.length}</span>
+                <span style={{fontSize:11,color:"#8B5A2B",background:"#8B5A2B18",borderRadius:20,padding:"1px 8px",fontWeight:700}}>{items.length}</span>
               </div>
               <span style={{color:"var(--text3)",fontSize:13,transition:"transform .2s",display:"inline-block",transform:collapsed?"rotate(-90deg)":"none"}}>▼</span>
             </div>
@@ -3376,7 +3369,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
                       <span style={{fontSize:11,color:"var(--text3)",background:"var(--bg4)",borderRadius:6,padding:"1px 6px"}}>{mp.unidade}</span>
                       {mp.ultimoValor>0
-                        ?<span style={{fontSize:11,color:"#4ade80",fontWeight:600}}>{fmtMoney(mp.ultimoValor)}</span>
+                        ?<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>{fmtMoney(mp.ultimoValor)}</span>
                         :<span style={{fontSize:11,color:"var(--text3)"}}>Sem preço</span>}
                     </div>
                   </div>
@@ -3385,9 +3378,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       setProdForm({nome:mp.nome,categoria:mp.categoria,unidade:mp.unidade,valor:String(mp.ultimoValor||"").replace(".",",")});
                       setProdEdit(mp.id);
                       window.scrollTo({top:0,behavior:"smooth"});
-                    }} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#7c8fff"}}>✏️</button>
+                    }} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#8B5A2B"}}>✏️</button>
                     <button onClick={()=>{if(confirm(`Excluir "${mp.nome}"?`)){_listaDeletados.add(mp.id);setDb(d=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter(m=>m.id!==mp.id)}));}}}
-                      style={{background:"var(--bg4)",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#ff5c7a"}}>🗑️</button>
+                      style={{background:"var(--bg4)",border:"1px solid #EF444433",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"#EF4444"}}>🗑️</button>
                   </div>
                 </div>
               ))}
@@ -3431,7 +3424,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 return {...d,normalizacoes:norms};
               });
               setNormForm({nomePadrao:"",termos:""});setNormEdit(null);
-            }} style={{background:"#7c8fff",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
+            }} style={{background:"#8B5A2B",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
               {normEdit?"💾 Atualizar":"➕ Salvar"}
             </button>
             {normEdit&&<button className="btn" onClick={()=>{setNormEdit(null);setNormForm({nomePadrao:"",termos:""});}}
@@ -3449,9 +3442,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               </div>
               <div style={{display:"flex",gap:4,flexShrink:0}}>
                 <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
-                  style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+                  style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#8B5A2B"}}>✏️</button>
                 <button onClick={()=>{if(confirm("Excluir substituição?")){_listaDeletados.add(n.id);setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
-                  style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+                  style={{background:"none",border:"1px solid #EF444433",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#EF4444"}}>🗑️</button>
               </div>
             </div>
           </div>
@@ -4105,12 +4098,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {/* Header */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
-      {pendentes.length>0&&<span style={{background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
-      {comprados.length>0&&<span style={{background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>✅ {comprados.length}</span>}
-      {naoTemList.length>0&&<span style={{background:"#fbbf2422",color:"#fbbf24",border:"1px solid #fbbf2444",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>🚫 {naoTemList.length}</span>}
+      {pendentes.length>0&&<span style={{background:"#EF444422",color:"#EF4444",border:"1px solid #EF444444",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
+      {comprados.length>0&&<span style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>✅ {comprados.length}</span>}
+      {naoTemList.length>0&&<span style={{background:"#F59E0B22",color:"#F59E0B",border:"1px solid #F59E0B44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>🚫 {naoTemList.length}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
-        {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#0d1520",color:"#60a5fa",border:"1px solid #1e3a5f",padding:"6px 12px",fontSize:12}}>🖨️</button>}
-        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
+        {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#DBEAFE",color:"#60a5fa",border:"1px solid #1e3a5f",padding:"6px 12px",fontSize:12}}>🖨️</button>}
+        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
 
@@ -4152,11 +4145,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 return <div key={p.id} style={{marginBottom:6,border:"1px solid var(--border)",borderRadius:8,overflow:"hidden"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg4)",cursor:"pointer"}} onClick={()=>setExpandedPedido(expanded?null:p.id)}>
                     <span style={{fontSize:13,color:"#fb923c"}}>{p.autoArquivado?"📋":"🛒"}</span>
-                    <span style={{flex:1,fontSize:13,fontWeight:700}}>{dataFmt}{p.autoArquivado?<span style={{fontSize:9,color:"#fbbf24",marginLeft:6}}>auto</span>:""}</span>
+                    <span style={{flex:1,fontSize:13,fontWeight:700}}>{dataFmt}{p.autoArquivado?<span style={{fontSize:9,color:"#F59E0B",marginLeft:6}}>auto</span>:""}</span>
                     <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
-                    <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #4ade8044",borderRadius:6,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
+                    <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #22C55E44",borderRadius:6,color:"#22C55E",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
                     <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
-                    {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>}
+                    {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>}
                     <span style={{fontSize:11,color:"#555"}}>{expanded?"▲":"▼"}</span>
                   </div>
                   {expanded&&<div style={{padding:"8px 12px"}}>
@@ -4165,8 +4158,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                         <span style={{fontSize:12}}>{it.naoTem?"🚫":catIcon(it.categoria||"outros")}</span>
                         <span style={{flex:1,fontSize:13,textDecoration:it.naoTem?"line-through":"none",color:it.naoTem?"#a08030":"inherit"}}>{it.nome}</span>
                         <span style={{fontSize:12,color:"var(--text2)"}}>{it.quantidade||1} {it.unidade||"un"}</span>
-                        {it.naoTem&&<span style={{fontSize:9,color:"#fbbf24",fontWeight:700}}>não tem</span>}
-                        {it.urgente&&<span style={{fontSize:10,color:"#ff5c7a",fontWeight:700}}>!</span>}
+                        {it.naoTem&&<span style={{fontSize:9,color:"#F59E0B",fontWeight:700}}>não tem</span>}
+                        {it.urgente&&<span style={{fontSize:10,color:"#EF4444",fontWeight:700}}>!</span>}
                       </div>
                     ))}
                   </div>}
@@ -4225,20 +4218,20 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       };
       return <div className="card" style={{marginBottom:12,border:"1px solid #78600a"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <div className="section-title" style={{color:"#fbbf24",marginBottom:0}}>💰 Estimativa de Custo da Lista</div>
-          {itensPend.length>0&&<button className="btn" onClick={imprimirEstimativa} style={{background:"#15130a",color:"#fbbf24",border:"1px solid #78600a",padding:"5px 12px",fontSize:11}}>🖨️ Imprimir</button>}
+          <div className="section-title" style={{color:"#F59E0B",marginBottom:0}}>💰 Estimativa de Custo da Lista</div>
+          {itensPend.length>0&&<button className="btn" onClick={imprimirEstimativa} style={{background:"#FEF3C7",color:"#F59E0B",border:"1px solid #78600a",padding:"5px 12px",fontSize:11}}>🖨️ Imprimir</button>}
         </div>
         {!itensPend.length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhum item pendente na lista.</div>}
         {itensPend.length>0&&<>
-          <div style={{fontSize:11,color:"#888",marginBottom:10,background:"#1a1a08",borderRadius:6,padding:"6px 10px",border:"1px solid #333010"}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:10,background:"#DCFCE7",borderRadius:6,padding:"6px 10px",border:"1px solid #333010"}}>
             Valores baseados no último preço de compra registrado. {semPreco.length>0&&<span style={{color:"#f59e0b"}}>{semPreco.length} item(ns) sem preço cadastrado.</span>}
           </div>
           {cats.map(cat=>{
             const catLinhas=linhas.filter(l=>(l.categoria||"outros")===cat);
             const catTotal=catLinhas.filter(l=>l.temPreco).reduce((s,l)=>s+l.subtotal,0);
             return <div key={cat} style={{marginBottom:8}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#a78bfa",textTransform:"uppercase" as const,padding:"4px 0",borderBottom:"1px solid #2a2050",marginBottom:4}}>
-                {catIcon(cat)} {cat} {catTotal>0&&<span style={{color:"#fbbf24",fontWeight:400}}>— {fmtMoney(catTotal)}</span>}
+              <div style={{fontSize:11,fontWeight:700,color:"#8B5CF6",textTransform:"uppercase" as const,padding:"4px 0",borderBottom:"1px solid #2a2050",marginBottom:4}}>
+                {catIcon(cat)} {cat} {catTotal>0&&<span style={{color:"#F59E0B",fontWeight:400}}>— {fmtMoney(catTotal)}</span>}
               </div>
               {catLinhas.map((l,idx)=>{
                 const isExpanded=estConcItem===l.itemId;
@@ -4254,22 +4247,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     <span style={{color:"#888",whiteSpace:"nowrap" as const}}>{l.qtd} {l.unidade}</span>
                     {l.temPreco?<>
                       <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>{l.avgCount>1?"média ":""}× {fmtMoney(l.unitario)}</span>
-                      <span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const,minWidth:75,textAlign:"right" as const}}>{fmtMoney(l.subtotal)}</span>
+                      <span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const,minWidth:75,textAlign:"right" as const}}>{fmtMoney(l.subtotal)}</span>
                     </>:
                       <span style={{color:"#f59e0b",fontSize:10,whiteSpace:"nowrap" as const}}>sem preço</span>
                     }
                   </div>
-                  {isExpanded&&<div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
+                  {isExpanded&&<div style={{background:"#DBEAFE",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
                     <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produtos de compra</div>
                     <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} onClick={e=>e.stopPropagation()} autoFocus
                       className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-                    {vinculadosMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
-                      <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinculadosMps.length}):{vinculadosMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinculadosMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinculadosMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+                    {vinculadosMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
+                      <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinculadosMps.length}):{vinculadosMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinculadosMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinculadosMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
                       {vinculadosMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
-                        <span style={{color:"#4ade80"}}>🔗 {m.nome}</span>
+                        <span style={{color:"#22C55E"}}>🔗 {m.nome}</span>
                         <span style={{flex:1}}/>
-                        {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
-                        <button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId,m.id);}} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
+                        {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+                        <button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId,m.id);}} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
                       </div>)}
                     </div>}
                     {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
@@ -4288,22 +4281,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                         }
                       }}
                         style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
-                          background:linked?"#4ade8015":"transparent",border:linked?"1px solid #4ade8044":"1px solid transparent"}}>
+                          background:linked?"#22C55E15":"transparent",border:linked?"1px solid #22C55E44":"1px solid transparent"}}>
                         <span style={{fontSize:13}}>{linked?"☑️":"⬜"}</span>
-                        <span style={{flex:1,color:linked?"#4ade80":"#ccc",fontWeight:linked?700:400}}>{mp.nome}</span>
+                        <span style={{flex:1,color:linked?"#22C55E":"#ccc",fontWeight:linked?700:400}}>{mp.nome}</span>
                         {mp.ultimoValor>0
-                          ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
+                          ?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                           :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
                       </div>;
                     })}
                     </div>
                     <div style={{display:"flex",gap:6,marginTop:6}}>
                       {l.isLinked&&<button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId);}}
-                        className="btn" style={{flex:1,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
+                        className="btn" style={{flex:1,background:"#EF444422",color:"#EF4444",border:"1px solid #EF444444",padding:"6px",fontSize:11,fontWeight:700}}>
                         ✕ Desvincular Todos
                       </button>}
                       <button onClick={(e)=>{e.stopPropagation();setEstConcItem(null);setConcBusca("");}}
-                        className="btn" style={{flex:1,background:"#334155",color:"#e2e8f0",padding:"6px",fontSize:11,fontWeight:700}}>
+                        className="btn" style={{flex:1,background:"#FFFFFF",color:"#1F2937",border:"1px solid #E5E7EB",padding:"6px",fontSize:11,fontWeight:700}}>
                         ✓ Fechar
                       </button>
                     </div>
@@ -4313,8 +4306,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             </div>;
           })}
           <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",borderTop:"2px solid #78600a",marginTop:8}}>
-            <span style={{fontWeight:700,fontSize:15,color:"#fbbf24"}}>Total Estimado</span>
-            <span style={{fontWeight:700,fontSize:17,color:"#4ade80"}}>{fmtMoney(totalEstimado)}</span>
+            <span style={{fontWeight:700,fontSize:15,color:"#F59E0B"}}>Total Estimado</span>
+            <span style={{fontWeight:700,fontSize:17,color:"#22C55E"}}>{fmtMoney(totalEstimado)}</span>
           </div>
           {semPreco.length>0&&<div style={{fontSize:11,color:"#888",marginTop:4}}>
             * {semPreco.length} item(ns) sem preço: {semPreco.map(l=>l.nome).join(", ")}
@@ -4325,7 +4318,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     {/* Gerenciar categorias (admin only) */}
     {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
-      <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Categorias — Ordem de exibição</div>
+      <div className="section-title" style={{color:"#8B5CF6"}}>🏷️ Categorias — Ordem de exibição</div>
       <div style={{marginBottom:10}}>
         {cats.map((c,idx)=>(
           <div key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
@@ -4336,20 +4329,20 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     onChange={e=>setEditCat(ec=>ec?{...ec,val:e.target.value}:ec)}
                     onKeyDown={e=>{if(e.key==="Enter")renameCat(c,editCat.val);if(e.key==="Escape")setEditCat(null);}}
                     className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
-                  <button onClick={()=>renameCat(c,editCat.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                  <button onClick={()=>renameCat(c,editCat.val)} style={{background:"#22C55E22",border:"1px solid #22C55E",borderRadius:5,color:"#22C55E",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
                   <button onClick={()=>setEditCat(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
                 </>
               : <>
                   <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"capitalize"}}>{c}</span>
                   <button onClick={()=>setEditCat({name:c,val:c})} title="Renomear"
-                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#8B5A2B",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
                   <div style={{display:"flex",gap:2}}>
                     <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#a78bfa",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#8B5CF6",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
                     <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#a78bfa",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                   </div>
-                  {c!=="outros"&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
+                  {c!=="outros"&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
                 </>
             }
           </div>
@@ -4358,14 +4351,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div style={{display:"flex",gap:6}}>
         <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0}}/>
-        <button className="btn" onClick={addCat} style={{background:"#a78bfa",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
+        <button className="btn" onClick={addCat} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
       </div>
     </div>}
 
     {/* Gerenciar ruas (admin only) */}
     {isAdmin&&showRuaMgmt&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
     {isAdmin&&showRuaMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #065f46"}}>
-      <div className="section-title" style={{color:"#34d399"}}>🛤️ Ruas — Ordem de compra</div>
+      <div className="section-title" style={{color:"#22C55E"}}>🛤️ Ruas — Ordem de compra</div>
       <div style={{fontSize:11,color:"#888",marginBottom:10}}>Defina as ruas do mercado e associe categorias. Produtos dessas categorias herdarão a rua automaticamente.</div>
       <div style={{marginBottom:10}}>
         {!ruas.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhuma rua cadastrada</div>}
@@ -4374,27 +4367,27 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           const catsDisponiveis=cats.filter(c=>!ruaCatMap[c]||ruaCatMap[c]===r);
           return <div key={r} style={{marginBottom:6,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px"}}>
-              <span style={{fontSize:14,color:"#34d399",fontWeight:800,minWidth:22,textAlign:"center"}}>{idx+1}</span>
+              <span style={{fontSize:14,color:"#22C55E",fontWeight:800,minWidth:22,textAlign:"center"}}>{idx+1}</span>
               {editRua?.name===r
                 ? <>
                     <input autoFocus value={editRua.val}
                       onChange={e=>setEditRua(er=>er?{...er,val:e.target.value}:er)}
                       onKeyDown={e=>{if(e.key==="Enter")renameRua(r,editRua.val);if(e.key==="Escape")setEditRua(null);}}
                       className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
-                    <button onClick={()=>renameRua(r,editRua.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                    <button onClick={()=>renameRua(r,editRua.val)} style={{background:"#22C55E22",border:"1px solid #22C55E",borderRadius:5,color:"#22C55E",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
                     <button onClick={()=>setEditRua(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
                   </>
                 : <>
                     <span style={{flex:1,fontSize:13,fontWeight:600}}>{r}</span>
                     <button onClick={()=>setEditRua({name:r,val:r})} title="Renomear"
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#8B5A2B",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
                     <div style={{display:"flex",gap:2}}>
                       <button onClick={()=>moverRua(r,-1)} disabled={idx===0}
-                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#34d399",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#22C55E",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
                       <button onClick={()=>moverRua(r,1)} disabled={idx===ruas.length-1}
-                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"#333":"#34d399",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"#333":"#22C55E",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                     </div>
-                    <button onClick={()=>delRua(r)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                    <button onClick={()=>delRua(r)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
                   </>
               }
             </div>
@@ -4402,9 +4395,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             <div style={{padding:"2px 8px 4px",display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center"}}>
               <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Categorias:</span>
               {catsNaRua.map(c=>(
-                <span key={c} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#34d39918",color:"#34d399",border:"1px solid #34d39944",borderRadius:12,padding:"2px 8px"}}>
+                <span key={c} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#22C55E18",color:"#22C55E",border:"1px solid #22C55E44",borderRadius:12,padding:"2px 8px"}}>
                   {catIcon(c)} {c}
-                  <button onClick={()=>setRuaCat(c,"")} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                  <button onClick={()=>setRuaCat(c,"")} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
                 </span>
               ))}
               <select onChange={e=>{if(e.target.value)setRuaCat(e.target.value,r);e.target.value="";}} style={{fontSize:10,background:"var(--bg3)",color:"#888",border:"1px solid var(--border2)",borderRadius:12,padding:"2px 6px",cursor:"pointer"}}>
@@ -4430,9 +4423,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center",marginBottom:4}}>
                   <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Produtos ({prodsNaRua.length}):</span>
                   {prodsNaRua.slice(0,30).map((p:any)=>(
-                    <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#7c8fff18",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:12,padding:"2px 8px"}}>
+                    <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#8B5A2B18",color:"#8B5A2B",border:"1px solid #8B5A2B44",borderRadius:12,padding:"2px 8px"}}>
                       {p.nome}
-                      <button onClick={()=>setProdRuaBoth(p.nome,"")} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                      <button onClick={()=>setProdRuaBoth(p.nome,"")} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
                     </span>
                   ))}
                   {prodsNaRua.length>30&&<span style={{fontSize:10,color:"#888"}}>+{prodsNaRua.length-30} mais</span>}
@@ -4451,7 +4444,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                       }} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
                         <span style={{fontSize:13}}>{catIcon(p.cat||"outros")}</span>
                         <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
-                        {p.rua&&<span style={{fontSize:9,color:"#34d399"}}>🛤️ {p.rua}</span>}
+                        {p.rua&&<span style={{fontSize:9,color:"#22C55E"}}>🛤️ {p.rua}</span>}
                         <span style={{fontSize:10,color:"#888"}}>{p.unidade}</span>
                       </div>
                     ))}
@@ -4466,7 +4459,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div style={{display:"flex",gap:6}}>
         <input placeholder="Nova rua..." value={novaRua} onChange={e=>setNovaRua(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addRua();}} className="inp" style={{marginBottom:0}}/>
-        <button className="btn" onClick={addRua} style={{background:"#34d399",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>+ Add</button>
+        <button className="btn" onClick={addRua} style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>+ Add</button>
       </div>
     </div>}
 
@@ -4474,8 +4467,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {isAdmin&&showProdMgmt&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
     {isAdmin&&showProdMgmt&&<div ref={prodFormRef} className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-        <div className="section-title" style={{color:"#4ade80",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
-        <button className="btn" onClick={removerDuplicatas} style={{background:"#2a1020",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
+        <div className="section-title" style={{color:"#22C55E",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
+        <button className="btn" onClick={removerDuplicatas} style={{background:"#F3E8FF",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
       </div>
       {/* Form adicionar/editar */}
       <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap" as const}}>
@@ -4492,7 +4485,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <option value="">Rua</option>
           {ruas.map(r=><option key={r} value={r}>{r}</option>)}
         </select>}
-        <button className="btn" onClick={saveProd} style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
+        <button className="btn" onClick={saveProd} style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
         {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un",rua:""});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
       {/* Conciliação com compras */}
@@ -4505,16 +4498,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb4?(mn.includes(cb4)||cb4.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,20);
         const vinMps=(db.materiasPrimas||[]).filter((m:any)=>eVids.includes(m.id));
         vinMps.forEach((m:any)=>{if(!mps.find((o:any)=>o.id===m.id))mps.unshift(m);});
-        return <div style={{marginBottom:8,background:"#0d1020",borderRadius:8,border:"1px solid #1e2235",padding:"6px 8px"}}>
+        return <div style={{marginBottom:8,background:"#DBEAFE",borderRadius:8,border:"1px solid #1e2235",padding:"6px 8px"}}>
           <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — clique para vincular</div>
           <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
             className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-          {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
-            <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+          {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
+            <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
             {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
-              <span style={{color:"#4ade80"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
-              {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
-              {editProdId&&<button onClick={()=>desvincularMp(editProdId,m.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>}
+              <span style={{color:"#22C55E"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
+              {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+              {editProdId&&<button onClick={()=>desvincularMp(editProdId,m.id)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>}
             </div>)}
           </div>}
           {!mps.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
@@ -4528,16 +4521,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               }
             }}
               style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:editProdId?"pointer":"default",borderRadius:6,marginBottom:2,
-                background:isLinked?"#4ade8015":"transparent",border:isLinked?"1px solid #4ade8044":"1px solid transparent"}}>
+                background:isLinked?"#22C55E15":"transparent",border:isLinked?"1px solid #22C55E44":"1px solid transparent"}}>
               <span style={{fontSize:13}}>{isLinked?"☑️":"⬜"}</span>
-              <span style={{flex:1,color:isLinked?"#4ade80":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
+              <span style={{flex:1,color:isLinked?"#22C55E":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
               {mp.ultimoValor>0
-                ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
+                ?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                 :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
             </div>;
           })}
           </div>
-          {!editProdId&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>Salve o produto primeiro para vincular</div>}
+          {!editProdId&&<div style={{fontSize:10,color:"#F59E0B",marginTop:3}}>Salve o produto primeiro para vincular</div>}
         </div>;
       })()}
       {/* Busca + filtro categoria no catálogo */}
@@ -4563,14 +4556,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:isExpConc?"none":"1px solid var(--border)"}}>
               <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
               <span style={{flex:1,fontSize:13,cursor:"pointer"}} onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}}>{p.nome}</span>
-              {mp&&mp.ultimoValor>0?<span onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#4ade80",background:"#4ade8018",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const,cursor:"pointer"}}>
+              {mp&&mp.ultimoValor>0?<span onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px",whiteSpace:"nowrap" as const,cursor:"pointer"}}>
                 {isLinked?"🔗":"💰"}{mp._avgCount>1?`(${mp._avgCount})`:""} {fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}
               </span>:
               <span onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}} style={{fontSize:10,color:"#f59e0b",cursor:"pointer",whiteSpace:"nowrap" as const}}>sem preço</span>}
-              {p.rua&&<span style={{fontSize:10,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
+              {p.rua&&<span style={{fontSize:10,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
               <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
-              <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
-              <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+              <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#8B5A2B",fontSize:13,padding:"0 3px"}}>✏️</button>
+              <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:13,padding:"0 3px"}}>🗑️</button>
             </div>
             {isExpConc&&(()=>{
               const q2=p.nome.toLowerCase();
@@ -4578,16 +4571,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               const mpOpts=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb2?(mn.includes(cb2)||cb2.includes(mn)):(mn.includes(q2)||q2.includes(mn));}).slice(0,20);
               const vinMps=(db.materiasPrimas||[]).filter((m:any)=>pVids.includes(m.id));
               vinMps.forEach((m:any)=>{if(!mpOpts.find((o:any)=>o.id===m.id))mpOpts.unshift(m);});
-              return <div style={{background:"#0d1020",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
+              return <div style={{background:"#DBEAFE",border:"1px solid #1e2235",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
                 <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produtos de compra</div>
                 <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} autoFocus
                   className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
-                {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#4ade8010",borderRadius:6,border:"1px solid #4ade8033"}}>
-                  <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+                {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
+                  <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
                   {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
-                    <span style={{color:"#4ade80"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
-                    {m.ultimoValor>0&&<span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
-                    <button onClick={()=>desvincularMp(p.id,m.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
+                    <span style={{color:"#22C55E"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
+                    {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+                    <button onClick={()=>desvincularMp(p.id,m.id)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
                   </div>)}
                 </div>}
                 {!mpOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
@@ -4596,22 +4589,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   const mLinked=pVids.includes(m.id);
                   return <div key={m.id} onClick={()=>{if(mLinked)desvincularMp(p.id,m.id);else vincularMp(p.id,m.id);}}
                     style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
-                      background:mLinked?"#4ade8015":"transparent",border:mLinked?"1px solid #4ade8044":"1px solid transparent"}}>
+                      background:mLinked?"#22C55E15":"transparent",border:mLinked?"1px solid #22C55E44":"1px solid transparent"}}>
                     <span style={{fontSize:13}}>{mLinked?"☑️":"⬜"}</span>
-                    <span style={{flex:1,color:mLinked?"#4ade80":"#ccc",fontWeight:mLinked?700:400}}>{m.nome}</span>
+                    <span style={{flex:1,color:mLinked?"#22C55E":"#ccc",fontWeight:mLinked?700:400}}>{m.nome}</span>
                     {m.ultimoValor>0
-                      ?<span style={{color:"#4ade80",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>
+                      ?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>
                       :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
                   </div>;
                 })}
                 </div>
                 <div style={{display:"flex",gap:6,marginTop:6}}>
                   {isLinked&&<button onClick={()=>desvincularMp(p.id)}
-                    className="btn" style={{flex:1,background:"#ff5c7a22",color:"#ff5c7a",border:"1px solid #ff5c7a44",padding:"6px",fontSize:11,fontWeight:700}}>
+                    className="btn" style={{flex:1,background:"#EF444422",color:"#EF4444",border:"1px solid #EF444444",padding:"6px",fontSize:11,fontWeight:700}}>
                     ✕ Desvincular Todos
                   </button>}
                   <button onClick={()=>{setCatConcItem(null);setConcBusca("");}}
-                    className="btn" style={{flex:1,background:"#334155",color:"#e2e8f0",padding:"6px",fontSize:11,fontWeight:700}}>
+                    className="btn" style={{flex:1,background:"#FFFFFF",color:"#1F2937",border:"1px solid #E5E7EB",padding:"6px",fontSize:11,fontWeight:700}}>
                     ✓ Fechar
                   </button>
                 </div>
@@ -4624,10 +4617,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     {/* Form cadastro de produto */}
     {subTab==="nova"&&<><div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#2a4060":"#2a3260"}`}}>
-      <div className="section-title" style={{color:editId?"#fbbf24":"#7c8fff",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
+      <div className="section-title" style={{color:editId?"#F59E0B":"#8B5A2B",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
       {/* Produto + urgente */}
       <div style={{marginBottom:10}}>
-        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *{!isAdmin&&<span style={{color:"#fbbf24",fontWeight:400,marginLeft:6}}>(selecione do catálogo)</span>}</div>
+        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Produto *{!isAdmin&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>(selecione do catálogo)</span>}</div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <div style={{flex:1,position:"relative"}}>
             <input id="lista-nome-inp" placeholder={isAdmin?"Ex: Frango, Cebola, Detergente...":"🔍 Buscar produto cadastrado..."} value={form.nome}
@@ -4643,13 +4636,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   <span style={{fontSize:15}}>{catIcon(p.cat||"outros")}</span>
                   <span style={{flex:1,fontSize:13,fontWeight:600}}>{p.nome}</span>
                   <span style={{fontSize:11,color:"#888"}}>{p.unidade}</span>
-                  {p.cat&&<span style={{fontSize:10,color:"#a78bfa",background:"#a78bfa18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+                  {p.cat&&<span style={{fontSize:10,color:"#8B5CF6",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
                 </div>
               ))}
             </div>}
           </div>
           <button onClick={()=>setF("urgente",!form.urgente)}
-            style={{background:form.urgente?"#ff5c7a22":"var(--bg4)",border:`1px solid ${form.urgente?"#ff5c7a":"var(--border2)"}`,borderRadius:10,padding:"10px",cursor:"pointer",fontSize:16,flexShrink:0,lineHeight:1}} title="Urgente">
+            style={{background:form.urgente?"#EF444422":"var(--bg4)",border:`1px solid ${form.urgente?"#EF4444":"var(--border2)"}`,borderRadius:10,padding:"10px",cursor:"pointer",fontSize:16,flexShrink:0,lineHeight:1}} title="Urgente">
             {form.urgente?"🔴":"⚪"}
           </button>
         </div>
@@ -4700,7 +4693,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       </div>
       {/* Botões */}
       <div style={{display:"flex",gap:8}}>
-        <button className="btn" onClick={saveItem} style={{flex:1,background:editId?"#fbbf24":"#7c8fff",color:editId?"#111":"#fff",padding:"12px",fontSize:14,fontWeight:700}}>
+        <button className="btn" onClick={saveItem} style={{flex:1,background:editId?"#F59E0B":"#8B5A2B",color:editId?"#111":"#fff",padding:"12px",fontSize:14,fontWeight:700}}>
           {editId?"💾 Atualizar":"✅ Adicionar à Lista"}
         </button>
         {editId&&<button className="btn" onClick={cancelEdit} style={{background:"var(--border2)",color:"var(--text2)",padding:"12px 14px",fontSize:14}}>✕</button>}
@@ -4714,10 +4707,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
       </div>}
       {isAdmin&&comprados.length>0&&<>
-        <button className="btn" onClick={salvarPedido} style={{background:"#0a2010",color:"#4ade80",border:"1px solid #14532d",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
+        <button className="btn" onClick={salvarPedido} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #14532d",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
           💾 Salvar Pedido ({comprados.length})
         </button>
-        <button className="btn" onClick={limparComprados} style={{background:"#1a0a0a",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
+        <button className="btn" onClick={limparComprados} style={{background:"#FEE2E2",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
           🗑️ Limpar
         </button>
       </>}
@@ -4725,8 +4718,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     {/* Toggle vista por rua (admin only) */}
     {isAdmin&&ruas.length>0&&pendentes.length>0&&<div style={{display:"flex",gap:8,marginBottom:10}}>
-      <button onClick={()=>setVistaRua(false)} className="pill" style={{background:!vistaRua?"#7c8fff":"var(--bg4)",color:!vistaRua?"#fff":"#777",fontSize:12,padding:"7px 14px"}}>🏷️ Por Categoria</button>
-      <button onClick={()=>setVistaRua(true)} className="pill" style={{background:vistaRua?"#34d399":"var(--bg4)",color:vistaRua?"#111":"#777",fontSize:12,padding:"7px 14px"}}>🛤️ Por Rua</button>
+      <button onClick={()=>setVistaRua(false)} className="pill" style={{background:!vistaRua?"#8B5A2B":"var(--bg4)",color:!vistaRua?"#fff":"#777",fontSize:12,padding:"7px 14px"}}>🏷️ Por Categoria</button>
+      <button onClick={()=>setVistaRua(true)} className="pill" style={{background:vistaRua?"#22C55E":"var(--bg4)",color:vistaRua?"#111":"#777",fontSize:12,padding:"7px 14px"}}>🛤️ Por Rua</button>
     </div>}
 
     {/* Lista por categoria — somente pendentes */}
@@ -4746,27 +4739,27 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           return(
-          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":isEditing?"#7c8fff":"var(--border)"}`,transition:"all .15s"}}>
+          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":isEditing?"#8B5A2B":"var(--border)"}`,transition:"all .15s"}}>
             <button onClick={()=>toggle(item.id)}
-              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#ff5c7a":"#555"}`,background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
-              {item.urgente&&<span style={{fontSize:9,color:"#ff5c7a",fontWeight:900}}>!</span>}
+              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
+              {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900}}>!</span>}
             </button>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
-                {item.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
-                {isAdmin&&(item.rua||getRuaProd(item.nome))&&<span style={{fontSize:9,color:"#34d399",background:"#34d39918",borderRadius:4,padding:"1px 5px"}}>🛤️ {item.rua||getRuaProd(item.nome)}</span>}
+                {item.urgente&&<span style={{fontSize:9,background:"#EF4444",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
+                {isAdmin&&(item.rua||getRuaProd(item.nome))&&<span style={{fontSize:9,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {item.rua||getRuaProd(item.nome)}</span>}
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
                 <div style={{display:"flex",alignItems:"center",gap:2}} onClick={(e:any)=>e.stopPropagation()}>
                   <button onClick={()=>setQtd(item.id,Math.max(0.1,parseFloat(((item.quantidade||0)-1).toFixed(2))))}
-                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>−</button>
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#8B5A2B",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>−</button>
                   <input type="number" min="0.1" step="0.1" value={item.quantidade}
                     onChange={(e:any)=>{const v=parseFloat(e.target.value);if(!isNaN(v))setQtd(item.id,v);}}
-                    style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,color:"#7c8fff",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:5,padding:"2px 1px"}}/>
+                    style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,color:"#8B5A2B",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:5,padding:"2px 1px"}}/>
                   <button onClick={()=>setQtd(item.id,parseFloat(((item.quantidade||0)+1).toFixed(2)))}
-                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
-                  <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#8B5A2B",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
+                  <span style={{fontSize:11,color:"#8B5A2B",fontWeight:700}}>{item.unidade}</span>
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
@@ -4781,9 +4774,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"#333":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
               </div>}
               <div style={{display:"flex",gap:2}}>
-                <button onClick={()=>toggleNaoTem(item.id)} style={{background:"none",border:"1px solid #fbbf2433",borderRadius:6,color:"#fbbf24",cursor:"pointer",fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
-                {isAdmin&&<button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>}
-                <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
+                <button onClick={()=>toggleNaoTem(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
+                {isAdmin&&<button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#8B5A2B",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>}
+                <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
               </div>
             </div>
           </div>
@@ -4799,33 +4792,33 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       return <div key={rua} style={{marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"4px 0",borderBottom:"1px solid #065f46"}}>
           <span style={{fontSize:16}}>🛤️</span>
-          <span style={{fontSize:12,fontWeight:700,color:"#34d399",textTransform:"uppercase" as const,letterSpacing:0.8}}>{rua}</span>
+          <span style={{fontSize:12,fontWeight:700,color:"#22C55E",textTransform:"uppercase" as const,letterSpacing:0.8}}>{rua}</span>
           <span style={{fontSize:11,color:"#555",fontWeight:400}}>({itens.length})</span>
         </div>
         {itensSorted.map((item:any)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           return(
-          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#ff5c7a44":"var(--border)"}`,transition:"all .15s"}}>
+          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#1a0808":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":"var(--border)"}`,transition:"all .15s"}}>
             <button onClick={()=>toggle(item.id)}
-              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#ff5c7a":"#555"}`,background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              {item.urgente&&<span style={{fontSize:9,color:"#ff5c7a",fontWeight:900}}>!</span>}
+              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900}}>!</span>}
             </button>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
-                {item.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
-                <span style={{fontSize:10,color:"#a78bfa",background:"#a78bfa18",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
+                {item.urgente&&<span style={{fontSize:9,background:"#EF4444",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
+                <span style={{fontSize:10,color:"#8B5CF6",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
                 <div style={{display:"flex",alignItems:"center",gap:2}} onClick={(e:any)=>e.stopPropagation()}>
                   <button onClick={()=>setQtd(item.id,Math.max(0.1,parseFloat(((item.quantidade||0)-1).toFixed(2))))}
-                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>−</button>
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#8B5A2B",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>−</button>
                   <input type="number" min="0.1" step="0.1" value={item.quantidade}
                     onChange={(e:any)=>{const v=parseFloat(e.target.value);if(!isNaN(v))setQtd(item.id,v);}}
-                    style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,color:"#7c8fff",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:5,padding:"2px 1px"}}/>
+                    style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,color:"#8B5A2B",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:5,padding:"2px 1px"}}/>
                   <button onClick={()=>setQtd(item.id,parseFloat(((item.quantidade||0)+1).toFixed(2)))}
-                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
-                  <span style={{fontSize:11,color:"#7c8fff",fontWeight:700}}>{item.unidade}</span>
+                    style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#8B5A2B",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
+                  <span style={{fontSize:11,color:"#8B5A2B",fontWeight:700}}>{item.unidade}</span>
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
@@ -4833,9 +4826,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
             <div style={{display:"flex",gap:2}}>
-              <button onClick={()=>toggleNaoTem(item.id)} style={{background:"none",border:"1px solid #fbbf2433",borderRadius:6,color:"#fbbf24",cursor:"pointer",fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
-              <button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>
-              <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
+              <button onClick={()=>toggleNaoTem(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
+              <button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#8B5A2B",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>
+              <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
             </div>
           </div>);
         })}
@@ -4846,13 +4839,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {listaBuscaComp.length>0&&<div style={{marginTop:8,marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"4px 0",borderBottom:"1px solid var(--border)"}}>
         <span style={{fontSize:18}}>✅</span>
-        <span style={{fontSize:12,fontWeight:700,color:"#4ade80",textTransform:"uppercase" as const,letterSpacing:0.8}}>Comprados</span>
+        <span style={{fontSize:12,fontWeight:700,color:"#22C55E",textTransform:"uppercase" as const,letterSpacing:0.8}}>Comprados</span>
         <span style={{fontSize:11,color:"#555"}}>({listaBuscaComp.length})</span>
       </div>
       {listaBuscaComp.map((item:any)=>(
         <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",opacity:0.45,transition:"all .15s"}}>
           <button onClick={()=>toggle(item.id)}
-            style={{width:26,height:26,borderRadius:7,border:"2px solid #4ade80",background:"#4ade80",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            style={{width:26,height:26,borderRadius:7,border:"2px solid #22C55E",background:"#22C55E",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <span style={{color:"#111",fontSize:14,fontWeight:900,lineHeight:1}}>✓</span>
           </button>
           <div style={{flex:1,minWidth:0}}>
@@ -4868,13 +4861,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {listaBuscaNaoTem.length>0&&<div style={{marginTop:8,marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"4px 0",borderBottom:"1px solid #92400e"}}>
         <span style={{fontSize:18}}>🚫</span>
-        <span style={{fontSize:12,fontWeight:700,color:"#fbbf24",textTransform:"uppercase" as const,letterSpacing:0.8}}>Não tem</span>
+        <span style={{fontSize:12,fontWeight:700,color:"#F59E0B",textTransform:"uppercase" as const,letterSpacing:0.8}}>Não tem</span>
         <span style={{fontSize:11,color:"#555"}}>({listaBuscaNaoTem.length})</span>
       </div>
       {listaBuscaNaoTem.map((item:any)=>(
-        <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,background:"#1a1508",borderRadius:10,border:"1px solid #92400e44",opacity:0.55,transition:"all .15s"}}>
+        <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,background:"#FEF3C7",borderRadius:10,border:"1px solid #92400e44",opacity:0.55,transition:"all .15s"}}>
           <button onClick={()=>toggleNaoTem(item.id)}
-            style={{width:26,height:26,borderRadius:7,border:"2px solid #fbbf24",background:"#fbbf24",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            style={{width:26,height:26,borderRadius:7,border:"2px solid #F59E0B",background:"#F59E0B",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <span style={{color:"#111",fontSize:12,fontWeight:900,lineHeight:1}}>✕</span>
           </button>
           <div style={{flex:1,minWidth:0}}>
@@ -4887,13 +4880,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
     </>}
 
-    {autoArchiveMsg&&<div style={{position:"fixed",top:80,left:"50%",transform:"translateX(-50%)",background:"#0a2a10",border:"1px solid #4ade80",borderRadius:12,padding:"12px 20px",zIndex:200,boxShadow:"0 4px 20px #0008",fontSize:14,color:"#4ade80",fontWeight:700}}>
+    {autoArchiveMsg&&<div style={{position:"fixed",top:80,left:"50%",transform:"translateX(-50%)",background:"#DCFCE7",border:"1px solid #22C55E",borderRadius:12,padding:"12px 20px",zIndex:200,boxShadow:"0 4px 20px #0008",fontSize:14,color:"#22C55E",fontWeight:700}}>
       {autoArchiveMsg}
     </div>}
 
-    {undoInfo&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"#1e2235",border:"1px solid #7c8fff",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:12,zIndex:200,boxShadow:"0 4px 20px #0008",whiteSpace:"nowrap" as const}}>
+    {undoInfo&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"#DBEAFE",border:"1px solid #8B5A2B",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:12,zIndex:200,boxShadow:"0 4px 20px #0008",whiteSpace:"nowrap" as const}}>
       <span style={{fontSize:13,color:"var(--text)"}}>↩ {undoInfo.label}</span>
-      <button onClick={desfazer} style={{background:"#7c8fff",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Desfazer</button>
+      <button onClick={desfazer} style={{background:"#8B5A2B",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Desfazer</button>
     </div>}
   </div>;
 }
@@ -5115,20 +5108,20 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div className="section-title" style={{marginBottom:0}}>🏭 Produção</div>
       {itens.length>0&&<span style={{background:"#c084fc22",color:"#c084fc",border:"1px solid #c084fc44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itens.length} item(ns)</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
+        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #3a1515",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
 
     {/* Category management (admin) */}
     {showCatMgmt&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #3a2a60"}}>
-      <div className="section-title" style={{color:"#a78bfa"}}>🏷️ Categorias de Produção</div>
+      <div className="section-title" style={{color:"#8B5CF6"}}>🏷️ Categorias de Produção</div>
       <div style={{marginBottom:10}}>
         {cats.map((c,idx)=>(
           <div key={c} style={{position:"relative" as const,display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
             <button onClick={()=>setIconPicker(iconPicker===c?null:c)} title="Alterar ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",fontSize:16,padding:"2px 4px",lineHeight:1}}>{prodCatIcon(c)}</button>
-            {iconPicker===c&&<div style={{position:"absolute" as const,top:36,left:0,zIndex:99,background:"#1a1030",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
-              {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>setCatIcon(c,em)} style={{background:prodCatIcon(c)===em?"#5b21b644":"none",border:prodCatIcon(c)===em?"1px solid #a78bfa":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
+            {iconPicker===c&&<div style={{position:"absolute" as const,top:36,left:0,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
+              {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>setCatIcon(c,em)} style={{background:prodCatIcon(c)===em?"#5b21b644":"none",border:prodCatIcon(c)===em?"1px solid #8B5CF6":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
             </div>}
             {editCat?.name===c
               ? <>
@@ -5136,20 +5129,20 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                     onChange={e=>setEditCat(ec=>ec?{...ec,val:e.target.value}:ec)}
                     onKeyDown={e=>{if(e.key==="Enter")renameCat(c,editCat.val);if(e.key==="Escape")setEditCat(null);}}
                     className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
-                  <button onClick={()=>renameCat(c,editCat.val)} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                  <button onClick={()=>renameCat(c,editCat.val)} style={{background:"#22C55E22",border:"1px solid #22C55E",borderRadius:5,color:"#22C55E",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
                   <button onClick={()=>setEditCat(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
                 </>
               : <>
                   <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"uppercase" as const}}>{c}</span>
                   <button onClick={()=>setEditCat({name:c,val:c})} title="Renomear"
-                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#8B5A2B",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
                   <div style={{display:"flex",gap:2}}>
                     <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#a78bfa",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#8B5CF6",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
                     <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#a78bfa",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                   </div>
-                  <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                  <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
                 </>
             }
           </div>
@@ -5157,19 +5150,19 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       </div>
       <div style={{position:"relative" as const,display:"flex",gap:6,alignItems:"center"}}>
         <button onClick={()=>setIconPicker(iconPicker==="_new"?null:"_new")} title="Escolher ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",fontSize:18,padding:"4px 6px",lineHeight:1}}>{novaIcone}</button>
-        {iconPicker==="_new"&&<div style={{position:"absolute" as const,bottom:42,left:0,zIndex:99,background:"#1a1030",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
-          {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>{setNovaIcone(em);setIconPicker(null);}} style={{background:novaIcone===em?"#5b21b644":"none",border:novaIcone===em?"1px solid #a78bfa":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
+        {iconPicker==="_new"&&<div style={{position:"absolute" as const,bottom:42,left:0,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
+          {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>{setNovaIcone(em);setIconPicker(null);}} style={{background:novaIcone===em?"#5b21b644":"none",border:novaIcone===em?"1px solid #8B5CF6":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
         </div>}
         <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0,flex:1}}/>
-        <button className="btn" onClick={addCat} style={{background:"#a78bfa",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
+        <button className="btn" onClick={addCat} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
       </div>
     </div>}
 
     {/* Product catalog */}
     {showProdMgmt&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showProdMgmt&&<div ref={prodFormRef} className="card" style={{marginBottom:12,border:"1px solid #1a4a1a"}}>
-      <div className="section-title" style={{color:"#4ade80",margin:0,marginBottom:10}}>📦 Produtos de Produção <span style={{fontSize:11,color:"#555"}}>({prodsCatalog.length})</span></div>
+      <div className="section-title" style={{color:"#22C55E",margin:0,marginBottom:10}}>📦 Produtos de Produção <span style={{fontSize:11,color:"#555"}}>({prodsCatalog.length})</span></div>
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
           onKeyDown={e=>{if(e.key==="Enter")saveProd();}} className="inp" style={{flex:"2 1 120px",marginBottom:0}}/>
@@ -5180,7 +5173,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
           {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
         </select>
-        <button className="btn" onClick={saveProd} style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
+        <button className="btn" onClick={saveProd} style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
         {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><SortCtrl id="prodCatalog" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/></div>
@@ -5192,8 +5185,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
             {p.cat&&<span style={{fontSize:10,color:"#c084fc",background:"#c084fc18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
-            <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#7c8fff",fontSize:13,padding:"0 3px"}}>✏️</button>
-            <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:13,padding:"0 3px"}}>🗑️</button>
+            <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#8B5A2B",fontSize:13,padding:"0 3px"}}>✏️</button>
+            <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:13,padding:"0 3px"}}>🗑️</button>
           </div>
         ))}
       </div>
@@ -5219,22 +5212,22 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               <button onClick={()=>{
                 if(isEdit){salvarEdicaoPedido(ped.id);}
                 else{const q:Record<string,string>={};const o:Record<string,string>={};(ped.itens||[]).forEach((it:any)=>{const k=`${ped.id}_${it.nome}`;q[k]=String(it.quantidade);o[k]=it.obs||"";});setEditQtds(q);setEditObs(o);setEditPedId(ped.id);}
-              }} style={{background:"none",border:`1px solid ${isEdit?"#4ade8044":"#fbbf2444"}`,borderRadius:5,color:isEdit?"#4ade80":"#fbbf24",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{isEdit?"💾":"✏️"}</button>
+              }} style={{background:"none",border:`1px solid ${isEdit?"#22C55E44":"#F59E0B44"}`,borderRadius:5,color:isEdit?"#22C55E":"#F59E0B",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{isEdit?"💾":"✏️"}</button>
               {isEdit&&<button onClick={()=>{setEditPedId(null);setEditQtds({});setEditObs({});}} style={{background:"none",border:"1px solid #88888844",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>✕</button>}
               <button onClick={()=>setAddToPedId(addToPedId===ped.id?null:ped.id)} title="Adicionar produto"
-                style={{background:"none",border:`1px solid ${addToPedId===ped.id?"#4ade8044":"#4ade8044"}`,borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{addToPedId===ped.id?"✕":"➕"}</button>
+                style={{background:"none",border:`1px solid ${addToPedId===ped.id?"#22C55E44":"#22C55E44"}`,borderRadius:5,color:"#22C55E",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{addToPedId===ped.id?"✕":"➕"}</button>
               <button onClick={()=>{
                 if(!confirm("Excluir este pedido?"))return;
                 _listaDeletados.add(ped.id);
                 setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).filter((p:any)=>p.id!==ped.id)}));
-              }} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:5,color:"#ff5c7a",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
+              }} style={{background:"none",border:"1px solid #EF444433",borderRadius:5,color:"#EF4444",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
             </div>
           </div>
           {!isCollapsed&&<>{(ped.itens||[]).map((it:any,j:number)=>{
             const key=`${ped.id}_${it.nome}`;
             return <div key={j} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:j<(ped.itens||[]).length-1?"1px solid var(--border)":"none"}}>
               <span style={{fontSize:12,flex:1}}>{prodCatIcon(it.categoria)} {it.nome}</span>
-              <span style={{fontSize:10,color:"#a78bfa"}}>{it.categoria||""}</span>
+              <span style={{fontSize:10,color:"#8B5CF6"}}>{it.categoria||""}</span>
               {it.qtdAtual&&<span style={{fontSize:10,color:"#888"}}>atual: {it.qtdAtual}</span>}
               {isEdit?<input type="number" inputMode="decimal" min="0" step="any"
                 value={editQtds[key]||""} onChange={e=>setEditQtds(q=>({...q,[key]:e.target.value}))}
@@ -5243,11 +5236,11 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               {it.obs&&!isEdit&&<span style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>({it.obs})</span>}
               {isEdit&&<input placeholder="Obs" value={editObs[key]||""} onChange={e=>setEditObs(o=>({...o,[key]:e.target.value}))}
                 className="inp" style={{width:80,marginBottom:0,fontSize:10,padding:"3px 5px"}}/>}
-              {isEdit&&<button onClick={()=>delItemFromPedido(ped.id,j)} title="Remover item" style={{background:"none",border:"none",cursor:"pointer",color:"#ff5c7a",fontSize:12,padding:"0 2px",flexShrink:0}}>🗑️</button>}
+              {isEdit&&<button onClick={()=>delItemFromPedido(ped.id,j)} title="Remover item" style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:12,padding:"0 2px",flexShrink:0}}>🗑️</button>}
             </div>;
           })}
-          {addToPedId===ped.id&&<div style={{marginTop:8,padding:"10px",background:"#0d1a0d",borderRadius:8,border:"1px solid #1a4a1a"}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#4ade80",marginBottom:8}}>➕ Adicionar Produto ao Pedido</div>
+          {addToPedId===ped.id&&<div style={{marginTop:8,padding:"10px",background:"#DCFCE7",borderRadius:8,border:"1px solid #1a4a1a"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginBottom:8}}>➕ Adicionar Produto ao Pedido</div>
             <div style={{position:"relative",marginBottom:6}}>
               <input placeholder="Nome do produto..." value={addToPedForm.nome}
                 onChange={e=>{setAddToPedForm(f=>({...f,nome:e.target.value}));setAddToPedSugg(true);}}
@@ -5285,7 +5278,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               <input placeholder="Observações..." value={addToPedForm.obs} onChange={e=>setAddToPedForm(f=>({...f,obs:e.target.value}))}
                 onKeyDown={e=>{if(e.key==="Enter")addItemToPedido(ped.id);}}
                 className="inp" style={{flex:1,marginBottom:0,fontSize:12}}/>
-              <button onClick={()=>addItemToPedido(ped.id)} className="btn" style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:12,fontWeight:700,flexShrink:0}}>✅ Adicionar</button>
+              <button onClick={()=>addItemToPedido(ped.id)} className="btn" style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:12,fontWeight:700,flexShrink:0}}>✅ Adicionar</button>
             </div>
           </div>}</>}
         </div>;
@@ -5299,7 +5292,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             <div style={{fontSize:36,marginBottom:10}}>📦</div>
             <div style={{fontSize:14,marginBottom:6,color:"var(--text)"}}>Nenhum produto cadastrado ainda.</div>
             <div style={{fontSize:12,marginBottom:16,color:"#555"}}>Adicione os produtos que serão usados nos pedidos.</div>
-            {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"#7c3aed",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
+            {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"#8B5CF6",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
           </div>
         : <>
             {/* Lista por categoria */}
@@ -5346,7 +5339,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             {/* Botões ao final da lista */}
             <div style={{display:"flex",gap:6,marginTop:16,marginBottom:24}}>
               <button onClick={gerarPedidoCatalog} className="btn" disabled={preenchidos===0}
-                style={{flex:1,background:preenchidos>0?"linear-gradient(135deg,#7c3aed,#5b21b6)":"var(--border2)",color:preenchidos>0?"#fff":"#888",padding:"14px",fontSize:14,fontWeight:700}}>
+                style={{flex:1,background:preenchidos>0?"linear-gradient(135deg,#8B5CF6,#5b21b6)":"var(--border2)",color:preenchidos>0?"#fff":"#888",padding:"14px",fontSize:14,fontWeight:700}}>
                 📋 Gerar Pedido{preenchidos>0?` (${preenchidos})`:""}
               </button>
               <button onClick={compartilharWhatsAppRapido} disabled={preenchidos===0} className="btn"
@@ -5358,7 +5351,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 🖨️
               </button>
               {preenchidos>0&&<button onClick={()=>{try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}setQtdsCatalog({});setQtdsAtual({});}} className="btn"
-                style={{background:"#1a0a0a",color:"#ff7a7a",border:"1px solid #3a1515",padding:"14px 14px",fontSize:14}} title="Zerar tudo">
+                style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #3a1515",padding:"14px 14px",fontSize:14}} title="Zerar tudo">
                 ✕
               </button>}
             </div>
@@ -5434,7 +5427,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>📦 Controle de Estoque</div>
-      <span style={{background:"#7c8fff22",color:"#7c8fff",border:"1px solid #7c8fff44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{empresa}</span>
+      <span style={{background:"#8B5A2B22",color:"#8B5A2B",border:"1px solid #8B5A2B44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{empresa}</span>
     </div>
 
     {/* ===== INVENTÁRIO ===== */}
@@ -5481,7 +5474,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
                   materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mp.id?{...m,estoqueAtual:novo,...(ajusteModal.dataValidade?{dataValidade:ajusteModal.dataValidade}:{})}:m),
                   movEstoque:[{id:uid(),mpId:mp.id,mpNome:mp.nome,tipo:ajusteModal.tipo,...(isPerda?{razaoPerda:ajusteModal.razaoPerda}:{}),quantidade:Math.abs(diff),unidade:mp.unidade||"un",custo:mp.ultimoValor||0,data:today(),descricao:desc,criadoEm:now},...(d.movEstoque||[])]}));
                 setAjusteModal(null);
-              }} style={{background:"#7c8fff",color:"#fff",padding:"10px",flex:1,fontSize:14}}>✅ Confirmar</button>
+              }} style={{background:"#8B5A2B",color:"#fff",padding:"10px",flex:1,fontSize:14}}>✅ Confirmar</button>
               <button className="btn" onClick={()=>setAjusteModal(null)} style={{background:"var(--border)",color:"#888",padding:"10px",flex:1,fontSize:14}}>Cancelar</button>
             </div>
           </div>
@@ -5489,7 +5482,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
         {mergeModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div className="card" style={{width:"100%",maxWidth:420}}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>🔗 Agrupar Produto</div>
-            <div style={{fontSize:12,color:"#888",marginBottom:12}}>Mesclar <b style={{color:"#7c8fff"}}>{mergeModal.src.nome}</b> em outro produto. O estoque e histórico serão somados.</div>
+            <div style={{fontSize:12,color:"#888",marginBottom:12}}>Mesclar <b style={{color:"#8B5A2B"}}>{mergeModal.src.nome}</b> em outro produto. O estoque e histórico serão somados.</div>
             <select value={mergeTgt} onChange={e=>setMergeTgt(e.target.value)} className="inp" style={{marginBottom:12}}>
               <option value="">— Selecione o produto destino —</option>
               {mpsAll.filter((m:any)=>m.id!==mergeModal.src.id).map((m:any)=><option key={m.id} value={m.id}>{m.nome} ({(m.estoqueAtual||0).toFixed(2)} {m.unidade})</option>)}
@@ -5499,27 +5492,27 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
                 if(!mergeTgt)return alert("Selecione o produto destino");
                 if(!confirm(`Mesclar "${mergeModal.src.nome}" em "${mpsAll.find((m:any)=>m.id===mergeTgt)?.nome}"? Esta ação não pode ser desfeita.`))return;
                 mergeProducts(mergeModal.src.id,mergeTgt);setMergeModal(null);setMergeTgt("");
-              }} style={{background:"#7c8fff",color:"#fff",padding:"10px",flex:1,fontSize:14}}>🔗 Mesclar</button>
+              }} style={{background:"#8B5A2B",color:"#fff",padding:"10px",flex:1,fontSize:14}}>🔗 Mesclar</button>
               <button className="btn" onClick={()=>{setMergeModal(null);setMergeTgt("");}} style={{background:"var(--border)",color:"#888",padding:"10px",flex:1,fontSize:14}}>Cancelar</button>
             </div>
           </div>
         </div>}
-        {(()=>{const s=(db.materiasPrimas||[]).filter((m:any)=>!mpIdsComMov.has(m.id)&&(m.estoqueAtual||0)<=0).length;return s>0?<div style={{background:"#1a1a2e",border:"1px solid #2a2a4a",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#888"}}>{s} produto{s>1?"s":""} do catálogo sem movimentação — visíveis em <span style={{color:"#7c8fff",fontWeight:700}}>Compras → 🗃️ Produtos</span>.</div>:null;})()}
-        {vencRed.length>0&&<div style={{background:"#1a0a0a",border:"1px solid #ff5c7a55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
-          <span style={{color:"#ff5c7a",fontWeight:700}}>🚨 Vencendo em até 3 dias: </span>
+        {(()=>{const s=(db.materiasPrimas||[]).filter((m:any)=>!mpIdsComMov.has(m.id)&&(m.estoqueAtual||0)<=0).length;return s>0?<div style={{background:"#DBEAFE",border:"1px solid #2a2a4a",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#888"}}>{s} produto{s>1?"s":""} do catálogo sem movimentação — visíveis em <span style={{color:"#8B5A2B",fontWeight:700}}>Compras → 🗃️ Produtos</span>.</div>:null;})()}
+        {vencRed.length>0&&<div style={{background:"#FEE2E2",border:"1px solid #EF444455",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+          <span style={{color:"#EF4444",fontWeight:700}}>🚨 Vencendo em até 3 dias: </span>
           {vencRed.map((m:any)=>m.nome).join(", ")}
         </div>}
-        {vencOrange.length>0&&<div style={{background:"#1a1200",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+        {vencOrange.length>0&&<div style={{background:"#FEF3C7",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
           <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Vencendo em 4–7 dias: </span>
           {vencOrange.map((m:any)=>m.nome).join(", ")}
         </div>}
-        {perdaPercGlobal>3&&<div style={{background:"#1a0a0a",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+        {perdaPercGlobal>3&&<div style={{background:"#FEE2E2",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
           <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Alto índice de perda: </span>
           <span style={{color:"#ccc"}}>{perdaPercGlobal.toFixed(1)}% do total comprado foi descartado (meta: &lt;3%)</span>
         </div>}
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px"}}>
-            <div style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(totalVal)}</div>
+            <div style={{color:"#22C55E",fontWeight:700,fontSize:14}}>{fmtMoney(totalVal)}</div>
             <div className="muted" style={{fontSize:10}}>Valor em estoque</div>
           </div>
           <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px",background:baixo.length?"#1a0e0a":"var(--bg3)"}}>
@@ -5527,7 +5520,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
             <div className="muted" style={{fontSize:10}}>Abaixo do mín.</div>
           </div>
           <div className="card" style={{flex:1,textAlign:"center",padding:"10px 6px",background:zerado.length?"#1a0a0a":"var(--bg3)"}}>
-            <div style={{color:"#ff5c7a",fontWeight:700,fontSize:14}}>{zerado.length}</div>
+            <div style={{color:"#EF4444",fontWeight:700,fontSize:14}}>{zerado.length}</div>
             <div className="muted" style={{fontSize:10}}>Sem estoque</div>
           </div>
         </div>
@@ -5541,12 +5534,12 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
         <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
           {[["todos","Todos"],["ok","✅ OK"],["baixo","⚠️ Baixo"],["zerado","🔴 Zerado"]].map(([k,l])=>(
             <button key={k} onClick={()=>setFiltroEst(k)} className="pill"
-              style={{background:filtroEst===k?"var(--border2)":"transparent",color:filtroEst===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
+              style={{background:filtroEst===k?"var(--border2)":"transparent",color:filtroEst===k?"#8B5A2B":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
           ))}
         </div>
         {mpsFiltradas.map((m:any)=>{
           const est=m.estoqueAtual||0;const min=m.estoqueMinimo||0;
-          const cor=est<=0?"#ff5c7a":min>0&&est<min?"#f59e0b":"#4ade80";
+          const cor=est<=0?"#EF4444":min>0&&est<min?"#f59e0b":"#22C55E";
           const movs=(db.movEstoque||[]).filter((mv:any)=>mv.mpId===m.id).sort((a:any,b:any)=>((b.criadoEm||"").localeCompare(a.criadoEm||""))).slice(0,10);
           const fornList=(m.fornecedores||[]) as string[];
           const regra=REGRAS_CAT[m.categoria||""]||null;
@@ -5555,33 +5548,33 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
           const isPerecAlta=regra?.perecivel==="alta";
           const vencido=m.dataValidade&&m.dataValidade<today();
           const vencendoBreve=m.dataValidade&&!vencido&&m.dataValidade<=em7Str;
-          return <div key={m.id} className="list-item" style={{marginBottom:8,borderLeft:vencido?"3px solid #ff5c7a":vencendoBreve?"3px solid #f59e0b":"none"}}>
+          return <div key={m.id} className="list-item" style={{marginBottom:8,borderLeft:vencido?"3px solid #EF4444":vencendoBreve?"3px solid #f59e0b":"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
               <span style={{fontWeight:700,flex:1,marginRight:8}}>{catIcon} {m.nome}</span>
               <span style={{fontWeight:700,color:cor,whiteSpace:"nowrap" as const}}>{est.toFixed(2)} {m.unidade}</span>
             </div>
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap" as const}}>
               <span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{m.categoria}</span>
-              {!isCMV&&<span className="tag" style={{background:"#2a1a0a",color:"#f59e0b",fontSize:10,border:"1px solid #f59e0b44"}}>não CMV</span>}
-              {isPerecAlta&&<span className="tag" style={{background:"#1a0a1a",color:"#a78bfa",fontSize:10}}>perecível</span>}
+              {!isCMV&&<span className="tag" style={{background:"#FEF3C7",color:"#f59e0b",fontSize:10,border:"1px solid #f59e0b44"}}>não CMV</span>}
+              {isPerecAlta&&<span className="tag" style={{background:"#F3E8FF",color:"#8B5CF6",fontSize:10}}>perecível</span>}
               <span className="muted" style={{fontSize:11}}>Custo: {fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
               {min>0&&<span className="muted" style={{fontSize:11,color:est<min?"#f59e0b":"#555"}}>Mín: {min} {m.unidade}</span>}
-              {est>0&&<span className="muted" style={{fontSize:11,color:"#4ade80"}}>≈ {fmtMoney(est*(m.ultimoValor||0))}</span>}
+              {est>0&&<span className="muted" style={{fontSize:11,color:"#22C55E"}}>≈ {fmtMoney(est*(m.ultimoValor||0))}</span>}
             </div>
-            {m.dataValidade&&<div style={{fontSize:11,marginBottom:6,color:vencido?"#ff5c7a":vencendoBreve&&m.dataValidade<=em3Str?"#ff5c7a":vencendoBreve?"#f59e0b":"#555"}}>
+            {m.dataValidade&&<div style={{fontSize:11,marginBottom:6,color:vencido?"#EF4444":vencendoBreve&&m.dataValidade<=em3Str?"#EF4444":vencendoBreve?"#f59e0b":"#555"}}>
               📅 Validade: {fmtDate(m.dataValidade)}{vencido?" — VENCIDO":vencendoBreve?" — vencendo em breve":""}
             </div>}
             {fornList.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
               <span style={{fontSize:10,color:"#555",alignSelf:"center"}}>Fornecedor:</span>
-              {fornList.map((f:string,i:number)=><span key={i} className="tag" style={{background:"#1e2a4a",color:"#7c8fff",fontSize:10,border:"1px solid #2a3a6a"}}>{f}</span>)}
+              {fornList.map((f:string,i:number)=><span key={i} className="tag" style={{background:"#DBEAFE",color:"#8B5A2B",fontSize:10,border:"1px solid #2a3a6a"}}>{f}</span>)}
             </div>}
-            {min>0&&<div style={{background:"#1e2235",borderRadius:4,height:5,marginBottom:8}}>
+            {min>0&&<div style={{background:"#DBEAFE",borderRadius:4,height:5,marginBottom:8}}>
               <div style={{background:cor,height:5,borderRadius:4,width:`${Math.min(100,min>0?(est/min)*100:0)}%`,transition:"width .3s"}}/>
             </div>}
             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
-              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"var(--border)",color:"#7c8fff",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
-              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"perda",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"#1a0a0a",color:"#f59e0b",padding:"5px 10px",fontSize:12,border:"1px solid #f59e0b44"}}>🗑️ Perda</button>
-              <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"#a78bfa",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
+              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"var(--border)",color:"#8B5A2B",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
+              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"perda",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"#FEE2E2",color:"#f59e0b",padding:"5px 10px",fontSize:12,border:"1px solid #f59e0b44"}}>🗑️ Perda</button>
+              <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"#8B5CF6",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <input type="number" min="0" step="0.1" value={m.estoqueMinimo||""} placeholder="0"
                   onChange={e=>{const v=parseFloat(e.target.value)||0;setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((x:any)=>x.id===m.id?{...x,estoqueMinimo:v}:x)}));}}
@@ -5592,7 +5585,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
             </div>
             {verHistEst===m.id&&movs.length>0&&<div style={{marginTop:8,background:"var(--bg4)",borderRadius:8,padding:"8px 10px"}}>
               {movs.map((mv:any)=><div key={mv.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid #1e2235"}}>
-                <span style={{color:mv.tipo==="entrada"?"#4ade80":mv.tipo==="perda"?"#f59e0b":mv.tipo==="saida"?"#ff5c7a":"#888"}}>{mv.tipo==="entrada"?"▲":mv.tipo==="perda"?"🗑️":mv.tipo==="saida"?"▼":"🔧"} {(mv.quantidade||0).toFixed(2)} {mv.unidade}{mv.razaoPerda?` (${mv.razaoPerda})`:""}</span>
+                <span style={{color:mv.tipo==="entrada"?"#22C55E":mv.tipo==="perda"?"#f59e0b":mv.tipo==="saida"?"#EF4444":"#888"}}>{mv.tipo==="entrada"?"▲":mv.tipo==="perda"?"🗑️":mv.tipo==="saida"?"▼":"🔧"} {(mv.quantidade||0).toFixed(2)} {mv.unidade}{mv.razaoPerda?` (${mv.razaoPerda})`:""}</span>
                 <span className="muted" style={{flex:1,marginLeft:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mv.descricao}</span>
                 <span className="muted" style={{flexShrink:0,marginLeft:8}}>{fmtDate(mv.data)}</span>
               </div>)}
@@ -5654,19 +5647,19 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
           <span style={{fontSize:11,color:"#666"}}>Período:</span>
           {([[7,"7d"],[15,"15d"],[30,"30d"],[60,"60d"],[90,"90d"]] as [number,string][]).map(([d,l])=>(
             <button key={d} onClick={()=>setPeriodoAnl(d)} className="pill"
-              style={{background:periodoAnl===d?"#7c8fff":"var(--border)",color:periodoAnl===d?"#fff":"#666",fontSize:11,padding:"4px 10px"}}>{l}</button>
+              style={{background:periodoAnl===d?"#8B5A2B":"var(--border)",color:periodoAnl===d?"#fff":"#666",fontSize:11,padding:"4px 10px"}}>{l}</button>
           ))}
         </div>
-        {cmvPct>30&&receitaBruta>0&&<div style={{background:"#1a0a0a",border:"1px solid #ff5c7a55",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
-          <span style={{color:"#ff5c7a",fontWeight:700}}>🚨 CMV alto: {cmvPct.toFixed(1)}% da receita</span>
+        {cmvPct>30&&receitaBruta>0&&<div style={{background:"#FEE2E2",border:"1px solid #EF444455",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
+          <span style={{color:"#EF4444",fontWeight:700}}>🚨 CMV alto: {cmvPct.toFixed(1)}% da receita</span>
           <span style={{color:"#ccc"}}> — meta ≤30%. Revise consumos e perdas.</span>
         </div>}
-        {perdaPercPer>3&&comprasPer>0&&<div style={{background:"#1a1200",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
+        {perdaPercPer>3&&comprasPer>0&&<div style={{background:"#FEF3C7",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
           <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Perdas: {perdaPercPer.toFixed(1)}% das compras</span>
           <span style={{color:"#ccc"}}> — meta &lt;3% ({fmtMoney(perdasPer)} em {periodoAnl}d)</span>
         </div>}
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
-          {([["#4ade80",fmtMoney(totalValor),"Valor em estoque"],["#7c8fff",fmtMoney(cmvReal),`CMV real (${periodoAnl}d)`],["#f59e0b",fmtMoney(comprasPer),`Compras (${periodoAnl}d)`],["#ff5c7a",fmtMoney(perdasPer),`Perdas (${periodoAnl}d)`]] as [string,string,string][]).map(([cor,val,lab])=>(
+          {([["#22C55E",fmtMoney(totalValor),"Valor em estoque"],["#8B5A2B",fmtMoney(cmvReal),`CMV real (${periodoAnl}d)`],["#f59e0b",fmtMoney(comprasPer),`Compras (${periodoAnl}d)`],["#EF4444",fmtMoney(perdasPer),`Perdas (${periodoAnl}d)`]] as [string,string,string][]).map(([cor,val,lab])=>(
             <div key={lab} className="card" style={{flex:"1 1 45%",textAlign:"center",padding:"12px 8px"}}>
               <div style={{color:cor,fontWeight:700,fontSize:15}}>{val}</div>
               <div className="muted" style={{fontSize:10}}>{lab}</div>
@@ -5679,7 +5672,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
             <div className="muted" style={{fontSize:10}}>Receita bruta: {fmtMoney(receitaBruta)} ({periodoAnl}d)</div>
           </div>
           <div style={{textAlign:"right" as const}}>
-            <div style={{fontSize:20,fontWeight:800,color:cmvPct>30?"#ff5c7a":cmvPct>25?"#f59e0b":"#4ade80"}}>{cmvPct.toFixed(1)}%</div>
+            <div style={{fontSize:20,fontWeight:800,color:cmvPct>30?"#EF4444":cmvPct>25?"#f59e0b":"#22C55E"}}>{cmvPct.toFixed(1)}%</div>
             <div style={{fontSize:10,color:"#555"}}>Meta: ≤30%</div>
           </div>
         </div>}
@@ -5700,10 +5693,10 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
             return <div key={cat} style={{marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:3,fontSize:12}}>
                 <span>{catR?.icon||"📦"} <span style={{textTransform:"capitalize" as const}}>{cat}</span> <span className="muted">({data.items})</span>{!data.isCMV&&<span style={{marginLeft:4,fontSize:10,color:"#f59e0b"}}>não CMV</span>}</span>
-                <span style={{color:"#4ade80",fontWeight:700}}>{fmtMoney(data.valor)} <span className="muted">({pct.toFixed(0)}%)</span></span>
+                <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(data.valor)} <span className="muted">({pct.toFixed(0)}%)</span></span>
               </div>
-              <div style={{background:"#1e2235",borderRadius:4,height:6}}>
-                <div style={{background:data.isCMV?"#4ade80":"#f59e0b",height:6,borderRadius:4,width:`${Math.min(100,pct)}%`,transition:"width .5s"}}/>
+              <div style={{background:"#DBEAFE",borderRadius:4,height:6}}>
+                <div style={{background:data.isCMV?"#22C55E":"#f59e0b",height:6,borderRadius:4,width:`${Math.min(100,pct)}%`,transition:"width .5s"}}/>
               </div>
             </div>;
           })}
@@ -5711,23 +5704,23 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
         </div>
         <div className="section-title" style={{fontSize:12,marginBottom:8}}>🔄 Giro de Estoque</div>
         {criticos.length>0&&<div style={{marginBottom:10}}>
-          <div style={{fontSize:11,color:"#ff5c7a",fontWeight:700,marginBottom:4}}>🔴 Crítico — menos de 3 dias</div>
+          <div style={{fontSize:11,color:"#EF4444",fontWeight:700,marginBottom:4}}>🔴 Crítico — menos de 3 dias</div>
           {criticos.map((m:any)=><div key={m.id} className="list-item" style={{marginBottom:4,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:12,fontWeight:600}}>{REGRAS_CAT[m.categoria||""]?.icon||"📦"} {m.nome}</span>
-            <span style={{color:"#ff5c7a",fontWeight:700,fontSize:13}}>{m.diasCob.toFixed(1)}d</span>
+            <span style={{color:"#EF4444",fontWeight:700,fontSize:13}}>{m.diasCob.toFixed(1)}d</span>
           </div>)}
         </div>}
         {comGiro.length>0?<div style={{marginBottom:10}}>
           <div style={{fontSize:11,color:"#888",fontWeight:700,marginBottom:4}}>📊 Cobertura por produto (últimos {periodoAnl} dias)</div>
           {[...comGiro].sort((a:any,b:any)=>a.diasCob-b.diasCob).slice(0,20).map((m:any)=>{
             const expected=REGRAS_CAT[m.categoria||""]?.dias||30;
-            const cor=m.diasCob<3?"#ff5c7a":m.diasCob<expected?"#f59e0b":"#4ade80";
+            const cor=m.diasCob<3?"#EF4444":m.diasCob<expected?"#f59e0b":"#22C55E";
             return <div key={m.id} className="list-item" style={{marginBottom:4,padding:"8px 12px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                 <span style={{fontSize:12,fontWeight:600}}>{REGRAS_CAT[m.categoria||""]?.icon||"📦"} {m.nome}</span>
                 <span style={{color:cor,fontWeight:700,fontSize:12}}>{m.diasCob.toFixed(1)}d <span style={{fontSize:10,color:"#555"}}>/ {expected}d esp.</span></span>
               </div>
-              <div style={{background:"#1e2235",borderRadius:4,height:4}}>
+              <div style={{background:"#DBEAFE",borderRadius:4,height:4}}>
                 <div style={{background:cor,height:4,borderRadius:4,width:`${Math.min(100,(m.diasCob/expected)*100)}%`}}/>
               </div>
             </div>;
@@ -5754,8 +5747,8 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
               <div style={{fontSize:10,color:"#555"}}>CMP: {fmtMoney(cmp)}/{m.unidade}{catR?.cmv===false?<span style={{color:"#f59e0b",marginLeft:4}}>não CMV</span>:""}</div>
             </div>
             <div style={{textAlign:"right" as const}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#7c8fff"}}>{fmtMoney(ult)}</div>
-              {Math.abs(varP)>0.5&&<div style={{fontSize:10,color:varP>0?"#ff5c7a":"#4ade80"}}>{varP>0?"+":""}{varP.toFixed(1)}% vs CMP</div>}
+              <div style={{fontSize:12,fontWeight:700,color:"#8B5A2B"}}>{fmtMoney(ult)}</div>
+              {Math.abs(varP)>0.5&&<div style={{fontSize:10,color:varP>0?"#EF4444":"#22C55E"}}>{varP>0?"+":""}{varP.toFixed(1)}% vs CMP</div>}
             </div>
           </div>;
         })}
@@ -5778,11 +5771,11 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
       return <div>
         <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
           <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"10px 6px"}}>
-            <div style={{color:"#4ade80",fontWeight:700,fontSize:13}}>{fmtMoney(totEnt)}</div>
+            <div style={{color:"#22C55E",fontWeight:700,fontSize:13}}>{fmtMoney(totEnt)}</div>
             <div className="muted" style={{fontSize:10}}>Total entradas</div>
           </div>
           <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"10px 6px"}}>
-            <div style={{color:"#ff5c7a",fontWeight:700,fontSize:13}}>{fmtMoney(totSai)}</div>
+            <div style={{color:"#EF4444",fontWeight:700,fontSize:13}}>{fmtMoney(totSai)}</div>
             <div className="muted" style={{fontSize:10}}>Total saídas</div>
           </div>
           <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"10px 6px",background:totPerd>0?"#1a0e00":"var(--bg3)"}}>
@@ -5800,12 +5793,12 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
         <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
           {[["todos","Todos"],["entrada","▲ Entradas"],["saida","▼ Saídas"],["perda","🗑️ Perdas"],["ajuste","🔧 Ajustes"]].map(([k,l])=>(
             <button key={k} onClick={()=>setFiltroMov(k)} className="pill"
-              style={{background:filtroMov===k?"var(--border2)":"transparent",color:filtroMov===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:11,padding:"4px 10px"}}>{l}</button>
+              style={{background:filtroMov===k?"var(--border2)":"transparent",color:filtroMov===k?"#8B5A2B":"#555",border:"1px solid #252840",fontSize:11,padding:"4px 10px"}}>{l}</button>
           ))}
         </div>
         {filtradas.map((mv:any)=>{
           const isPerda=mv.tipo==="perda";
-          const cor=mv.tipo==="entrada"?"#4ade80":isPerda?"#f59e0b":mv.tipo==="saida"?"#ff5c7a":"#888";
+          const cor=mv.tipo==="entrada"?"#22C55E":isPerda?"#f59e0b":mv.tipo==="saida"?"#EF4444":"#888";
           const icon=mv.tipo==="entrada"?"▲":isPerda?"🗑️":mv.tipo==="saida"?"▼":"🔧";
           return <div key={mv.id} className="list-item" style={{marginBottom:6,padding:"8px 12px",borderLeft:isPerda?"3px solid #f59e0b44":"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
@@ -6111,7 +6104,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
     {contasAtrasadas.length>0&&<div style={{background:"linear-gradient(135deg,#1a0808,#2a0a0a)",border:"1px solid #7f1d1d",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
         <span style={{fontSize:18}}>🔴</span>
-        <span style={{fontWeight:700,color:"#ff5c7a",fontSize:14}}>{contasAtrasadas.length} conta{contasAtrasadas.length>1?"s":""} em atraso</span>
+        <span style={{fontWeight:700,color:"#EF4444",fontSize:14}}>{contasAtrasadas.length} conta{contasAtrasadas.length>1?"s":""} em atraso</span>
       </div>
       {contasAtrasadas.slice(0,3).map((c:any)=>{
         const dias=Math.floor((new Date(today()).getTime()-new Date(c.vencimento).getTime())/(1000*60*60*24));
@@ -6132,21 +6125,21 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
             <button onClick={()=>setVerConta(null)} style={{background:"none",border:"none",color:"#888",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
           </div>
           <div className="muted" style={{fontSize:12,marginBottom:8}}>{fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div>
-          {verConta.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#0a0d18",borderRadius:7,padding:"5px 8px",marginBottom:8}}>
+          {verConta.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#DBEAFE",borderRadius:7,padding:"5px 8px",marginBottom:8}}>
             <span style={{fontSize:9,fontFamily:"monospace",color:"#555",flex:1,wordBreak:"break-all" as const,lineHeight:1.4}}>{verConta.chNFe}</span>
             <button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"none",border:"1px solid #1e2235",borderRadius:5,color:"#666",padding:"2px 7px",fontSize:10,cursor:"pointer",whiteSpace:"nowrap" as const}}>📋 Copiar chave</button>
           </div>}
-          {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"#1a2040",color:"#60a5fa",border:"1px solid #2a3a6a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:8,width:"100%"}}>
+          {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"#DBEAFE",color:"#60a5fa",border:"1px solid #2a3a6a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:8,width:"100%"}}>
             <span>📎</span><span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{verConta.anexo.nome}</span><span style={{fontSize:11,color:"#888"}}>abrir</span>
           </button>}
           <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
-            {itens.length>0&&<button onClick={()=>imprimirNFe(verConta,itens)} style={{background:"#1a2a1a",color:"#4ade80",border:"1px solid #2a4a2a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            {itens.length>0&&<button onClick={()=>imprimirNFe(verConta,itens)} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #2a4a2a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               🖨️ Imprimir / PDF
             </button>}
-            {verConta.xmlNFe&&<button onClick={()=>baixarXmlNFe(verConta.xmlNFe,verConta.nNF||"",verConta.fornecedorNome||"")} style={{background:"#1a1a2e",color:"#7c8fff",border:"1px solid #2a2a5a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            {verConta.xmlNFe&&<button onClick={()=>baixarXmlNFe(verConta.xmlNFe,verConta.nNF||"",verConta.fornecedorNome||"")} style={{background:"#DBEAFE",color:"#8B5A2B",border:"1px solid #2a2a5a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               📥 Baixar XML
             </button>}
-            {verConta.chNFe&&<button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"#0d1020",color:"#888",border:"1px solid #1e2235",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            {verConta.chNFe&&<button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"#DBEAFE",color:"#888",border:"1px solid #1e2235",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               📋 Copiar chave
             </button>}
           </div>
@@ -6176,7 +6169,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
       <div style={{overflowX:"auto",marginBottom:12,paddingBottom:4}}>
         <div style={{display:"flex",gap:6,minWidth:"max-content"}}>
           <button onClick={()=>setMesFiltro("todos")} className="pill"
-            style={{background:mesFiltro==="todos"?"#7c8fff":"var(--bg4)",color:mesFiltro==="todos"?"#fff":"#666",fontSize:12,padding:"7px 14px",whiteSpace:"nowrap" as const,border:"1px solid #252840"}}>
+            style={{background:mesFiltro==="todos"?"#8B5A2B":"var(--bg4)",color:mesFiltro==="todos"?"#fff":"#666",fontSize:12,padding:"7px 14px",whiteSpace:"nowrap" as const,border:"1px solid #252840"}}>
             Todos
           </button>
           {mesesDisponiveis.map(mes=>{
@@ -6184,7 +6177,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
             const isCur=mesFiltro===mes;
             const isHoje=mes===today().slice(0,7);
             return <button key={mes} onClick={()=>setMesFiltro(mes)} className="pill"
-              style={{background:isCur?"#7c8fff":isHoje?"#1a1f3a":"var(--bg4)",color:isCur?"#fff":isHoje?"#a0a8ff":"#666",fontSize:12,padding:"7px 14px",whiteSpace:"nowrap" as const,border:`1px solid ${isCur?"#7c8fff":isHoje?"#3a3f7a":"#252840"}`,position:"relative" as const,fontWeight:isHoje&&!isCur?600:400}}>
+              style={{background:isCur?"#8B5A2B":isHoje?"#1a1f3a":"var(--bg4)",color:isCur?"#fff":isHoje?"#a0a8ff":"#666",fontSize:12,padding:"7px 14px",whiteSpace:"nowrap" as const,border:`1px solid ${isCur?"#8B5A2B":isHoje?"#3a3f7a":"#252840"}`,position:"relative" as const,fontWeight:isHoje&&!isCur?600:400}}>
               {fmtMes(mes)}
               {pend>0&&<span style={{marginLeft:5,background:isCur?"rgba(255,255,255,0.3)":"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{pend}</span>}
             </button>;
@@ -6194,7 +6187,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
       <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
         {[["todos","Todos"],["pendente","Pendente"],["pago","Pago"]].map(([k,l])=>(
           <button key={k} onClick={()=>setFiltro(k)} className="pill"
-            style={{background:filtro===k?"var(--border2)":"transparent",color:filtro===k?"#7c8fff":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
+            style={{background:filtro===k?"var(--border2)":"transparent",color:filtro===k?"#8B5A2B":"#555",border:"1px solid #252840",fontSize:12,padding:"5px 12px"}}>{l}</button>
         ))}
         <button onClick={()=>setSortDir(s=>s==="asc"?"desc":"asc")} className="pill"
           style={{background:"var(--border)",color:"#888",border:"1px solid #252840",fontSize:12,padding:"5px 12px",marginLeft:"auto"}}>
@@ -6203,8 +6196,8 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
       </div>
       <div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar descrição, fornecedor ou categoria..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
       <div style={{display:"flex",gap:10,marginBottom:14}}>
-        <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#ff5c7a",fontWeight:700,fontSize:16}}>{fmtMoney(totPend)}</div><div className="muted" style={{fontSize:11}}>A Pagar</div></div>
-        <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#4ade80",fontWeight:700,fontSize:16}}>{fmtMoney(totPago)}</div><div className="muted" style={{fontSize:11}}>Pago</div></div>
+        <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#EF4444",fontWeight:700,fontSize:16}}>{fmtMoney(totPend)}</div><div className="muted" style={{fontSize:11}}>A Pagar</div></div>
+        <div className="card" style={{flex:1,textAlign:"center"}}><div style={{color:"#22C55E",fontWeight:700,fontSize:16}}>{fmtMoney(totPago)}</div><div className="muted" style={{fontSize:11}}>Pago</div></div>
       </div>
 
       {/* ── Recurring accounts section ── */}
@@ -6213,9 +6206,9 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
           style={{padding:"10px 14px",cursor:"pointer",background:"linear-gradient(135deg,#1a1030,#1a1540)",display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:14,transition:"transform .2s",transform:recorrenteCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▼</span>
           <span style={{fontSize:15}}>🔄</span>
-          <span style={{fontWeight:700,fontSize:14,color:"#a78bfa",flex:1}}>Recorrentes</span>
+          <span style={{fontWeight:700,fontSize:14,color:"#8B5CF6",flex:1}}>Recorrentes</span>
           <span style={{fontSize:11,color:"#888"}}>{gruposList.length} {gruposList.length===1?"série":"séries"}</span>
-          <span style={{fontWeight:700,fontSize:13,color:"#a78bfa"}}>{fmtMoney(totalRecorrente)}</span>
+          <span style={{fontWeight:700,fontSize:13,color:"#8B5CF6"}}>{fmtMoney(totalRecorrente)}</span>
         </div>
         {!recorrenteCollapsed&&<div style={{padding:"6px 0"}}>
           {gruposList.map(({gid,items:sorted,totalG,pagasG,descBase,nextPend})=>{
@@ -6227,18 +6220,18 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:13,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
                     {descBase}
-                    <span style={{fontSize:10,color:"#a78bfa",background:"#2d1a4f",borderRadius:20,padding:"1px 7px",fontWeight:700}}>{sorted.length}x</span>
+                    <span style={{fontSize:10,color:"#8B5CF6",background:"#F3E8FF",borderRadius:20,padding:"1px 7px",fontWeight:700}}>{sorted.length}x</span>
                   </div>
                   <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap" as const}}>
                     {sorted[0].categoria&&<span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{sorted[0].categoria}</span>}
                     {sorted[0].formaPag&&<span>{sorted[0].formaPag}</span>}
                     {sorted[0].fornecedor&&<span>• {sorted[0].fornecedor}</span>}
-                    {nextPend&&<span style={{color:"#fbbf24"}}>• Próx: {fmtDate(nextPend.vencimento)}</span>}
+                    {nextPend&&<span style={{color:"#F59E0B"}}>• Próx: {fmtDate(nextPend.vencimento)}</span>}
                   </div>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontWeight:700,fontSize:14,color:"#a78bfa"}}>{fmtMoney(totalG)}</div>
-                  <div style={{fontSize:11,color:pagasG===sorted.length?"#4ade80":"#888"}}>{pagasG}/{sorted.length} pagas</div>
+                  <div style={{fontWeight:700,fontSize:14,color:"#8B5CF6"}}>{fmtMoney(totalG)}</div>
+                  <div style={{fontSize:11,color:pagasG===sorted.length?"#22C55E":"#888"}}>{pagasG}/{sorted.length} pagas</div>
                 </div>
               </div>
               {expanded&&<div style={{background:"var(--bg2)"}}>
@@ -6246,21 +6239,21 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
                   <div key={c.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
                       <span style={{fontSize:13,fontWeight:600}}>{c.descricao}</span>
-                      <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a"}}>{fmtMoney(parseMoney(c.valor))}</span>
+                      <span style={{fontWeight:700,color:c.status==="pago"?"#22C55E":"#EF4444"}}>{fmtMoney(parseMoney(c.valor))}</span>
                     </div>
                     <div style={{fontSize:11,color:"#888",marginBottom:6}}>{fmtDate(c.vencimento)}</div>
                     <div style={{display:"flex",gap:5}}>
-                      <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
-                      {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"5px 10px",fontSize:11}}>📎</button>}
+                      <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#22C55E":"#F59E0B",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
+                      {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#DBEAFE",color:"#60a5fa",padding:"5px 10px",fontSize:11}}>📎</button>}
                       <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"5px 10px",fontSize:11}}>✏️</button>
-                      <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>🗑️</button>
+                      <button className="btn" onClick={()=>del(c.id)} style={{background:"#F3E8FF",color:"#EF4444",padding:"5px 10px",fontSize:11}}>🗑️</button>
                     </div>
                   </div>
                 ))}
                 <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-                  <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#1a2a1a",color:"#4ade80",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
-                  <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"#7c8fff",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
-                  <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
+                  <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#DCFCE7",color:"#22C55E",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
+                  <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"#8B5A2B",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
+                  <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"#F3E8FF",color:"#EF4444",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
                 </div>
               </div>}
             </div>;
@@ -6282,11 +6275,11 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
             style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:collapsed?12:"12px 12px 0 0",background:"var(--bg3)",cursor:"pointer",border:"1px solid var(--border)",borderBottom:collapsed?"1px solid var(--border)":"none"}}>
             <span style={{fontSize:12,transition:"transform .2s",transform:collapsed?"rotate(-90deg)":"rotate(0deg)"}}>▼</span>
             <span style={{fontSize:13}}>{isToday?"📌":isPast?"⏰":"📅"}</span>
-            <span style={{fontWeight:700,fontSize:13,color:isToday?"#7c8fff":isPast?"#ff5c7a":"#e8eaf0"}}>{date==="sem-data"?"Sem data":fmtDate(date)}</span>
-            {isToday&&<span style={{fontSize:9,color:"#7c8fff",background:"#1a1f3a",borderRadius:20,padding:"1px 7px",fontWeight:700}}>HOJE</span>}
+            <span style={{fontWeight:700,fontSize:13,color:isToday?"#8B5A2B":isPast?"#EF4444":"#e8eaf0"}}>{date==="sem-data"?"Sem data":fmtDate(date)}</span>
+            {isToday&&<span style={{fontSize:9,color:"#8B5A2B",background:"#DBEAFE",borderRadius:20,padding:"1px 7px",fontWeight:700}}>HOJE</span>}
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-              {pendDia>0&&<span style={{fontSize:10,color:"#ff5c7a",background:"#2a1015",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pendDia} pend.</span>}
-              {pagasDia>0&&<span style={{fontSize:10,color:"#4ade80",background:"#0a1a0a",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pagasDia} paga{pagasDia>1?"s":""}</span>}
+              {pendDia>0&&<span style={{fontSize:10,color:"#EF4444",background:"#FEE2E2",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pendDia} pend.</span>}
+              {pagasDia>0&&<span style={{fontSize:10,color:"#22C55E",background:"#DCFCE7",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pagasDia} paga{pagasDia>1?"s":""}</span>}
               <span style={{fontSize:13,color:"#888",fontWeight:700}}>{fmtMoney(totalDia)}</span>
             </div>
           </div>
@@ -6295,23 +6288,23 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
               <div key={c.id} style={{padding:"12px 14px",borderTop:"1px solid var(--border)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                   <span style={{fontWeight:600,flex:1,marginRight:8}}>{c.descricao}</span>
-                  <span style={{fontWeight:700,color:c.status==="pago"?"#4ade80":"#ff5c7a",whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(c.valor))}</span>
+                  <span style={{fontWeight:700,color:c.status==="pago"?"#22C55E":"#EF4444",whiteSpace:"nowrap"}}>{fmtMoney(parseMoney(c.valor))}</span>
                 </div>
                 <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginBottom:6,fontSize:11,color:"#888",alignItems:"center"}}>
-                  {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"var(--border)",color:c.categoria==="Adiantamento"?"#fbbf24":"#888"}}>{c.categoria}</span>}
+                  {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#2a2010":"var(--border)",color:c.categoria==="Adiantamento"?"#F59E0B":"#888"}}>{c.categoria}</span>}
                   {c.formaPag&&<span>{c.formaPag}</span>}
                   {c.fornecedor&&<span>• {c.fornecedor}</span>}
-                  {c.origem==="compra"&&<span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>compra</span>}
+                  {c.origem==="compra"&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa",fontSize:10}}>compra</span>}
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-                  <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#4ade80":"#fbbf24",padding:"6px 12px",fontSize:12}}>
+                  <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#1a2a1a":"#1a1f2e",color:c.status==="pago"?"#22C55E":"#F59E0B",padding:"6px 12px",fontSize:12}}>
                     {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
                   </button>
-                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
-                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"#1a2a1a",color:"#4ade80",padding:"6px 12px",fontSize:12}}>🖨️</button>}
-                  {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#1a2040",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>📎</button>}
+                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#DBEAFE",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
+                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>🖨️</button>}
+                  {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#DBEAFE",color:"#60a5fa",padding:"6px 12px",fontSize:12}}>📎</button>}
                   <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-                  <button className="btn" onClick={()=>del(c.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+                  <button className="btn" onClick={()=>del(c.id)} style={{background:"#F3E8FF",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️</button>
                 </div>
               </div>
             ))}
@@ -6386,20 +6379,20 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
                   return <button key={v} type="button" onClick={()=>{
                     const cur=form.diasSemana||[];
                     setForm((f:any)=>({...f,diasSemana:sel?cur.filter((d:number)=>d!==v):[...cur,v].sort((a:number,b:number)=>a-b)}));
-                  }} style={{background:sel?"#7c8fff":"var(--bg4)",color:sel?"#fff":"#666",border:`1px solid ${sel?"#7c8fff":"var(--border)"}`,borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer",fontWeight:sel?700:400}}>{l}</button>;
+                  }} style={{background:sel?"#8B5A2B":"var(--bg4)",color:sel?"#fff":"#666",border:`1px solid ${sel?"#8B5A2B":"var(--border)"}`,borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer",fontWeight:sel?700:400}}>{l}</button>;
                 })}
               </div>
               <div style={{display:"flex",gap:6}}>
                 <button type="button" onClick={()=>setForm((f:any)=>({...f,diasSemana:[1,2,3,4,5]}))}
-                  style={{background:"var(--border)",color:"#7c8fff",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Dias úteis</button>
+                  style={{background:"var(--border)",color:"#8B5A2B",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Dias úteis</button>
                 <button type="button" onClick={()=>setForm((f:any)=>({...f,diasSemana:[1,2,3,4,5,6]}))}
                   style={{background:"var(--border)",color:"#888",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Seg–Sáb</button>
                 <button type="button" onClick={()=>setForm((f:any)=>({...f,diasSemana:[0,1,2,3,4,5,6]}))}
                   style={{background:"var(--border)",color:"#888",border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>Todos</button>
               </div>
-              {!(form.diasSemana||[]).length&&<div style={{fontSize:11,color:"#ff5c7a",marginTop:4}}>Selecione pelo menos um dia.</div>}
+              {!(form.diasSemana||[]).length&&<div style={{fontSize:11,color:"#EF4444",marginTop:4}}>Selecione pelo menos um dia.</div>}
             </div>}
-            {parseInt(form.parcelas)>1&&<div style={{marginTop:8,fontSize:11,color:"#7c8fff",background:"#0d1220",borderRadius:6,padding:"6px 10px"}}>
+            {parseInt(form.parcelas)>1&&<div style={{marginTop:8,fontSize:11,color:"#8B5A2B",background:"#DBEAFE",borderRadius:6,padding:"6px 10px"}}>
               {(()=>{
                 const n=parseInt(form.parcelas)||1;
                 const v=parseMoney(form.valor);
@@ -6414,8 +6407,8 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
           <div style={{fontSize:12,color:"#888",marginBottom:6}}>📎 Documento comprovante (opcional)</div>
           {form.anexo?<div style={{display:"flex",gap:8,alignItems:"center",background:"var(--bg4)",borderRadius:8,padding:"8px 12px",border:"1px solid var(--border)"}}>
             <span style={{fontSize:12,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>📄 {form.anexo.nome}</span>
-            <button type="button" onClick={()=>abrirAnexo(form.anexo)} style={{background:"#1a2040",color:"#60a5fa",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>👁️ Ver</button>
-            <button type="button" onClick={()=>setForm((f:any)=>({...f,anexo:null}))} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>✕</button>
+            <button type="button" onClick={()=>abrirAnexo(form.anexo)} style={{background:"#DBEAFE",color:"#60a5fa",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>👁️ Ver</button>
+            <button type="button" onClick={()=>setForm((f:any)=>({...f,anexo:null}))} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>✕</button>
           </div>:<label style={{display:"block",cursor:"pointer"}}>
             <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{display:"none"}} onChange={handleAnexo}/>
             <div style={{border:"2px dashed var(--border2)",borderRadius:8,padding:"14px",textAlign:"center" as const,color:"#555",fontSize:13}}>
@@ -6423,7 +6416,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
             </div>
           </label>}
         </div>
-        <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"13px",width:"100%",fontSize:15}}>
+        <button className="btn" onClick={save} style={{background:"#8B5A2B",color:"#fff",padding:"13px",width:"100%",fontSize:15}}>
           {editId||editGrupoRecorr?"💾 Atualizar":"💾 Salvar"}
         </button>
         {(editId||editGrupoRecorr)&&<button className="btn" onClick={()=>{setEditId(null);setEditGrupoRecorr(null);setForm(emptyForm);setSubTab("lista");}}
@@ -6438,14 +6431,14 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
         <div className="row">
           <input placeholder="Nova categoria" value={novacat} onChange={e=>setNovacat(e.target.value)} className="inp"/>
           <button className="btn" onClick={()=>{if(!novacat)return;setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),novacat]}));setNovacat("");}}
-            style={{background:"#7c8fff",color:"#fff",padding:"10px 16px",whiteSpace:"nowrap"}}>+ Add</button>
+            style={{background:"#8B5A2B",color:"#fff",padding:"10px 16px",whiteSpace:"nowrap"}}>+ Add</button>
         </div>
       </div>
       {(db.categorias||[]).map((c:string)=>(
         <div key={c} className="list-item" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span>{c}</span>
           <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:d.categorias.filter((x:string)=>x!==c)}))}
-            style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+            style={{background:"#F3E8FF",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
       ))}
 
@@ -6455,8 +6448,8 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
           Receba um alerta no celular às 7h–9h quando houver contas vencendo no dia seguinte.
         </div>
         {notifStatus==="unsupported"&&<div style={{fontSize:12,color:"#f59e0b",marginBottom:8}}>⚠️ Seu navegador não suporta notificações push. Use Chrome ou Safari 16.4+.</div>}
-        {notifStatus==="denied"&&<div style={{fontSize:12,color:"#ff5c7a",marginBottom:8}}>🚫 Permissão negada. Acesse as configurações do navegador e permita notificações para este site.</div>}
-        {notifStatus==="subscribed"&&<div style={{fontSize:12,color:"#4ade80",marginBottom:8}}>✅ Notificações ativas neste dispositivo.</div>}
+        {notifStatus==="denied"&&<div style={{fontSize:12,color:"#EF4444",marginBottom:8}}>🚫 Permissão negada. Acesse as configurações do navegador e permita notificações para este site.</div>}
+        {notifStatus==="subscribed"&&<div style={{fontSize:12,color:"#22C55E",marginBottom:8}}>✅ Notificações ativas neste dispositivo.</div>}
         {notifStatus==="idle"&&<div style={{fontSize:12,color:"#888",marginBottom:8}}>⏸ Notificações desativadas.</div>}
         <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
           {notifEmpresa&&<select value={notifEmpresa} onChange={e=>setNotifEmpresa(e.target.value)} className="inp" style={{maxWidth:140,marginBottom:0}}>
@@ -6465,17 +6458,17 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
           </select>}
           {notifStatus!=="subscribed"&&notifStatus!=="unsupported"&&notifStatus!=="denied"&&(
             <button className="btn" disabled={notifLoading} onClick={()=>ativarNotificacoes(notifEmpresa||"CONFRARIA")}
-              style={{background:"#7c8fff",color:"#fff",padding:"10px 16px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              style={{background:"#8B5A2B",color:"#fff",padding:"10px 16px",fontSize:13,opacity:notifLoading?0.6:1}}>
               {notifLoading?"Aguarde...":"🔔 Ativar notificações"}
             </button>
           )}
           {notifStatus==="subscribed"&&<>
             <button className="btn" disabled={notifLoading} onClick={()=>testarNotificacao(notifEmpresa||"CONFRARIA")}
-              style={{background:"#1e3a2a",color:"#4ade80",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              style={{background:"#DCFCE7",color:"#22C55E",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
               {notifLoading?"...":"📲 Testar agora"}
             </button>
             <button className="btn" disabled={notifLoading} onClick={desativarNotificacoes}
-              style={{background:"#2a1520",color:"#ff5c7a",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              style={{background:"#F3E8FF",color:"#EF4444",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
               {notifLoading?"...":"🔕 Desativar"}
             </button>
           </>}
@@ -6613,11 +6606,11 @@ function FichaTecnica({db,setDb}){
   return <div>
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
       {[["lista","📋 Fichas"],["novo",editId?"✏️ Editando":"➕ Nova"],["conciliacao","🔗 Conciliação"],["mps","🥩 Matérias"]].map(([k,l])=>(
-        <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
+        <button key={k} onClick={()=>setSubTab(k)} className="pill" style={{background:subTab===k?"#8B5A2B":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
       ))}
     </div>
     {subTab==="lista"&&<div>
-      <button className="btn" onClick={atualizar} style={{background:"#1a2a1a",color:"#4ade80",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
+      <button className="btn" onClick={atualizar} style={{background:"#DCFCE7",color:"#22C55E",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
         <div style={{position:"relative",flex:1}}><input placeholder="🔍 Buscar ficha técnica..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14,marginBottom:0}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
         <SortCtrl id="fichas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/>
@@ -6630,8 +6623,8 @@ function FichaTecnica({db,setDb}){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontWeight:700,fontSize:16}}>{f.nome}</div>
             <div style={{display:"flex",gap:5}}>
-              {por>1&&<span className="tag" style={{background:"#1a2030",color:"#60a5fa"}}>{por} porções</span>}
-              <span className="tag" style={{background:"#1a2a1a",color:"#4ade80"}}>CMV {cmv}%</span>
+              {por>1&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa"}}>{por} porções</span>}
+              <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>CMV {cmv}%</span>
             </div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
@@ -6640,11 +6633,11 @@ function FichaTecnica({db,setDb}){
               <div className="muted" style={{fontSize:10}}>Custo total</div>
             </div>
             {por>1&&<div style={{flex:1,minWidth:80,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-              <div style={{color:"#a78bfa",fontWeight:700,fontSize:14}}>{fmtMoney(cp)}</div>
+              <div style={{color:"#8B5CF6",fontWeight:700,fontSize:14}}>{fmtMoney(cp)}</div>
               <div className="muted" style={{fontSize:10}}>Custo/porção</div>
             </div>}
-            <div style={{flex:1,minWidth:80,background:"#0f1e10",borderRadius:10,padding:"10px",textAlign:"center",border:"1px solid #1e3520"}}>
-              <div style={{color:"#4ade80",fontWeight:700,fontSize:14}}>{fmtMoney(pp)}</div>
+            <div style={{flex:1,minWidth:80,background:"#DCFCE7",borderRadius:10,padding:"10px",textAlign:"center",border:"1px solid #1e3520"}}>
+              <div style={{color:"#22C55E",fontWeight:700,fontSize:14}}>{fmtMoney(pp)}</div>
               <div className="muted" style={{fontSize:10}}>Preço/porção</div>
             </div>
           </div>
@@ -6655,8 +6648,8 @@ function FichaTecnica({db,setDb}){
           ))}
           <div style={{display:"flex",gap:8,marginTop:10}}>
             <button className="btn" onClick={()=>edit(f)} style={{background:"var(--border)",color:"#888",padding:"6px 14px",fontSize:12}}>✏️ Editar</button>
-            <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"#1a1a30",color:"#7c8fff",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
-            <button className="btn" onClick={()=>del(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 14px",fontSize:12}}>🗑️</button>
+            <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"#DBEAFE",color:"#8B5A2B",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
+            <button className="btn" onClick={()=>del(f.id)} style={{background:"#F3E8FF",color:"#EF4444",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
           {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
         </div>;
@@ -6694,12 +6687,12 @@ function FichaTecnica({db,setDb}){
               <div key={m.id} onMouseDown={()=>selectInsSugg(m)}
                 style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
                 <span style={{fontSize:13,fontWeight:600}}>{m.nome}</span>
-                <span style={{fontSize:11,color:"#4ade80"}}>{fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
+                <span style={{fontSize:11,color:"#22C55E"}}>{fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
               </div>
             ))}
           </div>}
-          {novoIns.mp&&<div style={{fontSize:10,color:"#4ade80",marginTop:3}}>Vinculado à matéria-prima</div>}
-          {novoIns.nome&&!novoIns.mp&&<div style={{fontSize:10,color:"#fbbf24",marginTop:3}}>Produto manual — concilie com compras depois</div>}
+          {novoIns.mp&&<div style={{fontSize:10,color:"#22C55E",marginTop:3}}>Vinculado à matéria-prima</div>}
+          {novoIns.nome&&!novoIns.mp&&<div style={{fontSize:10,color:"#F59E0B",marginTop:3}}>Produto manual — concilie com compras depois</div>}
         </div>
         <div style={{background:"var(--bg4)",borderRadius:8,padding:"8px",marginBottom:8,border:"1px solid var(--border)"}}>
           <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>Dados do Produto Comprado</div>
@@ -6721,13 +6714,13 @@ function FichaTecnica({db,setDb}){
               </select>
             </div>
           </div>
-          {insQtdComprada>0&&insPrecoTotal>0&&<div style={{fontSize:11,color:"#4ade80",marginTop:4}}>
+          {insQtdComprada>0&&insPrecoTotal>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:4}}>
             Valor/und: {fmtMoney(insValorUnd)}/{novoIns.unidade}
           </div>}
         </div>
         <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"flex-end"}}>
           <div style={{flex:1}}>
-            <label style={{fontSize:10,color:"#fbbf24",fontWeight:600}}>Qtd Usada na Ficha</label>
+            <label style={{fontSize:10,color:"#F59E0B",fontWeight:600}}>Qtd Usada na Ficha</label>
             <input type="number" placeholder="0" min="0.01" step="0.01" value={novoIns.qtdUsada} onChange={e=>setNovoIns(i=>({...i,qtdUsada:e.target.value}))}
               onKeyDown={e=>{if(e.key==="Enter")addIns();}} className="inp" style={{marginBottom:0}}/>
           </div>
@@ -6767,7 +6760,7 @@ function FichaTecnica({db,setDb}){
                     className="inp" style={{marginBottom:0,fontSize:12,padding:"5px"}}/>
                 </div>
                 <div style={{display:"flex",gap:4,alignSelf:"flex-end",paddingBottom:2}}>
-                  <button onClick={saveEditIns} style={{background:"#4ade8022",border:"1px solid #4ade80",borderRadius:5,color:"#4ade80",cursor:"pointer",fontSize:11,padding:"5px 10px"}}>✓</button>
+                  <button onClick={saveEditIns} style={{background:"#22C55E22",border:"1px solid #22C55E",borderRadius:5,color:"#22C55E",cursor:"pointer",fontSize:11,padding:"5px 10px"}}>✓</button>
                   <button onClick={()=>setEditInsId(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,padding:"5px 8px"}}>✕</button>
                 </div>
               </div>
@@ -6776,8 +6769,8 @@ function FichaTecnica({db,setDb}){
               <div><div style={{fontSize:13,fontWeight:600}}>{i.nome}</div><div className="muted" style={{fontSize:11}}>{i.quantidade}{i.unidade} × {fmtMoney(i.valorUnd)}</div></div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontWeight:600,color:"#60a5fa"}}>{fmtMoney(i.custo)}</span>
-                <button onClick={()=>startEditIns(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#fbbf24",fontSize:13,padding:"0 3px"}}>✏️</button>
-                <button className="btn" onClick={()=>remIns(i.id)} style={{background:"transparent",color:"#ff5c7a",fontSize:16,padding:"0 4px"}}>✕</button>
+                <button onClick={()=>startEditIns(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#F59E0B",fontSize:13,padding:"0 3px"}}>✏️</button>
+                <button className="btn" onClick={()=>remIns(i.id)} style={{background:"transparent",color:"#EF4444",fontSize:16,padding:"0 4px"}}>✕</button>
               </div>
             </div>}
           </div>;
@@ -6788,35 +6781,35 @@ function FichaTecnica({db,setDb}){
         </div>
         {porcoes>1&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderTop:"1px solid #1e2235"}}>
           <span className="muted" style={{fontSize:12}}>Custo/porção ({porcoes} porções)</span>
-          <span style={{color:"#a78bfa",fontWeight:600,fontSize:13}}>{fmtMoney(custoPorcao)}</span>
+          <span style={{color:"#8B5CF6",fontWeight:600,fontSize:13}}>{fmtMoney(custoPorcao)}</span>
         </div>}
         <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:"1px solid #1e2235"}}>
           <span style={{fontWeight:700}}>Preço/porção ({cmvPct}% CMV)</span>
-          <span style={{color:"#4ade80",fontWeight:700,fontSize:15}}>{fmtMoney(precoPorcao)}</span>
+          <span style={{color:"#22C55E",fontWeight:700,fontSize:15}}>{fmtMoney(precoPorcao)}</span>
         </div>
       </div>}
-      <button className="btn" onClick={save} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Ficha"}</button>
+      <button className="btn" onClick={save} style={{background:"#8B5A2B",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Ficha"}</button>
       {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm({nome:"",insumos:[],porcoes:"1",cmv:"30"});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>}
     {subTab==="conciliacao"&&<div>
-      <div className="section-title" style={{color:"#7c8fff"}}>🔗 Conciliação com Compras</div>
+      <div className="section-title" style={{color:"#8B5A2B"}}>🔗 Conciliação com Compras</div>
       <div style={{fontSize:11,color:"#888",marginBottom:6}}>Vincule os insumos das fichas aos produtos de compra para atualização automática de preços.</div>
       <div style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap" as const}}>
-        <span style={{fontSize:10,display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:4,background:"#4ade80",display:"inline-block"}}></span> Vinculado</span>
-        <span style={{fontSize:10,display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:4,background:"#fbbf24",display:"inline-block"}}></span> Manual (sem vínculo)</span>
+        <span style={{fontSize:10,display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:4,background:"#22C55E",display:"inline-block"}}></span> Vinculado</span>
+        <span style={{fontSize:10,display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:4,background:"#F59E0B",display:"inline-block"}}></span> Manual (sem vínculo)</span>
       </div>
       {!(db.fichasTecnicas||[]).length&&<EmptyState msg="Nenhuma ficha técnica criada"/>}
       {(db.fichasTecnicas||[]).map(f=>{
         const isOpen=concFichaId===f.id;
         const totalVinc=(f.insumos||[]).filter(i=>i.mpId).length;
         const totalMan=(f.insumos||[]).filter(i=>!i.mpId).length;
-        return <div key={f.id} className="card" style={{marginBottom:10,border:isOpen?"1px solid #7c8fff":"1px solid var(--border)"}}>
+        return <div key={f.id} className="card" style={{marginBottom:10,border:isOpen?"1px solid #8B5A2B":"1px solid var(--border)"}}>
           <div onClick={()=>setConcFichaId(isOpen?null:f.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
             <div>
               <div style={{fontWeight:700,fontSize:14}}>{f.nome}</div>
               <div style={{display:"flex",gap:6,marginTop:2}}>
-                {totalVinc>0&&<span style={{fontSize:10,color:"#4ade80"}}>✓ {totalVinc} vinculado(s)</span>}
-                {totalMan>0&&<span style={{fontSize:10,color:"#fbbf24"}}>⚠ {totalMan} manual(is)</span>}
+                {totalVinc>0&&<span style={{fontSize:10,color:"#22C55E"}}>✓ {totalVinc} vinculado(s)</span>}
+                {totalMan>0&&<span style={{fontSize:10,color:"#F59E0B"}}>⚠ {totalMan} manual(is)</span>}
               </div>
             </div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -6839,13 +6832,13 @@ function FichaTecnica({db,setDb}){
               return <div key={ins.id} style={{padding:"10px 0",borderBottom:"1px solid #1e2235"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{width:8,height:8,borderRadius:4,background:isVinculado?"#4ade80":"#fbbf24",display:"inline-block",flexShrink:0}}></span>
+                    <span style={{width:8,height:8,borderRadius:4,background:isVinculado?"#22C55E":"#F59E0B",display:"inline-block",flexShrink:0}}></span>
                     <div>
                       <span style={{fontWeight:600,fontSize:13}}>{ins.nome}</span>
                       <span style={{color:"#888",fontWeight:400,fontSize:11}}> ({ins.quantidade}{ins.unidade})</span>
                     </div>
                   </div>
-                  {isVinculado&&<span style={{fontSize:9,color:"#4ade80",background:"#4ade8015",border:"1px solid #4ade8033",borderRadius:10,padding:"2px 7px"}}>MP: {mp.nome}</span>}
+                  {isVinculado&&<span style={{fontSize:9,color:"#22C55E",background:"#22C55E15",border:"1px solid #22C55E33",borderRadius:10,padding:"2px 7px"}}>MP: {mp.nome}</span>}
                 </div>
                 <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
                   <div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
@@ -6853,25 +6846,25 @@ function FichaTecnica({db,setDb}){
                     <div style={{fontSize:9,color:"#666"}}>Preço ficha</div>
                   </div>
                   <div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:ultimaCompra?"#4ade80":"#666"}}>{ultimaCompra?`${fmtMoney(precoCompra)}/${ultimaCompra.unidade||ins.unidade}`:"—"}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:ultimaCompra?"#22C55E":"#666"}}>{ultimaCompra?`${fmtMoney(precoCompra)}/${ultimaCompra.unidade||ins.unidade}`:"—"}</div>
                     <div style={{fontSize:9,color:"#666"}}>{ultimaCompra?`Compra ${fmtDate(ultimaCompra.data)}`:"Sem compra"}</div>
                   </div>
                   {isVinculado&&mp&&<div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#a78bfa"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#8B5CF6"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</div>
                     <div style={{fontSize:9,color:"#666"}}>Matéria-prima</div>
                   </div>}
-                  {ultimaCompra&&diff!==0&&<div style={{flex:"0 0 60px",background:diff>0?"#2a151a":"#152a1a",borderRadius:8,padding:"6px 8px",textAlign:"center",border:`1px solid ${diff>0?"#ff5c7a33":"#4ade8033"}`}}>
-                    <div style={{fontSize:12,fontWeight:700,color:diff>0?"#ff5c7a":"#4ade80"}}>{diff>0?"+":""}{diff.toFixed(1)}%</div>
+                  {ultimaCompra&&diff!==0&&<div style={{flex:"0 0 60px",background:diff>0?"#2a151a":"#152a1a",borderRadius:8,padding:"6px 8px",textAlign:"center",border:`1px solid ${diff>0?"#EF444433":"#22C55E33"}`}}>
+                    <div style={{fontSize:12,fontWeight:700,color:diff>0?"#EF4444":"#22C55E"}}>{diff>0?"+":""}{diff.toFixed(1)}%</div>
                     <div style={{fontSize:9,color:"#666"}}>Variação</div>
                   </div>}
                 </div>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>
                   {ultimaCompra&&Math.abs(diff)>0.5&&<button onClick={()=>conciliarInsumo(f.id,ins.id,precoCompra)} className="btn"
-                    style={{background:"#7c8fff22",color:"#7c8fff",border:"1px solid #7c8fff44",padding:"5px 10px",fontSize:11}}>
+                    style={{background:"#8B5A2B22",color:"#8B5A2B",border:"1px solid #8B5A2B44",padding:"5px 10px",fontSize:11}}>
                     ✓ Usar preço compra ({fmtMoney(precoCompra)})
                   </button>}
                   {isVinculado&&mp&&mp.ultimoValor!==precoFicha&&<button onClick={()=>conciliarInsumo(f.id,ins.id,mp.ultimoValor||0)} className="btn"
-                    style={{background:"#4ade8022",color:"#4ade80",border:"1px solid #4ade8044",padding:"5px 10px",fontSize:11}}>
+                    style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",padding:"5px 10px",fontSize:11}}>
                     ✓ Usar matéria-prima ({fmtMoney(mp.ultimoValor||0)})
                   </button>}
                 </div>
@@ -6881,13 +6874,13 @@ function FichaTecnica({db,setDb}){
                     <input placeholder={isVinculado?"Revincular a outro produto de compra...":"Buscar produto de compra para vincular..."} value={buscaVal}
                       onChange={e=>setConcBusca(b=>({...b,[buscaKey]:e.target.value}))}
                       onFocus={()=>{if(!buscaVal)setConcBusca(b=>({...b,[buscaKey]:ins.nome}));}}
-                      className="inp" style={{marginBottom:0,fontSize:11,padding:"6px 8px",border:`1px solid ${isVinculado?"var(--border)":"#fbbf2444"}`}}/>
+                      className="inp" style={{marginBottom:0,fontSize:11,padding:"6px 8px",border:`1px solid ${isVinculado?"var(--border)":"#F59E0B44"}`}}/>
                     {buscaResults.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:180,overflowY:"auto" as const}}>
                       {buscaResults.map((c,idx)=>(
                         <div key={idx} onMouseDown={()=>{vincularInsumo(f.id,ins.id,c);setConcBusca(b=>({...b,[buscaKey]:""}));}}
                           style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
                           <div><div style={{fontSize:12,fontWeight:600}}>{c.nomeProduto}</div><div style={{fontSize:10,color:"#888"}}>{c.fornecedor} · {fmtDate(c.data)}</div></div>
-                          <span style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"}</span>
+                          <span style={{fontSize:12,fontWeight:700,color:"#22C55E"}}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"}</span>
                         </div>
                       ))}
                     </div>}
@@ -6919,7 +6912,7 @@ function FichaTecnica({db,setDb}){
           {items.map(m=>(
             <div key={m.id} className="list-item" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:600,fontSize:14}}>{m.nome}</div><div className="muted" style={{fontSize:12}}>Último preço: {fmtMoney(m.ultimoValor||0)}/{m.unidade}</div></div>
-              <span className="tag" style={{background:"#1a2520",color:"#4ade80"}}>{m.unidade}</span>
+              <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>{m.unidade}</span>
             </div>
           ))}
         </div>;
@@ -7105,7 +7098,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#1a1a2e;paddin
 .bar button{padding:8px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
 .hdr{background:#1a1d35;color:#fff;padding:14px 18px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .hdr h1{font-size:16px;font-weight:700}.hdr .sub{font-size:10px;opacity:.7;margin-top:2px}
-.hdr .val-box{text-align:right}.hdr .val-box .big{font-size:22px;font-weight:800;color:#4ade80}.hdr .val-box .sm{font-size:10px;opacity:.7}
+.hdr .val-box{text-align:right}.hdr .val-box .big{font-size:22px;font-weight:800;color:#22C55E}.hdr .val-box .sm{font-size:10px;opacity:.7}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
 .box{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px}
 .box h3{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;border-bottom:1px solid #f0f0f0;padding-bottom:4px}
@@ -7171,7 +7164,7 @@ ${detalhesDesc.join("")}
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
       {[["lista","👥 Lista"],["cadastro","➕ Cadastro"],["faltas","📅 Faltas"],["adiantamentos","💸 Adiant."],["encargos","💼 Encargos"],["consumacoes","🍺 Consum."]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
-          style={{background:subTab===k?"#7c8fff":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:10,padding:"6px 10px"}}>{l}</button>
+          style={{background:subTab===k?"#8B5A2B":"var(--bg4)",color:subTab===k?"#fff":"#777",fontSize:10,padding:"6px 10px"}}>{l}</button>
       ))}
     </div>
 
@@ -7198,25 +7191,25 @@ ${detalhesDesc.join("")}
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
             <div><div style={{fontWeight:700,fontSize:15}}>{f.nome}</div><div className="muted">{f.funcao}</div></div>
             <div style={{textAlign:"right"}}>
-              <div style={{color:"#4ade80",fontWeight:700,fontSize:15}}>{fmtMoney(aRec)}</div>
+              <div style={{color:"#22C55E",fontWeight:700,fontSize:15}}>{fmtMoney(aRec)}</div>
               <div className="muted" style={{fontSize:11}}>a receber</div>
             </div>
           </div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
             <span className="tag" style={{background:"var(--border)",color:"#888"}}>Sal: {fmtMoney(f.salario)}</span>
-            {totFalt>0&&<span className="tag" style={{background:"#2a1520",color:"#ff5c7a"}}>-{fmtMoney(totFalt)} falta</span>}
-            {totAdt>0&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24"}}>-{fmtMoney(totAdt)} adt</span>}
-            {totBonif>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(totBonif)} bonif</span>}
-            {totComis>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(totComis)} comis</span>}
-            {totSalFam>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(totSalFam)} sal.fam</span>}
-            {totEnc>0&&<span className="tag" style={{background:"#2a1520",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} encargos</span>}
-            {totCons>0&&<span className="tag" style={{background:"#1a2030",color:"#60a5fa"}}>-{fmtMoney(totCons)} cons</span>}
+            {totFalt>0&&<span className="tag" style={{background:"#F3E8FF",color:"#EF4444"}}>-{fmtMoney(totFalt)} falta</span>}
+            {totAdt>0&&<span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>-{fmtMoney(totAdt)} adt</span>}
+            {totBonif>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totBonif)} bonif</span>}
+            {totComis>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totComis)} comis</span>}
+            {totSalFam>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totSalFam)} sal.fam</span>}
+            {totEnc>0&&<span className="tag" style={{background:"#F3E8FF",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} encargos</span>}
+            {totCons>0&&<span className="tag" style={{background:"#DBEAFE",color:"#60a5fa"}}>-{fmtMoney(totCons)} cons</span>}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button className="btn" onClick={()=>gerarHolerite(f)} style={{background:"#7c8fff",color:"#fff",padding:"7px 14px",fontSize:12}}>📄 Holerite</button>
-            <button className="btn" onClick={()=>{if(confirm(`Lançar folha de ${f.nome} (${relMes}) no Financeiro?`))lancarFolhaFin(f);}} style={{background:"#1a2510",color:"#4ade80",padding:"7px 12px",fontSize:12}}>💰 Folha</button>
+            <button className="btn" onClick={()=>gerarHolerite(f)} style={{background:"#8B5A2B",color:"#fff",padding:"7px 14px",fontSize:12}}>📄 Holerite</button>
+            <button className="btn" onClick={()=>{if(confirm(`Lançar folha de ${f.nome} (${relMes}) no Financeiro?`))lancarFolhaFin(f);}} style={{background:"#DCFCE7",color:"#22C55E",padding:"7px 12px",fontSize:12}}>💰 Folha</button>
             <button className="btn" onClick={()=>editFunc(f)} style={{background:"var(--border)",color:"#888",padding:"7px 12px",fontSize:12}}>✏️</button>
-            <button className="btn" onClick={()=>delFunc(f.id)} style={{background:"#2a1520",color:"#ff5c7a",padding:"7px 12px",fontSize:12}}>🗑️</button>
+            <button className="btn" onClick={()=>delFunc(f.id)} style={{background:"#F3E8FF",color:"#EF4444",padding:"7px 12px",fontSize:12}}>🗑️</button>
           </div>
           {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
         </div>;
@@ -7232,7 +7225,7 @@ ${detalhesDesc.join("")}
         <MoneyInput value={fForm.salario} onChange={v=>setFForm(f=>({...f,salario:v}))} placeholder="Salário" className="inp"/>
         <input placeholder="CPF" value={fForm.cpf} onChange={e=>setFForm(f=>({...f,cpf:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <input placeholder="Contato / WhatsApp" value={fForm.contato} onChange={e=>setFForm(f=>({...f,contato:e.target.value}))} className="inp" style={{marginTop:8}}/>
-        <button className="btn" onClick={saveFunc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{fEdit?"✏️ Atualizar":"💾 Cadastrar"}</button>
+        <button className="btn" onClick={saveFunc} style={{background:"#8B5A2B",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>{fEdit?"✏️ Atualizar":"💾 Cadastrar"}</button>
         {fEdit&&<button className="btn" onClick={()=>{setFEdit(null);setFForm({nome:"",funcao:"",salario:"",cpf:"",contato:""}); }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
     </div>}
@@ -7247,15 +7240,15 @@ ${detalhesDesc.join("")}
         <input type="date" value={faltaForm.data} onChange={e=>setFaltaForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <input type="number" placeholder="Nº de dias" value={faltaForm.dias} onChange={e=>setFaltaForm(f=>({...f,dias:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <input placeholder="Motivo" value={faltaForm.motivo} onChange={e=>setFaltaForm(f=>({...f,motivo:e.target.value}))} className="inp"/>
-        {faltaForm.funcionarioId&&faltaForm.dias&&<div style={{background:"#1a1f2e",borderRadius:10,padding:"10px",marginTop:8}}>
+        {faltaForm.funcionarioId&&faltaForm.dias&&<div style={{background:"#DBEAFE",borderRadius:10,padding:"10px",marginTop:8}}>
           <span className="muted">Desconto: </span>
-          <span style={{color:"#ff5c7a",fontWeight:700}}>{fmtMoney(((funcs.find(f=>f.id===faltaForm.funcionarioId)?.salario||0)/30)*parseFloat(faltaForm.dias||0))}</span>
+          <span style={{color:"#EF4444",fontWeight:700}}>{fmtMoney(((funcs.find(f=>f.id===faltaForm.funcionarioId)?.salario||0)/30)*parseFloat(faltaForm.dias||0))}</span>
         </div>}
-        <button className="btn" onClick={saveFalta} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
+        <button className="btn" onClick={saveFalta} style={{background:"#8B5A2B",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhFaltas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
       {sortList(db.faltas||[],db,'rhFaltas','data-desc').map(f=>{const fn=funcs.find(x=>x.id===f.funcionarioId);return <div key={f.id} className="list-item">
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#ff5c7a",fontWeight:700}}>-{fmtMoney(f.desconto)}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#EF4444",fontWeight:700}}>-{fmtMoney(f.desconto)}</span></div>
         <div className="muted">{f.dias} dia(s) • {fmtDate(f.data)}</div>{f.motivo&&<div className="muted">{f.motivo}</div>}
         {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
@@ -7265,8 +7258,8 @@ ${detalhesDesc.join("")}
     {subTab==="adiantamentos"&&<div>
       <div className="card" style={{marginBottom:14}}>
         <div className="section-title">Registrar Adiantamento</div>
-        <div style={{background:"#1a2030",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #252860"}}>
-          <div style={{fontSize:12,color:"#7c8fff",fontWeight:700,marginBottom:2}}>ℹ️ Integração Financeiro</div>
+        <div style={{background:"#DBEAFE",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #252860"}}>
+          <div style={{fontSize:12,color:"#8B5A2B",fontWeight:700,marginBottom:2}}>ℹ️ Integração Financeiro</div>
           <div className="muted" style={{fontSize:12}}>O adiantamento será lançado como conta a pagar (categoria: Adiantamento) no financeiro.</div>
         </div>
         <select value={adtForm.funcionarioId} onChange={e=>setAdtForm(f=>({...f,funcionarioId:e.target.value}))} className="inp" style={{marginBottom:8}}>
@@ -7276,15 +7269,15 @@ ${detalhesDesc.join("")}
         <input type="date" value={adtForm.data} onChange={e=>setAdtForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <MoneyInput value={adtForm.valor} onChange={v=>setAdtForm(f=>({...f,valor:v}))} placeholder="Valor" className="inp"/>
         <input placeholder="Descrição" value={adtForm.descricao} onChange={e=>setAdtForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
-        <button className="btn" onClick={saveAdt} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
+        <button className="btn" onClick={saveAdt} style={{background:"#8B5A2B",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhAdts" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
       {sortList(db.adiantamentos||[],db,'rhAdts','data-desc').map(a=>{const fn=funcs.find(f=>f.id===a.funcionarioId);return <div key={a.id} className="list-item">
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#fbbf24",fontWeight:700}}>{fmtMoney(parseMoney(a.valor))}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#F59E0B",fontWeight:700}}>{fmtMoney(parseMoney(a.valor))}</span></div>
         <div className="muted">{fmtDate(a.data)}</div>{a.descricao&&<div className="muted">{a.descricao}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
-          <span className="tag" style={{background:"#2a2010",color:"#fbbf24",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
-          <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+          <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
+          <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"#F3E8FF",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {a.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(a.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
@@ -7294,8 +7287,8 @@ ${detalhesDesc.join("")}
     {subTab==="encargos"&&<div>
       <div ref={formRefEnc} className="card" style={{marginBottom:14}}>
         <div className="section-title">{encEdit?"Editar Encargos":"Registrar Encargos"}</div>
-        <div style={{background:"#1a2030",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #252860"}}>
-          <div style={{fontSize:12,color:"#7c8fff",fontWeight:700,marginBottom:2}}>ℹ️ Encargos do funcionário</div>
+        <div style={{background:"#DBEAFE",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #252860"}}>
+          <div style={{fontSize:12,color:"#8B5A2B",fontWeight:700,marginBottom:2}}>ℹ️ Encargos do funcionário</div>
           <div className="muted" style={{fontSize:12}}>Vale Transporte + FGTS + INSS em valor único. Descontado no holerite (não lança no Financeiro).</div>
         </div>
         <select value={encForm.funcionarioId} onChange={e=>setEncForm(f=>({...f,funcionarioId:e.target.value}))} className="inp" style={{marginBottom:8}}>
@@ -7303,10 +7296,10 @@ ${detalhesDesc.join("")}
           {funcs.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
         <input type="date" value={encForm.data} onChange={e=>setEncForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
-        <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Deduções</div>
+        <div style={{fontSize:11,color:"#8B5A2B",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Deduções</div>
         <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Encargos (VT + FGTS + INSS)</label>
         <MoneyInput value={encForm.valor} onChange={v=>setEncForm(f=>({...f,valor:v}))} placeholder="0,00" className="inp" style={{marginBottom:10}}/>
-        <div style={{fontSize:11,color:"#4ade80",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Acréscimos</div>
+        <div style={{fontSize:11,color:"#22C55E",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Acréscimos</div>
         <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Bonificação</label>
         <MoneyInput value={encForm.bonificacao} onChange={v=>setEncForm(f=>({...f,bonificacao:v}))} placeholder="0,00" className="inp" style={{marginBottom:8}}/>
         <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Comissão</label>
@@ -7314,26 +7307,26 @@ ${detalhesDesc.join("")}
         <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Salário Família</label>
         <MoneyInput value={encForm.salarioFamilia} onChange={v=>setEncForm(f=>({...f,salarioFamilia:v}))} placeholder="0,00" className="inp" style={{marginBottom:8}}/>
         <input placeholder="Descrição (opcional)" value={encForm.descricao} onChange={e=>setEncForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <button className="btn" onClick={saveEnc} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:4,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
+        <button className="btn" onClick={saveEnc} style={{background:"#8B5A2B",color:"#fff",padding:"12px",width:"100%",marginTop:4,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
         {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhEncs" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
       {sortList(db.encargos||[],db,'rhEncs','data-desc').map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
           <span style={{fontWeight:700,fontSize:15}}>{fn?.nome||"—"}</span>
-          <span style={{color:"#4ade80",fontWeight:700,fontSize:13}}>{fmtDate(e.data)}</span>
+          <span style={{color:"#22C55E",fontWeight:700,fontSize:13}}>{fmtDate(e.data)}</span>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
-          {e.valor>0&&<span className="tag" style={{background:"#2a1520",color:"#ff9aa8"}}>-{fmtMoney(e.valor)} encargos</span>}
-          {e.bonificacao>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(e.bonificacao)} bonif.</span>}
-          {e.comissao>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(e.comissao)} comis.</span>}
-          {e.salarioFamilia>0&&<span className="tag" style={{background:"#1a2510",color:"#4ade80"}}>+{fmtMoney(e.salarioFamilia)} sal.fam.</span>}
+          {e.valor>0&&<span className="tag" style={{background:"#F3E8FF",color:"#ff9aa8"}}>-{fmtMoney(e.valor)} encargos</span>}
+          {e.bonificacao>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(e.bonificacao)} bonif.</span>}
+          {e.comissao>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(e.comissao)} comis.</span>}
+          {e.salarioFamilia>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(e.salarioFamilia)} sal.fam.</span>}
         </div>
         {e.descricao&&<div className="muted" style={{marginBottom:6}}>{e.descricao}</div>}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-          <button className="btn" onClick={()=>lancarEncFin(e)} style={{background:"#1a2510",color:"#4ade80",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
+          <button className="btn" onClick={()=>lancarEncFin(e)} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
           <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-          <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"#2a1520",color:"#ff5c7a",padding:"6px 12px",fontSize:12}}>🗑️</button>
+          <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"#F3E8FF",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {e.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(e.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
@@ -7350,14 +7343,14 @@ ${detalhesDesc.join("")}
         <input type="date" value={consForm.data} onChange={e=>setConsForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <MoneyInput value={consForm.valor} onChange={v=>setConsForm(f=>({...f,valor:v}))} placeholder="Valor da consumação" className="inp"/>
         <input placeholder="Descrição" value={consForm.descricao} onChange={e=>setConsForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
-        <button className="btn" onClick={saveCons} style={{background:"#7c8fff",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
+        <button className="btn" onClick={saveCons} style={{background:"#8B5A2B",color:"#fff",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhCons" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
       {sortList(db.consumacoes||[],db,'rhCons','data-desc').map(c=>{const fn=funcs.find(f=>f.id===c.funcionarioId);return <div key={c.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#60a5fa",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span></div>
         <div className="muted">{fmtDate(c.data)}</div>{c.descricao&&<div className="muted">{c.descricao}</div>}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
-          <button className="btn" onClick={()=>lancarConsFin(c)} style={{background:"#1a2510",color:"#4ade80",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
+          <button className="btn" onClick={()=>lancarConsFin(c)} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
         </div>
         {c.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(c.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
@@ -7413,7 +7406,7 @@ function DREComp({db,setDb,empresa}){
   const pe=mcPct>0?(totalDesp+imposto)/(mcPct/100):0;
 
   const pct=(v)=>vendasBrutas>0?`${((v/vendasBrutas)*100).toFixed(1)}%`:"—";
-  const col=(v:number)=>v>=0?"#4ade80":"#ff5c7a";
+  const col=(v:number)=>v>=0?"#22C55E":"#EF4444";
 
   const Row=({label,value,pctVal,color,bold=false,indent=false,border=true}:{label:string,value:number,pctVal?:number,color?:string,bold?:boolean,indent?:boolean,border?:boolean})=>(
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:border?"1px solid var(--border)":"none",paddingLeft:indent?16:0}}>
@@ -7458,7 +7451,7 @@ function DREComp({db,setDb,empresa}){
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
       <div className="section-title" style={{marginBottom:0}}>DRE — Resultado do Exercício</div>
-      <button className="btn" onClick={printDRE} style={{background:"#7c8fff",color:"#fff",padding:"8px 14px",fontSize:12}}>🖨️ Imprimir</button>
+      <button className="btn" onClick={printDRE} style={{background:"#8B5A2B",color:"#fff",padding:"8px 14px",fontSize:12}}>🖨️ Imprimir</button>
     </div>
 
     {/* Período */}
@@ -7493,23 +7486,23 @@ function DREComp({db,setDb,empresa}){
     {/* DRE Detalhado */}
     <div className="card" style={{marginBottom:12}}>
       <Row label="Receita Bruta" value={vendasBrutas} color="#60a5fa" bold/>
-      {despVendas>0&&<Row label="(-) Taxas iFood/99food" value={despVendas} color="#ff5c7a" indent/>}
+      {despVendas>0&&<Row label="(-) Taxas iFood/99food" value={despVendas} color="#EF4444" indent/>}
       <Row label="= Receita Líquida" value={vendasLiq} bold/>
       <div style={{padding:"8px 0 4px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>CMV — Custo das Mercadorias</div>
       {Object.entries(cmvCats).filter(([,v])=>v>0).map(([k,v])=>(
-        <Row key={k} label={k} value={v} color="#ff5c7a" indent/>
+        <Row key={k} label={k} value={v} color="#EF4444" indent/>
       ))}
-      <Row label="Total CMV" value={totalCMV} color="#ff5c7a" bold/>
+      <Row label="Total CMV" value={totalCMV} color="#EF4444" bold/>
       <Row label="= Lucro Bruto" value={lucroBruto} color={col(lucroBruto)} bold border={false}/>
     </div>
 
     <div className="card" style={{marginBottom:12}}>
       <div style={{padding:"0 0 8px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>Despesas</div>
       {Object.entries(despCats).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
-        <Row key={k} label={k} value={v} color="#ff5c7a" indent/>
+        <Row key={k} label={k} value={v} color="#EF4444" indent/>
       ))}
       {!Object.keys(despCats).length&&<div className="muted" style={{fontSize:12,paddingBottom:8}}>Nenhuma conta paga no período.</div>}
-      <Row label="Total Despesas" value={totalDesp} color="#ff5c7a" bold/>
+      <Row label="Total Despesas" value={totalDesp} color="#EF4444" bold/>
       <Row label="= Resultado Operacional" value={resultadoOp} color={col(resultadoOp)} bold border={false}/>
     </div>
 
@@ -7523,11 +7516,11 @@ function DREComp({db,setDb,empresa}){
       <div className="section-title" style={{color:"#60a5fa"}}>Ponto de Equilíbrio</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
         <div style={{textAlign:"center"}}>
-          <div style={{fontWeight:700,fontSize:14,color:"#fbbf24"}}>{fmtMoney(pe)}</div>
+          <div style={{fontWeight:700,fontSize:14,color:"#F59E0B"}}>{fmtMoney(pe)}</div>
           <div className="muted" style={{fontSize:10}}>PE (faturar)</div>
         </div>
         <div style={{textAlign:"center"}}>
-          <div style={{fontWeight:700,fontSize:14,color:mcPct>=30?"#4ade80":"#ff5c7a"}}>{mcPct.toFixed(1)}%</div>
+          <div style={{fontWeight:700,fontSize:14,color:mcPct>=30?"#22C55E":"#EF4444"}}>{mcPct.toFixed(1)}%</div>
           <div className="muted" style={{fontSize:10}}>Margem Contrib.</div>
         </div>
         <div style={{textAlign:"center"}}>
@@ -7541,15 +7534,15 @@ function DREComp({db,setDb,empresa}){
           {label:"Taxas delivery (iFood/99food)",val:(despVendas/vendasBrutas)*100,c:"#f87171"},
           {label:`Impostos Simples Nacional (${sn}%)`,val:sn,c:"#f59e0b"},
           {label:"CMV — custo dos insumos",val:(totalCMV/vendasBrutas)*100,c:"#fb923c"},
-          {label:"Despesas fixas e variáveis",val:(totalDesp/vendasBrutas)*100,c:"#a78bfa"},
-          {label:"💰 Lucro líquido final",val:(lucroLiq/vendasBrutas)*100,c:lucroLiq>=0?"#4ade80":"#ff5c7a",bold:true},
+          {label:"Despesas fixas e variáveis",val:(totalDesp/vendasBrutas)*100,c:"#8B5CF6"},
+          {label:"💰 Lucro líquido final",val:(lucroLiq/vendasBrutas)*100,c:lucroLiq>=0?"#22C55E":"#EF4444",bold:true},
         ].map(({label,val,c,bold})=>(
           <div key={label} style={{marginBottom:8}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
               <span style={{fontSize:11,color:bold?"var(--text)":"#888",fontWeight:bold?700:400}}>{label}</span>
               <span style={{fontWeight:bold?800:700,color:c,fontSize:bold?15:13}}>R${Math.abs(val).toFixed(2)}</span>
             </div>
-            <div style={{height:5,background:"#1a1d2e",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:5,background:"#DBEAFE",borderRadius:3,overflow:"hidden"}}>
               <div style={{height:"100%",borderRadius:3,width:`${Math.min(Math.abs(val),100)}%`,background:c,opacity:bold?1:0.7}}/>
             </div>
           </div>
@@ -7558,13 +7551,13 @@ function DREComp({db,setDb,empresa}){
           <span style={{fontSize:10,color:"#555"}}>Restante não alocado: R${Math.max(100-(despVendas/vendasBrutas*100+sn+totalCMV/vendasBrutas*100+totalDesp/vendasBrutas*100+Math.max(lucroLiq/vendasBrutas*100,0)),0).toFixed(2)}</span>
         </div>
       </div>}
-      <div style={{marginTop:12,padding:"10px",background:"#0a1a10",borderRadius:8,border:"1px solid #14532d",textAlign:"center"}}>
+      <div style={{marginTop:12,padding:"10px",background:"#DCFCE7",borderRadius:8,border:"1px solid #14532d",textAlign:"center"}}>
         <div style={{fontSize:10,color:"#888",marginBottom:2}}>Margem de Contribuição (sobra para cobrir fixas)</div>
-        <div style={{fontSize:22,fontWeight:800,color:mcPct>=30?"#4ade80":"#f59e0b"}}>{mcPct.toFixed(1)}%</div>
+        <div style={{fontSize:22,fontWeight:800,color:mcPct>=30?"#22C55E":"#f59e0b"}}>{mcPct.toFixed(1)}%</div>
         <div style={{fontSize:11,color:"#888",marginTop:2}}>{fmtMoney(mc)} sobre {fmtMoney(vendasBrutas)}</div>
-        {pe>0&&<div style={{marginTop:8,padding:"6px",background:"#0d1a30",borderRadius:6}}>
+        {pe>0&&<div style={{marginTop:8,padding:"6px",background:"#DBEAFE",borderRadius:6}}>
           <div style={{fontSize:10,color:"#888"}}>Ponto de equilíbrio (vendas viram lucro)</div>
-          <div style={{fontSize:16,fontWeight:700,color:"#fbbf24"}}>{fmtMoney(pe)}/mês</div>
+          <div style={{fontSize:16,fontWeight:700,color:"#F59E0B"}}>{fmtMoney(pe)}/mês</div>
           <div style={{fontSize:10,color:"#555"}}>≈ {fmtMoney(pe/30)}/dia</div>
         </div>}
       </div>
@@ -7641,26 +7634,26 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
     <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center"}}>
       <input type="month" value={mes} onChange={e=>{setMes(e.target.value);setSaldoIniStr("");}} className="inp" style={{flex:1}}/>
       <button className="btn" onClick={print}
-        style={{background:"#1a2040",border:"1px solid #3b82f6",color:"#60a5fa",padding:"10px 14px",fontSize:13,flexShrink:0}}>🖨️ Imprimir</button>
+        style={{background:"#DBEAFE",border:"1px solid #3b82f6",color:"#60a5fa",padding:"10px 14px",fontSize:13,flexShrink:0}}>🖨️ Imprimir</button>
     </div>
 
     {/* Saldo inicial */}
     <div className="card" style={{marginBottom:12,background:"linear-gradient(135deg,#0a1a30,#0d2040)",border:"1px solid #1e3a6f"}}>
-      <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Saldo Inicial do Mês</div>
+      <div style={{fontSize:11,color:"#8B5A2B",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Saldo Inicial do Mês</div>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <MoneyInput value={saldoIniStr} onChange={v=>setSaldoIniStr(v)} placeholder="0,00" className="inp" style={{flex:1}}/>
-        <button className="btn" onClick={saveSaldo} style={{background:"#7c8fff",color:"#fff",padding:"10px 14px",fontSize:13,flexShrink:0}}>Salvar</button>
+        <button className="btn" onClick={saveSaldo} style={{background:"#8B5A2B",color:"#fff",padding:"10px 14px",fontSize:13,flexShrink:0}}>Salvar</button>
       </div>
-      {saldoIniVal>0&&<div style={{marginTop:6,fontSize:12,color:"#7c8fff"}}>Saldo configurado: {fmtMoney(saldoIniVal)}</div>}
+      {saldoIniVal>0&&<div style={{marginTop:6,fontSize:12,color:"#8B5A2B"}}>Saldo configurado: {fmtMoney(saldoIniVal)}</div>}
     </div>
 
     {/* Summary cards */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
       {[
-        {label:"Entradas",val:totalEntradas,c:"#4ade80",s:"+"},
-        {label:"Saídas",val:totalSaidas,c:"#ff5c7a",s:"-"},
-        {label:"Saldo Inicial",val:saldoIniVal,c:"#7c8fff",s:""},
-        {label:"Saldo Final",val:saldoFinal,c:saldoFinal>=0?"#4ade80":"#ff5c7a",s:""},
+        {label:"Entradas",val:totalEntradas,c:"#22C55E",s:"+"},
+        {label:"Saídas",val:totalSaidas,c:"#EF4444",s:"-"},
+        {label:"Saldo Inicial",val:saldoIniVal,c:"#8B5A2B",s:""},
+        {label:"Saldo Final",val:saldoFinal,c:saldoFinal>=0?"#22C55E":"#EF4444",s:""},
       ].map(({label,val,c,s})=>(
         <div key={label} style={{background:"var(--bg3)",borderRadius:12,padding:"12px",border:"1px solid var(--border)",textAlign:"center"}}>
           <div style={{fontSize:11,color:"#888",marginBottom:4}}>{label}</div>
@@ -7684,8 +7677,8 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
           <div style={{background:"var(--bg3)",padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontWeight:700,fontSize:13}}>{fmtDate(d)}</span>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              {dEnt>0&&<span style={{fontSize:12,color:"#4ade80",fontWeight:600}}>+{fmtMoney(dEnt)}</span>}
-              {dSai>0&&<span style={{fontSize:12,color:"#ff5c7a",fontWeight:600}}>−{fmtMoney(dSai)}</span>}
+              {dEnt>0&&<span style={{fontSize:12,color:"#22C55E",fontWeight:600}}>+{fmtMoney(dEnt)}</span>}
+              {dSai>0&&<span style={{fontSize:12,color:"#EF4444",fontWeight:600}}>−{fmtMoney(dSai)}</span>}
               {setState&&<button onClick={(e)=>{
                 e.stopPropagation();
                 const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
@@ -7706,7 +7699,7 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
                   return{...prev,[outra]:{...dest,vendas:newVendas,contas:newContas}};
                 });
                 alert(`✅ ${dTxs.length} registro(s) transferido(s) para ${outra}`);
-              }} style={{background:"none",border:"1px solid #4c1d95",color:"#a78bfa",borderRadius:6,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>📤 Mover</button>}
+              }} style={{background:"none",border:"1px solid #4c1d95",color:"#8B5CF6",borderRadius:6,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>📤 Mover</button>}
             </div>
           </div>
           {dTxs.map(t=>(
@@ -7715,14 +7708,14 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
                 <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{t.descricao}</div>
                 <div style={{fontSize:11,color:"var(--text3)"}}>{t.categoria}</div>
               </div>
-              <span style={{fontWeight:700,fontSize:13,color:t.tipo==="entrada"?"#4ade80":"#ff5c7a",flexShrink:0,marginLeft:10}}>
+              <span style={{fontWeight:700,fontSize:13,color:t.tipo==="entrada"?"#22C55E":"#EF4444",flexShrink:0,marginLeft:10}}>
                 {t.tipo==="entrada"?"+":"−"}{fmtMoney(t.valor)}
               </span>
             </div>
           ))}
           <div style={{padding:"6px 14px",background:"var(--bg4)",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8}}>
             <span style={{fontSize:11,color:"var(--text3)"}}>Saldo acumulado:</span>
-            <span style={{fontWeight:700,fontSize:13,color:dayBal>=0?"#60a5fa":"#ff5c7a"}}>{fmtMoney(dayBal)}</span>
+            <span style={{fontWeight:700,fontSize:13,color:dayBal>=0?"#60a5fa":"#EF4444"}}>{fmtMoney(dayBal)}</span>
           </div>
         </div>;
       });
@@ -7730,7 +7723,7 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
 
     {dates.length>0&&<div style={{background:saldoFinal>=0?"linear-gradient(135deg,#0a2010,#0f3020)":"linear-gradient(135deg,#2a0a0a,#3a1010)",border:`1px solid ${saldoFinal>=0?"#166534":"#991b1b"}`,borderRadius:12,padding:"16px",textAlign:"center",marginTop:4}}>
       <div style={{fontSize:12,color:"#888",marginBottom:4}}>Saldo Final — {monthLabel(mes)}</div>
-      <div style={{fontSize:28,fontWeight:800,color:saldoFinal>=0?"#4ade80":"#ff5c7a"}}>{fmtMoney(saldoFinal)}</div>
+      <div style={{fontSize:28,fontWeight:800,color:saldoFinal>=0?"#22C55E":"#EF4444"}}>{fmtMoney(saldoFinal)}</div>
       <div style={{fontSize:11,color:"#888",marginTop:4}}>{fmtMoney(saldoIniVal)} inicial + {fmtMoney(totalEntradas)} entradas − {fmtMoney(totalSaidas)} saídas</div>
     </div>}
   </div>;
@@ -7962,11 +7955,11 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
   const pedidos=(db.pedidosLista||[]);
 
   const rels=[
-    {label:"DRE",          desc:"Demonstrativo de Resultado",   icon:"📊",fn:gDRE,    color:"#7c8fff"},
-    {label:"Vendas",       desc:"Histórico e modalidades",      icon:"💰",fn:gVendas,  color:"#4ade80"},
+    {label:"DRE",          desc:"Demonstrativo de Resultado",   icon:"📊",fn:gDRE,    color:"#8B5A2B"},
+    {label:"Vendas",       desc:"Histórico e modalidades",      icon:"💰",fn:gVendas,  color:"#22C55E"},
     {label:"Compras",      desc:"Insumos e fornecedores",       icon:"🛒",fn:gCompras, color:"#60a5fa"},
-    {label:"Financeiro",   desc:"Contas a pagar e pagas",       icon:"📋",fn:gFinanceiro,color:"#a78bfa"},
-    {label:"RH",           desc:"Funcionários, faltas e adt.",  icon:"👥",fn:gRH,      color:"#fbbf24"},
+    {label:"Financeiro",   desc:"Contas a pagar e pagas",       icon:"📋",fn:gFinanceiro,color:"#8B5CF6"},
+    {label:"RH",           desc:"Funcionários, faltas e adt.",  icon:"👥",fn:gRH,      color:"#F59E0B"},
     {label:"Comparativo",  desc:"CONFRARIA vs SEAMA",           icon:"⚖️",fn:gComp,   color:"#f472b6"},
   ];
   return <div>
@@ -8009,9 +8002,9 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
             <button onClick={()=>delPedido(ped.id)} title="Excluir pedido" style={{background:"transparent",border:"none",cursor:"pointer",color:"#ef4444",fontSize:18,padding:4}}>🗑️</button>
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-            <button className="btn" onClick={()=>gPedidoPrint(ped)} style={{flex:1,background:"#1e2235",color:"#7c8fff",fontSize:12,padding:"8px 6px",minWidth:80}}>🖨️ PDF</button>
-            <button className="btn" onClick={()=>gPedidoWhatsApp(ped)} style={{flex:1,background:"#0a2010",color:"#4ade80",fontSize:12,padding:"8px 6px",minWidth:80}}>📱 WhatsApp</button>
-            <button className="btn" onClick={()=>gPedidoCSV(ped)} style={{flex:1,background:"#0d1b2e",color:"#60a5fa",fontSize:12,padding:"8px 6px",minWidth:80}}>📊 CSV</button>
+            <button className="btn" onClick={()=>gPedidoPrint(ped)} style={{flex:1,background:"#DBEAFE",color:"#8B5A2B",fontSize:12,padding:"8px 6px",minWidth:80}}>🖨️ PDF</button>
+            <button className="btn" onClick={()=>gPedidoWhatsApp(ped)} style={{flex:1,background:"#DCFCE7",color:"#22C55E",fontSize:12,padding:"8px 6px",minWidth:80}}>📱 WhatsApp</button>
+            <button className="btn" onClick={()=>gPedidoCSV(ped)} style={{flex:1,background:"#DBEAFE",color:"#60a5fa",fontSize:12,padding:"8px 6px",minWidth:80}}>📊 CSV</button>
           </div>
         </div>
       ))}
@@ -8042,8 +8035,8 @@ function Comparativo({state}){
         <div style={{display:"flex",gap:8}}>
           {[{name:"CONFRARIA",val:a,wins:aW},{name:"SEAMA",val:b,wins:!aW||(a===b)}].map(({name,val,wins})=>(
             <div key={name} style={{flex:1,background:wins?"#141e14":"var(--bg4)",borderRadius:10,padding:"10px",border:`1px solid ${wins?"#2a3a2a":"var(--border)"}`}}>
-              <div style={{fontSize:10,color:wins?"#4ade80":"#555",fontWeight:700,marginBottom:2}}>{wins&&"★ "}{name}</div>
-              <div style={{fontWeight:700,color:wins?"#4ade80":"var(--text)",fontSize:14}}>{fmt(val)}</div>
+              <div style={{fontSize:10,color:wins?"#22C55E":"#555",fontWeight:700,marginBottom:2}}>{wins&&"★ "}{name}</div>
+              <div style={{fontWeight:700,color:wins?"#22C55E":"var(--text)",fontSize:14}}>{fmt(val)}</div>
             </div>
           ))}
         </div>
@@ -8143,50 +8136,50 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
           const blob=new Blob([JSON.stringify(localEmp,null,2)],{type:"application/json"});
           const url=URL.createObjectURL(blob);const a=document.createElement("a");
           a.href=url;a.download=`LOCAL_${emp}_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);
-        }} style={{background:"#1a3a10",color:"#22c55e",padding:"8px 12px",fontSize:12,flex:1}}>⬇️ Baixar local</button>
+        }} style={{background:"#DCFCE7",color:"#22c55e",padding:"8px 12px",fontSize:12,flex:1}}>⬇️ Baixar local</button>
         <button className="btn" onClick={async()=>{
           if(!confirm(`Enviar dados locais deste dispositivo para o servidor (${emp})?\n\n${lContas} contas · ${lVendas} vendas · ${lCompras} compras`))return;
           const r=await fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(localEmp)});
           const d=await r.json();
           if(d.ok){alert("✅ Enviado!");window.location.reload();}else alert("Erro: "+(d.error||"—"));
-        }} style={{background:"#2a1800",color:"#f59e0b",padding:"8px 12px",fontSize:12,flex:1}}>⬆️ Enviar ao servidor</button>
+        }} style={{background:"#FEF3C7",color:"#f59e0b",padding:"8px 12px",fontSize:12,flex:1}}>⬆️ Enviar ao servidor</button>
       </div>}
     </div>
 
     {/* Export / Import */}
     <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
-      <button className="btn" onClick={exportarJSON} style={{background:"#1a3a20",color:"#4ade80",padding:"9px 12px",fontSize:12,flex:1}}>⬇️ Baixar backup JSON</button>
-      <button className="btn" onClick={()=>importRef.current?.click()} style={{background:"#1a2040",color:"#60a5fa",padding:"9px 12px",fontSize:12,flex:1}}>⬆️ Importar JSON</button>
+      <button className="btn" onClick={exportarJSON} style={{background:"#DCFCE7",color:"#22C55E",padding:"9px 12px",fontSize:12,flex:1}}>⬇️ Baixar backup JSON</button>
+      <button className="btn" onClick={()=>importRef.current?.click()} style={{background:"#DBEAFE",color:"#60a5fa",padding:"9px 12px",fontSize:12,flex:1}}>⬆️ Importar JSON</button>
       <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={importarJSON}/>
     </div>
 
     {/* Backups do servidor */}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
       <div style={{fontSize:12,color:"#555"}}>Backups automáticos do servidor</div>
-      <button className="btn" onClick={carregar} style={{background:"#1a2040",color:"#60a5fa",padding:"4px 10px",fontSize:11}} disabled={loading}>{loading?"⏳":"🔄"}</button>
+      <button className="btn" onClick={carregar} style={{background:"#DBEAFE",color:"#60a5fa",padding:"4px 10px",fontSize:11}} disabled={loading}>{loading?"⏳":"🔄"}</button>
     </div>
     {lista.length===0&&!loading&&<div style={{fontSize:12,color:"#444",textAlign:"center",padding:"10px 0"}}>Nenhum backup do servidor ainda.</div>}
     {lista.map((b:any)=>{
       const isSafety=b.file.startsWith("safety_");
-      return <div key={b.file} className="list-item" style={{borderLeft:`3px solid ${isSafety?"#fbbf24":"#4ade80"}`,padding:"8px 10px",marginBottom:6}}>
+      return <div key={b.file} className="list-item" style={{borderLeft:`3px solid ${isSafety?"#F59E0B":"#22C55E"}`,padding:"8px 10px",marginBottom:6}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
           <span style={{fontWeight:700,fontSize:12}}>{fmtTs(b.file)}</span>
-          {isSafety&&<span className="tag" style={{background:"#2a2010",color:"#fbbf24",fontSize:9}}>⚠️ segurança</span>}
+          {isSafety&&<span className="tag" style={{background:"#FEF3C7",color:"#F59E0B",fontSize:9}}>⚠️ segurança</span>}
           <span style={{fontSize:10,color:"#555"}}>{b.size?`${(b.size/1024).toFixed(0)} KB`:""}</span>
         </div>
         {b.preview&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.contas} contas</span>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.vendas} vendas</span>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.compras} compras</span>
-          <span className="tag" style={{background:"#1a2040",color:"#60a5fa",fontSize:10}}>{b.preview.funcionarios} funcs</span>
+          <span className="tag" style={{background:"#DBEAFE",color:"#60a5fa",fontSize:10}}>{b.preview.contas} contas</span>
+          <span className="tag" style={{background:"#DBEAFE",color:"#60a5fa",fontSize:10}}>{b.preview.vendas} vendas</span>
+          <span className="tag" style={{background:"#DBEAFE",color:"#60a5fa",fontSize:10}}>{b.preview.compras} compras</span>
+          <span className="tag" style={{background:"#DBEAFE",color:"#60a5fa",fontSize:10}}>{b.preview.funcionarios} funcs</span>
         </div>}
         <div style={{display:"flex",gap:6}}>
           <button className="btn" onClick={()=>restaurar(b.file)} disabled={restaurando===b.file||excluindo===b.file}
-            style={{background:isSafety?"#2a2010":"#1a2a10",color:isSafety?"#fbbf24":"#4ade80",padding:"5px 10px",fontSize:11,flex:1}}>
+            style={{background:isSafety?"#2a2010":"#1a2a10",color:isSafety?"#F59E0B":"#22C55E",padding:"5px 10px",fontSize:11,flex:1}}>
             {restaurando===b.file?"⏳ Restaurando...":"♻️ Restaurar"}
           </button>
           <button className="btn" onClick={()=>excluirBackup(b.file)} disabled={excluindo===b.file||restaurando===b.file}
-            style={{background:"#2a1015",color:"#ff5c7a",padding:"5px 10px",fontSize:11}}>
+            style={{background:"#FEE2E2",color:"#EF4444",padding:"5px 10px",fontSize:11}}>
             {excluindo===b.file?"⏳":"🗑️"}
           </button>
         </div>
@@ -8208,7 +8201,7 @@ function BackupsPanel({empresaAtual,state,setState}:{empresaAtual:string,state:a
       <div style={{display:"flex",gap:4}}>
         {(["CONFRARIA","SEAMA"] as const).map(e=>(
           <button key={e} onClick={()=>setEmp(e)} className="pill"
-            style={{background:emp===e?"#7c8fff":"var(--bg4)",color:emp===e?"#fff":"#777",fontSize:12,padding:"6px 14px",fontWeight:emp===e?700:400}}>
+            style={{background:emp===e?"#8B5A2B":"var(--bg4)",color:emp===e?"#fff":"#777",fontSize:12,padding:"6px 14px",fontWeight:emp===e?700:400}}>
             {e}
           </button>
         ))}
@@ -8309,7 +8302,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:"var(--bg4)",borderRadius:10,padding:"8px 14px",border:"1.5px solid var(--border2)"}}>
         <span style={{fontSize:13,color:"var(--text2)",flex:1}}>Cor do texto na lista</span>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          {["#e8eaf0","#7c8fff","#4ade80","#f59e0b","#ff9aa8","#60a5fa","#c084fc","#34d399","#fb923c","#f472b6"].map(c=>(
+          {["#e8eaf0","#8B5A2B","#22C55E","#f59e0b","#ff9aa8","#60a5fa","#c084fc","#22C55E","#fb923c","#f472b6"].map(c=>(
             <button key={c} onClick={()=>setF("corTexto",c)}
               style={{width:20,height:20,borderRadius:"50%",background:c,border:form.corTexto===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0,flexShrink:0}}/>
           ))}
@@ -8322,7 +8315,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
         <span style={{fontSize:13,color:"var(--text2)"}}>🖥️ Também criar/atualizar login no PDV (atendente) — mesmo nome e senha</span>
       </label>
       <div style={{display:"flex",gap:8}}>
-        <button className="btn" onClick={save} disabled={pdvSaving} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"11px",fontSize:13,opacity:pdvSaving?0.6:1}}>
+        <button className="btn" onClick={save} disabled={pdvSaving} style={{flex:1,background:"#8B5A2B",color:"#fff",padding:"11px",fontSize:13,opacity:pdvSaving?0.6:1}}>
           {pdvSaving?"⏳ Criando acesso PDV...":editId?"💾 Salvar Alterações":"➕ Criar Usuário"}
         </button>
         {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(EMPTY);}} style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
@@ -8342,19 +8335,19 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:u.corTexto||"inherit"}}>{u.nome}</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center"}}>
-              <span className="tag" style={{background:({admin:"#3a2a6044",op:"#1a3a3a44",op_lista:"#1a3a1a44",op_producao:"#3a2a1a44"})[u.role]||"#1a3a1a44",color:({admin:"#a78bfa",op:"#60a5fa",op_lista:"#4ade80",op_producao:"#f59e0b"})[u.role]||"#4ade80",border:`1px solid ${({admin:"#5a3a90",op:"#2a5a5a",op_lista:"#2a5a2a",op_producao:"#5a3a1a"})[u.role]||"#2a5a2a"}`}}>
+              <span className="tag" style={{background:({admin:"#3a2a6044",op:"#1a3a3a44",op_lista:"#1a3a1a44",op_producao:"#3a2a1a44"})[u.role]||"#1a3a1a44",color:({admin:"#8B5CF6",op:"#60a5fa",op_lista:"#22C55E",op_producao:"#f59e0b"})[u.role]||"#22C55E",border:`1px solid ${({admin:"#5a3a90",op:"#2a5a5a",op_lista:"#2a5a2a",op_producao:"#5a3a1a"})[u.role]||"#2a5a2a"}`}}>
                 {({admin:"Admin",op:"Lista + Produção",op_lista:"Lista",op_producao:"Produção"})[u.role]||"Operador"}
               </span>
               {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)"}}>{u.empresa}</span>}
-              {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#4ade80",border:"1px solid #2a5a3a"}}>🖥️ PDV</span>}
+              {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#22C55E",border:"1px solid #2a5a3a"}}>🖥️ PDV</span>}
               <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
                 {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver senha"}
               </button>
             </div>
           </div>
           <div style={{display:"flex",gap:4,flexShrink:0}}>
-            <button onClick={()=>startEdit(u)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
-            <button onClick={()=>del(u.id,u.nome)} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+            <button onClick={()=>startEdit(u)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#8B5A2B"}}>✏️</button>
+            <button onClick={()=>del(u.id,u.nome)} style={{background:"none",border:"1px solid #EF444433",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#EF4444"}}>🗑️</button>
           </div>
         </div>
       </div>
@@ -8530,11 +8523,11 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
     <div className="muted" style={{fontSize:11,marginBottom:12}}>Catálogo real — o que você mudar aqui aparece direto no PDV e no Delivery (mesmo cadastro do Admin).</div>
 
     <div style={{display:"flex",gap:5,marginBottom:14}}>
-      <button className="pill" onClick={()=>setSubTab("produtos")} style={{background:subTab==="produtos"?"#7c8fff":"var(--bg4)",color:subTab==="produtos"?"#fff":"#777"}}>🍽️ Produtos</button>
-      <button className="pill" onClick={()=>setSubTab("categorias")} style={{background:subTab==="categorias"?"#7c8fff":"var(--bg4)",color:subTab==="categorias"?"#fff":"#777"}}>📂 Categorias</button>
+      <button className="pill" onClick={()=>setSubTab("produtos")} style={{background:subTab==="produtos"?"#8B5A2B":"var(--bg4)",color:subTab==="produtos"?"#fff":"#777"}}>🍽️ Produtos</button>
+      <button className="pill" onClick={()=>setSubTab("categorias")} style={{background:subTab==="categorias"?"#8B5A2B":"var(--bg4)",color:subTab==="categorias"?"#fff":"#777"}}>📂 Categorias</button>
     </div>
 
-    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #ff5c7a55",color:"#ff5c7a",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"#EF4444",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
     {loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
 
     {subTab==="produtos"&&<div>
@@ -8547,10 +8540,10 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
         </select>
         <input type="number" placeholder="R$ mín" value={precoMin} onChange={e=>setPrecoMin(e.target.value)} className="inp" style={{width:80,marginBottom:0}}/>
         <input type="number" placeholder="R$ máx" value={precoMax} onChange={e=>setPrecoMax(e.target.value)} className="inp" style={{width:80,marginBottom:0}}/>
-        <button className="pill" onClick={()=>setStatusFiltro("todos")} style={{background:statusFiltro==="todos"?"#7c8fff":"var(--bg4)",color:statusFiltro==="todos"?"#fff":"#777"}}>Todos</button>
+        <button className="pill" onClick={()=>setStatusFiltro("todos")} style={{background:statusFiltro==="todos"?"#8B5A2B":"var(--bg4)",color:statusFiltro==="todos"?"#fff":"#777"}}>Todos</button>
         <button className="pill" onClick={()=>setStatusFiltro("ativos")} style={{background:statusFiltro==="ativos"?"#22c55e":"var(--bg4)",color:statusFiltro==="ativos"?"#fff":"#777"}}>✅ Ativos</button>
         <button className="pill" onClick={()=>setStatusFiltro("inativos")} style={{background:statusFiltro==="inativos"?"#ef4444":"var(--bg4)",color:statusFiltro==="inativos"?"#fff":"#777"}}>🚫 Indisponíveis{inativosCount>0?` (${inativosCount})`:""}</button>
-        <button className="btn" onClick={openNovoProduto} style={{background:"#7c8fff",color:"#fff",fontSize:13,marginLeft:"auto"}}>+ Novo produto</button>
+        <button className="btn" onClick={openNovoProduto} style={{background:"#8B5A2B",color:"#fff",fontSize:13,marginLeft:"auto"}}>+ Novo produto</button>
       </div>
 
       <div className="card" style={{padding:0,overflowX:"auto" as const}}>
@@ -8563,7 +8556,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
             {listaFiltrada.map((p:any)=>(
               <tr key={p.id} style={{borderTop:"1px solid var(--border)",opacity:p.available?1:.6}}>
                 <td style={{padding:"8px 14px"}}>{p.name}</td>
-                <td><span className="tag" style={{background:"#1e2a5e44",color:"#7c8fff"}}>{p.category_name}</span></td>
+                <td><span className="tag" style={{background:"#1e2a5e44",color:"#8B5A2B"}}>{p.category_name}</span></td>
                 <td style={{fontFamily:"monospace"}}>{fmtMoney(p.price)}</td>
                 <td><span style={{color:ptColor(p.print_target),fontSize:11,fontWeight:700}}>{ptLabel(p.print_target)}</span></td>
                 <td>
@@ -8585,7 +8578,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
 
     {subTab==="categorias"&&<div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
-        <button className="btn" onClick={openNovaCategoria} style={{background:"#7c8fff",color:"#fff",fontSize:13}}>+ Nova categoria</button>
+        <button className="btn" onClick={openNovaCategoria} style={{background:"#8B5A2B",color:"#fff",fontSize:13}}>+ Nova categoria</button>
       </div>
       {cats.map((c:any)=>(
         <div key={c.id} className="card" style={{marginBottom:6,opacity:c.active?1:.55}}>
@@ -8595,7 +8588,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
               <div className="muted" style={{fontSize:11}}>Ordem {c.sort_order}{c.printer?` · 🖨️ ${c.printer}`:""}{!c.active&&" · inativa"}</div>
             </div>
             <button onClick={()=>toggleCategoriaAtiva(c)} title={c.active?"Desativar":"Ativar"} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12}}>{c.active?"⏸️":"▶️"}</button>
-            <button onClick={()=>openEditarCategoria(c)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+            <button onClick={()=>openEditarCategoria(c)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#8B5A2B"}}>✏️</button>
           </div>
         </div>
       ))}
@@ -8677,7 +8670,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
 
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>setProdModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
-          <button className="btn" onClick={saveProduto} style={{background:"#7c8fff",color:"#fff",flex:1}}>Salvar</button>
+          <button className="btn" onClick={saveProduto} style={{background:"#8B5A2B",color:"#fff",flex:1}}>Salvar</button>
         </div>
       </div>
     </div>}
@@ -8704,7 +8697,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
         </label>}
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>setCatModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
-          <button className="btn" onClick={saveCategoria} style={{background:"#7c8fff",color:"#fff",flex:1}}>Salvar</button>
+          <button className="btn" onClick={saveCategoria} style={{background:"#8B5A2B",color:"#fff",flex:1}}>Salvar</button>
         </div>
       </div>
     </div>}
@@ -8792,7 +8785,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
     <div style={{display:"flex",gap:4,marginBottom:14,overflowX:"auto",paddingBottom:4,WebkitOverflowScrolling:"touch" as any}}>
       {subTabs.map(([id,label])=>(
         <button key={id} onClick={()=>setSubTab(id)}
-          style={{padding:"8px 12px",background:subTab===id?"#7c8fff":"var(--bg4)",color:subTab===id?"#fff":"#888",border:subTab===id?"1px solid #7c8fff":"1px solid var(--border)",borderRadius:20,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",fontWeight:subTab===id?700:400}}>
+          style={{padding:"8px 12px",background:subTab===id?"#8B5A2B":"var(--bg4)",color:subTab===id?"#fff":"#888",border:subTab===id?"1px solid #8B5A2B":"1px solid var(--border)",borderRadius:20,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",fontWeight:subTab===id?700:400}}>
           {label}
         </button>
       ))}
@@ -8805,18 +8798,11 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Nome de exibição</label>
         <input value={nomeEmpresa} onChange={e=>setNomeEmpresa(e.target.value)} className="inp" style={{marginBottom:8}}/>
         <button className="btn" onClick={()=>{setConfig("nomeEmpresa",nomeEmpresa.trim());alert("✅ Nome salvo!");}}
-          style={{background:"#7c8fff",color:"#fff",padding:"10px",width:"100%",fontSize:13}}>💾 Salvar</button>
+          style={{background:"#8B5A2B",color:"#fff",padding:"10px",width:"100%",fontSize:13}}>💾 Salvar</button>
       </div>
 
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🎨 Aparência</div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <span style={{fontSize:13}}>Tema</span>
-          <button onClick={toggleTheme} className="btn"
-            style={{background:"var(--bg4)",border:"1px solid var(--border)",padding:"8px 16px",fontSize:13}}>
-            {theme==="dark"?"☀️ Modo Claro":"🌙 Modo Escuro"}
-          </button>
-        </div>
         <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>📍 Posição das Abas no Menu</div>
         <div style={{display:"flex",gap:8,marginBottom:8}}>
           {([
@@ -8825,10 +8811,10 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             ["fab","⊕ Flutuante","Botão redondo no canto"],
           ] as [typeof menuLayout,string,string][]).map(([k,label,desc])=>(
             <button key={k} onClick={()=>changeMenuLayout(k)} className="btn"
-              style={{flex:1,background:menuLayout===k?"#7c8fff22":"var(--bg4)",border:menuLayout===k?"2px solid #7c8fff":"1px solid var(--border)",color:menuLayout===k?"#7c8fff":"var(--text2)",padding:"10px 6px",fontSize:11,fontWeight:menuLayout===k?700:400,display:"flex",flexDirection:"column" as const,alignItems:"center",gap:4}}>
+              style={{flex:1,background:menuLayout===k?"#8B5A2B22":"var(--bg4)",border:menuLayout===k?"2px solid #8B5A2B":"1px solid var(--border)",color:menuLayout===k?"#8B5A2B":"var(--text2)",padding:"10px 6px",fontSize:11,fontWeight:menuLayout===k?700:400,display:"flex",flexDirection:"column" as const,alignItems:"center",gap:4}}>
               <span style={{fontSize:15}}>{label.split(" ")[0]}</span>
               <span>{label.split(" ").slice(1).join(" ")}</span>
-              {menuLayout===k&&<span style={{fontSize:9,color:"#7c8fff"}}>● ativo</span>}
+              {menuLayout===k&&<span style={{fontSize:9,color:"#8B5A2B"}}>● ativo</span>}
             </button>
           ))}
         </div>
@@ -8873,7 +8859,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
 
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📊 Empresa Ativa</div>
-        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Empresa selecionada atualmente: <strong style={{color:"#4ade80"}}>{empresa}</strong></div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Empresa selecionada atualmente: <strong style={{color:"#22C55E"}}>{empresa}</strong></div>
         <div className="muted" style={{fontSize:11}}>Para trocar de empresa, use o seletor no topo da tela.</div>
       </div>
     </div>}
@@ -8911,14 +8897,14 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
           <input value={novaCatFin} onChange={e=>setNovaCatFin(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}
             onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...d.categorias,n]}));setNovaCatFin("");}}}/>
           <button className="btn" onClick={()=>{const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...d.categorias,n]}));setNovaCatFin("");}}
-            style={{background:"#7c8fff",color:"#fff",padding:"8px 14px",fontSize:13}}>+</button>
+            style={{background:"#8B5A2B",color:"#fff",padding:"8px 14px",fontSize:13}}>+</button>
         </div>
         <div style={{maxHeight:240,overflowY:"auto"}}>
           {[...categoriasFin].sort((a,b)=>a.localeCompare(b,"pt-BR")).map(c=>(
             <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
               <span style={{fontSize:12}}>{c}</span>
               <button onClick={()=>{if(!confirm(`Excluir categoria "${c}"?`))return;setDb((d:any)=>({...d,categorias:(d.categorias||[]).filter((x:string)=>x!==c)}));}}
-                style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:13}}>🗑️</button>
+                style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:13}}>🗑️</button>
             </div>
           ))}
         </div>
@@ -8932,23 +8918,23 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🏷️ Categorias de Compras</div>
         <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Categorias base são fixas. Adicione categorias extras personalizadas.</div>
         <div style={{marginBottom:8}}>
-          <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Fixas</div>
+          <div style={{fontSize:11,color:"#8B5A2B",fontWeight:700,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Fixas</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {catsBase.map(c=><span key={c} className="tag" style={{background:"var(--bg4)",color:"var(--text2)",fontSize:11}}>{c}</span>)}
           </div>
         </div>
-        <div style={{fontSize:11,color:"#4ade80",fontWeight:700,marginBottom:4,marginTop:8,textTransform:"uppercase",letterSpacing:1}}>Personalizadas</div>
+        <div style={{fontSize:11,color:"#22C55E",fontWeight:700,marginBottom:4,marginTop:8,textTransform:"uppercase",letterSpacing:1}}>Personalizadas</div>
         <div style={{display:"flex",gap:6,marginBottom:6}}>
           <input value={novaCatCompra} onChange={e=>setNovaCatCompra(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}
             onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatCompra.trim().toLowerCase();if(!n||[...catsBase,...catsExtra].includes(n))return;setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));setNovaCatCompra("");}}}/>
           <button className="btn" onClick={()=>{const n=novaCatCompra.trim().toLowerCase();if(!n||[...catsBase,...catsExtra].includes(n))return;setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));setNovaCatCompra("");}}
-            style={{background:"#4ade80",color:"#111",padding:"8px 14px",fontSize:13,fontWeight:700}}>+</button>
+            style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,fontWeight:700}}>+</button>
         </div>
         {catsExtra.map(c=>(
           <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
             <span style={{fontSize:12}}>{c.charAt(0).toUpperCase()+c.slice(1)}</span>
             <button onClick={()=>setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:(d.config?.categoriasExtra||[]).filter((x:string)=>x!==c)}}))}
-              style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:13}}>🗑️</button>
+              style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:13}}>🗑️</button>
           </div>
         ))}
         {!catsExtra.length&&<div className="muted" style={{fontSize:11,marginTop:4}}>Nenhuma categoria personalizada.</div>}
@@ -8971,7 +8957,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
               return{...d,normalizacoes:norms};
             });
             setNormForm({nomePadrao:"",termos:""});setNormEdit(null);
-          }} style={{background:"#7c8fff",color:"#fff",padding:"10px",flex:1,fontSize:13}}>
+          }} style={{background:"#8B5A2B",color:"#fff",padding:"10px",flex:1,fontSize:13}}>
             {normEdit?"💾 Atualizar":"➕ Salvar"}
           </button>
           {normEdit&&<button className="btn" onClick={()=>{setNormEdit(null);setNormForm({nomePadrao:"",termos:""});}}
@@ -8979,7 +8965,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         </div>
       </div>
       {(db.normalizacoes||[]).length>0&&<div className="card" style={{marginBottom:12}}>
-        <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Regras cadastradas ({(db.normalizacoes||[]).length})</div>
+        <div style={{fontSize:11,color:"#8B5A2B",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Regras cadastradas ({(db.normalizacoes||[]).length})</div>
         {(db.normalizacoes||[]).map((n:any)=>(
           <div key={n.id} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
             <div style={{flex:1,minWidth:0}}>
@@ -8988,9 +8974,9 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             </div>
             <div style={{display:"flex",gap:4,flexShrink:0}}>
               <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
-                style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#7c8fff"}}>✏️</button>
+                style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#8B5A2B"}}>✏️</button>
               <button onClick={()=>{if(confirm("Excluir?")){_listaDeletados.add(n.id);setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
-                style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+                style={{background:"none",border:"1px solid #EF444433",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"#EF4444"}}>🗑️</button>
             </div>
           </div>
         ))}
@@ -9009,7 +8995,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             <div className="muted" style={{fontSize:10}}>Abaixo do mínimo</div>
           </div>
           <div style={{flex:1,minWidth:100,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-            <div style={{color:"#4ade80",fontWeight:700,fontSize:16}}>{(db.fornecedores||[]).length}</div>
+            <div style={{color:"#22C55E",fontWeight:700,fontSize:16}}>{(db.fornecedores||[]).length}</div>
             <div className="muted" style={{fontSize:10}}>Fornecedores</div>
           </div>
         </div>
@@ -9025,7 +9011,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             <div key={emp} style={{flex:1,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center",border:`1px solid ${sefazConfig[emp]?"#1a3a20":"#2a1520"}`}}>
               <div style={{fontSize:12,fontWeight:700,marginBottom:4}}>{emp}</div>
               <div style={{fontSize:20}}>{sefazConfig[emp]?"✅":"❌"}</div>
-              <div style={{fontSize:11,color:sefazConfig[emp]?"#4ade80":"#ff5c7a"}}>{sefazConfig[emp]?"Configurado":"Não encontrado"}</div>
+              <div style={{fontSize:11,color:sefazConfig[emp]?"#22C55E":"#EF4444"}}>{sefazConfig[emp]?"Configurado":"Não encontrado"}</div>
             </div>
           ))}
         </div>
@@ -9047,7 +9033,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             <button className="btn" onClick={()=>{
               fetch(`/api/nsu-status?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nsu:parseInt(sefazNsuInput)||0})})
                 .then(r=>r.json()).then(()=>{setSefazNSU(parseInt(sefazNsuInput)||0);setSefazShowNsuEdit(false);alert("✅ NSU atualizado!");}).catch(e=>alert("Erro: "+e.message));
-            }} style={{background:"#7c8fff",color:"#fff",padding:"8px 14px",fontSize:13}}>💾</button>
+            }} style={{background:"#8B5A2B",color:"#fff",padding:"8px 14px",fontSize:13}}>💾</button>
             <button className="btn" onClick={()=>setSefazShowNsuEdit(false)}
               style={{background:"var(--border)",color:"#888",padding:"8px 12px",fontSize:13}}>✕</button>
           </div>
@@ -9066,7 +9052,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         <button className="btn" onClick={()=>{
           setConfig("autoSyncInterval",autoSyncInterval);
           alert("✅ Intervalo salvo!");
-        }} style={{background:"#7c8fff",color:"#fff",padding:"10px",width:"100%",marginTop:8,fontSize:13}}>💾 Salvar Intervalo</button>
+        }} style={{background:"#8B5A2B",color:"#fff",padding:"10px",width:"100%",marginTop:8,fontSize:13}}>💾 Salvar Intervalo</button>
       </div>
 
       <div className="card" style={{marginBottom:12}}>
@@ -9074,7 +9060,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         <button className="btn" onClick={()=>{
           if(!confirm("Limpar o cache de NF-es e forçar re-download na próxima sync?"))return;
           fetch("/api/nfe-cache/clear",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})}).then(()=>alert("✅ Cache limpo!")).catch(e=>alert("Erro: "+e.message));
-        }} style={{background:"#2a1520",color:"#ff5c7a",border:"1px solid #3a1a2a",padding:"10px",width:"100%",fontSize:12,marginBottom:6}}>
+        }} style={{background:"#F3E8FF",color:"#EF4444",border:"1px solid #3a1a2a",padding:"10px",width:"100%",fontSize:12,marginBottom:6}}>
           🗑️ Limpar Cache SEFAZ ({empresa})
         </button>
         <div className="muted" style={{fontSize:11}}>Remove NF-es em cache. Na próxima sincronização, todas serão buscadas novamente a partir do NSU atual.</div>
@@ -9101,7 +9087,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,background:"var(--bg4)",borderRadius:10,padding:"8px 14px",border:"1.5px solid var(--border)"}}>
           <span style={{fontSize:12,color:"var(--text2)",flex:1}}>Cor do texto</span>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-            {["#e8eaf0","#7c8fff","#4ade80","#f59e0b","#ff9aa8","#60a5fa","#c084fc","#34d399","#fb923c","#f472b6"].map(c=>(
+            {["#e8eaf0","#8B5A2B","#22C55E","#f59e0b","#ff9aa8","#60a5fa","#c084fc","#22C55E","#fb923c","#f472b6"].map(c=>(
               <button key={c} onClick={()=>setUserForm(f=>({...f,corTexto:c}))}
                 style={{width:18,height:18,borderRadius:"50%",background:c,border:userForm.corTexto===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0}}/>
             ))}
@@ -9112,7 +9098,7 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
           <span style={{fontSize:12,color:"var(--text2)"}}>🖥️ Também criar/atualizar login no PDV (atendente) — mesmo nome e senha</span>
         </label>
         <div style={{display:"flex",gap:8}}>
-          <button className="btn" onClick={saveUser} disabled={pdvSaving} style={{flex:1,background:"#7c8fff",color:"#fff",padding:"10px",fontSize:13,opacity:pdvSaving?0.6:1}}>
+          <button className="btn" onClick={saveUser} disabled={pdvSaving} style={{flex:1,background:"#8B5A2B",color:"#fff",padding:"10px",fontSize:13,opacity:pdvSaving?0.6:1}}>
             {pdvSaving?"⏳ Criando acesso PDV...":editUserId?"💾 Salvar Alterações":"➕ Criar Usuário"}
           </button>
           {editUserId&&<button className="btn" onClick={()=>{setEditUserId(null);setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0",pdv:false});}}
@@ -9130,11 +9116,11 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14,marginBottom:2,color:u.corTexto||"inherit"}}>{u.nome}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                <span className="tag" style={{background:({admin:"#3a2a6044",op:"#1a3a3a44",op_lista:"#1a3a1a44",op_producao:"#3a2a1a44"})[u.role as string]||"#1a3a1a44",color:({admin:"#a78bfa",op:"#60a5fa",op_lista:"#4ade80",op_producao:"#f59e0b"})[u.role as string]||"#4ade80"}}>
+                <span className="tag" style={{background:({admin:"#3a2a6044",op:"#1a3a3a44",op_lista:"#1a3a1a44",op_producao:"#3a2a1a44"})[u.role as string]||"#1a3a1a44",color:({admin:"#8B5CF6",op:"#60a5fa",op_lista:"#22C55E",op_producao:"#f59e0b"})[u.role as string]||"#22C55E"}}>
                   {({admin:"Admin",op:"Lista+Prod",op_lista:"Lista",op_producao:"Produção"})[u.role as string]||"Op"}
                 </span>
                 {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)"}}>{u.empresa}</span>}
-                {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#4ade80"}}>🖥️ PDV</span>}
+                {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#22C55E"}}>🖥️ PDV</span>}
                 <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))}
                   style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
                   {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver"}
@@ -9142,8 +9128,8 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
               </div>
             </div>
             <div style={{display:"flex",gap:4,flexShrink:0}}>
-              <button onClick={()=>startEditUser(u)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#7c8fff"}}>✏️</button>
-              <button onClick={()=>delUser(u.id,u.nome)} style={{background:"none",border:"1px solid #ff5c7a33",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#ff5c7a"}}>🗑️</button>
+              <button onClick={()=>startEditUser(u)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#8B5A2B"}}>✏️</button>
+              <button onClick={()=>delUser(u.id,u.nome)} style={{background:"none",border:"1px solid #EF444433",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:12,color:"#EF4444"}}>🗑️</button>
             </div>
           </div>
         </div>
@@ -9173,8 +9159,8 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
             <div className="muted" style={{fontSize:11}}>{iaStatus==="ok"?"A IA está pronta para extrair produtos de cupons fiscais.":iaStatus==="error"?iaStatusDetail||"Erro ao conectar com a API.":"Configure a variável ANTHROPIC_API_KEY no .env do servidor."}</div>
           </div>
         </div>
-        {iaStatus!=="ok"&&<div style={{background:"#1a1a2a",borderRadius:8,padding:"10px",border:"1px solid #2a2a4a"}}>
-          <div style={{fontSize:11,color:"#7c8fff",fontWeight:700,marginBottom:4}}>Como configurar:</div>
+        {iaStatus!=="ok"&&<div style={{background:"#DBEAFE",borderRadius:8,padding:"10px",border:"1px solid #2a2a4a"}}>
+          <div style={{fontSize:11,color:"#8B5A2B",fontWeight:700,marginBottom:4}}>Como configurar:</div>
           <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
             1. Acesse o .env na VPS<br/>
             2. Adicione: <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>ANTHROPIC_API_KEY=sk-ant-...</code><br/>
@@ -9205,11 +9191,11 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
 
 // ===================== AGENDA PANEL =====================
 const ENC_STATUS:{[k:string]:{label:string,color:string,bg:string}}={
-  pendente:   {label:"Pendente",   color:"#fbbf24",bg:"#fbbf2418"},
-  confirmado: {label:"Confirmado", color:"#7c8fff",bg:"#7c8fff18"},
-  pronto:     {label:"Pronto",     color:"#4ade80",bg:"#4ade8018"},
-  entregue:   {label:"Entregue",   color:"#34d399",bg:"#34d39918"},
-  cancelado:  {label:"Cancelado",  color:"#ff5c7a",bg:"#ff5c7a18"},
+  pendente:   {label:"Pendente",   color:"#F59E0B",bg:"#F59E0B18"},
+  confirmado: {label:"Confirmado", color:"#8B5A2B",bg:"#8B5A2B18"},
+  pronto:     {label:"Pronto",     color:"#22C55E",bg:"#22C55E18"},
+  entregue:   {label:"Entregue",   color:"#22C55E",bg:"#22C55E18"},
+  cancelado:  {label:"Cancelado",  color:"#EF4444",bg:"#EF444418"},
 };
 const ENC_EMPTY={cliente:"",telefone:"",dataEntrega:today(),horaEntrega:"",itens:"",valor:"",status:"pendente",obs:"",formaPag:"",tipoPag:"total",valorEntrada:""};
 
@@ -9327,9 +9313,9 @@ function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     if(!cli){setViewId(null);return null;}
     const pedCli=[...encomendas.filter((e:any)=>(e.cliente||"").toLowerCase()===(cli.nome||"").toLowerCase())].sort((a:any,b:any)=>b.dataEntrega>a.dataEntrega?1:-1);
     return <div style={{padding:"12px 14px"}}>
-      <button onClick={()=>setViewId(null)} style={{background:"none",border:"none",color:"#7c8fff",cursor:"pointer",fontSize:12,marginBottom:10,padding:0}}>&#8592; Voltar</button>
+      <button onClick={()=>setViewId(null)} style={{background:"none",border:"none",color:"#8B5A2B",cursor:"pointer",fontSize:12,marginBottom:10,padding:0}}>&#8592; Voltar</button>
       <div style={{fontWeight:800,fontSize:15,marginBottom:2}}>{cli.nome}</div>
-      {cli.telefone&&<div style={{fontSize:12,color:"#7c8fff",marginBottom:6}}>📞 {cli.telefone}</div>}
+      {cli.telefone&&<div style={{fontSize:12,color:"#8B5A2B",marginBottom:6}}>📞 {cli.telefone}</div>}
       {cli.obs&&<div style={{fontSize:11,color:"var(--text2)",marginBottom:8,fontStyle:"italic" as const}}>{cli.obs}</div>}
       <div style={{fontSize:11,color:"var(--text2)",marginBottom:12,fontWeight:600}}>{pedCli.length} encomenda(s) no histórico</div>
       {pedCli.length===0&&<div style={{color:"var(--text2)",fontSize:12,textAlign:"center" as const,padding:16}}>Nenhuma encomenda para este cliente.</div>}
@@ -9340,7 +9326,7 @@ function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             <div style={{fontWeight:600,fontSize:12}}>{fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}</div>
             <span style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,borderRadius:8,padding:"2px 7px"}}>{st.label}</span>
           </div>
-          {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,color:"#4ade80",fontWeight:700}}>{fmtMoney(parseFloat(e.valor))}</div>}
+          {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,color:"#22C55E",fontWeight:700}}>{fmtMoney(parseFloat(e.valor))}</div>}
           {(e.produtos||[]).length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3}}>{(e.produtos||[]).map((p:any)=>p.qtd+"x "+p.nome).join(", ")}</div>}
           {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,fontStyle:"italic" as const}}>{e.itens}</div>}
         </div>;
@@ -9374,14 +9360,14 @@ function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
           <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>setViewId(cx.id)}>
             <div style={{fontWeight:700,fontSize:13}}>{cx.nome}</div>
-            {cx.telefone&&<div style={{fontSize:11,color:"#7c8fff",marginTop:2}}>📞 {cx.telefone}</div>}
+            {cx.telefone&&<div style={{fontSize:11,color:"#8B5A2B",marginTop:2}}>📞 {cx.telefone}</div>}
             {cx.obs&&<div style={{fontSize:11,color:"var(--text2)",marginTop:2,fontStyle:"italic" as const}}>{cx.obs}</div>}
             <div style={{fontSize:10,color:"var(--text2)",marginTop:4}}>{nEnc} encomenda(s)</div>
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
             {waNum&&<button onClick={(ev)=>{ev.stopPropagation();window.open("https://wa.me/"+waNum,"_blank");}} title="WhatsApp" style={{...btnA,border:"1px solid #25d36644",color:"#25d366"}}>📱</button>}
-            <button onClick={(ev)=>{ev.stopPropagation();startEdit(cx);}} style={{...btnA,border:"1px solid var(--border2)",color:"#7c8fff"}}>✏️</button>
-            <button onClick={(ev)=>{ev.stopPropagation();del(cx.id);}} style={{...btnA,border:"1px solid #ff5c7a22",color:"#ff5c7a",fontSize:14}}>×</button>
+            <button onClick={(ev)=>{ev.stopPropagation();startEdit(cx);}} style={{...btnA,border:"1px solid var(--border2)",color:"#8B5A2B"}}>✏️</button>
+            <button onClick={(ev)=>{ev.stopPropagation();del(cx.id);}} style={{...btnA,border:"1px solid #EF444422",color:"#EF4444",fontSize:14}}>×</button>
           </div>
         </div>
       </div>;
@@ -9404,9 +9390,9 @@ function AgendaPanel({db,setDb,empresa,isAdmin,pendingSub,setPendingSub}:{db:any
       {agendaTabs.filter(([k])=>isAdmin||k==="encomendas").map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)}
           style={{flexShrink:0,padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:subTab===k?700:500,position:"relative" as const,
-            background:subTab===k?"#7c8fff":"var(--bg3)",color:subTab===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
+            background:subTab===k?"#8B5A2B":"var(--bg3)",color:subTab===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
           {l}
-          {k==="cadastradas"&&nCad>0&&<span style={{position:"absolute" as const,top:-4,right:-4,background:"#34d399",color:"#fff",borderRadius:10,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{nCad}</span>}
+          {k==="cadastradas"&&nCad>0&&<span style={{position:"absolute" as const,top:-4,right:-4,background:"#22C55E",color:"#fff",borderRadius:10,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{nCad}</span>}
         </button>
       ))}
     </div>
@@ -9526,14 +9512,14 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const EncCard=({e}:{e:any})=>{
     const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
     const atras=e.dataEntrega<hoje;
-    return <div style={{background:"var(--bg3)",borderRadius:12,border:`1px solid ${atras?"#ff5c7a44":"var(--border)"}`,padding:"12px 14px",marginBottom:8}}>
+    return <div style={{background:"var(--bg3)",borderRadius:12,border:`1px solid ${atras?"#EF444444":"var(--border)"}`,padding:"12px 14px",marginBottom:8}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
             <span style={{fontWeight:700,fontSize:14}}>{e.cliente}</span>
-            {atras&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>ATRASADO</span>}
+            {atras&&<span style={{fontSize:9,background:"#EF4444",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800}}>ATRASADO</span>}
           </div>
-          {e.telefone&&<div style={{fontSize:11,color:"#7c8fff",marginTop:2}}>📞 {e.telefone}</div>}
+          {e.telefone&&<div style={{fontSize:11,color:"#8B5A2B",marginTop:2}}>📞 {e.telefone}</div>}
           <div style={{fontSize:11,color:atras?"#ff9aa8":"var(--text2)",marginTop:3}}>
             📅 {fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}
           </div>
@@ -9542,12 +9528,12 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
               const vP2=p.preco?parseFloat(String(p.preco).replace(/[^\d,]/g,"").replace(",",".")):0;
               return <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}>
                 <span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>
-                {vP2>0&&!isNaN(vP2)&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(vP2)}</span>}
+                {vP2>0&&!isNaN(vP2)&&<span style={{color:"#22C55E",flexShrink:0}}>{fmtMoney(vP2)}</span>}
               </div>;
             })}
           </div>}
           {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.4,fontStyle:"italic" as const}}>{e.itens}</div>}
-          {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
+          {e.valor&&parseFloat(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#22C55E",marginTop:4}}>{fmtMoney(parseFloat(e.valor))}</div>}
           {fmtPag(e)&&<div style={{fontSize:11,color:"#a3e635",marginTop:2}}>{fmtPag(e)}</div>}
           {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
         </div>
@@ -9555,9 +9541,9 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <span style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,borderRadius:10,padding:"2px 8px"}}>{st.label}</span>
           <div style={{display:"flex",gap:3,marginTop:4}}>
             <button onClick={()=>abrirWhatsApp(e,empresa)} title="WhatsApp" style={{...btnAcao,border:"1px solid #25d36644",color:"#25d366"}}>📱</button>
-            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #a78bfa44",color:"#a78bfa"}}>🖨️</button>
-            <button onClick={()=>startEdit(e)} style={{...btnAcao,border:"1px solid var(--border2)",color:"#7c8fff"}}>✏️</button>
-            <button onClick={()=>del(e.id)} style={{...btnAcao,border:"1px solid #ff5c7a22",color:"#ff5c7a",fontSize:14}}>×</button>
+            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #8B5CF644",color:"#8B5CF6"}}>🖨️</button>
+            <button onClick={()=>startEdit(e)} style={{...btnAcao,border:"1px solid var(--border2)",color:"#8B5A2B"}}>✏️</button>
+            <button onClick={()=>del(e.id)} style={{...btnAcao,border:"1px solid #EF444422",color:"#EF4444",fontSize:14}}>×</button>
           </div>
         </div>
       </div>
@@ -9578,7 +9564,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       {[["todos","Todas"],["pendente","Pendente"],["confirmado","Confirmado"],["pronto","Pronto"]].map(([k,l])=>(
         <button key={k} onClick={()=>setFiltroStatus(k)}
           style={{flexShrink:0,padding:"4px 10px",borderRadius:16,fontSize:10,fontWeight:filtroStatus===k?700:500,
-            background:filtroStatus===k?"#7c8fff":"var(--bg4)",color:filtroStatus===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
+            background:filtroStatus===k?"#8B5A2B":"var(--bg4)",color:filtroStatus===k?"#fff":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer"}}>
           {l}
         </button>
       ))}
@@ -9586,7 +9572,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
 
     {/* Banner pos-cadastro */}
     {encRecemSalva&&<div className="card" style={{marginBottom:14,border:"1px solid #25d36644",background:"linear-gradient(135deg,#041a0a,#0a1a10)"}}>
-      <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:"#4ade80"}}>Encomenda cadastrada!</div>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:"#22C55E"}}>Encomenda cadastrada!</div>
       {(encRecemSalva.produtos||[]).length>0&&<div style={{fontSize:11,color:"#a3e635",marginBottom:6}}>🏭 Pedido de producao gerado automaticamente</div>}
       <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Deseja compartilhar os detalhes com o cliente?</div>
       <div style={{display:"flex",gap:8}}>
@@ -9596,8 +9582,8 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     </div>}
 
     {/* Banner encomenda finalizada */}
-    {encFinalizada&&<div className="card" style={{marginBottom:14,border:"1px solid #34d39944",background:"linear-gradient(135deg,#041a10,#0a1a12)"}}>
-      <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:"#34d399"}}>Encomenda finalizada e salva em Cadastradas!</div>
+    {encFinalizada&&<div className="card" style={{marginBottom:14,border:"1px solid #22C55E44",background:"linear-gradient(135deg,#041a10,#0a1a12)"}}>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:"#22C55E"}}>Encomenda finalizada e salva em Cadastradas!</div>
       <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Compartilhar confirmacao de entrega com o cliente?</div>
       <div style={{display:"flex",gap:8}}>
         <button className="btn" style={{flex:1,background:"#25d366",border:"none"}} onClick={()=>{abrirWhatsApp(encFinalizada,empresa);setEncFinalizada(null);}}>📱 WhatsApp</button>
@@ -9638,12 +9624,12 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         <div style={{gridColumn:"1/-1"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
             <label className="label" style={{margin:0}}>Produtos do Cardapio</label>
-            <button onClick={()=>setShowNovoProd(v=>!v)} style={{fontSize:10,padding:"2px 8px",borderRadius:8,border:"1px solid #7c8fff44",background:"#7c8fff18",color:"#7c8fff",cursor:"pointer"}}>
+            <button onClick={()=>setShowNovoProd(v=>!v)} style={{fontSize:10,padding:"2px 8px",borderRadius:8,border:"1px solid #8B5A2B44",background:"#8B5A2B18",color:"#8B5A2B",cursor:"pointer"}}>
               {showNovoProd?"Fechar":"+ Cadastrar produto"}
             </button>
           </div>
-          {showNovoProd&&<div style={{background:"var(--bg4)",borderRadius:8,padding:10,marginBottom:8,border:"1px solid #7c8fff33"}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#7c8fff",marginBottom:6}}>Novo produto (aparece em Producao)</div>
+          {showNovoProd&&<div style={{background:"var(--bg4)",borderRadius:8,padding:10,marginBottom:8,border:"1px solid #8B5A2B33"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#8B5A2B",marginBottom:6}}>Novo produto (aparece em Producao)</div>
             <input className="inp" placeholder="Nome *" value={novoProdForm.nome} onChange={e=>setNovoProdForm(f=>({...f,nome:e.target.value}))} style={{marginBottom:6}}/>
             <div style={{display:"flex",gap:6}}>
               <select className="inp" style={{flex:1,marginBottom:0}} value={novoProdForm.cat} onChange={e=>setNovoProdForm(f=>({...f,cat:e.target.value}))}>
@@ -9662,12 +9648,12 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
               <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",fontSize:12}}>
                 <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}{p.unidade&&p.unidade!=="un"?<span style={{fontSize:10,color:"#888"}}> {p.unidade}</span>:null}</span>
                 <div style={{display:"flex",alignItems:"center",gap:3}}>
-                  <button onClick={()=>updateQtd(p.id,Math.max(0.5,parseFloat(((p.qtd||1)-0.5).toFixed(1))))} style={{width:20,height:20,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg3)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>-</button>
-                  <span style={{fontSize:12,fontWeight:700,color:"#7c8fff",minWidth:22,textAlign:"center" as const}}>{p.qtd}</span>
-                  <button onClick={()=>updateQtd(p.id,parseFloat(((p.qtd||1)+0.5).toFixed(1)))} style={{width:20,height:20,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg3)",color:"#7c8fff",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
+                  <button onClick={()=>updateQtd(p.id,Math.max(0.5,parseFloat(((p.qtd||1)-0.5).toFixed(1))))} style={{width:20,height:20,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg3)",color:"#8B5A2B",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>-</button>
+                  <span style={{fontSize:12,fontWeight:700,color:"#8B5A2B",minWidth:22,textAlign:"center" as const}}>{p.qtd}</span>
+                  <button onClick={()=>updateQtd(p.id,parseFloat(((p.qtd||1)+0.5).toFixed(1)))} style={{width:20,height:20,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg3)",color:"#8B5A2B",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                 </div>
                 <MoneyInput value={p.preco||""} onChange={v=>updatePreco(p.id,v)} placeholder="R$" style={{marginBottom:0,width:78,fontSize:11,padding:"3px 6px"}}/>
-                <button onClick={()=>remProd(p.id)} style={{background:"none",border:"none",color:"#ff5c7a",cursor:"pointer",fontSize:14,lineHeight:1,padding:"0 2px"}}>×</button>
+                <button onClick={()=>remProd(p.id)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:14,lineHeight:1,padding:"0 2px"}}>×</button>
               </div>
             ))}
           </div>}
@@ -9702,7 +9688,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
               if(tot<=0)return null;
               const fmt=(tot*100).toFixed(0).replace(/(\d+)(\d{2})$/,"$1,$2").replace(/\B(?=(\d{3})+(?!\d))/g,".");
               return <button type="button" onClick={()=>setF("valor",`R$ ${fmt}`)}
-                style={{fontSize:10,padding:"2px 8px",borderRadius:8,border:"1px solid #4ade8044",background:"#4ade8018",color:"#4ade80",cursor:"pointer"}}>
+                style={{fontSize:10,padding:"2px 8px",borderRadius:8,border:"1px solid #22C55E44",background:"#22C55E18",color:"#22C55E",cursor:"pointer"}}>
                 + Usar total dos produtos ({fmtMoney(tot)})
               </button>;
             })()}
@@ -9726,8 +9712,8 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <div style={{display:"flex",gap:8}}>
             {(["total","entrada"] as const).map(t=>(
               <button key={t} onClick={()=>setF("tipoPag",t)}
-                style={{flex:1,padding:"7px 0",borderRadius:8,border:`1px solid ${form.tipoPag===t?"#7c8fff":"var(--border)"}`,
-                  background:form.tipoPag===t?"#7c8fff22":"var(--bg3)",color:form.tipoPag===t?"#7c8fff":"var(--text2)",
+                style={{flex:1,padding:"7px 0",borderRadius:8,border:`1px solid ${form.tipoPag===t?"#8B5A2B":"var(--border)"}`,
+                  background:form.tipoPag===t?"#8B5A2B22":"var(--bg3)",color:form.tipoPag===t?"#8B5A2B":"var(--text2)",
                   cursor:"pointer",fontSize:12,fontWeight:form.tipoPag===t?700:500}}>
                 {t==="total"?"Pagamento Total":"Entrada + Restante"}
               </button>
@@ -9755,11 +9741,11 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     </div>}
 
     {atrasadas.length>0&&<>
-      <div style={{fontSize:11,fontWeight:800,color:"#ff5c7a",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6}}>Atrasadas ({atrasadas.length})</div>
+      <div style={{fontSize:11,fontWeight:800,color:"#EF4444",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6}}>Atrasadas ({atrasadas.length})</div>
       {atrasadas.map((e:any)=><EncCard key={e.id} e={e}/>)}
     </>}
     {proximas.length>0&&<>
-      <div style={{fontSize:11,fontWeight:800,color:"#7c8fff",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6,marginTop:atrasadas.length>0?12:0}}>Proximas ({proximas.length})</div>
+      <div style={{fontSize:11,fontWeight:800,color:"#8B5A2B",textTransform:"uppercase" as const,letterSpacing:0.8,marginBottom:6,marginTop:atrasadas.length>0?12:0}}>Proximas ({proximas.length})</div>
       {proximas.map((e:any)=><EncCard key={e.id} e={e}/>)}
     </>}
   </div>;
@@ -9804,27 +9790,27 @@ function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
               <span style={{fontWeight:700,fontSize:14}}>{e.cliente}</span>
               <span style={{fontSize:9,fontWeight:700,color:st.color,background:st.bg,borderRadius:8,padding:"1px 6px"}}>{st.label}</span>
             </div>
-            {e.telefone&&<div style={{fontSize:11,color:"#7c8fff",marginTop:2}}>📞 {e.telefone}</div>}
+            {e.telefone&&<div style={{fontSize:11,color:"#8B5A2B",marginTop:2}}>📞 {e.telefone}</div>}
             <div style={{fontSize:11,color:"var(--text2)",marginTop:3}}>📅 {fmtDate(e.dataEntrega)}{e.horaEntrega?` às ${e.horaEntrega}`:""}</div>
             {(e.produtos||[]).length>0&&<div style={{marginTop:4}}>
               {(e.produtos||[]).map((p:any,i:number)=>{
                 const vP=parsePreco(p.preco);
                 return <div key={i} style={{fontSize:11,color:"var(--text2)",display:"flex",justifyContent:"space-between" as const,gap:4}}>
                   <span>• {p.qtd}x {p.nome}{p.unidade&&p.unidade!=="un"?` (${p.unidade})`:""}</span>
-                  {vP>0&&<span style={{color:"#4ade80",flexShrink:0}}>{fmtMoney(vP)}</span>}
+                  {vP>0&&<span style={{color:"#22C55E",flexShrink:0}}>{fmtMoney(vP)}</span>}
                 </div>;
               })}
             </div>}
             {e.itens&&<div style={{fontSize:11,color:"var(--text2)",marginTop:3,fontStyle:"italic" as const,lineHeight:1.4}}>{e.itens}</div>}
-            {parsePreco(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginTop:4}}>{fmtMoney(parsePreco(e.valor))}</div>}
+            {parsePreco(e.valor)>0&&<div style={{fontSize:13,fontWeight:700,color:"#22C55E",marginTop:4}}>{fmtMoney(parsePreco(e.valor))}</div>}
             {pagInfo&&<div style={{fontSize:11,color:"#a3e635",marginTop:2}}>{pagInfo}</div>}
             {e.obs&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic" as const}}>{e.obs}</div>}
             <div style={{fontSize:9,color:"#444",marginTop:4}}>{e.atualizadoEm?`Finalizado em ${new Date(e.atualizadoEm).toLocaleDateString("pt-BR",{timeZone:TZ})}`:""}</div>
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
             <button onClick={()=>abrirWhatsApp(e,empresa)} title="WhatsApp" style={{...btnAcao,border:"1px solid #25d36644",color:"#25d366"}}>📱</button>
-            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #a78bfa44",color:"#a78bfa"}}>🖨️</button>
-            <button onClick={()=>del(e.id)} style={{...btnAcao,border:"1px solid #ff5c7a22",color:"#ff5c7a",fontSize:14}}>×</button>
+            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #8B5CF644",color:"#8B5CF6"}}>🖨️</button>
+            <button onClick={()=>del(e.id)} style={{...btnAcao,border:"1px solid #EF444422",color:"#EF4444",fontSize:14}}>×</button>
           </div>
         </div>
       </div>;
@@ -9875,7 +9861,7 @@ function AnotacoesPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:3,paddingBottom:4}}>
           <span style={{fontSize:10,color:"var(--text2)",fontWeight:600}}>Urgente</span>
           <button onClick={()=>setForm(f=>({...f,urgente:!f.urgente}))}
-            style={{width:40,height:22,borderRadius:11,border:"none",cursor:"pointer",background:form.urgente?"#ff5c7a":"var(--border2)",transition:"all .2s",position:"relative" as const}}>
+            style={{width:40,height:22,borderRadius:11,border:"none",cursor:"pointer",background:form.urgente?"#EF4444":"var(--border2)",transition:"all .2s",position:"relative" as const}}>
             <div style={{width:16,height:16,borderRadius:8,background:"#fff",position:"absolute" as const,top:3,left:form.urgente?21:3,transition:"left .2s"}}/>
           </button>
         </div>
@@ -9895,18 +9881,18 @@ function AnotacoesPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       const venceu=a.dataLembrete&&a.dataLembrete<hoje;
       const hjNote=a.dataLembrete===hoje;
       return <div key={a.id} style={{background:a.urgente?"#1a0808":"var(--bg3)",borderRadius:10,
-        border:`1px solid ${venceu?"#ff5c7a44":a.urgente?"#ff5c7a22":"var(--border)"}`,padding:"10px 12px",marginBottom:8}}>
+        border:`1px solid ${venceu?"#EF444444":a.urgente?"#EF444422":"var(--border)"}`,padding:"10px 12px",marginBottom:8}}>
         <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
           <div style={{flex:1,minWidth:0}}>
-            {a.urgente&&<span style={{fontSize:9,background:"#ff5c7a",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800,marginBottom:4,display:"inline-block"}}>URGENTE</span>}
+            {a.urgente&&<span style={{fontSize:9,background:"#EF4444",color:"#fff",borderRadius:8,padding:"1px 5px",fontWeight:800,marginBottom:4,display:"inline-block"}}>URGENTE</span>}
             <div style={{fontSize:13,lineHeight:1.4,whiteSpace:"pre-wrap" as const}}>{a.texto}</div>
-            {a.dataLembrete&&<div style={{fontSize:10,marginTop:4,fontWeight:600,color:venceu?"#ff5c7a":hjNote?"#fbbf24":"var(--text2)"}}>
+            {a.dataLembrete&&<div style={{fontSize:10,marginTop:4,fontWeight:600,color:venceu?"#EF4444":hjNote?"#F59E0B":"var(--text2)"}}>
               {venceu?"Venceu em":hjNote?"Hoje —":""} {fmtDate(a.dataLembrete)}
             </div>}
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
-            <button onClick={()=>startEdit(a)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",cursor:"pointer",fontSize:11,padding:"3px 6px"}}>✏️</button>
-            <button onClick={()=>del(a.id)} style={{background:"none",border:"1px solid #ff5c7a22",borderRadius:6,color:"#ff5c7a",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>×</button>
+            <button onClick={()=>startEdit(a)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#8B5A2B",cursor:"pointer",fontSize:11,padding:"3px 6px"}}>✏️</button>
+            <button onClick={()=>del(a.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>×</button>
           </div>
         </div>
       </div>;
@@ -9934,17 +9920,17 @@ function NotifBell({db,onNavigate,setPendingSub}:{db:any,onNavigate:(t:string)=>
 
   type Grp={cor:string,bg:string,titulo:string,itens:{label:string,sub?:string,tab:string}[]};
   const grupos:Grp[]=[];
-  if(encAtras.length>0)grupos.push({cor:"#ff5c7a",bg:"#ff5c7a18",titulo:`Encomendas atrasadas (${encAtras.length})`,
+  if(encAtras.length>0)grupos.push({cor:"#EF4444",bg:"#EF444418",titulo:`Encomendas atrasadas (${encAtras.length})`,
     itens:encAtras.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${fmtDate(e.dataEntrega)}`,tab:"agenda",sub:"encomendas"}))});
-  if(encProntas.length>0)grupos.push({cor:"#4ade80",bg:"#4ade8018",titulo:`Prontas para entrega (${encProntas.length})`,
+  if(encProntas.length>0)grupos.push({cor:"#22C55E",bg:"#22C55E18",titulo:`Prontas para entrega (${encProntas.length})`,
     itens:encProntas.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${fmtDate(e.dataEntrega)}`,tab:"agenda",sub:"encomendas"}))});
-  if(encAmanha.length>0)grupos.push({cor:"#a78bfa",bg:"#a78bfa18",titulo:`Encomendas amanhã (${encAmanha.length})`,
+  if(encAmanha.length>0)grupos.push({cor:"#8B5CF6",bg:"#8B5CF618",titulo:`Encomendas amanhã (${encAmanha.length})`,
     itens:encAmanha.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${e.horaEntrega||"sem hora"}`,tab:"agenda",sub:"encomendas"}))});
-  if(encHoje.length>0)grupos.push({cor:"#fbbf24",bg:"#fbbf2418",titulo:`Encomendas para hoje (${encHoje.length})`,
+  if(encHoje.length>0)grupos.push({cor:"#F59E0B",bg:"#F59E0B18",titulo:`Encomendas para hoje (${encHoje.length})`,
     itens:encHoje.slice(0,5).map((e:any)=>({label:`${e.cliente} — ${e.horaEntrega||"sem hora"}`,tab:"agenda",sub:"encomendas"}))});
   if(contasAtras.length>0)grupos.push({cor:"#f97316",bg:"#f9731618",titulo:`Contas atrasadas (${contasAtras.length})`,
     itens:contasAtras.slice(0,5).map((c:any)=>({label:`${c.descricao||c.categoria||"Conta"} — ${fmtDate(c.vencimento)}`,tab:"financeiro"}))});
-  if(contasHoje.length>0)grupos.push({cor:"#7c8fff",bg:"#7c8fff18",titulo:`Contas vencem hoje (${contasHoje.length})`,
+  if(contasHoje.length>0)grupos.push({cor:"#8B5A2B",bg:"#8B5A2B18",titulo:`Contas vencem hoje (${contasHoje.length})`,
     itens:contasHoje.slice(0,5).map((c:any)=>({label:`${c.descricao||c.categoria||"Conta"} — ${fmtMoney(parseMoney(c.valor))}`,tab:"financeiro"}))});
   if(estoqueBaixo.length>0)grupos.push({cor:"#f59e0b",bg:"#f59e0b18",titulo:`Estoque baixo (${estoqueBaixo.length})`,
     itens:estoqueBaixo.slice(0,5).map((m:any)=>({label:`${m.nome} — ${m.estoqueAtual||0} ${m.unidade||"un"} (min: ${m.estoqueMinimo})`,tab:"estoque"}))});
@@ -9954,7 +9940,7 @@ function NotifBell({db,onNavigate,setPendingSub}:{db:any,onNavigate:(t:string)=>
       style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:16,padding:"4px 8px",lineHeight:1,position:"relative" as const}}
       title="Notificacoes">
       🔔
-      {total>0&&<span style={{position:"absolute" as const,top:-4,right:-4,background:"#ff5c7a",color:"#fff",borderRadius:10,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{total>99?"99+":total}</span>}
+      {total>0&&<span style={{position:"absolute" as const,top:-4,right:-4,background:"#EF4444",color:"#fff",borderRadius:10,fontSize:8,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{total>99?"99+":total}</span>}
     </button>
     {open&&<>
       <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:299}}/>
@@ -9962,7 +9948,7 @@ function NotifBell({db,onNavigate,setPendingSub}:{db:any,onNavigate:(t:string)=>
         <div style={{padding:"10px 14px 8px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontWeight:800,fontSize:13}}>Notificacoes</span>
           {total===0&&<span style={{fontSize:11,color:"var(--text3)"}}>Nenhuma pendencia</span>}
-          {total>0&&<span style={{fontSize:10,background:"#ff5c7a",color:"#fff",borderRadius:10,padding:"1px 7px",fontWeight:700}}>{total} itens</span>}
+          {total>0&&<span style={{fontSize:10,background:"#EF4444",color:"#fff",borderRadius:10,padding:"1px 7px",fontWeight:700}}>{total} itens</span>}
         </div>
         {total===0&&<div style={{padding:"28px 16px",textAlign:"center" as const,color:"var(--text3)"}}>
           <div style={{fontSize:28,marginBottom:6}}>✅</div>
