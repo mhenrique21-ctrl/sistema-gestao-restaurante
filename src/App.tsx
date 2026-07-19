@@ -1043,7 +1043,7 @@ export default function App() {
       </div>
 
       {/* OPERATOR TABS (mobile, when operator has multiple tabs) */}
-      {isOp&&tabs.length>1&&<div style={{display:"flex",gap:6,padding:"8px 16px",background:"var(--bg2)",borderBottom:"1px solid #0EA5E940"}}>
+      {isOp&&tabs.length>1&&<div style={{display:"flex",gap:6,padding:"8px 16px",background:"var(--bg5)",borderBottom:"1px solid var(--border)"}}>
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px 10px",borderRadius:10,fontSize:12,fontWeight:tab===t.id?700:500,
@@ -3103,7 +3103,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             const num=String(seq[nota.grupoId]||1).padStart(3,"0");
             const hChanged=open&&(notaForn!==nota.fornecedor||notaData!==nota.data);
 
-            return <div key={nota.grupoId} style={{marginBottom:8,border:"1px solid",borderColor:open?"#6366F144":"#E5E7EB",borderRadius:12,overflow:"hidden",background:"var(--bg2)"}}>
+            return <div key={nota.grupoId} style={{marginBottom:8,border:"1px solid",borderColor:open?"#6366F144":"#E5E7EB",borderRadius:12,overflow:"hidden",background:"var(--bg4)"}}>
 
               {/* ---- cabeçalho da pasta ---- */}
               <div style={{display:"flex",alignItems:"center",padding:"11px 14px",cursor:"pointer",gap:10}}
@@ -3364,7 +3364,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             </div>
             {!collapsed&&<div>
               {items.map(mp=>(
-                <div key={mp.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,background:"var(--bg2)"}}>
+                <div key={mp.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,background:"var(--bg4)"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:600,fontSize:13,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mp.nome}</div>
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -6175,7 +6175,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
                   <div style={{fontSize:11,color:pagasG===sorted.length?"#22C55E":"#888"}}>{pagasG}/{sorted.length} pagas</div>
                 </div>
               </div>
-              {expanded&&<div style={{background:"var(--bg2)"}}>
+              {expanded&&<div style={{background:"var(--bg4)"}}>
                 {sorted.map((c:any)=>(
                   <div key={c.id} style={{padding:"10px 14px",borderTop:"1px solid var(--border)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
@@ -7611,7 +7611,7 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
             </div>
           </div>
           {dTxs.map(t=>(
-            <div key={t.id} style={{padding:"8px 14px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--bg2)"}}>
+            <div key={t.id} style={{padding:"8px 14px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--bg4)"}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{t.descricao}</div>
                 <div style={{fontSize:11,color:"var(--text3)"}}>{t.categoria}</div>
@@ -9932,7 +9932,7 @@ function NotifBell({db,onNavigate,setPendingSub}:{db:any,onNavigate:(t:string)=>
     </button>
     {open&&<>
       <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:299}}/>
-      <div style={{position:"absolute" as const,right:0,top:"110%",background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:14,padding:0,zIndex:300,width:300,maxHeight:420,overflowY:"auto" as const,boxShadow:"0 8px 32px #0009"}}>
+      <div style={{position:"absolute" as const,right:0,top:"110%",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:14,padding:0,zIndex:300,width:300,maxHeight:420,overflowY:"auto" as const,boxShadow:"0 8px 24px rgba(15,23,42,0.15)"}}>
         <div style={{padding:"10px 14px 8px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontWeight:800,fontSize:13}}>Notificacoes</span>
           {total===0&&<span style={{fontSize:11,color:"var(--text3)"}}>Nenhuma pendencia</span>}
