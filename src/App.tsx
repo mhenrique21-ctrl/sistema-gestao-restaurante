@@ -1226,8 +1226,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
 
   return <div>
     {/* Contas a Pagar — Hoje / Vencidas */}
-    <div className="card" style={{marginBottom:14,border:`1px solid ${contasAtrasadas.length>0?"#EF4444":"#E5E7EB"}`,
-      background:contasAtrasadas.length>0?"#FEE2E2":"var(--bg3)"}}>
+    <div className="card" style={{marginBottom:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         <div className="section-title" style={{margin:0}}>Contas a Pagar</div>
         <button onClick={irParaFinanceiro} style={{background:"none",border:"1px solid #0EA5E940",borderRadius:8,color:"#6366F1",
