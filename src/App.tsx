@@ -1224,14 +1224,40 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
     background:periodo===p?"#6366F1":"transparent",color:periodo===p?"#fff":"#888",
     border:periodo===p?"none":"1px solid #E5E7EB",borderRadius:8,cursor:"pointer" as const});
 
+  const contasPagarView:"full"|"min"|"off"=db.config?.contasPagarView||"full";
+  const setContasPagarView=(v:"full"|"min"|"off")=>setDb((d:any)=>({...d,config:{...(d.config||{}),contasPagarView:v}}));
+
   return <div>
     {/* Contas a Pagar — Hoje / Vencidas */}
+    {contasPagarView==="off"?(
+      <button onClick={()=>setContasPagarView("full")} className="card"
+        style={{marginBottom:14,width:"100%",textAlign:"left" as const,cursor:"pointer",border:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span className="section-title" style={{margin:0}}>Contas a Pagar {contasDash.length>0?`(${contasDash.length})`:""}</span>
+        <span style={{fontSize:11,color:"var(--text2)"}}>⊕ Mostrar</span>
+      </button>
+    ):(
     <div className="card" style={{marginBottom:14}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:contasPagarView==="min"?0:8}}>
         <div className="section-title" style={{margin:0}}>Contas a Pagar</div>
-        <button onClick={irParaFinanceiro} style={{background:"none",border:"1px solid #0EA5E940",borderRadius:8,color:"#6366F1",
-          fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todas</button>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <button onClick={()=>setContasPagarView(contasPagarView==="min"?"full":"min")} title={contasPagarView==="min"?"Expandir":"Minimizar"}
+            style={{background:"none",border:"1px solid var(--border)",borderRadius:8,color:"var(--text2)",fontSize:11,padding:"4px 8px",cursor:"pointer"}}>
+            {contasPagarView==="min"?"▾":"▴"}
+          </button>
+          <button onClick={()=>setContasPagarView("off")} title="Desativar este card"
+            style={{background:"none",border:"1px solid var(--border)",borderRadius:8,color:"var(--text2)",fontSize:11,padding:"4px 8px",cursor:"pointer"}}>✕</button>
+          <button onClick={irParaFinanceiro} style={{background:"none",border:"1px solid #0EA5E940",borderRadius:8,color:"#6366F1",
+            fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todas</button>
+        </div>
       </div>
+      {contasPagarView==="min"?(
+        contasDash.length===0
+          ?<div style={{fontSize:12,color:"#22C55E"}}>Nenhuma conta pendente para hoje</div>
+          :<div style={{display:"flex",gap:14,fontSize:12,flexWrap:"wrap" as const}}>
+            {contasAtrasadas.length>0&&<span style={{color:"#EF4444",fontWeight:600}}>VENCIDAS ({contasAtrasadas.length}) — {fmtMoney(totalAtrasadas)}</span>}
+            {contasHoje.length>0&&<span style={{color:"#F59E0B",fontWeight:600}}>HOJE ({contasHoje.length}) — {fmtMoney(totalHoje)}</span>}
+          </div>
+      ):(<>
       {contasDash.length===0&&<div style={{textAlign:"center",padding:"10px 0"}}>
         <span style={{color:"#22C55E",fontSize:13}}>Nenhuma conta pendente para hoje</span>
       </div>}
@@ -1261,7 +1287,9 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           <span style={{fontWeight:700,color:"#F59E0B",whiteSpace:"nowrap" as const}}>{fmtMoney(parseMoney(c.valor))}</span>
         </div>
       ))}
+      </>)}
     </div>
+    )}
 
     {/* Seletor de Período */}
     {/* Lembretes (Agenda > Anotacoes) */}
