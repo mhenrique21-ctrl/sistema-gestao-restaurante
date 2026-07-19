@@ -1863,7 +1863,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
             const dhReg = getTag(stripped,'dhRegEvento') || getTag(stripped,'dhEvento');
             res.setHeader('Content-Type','application/json');
             res.writeHead(200);
-            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, signDebug: _signDebug, rawSnippet: rawXml.slice(0,2000), sentSoapSnippet: soapBody.slice(0,600) }));
+            res.end(JSON.stringify({ cStat, xMotivo, dhReg, cnpj, uf, chNFe, signDebug: _signDebug, rawSnippet: rawXml.slice(0,2000), sentSoapSnippet: soapBody }));
           });
         });
         apiReq.on('error', e => { res.writeHead(500); res.end(JSON.stringify({error:e.message})); });
