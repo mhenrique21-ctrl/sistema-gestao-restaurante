@@ -8440,6 +8440,25 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
 
+  const [reordenando,setReordenando]=useState<string|null>(null); // id do produto sendo movido
+  const moveProduto=async(p:any,dir:-1|1)=>{
+    const cat=catalogo.find((c:any)=>c.id===p.category_id);
+    const produtosCat=cat?.products||[];
+    const idx=produtosCat.findIndex((x:any)=>x.id===p.id);
+    const novoIdx=idx+dir;
+    if(idx<0||novoIdx<0||novoIdx>=produtosCat.length)return;
+    const reordenado=[...produtosCat];
+    [reordenado[idx],reordenado[novoIdx]]=[reordenado[novoIdx],reordenado[idx]];
+    setReordenando(p.id);
+    try{
+      await Promise.all(reordenado.map((prod:any,i:number)=>
+        fetch(`/api/menu-produtos/${prod.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({sort_order:i})})
+      ));
+      await load();
+    }catch(e:any){alert("Erro ao reordenar produto");}
+    setReordenando(null);
+  };
+
   // ---- Modal Categoria ----
   const CAT_EMPTY={id:"",name:"",description:"",sort_order:"0",printer:"",applyPrinter:true};
   const [catModal,setCatModal]=useState<any>(null);
@@ -8504,14 +8523,32 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
       </div>
 
       <div className="card" style={{padding:0,overflowX:"auto" as const}}>
-        <div style={{padding:"10px 14px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--border)"}}>Produtos ({listaFiltrada.length})</div>
+        <div style={{padding:"10px 14px",borderBottom:"1px solid var(--border)"}}>
+          <div style={{fontWeight:700,fontSize:13}}>Produtos ({listaFiltrada.length})</div>
+          <div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>Use ▲▼ pra mudar a ordem de exibição dentro da categoria no cardápio</div>
+        </div>
         <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:13}}>
           <thead><tr style={{textAlign:"left" as const,background:"#F1F5F9",color:"#475569",fontSize:11,textTransform:"uppercase" as const}}>
-            <th style={{padding:"8px 14px"}}>Nome</th><th>Categoria</th><th>Preço</th><th>Impressora</th><th>Status</th><th>Ações</th>
+            <th style={{padding:"8px 14px",width:70}}>Posição</th><th>Nome</th><th>Categoria</th><th>Preço</th><th>Impressora</th><th>Status</th><th>Ações</th>
           </tr></thead>
           <tbody>
-            {listaFiltrada.map((p:any)=>(
+            {listaFiltrada.map((p:any)=>{
+              const cat=catalogo.find((c:any)=>c.id===p.category_id);
+              const produtosCat=cat?.products||[];
+              const idxCat=produtosCat.findIndex((x:any)=>x.id===p.id);
+              const noTopo=idxCat<=0;
+              const noFim=idxCat<0||idxCat>=produtosCat.length-1;
+              const movendo=reordenando===p.id;
+              return (
               <tr key={p.id} style={{borderTop:"1px solid var(--border)",opacity:p.available?1:.6}}>
+                <td style={{padding:"8px 14px"}}>
+                  <div style={{display:"flex",gap:3}}>
+                    <button onClick={()=>moveProduto(p,-1)} disabled={noTopo||movendo} title="Subir na categoria"
+                      style={{background:"var(--bg4)",border:"none",borderRadius:6,cursor:noTopo?"default":"pointer",padding:"4px 7px",fontSize:11,opacity:noTopo?.35:1}}>▲</button>
+                    <button onClick={()=>moveProduto(p,1)} disabled={noFim||movendo} title="Descer na categoria"
+                      style={{background:"var(--bg4)",border:"none",borderRadius:6,cursor:noFim?"default":"pointer",padding:"4px 7px",fontSize:11,opacity:noFim?.35:1}}>▼</button>
+                  </div>
+                </td>
                 <td style={{padding:"8px 14px"}}>{p.name}</td>
                 <td><span className="tag" style={{background:"#F3E8FF",color:"#7C3AED"}}>{p.category_name}</span></td>
                 <td style={{fontFamily:"monospace"}}>{fmtMoney(p.price)}</td>
@@ -8526,7 +8563,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
                   <button onClick={()=>delProduto(p)} title="Excluir" style={{background:"#ef444422",color:"#ef4444",border:"none",borderRadius:6,cursor:"pointer",padding:"5px 8px",fontSize:12}}>🗑️</button>
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
         {!loading&&!listaFiltrada.length&&<div style={{padding:20}}><EmptyState msg="Nenhum produto encontrado."/></div>}
