@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useCart } from '../store/cart'
 
@@ -22,10 +23,28 @@ const NAV = [
 
 export default function BottomNav() {
   const count = useCart((s) => s.items.reduce((n, i) => n + i.qty, 0))
+  const [hidden, setHidden] = useState(false)
+  const lastY = useRef(0)
+
+  useEffect(() => {
+    function handleScroll(e) {
+      const y = e.target === document ? window.scrollY : (e.target.scrollTop ?? 0)
+      const goingDown = y > lastY.current
+      setHidden(goingDown && y > 40)
+      lastY.current = y
+    }
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true })
+    return () => window.removeEventListener('scroll', handleScroll, { capture: true })
+  }, [])
 
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 safe-bottom"
-      style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderTop: '1px solid var(--border)', boxShadow: '0 -4px 20px rgba(93,64,55,0.06)' }}>
+      style={{
+        background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        borderTop: '1px solid var(--border)', boxShadow: '0 -4px 20px rgba(93,64,55,0.06)',
+        transform: hidden ? 'translateY(100%)' : 'translateY(0)',
+        transition: 'transform 0.28s cubic-bezier(0.32,0.72,0,1)',
+      }}>
       <div className="flex">
         {NAV.map(({ to, label, icon, badge }) => (
           <NavLink key={to} to={to} end={to === '/'}
