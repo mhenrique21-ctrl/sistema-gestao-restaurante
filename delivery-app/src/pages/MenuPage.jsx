@@ -91,7 +91,9 @@ export default function MenuPage() {
   const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
   const [storeStatus, setStoreStatus] = useState({ open: true })
+  const [searchCollapsed, setSearchCollapsed] = useState(false)
   const catRefs = useRef({})
+  const lastScrollY = useRef(0)
   const count = useCart((s) => s.items.reduce((n, i) => n + i.qty, 0))
   const total = useCart((s) => s.items.reduce((sum, i) => sum + itemLineTotal(i), 0))
   const navigate = useNavigate()
@@ -116,6 +118,13 @@ export default function MenuPage() {
   function scrollTo(id) {
     setActive(id)
     catRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function handleProductsScroll(e) {
+    const y = e.currentTarget.scrollTop
+    const goingDown = y > lastScrollY.current
+    setSearchCollapsed(goingDown && y > 40)
+    lastScrollY.current = y
   }
 
   const menuSemOfertas = menu.filter((c) => c.name !== 'Ofertas')
@@ -167,12 +176,19 @@ export default function MenuPage() {
         </div>
 
         {/* ── Hero banner ── */}
-        <div className="mx-5 mb-3 rounded-2xl overflow-hidden relative" style={{ height: 76, boxShadow: 'var(--shadow-lift)' }}>
-          <img src={bannerUrl || hero} alt="" className="w-full h-full block object-cover" />
+        <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
+          style={{ boxShadow: 'var(--shadow-lift)' }}>
+          <img src={bannerUrl || hero} alt="" className="w-full h-auto block" />
         </div>
 
         {/* ── Busca ── */}
-        <div className="px-5 pb-3">
+        <div className="px-5 overflow-hidden"
+          style={{
+            maxHeight: searchCollapsed ? 0 : 56,
+            opacity: searchCollapsed ? 0 : 1,
+            paddingBottom: searchCollapsed ? 0 : 12,
+            transition: 'max-height 0.28s cubic-bezier(0.32,0.72,0,1), opacity 0.2s ease, padding-bottom 0.28s ease',
+          }}>
           <div className="flex items-center gap-3 px-4 rounded-full"
             style={{ background: 'var(--card)', border: '1px solid var(--border)', height: 40, boxShadow: 'var(--shadow-soft)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -217,7 +233,7 @@ export default function MenuPage() {
       )}
 
       {/* ── Produtos ── */}
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-32" onScroll={handleProductsScroll}>
         {loading ? (
           <div className="px-5 pt-5 space-y-3">
             {[1,2,3,4,5].map((i) => <div key={i} className="skeleton h-28" />)}
