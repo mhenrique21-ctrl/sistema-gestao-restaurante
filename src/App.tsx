@@ -3756,13 +3756,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(lista.length>0&&pendentes.length===0&&(comprados.length>0||naoTemList.length>0)){
       if(!autoArchiveRef.current){
         autoArchiveRef.current=true;
-        const todosIds=lista.map((i:any)=>i.id);
-        todosIds.forEach(id=>_listaDeletados.add(id));
-        const itensArq=lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem}));
-        const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
-        (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000)}));
-        setAutoArchiveMsg("✅ Lista finalizada e arquivada automaticamente!");
-        setTimeout(()=>setAutoArchiveMsg(""),4000);
+        const querArquivar=confirm(`Todos os itens da lista foram marcados (comprados ou "não tem").\nArquivar a lista agora e começar uma nova?\n\nSe cancelar, os itens marcados continuam visíveis na lista.`);
+        if(querArquivar){
+          const todosIds=lista.map((i:any)=>i.id);
+          todosIds.forEach(id=>_listaDeletados.add(id));
+          const itensArq=lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem}));
+          const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
+          (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000)}));
+          setAutoArchiveMsg("✅ Lista finalizada e arquivada!");
+          setTimeout(()=>setAutoArchiveMsg(""),4000);
+        }
       }
     }else{
       autoArchiveRef.current=false;
