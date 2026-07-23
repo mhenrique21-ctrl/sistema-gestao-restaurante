@@ -643,7 +643,19 @@ const mergeFromServer=(prev:any,updates:any)=>{
       fornecedores:  byId(s.fornecedores||[]),
       funcionarios:  byId(s.funcionarios||[]),
       fichasTecnicas:byId(s.fichasTecnicas||[]),
-      materiasPrimas:byId(s.materiasPrimas||[]),
+      // materiasPrimas usa a mesma fusão de contas: o ajuste de estoque
+      // (Estoque > Confirmar) e a edição de estoqueMinimo carimbam
+      // atualizadoEm agora, então essa fusão evita que um poll reverta um
+      // ajuste de estoque que ainda não confirmou no servidor.
+      materiasPrimas:mergeArrayById(s.materiasPrimas||[],p.materiasPrimas||[],_listaDeletados),
+      // encomendas/clientesEncomenda não apareciam AQUI de jeito nenhum —
+      // vinham cru do spread {...s} (linha 633), ou seja, todo poll
+      // substituía o array local inteiro pelo do servidor sem fusão nenhuma
+      // (nem o byId simples que os outros campos já tinham). Isso incluía o
+      // botão de "Marcar como Confirmado/Pronto/Entregue" (setStatus, que já
+      // carimba atualizadoEm) — corrigido com a mesma fusão de contas.
+      encomendas:       mergeArrayById(s.encomendas||[],p.encomendas||[],_listaDeletados),
+      clientesEncomenda:mergeArrayById(s.clientesEncomenda||[],p.clientesEncomenda||[],_listaDeletados),
       faltas:        byId(s.faltas||[]),
       adiantamentos: byId(s.adiantamentos||[]),
       consumacoes:   byId(s.consumacoes||[]),
@@ -1112,7 +1124,7 @@ export default function App() {
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave}/>}
-              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -3680,6 +3692,34 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     });
   };
 
+  // Conversão pacote→unidade: quantas unidades individuais rendem 1 unidade
+  // de compra da matéria-prima (ex: 1 "un" de REFRIG COCA COLA MULTIPACK
+  // 6X350ML = 6 latas). Fica salvo na própria matéria-prima — uma vez
+  // definido, vale pra qualquer produto vinculado a ela, sem precisar
+  // informar de novo. Só estimativa/referência por enquanto (preço por
+  // unidade individual); é a base pra, no futuro, vincular com o PDV e
+  // fazer controle de estoque em unidades de verdade.
+  const setUnidadesPorEmbalagem=(mpId:string,valor:number)=>{
+    if(!(valor>0))return;
+    (setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mpId?{...m,unidadesPorEmbalagem:valor}:m)}));
+  };
+  // Badge reaproveitado nos 3 lugares que mostram "Vinculados" (catálogo,
+  // conciliação do form, e estimativa) — mesmo campo (unidadesPorEmbalagem),
+  // mesma matéria-prima, então o valor definido em qualquer um já aparece
+  // automaticamente nos outros dois.
+  const ConversaoBadge=(m:any)=>(
+    <span onClick={(e:any)=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"#888",flexShrink:0}}>
+      1{m.unidade||"un"}=
+      <input type="number" min="1" step="1" defaultValue={m.unidadesPorEmbalagem||1}
+        onBlur={(e:any)=>{const v=parseFloat(e.target.value);if(v>0)setUnidadesPorEmbalagem(m.id,v);}}
+        title="Quantas unidades individuais rende 1 unidade de compra"
+        style={{width:34,textAlign:"center" as const,fontSize:10,padding:"1px 2px",borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"#ccc"}}/>
+      un
+      {(m.unidadesPorEmbalagem||1)>1&&m.ultimoValor>0&&
+        <span style={{color:"#F59E0B",fontWeight:700,whiteSpace:"nowrap" as const}}>({fmtMoney(m.ultimoValor/m.unidadesPorEmbalagem)}/un)</span>}
+    </span>
+  );
+
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
 
   const saveItem=()=>{
@@ -4288,7 +4328,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         const prod=prodsCatalog.find((p:any)=>p.nome.toLowerCase()===item.nome.toLowerCase());
         const mp=getMpByName(item.nome,prod?.id);
         const qtd=parseFloat(item.quantidade)||1;
-        const unitario=mp?.ultimoValor||0;
+        // Se a matéria-prima tem conversão pacote→unidade definida (ex: 1
+        // "un" de compra = 6 latas), o custo por unidade individual é o
+        // preço do pacote dividido pelo rendimento — não o preço do pacote
+        // inteiro, senão a estimativa fica 6x maior que o real.
+        const unidadesEmbalagem=mp?.unidadesPorEmbalagem||1;
+        const unitario=mp?.ultimoValor?mp.ultimoValor/unidadesEmbalagem:0;
         const subtotal=qtd*unitario;
         const vIds=prod?getProdVinculados(prod):[];
         const isLinked=vIds.length>0;
@@ -4371,6 +4416,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                         <span style={{color:"#22C55E"}}>🔗 {m.nome}</span>
                         <span style={{flex:1}}/>
                         {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+                        {ConversaoBadge(m)}
                         <button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId,m.id);}} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
                       </div>)}
                     </div>}
@@ -4616,6 +4662,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
               <span style={{color:"#22C55E"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
               {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+              {ConversaoBadge(m)}
               {editProdId&&<button onClick={()=>desvincularMp(editProdId,m.id)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>}
             </div>)}
           </div>}
@@ -4689,6 +4736,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
                     <span style={{color:"#22C55E"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
                     {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+                    {ConversaoBadge(m)}
                     <button onClick={()=>desvincularMp(p.id,m.id)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
                   </div>)}
                 </div>}
@@ -5512,7 +5560,7 @@ const REGRAS_CAT:Record<string,{dias:number,perecivel:"alta"|"media"|"baixa",cmv
   "limpeza":   {dias:30, perecivel:"baixa", cmv:false, icon:"🧹"},
 };
 
-function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
 
   const [sub,setSub]=useState(pendingSub||"inventario");
   useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -5605,8 +5653,8 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
                 const novo=ajusteModal.tipo==="ajuste"?qtd:(ajusteModal.tipo==="entrada"?ant+qtd:Math.max(0,ant-qtd));
                 const diff=ajusteModal.tipo==="ajuste"?novo-ant:(ajusteModal.tipo==="entrada"?qtd:-qtd);
                 const desc=ajusteModal.descricao||(isPerda?`Perda: ${ajusteModal.razaoPerda}`:ajusteModal.tipo);
-                setDb((d:any)=>({...d,
-                  materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mp.id?{...m,estoqueAtual:novo,...(ajusteModal.dataValidade?{dataValidade:ajusteModal.dataValidade}:{})}:m),
+                (setDbAndSave||setDb)((d:any)=>({...d,
+                  materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mp.id?{...m,estoqueAtual:novo,atualizadoEm:now,...(ajusteModal.dataValidade?{dataValidade:ajusteModal.dataValidade}:{})}:m),
                   movEstoque:[{id:uid(),mpId:mp.id,mpNome:mp.nome,tipo:ajusteModal.tipo,...(isPerda?{razaoPerda:ajusteModal.razaoPerda}:{}),quantidade:Math.abs(diff),unidade:mp.unidade||"un",custo:mp.ultimoValor||0,data:today(),descricao:desc,criadoEm:now},...(d.movEstoque||[])]}));
                 setAjusteModal(null);
               }} style={{background:"#6366F1",color:"#fff",padding:"10px",flex:1,fontSize:14}}>✅ Confirmar</button>
@@ -5712,7 +5760,7 @@ function EstoqueTab({db,setDb,empresa,pendingSub,setPendingSub}:{db:any,setDb:an
               <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"#8B5CF6",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <input type="number" min="0" step="0.1" value={m.estoqueMinimo||""} placeholder="0"
-                  onChange={e=>{const v=parseFloat(e.target.value)||0;setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((x:any)=>x.id===m.id?{...x,estoqueMinimo:v}:x)}));}}
+                  onChange={e=>{const v=parseFloat(e.target.value)||0;(setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((x:any)=>x.id===m.id?{...x,estoqueMinimo:v,atualizadoEm:new Date().toISOString()}:x)}));}}
                   style={{width:60,background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 6px",fontSize:12,color:"var(--text1)"}}/>
                 <span style={{fontSize:11,color:"#555"}}>mín</span>
               </div>
