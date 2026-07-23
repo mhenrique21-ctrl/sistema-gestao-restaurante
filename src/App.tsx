@@ -736,7 +736,18 @@ export default function App() {
     poll();
     const interval=(tab==="lista"||tab==="producao")?300:3000;
     const t=setInterval(poll,interval);
-    return()=>clearInterval(t);
+    // No mobile (PWA instalado), o navegador pausa os timers quando o app vai
+    // pra segundo plano (tela bloqueia, troca de app). Sem isso, ao voltar o
+    // usuário via dados desatualizados até o próximo ciclo do polling cair —
+    // buscar na hora que a aba volta a ficar visível resolve.
+    const onVisible=()=>{if(document.visibilityState==="visible")poll();};
+    document.addEventListener("visibilitychange",onVisible);
+    window.addEventListener("focus",onVisible);
+    return()=>{
+      clearInterval(t);
+      document.removeEventListener("visibilitychange",onVisible);
+      window.removeEventListener("focus",onVisible);
+    };
   },[login,tab]);
 
   // On state change: save to localStorage + debounced save to server (only changed companies)
