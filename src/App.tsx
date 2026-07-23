@@ -553,12 +553,20 @@ const migrateDb=(m:any)=>{
     if(!m[e].categorias?.includes("Encomenda"))m[e].categorias=[...(m[e].categorias||[]),"Encomenda"];
     // Blindagem da lista de compras: dá identidade própria à lista atualmente aberta,
     // pra nunca se misturar com uma lista arquivada/de outra data (ver App.tsx:3502).
-    if(!m[e].listaAtualIdV1){
+    // IMPORTANTE (bug real corrigido): isso só inicializa quando não existe
+    // NENHUM listaAtualId ainda — nunca gera um novo se já existe um. E o
+    // timestamp usado é época mínima (não "agora"), pra essa identidade de
+    // fallback nunca conseguir vencer a de um fechamento de lista genuíno na
+    // comparação "quem é mais recente" do servidor. Antes, usava `new
+    // Date().toISOString()`: um dispositivo com cache local desatualizado (que
+    // ainda não tinha sincronizado) inventava uma identidade "mais recente"
+    // que a de verdade, tornando todos os itens reais órfãos sem ninguém ter
+    // clicado em "Fechar Lista".
+    if(!m[e].listaAtualId){
       const idNovo=uid();
       m[e].listaAtualId=idNovo;
-      m[e].listaAtualAbertaEm=new Date().toISOString();
+      m[e].listaAtualAbertaEm=new Date(0).toISOString();
       m[e].listaCompras=(m[e].listaCompras||[]).map((i:any)=>i.listaId?i:{...i,listaId:idNovo});
-      m[e].listaAtualIdV1=true;
     }
   });
   if(!m.CONFRARIA?.produtosSyncV1||!m.SEAMA?.produtosSyncV1){
@@ -3817,6 +3825,23 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     alert("✅ Lista fechada e arquivada! Uma lista nova foi aberta.");
   };
 
+  // Traz de volta itens órfãos (listaId diferente do atual) pra lista atual,
+  // sem tocar em mais nenhum campo — nome, quantidade, comprado/não-tem,
+  // categoria etc. continuam exatamente como estavam.
+  const recuperarOrfaos=()=>{
+    if(!isAdmin)return;
+    if(!orfaos.length)return;
+    if(!confirm(`Recuperar ${orfaos.length} item(ns) de volta pra lista atual?`))return;
+    const ts=Date.now();
+    (setDbAndSave||setDb)((d:any)=>({
+      ...d,
+      listaCompras:(d.listaCompras||[]).map((i:any)=>
+        i.listaId&&i.listaId!==d.listaAtualId?{...i,listaId:d.listaAtualId,updatedAt:ts}:i
+      ),
+    }));
+    alert("✅ Itens recuperados.");
+  };
+
   const moverItem=(id:string,dir:-1|1)=>{
     setDb((d:any)=>{
       const arr=[...(d.listaCompras||[])];
@@ -4799,10 +4824,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <button onClick={()=>setVistaRua(true)} className="pill" style={{background:vistaRua?"#22C55E":"var(--bg4)",color:vistaRua?"#111":"#777",fontSize:12,padding:"7px 14px"}}>🛤️ Por Rua</button>
     </div>}
 
-    {/* Itens órfãos: sobra de alguma corrida de sincronização com listaId de uma lista já fechada.
-        Nunca aparecem misturados na lista atual — só um aviso pro admin decidir o que fazer. */}
-    {isAdmin&&orfaos.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"9px 12px",background:"#FEF3C7",borderRadius:10,border:"1px solid #F59E0B44",fontSize:12,color:"#92400e"}}>
-      ⚠️ {orfaos.length} item(ns) de uma lista antiga não aparecem aqui (já fechada). Se precisar recuperá-los, veja o Arquivo.
+    {/* Itens órfãos: sobra de alguma corrida de sincronização com listaId diferente
+        do atual (lista fechada de propósito, ou — bug já corrigido — um dispositivo
+        desatualizado inventando uma identidade nova). Nunca aparecem misturados na
+        lista atual; o admin decide se quer trazê-los de volta ou não. */}
+    {isAdmin&&orfaos.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"9px 12px",background:"#FEF3C7",borderRadius:10,border:"1px solid #F59E0B44",fontSize:12,color:"#92400e"}}>
+      <span style={{flex:1}}>⚠️ {orfaos.length} item(ns) de uma lista antiga não aparecem aqui. Se não foi você quem fechou a lista, use "Recuperar" pra trazê-los de volta com todos os dados originais.</span>
+      <button onClick={recuperarOrfaos} className="btn" style={{background:"#F59E0B",color:"#fff",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
+        ↩ Recuperar
+      </button>
     </div>}
 
     {/* Progresso da lista atual */}

@@ -91,6 +91,30 @@ describe('mergeListaCompras', () => {
     assert.equal(result.listaDeletedIds.length, 5000);
   });
 
+  test('regressão: uma identidade forjada com timestamp "época" (migração de dispositivo desatualizado) nunca pode vencer a lista real', () => {
+    // Bug real: um dispositivo com cache local antigo inventava um
+    // listaAtualId novo carimbado com `new Date().toISOString()` ("agora") —
+    // como isso é sempre "mais recente" que qualquer lista real já aberta,
+    // ele vencia a corrida e tornava todos os itens reais órfãos sem
+    // ninguém ter fechado a lista de propósito. A correção usa `new Date(0)`
+    // (época mínima) pro fallback do dispositivo, que nunca deve vencer.
+    const listaReal = {
+      listaAtualId: 'lista-real',
+      listaAtualAbertaEm: '2026-07-01T00:00:00.000Z', // aberta há semanas, bem antes de "agora"
+      listaCompras: [item('a'), item('b')],
+    };
+    const dispositivoDesatualizado = {
+      listaAtualId: 'lista-forjada-por-migracao',
+      listaAtualAbertaEm: new Date(0).toISOString(), // época — o fallback correto
+      listaCompras: [], // esse dispositivo nem sabe dos itens reais
+    };
+    const result = mergeListaCompras(listaReal, dispositivoDesatualizado);
+    assert.equal(result.listaAtualId, 'lista-real', 'identidade real não pode ser substituída por um fallback de migração');
+    // Os itens reais continuam presentes e visíveis (mesmo listaId da lista real)
+    const idsPresentes = result.listaCompras.map((i) => i.id);
+    assert.ok(idsPresentes.includes('a') && idsPresentes.includes('b'), 'itens reais não podem virar órfãos por causa de uma migração de outro dispositivo');
+  });
+
   test('lista aberta mais recentemente (listaAtualAbertaEm) vence a identidade atual', () => {
     // Simula: admin fechou a lista e abriu uma nova (existing mais recente);
     // um dispositivo atrasado manda incoming com a identidade antiga.
