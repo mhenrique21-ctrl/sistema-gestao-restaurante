@@ -551,6 +551,15 @@ const migrateDb=(m:any)=>{
     if(!m[e].config)m[e].config={snAliquota:6};
     if(!m[e].categorias?.includes("Adiantamento"))m[e].categorias=["Adiantamento",...(m[e].categorias||[])];
     if(!m[e].categorias?.includes("Encomenda"))m[e].categorias=[...(m[e].categorias||[]),"Encomenda"];
+    // Blindagem da lista de compras: dá identidade própria à lista atualmente aberta,
+    // pra nunca se misturar com uma lista arquivada/de outra data (ver App.tsx:3502).
+    if(!m[e].listaAtualIdV1){
+      const idNovo=uid();
+      m[e].listaAtualId=idNovo;
+      m[e].listaAtualAbertaEm=new Date().toISOString();
+      m[e].listaCompras=(m[e].listaCompras||[]).map((i:any)=>i.listaId?i:{...i,listaId:idNovo});
+      m[e].listaAtualIdV1=true;
+    }
   });
   if(!m.CONFRARIA?.produtosSyncV1||!m.SEAMA?.produtosSyncV1){
     const allProds=new Map<string,any>();
@@ -3542,8 +3551,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
   const undoTimerRef=useRef<any>(null);
-  const autoArchiveRef=useRef(false);
-  const [autoArchiveMsg,setAutoArchiveMsg]=useState("");
+  const [travandoIds,setTravandoIds]=useState<Set<string>>(new Set());
+  const travar=(id:string)=>{
+    setTravandoIds(s=>new Set(s).add(id));
+    setTimeout(()=>setTravandoIds(s=>{const n=new Set(s);n.delete(id);return n;}),350);
+  };
 
   const pushUndo=(label:string,prevLista:any[],prevDeletedIds:string[],newSetIds:string[]=[])=>{
     setUndoInfo({lista:prevLista,deletedIds:prevDeletedIds,setIds:newSetIds,label});
@@ -3563,7 +3575,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const allCats=[...CATS_DEFAULT,...catsPers.filter((c:string)=>!CATS_DEFAULT.includes(c))].filter(c=>!catsDel.includes(c));
   const cats=catOrdem.length>0?[...catOrdem.filter(c=>allCats.includes(c)),...allCats.filter(c=>!catOrdem.includes(c))]:allCats;
 
-  const lista:any[]=db.listaCompras||[];
+  const listaAtualId=db.listaAtualId;
+  const listaTodas:any[]=db.listaCompras||[];
+  // Blindagem: só itens da lista atualmente aberta entram em qualquer visão/contagem.
+  // Um item "órfão" (listaId de uma lista já fechada, sobrevivente de alguma corrida
+  // de sincronização) nunca se mistura na tela — fica só visível pro admin decidir.
+  const lista:any[]=listaTodas.filter((i:any)=>!i.listaId||i.listaId===listaAtualId);
+  const orfaos:any[]=listaTodas.filter((i:any)=>i.listaId&&i.listaId!==listaAtualId);
   const pendentes=lista.filter((i:any)=>!i.comprado&&!i.naoTem);
   const comprados=lista.filter((i:any)=>i.comprado);
   const naoTemList=lista.filter((i:any)=>i.naoTem&&!i.comprado);
@@ -3649,14 +3667,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       setEditId(null);
       setPendingMpLinks(null);
     }else{
-      const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
       const nome=form.nome.trim();
       const cat=form.cat||"outros";
       const qtdNova=parseFloat(form.qtd)||1;
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
-      const newItem={id:uid(),nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
-      setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
       const nl=nome.toLowerCase();
+      // Evita duplicar linha: se já existe item pendente com o mesmo nome na lista
+      // atual, soma a quantidade em vez de criar um segundo item igual.
+      const pendenteExistente=pendentes.find((i:any)=>i.nome.trim().toLowerCase()===nl);
+      if(pendenteExistente){
+        const ts=Date.now();
+        setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)}));
+      }else{
+        const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
+        const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
+        setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
+      }
       if(pendingMpLinks!==null){
         const prodExiste=(db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl);
         if(prodExiste){
@@ -3686,16 +3712,24 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setPendingMpLinks(null);setConcBusca("");};
 
   const toggle=(id:string)=>{
+    if(travandoIds.has(id))return;
+    travar(id);
+    const item=lista.find((i:any)=>i.id===id);
+    pushUndo(`"${item?.nome||"Produto"}" ${item?.comprado?"desmarcado":"marcado como comprado"}`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
       const nowComprado=!it.comprado;
       const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
-      return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
+      return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,quantidadeComprada:nowComprado?i.quantidadeComprada:undefined,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
     });
   };
   const toggleNaoTem=(id:string)=>{
+    if(travandoIds.has(id))return;
+    travar(id);
+    const item=lista.find((i:any)=>i.id===id);
+    pushUndo(`"${item?.nome||"Produto"}" ${item?.naoTem?"desmarcado":"marcado como não tem"}`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
@@ -3707,6 +3741,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!(novaQtd>0))return;
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidade:novaQtd,updatedAt:ts}:i)}));
+  };
+  // Quantidade efetivamente comprada, separada da quantidade pedida original —
+  // preserva o pedido do Admin mesmo quando o Operador compra menos do que foi pedido.
+  const setQtdComprada=(id:string,novaQtd:number)=>{
+    if(!(novaQtd>0))return;
+    const ts=Date.now();
+    (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidadeComprada:novaQtd,updatedAt:ts}:i)}));
   };
   const del=(id:string)=>{
 
@@ -3736,63 +3777,28 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     }));
   };
 
-  const salvarPedido=()=>{
-    if(!comprados.length)return;
-    if(!confirm(`Salvar pedido com ${comprados.length} item(ns) comprado(s)?\nA lista inteira será zerada para o próximo pedido.`))return;
+  // Fechar lista: única forma de arquivar — sempre manual, sempre pelo Admin.
+  // Gera um listaAtualId novo, que é o que "abre" a próxima lista e garante que
+  // itens adicionados depois nunca se misturem com o pedido recém-arquivado.
+  const fecharLista=()=>{
+    if(!isAdmin)return;
+    if(!lista.length)return alert("A lista está vazia.");
+    if(!confirm(`Fechar a lista atual (${lista.length} item(ns)) e arquivar?\nUma lista nova e vazia será aberta em seguida.`))return;
     const todosIds=lista.map((i:any)=>i.id);
     todosIds.forEach(id=>_listaDeletados.add(id));
 
-    const pedido={id:uid(),data:today(),itens:lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),criadoEm:new Date().toISOString()};
+    const pedido={id:uid(),data:today(),itens:lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,quantidadeComprada:i.quantidadeComprada??null,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),criadoEm:new Date().toISOString()};
+    const novoListaId=uid();
     (setDbAndSave||setDb)((d:any)=>({
       ...d,
       pedidosLista:[pedido,...(d.pedidosLista||[])],
       listaCompras:[],
+      listaAtualId:novoListaId,
+      listaAtualAbertaEm:new Date().toISOString(),
       listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000),
     }));
-    alert("✅ Pedido salvo! Lista zerada para o próximo pedido.");
+    alert("✅ Lista fechada e arquivada! Uma lista nova foi aberta.");
   };
-
-  useEffect(()=>{
-    if(lista.length>0&&pendentes.length===0&&(comprados.length>0||naoTemList.length>0)){
-      if(!autoArchiveRef.current){
-        autoArchiveRef.current=true;
-        const querArquivar=confirm(`Todos os itens da lista foram marcados (comprados ou "não tem").\nArquivar a lista agora e começar uma nova?\n\nSe cancelar, os itens marcados continuam visíveis na lista.`);
-        if(querArquivar){
-          const todosIds=lista.map((i:any)=>i.id);
-          todosIds.forEach(id=>_listaDeletados.add(id));
-          const itensArq=lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem}));
-          const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
-          (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000)}));
-          setAutoArchiveMsg("✅ Lista finalizada e arquivada!");
-          setTimeout(()=>setAutoArchiveMsg(""),4000);
-        }
-      }
-    }else{
-      autoArchiveRef.current=false;
-    }
-  },[lista.length,pendentes.length,comprados.length,naoTemList.length]);
-
-  // Arquivamento automático diário às 18h, independente de a lista estar completa —
-  // garante que a lista sempre comece zerada no dia seguinte.
-  useEffect(()=>{
-    const check18h=()=>{
-      const now=new Date();
-      const todayStr=today();
-      const jaArquivouHoje=db.config?.lastAutoArchive18h===todayStr;
-      if(now.getHours()>=18&&!jaArquivouHoje&&lista.length>0){
-        const todosIds=lista.map((i:any)=>i.id);
-        todosIds.forEach(id=>_listaDeletados.add(id));
-        const itensArq=lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem}));
-        const pedido={id:uid(),data:today(),itens:itensArq,criadoEm:new Date().toISOString(),autoArquivado:true};
-        (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:[pedido,...(d.pedidosLista||[])],listaCompras:[],listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000),config:{...(d.config||{}),lastAutoArchive18h:todayStr}}));
-        setAutoArchiveMsg("✅ Lista arquivada automaticamente (18h)!");
-        setTimeout(()=>setAutoArchiveMsg(""),4000);
-      }
-    };
-    check18h();
-    const t=setInterval(check18h,60000);
-    return ()=>clearInterval(t);
-  },[lista.length,db.config?.lastAutoArchive18h]);
 
   const moverItem=(id:string,dir:-1|1)=>{
     setDb((d:any)=>{
@@ -4021,6 +4027,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!confirm(`Retomar lista de ${dataFmt} com ${(pedido.itens||[]).length} item(ns)?\nOs itens pendentes atuais serão substituídos.`))return;
     const novosItens=(pedido.itens||[]).filter((i:any)=>!i.naoTem).map((i:any,idx:number)=>({
       id:uid(),
+      listaId:listaAtualId,
       nome:i.nome,
       quantidade:i.quantidade||1,
       unidade:i.unidade||"un",
@@ -4759,13 +4766,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <input placeholder="🔍 Buscar produto..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14,marginBottom:0}}/>
         {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
       </div>}
-      {isAdmin&&comprados.length>0&&<>
-        <button className="btn" onClick={salvarPedido} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #22C55E40",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
-          💾 Salvar Pedido ({comprados.length})
+      {isAdmin&&lista.length>0&&<>
+        <button className="btn" onClick={fecharLista} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #22C55E40",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
+          🔒 Fechar Lista
         </button>
-        <button className="btn" onClick={limparComprados} style={{background:"#FEE2E2",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
+        {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"#FEE2E2",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
           🗑️ Limpar
-        </button>
+        </button>}
       </>}
     </div>
 
@@ -4773,6 +4780,20 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {isAdmin&&ruas.length>0&&pendentes.length>0&&<div style={{display:"flex",gap:8,marginBottom:10}}>
       <button onClick={()=>setVistaRua(false)} className="pill" style={{background:!vistaRua?"#6366F1":"var(--bg4)",color:!vistaRua?"#fff":"#777",fontSize:12,padding:"7px 14px"}}>🏷️ Por Categoria</button>
       <button onClick={()=>setVistaRua(true)} className="pill" style={{background:vistaRua?"#22C55E":"var(--bg4)",color:vistaRua?"#111":"#777",fontSize:12,padding:"7px 14px"}}>🛤️ Por Rua</button>
+    </div>}
+
+    {/* Itens órfãos: sobra de alguma corrida de sincronização com listaId de uma lista já fechada.
+        Nunca aparecem misturados na lista atual — só um aviso pro admin decidir o que fazer. */}
+    {isAdmin&&orfaos.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"9px 12px",background:"#FEF3C7",borderRadius:10,border:"1px solid #F59E0B44",fontSize:12,color:"#92400e"}}>
+      ⚠️ {orfaos.length} item(ns) de uma lista antiga não aparecem aqui (já fechada). Se precisar recuperá-los, veja o Arquivo.
+    </div>}
+
+    {/* Progresso da lista atual */}
+    {lista.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
+      <div style={{flex:1,height:8,borderRadius:99,background:"var(--bg4)",overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${Math.round(((comprados.length+naoTemList.length)/lista.length)*100)}%`,background:"#22C55E",transition:"width .25s"}}/>
+      </div>
+      <span style={{fontSize:12,fontWeight:700,color:"#22C55E",whiteSpace:"nowrap" as const}}>{comprados.length+naoTemList.length}/{lista.length} resolvidos</span>
     </div>}
 
     {/* Lista por categoria — somente pendentes */}
@@ -4793,8 +4814,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           const isEditing=editId===item.id;
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":isEditing?"#6366F1":"var(--border)"}`,transition:"all .15s"}}>
-            <button onClick={()=>toggle(item.id)}
-              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
+            <button onClick={()=>toggle(item.id)} disabled={travandoIds.has(item.id)}
+              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
               {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900}}>!</span>}
             </button>
             <div style={{flex:1,minWidth:0}}>
@@ -4827,9 +4848,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"#333":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
               </div>}
               <div style={{display:"flex",gap:2}}>
-                <button onClick={()=>toggleNaoTem(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
+                <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
                 {isAdmin&&<button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#6366F1",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>}
-                <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
+                {isAdmin&&<button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>}
               </div>
             </div>
           </div>
@@ -4852,8 +4873,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           return(
           <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":"var(--border)"}`,transition:"all .15s"}}>
-            <button onClick={()=>toggle(item.id)}
-              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <button onClick={()=>toggle(item.id)} disabled={travandoIds.has(item.id)}
+              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900}}>!</span>}
             </button>
             <div style={{flex:1,minWidth:0}}>
@@ -4879,7 +4900,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
             <div style={{display:"flex",gap:2}}>
-              <button onClick={()=>toggleNaoTem(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
+              <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
               <button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#6366F1",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>
               <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
             </div>
@@ -4895,19 +4916,30 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <span style={{fontSize:12,fontWeight:700,color:"#22C55E",textTransform:"uppercase" as const,letterSpacing:0.8}}>Comprados</span>
         <span style={{fontSize:11,color:"#555"}}>({listaBuscaComp.length})</span>
       </div>
-      {listaBuscaComp.map((item:any)=>(
+      {listaBuscaComp.map((item:any)=>{
+        const comprouMenos=item.quantidadeComprada!=null&&item.quantidadeComprada!==item.quantidade;
+        return(
         <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",opacity:0.45,transition:"all .15s"}}>
-          <button onClick={()=>toggle(item.id)}
-            style={{width:26,height:26,borderRadius:7,border:"2px solid #22C55E",background:"#22C55E",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <button onClick={()=>toggle(item.id)} disabled={travandoIds.has(item.id)}
+            style={{width:26,height:26,borderRadius:7,border:"2px solid #22C55E",background:"#22C55E",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <span style={{color:"#111",fontSize:14,fontWeight:900,lineHeight:1}}>✓</span>
           </button>
           <div style={{flex:1,minWidth:0}}>
             <span style={{fontSize:13,fontWeight:600,textDecoration:"line-through",color:"#555"}}>{item.nome}</span>
-            <div style={{fontSize:11,color:"#444",marginTop:1}}>{item.quantidade} {item.unidade}{item.categoria&&` · ${item.categoria}`}</div>
+            <div style={{fontSize:11,color:"#444",marginTop:1,display:"flex",alignItems:"center",gap:6}} onClick={(e:any)=>e.stopPropagation()}>
+              <span>Pedido: {item.quantidade} {item.unidade}{item.categoria&&` · ${item.categoria}`}</span>
+              <span style={{display:"flex",alignItems:"center",gap:3}}>
+                Comprou:
+                <input type="number" min="0.1" step="0.1" value={item.quantidadeComprada??item.quantidade}
+                  onChange={(e:any)=>{const v=parseFloat(e.target.value);if(!isNaN(v))setQtdComprada(item.id,v);}}
+                  style={{width:44,textAlign:"center",fontSize:11,color:comprouMenos?"#F59E0B":"#22C55E",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:5,padding:"1px 2px"}}/>
+              </span>
+            </div>
           </div>
-          <button onClick={()=>del(item.id)} style={{background:"none",border:"none",borderRadius:6,color:"#555",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
+          {isAdmin&&<button onClick={()=>del(item.id)} style={{background:"none",border:"none",borderRadius:6,color:"#555",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>}
         </div>
-      ))}
+        );
+      })}
     </div>}
 
     {/* Não tem — bloco único no fim */}
@@ -4919,23 +4951,19 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       </div>
       {listaBuscaNaoTem.map((item:any)=>(
         <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,background:"#FEF3C7",borderRadius:10,border:"1px solid #92400e44",opacity:0.55,transition:"all .15s"}}>
-          <button onClick={()=>toggleNaoTem(item.id)}
-            style={{width:26,height:26,borderRadius:7,border:"2px solid #F59E0B",background:"#F59E0B",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)}
+            style={{width:26,height:26,borderRadius:7,border:"2px solid #F59E0B",background:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <span style={{color:"#111",fontSize:12,fontWeight:900,lineHeight:1}}>✕</span>
           </button>
           <div style={{flex:1,minWidth:0}}>
             <span style={{fontSize:13,fontWeight:600,textDecoration:"line-through",color:"#a08030"}}>{item.nome}</span>
             <div style={{fontSize:11,color:"#776020",marginTop:1}}>{item.quantidade} {item.unidade}{item.categoria&&` · ${item.categoria}`}</div>
           </div>
-          <button onClick={()=>del(item.id)} style={{background:"none",border:"none",borderRadius:6,color:"#555",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
+          {isAdmin&&<button onClick={()=>del(item.id)} style={{background:"none",border:"none",borderRadius:6,color:"#555",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>}
         </div>
       ))}
     </div>}
     </>}
-
-    {autoArchiveMsg&&<div style={{position:"fixed",top:80,left:"50%",transform:"translateX(-50%)",background:"#DCFCE7",border:"1px solid #22C55E",borderRadius:12,padding:"12px 20px",zIndex:200,boxShadow:"0 4px 20px #0008",fontSize:14,color:"#22C55E",fontWeight:700}}>
-      {autoArchiveMsg}
-    </div>}
 
     {undoInfo&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"#DBEAFE",border:"1px solid #6366F1",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:12,zIndex:200,boxShadow:"0 4px 20px #0008",whiteSpace:"nowrap" as const}}>
       <span style={{fontSize:13,color:"var(--text)"}}>↩ {undoInfo.label}</span>
