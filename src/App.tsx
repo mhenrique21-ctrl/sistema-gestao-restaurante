@@ -590,6 +590,12 @@ const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-5000);localStor
 const _origAdd=_listaDeletados.add.bind(_listaDeletados);
 _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
+// Anexa o snapshot de ids excluídos (de QUALQUER entidade — vendas, contas,
+// compras, funcionários etc., não só a lista de compras) em todo POST pro
+// servidor. É o que permite ao servidor fundir o documento sem "ressuscitar"
+// um registro que algum dispositivo já excluiu (ver mergeDocument.js).
+const withDeletedIds=(doc:any)=>({...doc,deletedIds:[..._listaDeletados].slice(-5000)});
+
 // Merge listaCompras por ID: versão com updatedAt mais recente vence.
 // Itens novos do servidor são adicionados. Deletados são filtrados.
 const mergeFromServer=(prev:any,updates:any)=>{
@@ -766,7 +772,7 @@ export default function App() {
       try{
         await Promise.all(changed.map(async emp=>{
           const merged=await mergeWithServerBeforePost(emp);
-          const body=merged!=null?JSON.stringify(merged):JSON.stringify(state[emp]);
+          const body=JSON.stringify(withDeletedIds(merged!=null?merged:state[emp]));
           await fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body});
         }));
         setSyncStatus("ok");
@@ -814,7 +820,7 @@ export default function App() {
           saveSeqRef.current++;
           clearTimeout(syncTimer.current);
           syncTimer.current=null;
-          bodyToSave=JSON.stringify(next[empresa]);
+          bodyToSave=JSON.stringify(withDeletedIds(next[empresa]));
           return next;
         });
       });
@@ -6071,11 +6077,11 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
   };
   const del=(id:string)=>{_listaDeletados.add(id);(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));};
   const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;const ids=(db.contas||[]).filter((c:any)=>c.grupoRecorr===gid).map((c:any)=>c.id);ids.forEach(id=>_listaDeletados.add(id));(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
-  const pagarGrupo=(gid:string)=>(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.grupoRecorr===gid?{...c,status:"pago"}:c)}));
+  const pagarGrupo=(gid:string)=>(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.grupoRecorr===gid?{...c,status:"pago",atualizadoEm:new Date().toISOString()}:c)}));
   const toggle=(id:string)=>(setDbAndSave||setDb)((d:any)=>{
     const conta=(d.contas||[]).find((c:any)=>c.id===id);
     const novoStatus=conta?.status==="pago"?"pendente":"pago";
-    const contas=(d.contas||[]).map((c:any)=>c.id===id?{...c,status:novoStatus}:c);
+    const contas=(d.contas||[]).map((c:any)=>c.id===id?{...c,status:novoStatus,atualizadoEm:new Date().toISOString()}:c);
     if(novoStatus==="pago"&&conta?.origem==="adiantamento_rh")return{...d,contas,adiantamentos:(d.adiantamentos||[]).filter((a:any)=>a.contaId!==id)};
     return{...d,contas};
   });

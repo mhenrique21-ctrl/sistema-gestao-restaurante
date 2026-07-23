@@ -8,7 +8,7 @@ import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import webPush from 'web-push';
 import { SignedXml } from 'xml-crypto';
-import { mergeListaCompras } from './mergeListaCompras.js';
+import { mergeDocument } from './mergeDocument.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1734,14 +1734,15 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         if (fs.existsSync(file)) {
           try {
             const existing = JSON.parse(fs.readFileSync(file, 'utf-8'));
-            // Fusão da Lista de Compras no servidor (não só no cliente): sem
+            // Fusão do documento inteiro no servidor (não só no cliente): sem
             // isso, dois dispositivos escrevendo perto um do outro faziam o
-            // último POST sobrescrever o arquivo inteiro e apagar marcações/
-            // fechamentos de lista que o outro lado já tinha salvo um
-            // instante antes. Mesma lógica de mergeFromServer do App.tsx,
-            // só que aplicada contra o estado que está de fato no arquivo
-            // agora, não o que o cliente achava que estava.
-            incoming = mergeListaCompras(existing, incoming);
+            // último POST sobrescrever o arquivo inteiro e apagar qualquer
+            // mudança (marcar conta como paga, item da lista, editar um
+            // funcionário...) que o outro lado já tinha salvo um instante
+            // antes. Mesma lógica de mergeFromServer do App.tsx, só que
+            // aplicada contra o estado que está de fato no arquivo agora,
+            // não o que o cliente achava que estava.
+            incoming = mergeDocument(existing, incoming);
             const existingContas = (existing.contas||[]).length;
             const incomingContas = (incoming.contas||[]).length;
             const existingVendas = (existing.vendas||[]).length;
