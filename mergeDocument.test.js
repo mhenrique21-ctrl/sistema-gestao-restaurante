@@ -130,4 +130,18 @@ describe('mergeDocument', () => {
     assert.equal(a.status, 'pago', 'conta marcada como paga não pode voltar a pendente');
     assert.equal(b.valor, 200, 'edição concorrente em outro registro também não pode se perder');
   });
+
+  test('regressão: edição de produto do catálogo (produtosLista) sobrevive a um poll concorrente', () => {
+    // Cenário relatado: editar "Biscoito maisena" (categoria/rua) e a edição
+    // não ficava salva — um POST concorrente sem o carimbo revertia o campo.
+    const produto = (over = {}) => ({ id: 'prod-1', nome: 'Biscoito maisena', cat: 'Mercearia', unidade: 'un', rua: '', ...over });
+    const base = { produtosLista: [produto()], deletedIds: [] };
+    const payloadEdicao = { ...base, produtosLista: [produto({ rua: 'Rua 3', atualizadoEm: '2026-07-22T10:00:00.000Z' })] };
+    const payloadConcorrente = { ...base, produtosLista: [produto()] };
+
+    const afterEdicao = mergeDocument(base, payloadEdicao);
+    const final = mergeDocument(afterEdicao, payloadConcorrente);
+
+    assert.equal(final.produtosLista.find((p) => p.id === 'prod-1').rua, 'Rua 3', 'edição carimbada não pode ser revertida por um POST sem carimbo');
+  });
 });

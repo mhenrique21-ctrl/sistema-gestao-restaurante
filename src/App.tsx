@@ -668,7 +668,12 @@ const mergeFromServer=(prev:any,updates:any)=>{
       itensProducaoPendentes: unionById(p.itensProducaoPendentes||[],s.itensProducaoPendentes||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
-      produtosLista: byIdDedup(s.produtosLista||[]),
+      // produtosLista (catálogo): antes só pegava o array do servidor cru
+      // (deduplicado por nome) — uma edição de nome/categoria/rua/vínculo
+      // feita localmente que ainda não tinha sido salva podia ser revertida
+      // por um poll no meio do caminho. syncProdByName/saveProd já carimbam
+      // atualizadoEm, então a fusão por id+timestamp resolve certo.
+      produtosLista: byIdDedup(mergeArrayById(s.produtosLista||[],p.produtosLista||[],_listaDeletados)),
       pedidosLista:  unionById(p.pedidosLista||[],s.pedidosLista||[],true)
     };
     // listaCompras: merge por ID, versão mais recente (updatedAt) vence
@@ -3671,7 +3676,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   const syncProdByName=(nome:string,updater:(p:any)=>any)=>{
     const nl=nome.trim().toLowerCase();
-    applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===nl?updater(p):p)}));
+    const ts=new Date().toISOString();
+    // Carimba atualizadoEm em toda edição do catálogo (nome/categoria/rua,
+    // vincular/desvincular matéria-prima) — sem isso, um poll no meio do
+    // caminho não tinha como saber que essa era a versão mais recente e
+    // podia reverter a edição de volta pro que já estava salvo antes.
+    applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===nl?{...updater(p),atualizadoEm:ts}:p)}));
   };
   const vincularMp=(prodId:string,mpId:string)=>{
     const prod=(db.produtosLista||[]).find((p:any)=>p.id===prodId);
@@ -3977,14 +3987,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       if(oldName.toLowerCase()===n.toLowerCase()){
         syncProdByName(n,(p:any)=>({...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}));
       }else{
-        applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===oldName.trim().toLowerCase()?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}:p)}));
+        applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===oldName.trim().toLowerCase()?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua,atualizadoEm:new Date().toISOString()}:p)}));
       }
       setEditProdId(null);
     }else{
       applyBothProd((d:any)=>{
         const exists=(d.produtosLista||[]).some((p:any)=>p.nome.trim().toLowerCase()===n.toLowerCase());
         if(exists)return d;
-        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}]};
+        const ts=new Date().toISOString();
+        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua,criadoEm:ts,atualizadoEm:ts}]};
       });
     }
     setProdForm({nome:"",cat:"",unidade:"un",rua:""});
