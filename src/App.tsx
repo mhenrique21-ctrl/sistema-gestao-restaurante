@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { flushSync } from "react-dom";
+import { mergeArrayById } from "../mergeDocument.js";
 
 // ===================== STORAGE =====================
 const STORAGE_KEY = "gestao_app_v4";
@@ -631,7 +632,13 @@ const mergeFromServer=(prev:any,updates:any)=>{
     next[emp]={
       ...s,
       vendas:        byId(s.vendas||[]),
-      contas:        byId(s.contas||[]),
+      // contas usa fusão por id+timestamp (não só byId): sem isso, um poll
+      // que chega entre o clique em "marcar como pago" e o POST desse clique
+      // ainda não ter sido salvo sobrescrevia o estado otimista local com a
+      // versão antiga do servidor — dava a impressão de "marquei e voltou".
+      // toggle/pagarGrupo/save (Contas) sempre carimbam atualizadoEm agora,
+      // então o lado que acabou de mudar vence essa fusão.
+      contas:        mergeArrayById(s.contas||[],p.contas||[],_listaDeletados),
       compras:       byId(s.compras||[]),
       fornecedores:  byId(s.fornecedores||[]),
       funcionarios:  byId(s.funcionarios||[]),

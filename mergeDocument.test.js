@@ -61,6 +61,22 @@ describe('mergeArrayById', () => {
     const a = afterBoth.find((c) => c.id === 'a');
     assert.equal(a.status, 'pago', 'marcação de pago não pode se perder — a tinha atualizadoEm, b (pra esse item) não');
   });
+
+  test('regressão: poll do cliente não pode reverter uma marcação otimista local ainda não confirmada pelo servidor', () => {
+    // Cenário real relatado: usuário clica "marcar como pago" (App.tsx stamps
+    // atualizadoEm na hora, estado local otimista já mostra pago). Antes do
+    // POST desse clique confirmar no servidor, um poll (a cada 3s fora da
+    // aba Lista/Produção) busca o servidor — que ainda tem a versão antiga,
+    // sem essa marcação. App.tsx agora chama
+    // mergeArrayById(servidor, local, deletedIds) em vez de aceitar o
+    // servidor cru — o lado que TEM o carimbo (o clique local) vence.
+    const servidorAntesDoPost = [conta('x', { status: 'pendente' })];
+    const localOtimista = [conta('x', { status: 'pago', atualizadoEm: new Date().toISOString() })];
+
+    const resultadoDoPoll = mergeArrayById(servidorAntesDoPost, localOtimista, new Set());
+
+    assert.equal(resultadoDoPoll.find((c) => c.id === 'x').status, 'pago', 'poll não pode reverter a marcação otimista que ainda não foi salva');
+  });
 });
 
 describe('mergeDocument', () => {
