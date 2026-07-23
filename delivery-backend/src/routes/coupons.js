@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
 
 // POST /api/coupons/validate — valida e aplica cupom (público, usado no checkout)
 router.post('/validate', async (req, res) => {
@@ -113,8 +114,7 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
       return res.json(result.rows[0]);
     } catch (err) {
       if (err.code === '23505') return res.status(409).json({ error: 'Código já existe' });
-      console.error('[coupons/PATCH]', err.message);
-      return res.status(500).json({ error: err.message || 'Erro interno' });
+      return internalError(res, err, '[coupons/PATCH]');
     }
   }
   // Atualização parcial (ex: toggle active)
@@ -136,8 +136,7 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Cupom não encontrado' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[coupons/PATCH partial]', err.message);
-    res.status(500).json({ error: err.message || 'Erro interno' });
+    return internalError(res, err, '[coupons/PATCH partial]');
   }
 });
 

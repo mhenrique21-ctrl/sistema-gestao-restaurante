@@ -4,8 +4,8 @@ function getToken() {
   return localStorage.getItem('token')
 }
 
-async function request(method, path, body) {
-  const headers = { 'Content-Type': 'application/json' }
+async function request(method, path, body, extraHeaders) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders }
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
 
@@ -39,10 +39,11 @@ export const api = {
   createCustomer: (data) => request('POST', '/customers', data),
   updateCustomer: (id, data) => request('PATCH', `/customers/${id}`, data),
 
-  // Orders
-  guestOrder: (data) => request('POST', '/orders/guest', data),
-  createCardIntent: (amount) => request('POST', '/orders/create-card-intent', { amount }),
-  createOrder: (data) => request('POST', '/orders', data),
+  // Orders — idempotencyKey evita pedido/cobrança duplicada se a resposta se
+  // perder na rede e o app tentar de novo com a mesma chave.
+  guestOrder: (data, idempotencyKey) => request('POST', '/orders/guest', data, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined),
+  createCardIntent: (amount, idempotencyKey) => request('POST', '/orders/create-card-intent', { amount }, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined),
+  createOrder: (data, idempotencyKey) => request('POST', '/orders', data, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined),
   getOrder: (id) => request('GET', `/orders/public/${id}`),
   getOrders: (params = '') => request('GET', `/orders${params}`),
   getCustomerOrders: (phone) => request('GET', `/orders/customer/${phone.replace(/\D/g, '')}`),

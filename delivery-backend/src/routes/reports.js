@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
 
 router.use(authMiddleware, requireRole('admin'));
 
@@ -77,8 +78,7 @@ router.get('/daily', async (req, res) => {
       deleted_orders: deleted.rows,
     });
   } catch (err) {
-    console.error('[reports/daily]', err.message);
-    res.status(500).json({ error: err.message });
+    return internalError(res, err, '[reports/daily]');
   }
 });
 

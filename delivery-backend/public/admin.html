@@ -1282,7 +1282,8 @@ async function pageClientes() {
 let _clientesCache = [];
 
 async function buscarClientes(q) {
-  _clientesCache = await api('GET', '/customers?search=' + encodeURIComponent(q) + '&limit=200');
+  const res = await api('GET', '/customers?search=' + encodeURIComponent(q) + '&limit=200');
+  _clientesCache = res.data;
   renderClientesTabela();
 }
 
@@ -1576,8 +1577,8 @@ async function pagePedidos() {
 async function carregarPedidos() {
   try {
     const qs = pedidosFiltro !== 'todos' ? `?status=${pedidosFiltro}&limit=100` : '?limit=100';
-    const orders = await api('GET', '/orders' + qs);
-    renderPedidos(orders);
+    const res = await api('GET', '/orders' + qs);
+    renderPedidos(res.data);
     startOrderTimers();
   } catch(e) { toast('Erro ao carregar pedidos: ' + e.message, true); }
 }
@@ -3625,7 +3626,7 @@ async function pageArquivo() {
   document.getElementById('content').innerHTML = '<p style="color:#64748b">Carregando...</p>';
   let orders;
   try {
-    orders = await api('GET', '/orders?archived=true&limit=500');
+    orders = (await api('GET', '/orders?archived=true&limit=500')).data;
   } catch (e) {
     document.getElementById('content').innerHTML = `<div class="card"><p style="color:#ef4444">❌ Erro ao carregar arquivo: ${e.message}</p></div>`;
     return;

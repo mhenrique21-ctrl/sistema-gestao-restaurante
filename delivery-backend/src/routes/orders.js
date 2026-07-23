@@ -1,6 +1,8 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
+const { idempotent } = require('../middleware/idempotency');
 const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub');
 const stripeService = require('../services/stripe');
 const asaasService = require('../services/asaas');
@@ -100,8 +102,43 @@ async function insertItemAddons(orderItemId, addons, client = pool) {
   }
 }
 
+/**
+ * @openapi
+ * /orders/guest:
+ *   post:
+ *     summary: Criar pedido sem autenticação (app do cliente)
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: header
+ *         name: Idempotency-Key
+ *         schema: { type: string }
+ *         description: Evita criar pedido duplicado se a resposta se perder e o app reenviar.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, phone, delivery_type, payment_method, items]
+ *             properties:
+ *               name: { type: string }
+ *               phone: { type: string }
+ *               delivery_type: { type: string, enum: [delivery, pickup] }
+ *               delivery_address: { type: object, nullable: true }
+ *               payment_method: { type: string }
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     product_id: { type: string, format: uuid }
+ *                     quantity: { type: integer }
+ *     responses:
+ *       201: { description: Pedido criado }
+ *       400: { description: Payload inválido }
+ */
 // POST /api/orders/guest — pedido sem autenticação (app cliente)
-router.post('/guest', async (req, res) => {
+router.post('/guest', idempotent, async (req, res) => {
   const { name, phone, delivery_type, delivery_address,
           payment_method, notes, delivery_fee = 0, items, coupon_code, coupon_subtotal, stripe_payment_intent_id } = req.body;
 
@@ -332,7 +369,7 @@ router.post('/guest', async (req, res) => {
 });
 
 // POST /api/orders/create-card-intent — cria PaymentIntent pra cobrança de cartão no checkout
-router.post('/create-card-intent', async (req, res) => {
+router.post('/create-card-intent', idempotent, async (req, res) => {
   const amount = parseFloat(req.body.amount);
   if (!amount || amount <= 0) return res.status(400).json({ error: 'Valor inválido' });
   try {
@@ -506,8 +543,101 @@ router.post('/webhook/asaas', async (req, res) => {
   }
 });
 
+// Webhook Stripe — precisa ficar ANTES do authMiddleware: o Stripe nunca envia
+// JWT, só a assinatura verificada por stripeService.constructWebhookEvent.
+// (Bug corrigido: esta rota vivia depois do router.use(authMiddleware), o que
+// fazia todo evento do Stripe ser rejeitado com 401 antes de chegar aqui.)
+router.post('/webhook/stripe', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  try {
+    const event = stripeService.constructWebhookEvent(req.rawBody, sig);
+
+    if (event.type === 'payment_intent.succeeded') {
+      const pi = event.data.object;
+      const result = await pool.query(
+        `UPDATE orders SET payment_status='pago', status='pago'
+         WHERE stripe_payment_intent_id=$1 RETURNING id`,
+        [pi.id]
+      );
+      if (result.rows[0]) {
+        await pool.query(
+          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'pago') RETURNING id`,
+          [result.rows[0].id]
+        );
+        broadcastOrderUpdate({ event: 'payment_confirmed', order_id: result.rows[0].id });
+      }
+    }
+
+    if (event.type === 'payment_intent.payment_failed') {
+      const pi = event.data.object;
+      await pool.query(
+        `UPDATE orders SET payment_status='falhou' WHERE stripe_payment_intent_id=$1 RETURNING id`,
+        [pi.id]
+      );
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('[webhook/stripe]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── Todas as rotas abaixo exigem JWT ──────────────────────────────────────
 router.use(authMiddleware);
 
+/**
+ * @openapi
+ * /orders:
+ *   get:
+ *     summary: Listar pedidos (paginado)
+ *     tags: [Orders]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: date
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: archived
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 30 }
+ *     responses:
+ *       200:
+ *         description: Página de pedidos com metadados de paginação.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data: { type: array, items: { type: object } }
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     total: { type: integer }
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     total_pages: { type: integer }
+ *   post:
+ *     summary: Criar pedido (autenticado — PDV/admin)
+ *     tags: [Orders]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: header
+ *         name: Idempotency-Key
+ *         schema: { type: string }
+ *         description: Evita criar pedido duplicado se a resposta se perder e o cliente reenviar.
+ *     responses:
+ *       201: { description: Pedido criado }
+ *       400: { description: Payload inválido }
+ */
 // GET /api/orders — listar pedidos (com filtros)
 router.get('/', async (req, res) => {
   const { status, date, page = 1, limit = 30, archived } = req.query;
@@ -527,6 +657,13 @@ router.get('/', async (req, res) => {
   values.push(parseInt(limit), offset);
 
   try {
+    const countValues = values.slice(0, values.length - 2); // sem limit/offset
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM orders o ${where}`,
+      countValues
+    );
+    const total = parseInt(countResult.rows[0].total, 10);
+
     const result = await pool.query(
       `SELECT
          o.*,
@@ -542,10 +679,12 @@ router.get('/', async (req, res) => {
        LIMIT $${idx} OFFSET $${idx + 1}`,
       values
     );
-    res.json(result.rows);
+    res.json({
+      data: result.rows,
+      meta: { total, page: parseInt(page), limit: parseInt(limit), total_pages: Math.max(1, Math.ceil(total / parseInt(limit))) },
+    });
   } catch (err) {
-    console.error('[orders/GET]', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    return internalError(res, err, '[orders/GET]');
   }
 });
 
@@ -581,8 +720,7 @@ router.post('/close-register', requireRole('admin'), async (req, res) => {
 
     res.json({ ok: true, archived_count: archived.rows.length, summary });
   } catch (e) {
-    console.error('[orders/close-register]', e.message);
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[orders/close-register]');
   }
 });
 
@@ -607,7 +745,7 @@ router.post('/:id/finalize', requireRole('admin'), async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[orders/finalize]');
   }
 });
 
@@ -622,10 +760,26 @@ router.post('/:id/unfinalize', requireRole('admin'), async (req, res) => {
     broadcastOrderUpdate({ event: 'order_unfinalized', order_id: req.params.id });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[orders/unfinalize]');
   }
 });
 
+/**
+ * @openapi
+ * /orders/{id}:
+ *   get:
+ *     summary: Detalhe do pedido com itens
+ *     tags: [Orders]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Pedido encontrado }
+ *       404: { description: Pedido não encontrado }
+ */
 // GET /api/orders/:id — pedido completo com itens
 router.get('/:id', async (req, res) => {
   try {
@@ -671,7 +825,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/orders — criar pedido
-router.post('/', async (req, res) => {
+router.post('/', idempotent, async (req, res) => {
   const { customer_id, items, delivery_type, delivery_address,
           payment_method, notes, delivery_fee = 0, discount = 0 } = req.body;
 
@@ -874,11 +1028,36 @@ router.post('/from-admin', async (req, res) => {
     });
     res.status(201).json({ id: order.id, order_number: order.order_number });
   } catch (err) {
-    console.error('[orders/from-admin]', err.message, '| code:', err.code, '| detail:', err.detail);
-    res.status(500).json({ error: err.message || 'Erro interno' });
+    return internalError(res, err, '[orders/from-admin]');
   }
 });
 
+/**
+ * @openapi
+ * /orders/{id}/status:
+ *   patch:
+ *     summary: Atualizar status do pedido
+ *     tags: [Orders]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string }
+ *     responses:
+ *       200: { description: Status atualizado }
+ *       400: { description: Status inválido }
+ *       404: { description: Pedido não encontrado }
+ */
 // PATCH /api/orders/:id/status — atualizar status
 router.patch('/:id/status', async (req, res) => {
   const { status, notes, faltantes, reason } = req.body;
@@ -1068,45 +1247,7 @@ router.delete('/:id', async (req, res) => {
     await pool.query(`DELETE FROM orders WHERE id = $1 RETURNING id`, [req.params.id]);
     res.json({ ok: true, disabled_products: faltantesIds.length });
   } catch (err) {
-    console.error('[orders/DELETE]', err.message);
-    res.status(500).json({ error: 'Erro interno: ' + err.message });
-  }
-});
-
-// POST /api/orders/webhook/stripe — webhook Stripe
-router.post('/webhook/stripe', async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  try {
-    const event = stripeService.constructWebhookEvent(req.rawBody, sig);
-
-    if (event.type === 'payment_intent.succeeded') {
-      const pi = event.data.object;
-      const result = await pool.query(
-        `UPDATE orders SET payment_status='pago', status='pago'
-         WHERE stripe_payment_intent_id=$1 RETURNING id`,
-        [pi.id]
-      );
-      if (result.rows[0]) {
-        await pool.query(
-          `INSERT INTO order_status_history (order_id, status) VALUES ($1,'pago') RETURNING id`,
-          [result.rows[0].id]
-        );
-        broadcastOrderUpdate({ event: 'payment_confirmed', order_id: result.rows[0].id });
-      }
-    }
-
-    if (event.type === 'payment_intent.payment_failed') {
-      const pi = event.data.object;
-      await pool.query(
-        `UPDATE orders SET payment_status='falhou' WHERE stripe_payment_intent_id=$1 RETURNING id`,
-        [pi.id]
-      );
-    }
-
-    res.json({ received: true });
-  } catch (err) {
-    console.error('[webhook/stripe]', err.message);
-    res.status(400).json({ error: err.message });
+    return internalError(res, err, '[orders/DELETE]');
   }
 });
 

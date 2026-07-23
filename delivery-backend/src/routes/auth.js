@@ -1,11 +1,22 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const pool = require('../db/pool');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
+
+// Até 10 tentativas de login por IP a cada 15 minutos — sem isso, a rota
+// de login aceitava tentativas ilimitadas de força bruta de senha.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Tente novamente em alguns minutos.' },
+});
 
 // POST /api/auth/login — aceita nome ou email + senha
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { name, email, password } = req.body;
   const identifier = (name || email || '').trim();
   if (!identifier || !password) {
@@ -74,12 +85,15 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/auth/register (admin only — use via seed ou painel)
-router.post('/register', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Apenas admins podem criar usuários' });
-  }
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
+// POST /api/auth/register (admin only — use via seed ou painel)
+router.post('/register', registerLimiter, authMiddleware, requireRole('admin'), async (req, res) => {
   const { name, email, password, role } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
 
 // Converte array JS para literal PostgreSQL: [1,2] → '{1,2}' | ['A','B'] → '{"A","B"}'
 function pgIntArray(arr) {
@@ -119,8 +120,7 @@ router.patch('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Promoção não encontrada' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[promotions/PATCH]', err.message);
-    res.status(500).json({ error: 'Erro interno: ' + err.message });
+    return internalError(res, err, '[promotions/PATCH]');
   }
 });
 

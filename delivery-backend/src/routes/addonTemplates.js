@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
 
 router.use(authMiddleware);
 
@@ -98,8 +99,7 @@ router.post('/:id/sync', requireRole('admin'), async (req, res) => {
     }
     res.json({ updated: groupsRes.rows.length });
   } catch (err) {
-    console.error('[addon-templates/sync]', err.message);
-    res.status(500).json({ error: err.message || 'Erro interno' });
+    return internalError(res, err, '[addon-templates/sync]');
   }
 });
 

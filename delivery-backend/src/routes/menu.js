@@ -3,6 +3,7 @@ const multer = require('multer');
 const pool = require('../db/pool');
 const { supabase } = require('../db/supabase');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -36,6 +37,44 @@ router.post('/upload', authMiddleware, requireRole('admin'), upload.single('imag
   }
 });
 
+/**
+ * @openapi
+ * /menu:
+ *   get:
+ *     summary: Cardápio completo agrupado por categoria
+ *     description: >
+ *       Sem o parâmetro `channel` (ex.: PDV fazendo venda de balcão), mostra
+ *       tudo que está disponível, sem restrição de canal.
+ *     tags: [Menu]
+ *     parameters:
+ *       - in: query
+ *         name: channel
+ *         schema: { type: string, enum: [kiosk, delivery] }
+ *         description: Filtra produtos por show_kiosk/show_delivery.
+ *     responses:
+ *       200:
+ *         description: Lista de categorias, cada uma com seus produtos e adicionais.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string, format: uuid }
+ *                   name: { type: string }
+ *                   sort_order: { type: integer }
+ *                   products:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string, format: uuid }
+ *                         name: { type: string }
+ *                         price: { type: number }
+ *                         available: { type: boolean }
+ *                         promo_price: { type: number, nullable: true }
+ */
 // GET /api/menu — cardápio completo agrupado por categoria
 // ?channel=kiosk|delivery filtra por show_kiosk/show_delivery — sem o
 // parâmetro (ex: PDV fazendo venda de balcão), mostra tudo que está
@@ -138,6 +177,9 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Cardápio muda pouco (só quando o admin edita produtos) e é lido por
+    // todo cliente/kiosk/PDV que abre a tela — vale um cache curto.
+    res.set('Cache-Control', 'public, max-age=20');
     res.json(Object.values(menu).sort((a, b) => a.sort_order - b.sort_order));
   } catch (err) {
     console.error('[menu/GET]', err.message);
@@ -181,6 +223,21 @@ router.get('/admin', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /menu/products/{id}:
+ *   get:
+ *     summary: Detalhe de um produto
+ *     tags: [Menu]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Produto encontrado }
+ *       404: { description: Produto não encontrado }
+ */
 // GET /api/menu/products/:id — produto específico
 router.get('/products/:id', async (req, res) => {
   try {
@@ -197,6 +254,33 @@ router.get('/products/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /menu/products:
+ *   post:
+ *     summary: Criar produto
+ *     tags: [Menu]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [category_id, name, price]
+ *             properties:
+ *               category_id: { type: string, format: uuid }
+ *               name: { type: string }
+ *               description: { type: string }
+ *               price: { type: number }
+ *               image_url: { type: string }
+ *               featured: { type: boolean }
+ *               promo_price: { type: number, nullable: true }
+ *     responses:
+ *       201: { description: Produto criado }
+ *       400: { description: Categoria não encontrada }
+ *       403: { description: Só admin }
+ */
 // POST /api/menu/products — criar produto (admin)
 router.post('/products', authMiddleware, requireRole('admin'), async (req, res) => {
   const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery, promo_max_qty } = req.body;
@@ -225,8 +309,7 @@ router.post('/products', authMiddleware, requireRole('admin'), async (req, res) 
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === '23503') return res.status(400).json({ error: 'Categoria não encontrada' });
-    console.error('[menu/POST product]', err.message);
-    res.status(500).json({ error: 'Erro interno: ' + err.message });
+    return internalError(res, err, '[menu/POST product]');
   }
 });
 
@@ -249,6 +332,38 @@ router.patch('/products/:id/available', authMiddleware, requireRole('admin', 'at
   }
 });
 
+/**
+ * @openapi
+ * /menu/products/{id}:
+ *   patch:
+ *     summary: Atualizar produto (parcial)
+ *     tags: [Menu]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema: { type: object, description: "Qualquer subconjunto dos campos de produto." }
+ *     responses:
+ *       200: { description: Produto atualizado }
+ *       404: { description: Produto não encontrado }
+ *   delete:
+ *     summary: Remover produto
+ *     tags: [Menu]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Produto removido }
+ *       404: { description: Produto não encontrado }
+ */
 // PATCH /api/menu/products/:id — atualizar produto (admin)
 router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   const fields = ['name', 'description', 'price', 'image_url', 'available', 'sort_order', 'category_id', 'featured', 'promo_price', 'promo_label', 'print_target'];

@@ -143,7 +143,7 @@ async function loadOrders() {
   try {
     const res = await fetch('/api/orders?date=' + new Date().toISOString().slice(0,10), { headers: { Authorization: 'Bearer ' + TOKEN } });
     const orders = await res.json();
-    renderLog(Array.isArray(orders) ? orders : []);
+    renderLog(Array.isArray(orders?.data) ? orders.data : []);
   } catch(e) { console.error(e); }
 }
 

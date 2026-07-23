@@ -2,6 +2,7 @@ const router = require('express').Router();
 const pool = require('../db/pool');
 const bcrypt = require('bcryptjs');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
 
 router.use(authMiddleware, requireRole('admin'));
 
@@ -35,8 +36,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(r.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Nome já cadastrado' });
-    console.error('[users/POST]', err.message, err.code, err.detail);
-    res.status(500).json({ error: err.message || 'Erro interno' });
+    return internalError(res, err, '[users/POST]');
   }
 });
 

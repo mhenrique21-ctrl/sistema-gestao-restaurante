@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { broadcastToStation, requestPrinterList } = require('../websocket/hub');
 const pool = require('../db/pool');
+const { internalError } = require('../utils/errors');
 
 const PRINTER_KEYS = ['printer_caixa', 'printer_cozinha', 'printer_balcao'];
 
@@ -13,7 +14,8 @@ router.get('/', requireRole('admin'), async (req, res) => {
     const printers = await requestPrinterList();
     res.json({ printers });
   } catch (e) {
-    res.json({ printers: [], error: e.message });
+    console.error('[printers/GET]', e.message);
+    res.json({ printers: [], error: 'Não foi possível consultar as impressoras' });
   }
 });
 
@@ -25,7 +27,7 @@ router.get('/config', requireRole('admin'), async (req, res) => {
     for (const row of r.rows) cfg[row.key] = row.value;
     res.json(cfg);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[printers/config GET]');
   }
 });
 
@@ -47,7 +49,7 @@ router.post('/config', requireRole('admin'), async (req, res) => {
     }
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[printers/config POST]');
   }
 });
 
@@ -92,7 +94,7 @@ router.post('/reprint-order/:id', requireRole('admin'), async (req, res) => {
     broadcastToStation('caixa', { event: 'reprint_order', order: order.rows[0], items: items.rows });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[printers/reprint-order]');
   }
 });
 
@@ -109,7 +111,7 @@ router.post('/finalize-order/:id', requireRole('admin'), async (req, res) => {
     broadcastToStation('caixa', { event: 'finalize_order', order: r.rows[0] });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[printers/finalize-order]');
   }
 });
 
@@ -140,7 +142,7 @@ router.post('/close-register', requireRole('admin'), async (req, res) => {
     broadcastToStation('caixa', { event: 'close_register', summary });
     res.json({ ok: true, summary });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return internalError(res, e, '[printers/close-register]');
   }
 });
 

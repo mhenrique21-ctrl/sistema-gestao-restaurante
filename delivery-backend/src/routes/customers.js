@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
 
 // Todas as rotas exigem autenticação
 router.use(authMiddleware);
@@ -19,6 +20,12 @@ router.get('/', async (req, res) => {
       where += ` AND (c.name ILIKE $${values.length} OR c.phone ILIKE $${values.length})`;
     }
 
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM customers c ${where}`,
+      values // ainda sem limit/offset
+    );
+    const total = parseInt(countResult.rows[0].total, 10);
+
     values.push(parseInt(limit), offset);
     const result = await pool.query(
       `SELECT c.*,
@@ -32,10 +39,12 @@ router.get('/', async (req, res) => {
        LIMIT $${values.length - 1} OFFSET $${values.length}`,
       values
     );
-    res.json(result.rows);
+    res.json({
+      data: result.rows,
+      meta: { total, page: parseInt(page), limit: parseInt(limit), total_pages: Math.max(1, Math.ceil(total / parseInt(limit))) },
+    });
   } catch (err) {
-    console.error('[customers/GET]', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    return internalError(res, err, '[customers/GET]');
   }
 });
 

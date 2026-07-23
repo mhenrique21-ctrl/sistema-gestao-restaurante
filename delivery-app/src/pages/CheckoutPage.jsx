@@ -295,6 +295,10 @@ export default function CheckoutPage() {
   const pixFinalTotal = preDiscountTotal - pixDiscountAmount
   const total = payment === 'pix' ? pixFinalTotal : preDiscountTotal
   const totalRef = useRef(total)
+  // Uma chave por sessão de checkout — se o pedido for enviado de novo depois
+  // de uma resposta perdida na rede, o backend reconhece como a mesma tentativa
+  // em vez de criar um pedido/cobrança duplicado.
+  const idempotencyKeyRef = useRef(crypto.randomUUID())
 
   async function applyCoupon() {
     setCouponError('')
@@ -337,7 +341,7 @@ export default function CheckoutPage() {
         coupon_subtotal: couponApplied ? subtotalSemPromo : undefined,
         stripe_payment_intent_id: stripePaymentIntentId,
         items: items.map(i => ({ product_id: i.product.id, quantity: i.qty, notes: i.notes || null, addons: (i.addons || []).map(a => ({ addon_option_id: a.id, quantity: 1 })) })),
-      })
+      }, idempotencyKeyRef.current)
       clear()
       const BASE = import.meta.env.VITE_API_URL || ''
       // Meta Pixel — browser
@@ -400,7 +404,7 @@ export default function CheckoutPage() {
         if (fieldError) { ev.complete('fail'); setApplePayError(fieldError); return }
         setLoading(true)
         try {
-          const intentRes = await api.createCardIntent(totalRef.current)
+          const intentRes = await api.createCardIntent(totalRef.current, idempotencyKeyRef.current)
           const { paymentIntent, error: confirmError } = await stripe.confirmCardPayment(
             intentRes.clientSecret,
             { payment_method: ev.paymentMethod.id },
