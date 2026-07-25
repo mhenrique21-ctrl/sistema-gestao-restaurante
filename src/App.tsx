@@ -3557,6 +3557,55 @@ const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
 const EMPTY_FORM_LISTA={nome:"",qtd:"",unidade:"un",cat:"",estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,rua:""};
 
+// Arrastar o item pra direita marca comprado, arrastar pra esquerda abre edição
+// (startEdit) — substitui o antigo quadradinho de marcar + botões ✏️/× soltos.
+const SWIPE_RIGHT_COMMIT=170, SWIPE_LEFT_COMMIT=-170, SWIPE_MAXCLAMP=230;
+function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,onLeft?:()=>void,disabled?:boolean,rowStyle:any,children:any}){
+  const cardRef=useRef<HTMLDivElement>(null);
+  const iconRRef=useRef<HTMLDivElement>(null);
+  const iconLRef=useRef<HTMLDivElement>(null);
+  const drag=useRef({startX:0,dragX:0,dragging:false});
+
+  const setX=(x:number,animate:boolean)=>{
+    const card=cardRef.current;if(!card)return;
+    card.style.transition=animate?"transform .25s cubic-bezier(.2,.8,.2,1)":"none";
+    card.style.transform=`translateX(${x}px)`;
+    const rp=Math.max(0,x)/SWIPE_RIGHT_COMMIT, lp=Math.max(0,-x)/Math.abs(SWIPE_LEFT_COMMIT);
+    if(iconRRef.current){iconRRef.current.style.opacity=x>12?String(Math.min(1,rp+.2)):"0";iconRRef.current.style.transform=`translateY(-50%) scale(${.75+Math.min(rp,1)*.35})`;}
+    if(iconLRef.current){iconLRef.current.style.opacity=x<-12?String(Math.min(1,lp+.2)):"0";iconLRef.current.style.transform=`translateY(-50%) scale(${.75+Math.min(lp,1)*.35})`;}
+  };
+  const onPointerDown=(e:any)=>{
+    if(disabled)return;
+    drag.current.dragging=true;drag.current.startX=e.clientX;
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove=(e:any)=>{
+    if(!drag.current.dragging)return;
+    const delta=e.clientX-drag.current.startX;
+    drag.current.dragX=Math.min(SWIPE_MAXCLAMP,Math.max(-SWIPE_MAXCLAMP,delta));
+    setX(drag.current.dragX,false);
+  };
+  const onPointerUp=()=>{
+    if(!drag.current.dragging)return;
+    drag.current.dragging=false;
+    const x=drag.current.dragX;
+    if(x>=SWIPE_RIGHT_COMMIT){setX(0,false);onRight();return;}
+    if(onLeft&&x<=SWIPE_LEFT_COMMIT){setX(0,false);onLeft();return;}
+    setX(0,true);
+  };
+
+  return <div style={{position:"relative",borderRadius:10,marginBottom:4,overflow:"hidden",touchAction:"pan-y"}}>
+    <div style={{position:"absolute",inset:0,borderRadius:10,background:"var(--bg2)"}}>
+      <div ref={iconRRef} style={{position:"absolute",top:"50%",left:14,transform:"translateY(-50%) scale(.8)",width:30,height:30,borderRadius:9,background:"#22C55E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,opacity:0,transition:"opacity .08s linear",pointerEvents:"none"}}>✓</div>
+      {onLeft&&<div ref={iconLRef} style={{position:"absolute",top:"50%",right:14,transform:"translateY(-50%) scale(.8)",width:30,height:30,borderRadius:9,background:"#B45309",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,opacity:0,transition:"opacity .08s linear",pointerEvents:"none"}}>✏️</div>}
+    </div>
+    <div ref={cardRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+      style={{...rowStyle,position:"relative",cursor:disabled?"default":"grab"}}>
+      {children}
+    </div>
+  </div>;
+}
+
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
   const [subTab,setSubTab]=useState(pendingSub||"nova");
@@ -4865,6 +4914,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           {editId?"💾 Atualizar":"✅ Adicionar à Lista"}
         </button>
         {editId&&<button className="btn" onClick={cancelEdit} style={{background:"var(--border2)",color:"var(--text2)",padding:"12px 14px",fontSize:14}}>✕</button>}
+        {editId&&<button className="btn" onClick={()=>{del(editId);cancelEdit();}} style={{background:"var(--dangerBg,#FEE2E2)",color:"#EF4444",padding:"12px 14px",fontSize:14}} title="Apagar item">🗑️</button>}
       </div>
     </div>
 
@@ -4926,11 +4976,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           return(
-          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":isEditing?"#6366F1":"var(--border)"}`,transition:"all .15s"}}>
-            <button onClick={()=>toggle(item.id)} disabled={travandoIds.has(item.id)}
-              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
-              {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900}}>!</span>}
-            </button>
+          <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
+            onRight={()=>toggle(item.id)} onLeft={isAdmin?()=>startEdit(item):undefined}
+            rowStyle={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":isEditing?"#6366F1":"var(--border)"}`,transition:"background .15s,border-color .15s"}}>
+            {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900,flexShrink:0}}>!</span>}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
@@ -4962,11 +5011,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               </div>}
               <div style={{display:"flex",gap:2}}>
                 <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
-                {isAdmin&&<button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#6366F1",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>}
-                {isAdmin&&<button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>}
               </div>
             </div>
-          </div>
+          </SwipeRow>
           );
         })}
       </div>;
@@ -4985,11 +5032,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           return(
-          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",marginBottom:4,background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":"var(--border)"}`,transition:"all .15s"}}>
-            <button onClick={()=>toggle(item.id)} disabled={travandoIds.has(item.id)}
-              style={{width:26,height:26,borderRadius:7,border:`2px solid ${item.urgente?"#EF4444":"#555"}`,background:"transparent",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900}}>!</span>}
-            </button>
+          <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
+            onRight={()=>toggle(item.id)} onLeft={()=>startEdit(item)}
+            rowStyle={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":"var(--border)"}`,transition:"background .15s,border-color .15s"}}>
+            {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900,flexShrink:0}}>!</span>}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
@@ -5014,10 +5060,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             </div>
             <div style={{display:"flex",gap:2}}>
               <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
-              <button onClick={()=>startEdit(item)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#6366F1",cursor:"pointer",fontSize:11,padding:"3px 6px",lineHeight:1}}>✏️</button>
-              <button onClick={()=>del(item.id)} style={{background:"none",border:"1px solid #EF444422",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>
             </div>
-          </div>);
+          </SwipeRow>);
         })}
       </div>;
     })}
