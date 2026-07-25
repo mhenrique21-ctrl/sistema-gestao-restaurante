@@ -3559,12 +3559,18 @@ const EMPTY_FORM_LISTA={nome:"",qtd:"",unidade:"un",cat:"",estoqueQtd:"",estoque
 
 // Arrastar o item pra direita marca comprado, arrastar pra esquerda abre edição
 // (startEdit) — substitui o antigo quadradinho de marcar + botões ✏️/× soltos.
-const SWIPE_RIGHT_COMMIT=170, SWIPE_LEFT_COMMIT=-170, SWIPE_MAXCLAMP=230;
+const SWIPE_RIGHT_COMMIT=130, SWIPE_LEFT_COMMIT=-130, SWIPE_MAXCLAMP=190;
+// Um "flick" (arraste rápido e curto) não percorre a distância cheia do
+// commit por posição — sem isso, um toque rápido do usuário sempre voltava
+// pro lugar sem nunca abrir a edição/marcar comprado. Se o gesto foi rápido
+// (poucos ms) e percorreu uma distância mínima na direção certa, confirma
+// mesmo sem ter cruzado o limiar de posição inteiro.
+const SWIPE_FLICK_MIN_DIST=48, SWIPE_FLICK_MAX_MS=260, SWIPE_FLICK_VELOCITY=0.35;
 function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,onLeft?:()=>void,disabled?:boolean,rowStyle:any,children:any}){
   const cardRef=useRef<HTMLDivElement>(null);
   const iconRRef=useRef<HTMLDivElement>(null);
   const iconLRef=useRef<HTMLDivElement>(null);
-  const drag=useRef({startX:0,dragX:0,dragging:false});
+  const drag=useRef({startX:0,startT:0,dragX:0,dragging:false});
 
   const setX=(x:number,animate:boolean)=>{
     const card=cardRef.current;if(!card)return;
@@ -3576,7 +3582,7 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
   };
   const onPointerDown=(e:any)=>{
     if(disabled)return;
-    drag.current.dragging=true;drag.current.startX=e.clientX;
+    drag.current.dragging=true;drag.current.startX=e.clientX;drag.current.startT=performance.now();
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
   };
   const onPointerMove=(e:any)=>{
@@ -3589,8 +3595,11 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
     if(!drag.current.dragging)return;
     drag.current.dragging=false;
     const x=drag.current.dragX;
-    if(x>=SWIPE_RIGHT_COMMIT){setX(0,false);onRight();return;}
-    if(onLeft&&x<=SWIPE_LEFT_COMMIT){setX(0,false);onLeft();return;}
+    const elapsed=performance.now()-drag.current.startT;
+    const velocity=Math.abs(x)/Math.max(elapsed,1);
+    const isFlick=Math.abs(x)>=SWIPE_FLICK_MIN_DIST&&elapsed<=SWIPE_FLICK_MAX_MS&&velocity>=SWIPE_FLICK_VELOCITY;
+    if(x>=SWIPE_RIGHT_COMMIT||(isFlick&&x>0)){setX(0,false);onRight();return;}
+    if(onLeft&&(x<=SWIPE_LEFT_COMMIT||(isFlick&&x<0))){setX(0,false);onLeft();return;}
     setX(0,true);
   };
 
