@@ -3906,21 +3906,46 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     alert("✅ Lista fechada e arquivada! Uma lista nova foi aberta.");
   };
 
-  // Traz de volta itens órfãos (listaId diferente do atual) pra lista atual,
-  // sem tocar em mais nenhum campo — nome, quantidade, comprado/não-tem,
-  // categoria etc. continuam exatamente como estavam.
+  // Órfãos NUNCA voltam pra lista atual — isso misturaria itens de uma lista
+  // (dia) antiga com os de hoje, o que é exatamente o que não pode acontecer.
+  // Em vez de "recuperar" pra visão atual, cada grupo de órfãos (por listaId)
+  // vira seu próprio registro no Arquivo, datado pelo criadoEm mais antigo
+  // do grupo — os dados originais são preservados, só ficam no histórico
+  // ao invés de reaparecerem junto com o que está sendo comprado agora.
   const recuperarOrfaos=()=>{
     if(!isAdmin)return;
     if(!orfaos.length)return;
-    if(!confirm(`Recuperar ${orfaos.length} item(ns) de volta pra lista atual?`))return;
-    const ts=Date.now();
+    if(!confirm(`Arquivar ${orfaos.length} item(ns) de lista(s) antiga(s)? Eles vão pro Arquivo, sem se misturar com a lista de hoje.`))return;
+
+    const grupos=new Map<string,any[]>();
+    orfaos.forEach((i:any)=>{
+      const k=i.listaId||"sem-id";
+      if(!grupos.has(k))grupos.set(k,[]);
+      grupos.get(k)!.push(i);
+    });
+    const novosPedidos:any[]=[];
+    const idsArquivados:string[]=[];
+    grupos.forEach((itens)=>{
+      const datas=itens.map((i:any)=>i.criadoEm).filter(Boolean).sort();
+      const dataRef=datas.length?datas[0].slice(0,10):today();
+      novosPedidos.push({
+        id:uid(),
+        data:dataRef,
+        autoArquivado:true,
+        itens:itens.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,quantidadeComprada:i.quantidadeComprada??null,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),
+        criadoEm:new Date().toISOString(),
+      });
+      itens.forEach((i:any)=>idsArquivados.push(i.id));
+    });
+    idsArquivados.forEach(id=>_listaDeletados.add(id));
+
     (setDbAndSave||setDb)((d:any)=>({
       ...d,
-      listaCompras:(d.listaCompras||[]).map((i:any)=>
-        i.listaId&&i.listaId!==d.listaAtualId?{...i,listaId:d.listaAtualId,updatedAt:ts}:i
-      ),
+      pedidosLista:[...novosPedidos,...(d.pedidosLista||[])],
+      listaCompras:(d.listaCompras||[]).filter((i:any)=>!idsArquivados.includes(i.id)),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...idsArquivados])].slice(-5000),
     }));
-    alert("✅ Itens recuperados.");
+    alert(`✅ ${orfaos.length} item(ns) arquivado(s) no histórico — nada foi misturado com a lista de hoje.`);
   };
 
   const moverItem=(id:string,dir:-1|1)=>{
@@ -4913,14 +4938,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <button onClick={()=>setVistaRua(true)} className="pill" style={{background:vistaRua?"#22C55E":"var(--bg4)",color:vistaRua?"#111":"#777",fontSize:12,padding:"7px 14px"}}>🛤️ Por Rua</button>
     </div>}
 
-    {/* Itens órfãos: sobra de alguma corrida de sincronização com listaId diferente
-        do atual (lista fechada de propósito, ou — bug já corrigido — um dispositivo
-        desatualizado inventando uma identidade nova). Nunca aparecem misturados na
-        lista atual; o admin decide se quer trazê-los de volta ou não. */}
+    {/* Itens órfãos: sobra de uma lista antiga (fechada com órfãos já existentes,
+        ou uma corrida de sincronização que deixou o listaId desatualizado). Nunca
+        aparecem misturados na lista atual — o admin só pode arquivá-los no
+        histórico, no dia a que pertencem; nunca trazê-los de volta pra hoje. */}
     {isAdmin&&orfaos.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"9px 12px",background:"#FEF3C7",borderRadius:10,border:"1px solid #F59E0B44",fontSize:12,color:"#92400e"}}>
-      <span style={{flex:1}}>⚠️ {orfaos.length} item(ns) de uma lista antiga não aparecem aqui. Se não foi você quem fechou a lista, use "Recuperar" pra trazê-los de volta com todos os dados originais.</span>
+      <span style={{flex:1}}>⚠️ {orfaos.length} item(ns) de uma lista antiga ficaram pra trás (não aparecem aqui, nunca se misturam com a lista de hoje). Use "Arquivar" pra guardá-los no histórico, no dia certo.</span>
       <button onClick={recuperarOrfaos} className="btn" style={{background:"#F59E0B",color:"#fff",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
-        ↩ Recuperar
+        📂 Arquivar
       </button>
     </div>}
 
