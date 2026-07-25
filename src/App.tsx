@@ -3647,24 +3647,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [concBusca,setConcBusca]=useState("");
   const [pendingMpLinks,setPendingMpLinks]=useState<string[]|null>(null);
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
-  const [undoInfo,setUndoInfo]=useState<{lista:any[],deletedIds:string[],setIds:string[],label:string}|null>(null);
-  const undoTimerRef=useRef<any>(null);
   const [travandoIds,setTravandoIds]=useState<Set<string>>(new Set());
   const travar=(id:string)=>{
     setTravandoIds(s=>new Set(s).add(id));
     setTimeout(()=>setTravandoIds(s=>{const n=new Set(s);n.delete(id);return n;}),350);
-  };
-
-  const pushUndo=(label:string,prevLista:any[],prevDeletedIds:string[],newSetIds:string[]=[])=>{
-    setUndoInfo({lista:prevLista,deletedIds:prevDeletedIds,setIds:newSetIds,label});
-    clearTimeout(undoTimerRef.current);
-    undoTimerRef.current=setTimeout(()=>setUndoInfo(null),6000);
-  };
-  const desfazer=()=>{
-    if(!undoInfo)return;
-    undoInfo.setIds.forEach(id=>_listaDeletados.delete(id));
-    setDb((d:any)=>({...d,listaCompras:undoInfo.lista,listaDeletedIds:undoInfo.deletedIds}));
-    setUndoInfo(null);clearTimeout(undoTimerRef.current);
   };
 
   const catsPers:string[]=db.listaCategorias||[];
@@ -3680,9 +3666,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // de sincronização) nunca se mistura na tela — fica só visível pro admin decidir.
   const lista:any[]=listaTodas.filter((i:any)=>!i.listaId||i.listaId===listaAtualId);
   const orfaos:any[]=listaTodas.filter((i:any)=>i.listaId&&i.listaId!==listaAtualId);
-  const pendentes=lista.filter((i:any)=>!i.comprado&&!i.naoTem);
+  // "não tem" foi removido: item legado com essa marca antiga volta a contar como pendente normal.
+  const pendentes=lista.filter((i:any)=>!i.comprado);
   const comprados=lista.filter((i:any)=>i.comprado);
-  const naoTemList=lista.filter((i:any)=>i.naoTem&&!i.comprado);
 
   const getMpEstoque=(nomeProd:string)=>{
     const mp=(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase()===nomeProd.toLowerCase());
@@ -3845,8 +3831,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const toggle=(id:string)=>{
     if(travandoIds.has(id))return;
     travar(id);
-    const item=lista.find((i:any)=>i.id===id);
-    pushUndo(`"${item?.nome||"Produto"}" ${item?.comprado?"desmarcado":"marcado como comprado"}`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
     const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
@@ -3854,18 +3838,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const nowComprado=!it.comprado;
       const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
       return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,quantidadeComprada:nowComprado?i.quantidadeComprada:undefined,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
-    });
-  };
-  const toggleNaoTem=(id:string)=>{
-    if(travandoIds.has(id))return;
-    travar(id);
-    const item=lista.find((i:any)=>i.id===id);
-    pushUndo(`"${item?.nome||"Produto"}" ${item?.naoTem?"desmarcado":"marcado como não tem"}`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])]);
-    const ts=Date.now();
-    (setDbAndSave||setDb)((d:any)=>{
-      const it=(d.listaCompras||[]).find((i:any)=>i.id===id);if(!it)return d;
-      const nowNaoTem=!it.naoTem;
-      return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,naoTem:nowNaoTem,comprado:false,updatedAt:ts}:i)};
     });
   };
   const setQtd=(id:string,novaQtd:number)=>{
@@ -3881,11 +3853,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidadeComprada:novaQtd,updatedAt:ts}:i)}));
   };
   const del=(id:string)=>{
-
-    const prevLista=[...(db.listaCompras||[])];
-    const prevDeletedIds=[...(db.listaDeletedIds||[])];
-    const item=prevLista.find((i:any)=>i.id===id);
-    pushUndo(`"${item?.nome||"Produto"}" excluído`,prevLista,prevDeletedIds,[id]);
     _listaDeletados.add(id);
 
     setDb((d:any)=>({
@@ -3898,7 +3865,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!comprados.length)return;
 
     const ids=comprados.map((i:any)=>i.id);
-    pushUndo(`${comprados.length} comprado(s) removido(s)`,[...(db.listaCompras||[])],[...(db.listaDeletedIds||[])],ids);
     ids.forEach(id=>_listaDeletados.add(id));
 
     setDb((d:any)=>({
@@ -4150,9 +4116,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   };
 
   const listaBusca=busca.trim()?lista.filter((i:any)=>i.nome.toLowerCase().includes(busca.toLowerCase())):lista;
-  const listaBuscaPend=listaBusca.filter((i:any)=>!i.comprado&&!i.naoTem);
+  const listaBuscaPend=listaBusca.filter((i:any)=>!i.comprado);
   const listaBuscaComp=listaBusca.filter((i:any)=>i.comprado).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR"));
-  const listaBuscaNaoTem=listaBusca.filter((i:any)=>i.naoTem&&!i.comprado);
   const porCat:Record<string,any[]>={};
   listaBuscaPend.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCat[c])porCat[c]=[];porCat[c].push(i);});
   const catsSorted=cats.filter(c=>porCat[c]);
@@ -4309,7 +4274,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#EF444422",color:"#EF4444",border:"1px solid #EF444444",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
       {comprados.length>0&&<span style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>✅ {comprados.length}</span>}
-      {naoTemList.length>0&&<span style={{background:"#F59E0B22",color:"#F59E0B",border:"1px solid #F59E0B44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>🚫 {naoTemList.length}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#DBEAFE",color:"#1D4ED8",border:"1px solid #0EA5E940",padding:"6px 12px",fontSize:12}}>🖨️</button>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
@@ -4954,9 +4918,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {/* Progresso da lista atual */}
     {lista.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
       <div style={{flex:1,height:8,borderRadius:99,background:"var(--bg4)",overflow:"hidden"}}>
-        <div style={{height:"100%",width:`${Math.round(((comprados.length+naoTemList.length)/lista.length)*100)}%`,background:"#22C55E",transition:"width .25s"}}/>
+        <div style={{height:"100%",width:`${Math.round((comprados.length/lista.length)*100)}%`,background:"#22C55E",transition:"width .25s"}}/>
       </div>
-      <span style={{fontSize:12,fontWeight:700,color:"#22C55E",whiteSpace:"nowrap" as const}}>{comprados.length+naoTemList.length}/{lista.length} resolvidos</span>
+      <span style={{fontSize:12,fontWeight:700,color:"#22C55E",whiteSpace:"nowrap" as const}}>{comprados.length}/{lista.length} resolvidos</span>
     </div>}
 
     {/* Lista por categoria — somente pendentes */}
@@ -5002,17 +4966,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               {item.adicionadoPor&&<div style={{fontSize:12,marginTop:3,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
-            <div style={{display:"flex",flexDirection:"column" as const,gap:3,flexShrink:0,alignItems:"center"}}>
-              {isAdmin&&<div style={{display:"flex",gap:2}}>
-                <button onClick={()=>moverItem(item.id,-1)} disabled={idx===0}
-                  style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===0?"#333":"#888",cursor:idx===0?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▲</button>
-                <button onClick={()=>moverItem(item.id,1)} disabled={idx===pendCat.length-1}
-                  style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"#333":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
-              </div>}
-              <div style={{display:"flex",gap:2}}>
-                <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
-              </div>
-            </div>
+            {isAdmin&&<div style={{display:"flex",gap:2,flexShrink:0}}>
+              <button onClick={()=>moverItem(item.id,-1)} disabled={idx===0}
+                style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===0?"#333":"#888",cursor:idx===0?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▲</button>
+              <button onClick={()=>moverItem(item.id,1)} disabled={idx===pendCat.length-1}
+                style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"#333":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
+            </div>}
           </SwipeRow>
           );
         })}
@@ -5058,9 +5017,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               {item.adicionadoPor&&<div style={{fontSize:12,marginTop:3,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
-            <div style={{display:"flex",gap:2}}>
-              <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)} style={{background:"none",border:"1px solid #F59E0B33",borderRadius:6,color:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,fontSize:9,padding:"3px 5px",lineHeight:1,fontWeight:700}}>🚫</button>
-            </div>
           </SwipeRow>);
         })}
       </div>;
@@ -5099,33 +5055,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       })}
     </div>}
 
-    {/* Não tem — bloco único no fim */}
-    {listaBuscaNaoTem.length>0&&<div style={{marginTop:8,marginBottom:16}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"4px 0",borderBottom:"1px solid #92400e"}}>
-        <span style={{fontSize:18}}>🚫</span>
-        <span style={{fontSize:12,fontWeight:700,color:"#F59E0B",textTransform:"uppercase" as const,letterSpacing:0.8}}>Não tem</span>
-        <span style={{fontSize:11,color:"#555"}}>({listaBuscaNaoTem.length})</span>
-      </div>
-      {listaBuscaNaoTem.map((item:any)=>(
-        <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,background:"#FEF3C7",borderRadius:10,border:"1px solid #92400e44",opacity:0.55,transition:"all .15s"}}>
-          <button onClick={()=>toggleNaoTem(item.id)} disabled={travandoIds.has(item.id)}
-            style={{width:26,height:26,borderRadius:7,border:"2px solid #F59E0B",background:"#F59E0B",cursor:travandoIds.has(item.id)?"default":"pointer",opacity:travandoIds.has(item.id)?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <span style={{color:"#111",fontSize:12,fontWeight:900,lineHeight:1}}>✕</span>
-          </button>
-          <div style={{flex:1,minWidth:0}}>
-            <span style={{fontSize:13,fontWeight:600,textDecoration:"line-through",color:"#a08030"}}>{item.nome}</span>
-            <div style={{fontSize:11,color:"#776020",marginTop:1}}>{item.quantidade} {item.unidade}{item.categoria&&` · ${item.categoria}`}</div>
-          </div>
-          {isAdmin&&<button onClick={()=>del(item.id)} style={{background:"none",border:"none",borderRadius:6,color:"#555",cursor:"pointer",fontSize:13,padding:"3px 6px",lineHeight:1}}>×</button>}
-        </div>
-      ))}
-    </div>}
     </>}
-
-    {undoInfo&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:"#DBEAFE",border:"1px solid #6366F1",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:12,zIndex:200,boxShadow:"0 4px 20px #0008",whiteSpace:"nowrap" as const}}>
-      <span style={{fontSize:13,color:"var(--text)"}}>↩ {undoInfo.label}</span>
-      <button onClick={desfazer} style={{background:"#6366F1",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Desfazer</button>
-    </div>}
   </div>;
 }
 
