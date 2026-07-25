@@ -3638,6 +3638,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un",rua:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
   const prodFormRef=useRef<HTMLDivElement>(null);
+  const listaFormRef=useRef<HTMLDivElement>(null);
   const [buscaCatalogo,setBuscaCatalogo]=useState("");
   const [filtroCatCatalogo,setFiltroCatCatalogo]=useState("");
   const [showSugg,setShowSugg]=useState(false);
@@ -3833,7 +3834,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const startEdit=(item:any)=>{
     setForm({nome:item.nome,qtd:String(item.quantidade),unidade:item.unidade||"un",cat:item.categoria||"",estoqueQtd:item.estoqueQtd||"",estoqueUn:item.estoqueUn||"un",obs:item.obs||"",urgente:!!item.urgente,rua:item.rua||""});
     setEditId(item.id);
-    setTimeout(()=>document.getElementById("lista-nome-inp")?.focus(),50);
+    // Sem isso, arrastar um item mais abaixo na lista (fora da área visível)
+    // abria o formulário de edição no topo sem rolar a tela até ele —
+    // parecia que "nada acontecia", já que o usuário nunca via a mudança.
+    setTimeout(()=>{
+      listaFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"});
+      document.getElementById("lista-nome-inp")?.focus();
+    },50);
   };
   const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setPendingMpLinks(null);setConcBusca("");};
 
@@ -4831,7 +4838,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     {/* Form cadastro de produto */}
-    {subTab==="nova"&&<><div className="card" style={{marginBottom:14,border:`1px solid ${editId?"#6366F1":"#E5E7EB"}`}}>
+    {subTab==="nova"&&<><div ref={listaFormRef} className="card" style={{marginBottom:14,border:`1px solid ${editId?"#6366F1":"#E5E7EB"}`}}>
       <div className="section-title" style={{color:editId?"#F59E0B":"#6366F1",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
       {/* Produto + urgente */}
       <div style={{marginBottom:10}}>
