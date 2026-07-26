@@ -5029,6 +5029,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       </button>
     </div>}
 
+    {/* Valor estimado da compra (soma qtd x ultimo preço pago, itens ainda pendentes) */}
+    {(()=>{
+      const estimativaTotal=pendentes.reduce((s:number,i:any)=>s+(getMpByName(i.nome)?.ultimoValor||0)*(i.quantidade||0),0);
+      return estimativaTotal>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"10px 12px",background:"var(--accLight,#EEF2FF)",borderRadius:10,border:"1px solid #6366F144"}}>
+        <span style={{fontSize:12,fontWeight:600,color:"#6366F1"}}>💰 Valor estimado da compra</span>
+        <span style={{fontSize:15,fontWeight:800,color:"#6366F1"}}>{fmtMoney(estimativaTotal)}</span>
+      </div>;
+    })()}
+
     {/* Progresso da lista atual */}
     {lista.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
       <div style={{flex:1,height:8,borderRadius:99,background:"var(--bg4)",overflow:"hidden"}}>
@@ -5053,6 +5062,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any,idx:number)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
+          const mpPreco=getMpByName(item.nome)?.ultimoValor||0;
           if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
           <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
@@ -5078,7 +5088,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
-              {item.adicionadoPor&&<div style={{fontSize:12,marginTop:3,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</div>}
+              {(item.adicionadoPor||mpPreco>0)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
+                {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}
+                {mpPreco>0&&<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>}
+              </div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
             {isAdmin&&<div style={{display:"flex",gap:2,flexShrink:0}}>
@@ -5131,7 +5144,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
-              {item.adicionadoPor&&<div style={{fontSize:12,marginTop:3,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</div>}
+              {(item.adicionadoPor||mpPreco>0)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
+                {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}
+                {mpPreco>0&&<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>}
+              </div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
           </SwipeRow>);
