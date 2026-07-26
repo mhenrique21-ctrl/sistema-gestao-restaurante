@@ -957,10 +957,11 @@ export default function App() {
   const navTo=(t:string,s?:string)=>{setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
 
   return (
-    <div className="app-root" style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14}}>
+    <div className="app-root" data-theme={theme} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
-        :root{--bg:#FFFFFF;--bg2:#1E293B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F1F5F9;--sidebarHover:#334155;--border:#E5E7EB;--border2:#E5E7EB;--text:#1F2937;--text2:#64748B;--text3:#94A3B8;--acc:#6366F1;--accHover:#5558E8;--accLight:#EEF2FF;--success:#22C55E;--successBg:#DCFCE7;--successText:#15803D;--danger:#EF4444;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F59E0B;--warningBg:#FEF3C7;--warningText:#B45309;--info:#0EA5E9;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6;--categoryBg:#F3E8FF;--categoryText:#7C3AED;--pink:#EC4899}
+        .app-root{--bg:#F7F8FC;--bg2:#1E293B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F1F5F9;--sidebarHover:#334155;--border:#E6EAF2;--border2:#D5DBE8;--text:#1E2330;--text2:#70798F;--text3:#9AA3B5;--acc:#5B5CEB;--accHover:#4A4BD4;--accLight:#EEF2FF;--success:#16C172;--successBg:#DCFCE7;--successText:#15803D;--danger:#F04438;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F4B400;--warningBg:#FEF3C7;--warningText:#B45309;--info:#3B82F6;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6;--categoryBg:#F3E8FF;--categoryText:#7C3AED;--pink:#EC4899;--radiusCard:18px;--radiusControl:14px;--shadowCard:0 8px 24px rgba(18,38,63,0.08)}
+        .app-root[data-theme="dark"]{--bg:#0D1117;--bg2:#161B22;--bg3:#161B22;--bg4:#1C2128;--bg5:#161B22;--sidebarHover:#22282F;--border:#2D333B;--border2:#3A414C;--text:#FFFFFF;--text2:#9CA3AF;--text3:#6B7280;--acc:#F6C453;--accHover:#E7B336;--accLight:rgba(246,196,83,0.14);--success:#22C55E;--successBg:#0F2E1C;--successText:#4ADE80;--danger:#FF5A5F;--dangerBg:#3A1518;--dangerText:#FF8A8F;--warning:#F6C453;--warningBg:#3A2E12;--warningText:#F6C453;--info:#3B82F6;--infoBg:#122A47;--infoText:#7DB0FF;--category:#A78BFA;--categoryBg:#2A1F47;--categoryText:#C4B5FD;--pink:#F472B6;--shadowCard:0 12px 30px rgba(0,0,0,0.45)}
         *{box-sizing:border-box;margin:0;padding:0} input,select,textarea{font-family:inherit}
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
         .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:10px;transition:all .15s}
@@ -1055,6 +1056,10 @@ export default function App() {
           <LogoEmpresa empresa={empresa}/>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             {syncStatus==="sync"&&<span style={{fontSize:11,color:"var(--acc)"}}>⟳</span>}
+            <button onClick={toggleTheme} title={theme==="dark"?"Modo claro":"Modo escuro"}
+              style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:14,padding:"4px 8px",lineHeight:1}}>
+              {theme==="dark"?"☀️":"🌙"}
+            </button>
             {!isOp&&<div className="menu-picker-btn" style={{position:"relative"}}>
               <button onClick={()=>setMenuPickerOpen(v=>!v)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:14,padding:"4px 8px",lineHeight:1}} title="Posição do menu">
                 {menuLayout==="bottom"?"▼":menuLayout==="top"?"▲":"⊕"}
