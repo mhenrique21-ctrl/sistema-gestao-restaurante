@@ -1281,7 +1281,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
     background:periodo===p?"#6366F1":"transparent",color:periodo===p?"#fff":"#888",
     border:periodo===p?"none":"1px solid #E5E7EB",borderRadius:8,cursor:"pointer" as const});
 
-  const contasPagarView:"full"|"min"|"off"=db.config?.contasPagarView||"full";
+  const contasPagarView:"full"|"min"|"off"=db.config?.contasPagarView||"min";
   const setContasPagarView=(v:"full"|"min"|"off")=>setDb((d:any)=>({...d,config:{...(d.config||{}),contasPagarView:v}}));
 
   return <div>
