@@ -3694,8 +3694,8 @@ function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem,p
 // Painel de conciliação (vincular um item da lista a uma matéria-prima já cadastrada,
 // pra ele herdar o preço da última compra) — também como componente de nível superior,
 // pelo mesmo motivo do InlineEditItem (preservar foco do campo de busca ao digitar).
-function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca,vincularMp,desvincularMp,getProdVinculados,applyBothProd}:
-  {item:any,prodsCatalog:any[],materiasPrimas:any[],concBusca:string,setConcBusca:(v:string)=>void,vincularMp:(prodId:string,mpId:string)=>void,desvincularMp:(prodId:string,mpId?:string)=>void,getProdVinculados:(prod:any)=>string[],applyBothProd:(fn:(d:any)=>any)=>void}){
+function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca,vincularMp,desvincularMp,getProdVinculados,applyBothProd,onClose}:
+  {item:any,prodsCatalog:any[],materiasPrimas:any[],concBusca:string,setConcBusca:(v:string)=>void,vincularMp:(prodId:string,mpId:string)=>void,desvincularMp:(prodId:string,mpId?:string)=>void,getProdVinculados:(prod:any)=>string[],applyBothProd:(fn:(d:any)=>any)=>void,onClose:()=>void}){
   const prod=prodsCatalog.find((p:any)=>p.nome.trim().toLowerCase()===item.nome.trim().toLowerCase());
   const vIds=prod?getProdVinculados(prod):[];
   const vinculadosMps=vIds.length?materiasPrimas.filter((m:any)=>vIds.includes(m.id)):[];
@@ -3712,7 +3712,10 @@ function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca
     else vincularMp(prod.id,mpId);
   };
   return <div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:"0 0 8px 8px",padding:"8px 10px",marginTop:-4,marginBottom:6}}>
-    <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — vincular a produto de compra</div>
+    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+      <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5,flex:1}}>🔗 Conciliar — vincular a produto de compra</div>
+      <button onClick={onClose} style={{background:"#22C55E",border:"none",borderRadius:6,color:"#fff",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700,flexShrink:0}}>✓ Concluir</button>
+    </div>
     <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} autoFocus
       className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
     {vinculadosMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
@@ -5156,7 +5159,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"#333":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
             </div>}
           </SwipeRow>
-          {estConcItem===item.id&&<ConciliarPanel item={item} prodsCatalog={prodsCatalog} materiasPrimas={db.materiasPrimas||[]} concBusca={concBusca} setConcBusca={setConcBusca} vincularMp={vincularMp} desvincularMp={desvincularMp} getProdVinculados={getProdVinculados} applyBothProd={applyBothProd}/>}
+          {estConcItem===item.id&&<ConciliarPanel item={item} prodsCatalog={prodsCatalog} materiasPrimas={db.materiasPrimas||[]} concBusca={concBusca} setConcBusca={setConcBusca} vincularMp={vincularMp} desvincularMp={desvincularMp} getProdVinculados={getProdVinculados} applyBothProd={applyBothProd} onClose={()=>setEstConcItem(null)}/>}
           </div>
           );
         })}
@@ -5213,7 +5216,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
           </SwipeRow>
-          {estConcItem===item.id&&<ConciliarPanel item={item} prodsCatalog={prodsCatalog} materiasPrimas={db.materiasPrimas||[]} concBusca={concBusca} setConcBusca={setConcBusca} vincularMp={vincularMp} desvincularMp={desvincularMp} getProdVinculados={getProdVinculados} applyBothProd={applyBothProd}/>}
+          {estConcItem===item.id&&<ConciliarPanel item={item} prodsCatalog={prodsCatalog} materiasPrimas={db.materiasPrimas||[]} concBusca={concBusca} setConcBusca={setConcBusca} vincularMp={vincularMp} desvincularMp={desvincularMp} getProdVinculados={getProdVinculados} applyBothProd={applyBothProd} onClose={()=>setEstConcItem(null)}/>}
           </div>);
         })}
       </div>;
