@@ -1002,9 +1002,8 @@ export default function App() {
         <div style={{flex:1,overflowY:"auto"}}>
           {(()=>{
             const estoqueBaixo=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
-            const atrasadas=(db.contas||[]).filter(c=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).length;
             const badge=(id:string)=>id==="estoque"&&estoqueBaixo>0?<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{estoqueBaixo}</span>
-              :id==="contas"&&atrasadas>0?<span style={{background:"#EF4444",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{atrasadas}</span>:null;
+              :null;
             return menuFiltered.map(m=>{
               const hasKids=!!m.children?.length;
               const isOpen=expandedMenu===m.id;
