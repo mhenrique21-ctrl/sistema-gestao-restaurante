@@ -3627,6 +3627,40 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
   </div>;
 }
 
+// Componente de nivel superior (nao definido dentro de ListaComprasPanel) para que o
+// React preserve a identidade do input entre re-renders -- se fosse uma função criada
+// de novo a cada render do painel pai, o campo perderia o foco a cada letra digitada.
+function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem}:
+  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,cats:string[],editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void}){
+  return <div className="card" style={{marginBottom:4,border:"2px solid #6366F1",padding:"10px 12px"}}>
+    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+      <span style={{fontSize:11,fontWeight:700,color:"#6366F1"}}>✏️ Editando</span>
+      <div style={{flex:1}}/>
+      <button onClick={()=>setF("urgente",!form.urgente)}
+        style={{background:form.urgente?"#EF444422":"var(--bg4)",border:`1px solid ${form.urgente?"#EF4444":"var(--border2)"}`,borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:13,lineHeight:1}} title="Urgente">
+        {form.urgente?"🔴":"⚪"}
+      </button>
+    </div>
+    <input value={form.nome} onChange={e=>setF("nome",e.target.value)} className="inp" style={{marginBottom:8}} placeholder="Nome do produto"/>
+    <div style={{display:"flex",gap:8,marginBottom:8}}>
+      <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}/>
+      <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}>
+        {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+      </select>
+      {isAdmin&&<select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0,flex:"2 1 100px"}}>
+        <option value="">Sem categoria</option>
+        {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+      </select>}
+    </div>
+    <textarea placeholder="Observações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:40,marginBottom:8,resize:"vertical" as const}}/>
+    <div style={{display:"flex",gap:6}}>
+      <button className="btn" onClick={cancelEdit} style={{flex:1,background:"var(--border2)",color:"var(--text2)",padding:"9px",fontSize:13}}>Cancelar</button>
+      <button className="btn" onClick={()=>{if(editId){del(editId);cancelEdit();}}} style={{background:"#FEE2E2",color:"#EF4444",padding:"9px 12px",fontSize:13}}>🗑️</button>
+      <button className="btn" onClick={saveItem} style={{flex:1,background:"#6366F1",color:"#fff",padding:"9px",fontSize:13,fontWeight:700}}>💾 Salvar</button>
+    </div>
+  </div>;
+}
+
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
   const [subTab,setSubTab]=useState(pendingSub||"nova");
@@ -3853,34 +3887,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   // Edição embutida: mesma lógica/estado do formulário do topo, mas renderizada
   // na própria posição do item na lista (não pula pro topo da página).
-  const InlineEditItem=()=><div className="card" style={{marginBottom:4,border:"2px solid #6366F1",padding:"10px 12px"}}>
-    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-      <span style={{fontSize:11,fontWeight:700,color:"#6366F1"}}>✏️ Editando</span>
-      <div style={{flex:1}}/>
-      <button onClick={()=>setF("urgente",!form.urgente)}
-        style={{background:form.urgente?"#EF444422":"var(--bg4)",border:`1px solid ${form.urgente?"#EF4444":"var(--border2)"}`,borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:13,lineHeight:1}} title="Urgente">
-        {form.urgente?"🔴":"⚪"}
-      </button>
-    </div>
-    <input value={form.nome} onChange={e=>setF("nome",e.target.value)} className="inp" style={{marginBottom:8}} placeholder="Nome do produto"/>
-    <div style={{display:"flex",gap:8,marginBottom:8}}>
-      <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}/>
-      <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}>
-        {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
-      </select>
-      {isAdmin&&<select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0,flex:"2 1 100px"}}>
-        <option value="">Sem categoria</option>
-        {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
-      </select>}
-    </div>
-    <textarea placeholder="Observações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:40,marginBottom:8,resize:"vertical" as const}}/>
-    <div style={{display:"flex",gap:6}}>
-      <button className="btn" onClick={cancelEdit} style={{flex:1,background:"var(--border2)",color:"var(--text2)",padding:"9px",fontSize:13}}>Cancelar</button>
-      <button className="btn" onClick={()=>{if(editId){del(editId);cancelEdit();}}} style={{background:"#FEE2E2",color:"#EF4444",padding:"9px 12px",fontSize:13}}>🗑️</button>
-      <button className="btn" onClick={saveItem} style={{flex:1,background:"#6366F1",color:"#fff",padding:"9px",fontSize:13,fontWeight:700}}>💾 Salvar</button>
-    </div>
-  </div>;
-
   const toggle=(id:string)=>{
     if(travandoIds.has(id))return;
     travar(id);
@@ -4382,11 +4388,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           const label=mes==="sem-data"?"Sem data":`${MESES_PT[mm]||mm} ${ano}`;
           const aberto=expandedMeses.has(mes);
           const toggleMes=()=>setExpandedMeses(s=>{const n=new Set(s);if(n.has(mes))n.delete(mes);else n.add(mes);return n;});
-          return <div key={mes} style={{marginBottom:8,border:"1px solid #7c3a1066",borderRadius:10,overflow:"hidden"}}>
-            <div onClick={toggleMes} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:"#1a0e0488",cursor:"pointer",userSelect:"none" as const}}>
+          return <div key={mes} style={{marginBottom:8,border:"1px solid var(--border2)",borderRadius:10,overflow:"hidden"}}>
+            <div onClick={toggleMes} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:"var(--bg5)",cursor:"pointer",userSelect:"none" as const}}>
               <span style={{fontSize:15}}>{aberto?"📂":"📁"}</span>
-              <span style={{flex:1,fontSize:13,fontWeight:700,color:"#fb923c"}}>{label}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:700,color:"#B45309"}}>{label}</span>
               <span style={{fontSize:11,color:"#888",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:"1px 8px"}}>{pedidos.length} lista{pedidos.length>1?"s":""}</span>
+              {isAdmin&&<button onClick={e=>{e.stopPropagation();if(!confirm(`Excluir todas as ${pedidos.length} lista(s) arquivada(s) de ${label}?`))return;const ids=pedidos.map((p:any)=>p.id);ids.forEach((id:string)=>_listaDeletados.add(id));setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>!ids.includes(p.id))}));}}
+                style={{background:"#FEE2E2",border:"1px solid #EF444444",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700,flexShrink:0}}>🗑️ Apagar mês</button>}
               <span style={{fontSize:11,color:"#555"}}>{aberto?"▲":"▼"}</span>
             </div>
             {aberto&&<div style={{padding:"6px 8px 8px"}}>
@@ -4400,7 +4408,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
                     <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #22C55E44",borderRadius:6,color:"#22C55E",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
                     <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
-                    {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>}
+                    {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"#FEE2E2",border:"1px solid #EF444444",borderRadius:6,color:"#EF4444",cursor:"pointer",fontSize:12,padding:"3px 8px",fontWeight:700,flexShrink:0}}>🗑️</button>}
                     <span style={{fontSize:11,color:"#555"}}>{expanded?"▲":"▼"}</span>
                   </div>
                   {expanded&&<div style={{padding:"8px 12px"}}>
@@ -5015,7 +5023,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any,idx:number)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
-          if(isEditing)return <InlineEditItem key={item.id}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem}/>;
           return(
           <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={isAdmin?()=>startEdit(item):undefined}
@@ -5068,7 +5076,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
-          if(isEditing)return <InlineEditItem key={item.id}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem}/>;
           return(
           <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={()=>startEdit(item)}
