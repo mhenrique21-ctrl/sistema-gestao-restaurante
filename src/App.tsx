@@ -3691,6 +3691,57 @@ function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem,p
   </div>;
 }
 
+// Painel de conciliação (vincular um item da lista a uma matéria-prima já cadastrada,
+// pra ele herdar o preço da última compra) — também como componente de nível superior,
+// pelo mesmo motivo do InlineEditItem (preservar foco do campo de busca ao digitar).
+function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca,vincularMp,desvincularMp,getProdVinculados,applyBothProd}:
+  {item:any,prodsCatalog:any[],materiasPrimas:any[],concBusca:string,setConcBusca:(v:string)=>void,vincularMp:(prodId:string,mpId:string)=>void,desvincularMp:(prodId:string,mpId?:string)=>void,getProdVinculados:(prod:any)=>string[],applyBothProd:(fn:(d:any)=>any)=>void}){
+  const prod=prodsCatalog.find((p:any)=>p.nome.trim().toLowerCase()===item.nome.trim().toLowerCase());
+  const vIds=prod?getProdVinculados(prod):[];
+  const vinculadosMps=vIds.length?materiasPrimas.filter((m:any)=>vIds.includes(m.id)):[];
+  const cb=concBusca.trim().toLowerCase();
+  const q=item.nome.toLowerCase();
+  const mpOptions=materiasPrimas.filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,20);
+  const linkTo=(mpId:string)=>{
+    if(!prod){
+      applyBothProd((d:any)=>{
+        if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===item.nome.toLowerCase()))return d;
+        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:item.nome,cat:item.categoria,unidade:item.unidade,mpVinculados:[mpId]}]};
+      });
+    }else if(vIds.includes(mpId))desvincularMp(prod.id,mpId);
+    else vincularMp(prod.id,mpId);
+  };
+  return <div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:"0 0 8px 8px",padding:"8px 10px",marginTop:-4,marginBottom:6}}>
+    <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — vincular a produto de compra</div>
+    <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} autoFocus
+      className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
+    {vinculadosMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
+      <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinculadosMps.length})</div>
+      {vinculadosMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
+        <span style={{color:"#22C55E"}}>🔗 {m.nome}</span>
+        <span style={{flex:1}}/>
+        {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
+        {prod&&<button onClick={()=>desvincularMp(prod.id,m.id)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>}
+      </div>)}
+    </div>}
+    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
+    <div style={{maxHeight:150,overflowY:"auto" as const}}>
+      {mpOptions.map((mp:any)=>{
+        const linked=vIds.includes(mp.id);
+        return <div key={mp.id} onClick={()=>linkTo(mp.id)}
+          style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
+            background:linked?"#22C55E15":"transparent",border:linked?"1px solid #22C55E44":"1px solid transparent"}}>
+          <span style={{fontSize:13}}>{linked?"☑️":"⬜"}</span>
+          <span style={{flex:1,color:linked?"#22C55E":"var(--text)",fontWeight:linked?700:400}}>{mp.nome}</span>
+          {mp.ultimoValor>0
+            ?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
+            :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
 function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
   const [subTab,setSubTab]=useState(pendingSub||"nova");
@@ -5065,7 +5116,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           const mpPreco=getMpByName(item.nome)?.ultimoValor||0;
           if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
-          <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
+          <div key={item.id}>
+          <SwipeRow disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={isAdmin?()=>startEdit(item):undefined}
             rowStyle={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":"var(--border)"}`,transition:"background .15s,border-color .15s"}}>
             {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900,flexShrink:0}}>!</span>}
@@ -5088,9 +5140,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
-              {(item.adicionadoPor||mpPreco>0)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
+              {(item.adicionadoPor||mpPreco>0||isAdmin)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
                 {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}
-                {mpPreco>0&&<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>}
+                {mpPreco>0?<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>
+                  :isAdmin&&<button onClick={(e:any)=>{e.stopPropagation();setEstConcItem(estConcItem===item.id?null:item.id);setConcBusca("");}}
+                    style={{background:"none",border:"1px solid #F59E0B44",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:10,padding:"2px 6px",fontWeight:700,flexShrink:0}}>🔗 sem preço · conciliar</button>}
               </div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
@@ -5101,6 +5155,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"#333":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
             </div>}
           </SwipeRow>
+          {estConcItem===item.id&&<ConciliarPanel item={item} prodsCatalog={prodsCatalog} materiasPrimas={db.materiasPrimas||[]} concBusca={concBusca} setConcBusca={setConcBusca} vincularMp={vincularMp} desvincularMp={desvincularMp} getProdVinculados={getProdVinculados} applyBothProd={applyBothProd}/>}
+          </div>
           );
         })}
       </div>;
@@ -5119,9 +5175,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
+          const mpPreco=getMpByName(item.nome)?.ultimoValor||0;
           if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
-          <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
+          <div key={item.id}>
+          <SwipeRow disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={()=>startEdit(item)}
             rowStyle={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":"var(--border)"}`,transition:"background .15s,border-color .15s"}}>
             {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900,flexShrink:0}}>!</span>}
@@ -5144,13 +5202,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 </div>
                 {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
-              {(item.adicionadoPor||mpPreco>0)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
+              {(item.adicionadoPor||mpPreco>0||isAdmin)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
                 {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}
-                {mpPreco>0&&<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>}
+                {mpPreco>0?<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>
+                  :isAdmin&&<button onClick={(e:any)=>{e.stopPropagation();setEstConcItem(estConcItem===item.id?null:item.id);setConcBusca("");}}
+                    style={{background:"none",border:"1px solid #F59E0B44",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:10,padding:"2px 6px",fontWeight:700,flexShrink:0}}>🔗 sem preço · conciliar</button>}
               </div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
             </div>
-          </SwipeRow>);
+          </SwipeRow>
+          {estConcItem===item.id&&<ConciliarPanel item={item} prodsCatalog={prodsCatalog} materiasPrimas={db.materiasPrimas||[]} concBusca={concBusca} setConcBusca={setConcBusca} vincularMp={vincularMp} desvincularMp={desvincularMp} getProdVinculados={getProdVinculados} applyBothProd={applyBothProd}/>}
+          </div>);
         })}
       </div>;
     })}
