@@ -3630,8 +3630,19 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
 // Componente de nivel superior (nao definido dentro de ListaComprasPanel) para que o
 // React preserve a identidade do input entre re-renders -- se fosse uma função criada
 // de novo a cada render do painel pai, o campo perderia o foco a cada letra digitada.
-function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem}:
-  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,cats:string[],editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void}){
+function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem,prodsCatalog,getRuaDaCat,ruas}:
+  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,cats:string[],editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void,prodsCatalog:any[],getRuaDaCat:(cat:string)=>string,ruas:string[]}){
+  const [showSugg,setShowSugg]=useState(false);
+  const suggestions:any[]=form.nome.trim().length>=1
+    ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.trim().toLowerCase())).slice(0,8)
+    :prodsCatalog.slice(0,20);
+  const existeNoCatalogo=prodsCatalog.some((p:any)=>p.nome.trim().toLowerCase()===form.nome.trim().toLowerCase());
+  const selectSugg=(p:any)=>{
+    setF("nome",p.nome);
+    if(p.cat)setF("cat",p.cat);
+    if(p.unidade)setF("unidade",p.unidade);
+    setShowSugg(false);
+  };
   return <div className="card" style={{marginBottom:4,border:"2px solid #6366F1",padding:"10px 12px"}}>
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
       <span style={{fontSize:11,fontWeight:700,color:"#6366F1"}}>✏️ Editando</span>
@@ -3641,17 +3652,36 @@ function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem}:
         {form.urgente?"🔴":"⚪"}
       </button>
     </div>
-    <input value={form.nome} onChange={e=>setF("nome",e.target.value)} className="inp" style={{marginBottom:8}} placeholder="Nome do produto"/>
+    <div style={{position:"relative",marginBottom:8}}>
+      <input value={form.nome} onChange={e=>{setF("nome",e.target.value);setShowSugg(true);}}
+        onFocus={()=>setShowSugg(true)} onBlur={()=>setTimeout(()=>setShowSugg(false),150)}
+        className="inp" style={{marginBottom:0}} placeholder="Nome do produto"/>
+      {showSugg&&suggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:8,boxShadow:"var(--shadowCard,0 4px 16px rgba(0,0,0,0.2))",marginTop:2,maxHeight:200,overflowY:"auto" as const}}>
+        {suggestions.map((p:any)=>(
+          <div key={p.id} onMouseDown={()=>selectSugg(p)}
+            style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+            <span style={{fontSize:14}}>{catIcon(p.cat||"outros")}</span>
+            <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
+            <span style={{fontSize:10,color:"var(--text2)"}}>{p.unidade}</span>
+          </div>
+        ))}
+      </div>}
+      {form.nome.trim()&&!existeNoCatalogo&&<div style={{fontSize:10,color:"#F59E0B",marginTop:3}}>⚠️ Produto novo — não está no catálogo, será cadastrado ao salvar</div>}
+    </div>
     <div style={{display:"flex",gap:8,marginBottom:8}}>
       <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}/>
       <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}>
         {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
       </select>
-      {isAdmin&&<select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0,flex:"2 1 100px"}}>
+      {isAdmin&&<select value={form.cat} onChange={e=>{const c=e.target.value;setF("cat",c);if(!form.rua){const r=getRuaDaCat(c);if(r)setF("rua",r);}}} className="inp" style={{marginBottom:0,flex:"2 1 100px"}}>
         <option value="">Sem categoria</option>
         {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
       </select>}
     </div>
+    {isAdmin&&ruas.length>0&&<select value={form.rua||""} onChange={e=>setF("rua",e.target.value)} className="inp" style={{marginBottom:8}}>
+      <option value="">Sem rua</option>
+      {ruas.map(r=><option key={r} value={r}>🛤️ {r}</option>)}
+    </select>}
     <textarea placeholder="Observações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:40,marginBottom:8,resize:"vertical" as const}}/>
     <div style={{display:"flex",gap:6}}>
       <button className="btn" onClick={cancelEdit} style={{flex:1,background:"var(--border2)",color:"var(--text2)",padding:"9px",fontSize:13}}>Cancelar</button>
@@ -5023,7 +5053,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any,idx:number)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
-          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
           <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={isAdmin?()=>startEdit(item):undefined}
@@ -5076,7 +5106,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
-          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
           <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={()=>startEdit(item)}
