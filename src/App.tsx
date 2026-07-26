@@ -842,21 +842,29 @@ export default function App() {
   const setDbAndSave=(fn:(d:any)=>any)=>{
     directSaveRef.current=true;
     const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
+    // 1) Aplica a mudanca local JA (feedback instantaneo na tela — ex: item some
+    //    da lista assim que arrasta, sem esperar ida-e-volta com o servidor).
+    flushSync(()=>{
+      setState(prev=>{
+        const next={...prev,[empresa]:fn(prev[empresa])};
+        saveSeqRef.current++;
+        clearTimeout(syncTimer.current);
+        syncTimer.current=null;
+        return next;
+      });
+    });
+    setSyncStatus("sync");
+    // 2) Em seguida, funde com o que ha de mais recente no servidor (preserva a
+    //    mudanca que acabou de aplicar) e so entao salva — sem travar a UI.
     (async()=>{
       const merged=await mergeWithServerBeforePost(empresa);
       let bodyToSave="";
       flushSync(()=>{
         setState(prev=>{
-          const base=merged!=null?{...prev,[empresa]:merged}:prev;
-          const next={...base,[empresa]:fn(base[empresa])};
-          saveSeqRef.current++;
-          clearTimeout(syncTimer.current);
-          syncTimer.current=null;
-          bodyToSave=JSON.stringify(withDeletedIds(next[empresa]));
-          return next;
+          bodyToSave=JSON.stringify(withDeletedIds(merged??prev[empresa]));
+          return prev;
         });
       });
-      setSyncStatus("sync");
       fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
         .then(r=>{if(!r.ok)throw new Error(r.status+"");setSyncStatus("ok");})
         .catch(()=>setSyncStatus("erro"))
@@ -3833,15 +3841,40 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const startEdit=(item:any)=>{
     setForm({nome:item.nome,qtd:String(item.quantidade),unidade:item.unidade||"un",cat:item.categoria||"",estoqueQtd:item.estoqueQtd||"",estoqueUn:item.estoqueUn||"un",obs:item.obs||"",urgente:!!item.urgente,rua:item.rua||""});
     setEditId(item.id);
-    // Sem isso, arrastar um item mais abaixo na lista (fora da área visível)
-    // abria o formulário de edição no topo sem rolar a tela até ele —
-    // parecia que "nada acontecia", já que o usuário nunca via a mudança.
-    setTimeout(()=>{
-      listaFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"});
-      document.getElementById("lista-nome-inp")?.focus();
-    },50);
+    // A edição agora abre embutida na própria linha do produto (ver InlineEditItem),
+    // então não precisa mais rolar a tela até um formulário no topo da página.
   };
   const cancelEdit=()=>{setEditId(null);setForm(EMPTY_FORM_LISTA);setPendingMpLinks(null);setConcBusca("");};
+
+  // Edição embutida: mesma lógica/estado do formulário do topo, mas renderizada
+  // na própria posição do item na lista (não pula pro topo da página).
+  const InlineEditItem=()=><div className="card" style={{marginBottom:4,border:"2px solid #6366F1",padding:"10px 12px"}}>
+    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+      <span style={{fontSize:11,fontWeight:700,color:"#6366F1"}}>✏️ Editando</span>
+      <div style={{flex:1}}/>
+      <button onClick={()=>setF("urgente",!form.urgente)}
+        style={{background:form.urgente?"#EF444422":"var(--bg4)",border:`1px solid ${form.urgente?"#EF4444":"var(--border2)"}`,borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:13,lineHeight:1}} title="Urgente">
+        {form.urgente?"🔴":"⚪"}
+      </button>
+    </div>
+    <input value={form.nome} onChange={e=>setF("nome",e.target.value)} className="inp" style={{marginBottom:8}} placeholder="Nome do produto"/>
+    <div style={{display:"flex",gap:8,marginBottom:8}}>
+      <input type="number" min="0.1" step="0.1" value={form.qtd} onChange={e=>setF("qtd",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}/>
+      <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}>
+        {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
+      </select>
+      {isAdmin&&<select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp" style={{marginBottom:0,flex:"2 1 100px"}}>
+        <option value="">Sem categoria</option>
+        {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+      </select>}
+    </div>
+    <textarea placeholder="Observações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:40,marginBottom:8,resize:"vertical" as const}}/>
+    <div style={{display:"flex",gap:6}}>
+      <button className="btn" onClick={cancelEdit} style={{flex:1,background:"var(--border2)",color:"var(--text2)",padding:"9px",fontSize:13}}>Cancelar</button>
+      <button className="btn" onClick={()=>{if(editId){del(editId);cancelEdit();}}} style={{background:"#FEE2E2",color:"#EF4444",padding:"9px 12px",fontSize:13}}>🗑️</button>
+      <button className="btn" onClick={saveItem} style={{flex:1,background:"#6366F1",color:"#fff",padding:"9px",fontSize:13,fontWeight:700}}>💾 Salvar</button>
+    </div>
+  </div>;
 
   const toggle=(id:string)=>{
     if(travandoIds.has(id))return;
@@ -4837,7 +4870,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     {/* Form cadastro de produto */}
-    {subTab==="nova"&&<><div ref={listaFormRef} className="card" style={{marginBottom:14,border:`1px solid ${editId?"#6366F1":"#E5E7EB"}`}}>
+    {subTab==="nova"&&<>{!editId&&<div ref={listaFormRef} className="card" style={{marginBottom:14,border:"1px solid #E5E7EB"}}>
       <div className="section-title" style={{color:editId?"#F59E0B":"#6366F1",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
       {/* Produto + urgente */}
       <div style={{marginBottom:10}}>
@@ -4917,10 +4950,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <button className="btn" onClick={saveItem} style={{flex:1,background:editId?"#F59E0B":"#6366F1",color:editId?"#111":"#fff",padding:"12px",fontSize:14,fontWeight:700}}>
           {editId?"💾 Atualizar":"✅ Adicionar à Lista"}
         </button>
-        {editId&&<button className="btn" onClick={cancelEdit} style={{background:"var(--border2)",color:"var(--text2)",padding:"12px 14px",fontSize:14}}>✕</button>}
-        {editId&&<button className="btn" onClick={()=>{del(editId);cancelEdit();}} style={{background:"var(--dangerBg,#FEE2E2)",color:"#EF4444",padding:"12px 14px",fontSize:14}} title="Apagar item">🗑️</button>}
       </div>
-    </div>
+    </div>}
 
     {/* Busca + ações */}
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
@@ -4979,10 +5010,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any,idx:number)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
+          if(isEditing)return <InlineEditItem key={item.id}/>;
           return(
           <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={isAdmin?()=>startEdit(item):undefined}
-            rowStyle={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":isEditing?"#6366F1":"var(--border)"}`,transition:"background .15s,border-color .15s"}}>
+            rowStyle={{display:"flex",alignItems:"center",gap:8,padding:"10px 10px",background:item.urgente?"#FEE2E2":"var(--bg3)",borderRadius:10,border:`1px solid ${item.urgente?"#EF444444":"var(--border)"}`,transition:"background .15s,border-color .15s"}}>
             {item.urgente&&<span style={{fontSize:9,color:"#EF4444",fontWeight:900,flexShrink:0}}>!</span>}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
@@ -5030,6 +5062,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         </div>
         {itensSorted.map((item:any)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
+          const isEditing=editId===item.id;
+          if(isEditing)return <InlineEditItem key={item.id}/>;
           return(
           <SwipeRow key={item.id} disabled={travandoIds.has(item.id)}
             onRight={()=>toggle(item.id)} onLeft={()=>startEdit(item)}
