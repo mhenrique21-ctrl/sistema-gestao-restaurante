@@ -5144,6 +5144,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}
                 {mpPreco>0?<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>
                   :isAdmin&&<button onClick={(e:any)=>{e.stopPropagation();setEstConcItem(estConcItem===item.id?null:item.id);setConcBusca("");}}
+                    onPointerDown={(e:any)=>e.stopPropagation()}
                     style={{background:"none",border:"1px solid #F59E0B44",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:10,padding:"2px 6px",fontWeight:700,flexShrink:0}}>🔗 sem preço · conciliar</button>}
               </div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
@@ -5206,6 +5207,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}
                 {mpPreco>0?<span style={{fontSize:11,color:"var(--text2)",fontWeight:600,flexShrink:0}} title="Última compra">{fmtMoney(mpPreco)}{item.unidade?`/${item.unidade}`:""}</span>
                   :isAdmin&&<button onClick={(e:any)=>{e.stopPropagation();setEstConcItem(estConcItem===item.id?null:item.id);setConcBusca("");}}
+                    onPointerDown={(e:any)=>e.stopPropagation()}
                     style={{background:"none",border:"1px solid #F59E0B44",borderRadius:6,color:"#F59E0B",cursor:"pointer",fontSize:10,padding:"2px 6px",fontWeight:700,flexShrink:0}}>🔗 sem preço · conciliar</button>}
               </div>}
               {item.obs&&<div style={{fontSize:11,color:"#666",marginTop:2,fontStyle:"italic" as const,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.obs}</div>}
