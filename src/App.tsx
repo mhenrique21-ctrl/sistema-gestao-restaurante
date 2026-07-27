@@ -3166,6 +3166,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <span>Total</span><span style={{color:"#22C55E"}}>{fmtMoney(iaResult.totalCompra||0)}</span>
         </div>
         <hr className="divider"/>
+        <div className="section-title" style={{marginTop:8}}>Data da compra</div>
+        <input type="date" value={iaResult.data||today()} onChange={e=>setIaResult((r:any)=>({...r,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <div className="section-title" style={{marginTop:8}}>Pagamento {iaResult.formaPagamento&&<span style={{fontSize:10,color:"#22C55E",fontWeight:400}}>(detectado do cupom)</span>}</div>
         <div className="row" style={{marginBottom:8}}>
           <select value={iaFormaPag} onChange={e=>setIaFormaPag(e.target.value)} className="inp">
@@ -3219,8 +3221,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         {chaveConsultaResult&&(chaveConsultaResult.itens||[]).length>0&&<div style={{marginTop:10,background:"var(--bg4)",borderRadius:8,padding:"10px 12px",border:"1px solid #22C55E33"}}>
           <div style={{fontWeight:700,fontSize:13,color:"#22C55E",marginBottom:2}}>{chaveConsultaResult.fornecedor?.nome||"Fornecedor"}</div>
           <div style={{fontSize:11,color:"#6b7280",marginBottom:6}}>
-            {chaveConsultaResult.data?fmtDate(chaveConsultaResult.data):""} · {(chaveConsultaResult.itens||[]).length} produto(s) · {fmtMoney(chaveConsultaResult.totalCompra||0)}
+            {(chaveConsultaResult.itens||[]).length} produto(s) · {fmtMoney(chaveConsultaResult.totalCompra||0)}
           </div>
+          <div style={{fontSize:10,color:"#888",marginBottom:2}}>Data da compra</div>
+          <input type="date" value={chaveConsultaResult.data||today()} onChange={e=>setChaveConsultaResult((r:any)=>({...r,data:e.target.value}))} className="inp" style={{marginBottom:8,fontSize:12}}/>
           <div style={{display:"flex",gap:6}}>
             <button className="btn" onClick={()=>{importarNFeSefaz(chaveConsultaResult);setChaveConsultaResult(null);setChaveConsultaInput("");}}
               style={{flex:1,background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",padding:"8px",fontSize:12,fontWeight:700}}>📥 Importar NF-e</button>
@@ -3251,8 +3255,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 <div style={{fontWeight:700,fontSize:13,color:temItens?"#22C55E":"var(--text)",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
                   {nfe.fornecedor?.nome||"Fornecedor desconhecido"}
                 </div>
-                <div style={{fontSize:11,color:"var(--text2)",paddingTop:4,borderTop:"1px solid var(--border)"}}>
-                  {nfe.data?fmtDate(nfe.data):""}{nfe.nNF?` · NF #${nfe.nNF}`:""} · {isResumo?<span style={{color:"#F59E0B"}}>aguardando XML…</span>:<span style={{color:"#22C55E"}}>{(nfe.itens||[]).length} produto(s)</span>}
+                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",paddingTop:4,borderTop:"1px solid var(--border)",flexWrap:"wrap" as const}}>
+                  <input type="date" value={nfe.data||""} onChange={e=>setSefazList(l=>l.map((n:any,j:number)=>j===i?{...n,data:e.target.value}:n))}
+                    style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:4,color:"var(--text2)",fontSize:10,padding:"1px 3px"}}/>
+                  {nfe.nNF?<span>· NF #{nfe.nNF}</span>:null} · {isResumo?<span style={{color:"#F59E0B"}}>aguardando XML…</span>:<span style={{color:"#22C55E"}}>{(nfe.itens||[]).length} produto(s)</span>}
                 </div>
                 {nfe.totalCompra>0&&<div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginTop:4}}>{fmtMoney(nfe.totalCompra)}</div>}
                 {nfe.chNFe&&<div style={{display:"flex",alignItems:"center",gap:4,marginTop:4,paddingTop:4,borderTop:"1px solid var(--border)"}}>
