@@ -287,6 +287,42 @@ const normalizarNome=(nome:string,norms:any[])=>{
   }
   return nome;
 };
+// Nome final de um item de importação: prioriza a escolha feita na conciliação (por nome já normalizado), senão usa normalizarNome.
+const resolverNomeImport=(nomeRaw:string,norms:any[],resolucoes?:Record<string,string>)=>{
+  const norm=normalizarNome(nomeRaw,norms);
+  const key=norm.toLowerCase().trim();
+  return (resolucoes&&resolucoes[key])||norm;
+};
+// Itens (de NF-e/cupom) cujo nome normalizado não bate com nenhuma matéria-prima já cadastrada — precisam de conciliação manual.
+const itensNaoConciliados=(itens:any[],db:any)=>{
+  const vistos=new Set<string>();
+  const out:{nome:string,categoria?:string,unidade?:string}[]=[];
+  (itens||[]).forEach((it:any)=>{
+    if(!it?.nome)return;
+    const norm=normalizarNome(it.nome,db.normalizacoes||[]);
+    const key=norm.toLowerCase().trim();
+    if(vistos.has(key))return;
+    const existe=(db.materiasPrimas||[]).some((m:any)=>m.nome.toLowerCase().trim()===key);
+    if(!existe){vistos.add(key);out.push({nome:norm,categoria:it.categoria,unidade:it.unidade});}
+  });
+  return out;
+};
+// Persiste as escolhas da conciliação como novas substituições (normalizações), pra próximas importações já reconhecerem sozinhas.
+const mergeResolucoesEmNormalizacoes=(norms:any[],resolucoes?:Record<string,string>)=>{
+  if(!resolucoes||!Object.keys(resolucoes).length)return norms;
+  let out=[...norms];
+  Object.entries(resolucoes).forEach(([rawKey,mpNome])=>{
+    if(!mpNome||rawKey===mpNome.toLowerCase().trim())return;
+    const idx=out.findIndex((n:any)=>(n.nomePadrao||"").toLowerCase().trim()===mpNome.toLowerCase().trim());
+    if(idx>=0){
+      const termos=out[idx].termos||[];
+      if(!termos.some((t:string)=>(t||"").toLowerCase().trim()===rawKey))out[idx]={...out[idx],termos:[...termos,rawKey]};
+    }else{
+      out.push({id:uid(),nomePadrao:mpNome,termos:[rawKey]});
+    }
+  });
+  return out;
+};
 const parseMoney= (s) => {
   const str=String(s).trim();
   // handles "1.234,56" (pt-BR) or "1234.56" (en) or "1234,56"
@@ -2078,6 +2114,66 @@ function parseNFe(xmlString) {
   return{fornecedor,itens,totalCompra:total,data,nNF,chNFe,modelo,formaPag,dVenc};
 }
 
+// ===================== CONCILIAÇÃO DE PRODUTOS AO IMPORTAR (NF-e / Cupom) =====================
+function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens:{nome:string,categoria?:string,unidade?:string}[],materiasPrimas:any[],onConfirm:(r:Record<string,string>)=>void,onCancel:()=>void}){
+  const [escolhas,setEscolhas]=useState<Record<string,string>>({});
+  const [buscaAberta,setBuscaAberta]=useState<string|null>(null);
+  const [busca,setBusca]=useState("");
+  const escolher=(key:string,mpNome:string)=>{setEscolhas(e=>({...e,[key]:mpNome}));setBuscaAberta(null);setBusca("");};
+  const manterNovo=(key:string)=>{setEscolhas(e=>{const n={...e};delete n[key];return n;});};
+  const vinculados=Object.keys(escolhas).length;
+  return <div style={{position:"fixed",inset:0,background:"#000000aa",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onCancel}>
+    <div onClick={(e:any)=>e.stopPropagation()} style={{background:"var(--bg2)",width:"100%",maxWidth:520,maxHeight:"85vh",borderRadius:"16px 16px 0 0",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px #000a"}}>
+      <div style={{padding:"16px 18px 10px",borderBottom:"1px solid var(--border)"}}>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--acc)"}}>🔗 Conciliar produtos</div>
+        <div className="muted" style={{fontSize:12,marginTop:4,lineHeight:1.5}}>
+          {itens.length} produto(s) não batem com nada do seu catálogo. Vincule a um produto já existente ou mantenha como novo — quem for vinculado passa a ser reconhecido automaticamente nas próximas importações.
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
+        {itens.map(it=>{
+          const key=it.nome.toLowerCase().trim();
+          const escolhido=escolhas[key];
+          const isOpen=buscaAberta===key;
+          const cb=busca.trim().toLowerCase();
+          const candidatos=isOpen?materiasPrimas.filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):(mn.includes(key)||key.includes(mn));}).slice(0,15):[];
+          return <div key={key} style={{marginBottom:10,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
+            <div style={{padding:"8px 10px",background:"var(--bg3)"}}>
+              <div style={{fontSize:13,fontWeight:700}}>{it.nome}</div>
+              <div style={{fontSize:10,color:"#888",marginTop:2}}>{it.categoria||"—"}{it.unidade?` · ${it.unidade}`:""}</div>
+              <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
+                {escolhido
+                  ?<span style={{fontSize:11,color:"#4ade80",background:"#4ade8018",border:"1px solid #4ade8044",borderRadius:6,padding:"3px 8px",fontWeight:700}}>🔗 → {escolhido}</span>
+                  :<span style={{fontSize:11,color:"#fbbf24",background:"#fbbf2418",border:"1px solid #fbbf2444",borderRadius:6,padding:"3px 8px",fontWeight:700}}>✨ Novo produto</span>}
+                <button onClick={()=>{setBuscaAberta(isOpen?null:key);setBusca("");}} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",padding:"3px 8px",cursor:"pointer"}}>
+                  {isOpen?"✕ Fechar":"🔍 Vincular a existente"}
+                </button>
+                {escolhido&&<button onClick={()=>manterNovo(key)} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#888",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>}
+              </div>
+            </div>
+            {isOpen&&<div style={{padding:"8px 10px",borderTop:"1px solid var(--border)"}}>
+              <input autoFocus placeholder="🔍 Buscar produto no catálogo..." value={busca} onChange={(e:any)=>setBusca(e.target.value)} className="inp" style={{marginBottom:6,fontSize:12}}/>
+              {!candidatos.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum produto encontrado{busca?` para "${busca}"`:""}.</div>}
+              <div style={{maxHeight:140,overflowY:"auto" as const}}>
+                {candidatos.map((m:any)=><div key={m.id} onClick={()=>escolher(key,m.nome)}
+                  style={{padding:"6px 8px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,color:"#ccc"}}>
+                  {m.nome} <span style={{color:"#555",fontSize:10}}>({m.categoria||"—"})</span>
+                </div>)}
+              </div>
+            </div>}
+          </div>;
+        })}
+      </div>
+      <div style={{padding:"12px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:8}}>
+        <button onClick={onCancel} style={{flex:"0 0 90px",background:"var(--border2)",color:"#aaa",border:"none",borderRadius:8,padding:"12px",fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={()=>onConfirm(escolhas)} style={{flex:1,background:"#6366F1",color:"#fff",border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+          ✅ Concluir importação{vinculados>0?` (${vinculados} vinculado${vinculados>1?"s":""})`:""}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
+
 // ===================== HELPERS =====================
 const checkDuplicataCompra=(db:any, fornecedor:string, total:number, data:string):boolean=>{
   const cutoff=new Date(data+"T12:00:00");cutoff.setDate(cutoff.getDate()-3);
@@ -2126,6 +2222,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:""});
   const [prodEdit,setProdEdit]=useState<string|null>(null);
   const [verNota,setVerNota]=useState<string|null>(null);
+  const [conciliacao,setConciliacao]=useState<null|{itens:{nome:string,categoria?:string,unidade?:string}[],onConfirm:(r:Record<string,string>)=>void}>(null);
   const [editItemId,setEditItemId]=useState<string|null>(null);
   const [editItemForm,setEditItemForm]=useState<any>(null);
   const [notaForn,setNotaForn]=useState("");
@@ -2390,20 +2487,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [iaFormaPag,setIaFormaPag]=useState("dinheiro");
   const [iaVenc,setIaVenc]=useState(today());
 
-  const confirmarIA=()=>{
-    if(!iaResult)return;
+  const _execConfirmarIA=(resolucoes:Record<string,string>)=>{
     const forn=iaResult.fornecedor;
     const dataIA=iaResult.data||today();
-    if(checkDuplicataCompra(db,forn?.nome||"",iaResult.totalCompra||0,dataIA)){
-      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataIA)}. Deseja continuar mesmo assim?`))return;
-    }
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
+      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoes);
       const grupoId=uid();
       const novasCompras=(iaResult.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoes),categoria:item.categoria,
         unidade:item.unidade||"un",quantidade:item.quantidade||0,
         valor:item.valorTotal||0,valorUnitario:item.valorUnitario||0,
         data:iaResult.data||today(),origem:"ia",grupoId,criadoEm:new Date().toISOString(),
@@ -2430,11 +2524,23 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
       const contaFin:any={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,...(nfeXml?{xmlNFe:nfeXml,nNF:iaResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||""}:{}),criadoEm:new Date().toISOString()};
-      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);setNfeXml("");
+    setConciliacao(null);
     alert("✅ Cupom importado! Estoque e financeiro atualizados.");
+  };
+  const confirmarIA=()=>{
+    if(!iaResult)return;
+    const forn=iaResult.fornecedor;
+    const dataIA=iaResult.data||today();
+    if(checkDuplicataCompra(db,forn?.nome||"",iaResult.totalCompra||0,dataIA)){
+      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataIA)}. Deseja continuar mesmo assim?`))return;
+    }
+    const pend=itensNaoConciliados(iaResult.itens,db);
+    if(pend.length){setConciliacao({itens:pend,onConfirm:_execConfirmarIA});return;}
+    _execConfirmarIA({});
   };
 
   const del=(id)=>{_listaDeletados.add(id);(setDbAndSave||setDb)(d=>({...d,compras:d.compras.filter(c=>c.id!==id)}));};
@@ -2467,20 +2573,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     reader.readAsText(file,"utf-8");
   };
 
-  const confirmarNFe=()=>{
-    if(!nfeResult)return;
+  const _execConfirmarNFe=(resolucoes:Record<string,string>)=>{
     const forn=nfeResult.fornecedor;
     const dataNFe=nfeResult.data||today();
-    if(checkDuplicataCompra(db,forn?.nome||"",nfeResult.totalCompra||0,dataNFe)){
-      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataNFe)}. Deseja continuar mesmo assim?`))return;
-    }
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
+      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoes);
       const grupoId=uid();
       const novasCompras=(nfeResult.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoes),categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
         data:nfeResult.data||today(),origem:"nfe",
@@ -2513,12 +2616,25 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         nNF:nfeResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
         chNFe:nfeResult.chNFe||"",
         ...(nfeXml?{xmlNFe:nfeXml}:{}),criadoEm:new Date().toISOString()};
-      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
+    const qtdItens=nfeResult.itens.length;
     setNfeResult(null);setNfeError("");setNfeXml("");
     if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";
-    alert(`✅ NF-e importada! ${nfeResult.itens.length} produto(s) registrado(s).`);
+    setConciliacao(null);
+    alert(`✅ NF-e importada! ${qtdItens} produto(s) registrado(s).`);
+  };
+  const confirmarNFe=()=>{
+    if(!nfeResult)return;
+    const forn=nfeResult.fornecedor;
+    const dataNFe=nfeResult.data||today();
+    if(checkDuplicataCompra(db,forn?.nome||"",nfeResult.totalCompra||0,dataNFe)){
+      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataNFe)}. Deseja continuar mesmo assim?`))return;
+    }
+    const pend=itensNaoConciliados(nfeResult.itens,db);
+    if(pend.length){setConciliacao({itens:pend,onConfirm:_execConfirmarNFe});return;}
+    _execConfirmarNFe({});
   };
 
   // ---- SEFAZ Sync ----
@@ -2740,19 +2856,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setTimeout(()=>nfeManualRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);
   };
 
-  const importarNFeSefaz=(nfe:any,all=false)=>{
+  const _execImportarNFeSefaz=(nfe:any,all:boolean,resolucoes:Record<string,string>)=>{
     const forn=nfe.fornecedor;
     const dataSefaz=nfe.data||today();
-    if(!all&&checkDuplicataCompra(db,forn?.nome||"",nfe.totalCompra||0,dataSefaz)){
-      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataSefaz)}. Deseja continuar mesmo assim?`))return;
-    }
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
+      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoes);
       const grupoId=uid();
       const novasCompras=(nfe.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:normalizarNome(item.nome,d.normalizacoes),categoria:item.categoria,
+        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoes),categoria:item.categoria,
         unidade:item.unidade,quantidade:item.quantidade,
         valor:item.valorTotal,valorUnitario:item.valorUnitario,
         data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,criadoEm:new Date().toISOString(),
@@ -2787,7 +2901,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         chNFe:nfe.chNFe||"",
         ...(nfe.rawXml?{xmlNFe:nfe.rawXml}:{}),
         criadoEm:new Date().toISOString()};
-      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs]};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     if(!all){
@@ -2795,14 +2909,31 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       removeFromCache([nfe.nsu]);
     }
   };
+  const importarNFeSefaz=(nfe:any,all=false)=>{
+    const forn=nfe.fornecedor;
+    const dataSefaz=nfe.data||today();
+    if(!all&&checkDuplicataCompra(db,forn?.nome||"",nfe.totalCompra||0,dataSefaz)){
+      if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataSefaz)}. Deseja continuar mesmo assim?`))return;
+    }
+    const pend=itensNaoConciliados(nfe.itens,db);
+    if(pend.length){setConciliacao({itens:pend,onConfirm:(res)=>_execImportarNFeSefaz(nfe,all,res)});return;}
+    _execImportarNFeSefaz(nfe,all,{});
+  };
 
   const importarTodasNFeSefaz=()=>{
     const nsus=sefazList.map(n=>n.nsu).filter(Boolean);
     const count=sefazList.length;
-    sefazList.forEach(nfe=>importarNFeSefaz(nfe,true));
-    setSefazList([]);
-    removeFromCache(nsus);
-    alert(`✅ ${count} NF-e(s) importadas!`);
+    const todosItens=sefazList.flatMap(nfe=>nfe.itens||[]);
+    const finalizarTodas=(resolucoes:Record<string,string>)=>{
+      sefazList.forEach(nfe=>_execImportarNFeSefaz(nfe,true,resolucoes));
+      setSefazList([]);
+      removeFromCache(nsus);
+      setConciliacao(null);
+      alert(`✅ ${count} NF-e(s) importadas!`);
+    };
+    const pend=itensNaoConciliados(todosItens,db);
+    if(pend.length){setConciliacao({itens:pend,onConfirm:finalizarTodas});return;}
+    finalizarTodas({});
   };
 
   return <div>
@@ -3561,6 +3692,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
     {/* ===== LISTA DE COMPRAS ===== */}
 
+    {conciliacao&&<ConciliacaoImportModal itens={conciliacao.itens} materiasPrimas={db.materiasPrimas||[]}
+      onConfirm={(res)=>conciliacao.onConfirm(res)} onCancel={()=>setConciliacao(null)}/>}
   </div>;
 }
 
