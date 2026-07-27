@@ -58,6 +58,9 @@ router.patch('/:id', requireRole('admin'), async (req, res) => {
       `UPDATE addon_templates SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`, values
     );
     if (!r.rows[0]) return res.status(404).json({ error: 'Modelo não encontrado' });
+    if (active !== undefined) {
+      await pool.query('UPDATE addon_groups SET active=$1 WHERE template_id=$2', [active, req.params.id]);
+    }
     res.json(r.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Erro interno' });
@@ -85,8 +88,8 @@ router.post('/:id/sync', requireRole('admin'), async (req, res) => {
     const groupsRes = await pool.query('SELECT id FROM addon_groups WHERE template_id = $1', [req.params.id]);
     for (const g of groupsRes.rows) {
       await pool.query(
-        `UPDATE addon_groups SET name=$1, min_select=$2, max_select=$3, required=$4 WHERE id=$5 RETURNING id`,
-        [template.name, template.min_select, template.max_select, template.required, g.id]
+        `UPDATE addon_groups SET name=$1, min_select=$2, max_select=$3, required=$4, active=$5 WHERE id=$6 RETURNING id`,
+        [template.name, template.min_select, template.max_select, template.required, template.active !== false, g.id]
       );
       await pool.query('DELETE FROM addon_options WHERE group_id = $1 RETURNING id', [g.id]);
       let i = 0;

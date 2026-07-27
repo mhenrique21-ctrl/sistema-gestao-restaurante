@@ -119,7 +119,7 @@ router.get('/', async (req, res) => {
         o.sort_order AS option_sort
       FROM addon_groups g
       LEFT JOIN addon_options o ON o.group_id = g.id AND o.active = true
-      WHERE (g.active_days IS NULL OR $1 = ANY(g.active_days))
+      WHERE g.active = true AND (g.active_days IS NULL OR $1 = ANY(g.active_days))
       ORDER BY g.sort_order, o.sort_order, o.name
     `, [todayJs]);
 
