@@ -1230,6 +1230,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         console.log(`[SEFAZ] Aguardando ${waitMs/1000}s antes de buscar XML...`);
         await delay(waitMs);
         let result = null;
+        let limiteAtingido = false;
         try {
           result = await sefazFetchByChave(empresa, chNFe);
           if ((result.itens || []).length > 0) {
@@ -1239,14 +1240,17 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           }
         } catch (e2) {
           console.log(`[SEFAZ] Busca após manifestação: ${e2.message}`);
+          if ((e2.message || '').includes('656')) limiteAtingido = true;
         }
         if (!result || (result.itens || []).length === 0) {
-          const msg = jaManifestada
+          const msg = limiteAtingido
+            ? 'SEFAZ limitou consultas (máx. 20/hora). Aguarde 1 hora antes de tentar novamente.'
+            : jaManifestada
             ? 'NF-e já manifestada. SEFAZ ainda não disponibilizou o XML completo — tente novamente em alguns minutos.'
             : 'Manifestação enviada. O XML completo pode levar minutos para ficar disponível — tente novamente em breve.';
           res.setHeader('Content-Type', 'application/json');
           res.writeHead(200);
-          res.end(JSON.stringify({ itens: [], tipoDoc: 'resumo', pendente: true, jaManifestada: true, message: msg, manifestacao: manifestResult }));
+          res.end(JSON.stringify({ itens: [], tipoDoc: 'resumo', pendente: true, jaManifestada: true, limiteAtingido, message: msg, manifestacao: manifestResult }));
           return;
         }
         res.setHeader('Content-Type', 'application/json');

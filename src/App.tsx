@@ -2582,7 +2582,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const autoFetchingRef=useRef(false);
   useEffect(()=>{
     const resumos=sefazList.filter(n=>(n.tipoDoc==="resumo"||(!(n.tipoDoc)&&(n.itens||[]).length===0))&&n.chNFe&&n.chNFe.length===44);
-    if(resumos.length===0||autoFetchingRef.current||sefazLoading)return;
+    if(resumos.length===0||autoFetchingRef.current||sefazLoading||!waitOk)return;
     autoFetchingRef.current=true;
     (async()=>{
       for(const resumo of resumos){
@@ -2592,6 +2592,11 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           const ct=res.headers.get("content-type")||"";
           if(!ct.includes("application/json"))continue;
           const data=await res.json();
+          if(data.limiteAtingido||(data.message||"").includes("656")){
+            registrar656();
+            setFetchingChave(null);
+            break;
+          }
           if(res.ok&&!data.error&&!data.pendente&&(data.itens||[]).length>0){
             setSefazList(l=>l.map(n=>n.nsu===resumo.nsu?{...n,...data,tipoDoc:"completo"}:n));
           }
@@ -2601,7 +2606,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       }
       autoFetchingRef.current=false;
     })();
-  },[sefazList.length,sefazLoading]);
+  },[sefazList.length,sefazLoading,waitOk]);
 
   const salvarNSUManual=async()=>{
     const val=parseInt(sefazNsuInput);
@@ -2645,15 +2650,15 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     sincronizarSEFAZ(false);
   };
 
+  const registrar656=()=>{const now=Date.now();setSefaz656At(now);localStorage.setItem("sefaz_656_at",String(now));};
+
   const sincronizarSEFAZ=async(resetNsu=false)=>{
     setSefazLoading(true);setSefazError("");setSefazList([]);
     try{
       const res=await fetch("/api/nfe-sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,resetNsu})});
       const data=await res.json();
       if(!res.ok){
-        if((data.error||"").includes("656")){
-          const now=Date.now();setSefaz656At(now);localStorage.setItem("sefaz_656_at",String(now));
-        }
+        if((data.error||"").includes("656"))registrar656();
         throw new Error(data.error||"Erro ao sincronizar");
       }
       setSefaz656At(null);localStorage.removeItem("sefaz_656_at");
@@ -2686,6 +2691,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
   const buscarItensNFe=async(nfe:any,i:number)=>{
     if(!nfe.chNFe||nfe.chNFe.length!==44){alert("Chave de acesso não disponível para esta NF-e.");return;}
+    if(!waitOk){alert(`⏳ Limite de consultas SEFAZ atingido. Aguarde ${Math.ceil(waitMs/60000)} min antes de tentar novamente.`);return;}
     setFetchingChave(nfe.chNFe);
     try{
       const res=await fetch("/api/nfe-baixar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:nfe.chNFe})});
@@ -2694,6 +2700,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         throw new Error("Tempo de resposta excedido. Aguarde alguns minutos e tente novamente.");
       }
       const data=await res.json();
+      if((data.message||"").includes("656"))registrar656();
       if(!res.ok||data.error)throw new Error(data.error||`HTTP ${res.status}`);
       if(data.pendente||(data.itens||[]).length===0){
         alert("⏳ "+(data.message||"SEFAZ ainda processando. Aguarde alguns minutos e clique em 'Buscar' novamente."));
@@ -3128,9 +3135,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 </div>}
               </div>
               <div style={{display:"flex",gap:5,flexShrink:0}}>
-                {isResumo&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)} disabled={isLoading}
-                  style={{background:isLoading?"var(--border2)":"#f59e0b",color:isLoading?"#888":"#000",border:"none",padding:"6px 12px",fontSize:12,fontWeight:700}}>
-                  {isLoading?"⏳ Baixando…":"⚡ Baixar"}
+                {isResumo&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)} disabled={isLoading||!waitOk}
+                  title={!waitOk?`Limite SEFAZ atingido. Aguarde ${Math.ceil(waitMs/60000)} min.`:undefined}
+                  style={{background:isLoading||!waitOk?"var(--border2)":"#f59e0b",color:isLoading||!waitOk?"#888":"#000",border:"none",padding:"6px 12px",fontSize:12,fontWeight:700}}>
+                  {isLoading?"⏳ Baixando…":!waitOk?"⏳ Aguarde":"⚡ Baixar"}
                 </button>}
                 {temItens&&<button className="btn" onClick={()=>importarNFeSefaz(nfe)}
                   style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",padding:"6px 10px",fontSize:11}}>📥 Importar</button>}
