@@ -457,9 +457,9 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
     `xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">` +
     `<soap12:Header>${cabec}</soap12:Header>` +
     `<soap12:Body>` +
-    `<nfeRecepcaoEventoNF xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">` +
+    `<nfeRecepcaoEvento xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">` +
     `<nfeDadosMsg>${envEvento}</nfeDadosMsg>` +
-    `</nfeRecepcaoEventoNF>` +
+    `</nfeRecepcaoEvento>` +
     `</soap12:Body>` +
     `</soap12:Envelope>`
   );
@@ -487,7 +487,7 @@ function sefazManifestar(emp, chNFe) {
       hostname: 'www.nfe.fazenda.gov.br',
       path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       method: 'POST',
-      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
+      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
       ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
     };
     console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
@@ -1974,7 +1974,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           hostname: isHom ? 'hom1.nfe.fazenda.gov.br' : 'www.nfe.fazenda.gov.br',
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
-          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
+          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
           ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
         };
         const apiReq = https.request(opts, apiRes => {
