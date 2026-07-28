@@ -505,6 +505,7 @@ function sefazManifestar(emp, chNFe) {
     const privateKeyPem = fs.readFileSync(pem.keyPath, 'utf-8');
     const certPem = fs.readFileSync(pem.certPath, 'utf-8');
     const soapBody = buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem);
+    console.log(`[SEFAZ ${emp}] DEBUG envelope enviado (manifestação ${chNFe.slice(-8)}): ${soapBody}`);
     const bodyBuf = Buffer.from(soapBody, 'utf-8');
     const hasPem = fs.existsSync(pem.keyPath) && fs.existsSync(pem.certPath);
     const tlsOpts = hasPem
