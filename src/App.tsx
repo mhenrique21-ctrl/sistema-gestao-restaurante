@@ -1789,6 +1789,75 @@ function Vendas({db,setDb,setDbAndSave,state}){
       :`⚠️ ${ok} ok / ${erros} com erro — Somado: R$ ${totalMaq.toFixed(2).replace(".",",")}`);
     setIaRelLoading(false);
   };
+
+  // ---- Cupom de fechamento de caixa — Delivery (IA): lê o valor bruto e subtrai a taxa de entrega ----
+  const iaDelRef=useRef<HTMLInputElement>(null);
+  const iaDelCamRef=useRef<HTMLInputElement>(null);
+  const [iaDelLoading,setIaDelLoading]=useState(false);
+  const [iaDelImages,setIaDelImages]=useState<any[]>([]);
+  const [iaDelMsg,setIaDelMsg]=useState("");
+  const addDelFiles=async(files:FileList|null)=>{
+    if(!files||files.length===0)return;
+    const novos:any[]=[];
+    for(let i=0;i<files.length;i++){
+      const f=files[i];
+      await new Promise<void>(res=>{
+        const rd=new FileReader();
+        rd.onload=async()=>{
+          const resized=await redimRelImg(rd.result as string);
+          novos.push({id:uid(),preview:resized,base64:resized.split(",")[1],mediaType:"image/jpeg",status:"pending"});
+          res();
+        };
+        rd.readAsDataURL(f);
+      });
+    }
+    setIaDelImages(imgs=>[...imgs,...novos]);
+    setIaDelMsg("");
+  };
+  const PROMPT_DEL=`Analise este cupom/comprovante de fechamento de caixa de delivery e extraia os valores. Retorne APENAS um JSON válido, sem texto extra, sem markdown:\n{"data":"YYYY-MM-DD","valorTotal":0.00,"taxaEntrega":0.00}\nOnde "valorTotal" é o valor bruto total do fechamento de delivery (antes de descontar a taxa de entrega), e "taxaEntrega" é o valor cobrado de taxa de entrega que deve ser descontado do total. Use a data do cupom no formato YYYY-MM-DD. Se não encontrar algum campo use 0.`;
+  const processarCupomDelivery=async()=>{
+    const pendentes=iaDelImages.filter(img=>img.status==="pending");
+    if(pendentes.length===0)return;
+    setIaDelLoading(true);setIaDelMsg("");
+    let totalBruto=0,totalTaxa=0,dataUlt="",erros=0;
+    for(const img of pendentes){
+      setIaDelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"processing"}:x));
+      try{
+        const ctrl=new AbortController();
+        const t=setTimeout(()=>ctrl.abort(),100000);
+        const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({messages:[{role:"user",content:[
+            {type:"image",source:{type:"base64",media_type:img.mediaType,data:img.base64}},
+            {type:"text",text:PROMPT_DEL}
+          ]}]}),signal:ctrl.signal});
+        clearTimeout(t);
+        if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);
+        const dt=await res.json();
+        const txt=(dt.content||[]).map((b:any)=>b.text||"").join("").trim();
+        let parsed:any;
+        try{let c=txt.replace(/```json/g,"").replace(/```/g,"").trim();parsed=JSON.parse(c);}
+        catch{const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("JSON inválido");}
+        const bruto=parseFloat(String(parsed.valorTotal||parsed.total||0))||0;
+        const taxa=parseFloat(String(parsed.taxaEntrega||parsed.taxa_entrega||0))||0;
+        const liquido=Math.max(0,bruto-taxa);
+        totalBruto+=bruto;totalTaxa+=taxa;
+        if(parsed.data&&/^\d{4}-\d{2}-\d{2}$/.test(parsed.data))dataUlt=parsed.data;
+        setIaDelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"ok",bruto,taxa,liquido}:x));
+      }catch(e:any){
+        erros++;
+        setIaDelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"err",err:e.message}:x));
+      }
+    }
+    const totalLiquido=Math.max(0,totalBruto-totalTaxa);
+    if(totalLiquido>0)setForm(f=>({...f,
+      delivery:(parseMoney(f.delivery||0)+totalLiquido).toFixed(2).replace(".",","),
+    }));
+    const ok=pendentes.length-erros;
+    setIaDelMsg(erros===0
+      ?`✅ ${ok} cupom(ns) — Bruto: R$ ${totalBruto.toFixed(2).replace(".",",")} − Taxa: R$ ${totalTaxa.toFixed(2).replace(".",",")} = Líquido: R$ ${totalLiquido.toFixed(2).replace(".",",")}${dataUlt?` (ref. ${dataUlt.split("-").reverse().join("/")})`:""}`
+      :`⚠️ ${ok} ok / ${erros} com erro — Líquido somado: R$ ${totalLiquido.toFixed(2).replace(".",",")}`);
+    setIaDelLoading(false);
+  };
   return <div>
     <div className="section-title">Lançar Vendas do Dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
@@ -1867,6 +1936,45 @@ function Vendas({db,setDb,setDbAndSave,state}){
       </div>
       <div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>Delivery</label>
+        <input ref={iaDelRef} type="file" accept="image/*" multiple onChange={e=>{addDelFiles(e.target.files);if(iaDelRef.current)iaDelRef.current.value="";}} style={{display:"none"}}/>
+        <input ref={iaDelCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addDelFiles(e.target.files);if(iaDelCamRef.current)iaDelCamRef.current.value="";}} style={{display:"none"}}/>
+        <div style={{fontSize:11,fontWeight:600,color:"var(--text2)",marginBottom:6,textAlign:"center",letterSpacing:1}}>🛵 CUPOM FECHAMENTO DELIVERY (IA)</div>
+        <div style={{fontSize:10,color:"#888",marginBottom:6,textAlign:"center"}}>Lê o valor bruto e desconta a taxa de entrega automaticamente</div>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <button className="btn" type="button" onClick={()=>iaDelRef.current?.click()}
+            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #22C55E66",color:"#22C55E",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            🖼️ Galeria
+          </button>
+          <button className="btn" type="button" onClick={()=>iaDelCamRef.current?.click()}
+            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #22C55E66",color:"#22C55E",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            📷 Câmera
+          </button>
+        </div>
+        {iaDelImages.length>0&&<div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>
+            {iaDelImages.map((img,i)=>(
+              <div key={img.id} style={{position:"relative",borderRadius:8,overflow:"hidden",border:`1.5px solid ${img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#6366F1":"var(--border2)"}`,background:"var(--bg3)"}}>
+                <img src={img.preview} style={{width:"100%",height:80,objectFit:"cover",display:"block"}} alt={`cupom ${i+1}`}/>
+                <div style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,0.7)",borderRadius:999,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:10}}
+                  onClick={()=>setIaDelImages(imgs=>imgs.filter(x=>x.id!==img.id))}>✕</div>
+                <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#6366F1":"#888"}}>
+                  {img.status==="ok"?`R$ ${(img.liquido||0).toFixed(2).replace(".",",")}`:img.status==="err"?"erro":img.status==="processing"?"…":`Cupom ${i+1}`}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="btn" type="button" onClick={processarCupomDelivery} disabled={iaDelLoading||iaDelImages.every(x=>x.status!=="pending")}
+              style={{flex:1,background:iaDelLoading?"var(--bg3)":"#22C55E",color:iaDelLoading?"#888":"#051208",fontSize:13,padding:"10px",borderRadius:10,fontWeight:700}}>
+              {iaDelLoading?"⏳ Processando...":"🤖 Extrair e Somar"}
+            </button>
+            <button className="btn" type="button" onClick={()=>{setIaDelImages([]);setIaDelMsg("");}}
+              style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"10px 14px",borderRadius:10}}>
+              Limpar
+            </button>
+          </div>
+        </div>}
+        {iaDelMsg&&<div style={{marginTop:6,marginBottom:6,fontSize:12,color:iaDelMsg.startsWith("✅")?"#22C55E":iaDelMsg.startsWith("⚠")?"#F59E0B":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaDelMsg}</div>}
         <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
       </div>
       <hr className="divider"/>
