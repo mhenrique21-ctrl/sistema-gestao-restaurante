@@ -323,6 +323,54 @@ const mergeResolucoesEmNormalizacoes=(norms:any[],resolucoes?:Record<string,stri
   });
   return out;
 };
+// Mescla N matérias-primas duplicadas (marcas diferentes do mesmo produto) numa só: soma estoque, une fornecedores,
+// reaponta movEstoque/produtosLista/compras pro item canônico, e persiste substituição pra futuras importações já reconhecerem.
+const mesclarProdutosDuplicados=(d:any,{canonicoId,idsRemovidos,nomeFinal}:{canonicoId:string,idsRemovidos:string[],nomeFinal:string})=>{
+  const mps=[...(d.materiasPrimas||[])];
+  const canonico=mps.find((m:any)=>m.id===canonicoId);
+  if(!canonico)return d;
+  const removidos=mps.filter((m:any)=>idsRemovidos.includes(m.id)&&m.id!==canonicoId);
+  const nomeFinalTrim=(nomeFinal||canonico.nome).trim();
+  if(!removidos.length&&canonico.nome.trim()===nomeFinalTrim)return d;
+  const estoqueSum=(canonico.estoqueAtual||0)+removidos.reduce((s:number,m:any)=>s+(m.estoqueAtual||0),0);
+  const fornecedoresUnidos=[...(canonico.fornecedores||[])];
+  removidos.forEach((m:any)=>(m.fornecedores||[]).forEach((f:string)=>{if(!fornecedoresUnidos.some((tf:string)=>tf.toLowerCase()===f.toLowerCase()))fornecedoresUnidos.push(f);}));
+  const nomeAntigoCanon=canonico.nome;
+  const idx=mps.findIndex((m:any)=>m.id===canonicoId);
+  mps[idx]={...canonico,nome:nomeFinalTrim,estoqueAtual:estoqueSum,fornecedores:fornecedoresUnidos};
+  const idsRemSet=new Set(removidos.map((m:any)=>m.id));
+  const mpsFinal=mps.filter((m:any)=>!idsRemSet.has(m.id));
+  removidos.forEach((m:any)=>_listaDeletados.add(m.id));
+
+  const nomesAntigosLower=new Set(removidos.map((m:any)=>m.nome.toLowerCase().trim()));
+  if(nomeAntigoCanon.toLowerCase().trim()!==nomeFinalTrim.toLowerCase().trim())nomesAntigosLower.add(nomeAntigoCanon.toLowerCase().trim());
+
+  const movEstoque=(d.movEstoque||[]).map((mv:any)=>{
+    if(idsRemSet.has(mv.mpId))return{...mv,mpId:canonicoId,mpNome:nomeFinalTrim};
+    if(mv.mpId===canonicoId)return{...mv,mpNome:nomeFinalTrim};
+    return mv;
+  });
+  const compras=(d.compras||[]).map((c:any)=>nomesAntigosLower.has((c.nomeProduto||"").toLowerCase().trim())?{...c,nomeProduto:nomeFinalTrim}:c);
+  const produtosLista=(d.produtosLista||[]).map((p:any)=>{
+    const vinc:string[]=p.mpVinculados||(p.mpVinculadoId?[p.mpVinculadoId]:[]);
+    if(!vinc.length)return p;
+    let mudou=false;
+    const novos=vinc.map((id:string)=>{if(idsRemSet.has(id)){mudou=true;return canonicoId;}return id;});
+    if(!mudou)return p;
+    return{...p,mpVinculados:[...new Set(novos)],mpVinculadoId:undefined};
+  });
+  const norms=[...(d.normalizacoes||[])];
+  const idxN=norms.findIndex((n:any)=>(n.nomePadrao||"").toLowerCase().trim()===nomeFinalTrim.toLowerCase().trim());
+  const novosTermos=[...nomesAntigosLower].filter((n:string)=>n!==nomeFinalTrim.toLowerCase().trim());
+  if(idxN>=0){
+    const termosAtuais=norms[idxN].termos||[];
+    norms[idxN]={...norms[idxN],termos:[...new Set([...termosAtuais,...novosTermos])]};
+  }else if(novosTermos.length){
+    norms.push({id:uid(),nomePadrao:nomeFinalTrim,termos:novosTermos});
+  }
+
+  return{...d,materiasPrimas:mpsFinal,movEstoque,compras,produtosLista,normalizacoes:norms};
+};
 const parseMoney= (s) => {
   const str=String(s).trim();
   // handles "1.234,56" (pt-BR) or "1234.56" (en) or "1234,56"
@@ -2117,10 +2165,37 @@ function parseNFe(xmlString) {
 // ===================== CONCILIAÇÃO DE PRODUTOS AO IMPORTAR (NF-e / Cupom) =====================
 function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens:{nome:string,categoria?:string,unidade?:string}[],materiasPrimas:any[],onConfirm:(r:Record<string,string>)=>void,onCancel:()=>void}){
   const [escolhas,setEscolhas]=useState<Record<string,string>>({});
+  const [sugeridosIA,setSugeridosIA]=useState<Set<string>>(new Set());
+  const [iaCarregando,setIaCarregando]=useState(false);
+  const [iaErro,setIaErro]=useState("");
   const [buscaAberta,setBuscaAberta]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
-  const escolher=(key:string,mpNome:string)=>{setEscolhas(e=>({...e,[key]:mpNome}));setBuscaAberta(null);setBusca("");};
-  const manterNovo=(key:string)=>{setEscolhas(e=>{const n={...e};delete n[key];return n;});};
+  useEffect(()=>{
+    let cancelado=false;
+    setIaCarregando(true);setIaErro("");
+    fetch("/api/ia-sugerir-conciliacao",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({itens,catalogo:materiasPrimas.map((m:any)=>({id:m.id,nome:m.nome,categoria:m.categoria}))})})
+      .then(r=>r.json()).then(data=>{
+        if(cancelado)return;
+        const sugestoes=data.sugestoes||[];
+        const novasEscolhas:Record<string,string>={};
+        const novosSugeridos=new Set<string>();
+        sugestoes.forEach((s:any)=>{
+          if(!s.catalogoId)return;
+          const mp=materiasPrimas.find((m:any)=>m.id===s.catalogoId);
+          if(!mp)return;
+          const key=(s.nome||"").toLowerCase().trim();
+          novasEscolhas[key]=mp.nome;
+          novosSugeridos.add(key);
+        });
+        setEscolhas(e=>({...novasEscolhas,...e}));
+        setSugeridosIA(novosSugeridos);
+      }).catch(()=>{if(!cancelado)setIaErro("Não foi possível obter sugestões da IA agora — vincule manualmente se preferir.");})
+      .finally(()=>{if(!cancelado)setIaCarregando(false);});
+    return()=>{cancelado=true;};
+  },[]);
+  const escolher=(key:string,mpNome:string)=>{setEscolhas(e=>({...e,[key]:mpNome}));setSugeridosIA(s=>{const n=new Set(s);n.delete(key);return n;});setBuscaAberta(null);setBusca("");};
+  const manterNovo=(key:string)=>{setEscolhas(e=>{const n={...e};delete n[key];return n;});setSugeridosIA(s=>{const n=new Set(s);n.delete(key);return n;});};
   const vinculados=Object.keys(escolhas).length;
   return <div style={{position:"fixed",inset:0,background:"#000000aa",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onCancel}>
     <div onClick={(e:any)=>e.stopPropagation()} style={{background:"var(--bg2)",width:"100%",maxWidth:520,maxHeight:"85vh",borderRadius:"16px 16px 0 0",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px #000a"}}>
@@ -2129,6 +2204,8 @@ function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens
         <div className="muted" style={{fontSize:12,marginTop:4,lineHeight:1.5}}>
           {itens.length} produto(s) não batem com nada do seu catálogo. Vincule a um produto já existente ou mantenha como novo — quem for vinculado passa a ser reconhecido automaticamente nas próximas importações.
         </div>
+        {iaCarregando&&<div style={{fontSize:11,color:"#7c8fff",marginTop:6}}>🤖 Analisando com IA...</div>}
+        {iaErro&&<div style={{fontSize:11,color:"#f59e0b",marginTop:6}}>{iaErro}</div>}
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
         {itens.map(it=>{
@@ -2143,7 +2220,7 @@ function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{it.categoria||"—"}{it.unidade?` · ${it.unidade}`:""}</div>
               <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
                 {escolhido
-                  ?<span style={{fontSize:11,color:"#4ade80",background:"#4ade8018",border:"1px solid #4ade8044",borderRadius:6,padding:"3px 8px",fontWeight:700}}>🔗 → {escolhido}</span>
+                  ?<span style={{fontSize:11,color:"#4ade80",background:"#4ade8018",border:"1px solid #4ade8044",borderRadius:6,padding:"3px 8px",fontWeight:700}}>{sugeridosIA.has(key)?"🤖":"🔗"} → {escolhido}</span>
                   :<span style={{fontSize:11,color:"#fbbf24",background:"#fbbf2418",border:"1px solid #fbbf2444",borderRadius:6,padding:"3px 8px",fontWeight:700}}>✨ Novo produto</span>}
                 <button onClick={()=>{setBuscaAberta(isOpen?null:key);setBusca("");}} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",padding:"3px 8px",cursor:"pointer"}}>
                   {isOpen?"✕ Fechar":"🔍 Vincular a existente"}
@@ -2221,6 +2298,44 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [sugestoesForn,setSugestoesForn]=useState([]);
   const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:""});
   const [prodEdit,setProdEdit]=useState<string|null>(null);
+  const [novaMarca,setNovaMarca]=useState("");
+  const [gruposSugeridos,setGruposSugeridos]=useState<null|{nomeSugerido:string,ids:string[],motivo?:string}[]>(null);
+  const [gruposCarregando,setGruposCarregando]=useState(false);
+  const [gruposErro,setGruposErro]=useState("");
+  const [gruposMarcados,setGruposMarcados]=useState<Record<number,Set<string>>>({});
+  const [gruposNomeFinal,setGruposNomeFinal]=useState<Record<number,string>>({});
+  const sugerirAgrupamentos=async()=>{
+    setGruposCarregando(true);setGruposErro("");setGruposSugeridos(null);
+    try{
+      const catalogo=(db.materiasPrimas||[]).map((m:any)=>({id:m.id,nome:m.nome,categoria:m.categoria,unidade:m.unidade}));
+      const r=await fetch("/api/ia-sugerir-agrupamentos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({catalogo})});
+      const data=await r.json();
+      if(data.error)throw new Error(data.error);
+      const grupos=(data.grupos||[]).filter((g:any)=>(g.ids||[]).length>=2);
+      setGruposSugeridos(grupos);
+      const marcados:Record<number,Set<string>>={};
+      const nomes:Record<number,string>={};
+      grupos.forEach((g:any,i:number)=>{marcados[i]=new Set(g.ids);nomes[i]=g.nomeSugerido;});
+      setGruposMarcados(marcados);setGruposNomeFinal(nomes);
+      if(!grupos.length)setGruposErro("Nenhuma duplicata encontrada no catálogo atual.");
+    }catch(e:any){setGruposErro(e.message||"Erro ao consultar IA.");}
+    setGruposCarregando(false);
+  };
+  const confirmarMesclagemGrupo=(i:number)=>{
+    if(!gruposSugeridos)return;
+    const grupo=gruposSugeridos[i];
+    const idsMarcados=[...(gruposMarcados[i]||[])];
+    if(idsMarcados.length<2)return alert("Marque pelo menos 2 produtos pra mesclar.");
+    const nomeFinal=(gruposNomeFinal[i]||grupo.nomeSugerido).trim();
+    if(!nomeFinal)return alert("Informe o nome final do produto.");
+    const membros=idsMarcados.map(id=>(db.materiasPrimas||[]).find((m:any)=>m.id===id)).filter(Boolean);
+    const canonico=[...membros].sort((a:any,b:any)=>(b.estoqueAtual||0)-(a.estoqueAtual||0))[0];
+    if(!canonico)return;
+    const idsRemovidos=idsMarcados.filter(id=>id!==canonico.id);
+    if(!confirm(`Mesclar ${idsMarcados.length} produtos em "${nomeFinal}"?\n\nEstoque será somado, histórico de compras renomeado, e os itens duplicados serão apagados do catálogo. Essa ação não tem desfazer automático.`))return;
+    (setDbAndSave||setDb)((d:any)=>mesclarProdutosDuplicados(d,{canonicoId:canonico.id,idsRemovidos,nomeFinal}));
+    setGruposSugeridos(gs=>gs?gs.filter((_,j)=>j!==i):gs);
+  };
   const [verNota,setVerNota]=useState<string|null>(null);
   const [conciliacao,setConciliacao]=useState<null|{itens:{nome:string,categoria?:string,unidade?:string}[],onConfirm:(r:Record<string,string>)=>void}>(null);
   const [editItemId,setEditItemId]=useState<string|null>(null);
@@ -3553,6 +3668,48 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 style={{background:"#8B5CF6",color:"#fff",padding:"5px 10px",fontSize:11,flexShrink:0}}>Aplicar</button>
             </div>;
           })()}
+          {prodEdit&&(()=>{
+            const prodAtual=(db.materiasPrimas||[]).find((m:any)=>m.id===prodEdit);
+            const nomeAtual=(prodAtual?.nome||prodForm.nome||"").trim();
+            const nomeKey=nomeAtual.toLowerCase();
+            const normaVinc=(db.normalizacoes||[]).find((n:any)=>(n.nomePadrao||"").toLowerCase().trim()===nomeKey);
+            const termos:string[]=normaVinc?.termos||[];
+            const addMarca=()=>{
+              const v=novaMarca.trim();
+              if(!v)return;
+              if(v.toLowerCase()===nomeKey)return alert("Isso já é o nome do próprio produto.");
+              setDb((d:any)=>{
+                const norms=[...(d.normalizacoes||[])];
+                const idx=norms.findIndex((n:any)=>(n.nomePadrao||"").toLowerCase().trim()===nomeKey);
+                if(idx>=0){
+                  if(!(norms[idx].termos||[]).some((t:string)=>t.toLowerCase().trim()===v.toLowerCase()))
+                    norms[idx]={...norms[idx],termos:[...(norms[idx].termos||[]),v]};
+                }else{
+                  norms.push({id:uid(),nomePadrao:nomeAtual,termos:[v]});
+                }
+                return{...d,normalizacoes:norms};
+              });
+              setNovaMarca("");
+            };
+            const remMarca=(t:string)=>{
+              setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).map((n:any)=>(n.nomePadrao||"").toLowerCase().trim()===nomeKey?{...n,termos:(n.termos||[]).filter((x:string)=>x!==t)}:n)}));
+            };
+            return <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:"var(--acc)",marginBottom:4}}>🏷️ Marcas vinculadas ({termos.length})</div>
+              <div className="muted" style={{fontSize:11,marginBottom:8}}>Nomes de outras marcas que devem entrar automaticamente como "{nomeAtual}".</div>
+              {termos.length>0&&<div style={{display:"flex",flexWrap:"wrap" as const,gap:6,marginBottom:8}}>
+                {termos.map((t:string)=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:20,padding:"3px 4px 3px 10px",fontSize:11}}>
+                  {t}
+                  <button onClick={()=>remMarca(t)} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:12,padding:"0 4px",lineHeight:1}}>×</button>
+                </span>)}
+              </div>}
+              <div style={{display:"flex",gap:6}}>
+                <input value={novaMarca} onChange={e=>setNovaMarca(e.target.value)} placeholder="ex: chocolate garoto 250g" className="inp" style={{marginBottom:0,fontSize:12}}
+                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addMarca();}}}/>
+                <button className="btn" onClick={addMarca} style={{background:"#6366F1",color:"#fff",padding:"8px 14px",fontSize:12,flexShrink:0}}>+ Adicionar</button>
+              </div>
+            </div>;
+          })()}
           <div className="row">
             <button className="btn" onClick={()=>{
               if(!prodForm.nome)return alert("Nome é obrigatório.");
@@ -3642,6 +3799,47 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           Defina um <strong>nome padrão</strong> e as variações que devem ser substituídas ao dar entrada em compras.
           Ex.: nome padrão <em>"açúcar"</em> → termos "açúcar cristal, açúcar refinado, açúcar union".
         </div>
+
+        <div className="card" style={{marginBottom:14,border:"1px solid #6366F144"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:gruposSugeridos||gruposErro?10:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--acc)"}}>🤖 Duplicatas no catálogo</div>
+            <button className="btn" onClick={sugerirAgrupamentos} disabled={gruposCarregando}
+              style={{background:gruposCarregando?"var(--border2)":"#6366F1",color:gruposCarregando?"#888":"#fff",padding:"8px 14px",fontSize:12,fontWeight:700}}>
+              {gruposCarregando?"⏳ Analisando...":"🤖 Sugerir agrupamentos"}
+            </button>
+          </div>
+          {gruposErro&&<div className="muted" style={{fontSize:12,marginTop:6}}>{gruposErro}</div>}
+          {gruposSugeridos&&gruposSugeridos.length>0&&<div style={{marginTop:10}}>
+            {gruposSugeridos.map((g,i)=>{
+              const marcados=gruposMarcados[i]||new Set<string>();
+              const membros=g.ids.map(id=>(db.materiasPrimas||[]).find((m:any)=>m.id===id)).filter(Boolean);
+              const estoqueTotal=membros.filter((m:any)=>marcados.has(m.id)).reduce((s:number,m:any)=>s+(m.estoqueAtual||0),0);
+              const toggle=(id:string)=>setGruposMarcados(gm=>{const n=new Set(gm[i]||[]);if(n.has(id))n.delete(id);else n.add(id);return{...gm,[i]:n};});
+              return <div key={i} style={{border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:10,background:"var(--bg3)"}}>
+                <div style={{fontSize:11,color:"#888",marginBottom:6}}>Sugerido{g.motivo?` — ${g.motivo}`:""}</div>
+                {membros.map((m:any)=>(
+                  <label key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:13,cursor:"pointer"}}>
+                    <input type="checkbox" checked={marcados.has(m.id)} onChange={()=>toggle(m.id)}/>
+                    <span style={{flex:1}}>{m.nome}</span>
+                    <span style={{fontSize:11,color:"#888"}}>estoque: {m.estoqueAtual||0}{m.unidade||""}</span>
+                  </label>
+                ))}
+                <div style={{fontSize:11,color:"#888",marginTop:6,marginBottom:4}}>Nome final</div>
+                <input value={gruposNomeFinal[i]??g.nomeSugerido} onChange={e=>setGruposNomeFinal(gn=>({...gn,[i]:e.target.value}))} className="inp" style={{marginBottom:8,fontSize:13}}/>
+                <div style={{fontSize:11,color:"#f59e0b",background:"#fbbf2412",border:"1px solid #fbbf2433",borderRadius:6,padding:"6px 8px",marginBottom:8,lineHeight:1.5}}>
+                  ⚠️ Ao confirmar: estoque somado ({estoqueTotal}{membros[0]?.unidade||""}), fornecedores unidos, histórico de compras renomeado para "{gruposNomeFinal[i]??g.nomeSugerido}". Os demais itens marcados são apagados do catálogo. Sem desfazer automático.
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn" onClick={()=>setGruposSugeridos(gs=>gs?gs.filter((_,j)=>j!==i):gs)}
+                    style={{background:"var(--border2)",color:"#aaa",padding:"8px",fontSize:12,flex:1}}>Ignorar</button>
+                  <button className="btn" onClick={()=>confirmarMesclagemGrupo(i)}
+                    style={{background:"#22C55E",color:"#051208",padding:"8px",fontSize:12,fontWeight:700,flex:2}}>✅ Confirmar mesclagem</button>
+                </div>
+              </div>;
+            })}
+          </div>}
+        </div>
+
         <div className="card" style={{marginBottom:14}}>
           <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:"var(--acc)"}}>{normEdit?"✏️ Editar Substituição":"➕ Nova Substituição"}</div>
           <input placeholder="Nome padrão (ex: açúcar)" value={normForm.nomePadrao}
@@ -5924,18 +6122,9 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
 
   const mergeProducts=(srcId:string,tgtId:string)=>{
     setDb((d:any)=>{
-      const mps2=[...(d.materiasPrimas||[])];
-      const src2=mps2.find((m:any)=>m.id===srcId);
-      const tgt2=mps2.find((m:any)=>m.id===tgtId);
-      if(!src2||!tgt2||src2.id===tgt2.id)return d;
-      tgt2.estoqueAtual=(tgt2.estoqueAtual||0)+(src2.estoqueAtual||0);
-      const fornT=[...(tgt2.fornecedores||[])];
-      (src2.fornecedores||[]).forEach((f:string)=>{if(!fornT.some((tf:string)=>tf.toLowerCase()===f.toLowerCase()))fornT.push(f);});
-      tgt2.fornecedores=fornT;
-      const movs2=(d.movEstoque||[]).map((mv:any)=>mv.mpId===src2.id?{...mv,mpId:tgt2.id,mpNome:tgt2.nome}:mv);
-      const compras2=(d.compras||[]).map((c:any)=>c.nomeProduto.toLowerCase()===src2.nome.toLowerCase()?{...c,nomeProduto:tgt2.nome}:c);
-      _listaDeletados.add(src2.id);
-      return{...d,materiasPrimas:mps2.filter((m:any)=>m.id!==src2.id),movEstoque:movs2,compras:compras2};
+      const tgt2=(d.materiasPrimas||[]).find((m:any)=>m.id===tgtId);
+      if(!tgt2||srcId===tgtId)return d;
+      return mesclarProdutosDuplicados(d,{canonicoId:tgtId,idsRemovidos:[srcId],nomeFinal:tgt2.nome});
     });
   };
 

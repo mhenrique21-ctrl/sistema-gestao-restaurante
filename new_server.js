@@ -766,6 +766,76 @@ async function getServiceToken() {
   return _serviceToken;
 }
 
+// ---- IA (Anthropic) — helper compartilhado com retry, usado por /api/scan e pelas rotas de conciliação de produtos ----
+function anthropicComplete({ system, userText, maxTokens = 2048 }) {
+  return new Promise((resolve, reject) => {
+    if (!API_KEY) { reject(new Error('Chave da API não configurada no servidor. Configure ANTHROPIC_API_KEY no .env da VPS.')); return; }
+    const bodyData = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: userText }],
+    });
+    const callAnthropic = (data) => new Promise((res2, rej2) => {
+      const options = {
+        hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01', 'Content-Length': Buffer.byteLength(data) },
+      };
+      const apiReq = https.request(options, apiRes => {
+        let result = '';
+        apiRes.on('data', c => result += c);
+        apiRes.on('end', () => res2({ status: apiRes.statusCode, body: result }));
+      });
+      apiReq.on('error', err => rej2(err));
+      apiReq.setTimeout(60000, () => { apiReq.destroy(); rej2(new Error('TIMEOUT')); });
+      apiReq.write(data);
+      apiReq.end();
+    });
+    (async () => {
+      const MAX_RETRIES = 3;
+      const RETRY_CODES = [429, 500, 502, 503, 529];
+      let lastStatus = 0, lastBody = '';
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const resp = await callAnthropic(bodyData);
+          lastStatus = resp.status; lastBody = resp.body;
+          if (resp.status === 200) {
+            try {
+              const parsed = JSON.parse(resp.body);
+              const text = (parsed.content || []).map(c => c.text || '').join('');
+              resolve(text);
+            } catch (e) { reject(new Error('Resposta da IA inválida: ' + e.message)); }
+            return;
+          }
+          if (!RETRY_CODES.includes(resp.status) || attempt === MAX_RETRIES) break;
+          let retryAfter = 2000 * attempt;
+          try { const p = JSON.parse(resp.body); if (p?.error?.type === 'rate_limit_error') retryAfter = Math.max(retryAfter, 5000); } catch {}
+          await new Promise(r => setTimeout(r, retryAfter));
+        } catch (netErr) {
+          lastStatus = netErr.message === 'TIMEOUT' ? 504 : 500;
+          lastBody = JSON.stringify({ error: netErr.message === 'TIMEOUT' ? 'Timeout: a IA demorou demais para responder.' : `Erro de rede: ${netErr.message}` });
+          if (attempt === MAX_RETRIES) break;
+          await new Promise(r => setTimeout(r, 2000 * attempt));
+        }
+      }
+      let errMsg = '';
+      try {
+        const parsed = JSON.parse(lastBody);
+        const errObj = parsed?.error;
+        if (errObj) {
+          const errType = errObj.type || '';
+          if (errType === 'authentication_error') errMsg = 'Chave da API inválida ou expirada.';
+          else if (errType === 'rate_limit_error') errMsg = 'Limite de requisições da IA excedido. Aguarde alguns minutos.';
+          else if (errType === 'overloaded_error' || lastStatus === 529) errMsg = 'Servidor da IA sobrecarregado. Tente novamente em alguns minutos.';
+          else errMsg = errObj.message || JSON.stringify(errObj);
+        }
+      } catch {}
+      if (!errMsg) errMsg = lastStatus === 504 ? 'Timeout: a IA demorou demais para responder.' : `Erro do servidor da IA (HTTP ${lastStatus}).`;
+      reject(new Error(errMsg));
+    })();
+  });
+}
+
 // ---- HTTP Server ----
 
 const server = http.createServer((req, res) => {
@@ -931,6 +1001,73 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         console.log(`[IA] Erro ao processar requisição: ${e.message}`);
         res.writeHead(400);
         res.end(JSON.stringify({ error: `Erro ao processar requisição: ${e.message}` }));
+      }
+    });
+    return;
+  }
+
+  // IA: sugerir vínculo de itens não conciliados com o catálogo já cadastrado (usado na tela de conciliação de import)
+  if (req.method === 'POST' && urlPath === '/api/ia-sugerir-conciliacao') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { itens, catalogo } = JSON.parse(body);
+        if (!Array.isArray(itens) || !itens.length || !Array.isArray(catalogo) || !catalogo.length) {
+          res.setHeader('Content-Type', 'application/json'); res.writeHead(200); res.end(JSON.stringify({ sugestoes: [] })); return;
+        }
+        const system = `Você ajuda a reconciliar nomes de produtos de notas fiscais/cupons com um catálogo interno já cadastrado. Vários fornecedores usam marcas ou grafias diferentes para o MESMO produto (ex: "Choc. Confraria 250g" e "Chocolate Garoto 250g" podem ser o mesmo item se o restaurante considera qualquer chocolate desse tipo como um único produto de estoque).
+
+Para cada item da lista "itens", decida se ele é o MESMO produto que algum item do "catalogo" (apenas marca/grafia diferente), ou se é genuinamente um produto novo/diferente.
+
+Seja CONSERVADOR: só vincule quando tiver bastante confiança de que é o mesmo tipo de produto. Produtos de categorias claramente diferentes NUNCA são o mesmo item. Na dúvida, não vincule.
+
+Responda APENAS com um JSON no formato:
+{"sugestoes":[{"nome":"<nome exato do item de entrada>","catalogoId":"<id do catálogo ou null>","confianca":"alta|media"}]}`;
+        const userText = `CATÁLOGO (id — nome — categoria):\n${catalogo.map(c => `${c.id} — ${c.nome} — ${c.categoria || ''}`).join('\n')}\n\nITENS A CONCILIAR:\n${itens.map(i => `${i.nome} — ${i.categoria || ''}`).join('\n')}`;
+        const text = await anthropicComplete({ system, userText, maxTokens: 2048 });
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { sugestoes: [] };
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify(parsed));
+      } catch (e) {
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // IA: varrer catálogo já cadastrado em busca de produtos duplicados (marcas/grafias diferentes do mesmo item)
+  if (req.method === 'POST' && urlPath === '/api/ia-sugerir-agrupamentos') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { catalogo } = JSON.parse(body);
+        if (!Array.isArray(catalogo) || catalogo.length < 2) {
+          res.setHeader('Content-Type', 'application/json'); res.writeHead(200); res.end(JSON.stringify({ grupos: [] })); return;
+        }
+        const system = `Você analisa um catálogo de matérias-primas de um restaurante/confeitaria em busca de produtos DUPLICADOS — o mesmo tipo de produto cadastrado mais de uma vez com marcas ou grafias diferentes (ex: "Chocolate Garoto 250g" e "Choc. Confraria 250g" sendo o mesmo tipo de item pro estoque do restaurante).
+
+Seja MUITO CONSERVADOR: só agrupe itens que você tem certeza razoável de que são o mesmo tipo de produto para fins de estoque. Produtos parecidos mas de categorias/usos diferentes (ex: "farinha de trigo" e "farinha de rosca") NÃO são o mesmo item. Não invente grupos — se nada parecer duplicado, retorne uma lista vazia.
+
+Responda APENAS com um JSON no formato:
+{"grupos":[{"nomeSugerido":"<nome final do produto unificado>","ids":["<id1>","<id2>", "..."],"motivo":"<breve explicação>"}]}
+Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
+        const userText = `CATÁLOGO (id — nome — categoria — unidade):\n${catalogo.map(c => `${c.id} — ${c.nome} — ${c.categoria || ''} — ${c.unidade || ''}`).join('\n')}`;
+        const text = await anthropicComplete({ system, userText, maxTokens: 4096 });
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { grupos: [] };
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify(parsed));
+      } catch (e) {
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
       }
     });
     return;
