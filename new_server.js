@@ -402,7 +402,7 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
 
   const infEventoXml =
     `<infEvento Id="${evId}">` +
-    `<cOrgao>91</cOrgao>` +
+    `<cOrgao>${uf}</cOrgao>` +
     `<tpAmb>${tpAmb}</tpAmb>` +
     `<CNPJ>${cnpj}</CNPJ>` +
     `<chNFe>${chNFe}</chNFe>` +
