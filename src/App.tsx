@@ -3981,13 +3981,15 @@ const EMPTY_FORM_LISTA={nome:"",qtd:"",unidade:"un",cat:"",estoqueQtd:"",estoque
 
 // Arrastar o item pra direita marca comprado, arrastar pra esquerda abre edição
 // (startEdit) — substitui o antigo quadradinho de marcar + botões ✏️/× soltos.
-const SWIPE_RIGHT_COMMIT=130, SWIPE_LEFT_COMMIT=-130, SWIPE_MAXCLAMP=190;
+const SWIPE_RIGHT_COMMIT=90, SWIPE_LEFT_COMMIT=-90, SWIPE_MAXCLAMP=190;
 // Um "flick" (arraste rápido e curto) não percorre a distância cheia do
 // commit por posição — sem isso, um toque rápido do usuário sempre voltava
 // pro lugar sem nunca abrir a edição/marcar comprado. Se o gesto foi rápido
 // (poucos ms) e percorreu uma distância mínima na direção certa, confirma
 // mesmo sem ter cruzado o limiar de posição inteiro.
-const SWIPE_FLICK_MIN_DIST=48, SWIPE_FLICK_MAX_MS=260, SWIPE_FLICK_VELOCITY=0.35;
+// Limiares afrouxados: um swipe "normal" (nem muito longo, nem muito rápido)
+// estava caindo fora dos dois critérios e sempre voltava pro lugar sem marcar.
+const SWIPE_FLICK_MIN_DIST=36, SWIPE_FLICK_MAX_MS=320, SWIPE_FLICK_VELOCITY=0.2;
 function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,onLeft?:()=>void,disabled?:boolean,rowStyle:any,children:any}){
   const cardRef=useRef<HTMLDivElement>(null);
   const iconRRef=useRef<HTMLDivElement>(null);
