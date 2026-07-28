@@ -1971,7 +1971,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         const bodyBuf = Buffer.from(soapBody, 'utf-8');
         const tlsOpts = { key: fs.readFileSync(pem.keyPath), cert: fs.readFileSync(pem.certPath) };
         const opts = {
-          hostname: isHom ? 'hom.nfe.fazenda.gov.br' : 'www.nfe.fazenda.gov.br',
+          hostname: isHom ? 'hom1.nfe.fazenda.gov.br' : 'www.nfe.fazenda.gov.br',
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
           headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
