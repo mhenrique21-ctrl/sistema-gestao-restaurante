@@ -390,7 +390,7 @@ function getX509CertBase64(certPem) {
 }
 
 let _signDebug = {};
-function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
+function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = '1') {
   const tpEvento   = '210210';
   const nSeqEvento = '1';
   const evId       = `ID${tpEvento}${chNFe}0${nSeqEvento}`;
@@ -403,7 +403,7 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
   const infEventoXml =
     `<infEvento Id="${evId}">` +
     `<cOrgao>91</cOrgao>` +
-    `<tpAmb>1</tpAmb>` +
+    `<tpAmb>${tpAmb}</tpAmb>` +
     `<CNPJ>${cnpj}</CNPJ>` +
     `<chNFe>${chNFe}</chNFe>` +
     `<dhEvento>${dhEvento}</dhEvento>` +
@@ -1957,20 +1957,21 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     req.on('data', c => body += c);
     req.on('end', async () => {
       try {
-        const { empresa, chNFe } = JSON.parse(body);
+        const { empresa, chNFe, ambiente } = JSON.parse(body);
         if (!['CONFRARIA','SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({error:'Empresa inválida'})); return; }
         const pem = ensurePemFiles(empresa);
         if (!pem) { res.writeHead(503); res.end(JSON.stringify({error:'Certificado PEM não disponível'})); return; }
         const cnpj = (process.env[`CNPJ_${empresa}`]||'').replace(/\D/g,'');
         const uf   = process.env[`UF_${empresa}`] || '35';
         if (!cnpj) { res.writeHead(400); res.end(JSON.stringify({error:`CNPJ_${empresa} não configurado`})); return; }
+        const isHom = ambiente === 'homologacao';
         const privateKeyPem = fs.readFileSync(pem.keyPath, 'utf-8');
         const certPem = fs.readFileSync(pem.certPath, 'utf-8');
-        const soapBody = buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem);
+        const soapBody = buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, isHom ? '2' : '1');
         const bodyBuf = Buffer.from(soapBody, 'utf-8');
         const tlsOpts = { key: fs.readFileSync(pem.keyPath), cert: fs.readFileSync(pem.certPath) };
         const opts = {
-          hostname: 'www.nfe.fazenda.gov.br',
+          hostname: isHom ? 'hom.nfe.fazenda.gov.br' : 'www.nfe.fazenda.gov.br',
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
           headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
