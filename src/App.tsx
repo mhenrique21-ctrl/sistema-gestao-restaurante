@@ -1721,13 +1721,15 @@ function Vendas({db,setDb,setDbAndSave,state}){
     delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","): "",
   });setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{_listaDeletados.add(id);setDbAndSave(d=>({...d,vendas:(d.vendas||[]).filter(v=>v.id!==id)}));};
-  const iaRelRef=useRef<HTMLInputElement>(null);
-  const iaRelCamRef=useRef<HTMLInputElement>(null);
-  const [iaRelLoading,setIaRelLoading]=useState(false);
-  const [iaRelImages,setIaRelImages]=useState<any[]>([]);
-  const [iaRelMsg,setIaRelMsg]=useState("");
+  // ---- Leitura combinada de comprovantes (IA): várias fotos numa chamada só, separadas por forma de pagamento ----
+  const iaCombRef=useRef<HTMLInputElement>(null);
+  const iaCombCamRef=useRef<HTMLInputElement>(null);
+  const [iaCombLoading,setIaCombLoading]=useState(false);
+  const [iaCombImages,setIaCombImages]=useState<any[]>([]);
+  const [iaCombMsg,setIaCombMsg]=useState("");
+  const [iaCombResultado,setIaCombResultado]=useState<any>(null);
   const redimRelImg=(dataUrl:string,maxPx=1200,q=0.70):Promise<string>=>new Promise(r=>{const i=new Image();i.onload=()=>{let w=i.width,h=i.height;if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d")!.drawImage(i,0,0,w,h);let res=c.toDataURL("image/jpeg",q);if(res.length>500000)res=c.toDataURL("image/jpeg",0.50);r(res);};i.onerror=()=>r(dataUrl);i.src=dataUrl;});
-  const addRelFiles=async(files:FileList|null)=>{
+  const addCombFiles=async(files:FileList|null)=>{
     if(!files||files.length===0)return;
     const novos:any[]=[];
     for(let i=0;i<files.length;i++){
@@ -1736,171 +1738,161 @@ function Vendas({db,setDb,setDbAndSave,state}){
         const rd=new FileReader();
         rd.onload=async()=>{
           const resized=await redimRelImg(rd.result as string);
-          novos.push({id:uid(),preview:resized,base64:resized.split(",")[1],mediaType:"image/jpeg",status:"pending"});
+          novos.push({id:uid(),preview:resized,base64:resized.split(",")[1],mediaType:"image/jpeg"});
           res();
         };
         rd.readAsDataURL(f);
       });
     }
-    setIaRelImages(imgs=>[...imgs,...novos]);
-    setIaRelMsg("");
+    setIaCombImages(imgs=>[...imgs,...novos]);
+    setIaCombMsg("");setIaCombResultado(null);
   };
-  const PROMPT_REL=`Analise este relatório/extrato de maquininha de cartão e extraia os totais. Retorne APENAS um JSON válido, sem texto extra, sem markdown:\n{"data":"YYYY-MM-DD","maquininha":0.00,"debito":0.00,"credito_avista":0.00,"credito_parcelado":0.00,"pix":0.00}\nOnde "maquininha" é o TOTAL GERAL de todas as transações aprovadas (débito+crédito+pix). Use a data do relatório no formato YYYY-MM-DD. Se não encontrar algum campo use 0.`;
-  const processarRelatorios=async()=>{
-    const pendentes=iaRelImages.filter(img=>img.status==="pending");
-    if(pendentes.length===0)return;
-    setIaRelLoading(true);setIaRelMsg("");
-    let totalMaq=0,totalDeb=0,totalCred=0,totalPix=0,dataUlt="",erros=0;
-    for(const img of pendentes){
-      setIaRelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"processing"}:x));
-      try{
-        const ctrl=new AbortController();
-        const t=setTimeout(()=>ctrl.abort(),100000);
-        const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({messages:[{role:"user",content:[
-            {type:"image",source:{type:"base64",media_type:img.mediaType,data:img.base64}},
-            {type:"text",text:PROMPT_REL}
-          ]}]}),signal:ctrl.signal});
-        clearTimeout(t);
-        if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);
-        const dt=await res.json();
-        const txt=(dt.content||[]).map((b:any)=>b.text||"").join("").trim();
-        let parsed:any;
-        try{let c=txt.replace(/```json/g,"").replace(/```/g,"").trim();parsed=JSON.parse(c);}
-        catch{const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("JSON inválido");}
-        const maq=parseFloat(String(parsed.maquininha||parsed.total||parsed.total_geral||0))||0;
-        const deb=parseFloat(String(parsed.debito||0))||0;
-        const cred=parseFloat(String(parsed.credito_avista||0))+parseFloat(String(parsed.credito_parcelado||0));
-        const pix=parseFloat(String(parsed.pix||0))||0;
-        totalMaq+=maq;totalDeb+=deb;totalCred+=cred;totalPix+=pix;
-        if(parsed.data&&/^\d{4}-\d{2}-\d{2}$/.test(parsed.data))dataUlt=parsed.data;
-        setIaRelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"ok",maq,deb,cred,pix}:x));
-      }catch(e:any){
-        erros++;
-        setIaRelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"err",err:e.message}:x));
-      }
-    }
-    if(totalMaq>0)setForm(f=>({...f,
-      maquininha:(parseMoney(f.maquininha||0)+totalMaq).toFixed(2).replace(".",","),
-    }));
-    const ok=pendentes.length-erros;
-    setIaRelMsg(erros===0
-      ?`✅ ${ok} relatório(s) — Total: R$ ${totalMaq.toFixed(2).replace(".",",")} | Déb: R$ ${totalDeb.toFixed(2).replace(".",",")} | Créd: R$ ${totalCred.toFixed(2).replace(".",",")} | Pix: R$ ${totalPix.toFixed(2).replace(".",",")}${dataUlt?` (ref. ${dataUlt.split("-").reverse().join("/")})`:""}\n⚠️ Data mantida como digitada no formulário.`
-      :`⚠️ ${ok} ok / ${erros} com erro — Somado: R$ ${totalMaq.toFixed(2).replace(".",",")}`);
-    setIaRelLoading(false);
-  };
+  const PROMPT_COMBINADO=`Você vai analisar várias imagens de comprovantes/relatórios de fechamento de caixa de um restaurante, enviadas juntas nesta mesma mensagem. Cada imagem pode ser de um tipo diferente:
+- Relatório/extrato de maquininha de cartão (mostra débito, crédito à vista, crédito parcelado, pix)
+- Comprovante ou anotação de dinheiro em caixa
+- Fechamento/relatório de vendas do iFood
+- Fechamento/relatório de vendas do 99Food
+- Cupom/comprovante de fechamento de delivery próprio do restaurante (mostra valor bruto e a taxa de entrega cobrada, que deve ser descontada do valor bruto)
 
-  // ---- Cupom de fechamento de caixa — Delivery (IA): lê o valor bruto e subtrai a taxa de entrega ----
-  const iaDelRef=useRef<HTMLInputElement>(null);
-  const iaDelCamRef=useRef<HTMLInputElement>(null);
-  const [iaDelLoading,setIaDelLoading]=useState(false);
-  const [iaDelImages,setIaDelImages]=useState<any[]>([]);
-  const [iaDelMsg,setIaDelMsg]=useState("");
-  const addDelFiles=async(files:FileList|null)=>{
-    if(!files||files.length===0)return;
-    const novos:any[]=[];
-    for(let i=0;i<files.length;i++){
-      const f=files[i];
-      await new Promise<void>(res=>{
-        const rd=new FileReader();
-        rd.onload=async()=>{
-          const resized=await redimRelImg(rd.result as string);
-          novos.push({id:uid(),preview:resized,base64:resized.split(",")[1],mediaType:"image/jpeg",status:"pending"});
-          res();
-        };
-        rd.readAsDataURL(f);
-      });
+Para CADA imagem, identifique de qual tipo ela é PELO CONTEÚDO (não pela ordem em que foi enviada — as imagens não têm ordem definida). Extraia os valores de cada imagem e SOME os valores quando houver mais de uma imagem do mesmo tipo.
+
+Retorne APENAS um JSON válido, sem texto extra, sem markdown, exatamente neste formato:
+{
+  "data": "YYYY-MM-DD",
+  "maquininha": {"debito":0.00,"credito_avista":0.00,"credito_parcelado":0.00,"pix":0.00},
+  "dinheiro": 0.00,
+  "ifood": 0.00,
+  "ifoodTaxa": 0,
+  "99food": 0.00,
+  "99foodTaxa": 0,
+  "delivery": {"bruto":0.00,"taxaEntrega":0.00}
+}
+
+Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondentes. Use a data mais clara/recente encontrada em qualquer uma das imagens, no formato YYYY-MM-DD. Nunca invente valores — se algo estiver ilegível, use 0.`;
+  const processarLeituraCombinada=async()=>{
+    if(!iaCombImages.length)return;
+    setIaCombLoading(true);setIaCombMsg("");setIaCombResultado(null);
+    try{
+      const ctrl=new AbortController();
+      const t=setTimeout(()=>ctrl.abort(),100000);
+      const content=[
+        ...iaCombImages.map(img=>({type:"image",source:{type:"base64",media_type:img.mediaType,data:img.base64}})),
+        {type:"text",text:PROMPT_COMBINADO},
+      ];
+      const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({messages:[{role:"user",content}]}),signal:ctrl.signal});
+      clearTimeout(t);
+      if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);
+      const dt=await res.json();
+      const txt=(dt.content||[]).map((b:any)=>b.text||"").join("").trim();
+      let parsed:any;
+      try{let c=txt.replace(/```json/g,"").replace(/```/g,"").trim();parsed=JSON.parse(c);}
+      catch{const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("JSON inválido");}
+      const maq=parsed.maquininha||{};
+      const debito=parseFloat(String(maq.debito||0))||0;
+      const creditoAvista=parseFloat(String(maq.credito_avista||0))||0;
+      const creditoParcelado=parseFloat(String(maq.credito_parcelado||0))||0;
+      const pix=parseFloat(String(maq.pix||0))||0;
+      const maquininhaTotal=debito+creditoAvista+creditoParcelado+pix;
+      const dinheiro=parseFloat(String(parsed.dinheiro||0))||0;
+      const ifood=parseFloat(String(parsed.ifood||0))||0;
+      const ifoodTaxa=parseFloat(String(parsed.ifoodTaxa||0))||0;
+      const nfood=parseFloat(String(parsed["99food"]||0))||0;
+      const nfoodTaxa=parseFloat(String(parsed["99foodTaxa"]||0))||0;
+      const del=parsed.delivery||{};
+      const deliveryBruto=parseFloat(String(del.bruto||0))||0;
+      const deliveryTaxa=parseFloat(String(del.taxaEntrega||0))||0;
+      const deliveryLiquido=Math.max(0,deliveryBruto-deliveryTaxa);
+      setIaCombResultado({data:parsed.data,debito,creditoAvista,creditoParcelado,pix,maquininhaTotal,dinheiro,ifood,ifoodTaxa,nfood,nfoodTaxa,deliveryBruto,deliveryTaxa,deliveryLiquido});
+      setIaCombMsg("✅ Leitura concluída. Confira os valores abaixo antes de preencher.");
+    }catch(e:any){
+      setIaCombMsg("⚠️ "+e.message);
     }
-    setIaDelImages(imgs=>[...imgs,...novos]);
-    setIaDelMsg("");
+    setIaCombLoading(false);
   };
-  const PROMPT_DEL=`Analise este cupom/comprovante de fechamento de caixa de delivery e extraia os valores. Retorne APENAS um JSON válido, sem texto extra, sem markdown:\n{"data":"YYYY-MM-DD","valorTotal":0.00,"taxaEntrega":0.00}\nOnde "valorTotal" é o valor bruto total do fechamento de delivery (antes de descontar a taxa de entrega), e "taxaEntrega" é o valor cobrado de taxa de entrega que deve ser descontado do total. Use a data do cupom no formato YYYY-MM-DD. Se não encontrar algum campo use 0.`;
-  const processarCupomDelivery=async()=>{
-    const pendentes=iaDelImages.filter(img=>img.status==="pending");
-    if(pendentes.length===0)return;
-    setIaDelLoading(true);setIaDelMsg("");
-    let totalBruto=0,totalTaxa=0,dataUlt="",erros=0;
-    for(const img of pendentes){
-      setIaDelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"processing"}:x));
-      try{
-        const ctrl=new AbortController();
-        const t=setTimeout(()=>ctrl.abort(),100000);
-        const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({messages:[{role:"user",content:[
-            {type:"image",source:{type:"base64",media_type:img.mediaType,data:img.base64}},
-            {type:"text",text:PROMPT_DEL}
-          ]}]}),signal:ctrl.signal});
-        clearTimeout(t);
-        if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);
-        const dt=await res.json();
-        const txt=(dt.content||[]).map((b:any)=>b.text||"").join("").trim();
-        let parsed:any;
-        try{let c=txt.replace(/```json/g,"").replace(/```/g,"").trim();parsed=JSON.parse(c);}
-        catch{const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("JSON inválido");}
-        const bruto=parseFloat(String(parsed.valorTotal||parsed.total||0))||0;
-        const taxa=parseFloat(String(parsed.taxaEntrega||parsed.taxa_entrega||0))||0;
-        const liquido=Math.max(0,bruto-taxa);
-        totalBruto+=bruto;totalTaxa+=taxa;
-        if(parsed.data&&/^\d{4}-\d{2}-\d{2}$/.test(parsed.data))dataUlt=parsed.data;
-        setIaDelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"ok",bruto,taxa,liquido}:x));
-      }catch(e:any){
-        erros++;
-        setIaDelImages(imgs=>imgs.map(x=>x.id===img.id?{...x,status:"err",err:e.message}:x));
-      }
-    }
-    const totalLiquido=Math.max(0,totalBruto-totalTaxa);
-    if(totalLiquido>0)setForm(f=>({...f,
-      delivery:(parseMoney(f.delivery||0)+totalLiquido).toFixed(2).replace(".",","),
+  const aplicarResultadoCombinado=()=>{
+    if(!iaCombResultado)return;
+    const r=iaCombResultado;
+    setForm(f=>({
+      ...f,
+      ...(r.data&&/^\d{4}-\d{2}-\d{2}$/.test(r.data)?{data:r.data}:{}),
+      maquininha:r.maquininhaTotal>0?r.maquininhaTotal.toFixed(2).replace(".",","):f.maquininha,
+      dinheiro:r.dinheiro>0?r.dinheiro.toFixed(2).replace(".",","):f.dinheiro,
+      ifood:r.ifood>0?r.ifood.toFixed(2).replace(".",","):f.ifood,
+      ifoodTaxa:r.ifoodTaxa>0?String(r.ifoodTaxa):f.ifoodTaxa,
+      "99food":r.nfood>0?r.nfood.toFixed(2).replace(".",","):f["99food"],
+      nfoodTaxa:r.nfoodTaxa>0?String(r.nfoodTaxa):f.nfoodTaxa,
+      delivery:r.deliveryLiquido>0?r.deliveryLiquido.toFixed(2).replace(".",","):f.delivery,
     }));
-    const ok=pendentes.length-erros;
-    setIaDelMsg(erros===0
-      ?`✅ ${ok} cupom(ns) — Bruto: R$ ${totalBruto.toFixed(2).replace(".",",")} − Taxa: R$ ${totalTaxa.toFixed(2).replace(".",",")} = Líquido: R$ ${totalLiquido.toFixed(2).replace(".",",")}${dataUlt?` (ref. ${dataUlt.split("-").reverse().join("/")})`:""}`
-      :`⚠️ ${ok} ok / ${erros} com erro — Líquido somado: R$ ${totalLiquido.toFixed(2).replace(".",",")}`);
-    setIaDelLoading(false);
+    setIaCombImages([]);setIaCombResultado(null);setIaCombMsg("✅ Formulário preenchido — confira e salve.");
   };
   return <div>
     <div className="section-title">Lançar Vendas do Dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
       <div style={{marginBottom:10}}>
-        <input ref={iaRelRef} type="file" accept="image/*" multiple onChange={e=>{addRelFiles(e.target.files);if(iaRelRef.current)iaRelRef.current.value="";}} style={{display:"none"}}/>
-        <input ref={iaRelCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addRelFiles(e.target.files);if(iaRelCamRef.current)iaRelCamRef.current.value="";}} style={{display:"none"}}/>
-        <div style={{fontSize:11,fontWeight:600,color:"var(--text2)",marginBottom:6,textAlign:"center",letterSpacing:1}}>📊 RELATÓRIO DA MAQUININHA (IA)</div>
+        <input ref={iaCombRef} type="file" accept="image/*" multiple onChange={e=>{addCombFiles(e.target.files);if(iaCombRef.current)iaCombRef.current.value="";}} style={{display:"none"}}/>
+        <input ref={iaCombCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addCombFiles(e.target.files);if(iaCombCamRef.current)iaCombCamRef.current.value="";}} style={{display:"none"}}/>
+        <div style={{fontSize:11,fontWeight:600,color:"var(--text2)",marginBottom:6,textAlign:"center",letterSpacing:1}}>🤖 LEITURA COMBINADA DE COMPROVANTES</div>
+        <div style={{fontSize:10,color:"#888",marginBottom:6,textAlign:"center"}}>Junte todas as fotos do dia (maquininha, delivery, iFood...) — a IA identifica cada uma e separa por forma de pagamento</div>
         <div style={{display:"flex",gap:8,marginBottom:8}}>
-          <button className="btn" type="button" onClick={()=>iaRelRef.current?.click()}
+          <button className="btn" type="button" onClick={()=>iaCombRef.current?.click()}
             style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #6366F166",color:"#6366F1",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             🖼️ Galeria
           </button>
-          <button className="btn" type="button" onClick={()=>iaRelCamRef.current?.click()}
+          <button className="btn" type="button" onClick={()=>iaCombCamRef.current?.click()}
             style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #6366F166",color:"#6366F1",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             📷 Câmera
           </button>
         </div>
-        {iaRelImages.length>0&&<div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>
-            {iaRelImages.map((img,i)=>(
-              <div key={img.id} style={{position:"relative",borderRadius:8,overflow:"hidden",border:`1.5px solid ${img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#6366F1":"var(--border2)"}`,background:"var(--bg3)"}}>
-                <img src={img.preview} style={{width:"100%",height:80,objectFit:"cover",display:"block"}} alt={`rel ${i+1}`}/>
-                <div style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,0.7)",borderRadius:999,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:10}}
-                  onClick={()=>setIaRelImages(imgs=>imgs.filter(x=>x.id!==img.id))}>✕</div>
-                <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#6366F1":"#888"}}>
-                  {img.status==="ok"?`R$ ${(img.maq||0).toFixed(2).replace(".",",")}`:img.status==="err"?"erro":img.status==="processing"?"…":`Rel. ${i+1}`}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:6}}>
-            <button className="btn" type="button" onClick={processarRelatorios} disabled={iaRelLoading||iaRelImages.every(x=>x.status!=="pending")}
-              style={{flex:1,background:iaRelLoading?"var(--bg3)":"#6366F1",color:"#fff",fontSize:13,padding:"10px",borderRadius:10}}>
-              {iaRelLoading?"⏳ Processando...":"🤖 Extrair e Somar"}
-            </button>
-            <button className="btn" type="button" onClick={()=>{setIaRelImages([]);setIaRelMsg("");}}
-              style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"10px 14px",borderRadius:10}}>
-              Limpar
-            </button>
+        {iaCombImages.length>0&&<div style={{display:"flex",gap:8,overflowX:"auto" as const,paddingBottom:6,marginBottom:8}}>
+          {iaCombImages.map((img,i)=>(
+            <div key={img.id} style={{position:"relative",flexShrink:0,width:120,borderRadius:10,overflow:"hidden",border:"1.5px solid var(--border2)",background:"var(--bg3)"}}>
+              <img src={img.preview} style={{width:120,height:160,objectFit:"cover",display:"block"}} alt={`comprovante ${i+1}`}/>
+              <div style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,0.7)",borderRadius:999,width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:12,color:"#fff"}}
+                onClick={()=>{setIaCombImages(imgs=>imgs.filter(x=>x.id!==img.id));setIaCombResultado(null);}}>✕</div>
+              <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:"#888"}}>Foto {i+1}</div>
+            </div>
+          ))}
+        </div>}
+        {iaCombImages.length>0&&!iaCombResultado&&<div style={{display:"flex",gap:6,marginBottom:8}}>
+          <button className="btn" type="button" onClick={processarLeituraCombinada} disabled={iaCombLoading}
+            style={{flex:1,background:iaCombLoading?"var(--bg3)":"#6366F1",color:"#fff",fontSize:13,padding:"11px",borderRadius:10,fontWeight:700}}>
+            {iaCombLoading?"⏳ Lendo tudo...":`🤖 Ler ${iaCombImages.length} foto(s) e separar por forma de pagamento`}
+          </button>
+          <button className="btn" type="button" onClick={()=>{setIaCombImages([]);setIaCombMsg("");}}
+            style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"11px 14px",borderRadius:10}}>
+            Limpar
+          </button>
+        </div>}
+        {iaCombMsg&&<div style={{marginTop:6,marginBottom:8,fontSize:12,color:iaCombMsg.startsWith("✅")?"#22C55E":iaCombMsg.startsWith("⚠")?"#F59E0B":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaCombMsg}</div>}
+        {iaCombResultado&&<div style={{background:"var(--bg4)",border:"1px solid #6366F144",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--acc)",marginBottom:8}}>Resultado da leitura</div>
+          {iaCombResultado.maquininhaTotal>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid var(--border)"}}>
+            <span>💳 Maquininha</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.maquininhaTotal)}</span>
+          </div>}
+          {iaCombResultado.maquininhaTotal>0&&<div style={{fontSize:10,color:"#888",padding:"2px 0 6px"}}>déb {fmtMoney(iaCombResultado.debito)} · créd {fmtMoney(iaCombResultado.creditoAvista+iaCombResultado.creditoParcelado)} · pix {fmtMoney(iaCombResultado.pix)}</div>}
+          {iaCombResultado.dinheiro>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid var(--border)"}}>
+            <span>💵 Dinheiro</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.dinheiro)}</span>
+          </div>}
+          {iaCombResultado.ifood>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid var(--border)"}}>
+            <span>🍔 iFood</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.ifood)}</span>
+          </div>}
+          {iaCombResultado.nfood>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid var(--border)"}}>
+            <span>9️⃣9️⃣ 99Food</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.nfood)}</span>
+          </div>}
+          {iaCombResultado.deliveryLiquido>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0"}}>
+            <span>🛵 Delivery</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.deliveryLiquido)}</span>
+          </div>}
+          {iaCombResultado.deliveryLiquido>0&&<div style={{fontSize:10,color:"#888",padding:"2px 0 6px"}}>bruto {fmtMoney(iaCombResultado.deliveryBruto)} − taxa {fmtMoney(iaCombResultado.deliveryTaxa)}</div>}
+          {!(iaCombResultado.maquininhaTotal>0||iaCombResultado.dinheiro>0||iaCombResultado.ifood>0||iaCombResultado.nfood>0||iaCombResultado.deliveryLiquido>0)&&<div style={{fontSize:12,color:"#F59E0B",padding:"4px 0"}}>Nenhum valor reconhecido nas fotos enviadas.</div>}
+          <div style={{display:"flex",gap:6,marginTop:8}}>
+            <button className="btn" type="button" onClick={aplicarResultadoCombinado}
+              style={{flex:1,background:"#22C55E",color:"#051208",fontSize:13,padding:"10px",borderRadius:10,fontWeight:700}}>✅ Preencher formulário</button>
+            <button className="btn" type="button" onClick={()=>setIaCombResultado(null)}
+              style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"10px 14px",borderRadius:10}}>🔄 Refazer</button>
           </div>
         </div>}
-        {iaRelMsg&&<div style={{marginTop:6,fontSize:12,color:iaRelMsg.startsWith("✅")?"#22C55E":iaRelMsg.startsWith("⚠")?"#F59E0B":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaRelMsg}</div>}
       </div>
       {["maquininha","dinheiro"].map(m=>(
         <div key={m} style={{marginBottom:8}}>
@@ -1936,45 +1928,6 @@ function Vendas({db,setDb,setDbAndSave,state}){
       </div>
       <div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>Delivery</label>
-        <input ref={iaDelRef} type="file" accept="image/*" multiple onChange={e=>{addDelFiles(e.target.files);if(iaDelRef.current)iaDelRef.current.value="";}} style={{display:"none"}}/>
-        <input ref={iaDelCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addDelFiles(e.target.files);if(iaDelCamRef.current)iaDelCamRef.current.value="";}} style={{display:"none"}}/>
-        <div style={{fontSize:11,fontWeight:600,color:"var(--text2)",marginBottom:6,textAlign:"center",letterSpacing:1}}>🛵 CUPOM FECHAMENTO DELIVERY (IA)</div>
-        <div style={{fontSize:10,color:"#888",marginBottom:6,textAlign:"center"}}>Lê o valor bruto e desconta a taxa de entrega automaticamente</div>
-        <div style={{display:"flex",gap:8,marginBottom:8}}>
-          <button className="btn" type="button" onClick={()=>iaDelRef.current?.click()}
-            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #22C55E66",color:"#22C55E",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            🖼️ Galeria
-          </button>
-          <button className="btn" type="button" onClick={()=>iaDelCamRef.current?.click()}
-            style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #22C55E66",color:"#22C55E",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            📷 Câmera
-          </button>
-        </div>
-        {iaDelImages.length>0&&<div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>
-            {iaDelImages.map((img,i)=>(
-              <div key={img.id} style={{position:"relative",borderRadius:8,overflow:"hidden",border:`1.5px solid ${img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#6366F1":"var(--border2)"}`,background:"var(--bg3)"}}>
-                <img src={img.preview} style={{width:"100%",height:80,objectFit:"cover",display:"block"}} alt={`cupom ${i+1}`}/>
-                <div style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,0.7)",borderRadius:999,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:10}}
-                  onClick={()=>setIaDelImages(imgs=>imgs.filter(x=>x.id!==img.id))}>✕</div>
-                <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:img.status==="ok"?"#22C55E":img.status==="err"?"#f87171":img.status==="processing"?"#6366F1":"#888"}}>
-                  {img.status==="ok"?`R$ ${(img.liquido||0).toFixed(2).replace(".",",")}`:img.status==="err"?"erro":img.status==="processing"?"…":`Cupom ${i+1}`}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:6}}>
-            <button className="btn" type="button" onClick={processarCupomDelivery} disabled={iaDelLoading||iaDelImages.every(x=>x.status!=="pending")}
-              style={{flex:1,background:iaDelLoading?"var(--bg3)":"#22C55E",color:iaDelLoading?"#888":"#051208",fontSize:13,padding:"10px",borderRadius:10,fontWeight:700}}>
-              {iaDelLoading?"⏳ Processando...":"🤖 Extrair e Somar"}
-            </button>
-            <button className="btn" type="button" onClick={()=>{setIaDelImages([]);setIaDelMsg("");}}
-              style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"10px 14px",borderRadius:10}}>
-              Limpar
-            </button>
-          </div>
-        </div>}
-        {iaDelMsg&&<div style={{marginTop:6,marginBottom:6,fontSize:12,color:iaDelMsg.startsWith("✅")?"#22C55E":iaDelMsg.startsWith("⚠")?"#F59E0B":"#f87171",lineHeight:1.5,padding:"6px 8px",background:"var(--bg4)",borderRadius:8}}>{iaDelMsg}</div>}
         <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
       </div>
       <hr className="divider"/>
