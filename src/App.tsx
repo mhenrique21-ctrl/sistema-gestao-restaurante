@@ -1845,10 +1845,10 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
             📷 Câmera
           </button>
         </div>
-        {iaCombImages.length>0&&<div style={{display:"flex",gap:8,overflowX:"auto" as const,paddingBottom:6,marginBottom:8}}>
+        {iaCombImages.length>0&&<div style={{display:"flex",flexDirection:"row",flexWrap:"nowrap",gap:8,overflowX:"auto" as const,WebkitOverflowScrolling:"touch",paddingBottom:6,marginBottom:8}}>
           {iaCombImages.map((img,i)=>(
-            <div key={img.id} style={{position:"relative",flexShrink:0,width:120,borderRadius:10,overflow:"hidden",border:"1.5px solid var(--border2)",background:"var(--bg3)"}}>
-              <img src={img.preview} style={{width:120,height:160,objectFit:"cover",display:"block"}} alt={`comprovante ${i+1}`}/>
+            <div key={img.id} style={{position:"relative",flex:"0 0 120px",width:120,maxWidth:120,minWidth:120,borderRadius:10,overflow:"hidden",border:"1.5px solid var(--border2)",background:"var(--bg3)"}}>
+              <img src={img.preview} style={{display:"block",width:"120px",height:"160px",maxWidth:"none",objectFit:"cover"}} alt={`comprovante ${i+1}`}/>
               <div style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,0.7)",borderRadius:999,width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:12,color:"#fff"}}
                 onClick={()=>{setIaCombImages(imgs=>imgs.filter(x=>x.id!==img.id));setIaCombResultado(null);}}>✕</div>
               <div style={{fontSize:9,textAlign:"center",padding:"2px 4px",color:"#888"}}>Foto {i+1}</div>
