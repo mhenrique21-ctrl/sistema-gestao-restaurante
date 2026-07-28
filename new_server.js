@@ -410,7 +410,7 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
     `<tpEvento>${tpEvento}</tpEvento>` +
     `<nSeqEvento>${nSeqEvento}</nSeqEvento>` +
     `<verEvento>1.00</verEvento>` +
-    `<detEvento versao="1.00"><descEvento>Ciência da Operação</descEvento></detEvento>` +
+    `<detEvento versao="1.00"><descEvento>Ciencia da Operacao</descEvento></detEvento>` +
     `</infEvento>`;
 
   const eventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">${infEventoXml}</evento>`;
