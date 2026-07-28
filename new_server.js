@@ -400,11 +400,8 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
   const dhEvento = new Date(_d.getTime() - 3 * 3600 * 1000)
     .toISOString().replace(/\.\d{3}Z$/, '-03:00');
 
-  // infEvento em forma canônica C14N:
-  //  – namespace herdado de envEvento explicitado (exigido pelo C14N do elemento isolado)
-  //  – ordem canônica de atributos: namespace (xmlns) antes de atributos regulares (Id)
-  const infEventoC14n =
-    `<infEvento xmlns="http://www.portalfiscal.inf.br/nfe" Id="${evId}">` +
+  const infEventoXml =
+    `<infEvento Id="${evId}">` +
     `<cOrgao>91</cOrgao>` +
     `<tpAmb>1</tpAmb>` +
     `<CNPJ>${cnpj}</CNPJ>` +
@@ -416,66 +413,41 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem) {
     `<detEvento versao="1.00"><descEvento>Ciência da Operação</descEvento></detEvento>` +
     `</infEvento>`;
 
-  // infEvento sem xmlns para uso dentro de envEvento (namespace herdado)
-  const infEventoInDoc = infEventoC14n.replace(
-    ` xmlns="http://www.portalfiscal.inf.br/nfe"`, ''
-  );
+  const eventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">${infEventoXml}</evento>`;
 
-  // DigestValue = Base64(SHA1(C14N(infEvento)))
-  const digestValue = crypto.createHash('sha1')
-    .update(Buffer.from(infEventoC14n, 'utf8'))
-    .digest('base64');
+  const certBase64 = getX509CertBase64(certPem);
 
-  // SignedInfo em forma canônica (sem self-closing, xmlns na raiz)
-  const signedInfo =
-    `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">` +
-    `<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315">` +
-    `</CanonicalizationMethod>` +
-    `<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1">` +
-    `</SignatureMethod>` +
-    `<Reference URI="#${evId}">` +
-    `<Transforms>` +
-    `<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature">` +
-    `</Transform>` +
-    `<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315">` +
-    `</Transform>` +
-    `</Transforms>` +
-    `<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1">` +
-    `</DigestMethod>` +
-    `<DigestValue>${digestValue}</DigestValue>` +
-    `</Reference>` +
-    `</SignedInfo>`;
-
-  // SignatureValue = Base64(RSA-SHA1(SignedInfo))
-  const signer = crypto.createSign('SHA1');
-  signer.update(Buffer.from(signedInfo, 'utf8'));
-  const signatureValue = signer.sign(privateKeyPem, 'base64');
-
-  // Certificado X.509 em base64 (primeiro certificado do PEM)
-  const certMatches = certPem.match(
-    /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g
-  ) || [];
-  const certBase64 = certMatches.length > 0
-    ? certMatches[0]
-        .replace(/-----BEGIN CERTIFICATE-----/g, '')
-        .replace(/-----END CERTIFICATE-----/g, '')
-        .replace(/\s/g, '')
-    : '';
-
-  const signature =
-    `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">` +
-    signedInfo +
-    `<SignatureValue>${signatureValue}</SignatureValue>` +
-    `<KeyInfo><X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data></KeyInfo>` +
-    `</Signature>`;
+  // Assinatura via xml-crypto (implementação real de C14N/XMLDSig) em vez de
+  // string concatenada à mão — a versão manual anterior travava a SEFAZ com
+  // "Object reference not set to an instance of an object" antes de qualquer
+  // cStat, indicando rejeição da assinatura em si.
+  const sig = new SignedXml({
+    privateKey: privateKeyPem,
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+  });
+  sig.addReference({
+    xpath: "//*[local-name(.)='infEvento']",
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    ],
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    uri: `#${evId}`,
+  });
+  sig.getKeyInfoContent = () => `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`;
+  sig.computeSignature(eventoXml, {
+    location: { reference: "//*[local-name(.)='infEvento']", action: 'after' },
+  });
+  const eventoAssinado = sig.getSignedXml();
 
   const envEvento =
     `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">` +
     `<idLote>1</idLote>` +
-    `<evento versao="1.00">${infEventoInDoc}${signature}</evento>` +
+    eventoAssinado +
     `</envEvento>`;
 
-  _signDebug = { method: 'manual-crypto', evId, digestValue };
+  _signDebug = { method: 'xml-crypto', evId };
 
   const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
   return (
