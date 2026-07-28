@@ -487,7 +487,7 @@ function sefazManifestar(emp, chNFe) {
       hostname: 'www.nfe.fazenda.gov.br',
       path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       method: 'POST',
-      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
+      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
       ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
     };
     console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
@@ -1974,7 +1974,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           hostname: isHom ? 'hom1.nfe.fazenda.gov.br' : 'www.nfe.fazenda.gov.br',
           path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
           method: 'POST',
-          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
+          headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'SOAPAction': '', 'Content-Length': bodyBuf.length },
           ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
         };
         const apiReq = https.request(opts, apiRes => {
