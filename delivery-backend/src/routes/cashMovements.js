@@ -15,9 +15,15 @@ const METHOD_BUCKET_SQL = `CASE
 END`;
 const SALE_METHODS = ['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'];
 
+// "Hoje" no fuso de Belém (não UTC) — depois das 21h local já é o dia seguinte em UTC,
+// então usar toISOString().slice(0,10) faz o caixa "sumir" no fim do expediente.
+function todayBelem() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Belem' });
+}
+
 // GET /api/cash-movements?date=YYYY-MM-DD — abertura/sangrias/suprimentos + vendas (PDV+Delivery) do dia (padrão: hoje)
 router.get('/', async (req, res) => {
-  const date = req.query.date || new Date().toISOString().slice(0, 10);
+  const date = req.query.date || todayBelem();
   try {
     const result = await pool.query(
       `SELECT cm.id, cm.type, cm.amount, cm.reason, cm.breakdown, cm.created_at,
@@ -97,7 +103,7 @@ router.post('/', async (req, res) => {
   }
   try {
     if (type === 'abertura') {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayBelem();
       const existing = await pool.query(
         `SELECT id FROM cash_movements WHERE type = 'abertura' AND DATE(created_at AT TIME ZONE 'America/Belem') = $1`,
         [today]
