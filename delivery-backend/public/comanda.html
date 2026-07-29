@@ -144,21 +144,7 @@
   .login-card-head .ic svg { width: 22px; height: 22px; color: #fff; }
   .login-card-head h2 { font-size: 1.35rem; font-weight: 800; color: var(--c-text); }
   .login-card-head p { font-size: .85rem; color: var(--c-muted); margin-top: 2px; }
-  #login-troca-btn { margin-left: auto; display: flex; align-items: center; gap: 6px; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 9px; padding: 8px 14px; font-size: .82rem; font-weight: 700; color: var(--c-text); flex-shrink: 0; }
-
   .login-section-title { font-size: .88rem; font-weight: 800; color: var(--c-text); margin-bottom: 10px; }
-  #op-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-bottom: 20px; }
-  .op-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px; border-radius: 12px; border: 2px solid var(--c-border); background: var(--c-surface); text-align: center; }
-  .op-card .av { width: 44px; height: 44px; border-radius: 50%; background: var(--c-bg); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: .95rem; color: var(--c-muted); }
-  .op-card .nm { font-size: .82rem; font-weight: 800; color: var(--c-text); line-height: 1.2; }
-  .op-card .rl { font-size: .68rem; color: var(--c-muted); }
-  .op-card.selected { border-color: var(--gold-dim); background: #FBF3E2; }
-  .op-card.selected .av { background: var(--gold-dim); color: #fff; }
-  .op-card.add .av { background: var(--c-bg); color: var(--gold-dim); font-size: 1.3rem; }
-  .op-card.add { border-style: dashed; }
-
-  #op-outro-wrap { margin-bottom: 14px; }
-  #op-outro-wrap input { width: 100%; padding: 11px 14px; border-radius: 9px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: .92rem; }
 
   .login-pass-wrap { position: relative; margin-bottom: 14px; }
   .login-pass-wrap .lic { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--c-muted); pointer-events: none; }
@@ -166,11 +152,6 @@
   #login-senha { width: 100%; padding: 13px 44px; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: 1rem; letter-spacing: .04em; }
   .login-pass-wrap .eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--c-muted); padding: 6px; }
   .login-pass-wrap .eye svg { width: 18px; height: 18px; }
-
-  #keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
-  .kp-btn { padding: 14px 0; border-radius: 10px; border: 1px solid var(--c-border); background: var(--c-bg); font-weight: 800; font-size: 1.05rem; color: var(--c-text); }
-  .kp-btn small { display: block; font-size: .58rem; font-weight: 700; color: var(--c-muted); letter-spacing: .06em; }
-  .kp-btn.kp-fp svg { width: 20px; height: 20px; }
 
   #login-error { color: var(--danger); font-size: .82rem; margin-bottom: 10px; min-height: 16px; text-align: center; }
   #login-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 15px; border-radius: 10px; border: none; background: linear-gradient(135deg, #8A4A1F 0%, #6B3410 100%); color: #fff; font-weight: 800; font-size: .96rem; }
@@ -542,41 +523,18 @@
         <div class="login-card-head">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
           <div><h2>Abertura do PDV</h2><p>Informe suas credenciais para acessar o sistema</p></div>
-          <button id="login-troca-btn" onclick="resetOperatorSelection()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-            Trocar usuário
-          </button>
         </div>
 
-        <div class="login-section-title">Selecione o operador</div>
-        <div id="op-grid"><div class="cart-empty">Carregando...</div></div>
-        <div id="op-outro-wrap" class="hidden">
-          <input id="login-nome" type="text" placeholder="Nome do usuário" autocomplete="username">
-        </div>
+        <div class="login-section-title">Usuário</div>
+        <input id="login-usuario" list="login-usuario-list" type="text" placeholder="Nome de usuário" autocomplete="username" style="width:100%;padding:13px 14px;border-radius:10px;border:1px solid var(--c-border);background:var(--c-bg);color:var(--c-text);font-size:1rem;margin-bottom:14px">
+        <datalist id="login-usuario-list"></datalist>
 
-        <div class="login-section-title" style="margin-top:6px">Senha de acesso</div>
+        <div class="login-section-title">Senha de acesso</div>
         <div class="login-pass-wrap">
           <span class="lic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
           <input id="login-senha" type="password" placeholder="Digite sua senha" autocomplete="current-password">
           <button class="eye" onclick="toggleSenhaVisivel()" id="login-eye-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-        </div>
-
-        <div id="keypad">
-          <button class="kp-btn" onclick="keypadPress('1')">1</button>
-          <button class="kp-btn" onclick="keypadPress('2')">2<small>ABC</small></button>
-          <button class="kp-btn" onclick="keypadPress('3')">3<small>DEF</small></button>
-          <button class="kp-btn" onclick="keypadPress('4')">4<small>GHI</small></button>
-          <button class="kp-btn" onclick="keypadPress('5')">5<small>JKL</small></button>
-          <button class="kp-btn" onclick="keypadPress('6')">6<small>MNO</small></button>
-          <button class="kp-btn" onclick="keypadPress('7')">7<small>PQRS</small></button>
-          <button class="kp-btn" onclick="keypadPress('8')">8<small>TUV</small></button>
-          <button class="kp-btn" onclick="keypadPress('9')">9<small>WXYZ</small></button>
-          <button class="kp-btn" onclick="keypadBackspace()">⌫</button>
-          <button class="kp-btn" onclick="keypadPress('0')">0</button>
-          <button class="kp-btn kp-fp" onclick="showToast('🔒 Login biométrico em breve')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5v2"/><path d="M7 13v3a5 5 0 0 0 10 0v-6a5 5 0 0 0-3-4.6"/><path d="M12 9v6"/><path d="M9 9v6a3 3 0 0 0 6 0"/></svg>
           </button>
         </div>
 
@@ -588,7 +546,7 @@
 
         <div class="login-footlinks">
           <a onclick="showToast('Contate um administrador para redefinir sua senha.')">❓ Esqueci minha senha</a>
-          <a onclick="window.location.href='https://confrariacafe.com/'">⏻ Sair do sistema</a>
+          <a onclick="window.location.href='/home.html'">🏠 Voltar ao menu</a>
         </div>
       </div>
     </div>
@@ -946,7 +904,6 @@ function showToast(html) {
 
 // ── Login ────────────────────────────────────────────
 let loginStatusTimer = null;
-let selectedOperator = null; // nome do operador escolhido no grid, ou null se "Outro operador"
 
 function showLoginScreen() {
   if (pendingListTimer) { clearInterval(pendingListTimer); pendingListTimer = null; }
@@ -975,56 +932,15 @@ function showLoginScreen() {
   }
 }
 
-// ── Seleção de operador (só quem tem acesso ao PDV: admin/atendente ativos) ──
-function initials(name) {
-  return (name || '').trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('');
-}
-const ROLE_LABELS = { admin: 'Administrador', atendente: 'Atendente' };
-
+// ── Lista de operadores (autocomplete do campo Usuário) ──
 async function loadPdvOperators() {
-  const grid = document.getElementById('op-grid');
+  const list = document.getElementById('login-usuario-list');
   try {
     const res = await fetch(`${API}/api/auth/pdv-operators`);
-    const list = await res.json();
-    if (!res.ok || !Array.isArray(list)) { grid.innerHTML = '<div class="cart-empty">Erro ao carregar operadores</div>'; return; }
-    grid.innerHTML = list.map(op => `
-      <button class="op-card" data-name="${op.name}" onclick="selectOperator('${op.name.replace(/'/g, "\\'")}')">
-        <span class="av">${initials(op.name)}</span>
-        <span class="nm">${op.name}</span>
-        <span class="rl">${ROLE_LABELS[op.role] || op.role}</span>
-      </button>
-    `).join('') + `
-      <button class="op-card add" onclick="selectOutroOperador()">
-        <span class="av">+</span>
-        <span class="nm">Outro operador</span>
-      </button>
-    `;
-  } catch (e) {
-    grid.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
-  }
-}
-
-function selectOperator(name) {
-  selectedOperator = name;
-  document.getElementById('op-outro-wrap').classList.add('hidden');
-  document.querySelectorAll('.op-card').forEach(c => c.classList.toggle('selected', c.dataset.name === name));
-  document.getElementById('login-senha').focus();
-}
-
-function selectOutroOperador() {
-  selectedOperator = null;
-  document.querySelectorAll('.op-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById('op-outro-wrap').classList.remove('hidden');
-  document.getElementById('login-nome').value = '';
-  document.getElementById('login-nome').focus();
-}
-
-function resetOperatorSelection() {
-  selectedOperator = null;
-  document.querySelectorAll('.op-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById('op-outro-wrap').classList.add('hidden');
-  document.getElementById('login-senha').value = '';
-  document.getElementById('login-error').textContent = '';
+    const ops = await res.json();
+    if (!res.ok || !Array.isArray(ops)) return;
+    list.innerHTML = ops.map(op => `<option value="${op.name}">`).join('');
+  } catch (e) {}
 }
 
 function toggleSenhaVisivel() {
@@ -1032,19 +948,8 @@ function toggleSenhaVisivel() {
   input.type = input.type === 'password' ? 'text' : 'password';
 }
 
-function keypadPress(digit) {
-  const input = document.getElementById('login-senha');
-  input.value += digit;
-  input.focus();
-}
-function keypadBackspace() {
-  const input = document.getElementById('login-senha');
-  input.value = input.value.slice(0, -1);
-  input.focus();
-}
-
 async function doLogin() {
-  const nome = selectedOperator || document.getElementById('login-nome').value.trim();
+  const nome = document.getElementById('login-usuario').value.trim();
   const senha = document.getElementById('login-senha').value;
   const erro = document.getElementById('login-error');
   const btn = document.getElementById('login-btn');
