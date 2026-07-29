@@ -4,7 +4,18 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 
 router.use(authMiddleware, requireRole('admin', 'atendente'));
 
-// GET /api/cash-movements?date=YYYY-MM-DD — abertura/sangrias/suprimentos do dia (padrão: hoje)
+// Normaliza os vários formatos de payment_method já gravados (código ou rótulo legado)
+// pros 4 baldes usados no resumo do caixa. O que não bate cai em "outros" (ex: "misto").
+const METHOD_BUCKET_SQL = `CASE
+  WHEN payment_method IN ('dinheiro') THEN 'dinheiro'
+  WHEN payment_method IN ('cartao_credito', 'Cartão de Crédito') THEN 'cartao_credito'
+  WHEN payment_method IN ('cartao_debito', 'Cartão de Débito') THEN 'cartao_debito'
+  WHEN payment_method IN ('pix', 'pix_auto') THEN 'pix'
+  ELSE 'outros'
+END`;
+const SALE_METHODS = ['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'];
+
+// GET /api/cash-movements?date=YYYY-MM-DD — abertura/sangrias/suprimentos + vendas (PDV+Delivery) do dia (padrão: hoje)
 router.get('/', async (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
   try {
@@ -20,11 +31,52 @@ router.get('/', async (req, res) => {
     const abertura = result.rows.filter((r) => r.type === 'abertura').reduce((s, r) => s + parseFloat(r.amount), 0);
     const sangrias = result.rows.filter((r) => r.type === 'sangria').reduce((s, r) => s + parseFloat(r.amount), 0);
     const suprimentos = result.rows.filter((r) => r.type === 'suprimento').reduce((s, r) => s + parseFloat(r.amount), 0);
-    const saldo = abertura + suprimentos - sangrias;
+
+    const pdvRows = await pool.query(
+      `SELECT ${METHOD_BUCKET_SQL} AS method, COUNT(*) AS qty, COALESCE(SUM(total), 0) AS total
+       FROM comandas
+       WHERE status = 'fechada' AND DATE(closed_at AT TIME ZONE 'America/Belem') = $1
+       GROUP BY method`,
+      [date]
+    );
+    const deliveryRows = await pool.query(
+      `SELECT ${METHOD_BUCKET_SQL} AS method, COUNT(*) AS qty, COALESCE(SUM(total), 0) AS total
+       FROM orders
+       WHERE status != 'cancelado' AND DATE(created_at AT TIME ZONE 'America/Belem') = $1
+       GROUP BY method`,
+      [date]
+    );
+
+    const byMethod = {};
+    let totalPdv = 0;
+    let totalDelivery = 0;
+    for (const m of SALE_METHODS) {
+      const pdv = pdvRows.rows.find((r) => r.method === m);
+      const delivery = deliveryRows.rows.find((r) => r.method === m);
+      const pdvTotal = pdv ? parseFloat(pdv.total) : 0;
+      const deliveryTotal = delivery ? parseFloat(delivery.total) : 0;
+      byMethod[m] = {
+        pdv: pdvTotal,
+        delivery: deliveryTotal,
+        total: pdvTotal + deliveryTotal,
+        qtyPdv: pdv ? parseInt(pdv.qty, 10) : 0,
+        qtyDelivery: delivery ? parseInt(delivery.qty, 10) : 0,
+      };
+      totalPdv += pdvTotal;
+      totalDelivery += deliveryTotal;
+    }
+    const outrosPdv = pdvRows.rows.find((r) => r.method === 'outros');
+    const outrosDelivery = deliveryRows.rows.find((r) => r.method === 'outros');
+    if (outrosPdv) totalPdv += parseFloat(outrosPdv.total);
+    if (outrosDelivery) totalDelivery += parseFloat(outrosDelivery.total);
+
+    const saldo = abertura + suprimentos - sangrias + byMethod.dinheiro.pdv;
+
     res.json({
       date,
       movements: [...result.rows].reverse(),
       totals: { abertura, sangrias, suprimentos, saldo },
+      sales: { byMethod, totalPdv, totalDelivery, totalGeral: totalPdv + totalDelivery },
     });
   } catch (err) {
     console.error('[cash-movements/GET]', err.message);

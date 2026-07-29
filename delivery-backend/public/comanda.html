@@ -402,6 +402,12 @@
   .fin-summary-card .value { display: block; font-size: 1.15rem; font-weight: 800; color: var(--c-text); }
   .fin-summary-card .value.negative { color: var(--danger); }
   .fin-summary-card .value.positive { color: #2f8f63; }
+  .fin-summary-card .sub { display: block; font-size: .68rem; color: var(--c-muted); margin-top: 4px; }
+  .fin-sales-total { display: flex; gap: 10px; margin-bottom: 20px; }
+  .fin-sales-total-card { flex: 1; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-size: .84rem; font-weight: 700; color: var(--c-text); }
+  .fin-sales-grand { background: rgba(201,162,94,.12); border: 1px solid var(--gold-dim); border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .fin-sales-grand span:first-child { font-size: .86rem; font-weight: 700; color: var(--gold-dim); }
+  .fin-sales-grand span:last-child { font-size: 1.2rem; font-weight: 800; color: var(--gold-dim); }
   .fin-form { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
   .fin-form-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
   .fin-form-tab { flex: 1; padding: 10px; border-radius: 8px; border: 2px solid var(--c-border); background: var(--c-bg); color: var(--c-muted); font-weight: 700; font-size: .82rem; }
@@ -620,6 +626,14 @@
         <span class="value" id="fin-total-saldo">R$ 0,00</span>
       </div>
     </div>
+
+    <div class="side-title">Vendas de hoje por forma de pagamento (PDV + Delivery)</div>
+    <div class="fin-summary" id="fin-sales-methods"></div>
+    <div class="fin-sales-total">
+      <div class="fin-sales-total-card"><span>🏪 Total PDV</span><span id="fin-sales-total-pdv">R$ 0,00</span></div>
+      <div class="fin-sales-total-card"><span>🛵 Total Delivery</span><span id="fin-sales-total-delivery">R$ 0,00</span></div>
+    </div>
+    <div class="fin-sales-grand"><span>Total vendido hoje</span><span id="fin-sales-total-geral">R$ 0,00</span></div>
 
     <div class="fin-form">
       <div class="fin-form-tabs">
@@ -1463,6 +1477,7 @@ async function loadFinanceiro() {
     document.getElementById('fin-total-sangrias').textContent = fmt(data.totals.sangrias);
     document.getElementById('fin-total-suprimentos').textContent = fmt(data.totals.suprimentos);
     document.getElementById('fin-total-saldo').textContent = fmt(data.totals.saldo);
+    renderFinSales(data.sales);
 
     if (!data.movements.length) {
       el.innerHTML = '<div class="cart-empty">Nenhuma movimentação hoje</div>';
@@ -1483,6 +1498,31 @@ async function loadFinanceiro() {
   } catch (e) {
     el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
   }
+}
+
+const FIN_SALE_METHOD_LABELS = {
+  dinheiro: { icon: '💵', label: 'Dinheiro' },
+  cartao_debito: { icon: '💳', label: 'Débito' },
+  cartao_credito: { icon: '💳', label: 'Crédito' },
+  pix: { icon: '📱', label: 'PIX' },
+};
+
+function renderFinSales(sales) {
+  const el = document.getElementById('fin-sales-methods');
+  if (!sales) { el.innerHTML = ''; return; }
+  el.innerHTML = Object.entries(FIN_SALE_METHOD_LABELS).map(([method, info]) => {
+    const s = sales.byMethod[method] || { pdv: 0, delivery: 0, total: 0 };
+    return `
+      <div class="fin-summary-card">
+        <span class="label">${info.icon} ${info.label}</span>
+        <span class="value">${fmt(s.total)}</span>
+        <span class="sub">PDV ${fmt(s.pdv)} · Delivery ${fmt(s.delivery)}</span>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('fin-sales-total-pdv').textContent = fmt(sales.totalPdv);
+  document.getElementById('fin-sales-total-delivery').textContent = fmt(sales.totalDelivery);
+  document.getElementById('fin-sales-total-geral').textContent = fmt(sales.totalGeral);
 }
 
 async function submitCashMovement() {
