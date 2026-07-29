@@ -2534,6 +2534,25 @@ function doLogout() {
   showLoginScreen();
 }
 
+// ── Fechar modal aberto com ESC ──────────────────────
+// Modais "fixos" (toggle .hidden) têm função de fechar própria; os criados
+// dinamicamente (openXModal → document.body.appendChild) só precisam remover
+// o próprio elemento — igual ao botão "Cancelar" de cada um.
+const ESC_MODAL_CLOSERS = {
+  'abertura-modal-backdrop': () => closeAberturaModal(),
+  'close-register-modal-backdrop': () => closeCloseRegisterModal(),
+  'product-modal-backdrop': () => closeProductModal(),
+  'close-modal-backdrop': () => closeCloseModal(),
+};
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const modal = document.querySelector('.modal-backdrop:not(.hidden)');
+  if (!modal) return;
+  const closer = ESC_MODAL_CLOSERS[modal.id];
+  if (closer) closer();
+  else modal.remove();
+});
+
 // ── Init ─────────────────────────────────────────────
 if (!TOKEN) {
   showLoginScreen();
