@@ -3,6 +3,7 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 const { broadcastToStation, requestPrinterList } = require('../websocket/hub');
 const pool = require('../db/pool');
 const { internalError } = require('../utils/errors');
+const { getCashSummary, todayBelem } = require('../services/cashSummary');
 
 const PRINTER_KEYS = ['printer_caixa', 'printer_cozinha', 'printer_balcao'];
 
@@ -115,30 +116,13 @@ router.post('/finalize-order/:id', requireRole('admin'), async (req, res) => {
   }
 });
 
-// POST /api/printers/close-register — imprime fechamento de caixa (totais do dia, sem lista de pedidos)
-router.post('/close-register', requireRole('admin'), async (req, res) => {
-  const date = req.body.date || new Date().toISOString().slice(0, 10);
+// POST /api/printers/close-register — imprime fechamento de caixa (fundo/sangria/suprimento/saldo
+// + vendas por comanda/balcão/delivery e forma de pagamento, mesmo resumo da aba Caixa)
+router.post('/close-register', requireRole('admin', 'atendente'), async (req, res) => {
+  const date = req.body.date || todayBelem();
   try {
-    const totals = await pool.query(
-      `SELECT
-         COUNT(*) AS total_pedidos,
-         SUM(CASE WHEN status != 'cancelado' THEN total ELSE 0 END) AS receita,
-         SUM(CASE WHEN status = 'cancelado' THEN 1 ELSE 0 END) AS cancelados,
-         SUM(COALESCE(discount, 0)) AS total_descontos,
-         SUM(COALESCE(delivery_fee, 0)) AS total_entregas
-       FROM orders
-       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1`,
-      [date]
-    );
-    const byPayment = await pool.query(
-      `SELECT COALESCE(payment_method, 'Não informado') AS payment_method, COUNT(*) AS qty, SUM(total) AS total
-       FROM orders
-       WHERE DATE(created_at AT TIME ZONE 'America/Belem') = $1 AND status NOT IN ('cancelado')
-       GROUP BY payment_method
-       ORDER BY total DESC`,
-      [date]
-    );
-    const summary = { date, totals: totals.rows[0], by_payment: byPayment.rows };
+    const summary = await getCashSummary(date);
+    summary.operatorName = req.user?.name || null;
     broadcastToStation('caixa', { event: 'close_register', summary });
     res.json({ ok: true, summary });
   } catch (e) {

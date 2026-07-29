@@ -643,6 +643,8 @@
     </div>
     <div class="fin-sales-grand"><span>Total vendido hoje</span><span id="fin-sales-total-geral">R$ 0,00</span></div>
 
+    <button class="btn btn-primary" style="width:100%;margin-bottom:24px" id="fin-close-register-btn" onclick="closeRegisterPrint()">🖨 Fechar Caixa e Imprimir</button>
+
     <div class="fin-form">
       <div class="fin-form-tabs">
         <button class="fin-form-tab active" data-type="sangria" onclick="setFinType('sangria')">🔻 Sangria (retirada)</button>
@@ -1588,6 +1590,28 @@ async function deleteCashMovement(id) {
     loadFinanceiro();
   } catch (e) {
     alert('Erro de conexão');
+  }
+}
+
+async function closeRegisterPrint() {
+  if (!confirm('Fechar o caixa e imprimir o cupom de fechamento?')) return;
+  const btn = document.getElementById('fin-close-register-btn');
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Enviando pra impressão...';
+  try {
+    const res = await fetch(`${API}/api/printers/close-register`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro ao fechar caixa'); return; }
+    showToast('🖨 Fechamento enviado pra impressão!');
+  } catch (e) {
+    showToast('Erro de conexão');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
