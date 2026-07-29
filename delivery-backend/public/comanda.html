@@ -217,6 +217,8 @@
   #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .product-card { background: var(--c-surface); border: 1px solid var(--c-border); box-shadow: 0 1px 3px rgba(42,35,24,.05); border-radius: 12px; padding: 12px; text-align: left; color: var(--c-text); }
   .product-card:active { background: var(--c-bg); }
+  .product-card .thumb { width: 100%; aspect-ratio: 4/3; border-radius: 9px; margin-bottom: 8px; object-fit: cover; background: var(--c-bg); border: 1px solid var(--c-border); }
+  .product-card .thumb.placeholder { display: flex; align-items: center; justify-content: center; font-size: 1.6rem; }
   .product-card .name { font-size: .88rem; font-weight: 700; margin-bottom: 4px; color: var(--c-text); }
   .product-card .price { font-size: .82rem; color: var(--gold-dim); font-weight: 700; }
 
@@ -2006,6 +2008,9 @@ function renderProductGrid() {
   if (!products.length) { el.innerHTML = '<div class="launched-empty">Sem produtos nesta categoria</div>'; return; }
   el.innerHTML = products.map(p => `
     <button class="product-card" onclick="openProductModal('${p.id}')">
+      ${p.image_url
+        ? `<img class="thumb" src="${p.image_url}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;thumb placeholder&quot;>🍽️</div>'">`
+        : `<div class="thumb placeholder">🍽️</div>`}
       <div class="name">${p.name}</div>
       <div class="price">${fmt(p.promo_price ?? p.price)}</div>
     </button>
