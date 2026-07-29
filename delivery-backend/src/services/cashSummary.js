@@ -1,12 +1,20 @@
 const pool = require('../db/pool');
 
 // Normaliza os vários formatos de payment_method já gravados (código ou rótulo legado)
-// pros 4 baldes usados no resumo do caixa. O que não bate cai em "outros" (ex: "misto").
+// pros 4 baldes usados no resumo do caixa. O que não bate cai em "outros".
 const METHOD_BUCKET_SQL = `CASE
   WHEN payment_method IN ('dinheiro') THEN 'dinheiro'
   WHEN payment_method IN ('cartao_credito', 'Cartão de Crédito') THEN 'cartao_credito'
   WHEN payment_method IN ('cartao_debito', 'Cartão de Débito') THEN 'cartao_debito'
   WHEN payment_method IN ('pix', 'pix_auto') THEN 'pix'
+  ELSE 'outros'
+END`;
+// Mesma normalização, mas pra cp.method (comanda_payments) em vez de payment_method direto.
+const CP_METHOD_BUCKET_SQL = `CASE
+  WHEN cp.method IN ('dinheiro') THEN 'dinheiro'
+  WHEN cp.method IN ('cartao_credito', 'Cartão de Crédito') THEN 'cartao_credito'
+  WHEN cp.method IN ('cartao_debito', 'Cartão de Débito') THEN 'cartao_debito'
+  WHEN cp.method IN ('pix', 'pix_auto') THEN 'pix'
   ELSE 'outros'
 END`;
 const SALE_METHODS = ['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'];
@@ -36,12 +44,15 @@ async function getCashSummary(date) {
   const suprimentos = result.rows.filter((r) => r.type === 'suprimento').reduce((s, r) => s + parseFloat(r.amount), 0);
 
   // Balcão = venda avulsa (code prefixado "balcao_", ver POST /comandas/balcao);
-  // qualquer outro código fechado é comanda (cartão físico / mesa).
+  // qualquer outro código fechado é comanda (cartão físico / mesa). Soma por
+  // comanda_payments (não comandas.payment_method) pra não perder o detalhe de
+  // pagamentos mistos — ali a comanda inteira vira "misto" e cairia em "outros".
   const pdvRows = await pool.query(
-    `SELECT (CASE WHEN code LIKE 'balcao_%' THEN 'balcao' ELSE 'comanda' END) AS channel,
-            ${METHOD_BUCKET_SQL} AS method, COUNT(*) AS qty, COALESCE(SUM(total), 0) AS total
-     FROM comandas
-     WHERE status = 'fechada' AND DATE(closed_at AT TIME ZONE 'America/Belem') = $1
+    `SELECT (CASE WHEN c.code LIKE 'balcao_%' THEN 'balcao' ELSE 'comanda' END) AS channel,
+            ${CP_METHOD_BUCKET_SQL} AS method, COUNT(*) AS qty, COALESCE(SUM(cp.amount), 0) AS total
+     FROM comanda_payments cp
+     JOIN comandas c ON c.id = cp.comanda_id
+     WHERE c.status = 'fechada' AND DATE(c.closed_at AT TIME ZONE 'America/Belem') = $1
      GROUP BY channel, method`,
     [date]
   );
