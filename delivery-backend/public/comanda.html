@@ -2322,6 +2322,7 @@ function toggleCloseTaxa() {
 
 function openCloseModal() {
   if (comanda.status !== 'aberta') return;
+  if (cart.length) { showToast('⚠️ Envie o pedido pendente para a cozinha antes de fechar a conta'); return; }
   closeIsBalcao = (comanda.code || '').startsWith('balcao_');
   closeSubtotalCents = Math.round(parseFloat(comanda.total || 0) * 100);
   closeIncludeTaxa = true;
