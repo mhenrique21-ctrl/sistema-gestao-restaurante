@@ -279,11 +279,11 @@ function printChannelSection(p, channelKey, channelData) {
     const s = (channelData && channelData.byMethod && channelData.byMethod[method]) || { qty: 0, total: 0 };
     if (!s.qty) continue;
     const left = `${label} ${s.qty}x`;
-    p.println(`${left.padEnd(22)}${fmt(s.total).padStart(10)}`);
+    p.println(`${left.padEnd(28)}${fmt(s.total).padStart(12)}`);
   }
   const total = (channelData && channelData.total) || 0;
   p.bold(true);
-  p.println(`${('Total ' + title[0] + title.slice(1).toLowerCase()).padEnd(22)}${fmt(total).padStart(10)}`);
+  p.println(`${('Total ' + title[0] + title.slice(1).toLowerCase()).padEnd(28)}${fmt(total).padStart(12)}`);
   p.bold(false);
   p.drawLine();
 }
@@ -291,7 +291,7 @@ function printChannelSection(p, channelKey, channelData) {
 async function buildCloseRegister(summary) {
   const tmp = path.join(os.tmpdir(), `close_${Date.now()}.prn`);
   const p = new ThermalPrinter({ type: PrinterTypes.EPSON, interface: tmp,
-    characterSet: CharacterSet.PC858_EURO, removeSpecialCharacters: false, width: 42 });
+    characterSet: CharacterSet.PC858_EURO, removeSpecialCharacters: false, width: 48 });
 
   const t = summary.totals || {};
   const sales = summary.sales || { channels: {}, byMethod: {}, totalGeral: 0 };
@@ -307,11 +307,11 @@ async function buildCloseRegister(summary) {
 
   p.alignLeft();
   p.bold(true); p.println('RESUMO DO CAIXA'); p.bold(false);
-  p.println(`${'Fundo de caixa'.padEnd(22)}${fmt(t.abertura).padStart(10)}`);
-  p.println(`${'Sangrias'.padEnd(22)}${('-' + fmt(t.sangrias)).padStart(10)}`);
-  p.println(`${'Suprimentos'.padEnd(22)}${fmt(t.suprimentos).padStart(10)}`);
+  p.println(`${'Fundo de caixa'.padEnd(28)}${fmt(t.abertura).padStart(12)}`);
+  p.println(`${'Sangrias'.padEnd(28)}${('-' + fmt(t.sangrias)).padStart(12)}`);
+  p.println(`${'Suprimentos'.padEnd(28)}${fmt(t.suprimentos).padStart(12)}`);
   p.bold(true);
-  p.println(`${'Saldo esperado'.padEnd(22)}${fmt(t.saldo).padStart(10)}`);
+  p.println(`${'Saldo esperado'.padEnd(28)}${fmt(t.saldo).padStart(12)}`);
   p.bold(false);
   p.drawLine();
 
@@ -321,13 +321,14 @@ async function buildCloseRegister(summary) {
 
   p.bold(true); p.println('TOTAL POR FORMA'); p.bold(false);
   for (const [method, label] of Object.entries(CLOSE_METHOD_LABELS)) {
-    p.println(`${label.padEnd(22)}${fmt(sales.byMethod[method]).padStart(10)}`);
+    p.println(`${label.padEnd(28)}${fmt(sales.byMethod[method]).padStart(12)}`);
   }
   p.drawLine();
 
   p.alignCenter();
   p.bold(true); p.setTextSize(1,1); p.println(`TOTAL VENDIDO ${fmt(sales.totalGeral)}`); p.setTextSize(0,0); p.bold(false);
   p.drawLine();
+  p.println('Fechado em ' + fmtTime());
   p.println('Confira o dinheiro em caixa');
   p.println('com o saldo esperado acima');
   p.println(''); p.println(''); p.println('');
