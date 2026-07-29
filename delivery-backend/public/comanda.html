@@ -2554,6 +2554,24 @@ document.addEventListener('keydown', (e) => {
   else modal.remove();
 });
 
+// ── Atalhos F1-F4 pras abas principais ───────────────
+// F1 Fazer Pedido · F2 Delivery · F3 Comandas · F4 Caixa — só quando os botões
+// já estão visíveis (logado, caixa aberto) e sem modal por cima atrapalhando.
+const FKEY_ACTIONS = {
+  F1: () => openBalcaoSale(),
+  F2: () => showTab('delivery'),
+  F3: () => showTab('comandas'),
+  F4: () => showTab('financeiro'),
+};
+document.addEventListener('keydown', (e) => {
+  const action = FKEY_ACTIONS[e.key];
+  if (!action) return;
+  if (document.getElementById('header-actions').classList.contains('hidden')) return;
+  if (document.querySelector('.modal-backdrop:not(.hidden)')) return;
+  e.preventDefault();
+  action();
+});
+
 // ── Init ─────────────────────────────────────────────
 if (!TOKEN) {
   showLoginScreen();
