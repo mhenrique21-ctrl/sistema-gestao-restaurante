@@ -14,6 +14,7 @@ const METHOD_BUCKET_SQL = `CASE
   ELSE 'outros'
 END`;
 const SALE_METHODS = ['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'];
+const SALE_CHANNELS = ['comanda', 'balcao', 'delivery'];
 
 // "Hoje" no fuso de Belém (não UTC) — depois das 21h local já é o dia seguinte em UTC,
 // então usar toISOString().slice(0,10) faz o caixa "sumir" no fim do expediente.
@@ -38,11 +39,14 @@ router.get('/', async (req, res) => {
     const sangrias = result.rows.filter((r) => r.type === 'sangria').reduce((s, r) => s + parseFloat(r.amount), 0);
     const suprimentos = result.rows.filter((r) => r.type === 'suprimento').reduce((s, r) => s + parseFloat(r.amount), 0);
 
+    // Balcão = venda avulsa (code prefixado "balcao_", ver POST /comandas/balcao);
+    // qualquer outro código fechado é comanda (cartão físico / mesa).
     const pdvRows = await pool.query(
-      `SELECT ${METHOD_BUCKET_SQL} AS method, COUNT(*) AS qty, COALESCE(SUM(total), 0) AS total
+      `SELECT (CASE WHEN code LIKE 'balcao_%' THEN 'balcao' ELSE 'comanda' END) AS channel,
+              ${METHOD_BUCKET_SQL} AS method, COUNT(*) AS qty, COALESCE(SUM(total), 0) AS total
        FROM comandas
        WHERE status = 'fechada' AND DATE(closed_at AT TIME ZONE 'America/Belem') = $1
-       GROUP BY method`,
+       GROUP BY channel, method`,
       [date]
     );
     const deliveryRows = await pool.query(
@@ -53,36 +57,40 @@ router.get('/', async (req, res) => {
       [date]
     );
 
-    const byMethod = {};
-    let totalPdv = 0;
-    let totalDelivery = 0;
-    for (const m of SALE_METHODS) {
-      const pdv = pdvRows.rows.find((r) => r.method === m);
-      const delivery = deliveryRows.rows.find((r) => r.method === m);
-      const pdvTotal = pdv ? parseFloat(pdv.total) : 0;
-      const deliveryTotal = delivery ? parseFloat(delivery.total) : 0;
-      byMethod[m] = {
-        pdv: pdvTotal,
-        delivery: deliveryTotal,
-        total: pdvTotal + deliveryTotal,
-        qtyPdv: pdv ? parseInt(pdv.qty, 10) : 0,
-        qtyDelivery: delivery ? parseInt(delivery.qty, 10) : 0,
-      };
-      totalPdv += pdvTotal;
-      totalDelivery += deliveryTotal;
+    const channels = {};
+    for (const ch of SALE_CHANNELS) {
+      channels[ch] = { byMethod: {}, total: 0 };
+      for (const m of SALE_METHODS) channels[ch].byMethod[m] = { qty: 0, total: 0 };
     }
-    const outrosPdv = pdvRows.rows.find((r) => r.method === 'outros');
-    const outrosDelivery = deliveryRows.rows.find((r) => r.method === 'outros');
-    if (outrosPdv) totalPdv += parseFloat(outrosPdv.total);
-    if (outrosDelivery) totalDelivery += parseFloat(outrosDelivery.total);
+    for (const row of pdvRows.rows) {
+      const total = parseFloat(row.total);
+      if (SALE_METHODS.includes(row.method)) {
+        channels[row.channel].byMethod[row.method] = { qty: parseInt(row.qty, 10), total };
+      }
+      channels[row.channel].total += total;
+    }
+    for (const row of deliveryRows.rows) {
+      const total = parseFloat(row.total);
+      if (SALE_METHODS.includes(row.method)) {
+        channels.delivery.byMethod[row.method] = { qty: parseInt(row.qty, 10), total };
+      }
+      channels.delivery.total += total;
+    }
 
-    const saldo = abertura + suprimentos - sangrias + byMethod.dinheiro.pdv;
+    const byMethod = {};
+    for (const m of SALE_METHODS) {
+      byMethod[m] = SALE_CHANNELS.reduce((s, ch) => s + channels[ch].byMethod[m].total, 0);
+    }
+    const totalGeral = SALE_CHANNELS.reduce((s, ch) => s + channels[ch].total, 0);
+
+    const dinheiroPdv = channels.comanda.byMethod.dinheiro.total + channels.balcao.byMethod.dinheiro.total;
+    const saldo = abertura + suprimentos - sangrias + dinheiroPdv;
 
     res.json({
       date,
       movements: [...result.rows].reverse(),
       totals: { abertura, sangrias, suprimentos, saldo },
-      sales: { byMethod, totalPdv, totalDelivery, totalGeral: totalPdv + totalDelivery },
+      sales: { channels, byMethod, totalGeral },
     });
   } catch (err) {
     console.error('[cash-movements/GET]', err.message);

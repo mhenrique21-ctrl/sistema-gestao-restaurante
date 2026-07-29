@@ -627,10 +627,18 @@
       </div>
     </div>
 
-    <div class="side-title">Vendas de hoje por forma de pagamento (PDV + Delivery)</div>
+    <div class="side-title">Vendas em Comanda</div>
+    <div class="fin-summary" id="fin-sales-comanda"></div>
+    <div class="side-title">Vendas no Balcão</div>
+    <div class="fin-summary" id="fin-sales-balcao"></div>
+    <div class="side-title">Vendas no Delivery</div>
+    <div class="fin-summary" id="fin-sales-delivery"></div>
+
+    <div class="side-title">Total por forma de pagamento (Comanda + Balcão + Delivery)</div>
     <div class="fin-summary" id="fin-sales-methods"></div>
     <div class="fin-sales-total">
-      <div class="fin-sales-total-card"><span>🏪 Total PDV</span><span id="fin-sales-total-pdv">R$ 0,00</span></div>
+      <div class="fin-sales-total-card"><span>📇 Total Comanda</span><span id="fin-sales-total-comanda">R$ 0,00</span></div>
+      <div class="fin-sales-total-card"><span>🏪 Total Balcão</span><span id="fin-sales-total-balcao">R$ 0,00</span></div>
       <div class="fin-sales-total-card"><span>🛵 Total Delivery</span><span id="fin-sales-total-delivery">R$ 0,00</span></div>
     </div>
     <div class="fin-sales-grand"><span>Total vendido hoje</span><span id="fin-sales-total-geral">R$ 0,00</span></div>
@@ -1507,21 +1515,42 @@ const FIN_SALE_METHOD_LABELS = {
   pix: { icon: '📱', label: 'PIX' },
 };
 
-function renderFinSales(sales) {
-  const el = document.getElementById('fin-sales-methods');
-  if (!sales) { el.innerHTML = ''; return; }
+function renderFinChannel(elId, channelData) {
+  const el = document.getElementById(elId);
+  if (!channelData) { el.innerHTML = ''; return; }
   el.innerHTML = Object.entries(FIN_SALE_METHOD_LABELS).map(([method, info]) => {
-    const s = sales.byMethod[method] || { pdv: 0, delivery: 0, total: 0 };
+    const s = channelData.byMethod[method] || { qty: 0, total: 0 };
     return `
       <div class="fin-summary-card">
         <span class="label">${info.icon} ${info.label}</span>
         <span class="value">${fmt(s.total)}</span>
-        <span class="sub">PDV ${fmt(s.pdv)} · Delivery ${fmt(s.delivery)}</span>
+        <span class="sub">${s.qty} venda${s.qty === 1 ? '' : 's'}</span>
       </div>
     `;
   }).join('');
-  document.getElementById('fin-sales-total-pdv').textContent = fmt(sales.totalPdv);
-  document.getElementById('fin-sales-total-delivery').textContent = fmt(sales.totalDelivery);
+}
+
+function renderFinSales(sales) {
+  if (!sales) {
+    ['fin-sales-comanda', 'fin-sales-balcao', 'fin-sales-delivery', 'fin-sales-methods'].forEach(id => {
+      document.getElementById(id).innerHTML = '';
+    });
+    return;
+  }
+  renderFinChannel('fin-sales-comanda', sales.channels.comanda);
+  renderFinChannel('fin-sales-balcao', sales.channels.balcao);
+  renderFinChannel('fin-sales-delivery', sales.channels.delivery);
+
+  document.getElementById('fin-sales-methods').innerHTML = Object.entries(FIN_SALE_METHOD_LABELS).map(([method, info]) => `
+    <div class="fin-summary-card">
+      <span class="label">${info.icon} ${info.label}</span>
+      <span class="value">${fmt(sales.byMethod[method] || 0)}</span>
+    </div>
+  `).join('');
+
+  document.getElementById('fin-sales-total-comanda').textContent = fmt(sales.channels.comanda.total);
+  document.getElementById('fin-sales-total-balcao').textContent = fmt(sales.channels.balcao.total);
+  document.getElementById('fin-sales-total-delivery').textContent = fmt(sales.channels.delivery.total);
   document.getElementById('fin-sales-total-geral').textContent = fmt(sales.totalGeral);
 }
 
