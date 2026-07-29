@@ -238,14 +238,20 @@
 
   /* ── Modal genérico ──────────────────────────────── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(20,16,10,.55); display: flex; align-items: flex-end; justify-content: center; z-index: 100; }
-  .modal-sheet { background: var(--c-surface); width: 100%; max-width: 520px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 88vh; overflow-y: auto; box-shadow: 0 -4px 24px rgba(0,0,0,.25); }
+  .modal-sheet { background: var(--c-surface); width: 100%; max-width: 820px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 88vh; overflow-y: auto; box-shadow: 0 -4px 24px rgba(0,0,0,.25); }
   .modal-sheet h3 { font-size: 1.1rem; margin-bottom: 4px; color: var(--gold-dim); }
   .addon-group { margin: 14px 0; }
   .addon-group .g-title { font-size: .85rem; font-weight: 700; margin-bottom: 6px; color: var(--c-text); }
   .addon-group .g-title .req { color: var(--danger); font-size: .72rem; font-weight: 600; }
-  .addon-opt { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--c-bg); border-radius: 10px; margin-bottom: 6px; border: 2px solid var(--c-border); }
+  .addon-opt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .addon-opt { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--c-bg); border-radius: 10px; border: 2px solid var(--c-border); }
   .addon-opt.selected { border-color: var(--gold); background: #FBF3E2; }
-  .addon-opt .opt-price { color: var(--c-muted); font-size: .8rem; }
+  .addon-opt .opt-name { font-size: .85rem; color: var(--c-text); }
+  .addon-opt .opt-price { color: var(--c-muted); font-size: .76rem; }
+  .addon-opt .opt-add-btn { flex-shrink: 0; width: 30px; height: 30px; border-radius: 999px; border: none; background: var(--c-border); color: var(--c-text); font-size: 1rem; font-weight: 700; }
+  .addon-opt .opt-stepper { flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
+  .addon-opt .opt-stepper button { width: 24px; height: 24px; border-radius: 999px; border: none; background: var(--gold-dim); color: #fff; font-size: .9rem; font-weight: 700; }
+  .addon-opt .opt-stepper span { font-size: .88rem; font-weight: 700; min-width: 14px; text-align: center; color: var(--gold-dim); }
   .modal-qty { display: flex; align-items: center; gap: 14px; margin: 16px 0; }
   .modal-qty button { background: var(--c-border); color: var(--c-text); border: none; width: 36px; height: 36px; border-radius: 8px; font-size: 1.1rem; font-weight: 700; }
   .modal-note { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: .88rem; margin-top: 10px; }
@@ -2032,8 +2038,12 @@ function openProductModal(productId) {
   if (!modalProduct) return;
   modalSelections = {};
   modalQty = 1;
-  (modalProduct.addon_groups || []).forEach(g => { modalSelections[g.id] = []; });
+  (modalProduct.addon_groups || []).forEach(g => { modalSelections[g.id] = {}; });
   renderProductModal();
+}
+
+function groupQtySum(groupId) {
+  return Object.values(modalSelections[groupId] || {}).reduce((s, n) => s + n, 0);
 }
 
 function renderProductModal() {
@@ -2048,13 +2058,32 @@ function renderProductModal() {
       <div style="color:var(--gold-dim);font-weight:700;font-size:.95rem">${fmt(p.promo_price ?? p.price)}</div>
       ${groups.map(g => `
         <div class="addon-group">
-          <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--c-muted);font-weight:400">(até ${g.max_select})</span></div>
-          ${g.options.map(o => `
-            <div class="addon-opt ${modalSelections[g.id]?.includes(o.id) ? 'selected' : ''}" onclick="toggleAddon('${g.id}','${o.id}',${g.max_select})">
-              <span>${o.name}</span>
-              <span class="opt-price">${o.price > 0 ? '+' + fmt(o.price) : ''}</span>
-            </div>
-          `).join('')}
+          <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--c-muted);font-weight:400">(até ${g.max_select}${g.max_select > 1 ? ', repetível' : ''})</span></div>
+          <div class="addon-opt-grid">
+            ${g.options.map(o => {
+              const qty = (modalSelections[g.id] || {})[o.id] || 0;
+              const priceLabel = o.price > 0 ? '+' + fmt(o.price) : '';
+              if (g.max_select === 1) {
+                return `
+                  <div class="addon-opt ${qty > 0 ? 'selected' : ''}" onclick="toggleSingleAddon('${g.id}','${o.id}')">
+                    <div><div class="opt-name">${o.name}</div><div class="opt-price">${priceLabel}</div></div>
+                  </div>
+                `;
+              }
+              return `
+                <div class="addon-opt ${qty > 0 ? 'selected' : ''}">
+                  <div><div class="opt-name">${o.name}</div><div class="opt-price">${priceLabel}${qty > 0 ? ' · ' + qty + 'x' : ''}</div></div>
+                  ${qty > 0
+                    ? `<div class="opt-stepper">
+                         <button onclick="decAddon('${g.id}','${o.id}')">−</button>
+                         <span>${qty}</span>
+                         <button onclick="incAddon('${g.id}','${o.id}',${g.max_select})">+</button>
+                       </div>`
+                    : `<button class="opt-add-btn" onclick="incAddon('${g.id}','${o.id}',${g.max_select})">+</button>`}
+                </div>
+              `;
+            }).join('')}
+          </div>
         </div>
       `).join('')}
       <div class="modal-qty">
@@ -2073,15 +2102,28 @@ function renderProductModal() {
   document.body.appendChild(backdrop);
 }
 
-function toggleAddon(groupId, optionId, maxSelect) {
-  const sel = modalSelections[groupId] || (modalSelections[groupId] = []);
-  const idx = sel.indexOf(optionId);
-  if (idx >= 0) { sel.splice(idx, 1); }
-  else {
-    if (maxSelect === 1) sel.length = 0;
-    else if (sel.length >= maxSelect) return;
-    sel.push(optionId);
-  }
+// Grupos de escolha única (ex: tamanho, ponto da carne) continuam como seleção simples.
+function toggleSingleAddon(groupId, optionId) {
+  const sel = modalSelections[groupId] || (modalSelections[groupId] = {});
+  const already = sel[optionId] > 0;
+  modalSelections[groupId] = already ? {} : { [optionId]: 1 };
+  renderProductModal();
+}
+
+// Grupos repetíveis (ex: "Dose Extra até 10") permitem somar a mesma opção várias vezes,
+// até o total do grupo (soma de todas as quantidades) bater no max_select.
+function incAddon(groupId, optionId, maxSelect) {
+  if (groupQtySum(groupId) >= maxSelect) return;
+  const sel = modalSelections[groupId] || (modalSelections[groupId] = {});
+  sel[optionId] = (sel[optionId] || 0) + 1;
+  renderProductModal();
+}
+
+function decAddon(groupId, optionId) {
+  const sel = modalSelections[groupId] || (modalSelections[groupId] = {});
+  if (!sel[optionId]) return;
+  sel[optionId] -= 1;
+  if (sel[optionId] <= 0) delete sel[optionId];
   renderProductModal();
 }
 
@@ -2099,7 +2141,7 @@ function closeProductModal() {
 function confirmAddToCart() {
   const p = modalProduct;
   for (const g of (p.addon_groups || [])) {
-    const count = (modalSelections[g.id] || []).length;
+    const count = groupQtySum(g.id);
     if (g.required && count < g.min_select) {
       alert(`Selecione ao menos ${g.min_select} opção(ões) em "${g.name}"`);
       return;
@@ -2107,9 +2149,9 @@ function confirmAddToCart() {
   }
   const addons = [];
   for (const g of (p.addon_groups || [])) {
-    for (const optId of (modalSelections[g.id] || [])) {
+    for (const [optId, qty] of Object.entries(modalSelections[g.id] || {})) {
       const opt = g.options.find(o => o.id === optId);
-      if (opt) addons.push({ addon_option_id: opt.id, quantity: 1 });
+      if (opt && qty > 0) addons.push({ addon_option_id: opt.id, quantity: qty });
     }
   }
   const note = document.getElementById('modal-note')?.value?.trim() || null;
@@ -2117,11 +2159,11 @@ function confirmAddToCart() {
   const addonsUnitTotal = addons.reduce((s, a) => {
     const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id));
     const o = g?.options.find(o => o.id === a.addon_option_id);
-    return s + parseFloat(o?.price || 0);
+    return s + parseFloat(o?.price || 0) * a.quantity;
   }, 0);
   cart.push({ product_id: p.id, product_name: p.name, quantity: modalQty, notes: note, addons,
     subtotal: (unitPrice + addonsUnitTotal) * modalQty,
-    addon_labels: addons.map(a => { const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id)); const o = g?.options.find(o => o.id === a.addon_option_id); return o?.name; }).filter(Boolean) });
+    addon_labels: addons.map(a => { const g = p.addon_groups.find(gr => gr.options.some(o => o.id === a.addon_option_id)); const o = g?.options.find(o => o.id === a.addon_option_id); return o ? (a.quantity > 1 ? `${a.quantity}x ${o.name}` : o.name) : null; }).filter(Boolean) });
   closeProductModal();
   renderCart();
   renderComandaBar();
