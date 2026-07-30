@@ -225,6 +225,15 @@ router.post('/guest', idempotent, async (req, res) => {
 
     const total = subtotal + fee - finalDiscount;
 
+    // Pedido mínimo para delivery
+    if (delivery_type === 'delivery') {
+      const minRow = await pool.query(`SELECT value FROM settings WHERE key = 'min_order_delivery'`);
+      const minValue = parseFloat(minRow.rows[0]?.value) || 0;
+      if (minValue > 0 && subtotal < minValue) {
+        return res.status(400).json({ error: `Pedido mínimo para entrega: R$ ${minValue.toFixed(2).replace('.', ',')}` });
+      }
+    }
+
     // Verifica no servidor (nunca confia no cliente) que o pagamento por cartão/Apple Pay foi realmente aprovado
     if (payment_method === 'apple_pay' && !stripe_payment_intent_id) {
       throw { status: 400, message: 'Pagamento não confirmado' };
@@ -272,7 +281,7 @@ router.post('/guest', idempotent, async (req, res) => {
     if (payment_method === 'pix') {
       const pixAutoRow = await pool.query(`SELECT active FROM payment_methods WHERE code = 'pix_auto'`);
       const pixAutoEnabled = pixAutoRow.rows[0]?.active === true;
-      if (pixAutoEnabled) {
+      if (pixAutoEnabled && total >= 15) {
         try {
           const asaasPix = await asaasService.createPixCharge({
             name, cpfCnpj: ASAAS_FIXED_CPF, phone, value: total,
