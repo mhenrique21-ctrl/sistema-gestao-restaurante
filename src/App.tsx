@@ -618,6 +618,14 @@ const migrateDb=(m:any)=>{
         if(mudou)m[e].iconesProducao=icons;
       }
     }
+    // produtosProducao ganhou suporte a múltiplas categorias — produtos antigos
+    // só tinham "cat" (string); aqui ganham "cats" (array), mantendo "cat" como
+    // o primeiro item pra quem ainda lê o campo antigo (pedidos/impressão/WhatsApp).
+    if(m[e].produtosProducao){
+      m[e].produtosProducao=m[e].produtosProducao.map((p:any)=>
+        Array.isArray(p.cats)?p:{...p,cats:p.cat?[p.cat]:[]}
+      );
+    }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].usuarios)m[e].usuarios=[];
     if(!m[e].usuariosSeedDone){
@@ -5740,6 +5748,22 @@ function IconPickerPopup({value,onPick,style}:{value:string,onPick:(icon:string)
 }
 let _dbIconesProd:Record<string,string>={};
 const prodCatIcon=(c:string)=>_dbIconesProd[c]||ICON_PROD[c]||"📦";
+// Categorias de um produto de produção — "cats" é a fonte de verdade (produto pode
+// pertencer a mais de uma), com fallback pro "cat" legado (produtos ainda não migrados).
+const prodCats=(p:any):string[]=>Array.isArray(p?.cats)&&p.cats.length?p.cats:(p?.cat?[p.cat]:[]);
+function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string[],selected:string[],onToggle:(c:string)=>void,onClose:()=>void,style?:any}){
+  return <div style={{position:"absolute" as const,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,minWidth:180,maxWidth:260,maxHeight:280,overflowY:"auto" as const,boxShadow:"0 8px 24px #0008",...style}}>
+    {cats.map(c=>{
+      const on=selected.includes(c);
+      return <label key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 4px",cursor:"pointer",borderRadius:6,background:on?"#8B5CF622":"none"}}>
+        <input type="checkbox" checked={on} onChange={()=>onToggle(c)} style={{margin:0}}/>
+        <CatIconBadge icon={prodCatIcon(c)} size={13}/>
+        <span style={{fontSize:12,fontWeight:on?700:500,color:on?"#5b21b6":"var(--text)"}}>{c}</span>
+      </label>;
+    })}
+    <button onClick={onClose} style={{width:"100%",marginTop:6,padding:"5px 0",borderRadius:6,border:"1px solid #8B5CF666",background:"#8B5CF6",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>Fechar</button>
+  </div>;
+}
 
 function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void}){
   const isAdmin=login?.role==="admin";
@@ -5765,23 +5789,25 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const setShowHist=(v:boolean)=>setSubTab(v?"pedidos":"novo");
 
   // Product catalog management
-  const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un"});
+  const [prodForm,setProdForm]=useState<{nome:string,cats:string[],unidade:string}>({nome:"",cats:[],unidade:"un"});
   const [editProdId,setEditProdId]=useState<string|null>(null);
+  const [prodCatPicker,setProdCatPicker]=useState(false);
   const prodFormRef=useRef<HTMLDivElement>(null);
   const prodsCatalog:any[]=db.produtosProducao||[];
+  const toggleProdFormCat=(c:string)=>setProdForm(f=>({...f,cats:f.cats.includes(c)?f.cats.filter(x=>x!==c):[...f.cats,c]}));
 
   const saveProd=()=>{
     const nome=prodForm.nome.trim();
     if(!nome)return alert("Nome obrigatório.");
     if(editProdId){
-      setDb((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cat:prodForm.cat,unidade:prodForm.unidade}:p)}));
+      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade}:p)}));
       setEditProdId(null);
     }else{
-      setDb((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cat:prodForm.cat,unidade:prodForm.unidade}]}));
+      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade}]}));
     }
-    setProdForm({nome:"",cat:"",unidade:"un"});
+    setProdForm({nome:"",cats:[],unidade:"un"});
   };
-  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cats:prodCats(p),unidade:p.unidade||"un"});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delProd=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).filter((p:any)=>p.id!==id)}));};
 
   // Category management
@@ -5790,10 +5816,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
 
   const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c],categoriasProducaoDeleted:(d.categoriasProducaoDeleted||[]).filter((x:string)=>x!==c),iconesProducao:{...(d.iconesProducao||{}),[c]:novaIcone}}));setNovaCat("");setNovaIcone("📦");};
   const delCat=(c:string)=>{
-    if(!confirm(`Excluir categoria "${c}"? Produtos serão movidos para "outros".`))return;
-    setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),categoriasProducaoDeleted:[...new Set([...(d.categoriasProducaoDeleted||[]),c])],produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===c?{...p,cat:""}:p),iconesProducao:icons};});
+    if(!confirm(`Excluir categoria "${c}"? Produtos ficarão sem essa categoria.`))return;
+    setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),categoriasProducaoDeleted:[...new Set([...(d.categoriasProducaoDeleted||[]),c])],produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(c)?{...p,cats:pc.filter((x:string)=>x!==c),cat:pc.filter((x:string)=>x!==c)[0]||""}:p;}),iconesProducao:icons};});
   };
-  const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>{const icons={...(d.iconesProducao||{})};if(icons[old]&&v!==old){icons[v]=icons[old];delete icons[old];}return{...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===old?{...p,cat:v}:p),iconesProducao:icons};});setEditCat(null);};
+  const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>{const icons={...(d.iconesProducao||{})};if(icons[old]&&v!==old){icons[v]=icons[old];delete icons[old];}return{...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(old)?{...p,cats:pc.map((x:string)=>x===old?v:x),cat:pc.map((x:string)=>x===old?v:x)[0]||""}:p;}),iconesProducao:icons};});setEditCat(null);};
   const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
 
   // Order form (Lista-style)
@@ -6006,24 +6032,28 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
           onKeyDown={e=>{if(e.key==="Enter")saveProd();}} className="inp" style={{flex:"2 1 120px",marginBottom:0}}/>
-        <select value={prodForm.cat} onChange={e=>setProdForm(f=>({...f,cat:e.target.value}))} className="inp" style={{flex:"1 1 90px",marginBottom:0}}>
-          <option value="">Categoria</option>
-          {cats.map(c=><option key={c} value={c}>{catIconChar(prodCatIcon(c))} {c}</option>)}
-        </select>
+        <div style={{position:"relative" as const,flex:"1 1 90px"}}>
+          <button onClick={()=>setProdCatPicker(v=>!v)} className="inp" style={{width:"100%",marginBottom:0,textAlign:"left" as const,cursor:"pointer",background:"var(--bg4)",display:"flex",alignItems:"center",gap:4,overflow:"hidden"}}>
+            {prodForm.cats.length
+              ? <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{prodForm.cats.map(c=>catIconChar(prodCatIcon(c))).join(" ")} {prodForm.cats.length} categoria{prodForm.cats.length>1?"s":""}</span>
+              : <span style={{color:"#888"}}>Categorias</span>}
+          </button>
+          {prodCatPicker&&<CatMultiPickerPopup cats={cats} selected={prodForm.cats} onToggle={toggleProdFormCat} onClose={()=>setProdCatPicker(false)} style={{top:"100%",left:0,marginTop:2}}/>}
+        </div>
         <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
           {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
         </select>
         <button className="btn" onClick={saveProd} style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
-        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
+        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cats:[],unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><SortCtrl id="prodCatalog" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/></div>
       <div style={{maxHeight:260,overflowY:"auto" as const}}>
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
         {sortList(prodsCatalog,db,'prodCatalog','nome-az').map((p:any)=>(
           <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
-            <CatIconBadge icon={prodCatIcon(p.cat||"")} size={14}/>
+            <CatIconBadge icon={prodCatIcon(prodCats(p)[0]||"")} size={14}/>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
-            {p.cat&&<span style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+            {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
             <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"#6366F1",fontSize:13,padding:"0 3px"}}>✏️</button>
             <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:13,padding:"0 3px"}}>🗑️</button>
@@ -6089,11 +6119,11 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 className="inp" style={{marginBottom:0,width:"100%"}}/>
               {addToPedSugg&&addToPedSuggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:180,overflowY:"auto"}}>
                 {addToPedSuggestions.map((p:any)=>(
-                  <div key={p.id} onMouseDown={()=>{setAddToPedForm(f=>({...f,nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"}));setAddToPedSugg(false);}}
+                  <div key={p.id} onMouseDown={()=>{setAddToPedForm(f=>({...f,nome:p.nome,cat:prodCats(p)[0]||"",unidade:p.unidade||"un"}));setAddToPedSugg(false);}}
                     style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
-                    <CatIconBadge icon={prodCatIcon(p.cat||"")} size={14}/>
+                    <CatIconBadge icon={prodCatIcon(prodCats(p)[0]||"")} size={14}/>
                     <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
-                    {p.cat&&<span style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+                    {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
                   </div>
                 ))}
               </div>}
@@ -6163,15 +6193,15 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 </div>;
               };
               return <>
-                {cats.filter(cat=>prodsCatalog.some((p:any)=>p.cat===cat)).map(cat=>(
+                {cats.filter(cat=>prodsCatalog.some((p:any)=>prodCats(p).includes(cat))).map(cat=>(
                   <div key={cat} style={{marginBottom:10}}>
                     {catHeader(cat,prodCatIcon(cat),"#7C3AED14","#7C3AED")}
-                    {prodsCatalog.filter((p:any)=>p.cat===cat).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
+                    {prodsCatalog.filter((p:any)=>prodCats(p).includes(cat)).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                   </div>
                 ))}
-                {prodsCatalog.filter((p:any)=>!p.cat).length>0&&<div style={{marginBottom:10}}>
+                {prodsCatalog.filter((p:any)=>!prodCats(p).length).length>0&&<div style={{marginBottom:10}}>
                   {catHeader("OUTROS","📦","#88888814","#888")}
-                  {prodsCatalog.filter((p:any)=>!p.cat).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
+                  {prodsCatalog.filter((p:any)=>!prodCats(p).length).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                 </div>}
               </>;
             })()}
@@ -10520,7 +10550,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
             {prodsFiltrados.length>0&&<div style={{position:"absolute" as const,top:"calc(100% + 2px)",left:0,right:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:8,zIndex:50,maxHeight:180,overflowY:"auto" as const,boxShadow:"0 4px 16px #0007"}}>
               {prodsFiltrados.map((p:any)=>(
                 <div key={p.id} onClick={()=>addProdPorId(p.id)} style={{padding:"9px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span>{p.nome}</span>{p.cat&&<span style={{fontSize:10,color:"#888"}}>{p.cat}</span>}
+                  <span>{p.nome}</span>{prodCats(p).length>0&&<span style={{fontSize:10,color:"#888"}}>{prodCats(p).join(", ")}</span>}
                 </div>
               ))}
             </div>}
