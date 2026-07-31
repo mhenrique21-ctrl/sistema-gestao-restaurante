@@ -762,6 +762,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
       pedidosProducao:  unionById(p.pedidosProducao||[],s.pedidosProducao||[],true),
       itensProducaoPendentes: unionById(p.itensProducaoPendentes||[],s.itensProducaoPendentes||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
+      // iconesProducao não tinha fusão nenhuma — vinha cru do spread {...s} acima,
+      // então trocar o ícone de uma categoria era revertido pelo poll seguinte
+      // (300ms) sempre que ele chegasse antes do POST confirmar no servidor.
+      // Local vence em conflito (mesma categoria mudou nos dois lados), igual ruaCatMap.
+      iconesProducao: {...(s.iconesProducao||{}), ...(p.iconesProducao||{})},
       // categoriasProducaoDeleted: sem isso, excluir uma categoria de produção
       // era revertido pelo próximo poll — a união acima só sabe ADICIONAR
       // categorias, nunca removê-las, então a versão antiga do servidor
@@ -5740,7 +5745,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const isAdmin=login?.role==="admin";
   _dbIconesProd=db.iconesProducao||{};
   const [iconPicker,setIconPicker]=useState<string|null>(null);
-  const setCatIcon=(cat:string,icon:string)=>{setDb((d:any)=>({...d,iconesProducao:{...(d.iconesProducao||{}), [cat]:icon}}));setIconPicker(null);};
+  const setCatIcon=(cat:string,icon:string)=>{(setDbAndSave||setDb)((d:any)=>({...d,iconesProducao:{...(d.iconesProducao||{}), [cat]:icon}}));setIconPicker(null);};
   const [novaIcone,setNovaIcone]=useState("📦");
   // Seed default categories once
   if(!db.pedidosProducaoSeedCats){
