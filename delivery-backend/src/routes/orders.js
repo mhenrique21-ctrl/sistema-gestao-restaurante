@@ -225,13 +225,11 @@ router.post('/guest', idempotent, async (req, res) => {
 
     const total = subtotal + fee - finalDiscount;
 
-    // Pedido mínimo para delivery
-    if (delivery_type === 'delivery') {
-      const minRow = await pool.query(`SELECT value FROM settings WHERE key = 'min_order_delivery'`);
-      const minValue = parseFloat(minRow.rows[0]?.value) || 0;
-      if (minValue > 0 && subtotal < minValue) {
-        return res.status(400).json({ error: `Pedido mínimo para entrega: R$ ${minValue.toFixed(2).replace('.', ',')}` });
-      }
+    // Pedido mínimo (vale para delivery e retirada)
+    const minRow = await pool.query(`SELECT value FROM settings WHERE key = 'min_order_delivery'`);
+    const minValue = parseFloat(minRow.rows[0]?.value) || 0;
+    if (minValue > 0 && subtotal < minValue) {
+      return res.status(400).json({ error: `Pedido mínimo: R$ ${minValue.toFixed(2).replace('.', ',')}` });
     }
 
     // Verifica no servidor (nunca confia no cliente) que o pagamento por cartão/Apple Pay foi realmente aprovado
