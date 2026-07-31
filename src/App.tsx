@@ -5865,15 +5865,23 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const setQtdsAtual=(fn:any)=>setQtdsAtualRaw(prev=>{const next=typeof fn==="function"?fn(prev):fn;try{localStorage.setItem("prod_qtds_atual",JSON.stringify(next));}catch{}return next;});
   // campo "preenchido" = qualquer valor digitado, incluindo "0"
   const _campoPreenchido=(map:Record<string,string>,id:string)=>map[id]!==undefined&&map[id]!=="";
-  const preenchidos=prodsCatalog.filter((p:any)=>_campoPreenchido(qtdsCatalog,p.id)||_campoPreenchido(qtdsAtual,p.id)).length;
-  const _itensFilled=(catalog:any[])=>catalog
-    .filter((p:any)=>_campoPreenchido(qtdsCatalog,p.id)||_campoPreenchido(qtdsAtual,p.id))
-    .map((p:any)=>({
-      nome:p.nome,
-      quantidade:_campoPreenchido(qtdsCatalog,p.id)?parseFloat(qtdsCatalog[p.id]):null,
-      qtdAtual:_campoPreenchido(qtdsAtual,p.id)?qtdsAtual[p.id]:"",
-      unidade:p.unidade||"un",categoria:p.cat||"",obs:""
-    }));
+  // Produto com várias categorias pede quantidade independente em cada uma (ex.: SEAMA
+  // pede 10, BARTOLOMEIA pede 5 do mesmo item) — a chave do campo inclui a categoria,
+  // não só o id do produto, senão as seções compartilhariam o mesmo valor.
+  const qtyKey=(prodId:string,cat:string)=>`${prodId}::${cat||""}`;
+  const _prodCatPairs=(catalog:any[])=>catalog.flatMap((p:any)=>{const cs=prodCats(p);return(cs.length?cs:[""]).map(cat=>({p,cat}));});
+  const preenchidos=_prodCatPairs(prodsCatalog).filter(({p,cat})=>{const k=qtyKey(p.id,cat);return _campoPreenchido(qtdsCatalog,k)||_campoPreenchido(qtdsAtual,k);}).length;
+  const _itensFilled=(catalog:any[])=>_prodCatPairs(catalog)
+    .filter(({p,cat})=>{const k=qtyKey(p.id,cat);return _campoPreenchido(qtdsCatalog,k)||_campoPreenchido(qtdsAtual,k);})
+    .map(({p,cat})=>{
+      const k=qtyKey(p.id,cat);
+      return{
+        nome:p.nome,
+        quantidade:_campoPreenchido(qtdsCatalog,k)?parseFloat(qtdsCatalog[k]):null,
+        qtdAtual:_campoPreenchido(qtdsAtual,k)?qtdsAtual[k]:"",
+        unidade:p.unidade||"un",categoria:cat||"",obs:""
+      };
+    });
 
   const gerarPedidoCatalog=()=>{
     const itensFilled=_itensFilled(prodsCatalog);
@@ -6175,37 +6183,38 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   <span style={{width:26}}/>
                 </div>
               );
-              const renderItem=(p:any)=>{
-                const vAtual=qtdsAtual[p.id]||"";
-                const vPed=qtdsCatalog[p.id]||"";
+              const renderItem=(p:any,cat:string)=>{
+                const k=qtyKey(p.id,cat);
+                const vAtual=qtdsAtual[k]||"";
+                const vPed=qtdsCatalog[k]||"";
                 const filled=vPed!=="";
                 const filledAtual=vAtual!=="";
                 const inputBase:any={type:"text",inputMode:"numeric",pattern:"[0-9]*",placeholder:"",onFocus:(e:any)=>e.currentTarget.select()};
                 const styleAtual:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filledAtual?"#f59e0b12":"var(--bg4)",border:filledAtual?"2px solid #f59e0b":"1px solid #f59e0b44",borderRadius:8,color:filledAtual?"#f59e0b":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
                 const stylePed:any={width:64,textAlign:"center" as const,padding:"9px 4px",background:filled?"#7C3AED12":"var(--bg4)",border:filled?"2px solid #7C3AED":"1px solid #7C3AED44",borderRadius:8,color:filled?"#7C3AED":"#888",fontSize:15,fontWeight:700,outline:"none",WebkitAppearance:"none",MozAppearance:"textfield"};
-                return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 6px",borderBottom:"1px solid var(--border)",background:filled?"#7C3AED06":filledAtual?"#f59e0b04":"transparent"}}>
+                return <div key={k} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 6px",borderBottom:"1px solid var(--border)",background:filled?"#7C3AED06":filledAtual?"#f59e0b04":"transparent"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:(filled||filledAtual)?600:500,color:(filled||filledAtual)?"var(--text)":"var(--text2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
                   </div>
-                  <input {...inputBase} value={vAtual} onChange={(e:any)=>setQtdsAtual(q=>({...q,[p.id]:e.target.value}))} style={styleAtual}/>
-                  <input {...inputBase} value={vPed} onChange={(e:any)=>setQtdsCatalog(q=>({...q,[p.id]:e.target.value}))} style={stylePed}/>
+                  <input {...inputBase} value={vAtual} onChange={(e:any)=>setQtdsAtual(q=>({...q,[k]:e.target.value}))} style={styleAtual}/>
+                  <input {...inputBase} value={vPed} onChange={(e:any)=>setQtdsCatalog(q=>({...q,[k]:e.target.value}))} style={stylePed}/>
                   <span style={{fontSize:10,color:"#666",width:26,flexShrink:0,textAlign:"left" as const}}>{p.unidade||"un"}</span>
                 </div>;
               };
-              // Produto com várias categorias aparece em CADA seção correspondente —
-              // é a mesma quantidade compartilhada entre as seções (preencher em
-              // qualquer uma delas atualiza o mesmo campo), não uma quantidade por
-              // categoria.
+              // Produto com várias categorias aparece em CADA seção correspondente,
+              // com uma quantidade INDEPENDENTE por categoria (ex.: SEAMA pede 10,
+              // BARTOLOMEIA pede 5 do mesmo item) — vira uma linha de pedido por
+              // categoria preenchida.
               return <>
                 {cats.filter(cat=>prodsCatalog.some((p:any)=>prodCats(p).includes(cat))).map(cat=>(
                   <div key={cat} style={{marginBottom:10}}>
                     {catHeader(cat,prodCatIcon(cat),"#7C3AED14","#7C3AED")}
-                    {prodsCatalog.filter((p:any)=>prodCats(p).includes(cat)).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
+                    {prodsCatalog.filter((p:any)=>prodCats(p).includes(cat)).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,cat))}
                   </div>
                 ))}
                 {prodsCatalog.filter((p:any)=>!prodCats(p).length).length>0&&<div style={{marginBottom:10}}>
                   {catHeader("OUTROS","📦","#88888814","#888")}
-                  {prodsCatalog.filter((p:any)=>!prodCats(p).length).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
+                  {prodsCatalog.filter((p:any)=>!prodCats(p).length).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,""))}
                 </div>}
               </>;
             })()}
