@@ -324,6 +324,10 @@ export default function CheckoutPage() {
     if (!phone.trim()) return 'Informe seu WhatsApp'
     if (deliveryType === 'delivery' && !neighborhood) return 'Selecione o bairro'
     if (deliveryType === 'delivery' && !street.trim()) return 'Informe a rua'
+    const minOrder = parseFloat(settings.min_order_delivery) || 0
+    if (minOrder > 0 && subtotal < minOrder) {
+      return `🛵 Pedido mínimo: ${brl(minOrder)} — faltam ${brl(minOrder - subtotal)} para continuar`
+    }
     return ''
   }
 
