@@ -5687,6 +5687,52 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 const CATS_PRODUCAO_DEFAULT=["BOLO","TORTAS","PUDIM","PRODUÇÃO IVANE","COXINHAS","TRANÇA","ESFIRRAS","MASSAS FOLHADAS","CROISSANTS","IVAM SALADEIRO","DANY GOMES"];
 const ICON_PROD:Record<string,string>={"BOLO":"🎂","TORTAS":"🥧","PUDIM":"🍮","PRODUÇÃO IVANE":"👩‍🍳","COXINHAS":"🍗","TRANÇA":"🥖","ESFIRRAS":"🥟","MASSAS FOLHADAS":"🥐","CROISSANTS":"🥐","IVAM SALADEIRO":"🧑‍🍳","DANY GOMES":"👨‍🍳"};
 const EMOJI_PALETTE=["🎂","🥧","🍮","🍗","🥖","🥟","🥐","👩‍🍳","🧑‍🍳","👨‍🍳","🍰","🧁","🍩","🍪","🥮","🍞","🥯","🥨","🥞","🧇","🍕","🌮","🥪","🍔","🌯","🥙","🧆","🥗","🍝","🍜","🍲","🍛","🍣","🍱","🥘","🫕","🍖","🥩","🐟","🦐","🥚","🧀","🥬","🥕","🍅","🌽","🥔","🧅","🍋","🍓","🫐","🍫","🍦","☕","🧃","🍺","🧊","📦","🏷️","⭐","💎","🔥","❄️","🌿","🌶️","🫒","🧈","🍯","🥛","🫘","🥜","🧂","💼","🏪","🛒","📋","✨"];
+// Ícone "letra colorida" — pra categorias com nome de pessoa (MARIO, SEAMA...) onde
+// nenhum emoji de comida faz sentido. Guardado como string "L:<letra>:<corHex>" dentro
+// do mesmo campo que já guarda emoji — parseIconLetra reconhece o formato.
+const LETRAS_PALETTE=Array.from({length:26},(_,i)=>String.fromCharCode(65+i));
+const CORES_LETRA_PALETTE=["#EF4444","#F97316","#F59E0B","#22C55E","#0EA5E9","#6366F1","#8B5CF6","#EC4899","#78350F","#374151"];
+const parseIconLetra=(icon:string):{letra:string,cor:string}|null=>{
+  if(!icon||!icon.startsWith("L:"))return null;
+  const [,letra,cor]=icon.split(":");
+  if(!letra||!cor)return null;
+  return{letra,cor};
+};
+// Caractere puro do ícone — usado onde não dá pra renderizar JSX (option, texto de
+// WhatsApp, HTML impresso): letra colorida vira só a letra, sem o círculo/cor.
+const catIconChar=(icon:string):string=>{const l=parseIconLetra(icon);return l?l.letra:icon;};
+function CatIconBadge({icon,size=18}:{icon:string,size?:number}){
+  const l=parseIconLetra(icon);
+  if(!l)return <span style={{fontSize:size}}>{icon}</span>;
+  const s=Math.round(size*1.15);
+  return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:s,height:s,borderRadius:"50%",background:l.cor,color:"#fff",fontSize:Math.round(s*0.58),fontWeight:800,lineHeight:1,flexShrink:0}}>{l.letra}</span>;
+}
+function IconPickerPopup({value,onPick,style}:{value:string,onPick:(icon:string)=>void,style?:any}){
+  const lAtual=parseIconLetra(value);
+  const [tab,setTab]=useState<"emoji"|"letra">(lAtual?"letra":"emoji");
+  const [letraSel,setLetraSel]=useState<string|null>(lAtual?lAtual.letra:null);
+  return <div style={{position:"absolute" as const,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,maxWidth:260,boxShadow:"0 8px 24px #0008",...style}}>
+    <div style={{display:"flex",gap:4,marginBottom:6}}>
+      <button onClick={()=>setTab("emoji")} style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:tab==="emoji"?"#8B5CF6":"#8B5CF622",color:tab==="emoji"?"#fff":"#5b21b6"}}>Emojis</button>
+      <button onClick={()=>{setTab("letra");setLetraSel(lAtual?lAtual.letra:null);}} style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:tab==="letra"?"#8B5CF6":"#8B5CF622",color:tab==="letra"?"#fff":"#5b21b6"}}>Letras</button>
+    </div>
+    {tab==="emoji"&&<div style={{display:"flex",flexWrap:"wrap" as const,gap:4}}>
+      {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>onPick(em)} style={{background:value===em?"#5b21b644":"none",border:value===em?"1px solid #8B5CF6":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
+    </div>}
+    {tab==="letra"&&!letraSel&&<div style={{display:"flex",flexWrap:"wrap" as const,gap:4}}>
+      {LETRAS_PALETTE.map(le=><button key={le} onClick={()=>setLetraSel(le)} style={{width:26,height:26,borderRadius:6,border:"1px solid #8B5CF666",background:"#fff",cursor:"pointer",fontSize:13,fontWeight:700,color:"#5b21b6"}}>{le}</button>)}
+    </div>}
+    {tab==="letra"&&letraSel&&<div>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+        <button onClick={()=>setLetraSel(null)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#5b21b6",padding:0}}>←</button>
+        <span style={{fontSize:12,fontWeight:700,color:"#5b21b6"}}>Cor da letra {letraSel}</span>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap" as const,gap:6}}>
+        {CORES_LETRA_PALETTE.map(cor=><button key={cor} onClick={()=>onPick(`L:${letraSel}:${cor}`)} style={{width:26,height:26,borderRadius:"50%",background:cor,border:value===`L:${letraSel}:${cor}`?"2px solid #000":"1px solid #0003",cursor:"pointer"}}/>)}
+      </div>
+    </div>}
+  </div>;
+}
 let _dbIconesProd:Record<string,string>={};
 const prodCatIcon=(c:string)=>_dbIconesProd[c]||ICON_PROD[c]||"📦";
 
@@ -5839,7 +5885,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     (ped.itens||[]).forEach((it:any)=>{const c=it.categoria||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     let txt=`🏭 *PEDIDO DE PRODUÇÃO*\n📅 ${fmtDate(ped.data)}\n`;
     Object.entries(pc).forEach(([cat,its])=>{
-      txt+=`\n${prodCatIcon(cat)} *${cat}*\n`;
+      txt+=`\n${catIconChar(prodCatIcon(cat))} *${cat}*\n`;
       its.forEach((it:any)=>{const un=it.unidade||"un";const partes=[];if(it.qtdAtual!=null&&it.qtdAtual!=="")partes.push(`Atual: ${parseFloat(it.qtdAtual)===0?"*ZERADO*":`${it.qtdAtual} ${un}`}`);if(it.quantidade!=null)partes.push(`Pedido: ${it.quantidade===0?"*ZERADO*":`*${it.quantidade} ${un}*`}`);if(it.obs)partes.push(it.obs);txt+=`• ${it.nome}\n  ${partes.join(" | ")}\n`;});
     });
     txt+=`\n_Solicitado por: ${ped.solicitante||"—"}_`;
@@ -5853,7 +5899,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
     const sections=Object.entries(pc).map(([cat,its])=>`
-      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${prodCatIcon(cat)} ${cat}</td></tr>
+      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${catIconChar(prodCatIcon(cat))} ${cat}</td></tr>
       ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.qtdAtual||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade?`${it.quantidade} ${it.unidade||"un"}`:"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
     `).join("");
     const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
@@ -5912,10 +5958,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div style={{marginBottom:10}}>
         {cats.map((c,idx)=>(
           <div key={c} style={{position:"relative" as const,display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
-            <button onClick={()=>setIconPicker(iconPicker===c?null:c)} title="Alterar ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",fontSize:16,padding:"2px 4px",lineHeight:1}}>{prodCatIcon(c)}</button>
-            {iconPicker===c&&<div style={{position:"absolute" as const,top:36,left:0,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
-              {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>setCatIcon(c,em)} style={{background:prodCatIcon(c)===em?"#5b21b644":"none",border:prodCatIcon(c)===em?"1px solid #8B5CF6":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
-            </div>}
+            <button onClick={()=>setIconPicker(iconPicker===c?null:c)} title="Alterar ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",padding:"2px 4px",lineHeight:1}}><CatIconBadge icon={prodCatIcon(c)} size={16}/></button>
+            {iconPicker===c&&<IconPickerPopup value={prodCatIcon(c)} onPick={(icon)=>setCatIcon(c,icon)} style={{top:36,left:0}}/>}
             {editCat?.name===c
               ? <>
                   <input autoFocus value={editCat.val}
@@ -5942,10 +5986,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         ))}
       </div>
       <div style={{position:"relative" as const,display:"flex",gap:6,alignItems:"center"}}>
-        <button onClick={()=>setIconPicker(iconPicker==="_new"?null:"_new")} title="Escolher ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",fontSize:18,padding:"4px 6px",lineHeight:1}}>{novaIcone}</button>
-        {iconPicker==="_new"&&<div style={{position:"absolute" as const,bottom:42,left:0,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,display:"flex",flexWrap:"wrap" as const,gap:4,maxWidth:260,boxShadow:"0 8px 24px #0008"}}>
-          {EMOJI_PALETTE.map(em=><button key={em} onClick={()=>{setNovaIcone(em);setIconPicker(null);}} style={{background:novaIcone===em?"#5b21b644":"none",border:novaIcone===em?"1px solid #8B5CF6":"1px solid transparent",borderRadius:6,cursor:"pointer",fontSize:18,padding:"3px 5px",lineHeight:1}}>{em}</button>)}
-        </div>}
+        <button onClick={()=>setIconPicker(iconPicker==="_new"?null:"_new")} title="Escolher ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",padding:"4px 6px",lineHeight:1}}><CatIconBadge icon={novaIcone} size={18}/></button>
+        {iconPicker==="_new"&&<IconPickerPopup value={novaIcone} onPick={(icon)=>{setNovaIcone(icon);setIconPicker(null);}} style={{bottom:42,left:0}}/>}
         <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0,flex:1}}/>
         <button className="btn" onClick={addCat} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
@@ -5961,7 +6003,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
           onKeyDown={e=>{if(e.key==="Enter")saveProd();}} className="inp" style={{flex:"2 1 120px",marginBottom:0}}/>
         <select value={prodForm.cat} onChange={e=>setProdForm(f=>({...f,cat:e.target.value}))} className="inp" style={{flex:"1 1 90px",marginBottom:0}}>
           <option value="">Categoria</option>
-          {cats.map(c=><option key={c} value={c}>{prodCatIcon(c)} {c}</option>)}
+          {cats.map(c=><option key={c} value={c}>{catIconChar(prodCatIcon(c))} {c}</option>)}
         </select>
         <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
           {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
@@ -5974,7 +6016,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
         {sortList(prodsCatalog,db,'prodCatalog','nome-az').map((p:any)=>(
           <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
-            <span style={{fontSize:14}}>{prodCatIcon(p.cat||"")}</span>
+            <CatIconBadge icon={prodCatIcon(p.cat||"")} size={14}/>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
             {p.cat&&<span style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
@@ -6019,7 +6061,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
           {!isCollapsed&&<>{(ped.itens||[]).map((it:any,j:number)=>{
             const key=`${ped.id}_${it.nome}`;
             return <div key={j} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:j<(ped.itens||[]).length-1?"1px solid var(--border)":"none"}}>
-              <span style={{fontSize:12,flex:1}}>{prodCatIcon(it.categoria)} {it.nome}</span>
+              <span style={{fontSize:12,flex:1,display:"flex",alignItems:"center",gap:4}}><CatIconBadge icon={prodCatIcon(it.categoria)} size={12}/>{it.nome}</span>
               <span style={{fontSize:10,color:"#8B5CF6"}}>{it.categoria||""}</span>
               {it.qtdAtual&&<span style={{fontSize:10,color:"#888"}}>atual: {it.qtdAtual}</span>}
               {isEdit?<input type="number" inputMode="decimal" min="0" step="any"
@@ -6044,7 +6086,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 {addToPedSuggestions.map((p:any)=>(
                   <div key={p.id} onMouseDown={()=>{setAddToPedForm(f=>({...f,nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un"}));setAddToPedSugg(false);}}
                     style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
-                    <span style={{fontSize:14}}>{prodCatIcon(p.cat||"")}</span>
+                    <CatIconBadge icon={prodCatIcon(p.cat||"")} size={14}/>
                     <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
                     {p.cat&&<span style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
                   </div>
@@ -6064,7 +6106,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               </select>
               <select value={addToPedForm.cat} onChange={e=>setAddToPedForm(f=>({...f,cat:e.target.value}))} className="inp" style={{flex:1,marginBottom:0,minWidth:80}}>
                 <option value="">Categoria</option>
-                {cats.map(c=><option key={c} value={c}>{prodCatIcon(c)} {c}</option>)}
+                {cats.map(c=><option key={c} value={c}>{catIconChar(prodCatIcon(c))} {c}</option>)}
               </select>
             </div>
             <div style={{display:"flex",gap:6}}>
@@ -6092,7 +6134,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             {(()=>{
               const catHeader=(label:string,icon:string,bg:string,color:string)=>(
                 <div style={{fontSize:12,fontWeight:700,color,textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:bg,borderRadius:8,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
-                  <span>{icon}</span><span style={{flex:1}}>{label}</span>
+                  <CatIconBadge icon={icon} size={12}/><span style={{flex:1}}>{label}</span>
                   <span style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginRight:4,width:64,textAlign:"center" as const}}>Atual</span>
                   <span style={{fontSize:10,color:"#7C3AED",fontWeight:700,width:64,textAlign:"center" as const}}>Pedido</span>
                   <span style={{width:26}}/>
