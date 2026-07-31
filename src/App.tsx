@@ -6192,16 +6192,20 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   <span style={{fontSize:10,color:"#666",width:26,flexShrink:0,textAlign:"left" as const}}>{p.unidade||"un"}</span>
                 </div>;
               };
+              // Cada produto entra numa única seção (sua categoria primária/1ª escolhida) —
+              // um produto com várias categorias não deve aparecer repetido com o mesmo
+              // campo de quantidade em cada seção, senão parece "duplicar" a quantidade.
+              const primaryCat=(p:any)=>prodCats(p)[0]||"";
               return <>
-                {cats.filter(cat=>prodsCatalog.some((p:any)=>prodCats(p).includes(cat))).map(cat=>(
+                {cats.filter(cat=>prodsCatalog.some((p:any)=>primaryCat(p)===cat)).map(cat=>(
                   <div key={cat} style={{marginBottom:10}}>
                     {catHeader(cat,prodCatIcon(cat),"#7C3AED14","#7C3AED")}
-                    {prodsCatalog.filter((p:any)=>prodCats(p).includes(cat)).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
+                    {prodsCatalog.filter((p:any)=>primaryCat(p)===cat).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                   </div>
                 ))}
-                {prodsCatalog.filter((p:any)=>!prodCats(p).length).length>0&&<div style={{marginBottom:10}}>
+                {prodsCatalog.filter((p:any)=>!primaryCat(p)).length>0&&<div style={{marginBottom:10}}>
                   {catHeader("OUTROS","📦","#88888814","#888")}
-                  {prodsCatalog.filter((p:any)=>!prodCats(p).length).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
+                  {prodsCatalog.filter((p:any)=>!primaryCat(p)).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map(renderItem)}
                 </div>}
               </>;
             })()}
