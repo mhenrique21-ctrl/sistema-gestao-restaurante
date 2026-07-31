@@ -610,6 +610,13 @@ const migrateDb=(m:any)=>{
         (ped.itens||[]).some((i:any)=>temLixo(i.nome))
           ?{...ped,itens:ped.itens.map((i:any)=>temLixo(i.nome)?{...i,nome:limpar(i.nome)}:i)}
           :ped);
+      // Ícones de categoria de produção corrompidos (ex: emoji virou "????") caem pro padrão 📦
+      if(m[e].iconesProducao){
+        const icons={...m[e].iconesProducao};
+        let mudou=false;
+        Object.keys(icons).forEach(k=>{if(temLixo(icons[k])||!limpar(icons[k])){icons[k]="📦";mudou=true;}});
+        if(mudou)m[e].iconesProducao=icons;
+      }
     }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].usuarios)m[e].usuarios=[];
