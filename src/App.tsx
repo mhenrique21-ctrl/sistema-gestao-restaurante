@@ -755,6 +755,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
       pedidosProducao:  unionById(p.pedidosProducao||[],s.pedidosProducao||[],true),
       itensProducaoPendentes: unionById(p.itensProducaoPendentes||[],s.itensProducaoPendentes||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
+      // categoriasProducaoDeleted: sem isso, excluir uma categoria de produção
+      // era revertido pelo próximo poll — a união acima só sabe ADICIONAR
+      // categorias, nunca removê-las, então a versão antiga do servidor
+      // (que ainda tinha a categoria) sempre "ressuscitava" ela de volta.
+      categoriasProducaoDeleted:[...new Set([...(s.categoriasProducaoDeleted||[]),...(p.categoriasProducaoDeleted||[])])],
       listaCatDeleted:[...new Set([...(s.listaCatDeleted||[]),...(p.listaCatDeleted||[])])],
       // produtosLista (catálogo): antes só pegava o array do servidor cru
       // (deduplicado por nome) — uma edição de nome/categoria/rua/vínculo
@@ -5688,7 +5693,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   if(!db.pedidosProducaoSeedCats){
     setTimeout(()=>setDb((d:any)=>({...d,pedidosProducaoSeedCats:true,categoriasProducao:d.categoriasProducao?.length?d.categoriasProducao:[...CATS_PRODUCAO_DEFAULT]})),0);
   }
-  const cats:string[]=(db.categoriasProducao||[]).length?db.categoriasProducao:CATS_PRODUCAO_DEFAULT;
+  const catsProdDel:string[]=db.categoriasProducaoDeleted||[];
+  const cats:string[]=((db.categoriasProducao||[]).length?db.categoriasProducao:CATS_PRODUCAO_DEFAULT).filter((c:string)=>!catsProdDel.includes(c));
 
   // Sub-panels via subTab (menu-driven)
   const [subTab,setSubTab]=useState(pendingSub||"novo");
@@ -5724,10 +5730,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const [novaCat,setNovaCat]=useState("");
   const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
 
-  const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c],iconesProducao:{...(d.iconesProducao||{}),[c]:novaIcone}}));setNovaCat("");setNovaIcone("📦");};
+  const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c],categoriasProducaoDeleted:(d.categoriasProducaoDeleted||[]).filter((x:string)=>x!==c),iconesProducao:{...(d.iconesProducao||{}),[c]:novaIcone}}));setNovaCat("");setNovaIcone("📦");};
   const delCat=(c:string)=>{
     if(!confirm(`Excluir categoria "${c}"? Produtos serão movidos para "outros".`))return;
-    setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===c?{...p,cat:""}:p),iconesProducao:icons};});
+    setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),categoriasProducaoDeleted:[...new Set([...(d.categoriasProducaoDeleted||[]),c])],produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===c?{...p,cat:""}:p),iconesProducao:icons};});
   };
   const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>{const icons={...(d.iconesProducao||{})};if(icons[old]&&v!==old){icons[v]=icons[old];delete icons[old];}return{...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.cat===old?{...p,cat:v}:p),iconesProducao:icons};});setEditCat(null);};
   const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
