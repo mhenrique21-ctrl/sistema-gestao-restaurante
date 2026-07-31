@@ -18,7 +18,7 @@ export default function CartPage() {
 
   useEffect(() => {
     api.settings().then((s) => {
-      setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates))
+      setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates, s.store_closed_manual))
       setMinOrder(parseFloat(s.min_order_delivery) || 0)
     }).catch(() => {})
   }, [])

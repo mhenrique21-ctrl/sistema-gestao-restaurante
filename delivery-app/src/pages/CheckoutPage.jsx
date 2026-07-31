@@ -319,6 +319,7 @@ export default function CheckoutPage() {
   }
 
   function validateFields() {
+    if (settings.store_closed_manual === 'true') return '🔴 Loja temporariamente fechada'
     if (!firstName.trim()) return 'Informe seu nome'
     if (!lastName.trim()) return 'Informe seu sobrenome'
     if (!phone.trim()) return 'Informe seu WhatsApp'

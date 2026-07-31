@@ -29,7 +29,10 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function checkStoreOpen(businessHours, specialDates) {
+export function checkStoreOpen(businessHours, specialDates, storeClosedManual) {
+  if (storeClosedManual === 'true' || storeClosedManual === true) {
+    return { open: false, reason: 'Loja temporariamente fechada' }
+  }
   const today = todayISO()
   const jsDay = new Date().getDay()
   const now = nowMinutes()
