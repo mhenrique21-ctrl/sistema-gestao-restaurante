@@ -8,6 +8,12 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const server = http.createServer(app);
 
+// Atrás do Nginx (reverse proxy) — sem isso, o Express não confia no
+// X-Forwarded-For que o Nginx envia, e o express-rate-limit recusa a
+// requisição inteira (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR) em vez de só
+// avisar. "1" = confia só no primeiro hop (o próprio Nginx local).
+app.set('trust proxy', 1);
+
 app.use(compression());
 
 app.use(rateLimit({
