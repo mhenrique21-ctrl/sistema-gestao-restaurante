@@ -108,6 +108,35 @@
   .nav-btn .ic { font-size: 18px; }
   .nav-btn.active { color: #fff; }
 
+  /* ── Configurações: categorias e produtos ── */
+  #config-screen { flex: 1; display: none; min-height: 0; }
+  #config-screen.active { display: flex; }
+  #config-cats { width: 26%; min-width: 200px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  #config-cats-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .cfg-cat-row { display: flex; align-items: center; gap: 8px; border-radius: 12px; border: 1px solid var(--border); padding: 10px 12px; background: var(--card); }
+  .cfg-cat-row.active { border-color: var(--primary); background: #F1EAE3; }
+  .cfg-cat-row .nm { flex: 1; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .cfg-cat-row button { background: none; border: none; color: var(--text2); font-size: 13px; padding: 2px 4px; }
+  #config-cats-add { margin: 10px; height: 40px; border-radius: 12px; border: none; background: var(--primary); color: #fff; font-size: 13px; font-weight: 600; }
+  #config-products { flex: 1; padding: 14px; overflow-y: auto; }
+  #config-products-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  #config-products-head h3 { font-size: 14px; font-weight: 600; margin: 0; }
+  #config-products-add { height: 36px; padding: 0 14px; border-radius: 10px; border: none; background: var(--primary); color: #fff; font-size: 12.5px; font-weight: 600; }
+  .cfg-prod-row { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.04); padding: 10px 12px; margin-bottom: 8px; }
+  .cfg-prod-row .img { width: 38px; height: 38px; border-radius: 9px; background: var(--bg); flex-shrink: 0; }
+  .cfg-prod-row .nm { flex: 1; font-size: 13px; font-weight: 500; }
+  .cfg-prod-row .nm small { display: block; color: var(--text2); font-size: 11px; font-weight: 400; }
+  .cfg-prod-row .pr { font-size: 13px; font-weight: 600; }
+  .cfg-prod-row .tag { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .cfg-prod-row .tag.off { background: #FBEAE8; color: var(--danger); }
+  .cfg-prod-row button { background: none; border: none; color: var(--text2); font-size: 14px; padding: 2px 6px; }
+  .field-group { margin-bottom: 12px; }
+  .field-group label { display: block; font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
+  .field-group input, .field-group textarea, .field-group select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 13.5px; font-family: inherit; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field-group { flex: 1; }
+  .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 12px; }
+
   /* ── Modal genérico ── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(20,16,10,.55); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
   .modal-sheet { background: var(--card); border-radius: 18px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; padding: 20px; }
@@ -187,6 +216,20 @@
         <button id="pay-btn" disabled>Receber pagamento</button>
         <div id="pay-hint">Ao confirmar, imprime a ficha de cada produto</div>
       </div>
+    </div>
+  </div>
+
+  <div id="config-screen">
+    <div id="config-cats">
+      <div id="config-cats-list"></div>
+      <button id="config-cats-add">+ Nova categoria</button>
+    </div>
+    <div id="config-products">
+      <div id="config-products-head">
+        <h3 id="config-products-title">Categorias</h3>
+        <button id="config-products-add" class="hidden">+ Novo produto</button>
+      </div>
+      <div id="config-products-list"></div>
     </div>
   </div>
 
@@ -561,10 +604,206 @@ function printFichas(sale) {
 }
 
 // ── Navegação inferior (Vendas/Caixa/Configurações) ─
-// Consulta de vendas, caixa e configurações vêm na próxima fase — por
-// enquanto só o essencial (vender) está funcional.
+// Consulta de vendas e caixa vêm na próxima fase — por enquanto só
+// vender e configurar (categorias/produtos) estão funcionais.
+function setActiveNav(id) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.id === id));
+}
+
+document.getElementById('nav-vendas').addEventListener('click', () => {
+  document.getElementById('config-screen').classList.remove('active');
+  document.getElementById('main').style.display = 'flex';
+  setActiveNav('nav-vendas');
+});
 document.getElementById('nav-caixa').addEventListener('click', () => showToast('Em breve'));
-document.getElementById('nav-config').addEventListener('click', () => showToast('Em breve'));
+document.getElementById('nav-config').addEventListener('click', () => {
+  if (!['admin', 'gerente'].includes(CURRENT_USER?.role)) { showToast('Só admin ou gerente acessa configurações'); return; }
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('config-screen').classList.add('active');
+  setActiveNav('nav-config');
+  renderConfigCategories();
+});
+
+// ── Configurações: categorias ────────────────────────
+let configActiveCategory = null;
+
+function renderConfigCategories() {
+  const el = document.getElementById('config-cats-list');
+  if (!categories.length) { el.innerHTML = '<div style="color:var(--text2);font-size:12.5px;text-align:center;padding:16px">Nenhuma categoria ainda</div>'; }
+  else {
+    el.innerHTML = categories.map(c => `
+      <div class="cfg-cat-row ${c.id === configActiveCategory ? 'active' : ''}">
+        <span class="nm" data-id="${c.id}">${c.icon || ''} ${c.name}${c.active === false ? ' (inativa)' : ''}</span>
+        <button data-edit="${c.id}">✎</button>
+        <button data-del="${c.id}">🗑</button>
+      </div>
+    `).join('');
+    el.querySelectorAll('.nm').forEach(nmEl => nmEl.addEventListener('click', () => selectConfigCategory(nmEl.dataset.id)));
+    el.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openCategoryModal(btn.dataset.edit)));
+    el.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => deleteCategory(btn.dataset.del)));
+  }
+  if (!configActiveCategory && categories.length) configActiveCategory = categories[0].id;
+  renderConfigProducts();
+}
+
+function selectConfigCategory(id) {
+  configActiveCategory = id;
+  renderConfigCategories();
+}
+
+document.getElementById('config-cats-add').addEventListener('click', () => openCategoryModal(null));
+
+function openCategoryModal(categoryId) {
+  const cat = categories.find(c => c.id === categoryId) || null;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'cat-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:380px">
+      <h2>${cat ? 'Editar categoria' : 'Nova categoria'}</h2>
+      <div class="field-group"><label>Nome</label><input id="cat-name" value="${cat?.name || ''}"></div>
+      <div class="field-row">
+        <div class="field-group"><label>Ícone (emoji)</label><input id="cat-icon" value="${cat?.icon || ''}" maxlength="4"></div>
+        <div class="field-group"><label>Ordem</label><input id="cat-sort" type="number" value="${cat?.sort_order ?? 0}"></div>
+      </div>
+      ${cat ? `<label class="toggle-row"><input type="checkbox" id="cat-active" ${cat.active !== false ? 'checked' : ''}> Categoria ativa</label>` : ''}
+      <div id="cat-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-actions">
+        <button id="cat-cancel">Cancelar</button>
+        <button class="primary" id="cat-save">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#cat-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#cat-save').addEventListener('click', async () => {
+    const name = backdrop.querySelector('#cat-name').value.trim();
+    const errEl = backdrop.querySelector('#cat-error');
+    if (!name) { errEl.textContent = 'Nome é obrigatório'; return; }
+    const payload = {
+      name,
+      icon: backdrop.querySelector('#cat-icon').value.trim() || null,
+      sort_order: parseInt(backdrop.querySelector('#cat-sort').value, 10) || 0,
+    };
+    if (cat) payload.active = backdrop.querySelector('#cat-active').checked;
+    try {
+      const res = await fetch(`${API}/api/categories${cat ? '/' + cat.id : ''}`, {
+        method: cat ? 'PATCH' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+      backdrop.remove();
+      if (!cat) configActiveCategory = data.id;
+      await loadCatalog();
+      renderConfigCategories();
+      showToast('Categoria salva!');
+    } catch (e) { errEl.textContent = 'Erro de conexão'; }
+  });
+}
+
+async function deleteCategory(id) {
+  if (!confirm('Excluir esta categoria? Os produtos dela continuam existindo, mas ficam sem categoria.')) return;
+  try {
+    const res = await fetch(`${API}/api/categories/${id}`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) { showToast('Erro ao excluir'); return; }
+    if (configActiveCategory === id) configActiveCategory = null;
+    await loadCatalog();
+    renderConfigCategories();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+// ── Configurações: produtos ──────────────────────────
+function renderConfigProducts() {
+  const cat = categories.find(c => c.id === configActiveCategory);
+  document.getElementById('config-products-title').textContent = cat ? cat.name : 'Categorias';
+  const addBtn = document.getElementById('config-products-add');
+  addBtn.classList.toggle('hidden', !cat);
+  const list = document.getElementById('config-products-list');
+  if (!cat) { list.innerHTML = '<div style="color:var(--text2);font-size:13px;text-align:center;padding:20px">Selecione ou crie uma categoria</div>'; return; }
+  const prods = products.filter(p => p.category_id === cat.id);
+  if (!prods.length) { list.innerHTML = '<div style="color:var(--text2);font-size:13px;text-align:center;padding:20px">Nenhum produto nesta categoria</div>'; return; }
+  list.innerHTML = prods.map(p => `
+    <div class="cfg-prod-row">
+      <div class="img" style="${p.image_url ? `background-image:url('${p.image_url}');background-size:cover` : ''}"></div>
+      <div class="nm">${p.name}${p.available === false ? ' <span class="tag off">indisponível</span>' : ''}<small>${p.description || ''}</small></div>
+      <div class="pr">${fmt(p.price)}</div>
+      <button data-edit="${p.id}">✎</button>
+      <button data-del="${p.id}">🗑</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openProductModal(btn.dataset.edit)));
+  list.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => deleteProduct(btn.dataset.del)));
+}
+
+document.getElementById('config-products-add').addEventListener('click', () => openProductModal(null));
+
+function openProductModal(productId) {
+  const prod = products.find(p => p.id === productId) || null;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'prod-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet">
+      <h2>${prod ? 'Editar produto' : 'Novo produto'}</h2>
+      <div class="field-group"><label>Nome</label><input id="prod-name" value="${prod?.name || ''}"></div>
+      <div class="field-group"><label>Descrição</label><textarea id="prod-desc" rows="2">${prod?.description || ''}</textarea></div>
+      <div class="field-row">
+        <div class="field-group"><label>Preço (R$)</label><input id="prod-price" type="number" step="0.01" value="${prod?.price ?? ''}"></div>
+        <div class="field-group"><label>Código</label><input id="prod-code" value="${prod?.code || ''}"></div>
+      </div>
+      <div class="field-group"><label>URL da foto (opcional)</label><input id="prod-image" value="${prod?.image_url || ''}"></div>
+      ${prod ? `
+        <label class="toggle-row"><input type="checkbox" id="prod-active" ${prod.active !== false ? 'checked' : ''}> Produto ativo</label>
+        <label class="toggle-row"><input type="checkbox" id="prod-available" ${prod.available !== false ? 'checked' : ''}> Disponível pra venda agora</label>
+      ` : ''}
+      <div id="prod-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-actions">
+        <button id="prod-cancel">Cancelar</button>
+        <button class="primary" id="prod-save">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#prod-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#prod-save').addEventListener('click', async () => {
+    const name = backdrop.querySelector('#prod-name').value.trim();
+    const price = parseFloat(backdrop.querySelector('#prod-price').value);
+    const errEl = backdrop.querySelector('#prod-error');
+    if (!name || !(price >= 0)) { errEl.textContent = 'Nome e preço são obrigatórios'; return; }
+    const payload = {
+      name, price,
+      description: backdrop.querySelector('#prod-desc').value.trim() || null,
+      code: backdrop.querySelector('#prod-code').value.trim() || null,
+      image_url: backdrop.querySelector('#prod-image').value.trim() || null,
+    };
+    if (!prod) payload.category_id = configActiveCategory;
+    if (prod) {
+      payload.active = backdrop.querySelector('#prod-active').checked;
+      payload.available = backdrop.querySelector('#prod-available').checked;
+    }
+    try {
+      const res = await fetch(`${API}/api/products${prod ? '/' + prod.id : ''}`, {
+        method: prod ? 'PATCH' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+      backdrop.remove();
+      await loadCatalog();
+      renderConfigProducts();
+      showToast('Produto salvo!');
+    } catch (e) { errEl.textContent = 'Erro de conexão'; }
+  });
+}
+
+async function deleteProduct(id) {
+  if (!confirm('Excluir este produto?')) return;
+  try {
+    const res = await fetch(`${API}/api/products/${id}`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) { showToast('Erro ao excluir'); return; }
+    await loadCatalog();
+    renderConfigProducts();
+  } catch (e) { showToast('Erro de conexão'); }
+}
 
 // ── Init ─────────────────────────────────────────────
 if (TOKEN) {
