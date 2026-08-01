@@ -66,12 +66,12 @@
 
   #main { flex: 1; display: flex; min-height: 0; }
 
-  #categories { width: 18%; min-width: 130px; background: var(--sidebar); padding: 10px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
-  .cat-btn { height: 56px; border-radius: 14px; border: none; background: transparent; color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; gap: 2px; }
-  .cat-btn .ic { font-size: 18px; }
+  #categories { width: 12%; min-width: 92px; background: var(--sidebar); padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+  .cat-btn { height: 54px; border-radius: 12px; border: none; background: transparent; color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 500; gap: 2px; line-height: 1.15; padding: 4px 2px; text-align: center; }
+  .cat-btn .ic { font-size: 16px; }
   .cat-btn.active { background: var(--primary); color: #fff; }
 
-  #products-wrap { width: 57%; padding: 14px; overflow-y: auto; }
+  #products-wrap { width: 63%; padding: 14px; overflow-y: auto; }
   #products-title { font-size: 13px; font-weight: 600; color: var(--text2); margin: 0 0 10px; }
   #products-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .prod-card { position: relative; background: var(--card); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; border: none; }
@@ -751,7 +751,15 @@ function openProductModal(productId) {
         <div class="field-group"><label>Preço (R$)</label><input id="prod-price" type="number" step="0.01" value="${prod?.price ?? ''}"></div>
         <div class="field-group"><label>Código</label><input id="prod-code" value="${prod?.code || ''}"></div>
       </div>
-      <div class="field-group"><label>URL da foto (opcional)</label><input id="prod-image" value="${prod?.image_url || ''}"></div>
+      <div class="field-group">
+        <label>Foto do produto</label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div id="prod-image-preview" style="width:56px;height:56px;border-radius:10px;background:var(--bg);flex-shrink:0;${prod?.image_url ? `background-image:url('${prod.image_url}');background-size:cover;background-position:center` : ''}"></div>
+          <button type="button" id="prod-image-pick" style="height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);font-size:12.5px;font-weight:500">📷 Escolher da galeria</button>
+          <span id="prod-image-status" style="font-size:11.5px;color:var(--text2)"></span>
+        </div>
+        <input type="file" id="prod-image-file" accept="image/*" class="hidden">
+      </div>
       ${prod ? `
         <label class="toggle-row"><input type="checkbox" id="prod-active" ${prod.active !== false ? 'checked' : ''}> Produto ativo</label>
         <label class="toggle-row"><input type="checkbox" id="prod-available" ${prod.available !== false ? 'checked' : ''}> Disponível pra venda agora</label>
@@ -764,6 +772,29 @@ function openProductModal(productId) {
     </div>
   `;
   document.body.appendChild(backdrop);
+  let prodImageUrl = prod?.image_url || null;
+  const statusEl = backdrop.querySelector('#prod-image-status');
+  const previewEl = backdrop.querySelector('#prod-image-preview');
+  backdrop.querySelector('#prod-image-pick').addEventListener('click', () => backdrop.querySelector('#prod-image-file').click());
+  backdrop.querySelector('#prod-image-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    statusEl.textContent = 'Enviando...';
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch(`${API}/api/products/upload`, { method: 'POST', headers: authHeaders(), body: fd });
+      const data = await res.json();
+      if (!res.ok) { statusEl.textContent = data.error || 'Erro ao enviar'; return; }
+      prodImageUrl = data.url;
+      previewEl.style.backgroundImage = `url('${data.url}')`;
+      previewEl.style.backgroundSize = 'cover';
+      previewEl.style.backgroundPosition = 'center';
+      statusEl.textContent = 'Foto enviada ✓';
+    } catch (err) {
+      statusEl.textContent = 'Erro de conexão';
+    }
+  });
   backdrop.querySelector('#prod-cancel').addEventListener('click', () => backdrop.remove());
   backdrop.querySelector('#prod-save').addEventListener('click', async () => {
     const name = backdrop.querySelector('#prod-name').value.trim();
@@ -774,7 +805,7 @@ function openProductModal(productId) {
       name, price,
       description: backdrop.querySelector('#prod-desc').value.trim() || null,
       code: backdrop.querySelector('#prod-code').value.trim() || null,
-      image_url: backdrop.querySelector('#prod-image').value.trim() || null,
+      image_url: prodImageUrl,
     };
     if (!prod) payload.category_id = configActiveCategory;
     if (prod) {

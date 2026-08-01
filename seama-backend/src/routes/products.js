@@ -1,9 +1,37 @@
 const router = require('express').Router();
+const multer = require('multer');
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { internalError } = require('../utils/errors');
 
 router.use(authMiddleware);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Arquivo precisa ser uma imagem'));
+    cb(null, true);
+  },
+});
+
+// POST /api/products/upload — envia foto do produto (galeria/câmera do
+// tablet) e retorna a URL pública, pra colar em image_url.
+router.post('/upload', requireRole('admin', 'gerente'), upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  const ext = (req.file.originalname.match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0];
+  const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+  try {
+    const { error } = await pool.supabase.storage
+      .from('product-images')
+      .upload(path, req.file.buffer, { contentType: req.file.mimetype });
+    if (error) throw error;
+    const { data } = pool.supabase.storage.from('product-images').getPublicUrl(path);
+    res.status(201).json({ url: data.publicUrl });
+  } catch (err) {
+    return internalError(res, err, '[products/upload]');
+  }
+});
 
 // GET /api/products — inclui indisponíveis/inativos; a tela de venda decide
 // como exibir (ex: cinza/desabilitado), igual já é feito na Confraria.
