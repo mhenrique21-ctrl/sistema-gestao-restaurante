@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Steam swirl S-shape -->
+  <path d="M158,12 C148,4 162,-2 165,8 C168,18 154,22 152,32 C150,42 162,46 164,36"
+        fill="none" stroke="#C4713A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M148,8 C140,2 152,-3 154,6 C156,15 144,18 142,27 C140,36 150,40 152,30"
+        fill="none" stroke="#D4936A" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Cantina - script style -->
+  <text x="18" y="68"
+        font-family="'Georgia','Times New Roman',serif"
+        font-size="26" font-style="italic" font-weight="400" fill="#7B2E10"
+        letter-spacing="1">Cantina</text>
+
+  <!-- CAFE - large bold -->
+  <text x="10" y="175"
+        font-family="'Arial Black','Impact','Arial',sans-serif"
+        font-size="118" font-weight="900" fill="#7B2E10">CAFE</text>
+
+  <!-- Bottom bar on C and E (coffee cup style) -->
+  <rect x="10" y="178" width="22" height="8" rx="3" fill="#7B2E10"/>
+  <rect x="155" y="178" width="35" height="8" rx="3" fill="#7B2E10"/>
+</svg>
