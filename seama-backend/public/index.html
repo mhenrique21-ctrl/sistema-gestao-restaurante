@@ -655,19 +655,21 @@ async function confirmSale() {
   }
 }
 
-// Uma ficha por UNIDADE vendida (3 refrigerantes = 3 fichas iguais), sem
-// quantidade impressa. window.SeamaPrinter é injetado pelo app instalado
-// (Capacitor + SDK Elgin); no navegador ele não existe e a impressão só é
-// registrada no console — a venda em si já foi gravada de qualquer forma.
-function printFichas(sale) {
+// O plugin nativo só existe dentro do APK (Capacitor). No navegador retorna
+// null e a impressão vira só log — a venda já foi gravada de qualquer forma.
+function getPrinter() {
+  return window.Capacitor?.Plugins?.SeamaPrinter || null;
+}
+
+function printerPayload(sale) {
   const fichas = [];
   const copies = parseInt(SETTINGS.printer_copies, 10) || 1;
   for (const item of sale.items) {
     for (let i = 0; i < item.quantity * copies; i++) {
-      fichas.push({ name: item.product_name, price: item.unit_price });
+      fichas.push({ name: item.product_name, price: parseFloat(item.unit_price) || 0 });
     }
   }
-  const payload = {
+  return {
     ip: SETTINGS.printer_ip || '',
     port: parseInt(SETTINGS.printer_port, 10) || 9100,
     model: SETTINGS.printer_model || 'i9',
@@ -675,12 +677,20 @@ function printFichas(sale) {
     operator: CURRENT_USER?.username || '',
     fichas,
   };
-  if (window.SeamaPrinter?.printFichas) {
-    window.SeamaPrinter.printFichas(payload)
+}
+
+// Uma ficha por UNIDADE vendida (3 refrigerantes = 3 fichas iguais), sem
+// quantidade impressa.
+function printFichas(sale) {
+  const payload = printerPayload(sale);
+  const printer = getPrinter();
+  if (printer) {
+    printer.printFichas(payload)
+      .then(r => showToast(`🖨 ${r.printed} ficha(s) impressa(s)`))
       .catch(err => showToast('Erro na impressão: ' + (err?.message || err)));
     return;
   }
-  console.log(`[print] ${fichas.length} ficha(s) da venda #${sale.sale_number}`, payload);
+  console.log(`[print] ${payload.fichas.length} ficha(s) da venda #${sale.sale_number}`, payload);
 }
 
 // ── Navegação inferior (Vendas/Caixa/Configurações) ─
@@ -755,13 +765,27 @@ document.getElementById('set-save-btn').addEventListener('click', async () => {
   } catch (e) { errEl.textContent = 'Erro de conexão'; }
 });
 
-document.getElementById('set-test-btn').addEventListener('click', () => {
+document.getElementById('set-test-btn').addEventListener('click', async () => {
   const ip = document.getElementById('set-printer-ip').value.trim();
+  const port = parseInt(document.getElementById('set-printer-port').value, 10) || 9100;
   if (!ip) { showToast('Informe o IP primeiro'); return; }
-  // A impressão real só funciona no app instalado (Capacitor + SDK Elgin) —
-  // no navegador não dá pra abrir socket direto pra um IP da rede local.
-  if (!window.SeamaPrinter) { showToast('Teste só funciona no app instalado no tablet'); return; }
-  printFichas({ sale_number: 0, items: [{ product_name: 'TESTE DE IMPRESSAO', unit_price: 0, quantity: 1 }] });
+  const printer = getPrinter();
+  // No navegador não dá pra abrir socket direto pra um IP da rede local —
+  // é trava de segurança do Chrome, só o APK consegue.
+  if (!printer) { showToast('Teste só funciona no app instalado no tablet'); return; }
+  const btn = document.getElementById('set-test-btn');
+  btn.disabled = true;
+  try {
+    await printer.testConnection({ ip, port });
+    // Conexão OK: imprime uma ficha de teste com o mesmo layout das reais.
+    SETTINGS.printer_ip = ip;
+    SETTINGS.printer_port = String(port);
+    printFichas({ sale_number: 0, items: [{ product_name: 'TESTE DE IMPRESSAO', unit_price: 0, quantity: 1 }] });
+  } catch (err) {
+    showToast('Sem resposta da impressora: ' + (err?.message || err));
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ── Configurações: categorias ────────────────────────

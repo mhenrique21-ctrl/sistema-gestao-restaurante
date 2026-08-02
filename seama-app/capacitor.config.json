@@ -1,0 +1,13 @@
+{
+  "appId": "com.seama.pdv",
+  "appName": "Seama PDV",
+  "webDir": "www",
+  "server": {
+    "url": "https://seama.confrariacafe.com",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

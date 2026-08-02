@@ -1,0 +1,16 @@
+{
+  "name": "seama-app",
+  "version": "1.0.0",
+  "description": "App Android do PDV Seama (Capacitor + SDK Elgin)",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "build": "cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0"
+  }
+}
