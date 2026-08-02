@@ -112,8 +112,18 @@
   .nav-btn.active { color: #fff; }
 
   /* ── Configurações: categorias e produtos ── */
-  #config-screen { flex: 1; display: none; min-height: 0; }
+  #config-screen { flex: 1; display: none; min-height: 0; flex-direction: column; }
   #config-screen.active { display: flex; }
+  #config-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
+  .cfg-tab { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: 12.5px; font-weight: 500; color: var(--text2); }
+  .cfg-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  #config-body { flex: 1; min-height: 0; display: flex; }
+  .cfg-pane { display: none; flex: 1; min-height: 0; }
+  .cfg-pane.active { display: flex; }
+  #config-tab-impressora { padding: 20px; overflow-y: auto; }
+  .cfg-form { max-width: 460px; }
+  .cfg-form h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .cfg-hint { font-size: 12.5px; color: var(--text2); margin: 0 0 16px; }
   #config-cats { width: 26%; min-width: 200px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   #config-cats-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
   .cfg-cat-row { display: flex; align-items: center; gap: 8px; border-radius: 12px; border: 1px solid var(--border); padding: 10px 12px; background: var(--card); }
@@ -226,16 +236,51 @@
   </div>
 
   <div id="config-screen">
-    <div id="config-cats">
-      <div id="config-cats-list"></div>
-      <button id="config-cats-add">+ Nova categoria</button>
+    <div id="config-tabs">
+      <button class="cfg-tab active" data-tab="cardapio">🍽️ Cardápio</button>
+      <button class="cfg-tab" data-tab="impressora">🖨️ Impressora</button>
     </div>
-    <div id="config-products">
-      <div id="config-products-head">
-        <h3 id="config-products-title">Categorias</h3>
-        <button id="config-products-add" class="hidden">+ Novo produto</button>
+
+    <div id="config-body">
+      <div id="config-tab-cardapio" class="cfg-pane active">
+        <div id="config-cats">
+          <div id="config-cats-list"></div>
+          <button id="config-cats-add">+ Nova categoria</button>
+        </div>
+        <div id="config-products">
+          <div id="config-products-head">
+            <h3 id="config-products-title">Categorias</h3>
+            <button id="config-products-add" class="hidden">+ Novo produto</button>
+          </div>
+          <div id="config-products-list"></div>
+        </div>
       </div>
-      <div id="config-products-list"></div>
+
+      <div id="config-tab-impressora" class="cfg-pane">
+        <div class="cfg-form">
+          <h3>Impressora térmica</h3>
+          <p class="cfg-hint">A impressora precisa estar na mesma rede Wi-Fi do tablet, com IP fixo.</p>
+          <div class="field-row">
+            <div class="field-group" style="flex:2"><label>Endereço IP</label><input id="set-printer-ip" placeholder="192.168.0.101"></div>
+            <div class="field-group"><label>Porta</label><input id="set-printer-port" type="number" placeholder="9100"></div>
+          </div>
+          <div class="field-row">
+            <div class="field-group"><label>Modelo</label>
+              <select id="set-printer-model">
+                <option value="i9">Elgin i9</option>
+                <option value="i8">Elgin i8</option>
+                <option value="i7">Elgin i7</option>
+              </select>
+            </div>
+            <div class="field-group"><label>Vias por ficha</label><input id="set-printer-copies" type="number" min="1" max="3" placeholder="1"></div>
+          </div>
+          <div id="set-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+          <div class="modal-actions" style="max-width:320px">
+            <button id="set-test-btn">Testar impressão</button>
+            <button class="primary" id="set-save-btn">Salvar</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -356,6 +401,9 @@ function enterApp() {
   document.getElementById('app').classList.add('active');
   startClock();
   loadCatalog();
+  // Carrega config da impressora já no login: printFichas precisa do IP
+  // mesmo que ninguém abra a aba de Configurações nesta sessão.
+  loadPrinterSettings();
 }
 
 function startClock() {
@@ -599,14 +647,32 @@ async function confirmSale() {
   }
 }
 
-// Impressão real (SDK Elgin via Capacitor) entra numa fase seguinte — por
-// enquanto só simula, uma ficha por unidade vendida (sem quantidade impressa).
+// Uma ficha por UNIDADE vendida (3 refrigerantes = 3 fichas iguais), sem
+// quantidade impressa. window.SeamaPrinter é injetado pelo app instalado
+// (Capacitor + SDK Elgin); no navegador ele não existe e a impressão só é
+// registrada no console — a venda em si já foi gravada de qualquer forma.
 function printFichas(sale) {
   const fichas = [];
+  const copies = parseInt(SETTINGS.printer_copies, 10) || 1;
   for (const item of sale.items) {
-    for (let i = 0; i < item.quantity; i++) fichas.push({ name: item.product_name, price: item.unit_price });
+    for (let i = 0; i < item.quantity * copies; i++) {
+      fichas.push({ name: item.product_name, price: item.unit_price });
+    }
   }
-  console.log(`[print] ${fichas.length} ficha(s) da venda #${sale.sale_number}:`, fichas);
+  const payload = {
+    ip: SETTINGS.printer_ip || '',
+    port: parseInt(SETTINGS.printer_port, 10) || 9100,
+    model: SETTINGS.printer_model || 'i9',
+    saleNumber: sale.sale_number,
+    operator: CURRENT_USER?.username || '',
+    fichas,
+  };
+  if (window.SeamaPrinter?.printFichas) {
+    window.SeamaPrinter.printFichas(payload)
+      .catch(err => showToast('Erro na impressão: ' + (err?.message || err)));
+    return;
+  }
+  console.log(`[print] ${fichas.length} ficha(s) da venda #${sale.sale_number}`, payload);
 }
 
 // ── Navegação inferior (Vendas/Caixa/Configurações) ─
@@ -628,6 +694,66 @@ document.getElementById('nav-config').addEventListener('click', () => {
   document.getElementById('config-screen').classList.add('active');
   setActiveNav('nav-config');
   renderConfigCategories();
+});
+
+// ── Configurações: abas internas (Cardápio / Impressora) ──
+document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click', () => {
+  document.querySelectorAll('.cfg-tab').forEach(t => t.classList.toggle('active', t === tab));
+  document.querySelectorAll('.cfg-pane').forEach(p => p.classList.toggle('active', p.id === `config-tab-${tab.dataset.tab}`));
+  if (tab.dataset.tab === 'impressora') loadPrinterSettings();
+}));
+
+// ── Configurações: impressora ────────────────────────
+let SETTINGS = {};
+
+async function loadPrinterSettings() {
+  try {
+    const res = await fetch(`${API}/api/settings`, { headers: authHeaders() });
+    const data = await res.json();
+    if (!res.ok) return;
+    SETTINGS = data;
+    document.getElementById('set-printer-ip').value = data.printer_ip || '';
+    document.getElementById('set-printer-port').value = data.printer_port || '9100';
+    document.getElementById('set-printer-model').value = data.printer_model || 'i9';
+    document.getElementById('set-printer-copies').value = data.printer_copies || '1';
+  } catch (e) { showToast('Erro ao carregar configurações'); }
+}
+
+document.getElementById('set-save-btn').addEventListener('click', async () => {
+  const ip = document.getElementById('set-printer-ip').value.trim();
+  const port = document.getElementById('set-printer-port').value.trim() || '9100';
+  const errEl = document.getElementById('set-error');
+  errEl.textContent = '';
+  // Valida formato do IPv4 aqui pra não gravar endereço impossível e só
+  // descobrir na hora de imprimir, com cliente esperando no balcão.
+  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip) || ip.split('.').some(n => parseInt(n, 10) > 255)) {
+    errEl.textContent = 'IP inválido (ex: 192.168.0.101)'; return;
+  }
+  if (!(parseInt(port, 10) > 0 && parseInt(port, 10) <= 65535)) { errEl.textContent = 'Porta inválida'; return; }
+  try {
+    const res = await fetch(`${API}/api/settings`, {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        printer_ip: ip,
+        printer_port: port,
+        printer_model: document.getElementById('set-printer-model').value,
+        printer_copies: document.getElementById('set-printer-copies').value || '1',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+    await loadPrinterSettings();
+    showToast('Configuração salva!');
+  } catch (e) { errEl.textContent = 'Erro de conexão'; }
+});
+
+document.getElementById('set-test-btn').addEventListener('click', () => {
+  const ip = document.getElementById('set-printer-ip').value.trim();
+  if (!ip) { showToast('Informe o IP primeiro'); return; }
+  // A impressão real só funciona no app instalado (Capacitor + SDK Elgin) —
+  // no navegador não dá pra abrir socket direto pra um IP da rede local.
+  if (!window.SeamaPrinter) { showToast('Teste só funciona no app instalado no tablet'); return; }
+  printFichas({ sale_number: 0, items: [{ product_name: 'TESTE DE IMPRESSAO', unit_price: 0, quantity: 1 }] });
 });
 
 // ── Configurações: categorias ────────────────────────
