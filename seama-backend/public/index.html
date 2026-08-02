@@ -336,6 +336,39 @@ let discount = 0;
 
 function fmt(v) { return 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ','); }
 function authHeaders(extra) { return Object.assign({ Authorization: 'Bearer ' + TOKEN }, extra || {}); }
+
+// Todo fetch autenticado passa por aqui. O token vale 12h; quando vence, o
+// app antes entrava assim mesmo (porque havia token salvo), o catálogo vinha
+// 401 e o operador ficava numa tela vazia sem categoria nenhuma e sem jeito
+// de voltar pro login. Agora 401 derruba a sessão e volta pra tela de PIN.
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`${API}${path}`, {
+    ...options,
+    headers: authHeaders(options.headers),
+  });
+  if (res.status === 401) {
+    forceLogout('Sessão expirada. Entre novamente.');
+    throw new Error('unauthorized');
+  }
+  return res;
+}
+
+function forceLogout(msg) {
+  TOKEN = null;
+  CURRENT_USER = null;
+  localStorage.removeItem('seama_token');
+  localStorage.removeItem('seama_user');
+  cart = []; discount = 0;
+  document.getElementById('app').classList.remove('active');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('op-list').classList.remove('hidden');
+  document.getElementById('pin-section').classList.add('hidden');
+  document.getElementById('login-sub').textContent = 'Selecione seu usuário';
+  selectedOperator = null;
+  pin = '';
+  loadOperators();
+  if (msg) showToast(msg);
+}
 function showToast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -449,17 +482,24 @@ function startClock() {
 async function loadCatalog() {
   try {
     const [catRes, prodRes] = await Promise.all([
-      fetch(`${API}/api/categories`, { headers: authHeaders() }),
-      fetch(`${API}/api/products`, { headers: authHeaders() }),
+      apiFetch('/api/categories'),
+      apiFetch('/api/products'),
     ]);
     categories = await catRes.json();
     products = await prodRes.json();
     if (!Array.isArray(categories)) categories = [];
     if (!Array.isArray(products)) products = [];
     renderCategories();
-    if (categories.length) selectCategory(categories.find(c => c.active !== false)?.id || categories[0].id);
+    // Abre numa categoria que tenha produto: se a primeira estiver vazia
+    // (categoria recém-criada, ainda sem cadastro), o operador cairia numa
+    // tela em branco achando que o sistema não carregou.
+    if (categories.length) {
+      const ativas = categories.filter(c => c.active !== false);
+      const comProduto = ativas.find(c => products.some(p => p.category_id === c.id));
+      selectCategory((comProduto || ativas[0] || categories[0]).id);
+    }
   } catch (e) {
-    showToast('Erro ao carregar catálogo');
+    if (e.message !== 'unauthorized') showToast('Erro ao carregar catálogo');
   }
 }
 
@@ -655,8 +695,8 @@ async function confirmSale() {
   btn.disabled = true;
   btn.textContent = 'Enviando...';
   try {
-    const res = await fetch(`${API}/api/sales`, {
-      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+    const res = await apiFetch('/api/sales', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
         payments: payPayments,
@@ -671,7 +711,7 @@ async function confirmSale() {
     renderCart(); renderProducts();
     showToast(`✅ Venda #${data.sale_number} concluída!`);
   } catch (e) {
-    errEl.textContent = 'Erro de conexão';
+    if (e.message !== 'unauthorized') errEl.textContent = 'Erro de conexão';
     btn.disabled = false;
     btn.textContent = 'Confirmar e imprimir';
   }
@@ -782,7 +822,7 @@ let SETTINGS = {};
 
 async function loadPrinterSettings() {
   try {
-    const res = await fetch(`${API}/api/settings`, { headers: authHeaders() });
+    const res = await apiFetch('/api/settings');
     const data = await res.json();
     if (!res.ok) return;
     SETTINGS = data;
@@ -792,7 +832,7 @@ async function loadPrinterSettings() {
     document.getElementById('set-kitchen-enabled').checked = data.printer_kitchen_enabled === 'true';
     document.getElementById('set-kitchen-ip').value = data.printer_kitchen_ip || '';
     document.getElementById('set-kitchen-port').value = data.printer_kitchen_port || '9100';
-  } catch (e) { showToast('Erro ao carregar configurações'); }
+  } catch (e) { if (e.message !== 'unauthorized') showToast('Erro ao carregar configurações'); }
 }
 
 function validIp(ip) {
@@ -816,8 +856,8 @@ document.getElementById('set-save-btn').addEventListener('click', async () => {
   if (kitchenOn && !validIp(kitchenIp)) { errEl.textContent = 'Cozinha ligada exige um IP válido'; return; }
   if (kitchenIp && !(parseInt(kitchenPort, 10) > 0 && parseInt(kitchenPort, 10) <= 65535)) { errEl.textContent = 'Porta da cozinha inválida'; return; }
   try {
-    const res = await fetch(`${API}/api/settings`, {
-      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+    const res = await apiFetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         printer_ip: ip,
         printer_port: port,
@@ -971,8 +1011,8 @@ function openCategoryModal(categoryId) {
     };
     if (cat) payload.active = backdrop.querySelector('#cat-active').checked;
     try {
-      const res = await fetch(`${API}/api/categories${cat ? '/' + cat.id : ''}`, {
-        method: cat ? 'PATCH' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload),
+      const res = await apiFetch(`/api/categories${cat ? '/' + cat.id : ''}`, {
+        method: cat ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
@@ -988,12 +1028,12 @@ function openCategoryModal(categoryId) {
 async function deleteCategory(id) {
   if (!confirm('Excluir esta categoria? Os produtos dela continuam existindo, mas ficam sem categoria.')) return;
   try {
-    const res = await fetch(`${API}/api/categories/${id}`, { method: 'DELETE', headers: authHeaders() });
+    const res = await apiFetch(`/api/categories/${id}`, { method: 'DELETE' });
     if (!res.ok) { showToast('Erro ao excluir'); return; }
     if (configActiveCategory === id) configActiveCategory = null;
     await loadCatalog();
     renderConfigCategories();
-  } catch (e) { showToast('Erro de conexão'); }
+  } catch (e) { if (e.message !== 'unauthorized') showToast('Erro de conexão'); }
 }
 
 // ── Configurações: produtos ──────────────────────────
@@ -1068,7 +1108,7 @@ function openProductModal(productId) {
     try {
       const fd = new FormData();
       fd.append('image', file);
-      const res = await fetch(`${API}/api/products/upload`, { method: 'POST', headers: authHeaders(), body: fd });
+      const res = await apiFetch('/api/products/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) { statusEl.textContent = data.error || 'Erro ao enviar'; return; }
       prodImageUrl = data.url;
@@ -1099,8 +1139,8 @@ function openProductModal(productId) {
       payload.available = backdrop.querySelector('#prod-available').checked;
     }
     try {
-      const res = await fetch(`${API}/api/products${prod ? '/' + prod.id : ''}`, {
-        method: prod ? 'PATCH' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(payload),
+      const res = await apiFetch(`/api/products${prod ? '/' + prod.id : ''}`, {
+        method: prod ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
@@ -1115,11 +1155,11 @@ function openProductModal(productId) {
 async function deleteProduct(id) {
   if (!confirm('Excluir este produto?')) return;
   try {
-    const res = await fetch(`${API}/api/products/${id}`, { method: 'DELETE', headers: authHeaders() });
+    const res = await apiFetch(`/api/products/${id}`, { method: 'DELETE' });
     if (!res.ok) { showToast('Erro ao excluir'); return; }
     await loadCatalog();
     renderConfigProducts();
-  } catch (e) { showToast('Erro de conexão'); }
+  } catch (e) { if (e.message !== 'unauthorized') showToast('Erro de conexão'); }
 }
 
 // ── Init ─────────────────────────────────────────────
