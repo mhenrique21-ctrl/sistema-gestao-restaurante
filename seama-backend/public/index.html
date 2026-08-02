@@ -73,11 +73,14 @@
 
   #products-wrap { width: 63%; padding: 14px; overflow-y: auto; }
   #products-title { font-size: 13px; font-weight: 600; color: var(--text2); margin: 0 0 10px; }
-  #products-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .prod-card { position: relative; background: var(--card); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; border: none; }
-  .prod-card .img { width: 52px; height: 52px; border-radius: 12px; background: var(--bg); }
-  .prod-card .nm { font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; min-height: 28px; display: flex; align-items: center; }
-  .prod-card .pr { font-size: 13.5px; font-weight: 700; }
+  #products-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  /* Card vira quase só foto: a imagem ocupa a largura toda em 1:1, com nome
+     e preço compactos embaixo. Mesmo com 4 colunas (em vez de 3), a área da
+     foto fica bem maior que os 52px fixos de antes. */
+  .prod-card { position: relative; background: var(--card); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); padding: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; border: none; overflow: hidden; }
+  .prod-card .img { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; background: var(--bg) center/cover no-repeat; }
+  .prod-card .nm { font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; min-height: 28px; display: flex; align-items: center; justify-content: center; }
+  .prod-card .pr { font-size: 14px; font-weight: 700; text-align: center; }
   .prod-card.unavailable { opacity: .4; pointer-events: none; }
   .prod-card .badge { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 999px; background: var(--primary); color: #fff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
   #products-empty { color: var(--text2); font-size: 13px; padding: 20px; text-align: center; }
@@ -414,7 +417,7 @@ function renderProducts() {
     return `
       <button class="prod-card ${unavailable ? 'unavailable' : ''}" data-id="${p.id}">
         ${inCart ? `<span class="badge">${inCart.quantity}</span>` : ''}
-        <div class="img" style="${p.image_url ? `background-image:url('${p.image_url}');background-size:cover` : ''}"></div>
+        <div class="img" style="${p.image_url ? `background-image:url('${p.image_url}')` : ''}"></div>
         <div class="nm">${p.name}</div>
         <div class="pr">${fmt(p.price)}</div>
       </button>
