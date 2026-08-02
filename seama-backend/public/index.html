@@ -288,7 +288,7 @@
                 <option value="i7">Elgin i7</option>
               </select>
             </div>
-            <div class="field-group"><label>Vias por ficha</label><input id="set-printer-copies" type="number" min="1" max="3" placeholder="1"></div>
+            <div class="field-group"></div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
@@ -431,7 +431,7 @@ function enterApp() {
   document.getElementById('app').classList.add('active');
   startClock();
   loadCatalog();
-  // Carrega config da impressora já no login: printFichas precisa do IP
+  // Carrega config da impressora já no login: printCupom precisa do IP
   // mesmo que ninguém abra a aba de Configurações nesta sessão.
   loadPrinterSettings();
 }
@@ -665,7 +665,7 @@ async function confirmSale() {
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar venda'; btn.disabled = false; btn.textContent = 'Confirmar e imprimir'; return; }
-    printFichas(data);
+    printCupom(data);
     closePayModal();
     cart = []; discount = 0;
     renderCart(); renderProducts();
@@ -683,60 +683,68 @@ function getPrinter() {
   return window.Capacitor?.Plugins?.SeamaPrinter || null;
 }
 
-// Monta a lista de fichas — uma por UNIDADE vendida (3 refrigerantes = 3
-// fichas iguais), sem quantidade impressa. Se onlyKitchen, filtra só os
-// produtos marcados como "imprime na cozinha".
-function buildFichas(sale, onlyKitchen) {
-  const fichas = [];
-  const copies = parseInt(SETTINGS.printer_copies, 10) || 1;
+const PAY_SHORT = {
+  dinheiro: 'Dinheiro', pix: 'PIX', cartao_debito: 'Cartão Débito',
+  cartao_credito: 'Cartão Crédito', vale_alimentacao: 'Vale Alimentação', vale_refeicao: 'Vale Refeição',
+};
+
+// Um item por linha do cupom (agrupado, não uma ficha por unidade — gastava
+// papel demais). Se onlyKitchen, filtra só os produtos marcados.
+function buildCupomItems(sale, onlyKitchen) {
+  const items = [];
   for (const item of sale.items) {
     if (onlyKitchen) {
       const prod = products.find(p => p.id === item.product_id);
-      // Na ficha de teste não existe produto no catálogo: item.print_kitchen
+      // No cupom de teste não existe produto no catálogo: item.print_kitchen
       // permite forçar o roteamento manualmente.
       const goesToKitchen = item.print_kitchen ?? prod?.print_kitchen;
       if (!goesToKitchen) continue;
     }
-    for (let i = 0; i < item.quantity * copies; i++) {
-      fichas.push({ name: item.product_name, price: parseFloat(item.unit_price) || 0 });
-    }
+    const qty = parseInt(item.quantity, 10) || 1;
+    const unit = parseFloat(item.unit_price) || 0;
+    items.push({ name: item.product_name, quantity: qty, total: unit * qty });
   }
-  return fichas;
+  return items;
 }
 
-function printerJob(sale, fichas, ip, port) {
+function cupomJob(sale, items, ip, port, kitchen) {
   return {
     ip: ip || '',
     port: parseInt(port, 10) || 9100,
-    model: SETTINGS.printer_model || 'i9',
+    kitchen,
     saleNumber: sale.sale_number,
     operator: CURRENT_USER?.username || '',
-    fichas,
+    total: items.reduce((s, i) => s + i.total, 0),
+    payment: kitchen ? '' : (sale.payments || []).map(p => PAY_SHORT[p.method] || p.method).join(' + '),
+    items,
   };
 }
 
-// Balcão recebe tudo; cozinha recebe só os produtos marcados — e o mesmo
-// produto sai NOS DOIS lugares, não é desviado. São duas chamadas separadas
-// ao plugin, então uma impressora offline não impede a outra de imprimir.
-function printFichas(sale) {
+// Balcão recebe o cupom completo (com preços e total); cozinha recebe só os
+// produtos marcados, sem preço. São duas chamadas separadas ao plugin, então
+// uma impressora offline não impede a outra de imprimir.
+function printCupom(sale) {
   const printer = getPrinter();
   const jobs = [];
 
-  const balcao = buildFichas(sale, false);
-  if (balcao.length) jobs.push({ label: 'balcão', job: printerJob(sale, balcao, SETTINGS.printer_ip, SETTINGS.printer_port) });
+  const balcao = buildCupomItems(sale, false);
+  if (balcao.length) jobs.push({ label: 'balcão', job: cupomJob(sale, balcao, SETTINGS.printer_ip, SETTINGS.printer_port, false) });
 
   if (SETTINGS.printer_kitchen_enabled === 'true' && SETTINGS.printer_kitchen_ip) {
-    const cozinha = buildFichas(sale, true);
-    if (cozinha.length) jobs.push({ label: 'cozinha', job: printerJob(sale, cozinha, SETTINGS.printer_kitchen_ip, SETTINGS.printer_kitchen_port) });
+    const cozinha = buildCupomItems(sale, true);
+    if (cozinha.length) jobs.push({ label: 'cozinha', job: cupomJob(sale, cozinha, SETTINGS.printer_kitchen_ip, SETTINGS.printer_kitchen_port, true) });
   }
 
   if (!printer) {
-    jobs.forEach(j => console.log(`[print/${j.label}] ${j.job.fichas.length} ficha(s) da venda #${sale.sale_number}`, j.job));
+    jobs.forEach(j => console.log(`[cupom/${j.label}] venda #${sale.sale_number} · ${j.job.items.length} item(ns)`, j.job));
     return;
   }
+  // APK antigo (que só tem printFichas) não sabe imprimir cupom — avisa em vez
+  // de falhar silenciosamente com a venda já gravada.
+  if (!printer.printCupom) { showToast('Atualize o app do tablet para imprimir cupom'); return; }
   for (const { label, job } of jobs) {
-    printer.printFichas(job)
-      .then(r => showToast(`🖨 ${label}: ${r.printed} ficha(s)`))
+    printer.printCupom(job)
+      .then(() => showToast(`🖨 Cupom impresso (${label})`))
       .catch(err => showToast(`Erro na impressão (${label}): ` + (err?.message || err)));
   }
 }
@@ -781,7 +789,6 @@ async function loadPrinterSettings() {
     document.getElementById('set-printer-ip').value = data.printer_ip || '';
     document.getElementById('set-printer-port').value = data.printer_port || '9100';
     document.getElementById('set-printer-model').value = data.printer_model || 'i9';
-    document.getElementById('set-printer-copies').value = data.printer_copies || '1';
     document.getElementById('set-kitchen-enabled').checked = data.printer_kitchen_enabled === 'true';
     document.getElementById('set-kitchen-ip').value = data.printer_kitchen_ip || '';
     document.getElementById('set-kitchen-port').value = data.printer_kitchen_port || '9100';
@@ -815,7 +822,6 @@ document.getElementById('set-save-btn').addEventListener('click', async () => {
         printer_ip: ip,
         printer_port: port,
         printer_model: document.getElementById('set-printer-model').value,
-        printer_copies: document.getElementById('set-printer-copies').value || '1',
         printer_kitchen_enabled: kitchenOn ? 'true' : 'false',
         printer_kitchen_ip: kitchenIp,
         printer_kitchen_port: kitchenPort,
@@ -839,18 +845,26 @@ async function testPrinter(which) {
   // No navegador não dá pra abrir socket direto pra um IP da rede local —
   // é trava de segurança do Chrome, só o APK consegue.
   if (!printer) { showToast('Teste só funciona no app instalado no tablet'); return; }
+  if (!printer.printCupom) { showToast('Atualize o app do tablet para imprimir cupom'); return; }
   const btn = document.getElementById(isKitchen ? 'set-test-kitchen-btn' : 'set-test-btn');
   btn.disabled = true;
   try {
     await printer.testConnection({ ip, port });
-    await printer.printFichas({
+    // Cupom de teste com o mesmo layout do real, pra conferir alinhamento
+    // e acentuação antes de vender de verdade.
+    await printer.printCupom({
       ip, port,
-      model: SETTINGS.printer_model || 'i9',
+      kitchen: isKitchen,
       saleNumber: 0,
       operator: CURRENT_USER?.username || '',
-      fichas: [{ name: `TESTE ${isKitchen ? 'COZINHA' : 'BALCAO'}`, price: 0 }],
+      total: 12.5,
+      payment: isKitchen ? '' : 'Dinheiro',
+      items: [
+        { name: 'Teste de impressao', quantity: 1, total: 8.5 },
+        { name: 'Cafe com leite', quantity: 2, total: 4 },
+      ],
     });
-    showToast(`🖨 Ficha de teste enviada (${which})`);
+    showToast(`🖨 Cupom de teste enviado (${which})`);
   } catch (err) {
     showToast(`Sem resposta da impressora ${which}: ` + (err?.message || err));
   } finally {

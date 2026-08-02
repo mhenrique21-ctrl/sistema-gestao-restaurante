@@ -24,6 +24,11 @@ import java.util.List;
  * serial, onde ele resolve driver. Aqui, socket direto tira uma dependência
  * binária do build e é o mesmo protocolo que o agente de impressão da Confraria
  * já usa em produção.
+ *
+ * Imprime UM CUPOM por venda (antes era uma ficha por unidade, que gastava
+ * papel demais). Duas vias possíveis, com layouts diferentes:
+ *   - balcão: itens com preço, total e forma de pagamento (comprovante do cliente)
+ *   - cozinha: só os itens marcados, SEM preço, nome em fonte alta (lê de longe)
  */
 @CapacitorPlugin(name = "SeamaPrinter")
 public class PrinterPlugin extends Plugin {
@@ -46,50 +51,64 @@ public class PrinterPlugin extends Plugin {
         return new byte[] { 0x1D, 0x21, (byte) n };
     }
 
+    private static class Item {
+        String name;
+        int quantity;
+        double total;
+    }
+
     @PluginMethod
-    public void printFichas(PluginCall call) {
+    public void printCupom(PluginCall call) {
         String ip = call.getString("ip", "");
         int port = call.getInt("port", 9100);
         String saleNumber = String.valueOf(call.getInt("saleNumber", 0));
         String operator = call.getString("operator", "");
-        JSArray fichas = call.getArray("fichas");
+        String payment = call.getString("payment", "");
+        Double totalObj = call.getDouble("total");
+        double total = totalObj == null ? 0 : totalObj;
+        boolean kitchen = Boolean.TRUE.equals(call.getBoolean("kitchen", false));
+        JSArray itemsArr = call.getArray("items");
 
         if (ip == null || ip.isEmpty()) {
             call.reject("IP da impressora não configurado");
             return;
         }
-        if (fichas == null || fichas.length() == 0) {
-            call.reject("Nenhuma ficha para imprimir");
+        if (itemsArr == null || itemsArr.length() == 0) {
+            call.reject("Nenhum item para imprimir");
             return;
         }
 
-        List<String> names = new ArrayList<>();
-        List<String> prices = new ArrayList<>();
+        List<Item> items = new ArrayList<>();
         try {
-            for (int i = 0; i < fichas.length(); i++) {
-                JSObject f = JSObject.fromJSONObject(fichas.getJSONObject(i));
-                names.add(f.getString("name", ""));
-                Double p = f.getDouble("price");
-                prices.add(formatMoney(p == null ? 0 : p));
+            for (int i = 0; i < itemsArr.length(); i++) {
+                JSObject o = JSObject.fromJSONObject(itemsArr.getJSONObject(i));
+                Item it = new Item();
+                it.name = o.getString("name", "");
+                Integer q = o.getInteger("quantity");
+                it.quantity = q == null ? 1 : q;
+                Double t = o.getDouble("total");
+                it.total = t == null ? 0 : t;
+                items.add(it);
             }
         } catch (Exception e) {
-            call.reject("Fichas em formato inválido: " + e.getMessage());
+            call.reject("Itens em formato inválido: " + e.getMessage());
             return;
         }
 
-        // Impressão fora da thread principal: socket na UI thread trava o app.
+        // Socket na thread principal trava o app.
         new Thread(() -> {
             Socket socket = null;
             try {
                 socket = new Socket();
                 socket.connect(new InetSocketAddress(ip, port), 5000);
                 OutputStream out = socket.getOutputStream();
-                for (int i = 0; i < names.size(); i++) {
-                    out.write(buildFicha(names.get(i), prices.get(i), saleNumber, operator));
-                }
+                out.write(kitchen
+                        ? buildCupomCozinha(items, saleNumber, operator)
+                        : buildCupomBalcao(items, saleNumber, operator, total, payment));
                 out.flush();
                 JSObject ret = new JSObject();
-                ret.put("printed", names.size());
+                ret.put("printed", 1);
+                ret.put("items", items.size());
                 call.resolve(ret);
             } catch (Exception e) {
                 call.reject("Falha ao imprimir: " + e.getMessage());
@@ -122,40 +141,113 @@ public class PrinterPlugin extends Plugin {
         }).start();
     }
 
-    private byte[] buildFicha(String name, String price, String saleNumber, String operator) throws Exception {
+    // ── Cupom do balcão (comprovante do cliente) ────────
+    private byte[] buildCupomBalcao(List<Item> items, String saleNumber, String operator,
+                                    double total, String payment) throws Exception {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
+        header(b, "SEAMA", saleNumber);
+
+        b.write(ALIGN_LEFT);
+        b.write(line(dateNow() + " " + timeNow()));
+        if (operator != null && !operator.isEmpty()) b.write(line("Operador: " + operator));
+        b.write(line(rule('-')));
+        b.write(line(cols("QTD", "ITEM", "VALOR")));
+        b.write(line(rule('-')));
+
+        for (Item it : items) {
+            b.write(line(cols(String.valueOf(it.quantity), it.name, money(it.total))));
+        }
+
+        b.write(line(rule('-')));
+        b.write(BOLD_ON);
+        b.write(textSize(1, 2));
+        b.write(line(pad("TOTAL", "R$ " + money(total), COLS)));
+        b.write(textSize(1, 1));
+        b.write(BOLD_OFF);
+        if (payment != null && !payment.isEmpty()) b.write(line("Pagamento: " + payment));
+        b.write(line(rule('-')));
+
+        b.write(ALIGN_CENTER);
+        b.write(line("Obrigado pela preferencia!"));
+        footer(b);
+        return b.toByteArray();
+    }
+
+    // ── Via da cozinha (produção) ───────────────────────
+    private byte[] buildCupomCozinha(List<Item> items, String saleNumber, String operator) throws Exception {
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        header(b, "COZINHA", saleNumber);
+
+        b.write(ALIGN_LEFT);
+        b.write(line(pad(timeNow(), operator == null ? "" : operator, COLS)));
+        b.write(line(rule('-')));
+        b.write(LF);
+
+        // Sem preço e em fonte alta: o cozinheiro precisa ler rápido e de longe.
+        for (Item it : items) {
+            b.write(BOLD_ON);
+            b.write(textSize(1, 2));
+            b.write(line("  " + it.quantity + "x " + it.name.toUpperCase()));
+            b.write(textSize(1, 1));
+            b.write(BOLD_OFF);
+            b.write(LF);
+        }
+
+        b.write(line(rule('-')));
+        footer(b);
+        return b.toByteArray();
+    }
+
+    private void header(ByteArrayOutputStream b, String title, String saleNumber) throws Exception {
         b.write(INIT);
         b.write(CODEPAGE_850);
         b.write(ALIGN_CENTER);
-
-        b.write(line("SEAMA"));
-        b.write(line("Venda #" + saleNumber + "  " + timeNow()));
-        b.write(line(dashes()));
-        b.write(LF);
-
-        // Nome do produto é a informação principal: fonte dobrada; se o nome
-        // for longo, cai pra altura dobrada só, pra não estourar a largura.
         b.write(BOLD_ON);
-        b.write(name.length() <= 20 ? textSize(2, 2) : textSize(1, 2));
-        b.write(line(name.toUpperCase()));
+        b.write(textSize(1, 2));
+        b.write(line(title));
         b.write(textSize(1, 1));
         b.write(BOLD_OFF);
-
-        b.write(LF);
-        b.write(textSize(1, 2));
-        b.write(line(price));
+        b.write(line(rule('=')));
+        // Senha em destaque: é por ela que o cliente é chamado e a cozinha
+        // casa o pedido com o balcão.
+        b.write(BOLD_ON);
+        b.write(textSize(2, 2));
+        b.write(line("SENHA " + saleNumber));
         b.write(textSize(1, 1));
+        b.write(BOLD_OFF);
+        b.write(line(rule('=')));
+    }
 
-        b.write(LF);
-        b.write(line(dashes()));
-        if (operator != null && !operator.isEmpty()) b.write(line(operator));
-
+    private void footer(ByteArrayOutputStream b) throws Exception {
         b.write(LF);
         b.write(LF);
         b.write(LF);
         b.write(ALIGN_LEFT);
         b.write(CUT);
-        return b.toByteArray();
+    }
+
+    /** Linha de item: qtd (3) + nome + valor (10 à direita), truncando o nome. */
+    private String cols(String qty, String name, String value) {
+        String q = padLeft(qty, 3);
+        String v = padLeft(value, 10);
+        int nameWidth = COLS - 3 - 1 - 10;
+        String n = name.length() > nameWidth ? name.substring(0, nameWidth) : name;
+        StringBuilder sb = new StringBuilder(q).append(' ').append(n);
+        while (sb.length() < COLS - 10) sb.append(' ');
+        return sb.append(v).toString();
+    }
+
+    /** Junta esquerda e direita preenchendo o meio com espaço. */
+    private String pad(String left, String right, int width) {
+        StringBuilder sb = new StringBuilder(left);
+        while (sb.length() < width - right.length()) sb.append(' ');
+        return sb.append(right).toString();
+    }
+
+    private String padLeft(String s, int width) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = s.length(); i < width; i++) sb.append(' ');
+        return sb.append(s).toString();
     }
 
     private byte[] line(String text) throws Exception {
@@ -163,18 +255,23 @@ public class PrinterPlugin extends Plugin {
         return (text + "\n").getBytes("IBM850");
     }
 
-    private String dashes() {
+    private String rule(char c) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < COLS; i++) sb.append('-');
+        for (int i = 0; i < COLS; i++) sb.append(c);
         return sb.toString();
     }
 
-    private String timeNow() {
-        return new java.text.SimpleDateFormat("dd/MM HH:mm", new java.util.Locale("pt", "BR"))
+    private String dateNow() {
+        return new java.text.SimpleDateFormat("dd/MM/yyyy", new java.util.Locale("pt", "BR"))
                 .format(new java.util.Date());
     }
 
-    private String formatMoney(double v) {
-        return "R$ " + String.format(new java.util.Locale("pt", "BR"), "%.2f", v).replace('.', ',');
+    private String timeNow() {
+        return new java.text.SimpleDateFormat("HH:mm", new java.util.Locale("pt", "BR"))
+                .format(new java.util.Date());
+    }
+
+    private String money(double v) {
+        return String.format(new java.util.Locale("pt", "BR"), "%.2f", v).replace('.', ',');
     }
 }

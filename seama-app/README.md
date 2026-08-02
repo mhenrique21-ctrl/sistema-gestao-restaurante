@@ -73,5 +73,20 @@ ele seria uma dependência binária a mais no build, sem ganho.
 
 O mesmo protocolo já roda em produção no agente de impressão da Confraria.
 
+Imprime **um cupom por venda** (`printCupom`). Antes era uma ficha por unidade
+vendida, o que gastava papel demais. Duas vias com layouts diferentes:
+
+| Via | Conteúdo |
+|---|---|
+| Balcão | Itens agrupados com preço, total, forma de pagamento |
+| Cozinha | Só os itens marcados `print_kitchen`, **sem preço**, nome em fonte alta |
+
+Nas duas, o número da venda sai como **SENHA** em fonte dupla — é por ela que
+o cliente é chamado e a cozinha casa o pedido com o balcão.
+
+Largura fixa de 48 colunas (80mm); nome de produto é truncado pra nunca
+estourar a linha. Acentos via `IBM850` — sem isso "ã"/"ç" saem como lixo.
+
 IP/porta/modelo ficam na tabela `settings` do banco, editáveis em
-**Configurações → Impressora** dentro do próprio PDV.
+**Configurações → Impressora** dentro do próprio PDV. A impressora da cozinha
+é opcional e tem liga/desliga próprio.
