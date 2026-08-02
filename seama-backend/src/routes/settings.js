@@ -6,7 +6,10 @@ const { internalError } = require('../utils/errors');
 router.use(authMiddleware);
 
 // Chaves aceitas — lista fixa pra ninguém gravar chave arbitrária pelo app.
-const ALLOWED_KEYS = ['printer_ip', 'printer_port', 'printer_model', 'printer_copies'];
+const ALLOWED_KEYS = [
+  'printer_ip', 'printer_port', 'printer_model', 'printer_copies',
+  'printer_kitchen_ip', 'printer_kitchen_port', 'printer_kitchen_enabled',
+];
 
 // GET /api/settings — todas as configurações (chave/valor)
 router.get('/', async (req, res) => {

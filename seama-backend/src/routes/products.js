@@ -38,7 +38,7 @@ router.post('/upload', requireRole('admin', 'gerente'), upload.single('image'), 
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, category_id, name, description, image_url, price, code, barcode, active, available, sort_order
+      `SELECT id, category_id, name, description, image_url, price, code, barcode, active, available, sort_order, print_kitchen
        FROM products ORDER BY sort_order, name`
     );
     res.json(result.rows);
@@ -48,14 +48,17 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', requireRole('admin', 'gerente'), async (req, res) => {
-  const { category_id, name, description, image_url, price, code, barcode, sort_order = 0 } = req.body;
+  const { category_id, name, description, image_url, price, code, barcode, sort_order = 0, print_kitchen } = req.body;
   if (!name || !(parseFloat(price) >= 0)) {
     return res.status(400).json({ error: 'Nome e preço são obrigatórios' });
   }
   try {
+    // print_kitchen entra como literal (não como $9+) pelo mesmo motivo do
+    // PATCH abaixo: o wrapper de pool.js corrompe placeholders acima de $9.
+    const kitchenSql = print_kitchen ? 'TRUE' : 'FALSE';
     const result = await pool.query(
-      `INSERT INTO products (category_id, name, description, image_url, price, code, barcode, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO products (category_id, name, description, image_url, price, code, barcode, sort_order, print_kitchen)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${kitchenSql}) RETURNING *`,
       [category_id || null, name.trim(), description || null, image_url || null, parseFloat(price), code || null, barcode || null, sort_order]
     );
     res.status(201).json(result.rows[0]);
@@ -65,7 +68,7 @@ router.post('/', requireRole('admin', 'gerente'), async (req, res) => {
 });
 
 router.patch('/:id', requireRole('admin', 'gerente'), async (req, res) => {
-  const { category_id, name, description, image_url, price, code, barcode, sort_order, active, available } = req.body;
+  const { category_id, name, description, image_url, price, code, barcode, sort_order, active, available, print_kitchen } = req.body;
   const updates = [];
   const values = [];
   let idx = 1;
@@ -83,6 +86,7 @@ router.patch('/:id', requireRole('admin', 'gerente'), async (req, res) => {
   // de string sem âncora.
   if (active !== undefined) { updates.push(`active = ${active ? 'TRUE' : 'FALSE'}`); }
   if (available !== undefined) { updates.push(`available = ${available ? 'TRUE' : 'FALSE'}`); }
+  if (print_kitchen !== undefined) { updates.push(`print_kitchen = ${print_kitchen ? 'TRUE' : 'FALSE'}`); }
   if (!updates.length) return res.status(400).json({ error: 'Nenhum campo pra atualizar' });
   values.push(req.params.id);
   try {

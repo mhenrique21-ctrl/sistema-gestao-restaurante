@@ -65,6 +65,10 @@
   #app.active { display: flex; }
   #header { height: 64px; flex-shrink: 0; background: var(--header); display: flex; align-items: center; padding: 0 20px; gap: 16px; }
   #header .logo { width: 32px; height: 32px; border-radius: 9px; background: var(--primary); flex-shrink: 0; }
+  #sync-btn { width: 38px; height: 38px; border-radius: 10px; border: none; background: var(--primary); color: #F6F4F1; font-size: 17px; flex-shrink: 0; }
+  #sync-btn:active { background: var(--hover); }
+  #sync-btn.spinning { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   #header .brand { color: #F6F4F1; font-size: 14px; font-weight: 600; line-height: 1.2; }
   #header .brand small { display: block; color: #B8AFA8; font-size: 11px; font-weight: 400; }
   #header input#search { flex: 1; max-width: 280px; height: 34px; border-radius: 10px; border: 1px solid #4A4038; background: #2C2522; color: #F6F4F1; padding: 0 12px; font-size: 13px; }
@@ -150,6 +154,7 @@
   .cfg-prod-row .pr { font-size: 13px; font-weight: 600; }
   .cfg-prod-row .tag { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
   .cfg-prod-row .tag.off { background: #FBEAE8; color: var(--danger); }
+  .cfg-prod-row .tag.kitchen { background: #E9F0EA; color: var(--success); }
   .cfg-prod-row button { background: none; border: none; color: var(--text2); font-size: 14px; padding: 2px 6px; }
   .field-group { margin-bottom: 12px; }
   .field-group label { display: block; font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
@@ -217,6 +222,7 @@
 <!-- ── App ── -->
 <div id="app">
   <div id="header">
+    <button id="sync-btn" title="Sincronizar">↻</button>
     <div class="logo"></div>
     <div class="brand">Seama<small id="header-sale-info">Nova venda · —</small></div>
     <input id="search" placeholder="Buscar produto...">
@@ -266,8 +272,10 @@
 
       <div id="config-tab-impressora" class="cfg-pane">
         <div class="cfg-form">
-          <h3>Impressora térmica</h3>
-          <p class="cfg-hint">A impressora precisa estar na mesma rede Wi-Fi do tablet, com IP fixo.</p>
+          <p class="cfg-hint">As impressoras precisam estar na mesma rede Wi-Fi do tablet, com IP fixo.</p>
+
+          <h3>🖨️ Balcão</h3>
+          <p class="cfg-hint">Imprime a ficha de todos os produtos vendidos.</p>
           <div class="field-row">
             <div class="field-group" style="flex:2"><label>Endereço IP</label><input id="set-printer-ip" placeholder="192.168.0.101"></div>
             <div class="field-group"><label>Porta</label><input id="set-printer-port" type="number" placeholder="9100"></div>
@@ -282,9 +290,23 @@
             </div>
             <div class="field-group"><label>Vias por ficha</label><input id="set-printer-copies" type="number" min="1" max="3" placeholder="1"></div>
           </div>
+
+          <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+
+          <label class="toggle-row" style="margin-bottom:4px">
+            <input type="checkbox" id="set-kitchen-enabled">
+            <b>🍳 Cozinha</b>
+          </label>
+          <p class="cfg-hint">Só os produtos marcados como "imprime na cozinha" saem aqui — e continuam saindo no balcão também.</p>
+          <div class="field-row">
+            <div class="field-group" style="flex:2"><label>Endereço IP</label><input id="set-kitchen-ip" placeholder="192.168.0.100"></div>
+            <div class="field-group"><label>Porta</label><input id="set-kitchen-port" type="number" placeholder="9100"></div>
+          </div>
+
           <div id="set-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
-          <div class="modal-actions" style="max-width:320px">
-            <button id="set-test-btn">Testar impressão</button>
+          <div class="modal-actions" style="max-width:460px">
+            <button id="set-test-btn">Testar balcão</button>
+            <button id="set-test-kitchen-btn">Testar cozinha</button>
             <button class="primary" id="set-save-btn">Salvar</button>
           </div>
         </div>
@@ -661,17 +683,31 @@ function getPrinter() {
   return window.Capacitor?.Plugins?.SeamaPrinter || null;
 }
 
-function printerPayload(sale) {
+// Monta a lista de fichas — uma por UNIDADE vendida (3 refrigerantes = 3
+// fichas iguais), sem quantidade impressa. Se onlyKitchen, filtra só os
+// produtos marcados como "imprime na cozinha".
+function buildFichas(sale, onlyKitchen) {
   const fichas = [];
   const copies = parseInt(SETTINGS.printer_copies, 10) || 1;
   for (const item of sale.items) {
+    if (onlyKitchen) {
+      const prod = products.find(p => p.id === item.product_id);
+      // Na ficha de teste não existe produto no catálogo: item.print_kitchen
+      // permite forçar o roteamento manualmente.
+      const goesToKitchen = item.print_kitchen ?? prod?.print_kitchen;
+      if (!goesToKitchen) continue;
+    }
     for (let i = 0; i < item.quantity * copies; i++) {
       fichas.push({ name: item.product_name, price: parseFloat(item.unit_price) || 0 });
     }
   }
+  return fichas;
+}
+
+function printerJob(sale, fichas, ip, port) {
   return {
-    ip: SETTINGS.printer_ip || '',
-    port: parseInt(SETTINGS.printer_port, 10) || 9100,
+    ip: ip || '',
+    port: parseInt(port, 10) || 9100,
     model: SETTINGS.printer_model || 'i9',
     saleNumber: sale.sale_number,
     operator: CURRENT_USER?.username || '',
@@ -679,18 +715,30 @@ function printerPayload(sale) {
   };
 }
 
-// Uma ficha por UNIDADE vendida (3 refrigerantes = 3 fichas iguais), sem
-// quantidade impressa.
+// Balcão recebe tudo; cozinha recebe só os produtos marcados — e o mesmo
+// produto sai NOS DOIS lugares, não é desviado. São duas chamadas separadas
+// ao plugin, então uma impressora offline não impede a outra de imprimir.
 function printFichas(sale) {
-  const payload = printerPayload(sale);
   const printer = getPrinter();
-  if (printer) {
-    printer.printFichas(payload)
-      .then(r => showToast(`🖨 ${r.printed} ficha(s) impressa(s)`))
-      .catch(err => showToast('Erro na impressão: ' + (err?.message || err)));
+  const jobs = [];
+
+  const balcao = buildFichas(sale, false);
+  if (balcao.length) jobs.push({ label: 'balcão', job: printerJob(sale, balcao, SETTINGS.printer_ip, SETTINGS.printer_port) });
+
+  if (SETTINGS.printer_kitchen_enabled === 'true' && SETTINGS.printer_kitchen_ip) {
+    const cozinha = buildFichas(sale, true);
+    if (cozinha.length) jobs.push({ label: 'cozinha', job: printerJob(sale, cozinha, SETTINGS.printer_kitchen_ip, SETTINGS.printer_kitchen_port) });
+  }
+
+  if (!printer) {
+    jobs.forEach(j => console.log(`[print/${j.label}] ${j.job.fichas.length} ficha(s) da venda #${sale.sale_number}`, j.job));
     return;
   }
-  console.log(`[print] ${payload.fichas.length} ficha(s) da venda #${sale.sale_number}`, payload);
+  for (const { label, job } of jobs) {
+    printer.printFichas(job)
+      .then(r => showToast(`🖨 ${label}: ${r.printed} ficha(s)`))
+      .catch(err => showToast(`Erro na impressão (${label}): ` + (err?.message || err)));
+  }
 }
 
 // ── Navegação inferior (Vendas/Caixa/Configurações) ─
@@ -734,20 +782,32 @@ async function loadPrinterSettings() {
     document.getElementById('set-printer-port').value = data.printer_port || '9100';
     document.getElementById('set-printer-model').value = data.printer_model || 'i9';
     document.getElementById('set-printer-copies').value = data.printer_copies || '1';
+    document.getElementById('set-kitchen-enabled').checked = data.printer_kitchen_enabled === 'true';
+    document.getElementById('set-kitchen-ip').value = data.printer_kitchen_ip || '';
+    document.getElementById('set-kitchen-port').value = data.printer_kitchen_port || '9100';
   } catch (e) { showToast('Erro ao carregar configurações'); }
+}
+
+function validIp(ip) {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && !ip.split('.').some(n => parseInt(n, 10) > 255);
 }
 
 document.getElementById('set-save-btn').addEventListener('click', async () => {
   const ip = document.getElementById('set-printer-ip').value.trim();
   const port = document.getElementById('set-printer-port').value.trim() || '9100';
+  const kitchenOn = document.getElementById('set-kitchen-enabled').checked;
+  const kitchenIp = document.getElementById('set-kitchen-ip').value.trim();
+  const kitchenPort = document.getElementById('set-kitchen-port').value.trim() || '9100';
   const errEl = document.getElementById('set-error');
   errEl.textContent = '';
   // Valida formato do IPv4 aqui pra não gravar endereço impossível e só
   // descobrir na hora de imprimir, com cliente esperando no balcão.
-  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip) || ip.split('.').some(n => parseInt(n, 10) > 255)) {
-    errEl.textContent = 'IP inválido (ex: 192.168.0.101)'; return;
-  }
-  if (!(parseInt(port, 10) > 0 && parseInt(port, 10) <= 65535)) { errEl.textContent = 'Porta inválida'; return; }
+  if (!validIp(ip)) { errEl.textContent = 'IP do balcão inválido (ex: 192.168.0.101)'; return; }
+  if (!(parseInt(port, 10) > 0 && parseInt(port, 10) <= 65535)) { errEl.textContent = 'Porta do balcão inválida'; return; }
+  // Só exige IP da cozinha se ela estiver ligada — assim dá pra salvar o
+  // balcão antes da impressora da cozinha existir.
+  if (kitchenOn && !validIp(kitchenIp)) { errEl.textContent = 'Cozinha ligada exige um IP válido'; return; }
+  if (kitchenIp && !(parseInt(kitchenPort, 10) > 0 && parseInt(kitchenPort, 10) <= 65535)) { errEl.textContent = 'Porta da cozinha inválida'; return; }
   try {
     const res = await fetch(`${API}/api/settings`, {
       method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -756,6 +816,9 @@ document.getElementById('set-save-btn').addEventListener('click', async () => {
         printer_port: port,
         printer_model: document.getElementById('set-printer-model').value,
         printer_copies: document.getElementById('set-printer-copies').value || '1',
+        printer_kitchen_enabled: kitchenOn ? 'true' : 'false',
+        printer_kitchen_ip: kitchenIp,
+        printer_kitchen_port: kitchenPort,
       }),
     });
     const data = await res.json();
@@ -765,27 +828,47 @@ document.getElementById('set-save-btn').addEventListener('click', async () => {
   } catch (e) { errEl.textContent = 'Erro de conexão'; }
 });
 
-document.getElementById('set-test-btn').addEventListener('click', async () => {
-  const ip = document.getElementById('set-printer-ip').value.trim();
-  const port = parseInt(document.getElementById('set-printer-port').value, 10) || 9100;
-  if (!ip) { showToast('Informe o IP primeiro'); return; }
+// Testa uma impressora específica: confirma o socket e, se responder, manda
+// uma ficha de teste com o mesmo layout das reais.
+async function testPrinter(which) {
+  const isKitchen = which === 'cozinha';
+  const ip = document.getElementById(isKitchen ? 'set-kitchen-ip' : 'set-printer-ip').value.trim();
+  const port = parseInt(document.getElementById(isKitchen ? 'set-kitchen-port' : 'set-printer-port').value, 10) || 9100;
+  if (!ip) { showToast(`Informe o IP ${isKitchen ? 'da cozinha' : 'do balcão'} primeiro`); return; }
   const printer = getPrinter();
   // No navegador não dá pra abrir socket direto pra um IP da rede local —
   // é trava de segurança do Chrome, só o APK consegue.
   if (!printer) { showToast('Teste só funciona no app instalado no tablet'); return; }
-  const btn = document.getElementById('set-test-btn');
+  const btn = document.getElementById(isKitchen ? 'set-test-kitchen-btn' : 'set-test-btn');
   btn.disabled = true;
   try {
     await printer.testConnection({ ip, port });
-    // Conexão OK: imprime uma ficha de teste com o mesmo layout das reais.
-    SETTINGS.printer_ip = ip;
-    SETTINGS.printer_port = String(port);
-    printFichas({ sale_number: 0, items: [{ product_name: 'TESTE DE IMPRESSAO', unit_price: 0, quantity: 1 }] });
+    await printer.printFichas({
+      ip, port,
+      model: SETTINGS.printer_model || 'i9',
+      saleNumber: 0,
+      operator: CURRENT_USER?.username || '',
+      fichas: [{ name: `TESTE ${isKitchen ? 'COZINHA' : 'BALCAO'}`, price: 0 }],
+    });
+    showToast(`🖨 Ficha de teste enviada (${which})`);
   } catch (err) {
-    showToast('Sem resposta da impressora: ' + (err?.message || err));
+    showToast(`Sem resposta da impressora ${which}: ` + (err?.message || err));
   } finally {
     btn.disabled = false;
   }
+}
+
+document.getElementById('set-test-btn').addEventListener('click', () => testPrinter('balcão'));
+document.getElementById('set-test-kitchen-btn').addEventListener('click', () => testPrinter('cozinha'));
+
+// ── Sincronizar ──────────────────────────────────────
+// Recarrega a página inteira: pega código novo (o app carrega do servidor)
+// e dados frescos de uma vez só. Com venda em andamento, confirma antes —
+// o carrinho vive só na memória e seria perdido.
+document.getElementById('sync-btn').addEventListener('click', () => {
+  if (cart.length && !confirm('Tem uma venda em andamento. Sincronizar agora vai limpar o carrinho. Continuar?')) return;
+  document.getElementById('sync-btn').classList.add('spinning');
+  location.reload();
 });
 
 // ── Configurações: categorias ────────────────────────
@@ -912,7 +995,7 @@ function renderConfigProducts() {
   list.innerHTML = prods.map(p => `
     <div class="cfg-prod-row">
       <div class="img" style="${p.image_url ? `background-image:url('${p.image_url}');background-size:cover` : ''}"></div>
-      <div class="nm">${p.name}${p.available === false ? ' <span class="tag off">indisponível</span>' : ''}<small>${p.description || ''}</small></div>
+      <div class="nm">${p.name}${p.available === false ? ' <span class="tag off">indisponível</span>' : ''}${p.print_kitchen ? ' <span class="tag kitchen">🍳 cozinha</span>' : ''}<small>${p.description || ''}</small></div>
       <div class="pr">${fmt(p.price)}</div>
       <button data-edit="${p.id}">✎</button>
       <button data-del="${p.id}">🗑</button>
@@ -947,6 +1030,7 @@ function openProductModal(productId) {
         </div>
         <input type="file" id="prod-image-file" accept="image/*" class="hidden">
       </div>
+      <label class="toggle-row"><input type="checkbox" id="prod-kitchen" ${prod?.print_kitchen ? 'checked' : ''}> 🍳 Também imprime na cozinha</label>
       ${prod ? `
         <label class="toggle-row"><input type="checkbox" id="prod-active" ${prod.active !== false ? 'checked' : ''}> Produto ativo</label>
         <label class="toggle-row"><input type="checkbox" id="prod-available" ${prod.available !== false ? 'checked' : ''}> Disponível pra venda agora</label>
@@ -993,6 +1077,7 @@ function openProductModal(productId) {
       description: backdrop.querySelector('#prod-desc').value.trim() || null,
       code: backdrop.querySelector('#prod-code').value.trim() || null,
       image_url: prodImageUrl,
+      print_kitchen: backdrop.querySelector('#prod-kitchen').checked,
     };
     if (!prod) payload.category_id = configActiveCategory;
     if (prod) {
