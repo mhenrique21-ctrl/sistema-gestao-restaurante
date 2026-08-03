@@ -199,6 +199,24 @@
   .field-row { display: flex; gap: 10px; }
   .field-row .field-group { flex: 1; }
   .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 12px; }
+  /* ── Configurações: usuários ── */
+  .usr-row { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
+  .usr-row:last-child { border-bottom: none; }
+  .usr-row.off { opacity: .5; }
+  .usr-row .av { width: 32px; height: 32px; border-radius: 999px; background: #F1EAE3; color: var(--primary); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .usr-row .info { flex: 1; min-width: 0; }
+  .usr-row .nm { font-size: 12.5px; font-weight: 500; }
+  .usr-row .sub { font-size: 10.5px; color: var(--text2); }
+  .usr-row button { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 5px 10px; font-size: 11px; }
+  .usr-row .tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; margin-left: 4px; }
+  .usr-row .tag.role-admin { background: #F1EAE3; color: var(--primary); }
+  .usr-row .tag.role-gerente { background: #FAF0DE; color: var(--warning); }
+  .usr-row .tag.role-caixa { background: var(--bg); color: var(--text2); }
+  .usr-row .tag.off { background: #FBEAE8; color: var(--danger); }
+  .role-picker { display: flex; gap: 6px; }
+  .role-opt { flex: 1; border: 1px solid var(--border); background: var(--card); border-radius: 9px; padding: 8px; font-size: 11.5px; }
+  .role-opt.selected { border: 2px solid var(--primary); background: #F1EAE3; color: var(--primary); font-weight: 600; }
+
   .icon-picker { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-height: 168px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 10px; }
   .icon-opt { height: 36px; border-radius: 9px; border: 2px solid transparent; background: var(--bg); font-size: 18px; line-height: 1; padding: 0; }
   .icon-opt.selected { border-color: var(--primary); background: #F1EAE3; }
@@ -294,6 +312,7 @@
     <div id="config-tabs">
       <button class="cfg-tab active" data-tab="cardapio">🍽️ Cardápio</button>
       <button class="cfg-tab" data-tab="impressora">🖨️ Impressora</button>
+      <button class="cfg-tab" data-tab="usuarios">👥 Usuários</button>
     </div>
 
     <div id="config-body">
@@ -350,6 +369,19 @@
             <button id="set-test-kitchen-btn">Testar cozinha</button>
             <button class="primary" id="set-save-btn">Salvar</button>
           </div>
+        </div>
+      </div>
+
+      <div id="config-tab-usuarios" class="cfg-pane">
+        <div class="cfg-form" style="max-width:560px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <h3 style="margin:0">Usuários do sistema</h3>
+            <button id="usr-add-btn" style="height:32px;padding:0 13px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:12px;font-weight:600">+ Novo usuário</button>
+          </div>
+          <p class="cfg-hint">Usuário nunca é excluído — o histórico de vendas e caixa precisa saber quem fez o quê. Desativar tira da tela de login e corta o acesso na hora.</p>
+          <div id="usr-list"></div>
+          <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+          <button id="usr-mypin-btn" style="height:36px;padding:0 15px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:12.5px;font-weight:600">🔑 Trocar meu PIN</button>
         </div>
       </div>
     </div>
@@ -1177,12 +1209,188 @@ async function loadHistorico() {
   } catch (e) { /* silencioso: histórico é acessório */ }
 }
 
-// ── Configurações: abas internas (Cardápio / Impressora) ──
+// ── Configurações: abas internas (Cardápio / Impressora / Usuários) ──
 document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click', () => {
+  if (tab.dataset.tab === 'usuarios' && CURRENT_USER?.role !== 'admin') {
+    showToast('Só administrador gerencia usuários'); return;
+  }
   document.querySelectorAll('.cfg-tab').forEach(t => t.classList.toggle('active', t === tab));
   document.querySelectorAll('.cfg-pane').forEach(p => p.classList.toggle('active', p.id === `config-tab-${tab.dataset.tab}`));
   if (tab.dataset.tab === 'impressora') loadPrinterSettings();
+  if (tab.dataset.tab === 'usuarios') loadUsuarios();
 }));
+
+// ── Configurações: usuários ──────────────────────────
+const ROLE_LABELS = { caixa: 'Caixa', gerente: 'Gerente', admin: 'Admin' };
+let USUARIOS = [];
+
+async function loadUsuarios() {
+  const el = document.getElementById('usr-list');
+  el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    const res = await apiFetch('/api/auth/users');
+    USUARIOS = await res.json();
+    if (!res.ok || !Array.isArray(USUARIOS)) { el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro ao carregar</p>'; return; }
+    renderUsuarios();
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+function ultimoAcesso(u) {
+  if (!u.last_login_at) return 'nunca acessou';
+  const d = new Date(u.last_login_at);
+  const hoje = new Date().toDateString() === d.toDateString();
+  return hoje
+    ? `último acesso hoje ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+    : `último acesso ${d.toLocaleDateString('pt-BR')}`;
+}
+
+function renderUsuarios() {
+  const el = document.getElementById('usr-list');
+  el.innerHTML = USUARIOS.map(u => {
+    const souEu = u.id === CURRENT_USER?.id;
+    return `
+      <div class="usr-row ${u.active ? '' : 'off'}">
+        <div class="av">${(u.username || '?').slice(0, 2).toUpperCase()}</div>
+        <div class="info">
+          <div class="nm">${u.username}
+            <span class="tag role-${u.role}">${ROLE_LABELS[u.role]}</span>
+            ${u.active ? '' : '<span class="tag off">inativo</span>'}
+          </div>
+          <div class="sub">${souEu ? 'Você · ' : ''}${ultimoAcesso(u)}</div>
+        </div>
+        <button data-id="${u.id}">Editar</button>
+      </div>`;
+  }).join('');
+  el.querySelectorAll('button[data-id]').forEach(b => b.addEventListener('click', () => openUsuarioModal(b.dataset.id)));
+}
+
+document.getElementById('usr-add-btn').addEventListener('click', () => openUsuarioModal(null));
+document.getElementById('usr-mypin-btn').addEventListener('click', openMeuPinModal);
+
+function openUsuarioModal(userId) {
+  const u = USUARIOS.find(x => x.id === userId) || null;
+  const souEu = u && u.id === CURRENT_USER?.id;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'usr-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:340px">
+      <h2>${u ? 'Editar · ' + u.username : 'Novo usuário'}</h2>
+      <div class="sub">${u ? ROLE_LABELS[u.role] : 'Cadastre um colaborador'}</div>
+      <div class="field-group"><label>Nome</label><input id="usr-name" value="${u?.username || ''}" placeholder="Ex: Ana"></div>
+      <div class="field-group">
+        <label>Perfil</label>
+        <div class="role-picker" id="usr-role-picker">
+          ${['caixa', 'gerente', 'admin'].map(r => `
+            <button type="button" class="role-opt ${(u?.role || 'caixa') === r ? 'selected' : ''}" data-role="${r}">${ROLE_LABELS[r]}</button>
+          `).join('')}
+        </div>
+        ${souEu ? '<small style="color:var(--text2);font-size:10.5px">Você não pode rebaixar o próprio perfil</small>' : ''}
+      </div>
+      <div class="field-group">
+        <label>${u ? 'Novo PIN (deixe vazio pra manter)' : 'PIN (4 a 6 dígitos)'}</label>
+        <input id="usr-pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••••">
+        <small style="color:var(--text2);font-size:10.5px">Evite sequências (123456) ou dígito repetido</small>
+      </div>
+      ${u && !souEu ? `
+        <label class="toggle-row"><input type="checkbox" id="usr-active" ${u.active ? 'checked' : ''}> Usuário ativo</label>
+      ` : ''}
+      <div id="usr-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-actions">
+        <button id="usr-cancel">Cancelar</button>
+        <button class="primary" id="usr-save">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  let role = u?.role || 'caixa';
+  backdrop.querySelectorAll('.role-opt').forEach(b => b.addEventListener('click', () => {
+    role = b.dataset.role;
+    backdrop.querySelectorAll('.role-opt').forEach(x => x.classList.toggle('selected', x.dataset.role === role));
+  }));
+  backdrop.querySelector('#usr-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#usr-save').addEventListener('click', async () => {
+    const errEl = backdrop.querySelector('#usr-error');
+    const nome = backdrop.querySelector('#usr-name').value.trim();
+    const novoPin = backdrop.querySelector('#usr-pin').value.trim();
+    errEl.textContent = '';
+    if (!nome) { errEl.textContent = 'Informe o nome'; return; }
+    if (!u && !novoPin) { errEl.textContent = 'Informe o PIN'; return; }
+    if (novoPin && !/^\d{4,6}$/.test(novoPin)) { errEl.textContent = 'PIN deve ter de 4 a 6 dígitos'; return; }
+
+    const payload = { username: nome, role };
+    if (novoPin) payload.pin = novoPin;
+    const chk = backdrop.querySelector('#usr-active');
+    if (chk) payload.active = chk.checked;
+
+    const btn = backdrop.querySelector('#usr-save');
+    btn.disabled = true;
+    try {
+      const res = await apiFetch(`/api/auth/users${u ? '/' + u.id : ''}`, {
+        method: u ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; btn.disabled = false; return; }
+      backdrop.remove();
+      showToast(u ? 'Usuário atualizado' : 'Usuário criado');
+      loadUsuarios();
+    } catch (e) {
+      if (e.message !== 'unauthorized') { errEl.textContent = 'Erro de conexão'; btn.disabled = false; }
+    }
+  });
+}
+
+function openMeuPinModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'pin-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:320px">
+      <h2>🔑 Trocar meu PIN</h2>
+      <div class="sub">Você precisa saber o PIN atual</div>
+      <div class="field-group"><label>PIN atual</label><input id="pin-atual" type="password" inputmode="numeric" maxlength="6" placeholder="••••••"></div>
+      <div class="field-group"><label>Novo PIN</label><input id="pin-novo" type="password" inputmode="numeric" maxlength="6" placeholder="••••••"></div>
+      <div class="field-group"><label>Repita o novo PIN</label><input id="pin-novo2" type="password" inputmode="numeric" maxlength="6" placeholder="••••••"></div>
+      <div id="pin-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-actions">
+        <button id="pin-cancel">Cancelar</button>
+        <button class="primary" id="pin-save">Trocar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#pin-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#pin-save').addEventListener('click', async () => {
+    const errEl = backdrop.querySelector('#pin-error');
+    const atual = backdrop.querySelector('#pin-atual').value.trim();
+    const novo = backdrop.querySelector('#pin-novo').value.trim();
+    const novo2 = backdrop.querySelector('#pin-novo2').value.trim();
+    errEl.textContent = '';
+    if (!atual || !novo) { errEl.textContent = 'Preencha os campos'; return; }
+    if (novo !== novo2) { errEl.textContent = 'Os novos PINs não são iguais'; return; }
+    if (!/^\d{4,6}$/.test(novo)) { errEl.textContent = 'PIN deve ter de 4 a 6 dígitos'; return; }
+
+    const btn = backdrop.querySelector('#pin-save');
+    btn.disabled = true;
+    try {
+      const res = await apiFetch('/api/auth/change-pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_pin: atual, new_pin: novo }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Erro ao trocar'; btn.disabled = false; return; }
+      backdrop.remove();
+      showToast('PIN alterado!');
+    } catch (e) {
+      if (e.message !== 'unauthorized') { errEl.textContent = 'Erro de conexão'; btn.disabled = false; }
+    }
+  });
+}
 
 // ── Configurações: impressora ────────────────────────
 let SETTINGS = {};
