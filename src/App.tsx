@@ -371,6 +371,40 @@ const mesclarProdutosDuplicados=(d:any,{canonicoId,idsRemovidos,nomeFinal}:{cano
 
   return{...d,materiasPrimas:mpsFinal,movEstoque,compras,produtosLista,normalizacoes:norms};
 };
+// Empurra os itens de uma compra da SEAMA pro estoque do PDV. O PDV é a fonte
+// da verdade do estoque de revenda: item COM vínculo entra sozinho, item SEM
+// vínculo fica numa fila lá, esperando o de-para — nada some em silêncio.
+// Falhar aqui nunca pode derrubar a compra: ela já foi gravada no Gestão, e o
+// reenvio é seguro (o PDV recusa grupoId repetido).
+const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
+  if (empresa !== "SEAMA" || !grupoId || !itens?.length) return;
+  try {
+    const r = await fetch("/api/seama-estoque", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        origin_id: grupoId,
+        supplier: fornecedor || null,
+        items: itens.map((i) => ({
+          nome: i.nomeProduto,
+          quantidade: i.quantidade,
+          unidade: i.unidade || "un",
+        })),
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error("[seama-estoque]", d.error || r.status); return; }
+    if (d.duplicated) return;
+    if (d.pending > 0) {
+      alert(`📦 PDV Seama: ${d.applied} item(ns) entraram no estoque.\n\n⚠️ ${d.pending} item(ns) aguardam vínculo — abra o PDV em Configurações → Compras para indicar a qual produto do cardápio correspondem.`);
+    } else if (d.applied > 0) {
+      alert(`📦 PDV Seama: ${d.applied} item(ns) entraram no estoque automaticamente.`);
+    }
+  } catch (e) {
+    console.error("[seama-estoque]", e.message);
+  }
+};
+
 const parseMoney= (s) => {
   const str=String(s).trim();
   // handles "1.234,56" (pt-BR) or "1234.56" (en) or "1234,56"
@@ -2535,6 +2569,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         criadoEm:new Date().toISOString(),
       };
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])],movEstoque:[...movs]};
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     // reset
@@ -2730,6 +2765,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
       const contaFin:any={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,...(nfeXml?{xmlNFe:nfeXml,nNF:iaResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||""}:{}),criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);setNfeXml("");
@@ -2822,6 +2858,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         chNFe:nfeResult.chNFe||"",
         ...(nfeXml?{xmlNFe:nfeXml}:{}),criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     const qtdItens=nfeResult.itens.length;
@@ -3107,6 +3144,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         ...(nfe.rawXml?{xmlNFe:nfe.rawXml}:{}),
         criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     if(!all){

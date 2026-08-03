@@ -1233,6 +1233,39 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // ── Compra → estoque do PDV Seama ────────────────────────────────────
+  // Proxy autenticado por segredo de serviço: o navegador nunca vê a
+  // credencial, só fala com este backend. O PDV é a fonte da verdade do
+  // estoque dos itens de revenda; aqui a compra só é empurrada pra lá.
+  if (req.method === 'POST' && urlPath === '/api/seama-estoque') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { origin_id, supplier, items } = JSON.parse(body);
+        if (!origin_id || !Array.isArray(items) || !items.length) {
+          res.writeHead(400); res.end(JSON.stringify({ error: 'origin_id e items são obrigatórios' })); return;
+        }
+        const secret = process.env.SEAMA_SERVICE_SECRET;
+        if (!secret) { res.writeHead(500); res.end(JSON.stringify({ error: 'SEAMA_SERVICE_SECRET não configurado neste servidor' })); return; }
+        const base = process.env.SEAMA_PDV_URL || 'https://seama.confrariacafe.com';
+        const upstream = await fetch(`${base}/api/supply/purchase`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
+          body: JSON.stringify({ origin_id, supplier, items }),
+        });
+        const data = await upstream.json().catch(() => ({}));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(upstream.status);
+        res.end(JSON.stringify(data));
+      } catch (e) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Erro ao enviar compra pro PDV: ' + e.message }));
+      }
+    });
+    return;
+  }
+
   // ── Catálogo real (produtos/categorias do delivery-backend) ──────────
   // Proxy autenticado por token de serviço — o navegador nunca vê o JWT
   // nem o segredo, só fala com este backend.
