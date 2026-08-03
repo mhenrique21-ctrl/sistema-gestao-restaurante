@@ -1076,6 +1076,7 @@ export default function App() {
       {id:"est-inv",label:"Inventário",icon:"📦",sub:"inventario"},
       {id:"est-ana",label:"Análise",icon:"📊",sub:"analise"},
       {id:"est-mov",label:"Movimentações",icon:"📋",sub:"movimentacoes"},
+      {id:"est-proj",label:"Projeção de compras",icon:"📊",sub:"projecao"},
     ]},
     {id:"fluxo",label:"Fluxo de Caixa",icon:"💵"},
     {id:"gestao",label:"Gestão",icon:"⚙️",children:[
@@ -6282,6 +6283,91 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   </div>;
 }
 
+// ===================== PROJEÇÃO DE COMPRAS =====================
+// Estima quanto vai ser preciso comprar de cada matéria-prima num período,
+// a partir do RITMO DE COMPRA passado. Não é consumo medido (isso só a ficha
+// técnica dá): se você estocou demais num mês, a projeção herda o exagero —
+// daí o botão de ignorar uma nota atípica.
+const JANELA_PROJECAO=90;   // compra de insumo é esporádica; 30 dias pegaria
+                            // uma ou duas notas só e distorceria o ritmo
+const MIN_DIAS_HISTORICO=14;
+const DIAS_INATIVO=60;      // sem comprar há tanto tempo, saiu do cardápio
+
+const diasEntre=(a:string,b:string)=>Math.round((new Date(b+"T12:00:00").getTime()-new Date(a+"T12:00:00").getTime())/86400000);
+
+function projetarCompras(db:any,dias:number,ignoradas:string[]=[]){
+  const hoje=today();
+  const limite=new Date(hoje+"T12:00:00");limite.setDate(limite.getDate()-JANELA_PROJECAO);
+  const limiteStr=limite.toISOString().slice(0,10);
+
+  // Agrupa as compras por matéria-prima (pelo nome, que é como o Gestão liga
+  // compra e matéria-prima ao dar entrada).
+  const porNome:Record<string,any[]>={};
+  (db.compras||[]).forEach((c:any)=>{
+    if(c.excluido)return;
+    if(ignoradas.includes(c.id))return;
+    if(!c.data||c.data<limiteStr)return;
+    const q=parseFloat(c.quantidade)||0;
+    if(q<=0)return;
+    const k=(c.nomeProduto||"").trim().toLowerCase();
+    if(!k)return;
+    (porNome[k]=porNome[k]||[]).push(c);
+  });
+
+  const itens:any[]=[];const semHistorico:any[]=[];const inativos:any[]=[];
+  const mps=db.materiasPrimas||[];
+
+  Object.entries(porNome).forEach(([k,compras]:[string,any[]])=>{
+    compras.sort((a,b)=>a.data<b.data?-1:1);
+    const mp=mps.find((m:any)=>(m.nome||"").trim().toLowerCase()===k);
+    const nome=mp?.nome||compras[0].nomeProduto;
+    const estoque=mp?.estoqueAtual||0;
+    const ultimo=compras[compras.length-1];
+    const preco=parseFloat(ultimo.valorUnitario)||mp?.ultimoValor||0;
+    const fornecedor=ultimo.fornecedor||(mp?.fornecedores||[])[0]||"";
+
+    const diasSemComprar=diasEntre(ultimo.data,hoje);
+    if(diasSemComprar>DIAS_INATIVO){
+      inativos.push({nome,estoque,unidade:mp?.unidade||ultimo.unidade||"un",diasSemComprar});
+      return;
+    }
+
+    // Unidade trocando entre notas soma coisas diferentes (3 kg + 3 pacotes).
+    // Sinaliza em vez de gerar um número errado com cara de certo.
+    const unidades=[...new Set(compras.map(c=>(c.unidade||"un").trim().toLowerCase()).filter(Boolean))];
+    const conflitoUnidade=unidades.length>1;
+
+    const historico=diasEntre(compras[0].data,hoje);
+    const total=compras.reduce((s,c)=>s+(parseFloat(c.quantidade)||0),0);
+    if(compras.length<2||historico<MIN_DIAS_HISTORICO){
+      semHistorico.push({nome,estoque,unidade:mp?.unidade||ultimo.unidade||"un",compras:compras.length,preco});
+      return;
+    }
+
+    const consumoDia=total/historico;
+    const precisa=consumoDia*dias;
+    const comprar=Math.max(0,precisa-estoque);
+    itens.push({
+      nome,categoria:mp?.categoria||ultimo.categoria||"",
+      unidade:mp?.unidade||ultimo.unidade||"un",
+      estoque,consumoDia,precisa,comprar,preco,
+      custo:comprar*preco,
+      fornecedor,conflitoUnidade,unidades,
+      emFalta:estoque<=0||estoque<consumoDia*3,
+      historico,totalComprado:total,qtdCompras:compras.length,
+      compras:compras.slice().reverse(),
+    });
+  });
+
+  itens.sort((a,b)=>b.custo-a.custo);
+  return{
+    itens,semHistorico,inativos,
+    total:itens.reduce((s,i)=>s+i.custo,0),
+    aComprar:itens.filter(i=>i.comprar>0).length,
+    emFalta:itens.filter(i=>i.emFalta).length,
+  };
+}
+
 // ===================== ESTOQUE =====================
 const REGRAS_CAT:Record<string,{dias:number,perecivel:"alta"|"media"|"baixa",cmv:boolean,icon:string}>={
   "carnes":    {dias:1,  perecivel:"alta",  cmv:true,  icon:"🥩"},
@@ -6311,6 +6397,10 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
   const [periodoAnl,setPeriodoAnl]=useState(30);
   const [buscaMov,setBuscaMov]=useState("");
   const [filtroMov,setFiltroMov]=useState("todos");
+  const [diasProj,setDiasProj]=useState(30);
+  const [verPorForn,setVerPorForn]=useState(false);
+  const [verHistProj,setVerHistProj]=useState<string|null>(null);
+  const [notasIgnoradas,setNotasIgnoradas]=useState<string[]>([]);
 
   const mps:any[]=[...(db.materiasPrimas||[])];
   const movEstoque:any[]=db.movEstoque||[];
@@ -6726,6 +6816,132 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
         })}
         {!filtradas.length&&<EmptyState msg="Nenhuma movimentação encontrada."/>}
         {movsAll.length>150&&<div className="muted" style={{textAlign:"center",fontSize:11,padding:"10px"}}>Exibindo 150 de {movsAll.length} movimentações</div>}
+      </div>;
+    })()}
+
+    {/* ===== PROJEÇÃO DE COMPRAS ===== */}
+    {sub==="projecao"&&<BackBar label="Inventário" onClick={()=>setSub("inventario")}/>}
+    {sub==="projecao"&&(()=>{
+      const p=projetarCompras(db,diasProj,notasIgnoradas);
+      const porFornecedor:Record<string,any[]>={};
+      p.itens.filter(i=>i.comprar>0).forEach(i=>{
+        const f=i.fornecedor||"Sem fornecedor";
+        (porFornecedor[f]=porFornecedor[f]||[]).push(i);
+      });
+      const fornecedores=Object.entries(porFornecedor)
+        .map(([nome,its]:[string,any[]])=>({nome,itens:its,total:its.reduce((s,i)=>s+i.custo,0)}))
+        .sort((a,b)=>b.total-a.total);
+
+      return <div>
+        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
+          {[7,15,21,30].map(d=>
+            <button key={d} onClick={()=>setDiasProj(d)} className={diasProj===d?"btn":"btn-ghost"}
+              style={{padding:"6px 14px",fontSize:12,borderRadius:20}}>{d} dias</button>)}
+          <button onClick={()=>setVerPorForn(v=>!v)} className={verPorForn?"btn":"btn-ghost"}
+            style={{padding:"6px 14px",fontSize:12,borderRadius:20,marginLeft:"auto"}}>
+            {verPorForn?"📋 Por item":"🏭 Por fornecedor"}
+          </button>
+        </div>
+
+        {!p.itens.length&&!p.semHistorico.length
+          ?<EmptyState msg="Sem compras lançadas ainda. A projeção começa a funcionar depois de algumas semanas de compras registradas."/>
+          :<>
+            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap" as const}}>
+              <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"12px 6px",background:"var(--bg3)"}}>
+                <div style={{fontWeight:800,fontSize:18}}>{fmtMoney(p.total)}</div>
+                <div className="muted" style={{fontSize:10}}>Gasto projetado · {diasProj} dias</div>
+              </div>
+              <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"12px 6px"}}>
+                <div style={{fontWeight:800,fontSize:18}}>{p.aComprar}</div>
+                <div className="muted" style={{fontSize:10}}>Itens a comprar</div>
+              </div>
+              <div className="card" style={{flex:"1 1 30%",textAlign:"center",padding:"12px 6px",background:p.emFalta>0?"#FEE2E2":"var(--bg3)"}}>
+                <div style={{fontWeight:800,fontSize:18,color:p.emFalta>0?"#EF4444":undefined}}>{p.emFalta}</div>
+                <div className="muted" style={{fontSize:10}}>Já em falta</div>
+              </div>
+            </div>
+
+            {verPorForn
+              ?fornecedores.map(f=>
+                <div key={f.nome} className="card" style={{marginBottom:8,borderLeft:"3px solid #6366F1"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+                    <b style={{fontSize:13}}>{f.nome}</b>
+                    <b style={{fontSize:13}}>{fmtMoney(f.total)}</b>
+                  </div>
+                  {f.itens.map((i:any)=>
+                    <div key={i.nome} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"var(--txt2)"}}>
+                      <span>{i.nome}</span>
+                      <span>{i.comprar.toFixed(1).replace(".0","")} {i.unidade}</span>
+                    </div>)}
+                </div>)
+              :p.itens.map(i=>
+                <div key={i.nome} className="card" style={{marginBottom:6,padding:"10px 12px",background:i.emFalta?"#FEF2F2":undefined}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <b style={{fontSize:13}}>{i.nome}{i.emFalta&&<span style={{color:"#EF4444",marginLeft:6,fontSize:11}}>⚠️ em falta</span>}</b>
+                      <div className="muted" style={{fontSize:10.5,marginTop:2}}>
+                        estoque {i.estoque.toFixed(1).replace(".0","")} {i.unidade} · consome {i.consumoDia.toFixed(2)} {i.unidade}/dia · {fmtMoney(i.preco)}/{i.unidade}
+                      </div>
+                      {i.conflitoUnidade&&<div style={{fontSize:10.5,color:"#f59e0b",marginTop:2}}>
+                        ⚠️ notas com unidades diferentes ({i.unidades.join(", ")}) — confira antes de usar o número
+                      </div>}
+                    </div>
+                    <div style={{textAlign:"right" as const,flexShrink:0}}>
+                      <div style={{fontWeight:800,fontSize:14}}>{i.comprar>0?`${i.comprar.toFixed(1).replace(".0","")} ${i.unidade}`:"—"}</div>
+                      <div className="muted" style={{fontSize:11}}>{i.custo>0?fmtMoney(i.custo):"tem estoque"}</div>
+                    </div>
+                  </div>
+                  <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                    <button onClick={()=>setVerHistProj(verHistProj===i.nome?null:i.nome)}
+                      className="btn-ghost" style={{padding:"3px 9px",fontSize:10.5}}>
+                      {verHistProj===i.nome?"Ocultar":`${i.qtdCompras} compras em ${i.historico}d`}
+                    </button>
+                  </div>
+                  {verHistProj===i.nome&&<div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+                    {i.compras.map((c:any)=>
+                      <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11,padding:"3px 0"}}>
+                        <span>{fmtDate(c.data)} · {(parseFloat(c.quantidade)||0).toFixed(1).replace(".0","")} {c.unidade||"un"} · {fmtMoney(c.valorUnitario)}</span>
+                        <button onClick={()=>setNotasIgnoradas(l=>l.includes(c.id)?l.filter(x=>x!==c.id):[...l,c.id])}
+                          className="btn-ghost" style={{padding:"2px 7px",fontSize:10}}
+                          title="Compra atípica (estoque pra evento, promoção) — tira do cálculo sem apagar a compra">
+                          {notasIgnoradas.includes(c.id)?"incluir":"ignorar"}
+                        </button>
+                      </div>)}
+                  </div>}
+                </div>)}
+
+            {!!notasIgnoradas.length&&<div className="card" style={{marginTop:8,fontSize:11,color:"var(--txt2)"}}>
+              {notasIgnoradas.length} compra(s) fora do cálculo ·{" "}
+              <button onClick={()=>setNotasIgnoradas([])} className="btn-ghost" style={{padding:"2px 8px",fontSize:10.5}}>voltar a incluir todas</button>
+            </div>}
+
+            {!!p.semHistorico.length&&<div className="card" style={{marginTop:12}}>
+              <b style={{fontSize:12}}>Sem histórico suficiente · {p.semHistorico.length}</b>
+              <div className="muted" style={{fontSize:10.5,margin:"3px 0 6px"}}>
+                Comprados uma vez só ou há menos de {MIN_DIAS_HISTORICO} dias. Não dá pra medir ritmo — ficam de fora em vez de gerar um número inventado.
+              </div>
+              {p.semHistorico.map((s:any)=>
+                <div key={s.nome} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"3px 0",color:"var(--txt2)"}}>
+                  <span>{s.nome}</span><span>estoque {s.estoque} {s.unidade}</span>
+                </div>)}
+            </div>}
+
+            {!!p.inativos.length&&<div className="card" style={{marginTop:8}}>
+              <b style={{fontSize:12}}>Parados · {p.inativos.length}</b>
+              <div className="muted" style={{fontSize:10.5,margin:"3px 0 6px"}}>
+                Sem compra há mais de {DIAS_INATIVO} dias — provavelmente saíram do cardápio.
+              </div>
+              {p.inativos.map((s:any)=>
+                <div key={s.nome} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"3px 0",color:"var(--txt2)"}}>
+                  <span>{s.nome}</span><span>{s.diasSemComprar} dias</span>
+                </div>)}
+            </div>}
+
+            <div className="muted" style={{fontSize:10.5,marginTop:12,lineHeight:1.7}}>
+              Calculado pelo ritmo de compra dos últimos {JANELA_PROJECAO} dias, não por consumo medido.
+              Se você estocou demais num mês, use "ignorar" naquela nota. O número exato só vem com a ficha técnica ligada à venda.
+            </div>
+          </>}
       </div>;
     })()}
   </div>;
