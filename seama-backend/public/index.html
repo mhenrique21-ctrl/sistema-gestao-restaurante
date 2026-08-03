@@ -126,6 +126,43 @@
   /* ── Configurações: categorias e produtos ── */
   #config-screen { flex: 1; display: none; min-height: 0; flex-direction: column; }
   #config-screen.active { display: flex; }
+
+  /* ── Caixa ── */
+  #caixa-screen { flex: 1; display: none; min-height: 0; overflow-y: auto; padding: 18px; }
+  #caixa-screen.active { display: block; }
+  #caixa-body { max-width: 720px; margin: 0 auto; }
+  .cx-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
+  .cx-empty { text-align: center; padding: 30px 20px; }
+  .cx-empty .ic { font-size: 34px; }
+  .cx-empty h3 { font-size: 15px; font-weight: 600; margin: 8px 0 2px; }
+  .cx-empty p { font-size: 12.5px; color: var(--text2); margin: 0 0 16px; }
+  .cx-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .cx-head .t { font-size: 14px; font-weight: 600; }
+  .cx-head .s { font-size: 11.5px; color: var(--text2); }
+  .cx-badge { background: #E9F0EA; color: var(--success); font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 999px; }
+  .cx-expected { background: var(--bg); border-radius: 11px; padding: 13px 15px; margin-bottom: 14px; }
+  .cx-expected .lbl { font-size: 11px; color: var(--text2); }
+  .cx-expected .val { font-size: 25px; font-weight: 700; margin-top: 2px; }
+  .cx-expected .calc { font-size: 10.5px; color: var(--text2); margin-top: 4px; }
+  .cx-methods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .cx-method { background: var(--bg); border-radius: 10px; padding: 9px 10px; }
+  .cx-method .m { font-size: 10px; color: var(--text2); }
+  .cx-method .v { font-size: 13.5px; font-weight: 600; margin-top: 2px; }
+  .cx-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+  .cx-actions button { flex: 1; height: 38px; border-radius: 11px; border: 1px solid var(--border); background: var(--card); font-size: 12.5px; font-weight: 600; }
+  .cx-actions button.danger { border: none; background: var(--danger); color: #fff; }
+  .cx-section-title { font-size: 11px; font-weight: 600; color: var(--text2); margin-bottom: 6px; letter-spacing: .03em; }
+  .cx-mov { display: flex; justify-content: space-between; font-size: 11.5px; padding: 5px 0; border-bottom: 1px solid var(--bg); }
+  .cx-mov:last-child { border-bottom: none; }
+  .cx-mov .plus { color: var(--success); font-weight: 600; }
+  .cx-mov .minus { color: var(--danger); font-weight: 600; }
+  .cx-diff { border-radius: 11px; padding: 12px 14px; }
+  .cx-diff.ok { background: #E9F0EA; }
+  .cx-diff.bad { background: #FBEAE8; }
+  .cx-diff .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
+  .cx-diff .total { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; margin-top: 4px; }
+  .cx-hist { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
+  .cx-hist:last-child { border-bottom: none; }
   #config-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
   .cfg-tab { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: 12.5px; font-weight: 500; color: var(--text2); }
   .cfg-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -247,6 +284,10 @@
         <div id="pay-hint">Ao confirmar, imprime a ficha de cada produto</div>
       </div>
     </div>
+  </div>
+
+  <div id="caixa-screen">
+    <div id="caixa-body"></div>
   </div>
 
   <div id="config-screen">
@@ -704,7 +745,19 @@ async function confirmSale() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar venda'; btn.disabled = false; btn.textContent = 'Confirmar e imprimir'; return; }
+    if (!res.ok) {
+      // Sem turno aberto a venda é recusada no banco: leva o operador direto
+      // pro caixa em vez de deixá-lo preso no modal sem saber o que fazer.
+      if (data.code === 'CAIXA_FECHADO') {
+        closePayModal();
+        showToast('Abra o caixa antes de vender');
+        document.getElementById('nav-caixa').click();
+        return;
+      }
+      errEl.textContent = data.error || 'Erro ao registrar venda';
+      btn.disabled = false; btn.textContent = 'Confirmar e imprimir';
+      return;
+    }
     printCupom(data);
     closePayModal();
     cart = []; discount = 0;
@@ -798,17 +851,331 @@ function setActiveNav(id) {
 
 document.getElementById('nav-vendas').addEventListener('click', () => {
   document.getElementById('config-screen').classList.remove('active');
+  document.getElementById('caixa-screen').classList.remove('active');
   document.getElementById('main').style.display = 'flex';
   setActiveNav('nav-vendas');
 });
-document.getElementById('nav-caixa').addEventListener('click', () => showToast('Em breve'));
+document.getElementById('nav-caixa').addEventListener('click', () => {
+  document.getElementById('config-screen').classList.remove('active');
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('caixa-screen').classList.add('active');
+  setActiveNav('nav-caixa');
+  loadCaixa();
+});
 document.getElementById('nav-config').addEventListener('click', () => {
   if (!['admin', 'gerente'].includes(CURRENT_USER?.role)) { showToast('Só admin ou gerente acessa configurações'); return; }
+  document.getElementById('caixa-screen').classList.remove('active');
   document.getElementById('main').style.display = 'none';
   document.getElementById('config-screen').classList.add('active');
   setActiveNav('nav-config');
   renderConfigCategories();
 });
+
+// ── Caixa ────────────────────────────────────────────
+// Só dinheiro passa pela gaveta: cartão e PIX entram no faturamento mas não
+// no valor físico a conferir no fechamento.
+const CX_METHOD_LABELS = {
+  dinheiro: '💵 Dinheiro', cartao_debito: '💳 Débito', cartao_credito: '💳 Crédito',
+  pix: '📱 PIX', vale_alimentacao: '🍽️ Vale Alim.', vale_refeicao: '🍔 Vale Ref.',
+};
+let CAIXA = null;
+
+async function loadCaixa() {
+  const el = document.getElementById('caixa-body');
+  el.innerHTML = '<p style="text-align:center;color:var(--text2);font-size:13px;padding:30px">Carregando...</p>';
+  try {
+    const res = await apiFetch('/api/cash-sessions/current');
+    CAIXA = await res.json();
+    renderCaixa();
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="text-align:center;color:var(--danger);font-size:13px;padding:30px">Erro ao carregar o caixa</p>';
+  }
+}
+
+function renderCaixa() {
+  const el = document.getElementById('caixa-body');
+  if (!CAIXA?.session) { renderCaixaFechado(el); return; }
+  renderCaixaAberto(el);
+}
+
+function renderCaixaFechado(el) {
+  el.innerHTML = `
+    <div class="cx-card cx-empty">
+      <div class="ic">🔒</div>
+      <h3>Caixa fechado</h3>
+      <p>Abra o caixa para começar a vender</p>
+      <div style="max-width:240px;margin:0 auto;text-align:left">
+        <div class="field-group"><label>Fundo de troco inicial</label><input id="cx-open-amount" type="number" step="0.01" min="0" placeholder="0,00"></div>
+        <div id="cx-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+        <button id="cx-open-btn" style="width:100%;height:40px;border:none;border-radius:11px;background:var(--success);color:#fff;font-size:13.5px;font-weight:600">Abrir caixa</button>
+      </div>
+    </div>
+    ${['admin', 'gerente'].includes(CURRENT_USER?.role) ? '<div class="cx-card"><div class="cx-section-title">TURNOS ANTERIORES</div><div id="cx-hist">Carregando...</div></div>' : ''}
+  `;
+  document.getElementById('cx-open-btn').addEventListener('click', abrirCaixa);
+  document.getElementById('cx-open-amount').focus();
+  if (['admin', 'gerente'].includes(CURRENT_USER?.role)) loadHistorico();
+}
+
+function renderCaixaAberto(el) {
+  const s = CAIXA.session;
+  const abertura = parseFloat(s.opening_amount);
+  const isGerente = ['admin', 'gerente'].includes(CURRENT_USER?.role);
+  const hora = new Date(s.opened_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  el.innerHTML = `
+    <div class="cx-card">
+      <div class="cx-head">
+        <div>
+          <div class="t">Turno aberto</div>
+          <div class="s">Desde ${hora} · ${s.opened_by_name || '—'}</div>
+        </div>
+        <span class="cx-badge">● Aberto</span>
+      </div>
+
+      <div class="cx-expected">
+        <div class="lbl">Esperado na gaveta agora</div>
+        <div class="val">${fmt(CAIXA.expected)}</div>
+        <div class="calc">${fmt(abertura)} abertura + ${fmt(CAIXA.sales.dinheiro.total)} vendas dinheiro + ${fmt(CAIXA.suprimentos)} suprimento − ${fmt(CAIXA.sangrias)} sangria</div>
+      </div>
+
+      <div class="cx-methods">
+        ${['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'].map(m => `
+          <div class="cx-method"><div class="m">${CX_METHOD_LABELS[m]}</div><div class="v">${fmt(CAIXA.sales[m].total)}</div></div>
+        `).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:14px">
+        <span style="color:var(--text2)">Total vendido no turno</span>
+        <b>${fmt(CAIXA.totalVendido)}</b>
+      </div>
+
+      <div class="cx-actions">
+        ${isGerente ? `
+          <button id="cx-sangria-btn">🔻 Sangria</button>
+          <button id="cx-suprimento-btn">🔺 Suprimento</button>
+        ` : ''}
+        <button class="danger" id="cx-close-btn">🔒 Fechar caixa</button>
+      </div>
+
+      <div class="cx-section-title">MOVIMENTAÇÕES</div>
+      <div>
+        ${CAIXA.movements.length ? CAIXA.movements.map(m => `
+          <div class="cx-mov">
+            <span>${new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${m.type === 'abertura' ? 'Abertura' : m.type === 'sangria' ? 'Sangria' : 'Suprimento'}${m.reason ? ' — ' + m.reason : ''}</span>
+            <span class="${m.type === 'sangria' ? 'minus' : 'plus'}">${m.type === 'sangria' ? '−' : '+'} ${fmt(m.amount)}</span>
+          </div>
+        `).join('') : '<p style="font-size:12px;color:var(--text2)">Nenhuma movimentação</p>'}
+      </div>
+    </div>
+
+    ${CAIXA.byOperator.length > 1 ? `
+      <div class="cx-card">
+        <div class="cx-section-title">VENDAS POR OPERADOR</div>
+        ${CAIXA.byOperator.map(o => `
+          <div class="cx-mov"><span>${o.username} · ${o.vendas} venda(s)</span><b>${fmt(o.total)}</b></div>
+        `).join('')}
+      </div>` : ''}
+  `;
+
+  if (isGerente) {
+    document.getElementById('cx-sangria-btn').addEventListener('click', () => openMovimentoModal('sangria'));
+    document.getElementById('cx-suprimento-btn').addEventListener('click', () => openMovimentoModal('suprimento'));
+  }
+  document.getElementById('cx-close-btn').addEventListener('click', openFechamentoModal);
+}
+
+async function abrirCaixa() {
+  const input = document.getElementById('cx-open-amount');
+  const errEl = document.getElementById('cx-error');
+  const amount = parseFloat(input.value);
+  errEl.textContent = '';
+  if (!(amount >= 0)) { errEl.textContent = 'Informe o fundo de troco (pode ser 0)'; return; }
+  const btn = document.getElementById('cx-open-btn');
+  btn.disabled = true;
+  try {
+    const res = await apiFetch('/api/cash-sessions/open', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opening_amount: amount }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao abrir caixa'; btn.disabled = false; return; }
+    showToast('✅ Caixa aberto!');
+    loadCaixa();
+  } catch (e) {
+    if (e.message !== 'unauthorized') { errEl.textContent = 'Erro de conexão'; btn.disabled = false; }
+  }
+}
+
+function openMovimentoModal(tipo) {
+  const isSangria = tipo === 'sangria';
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'mov-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:340px">
+      <h2>${isSangria ? '🔻 Sangria' : '🔺 Suprimento'}</h2>
+      <div class="sub">${isSangria ? 'Retirada de dinheiro da gaveta' : 'Entrada de dinheiro na gaveta'}</div>
+      <div class="field-group"><label>Valor</label><input id="mov-amount" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      <div class="field-group"><label>Motivo</label><input id="mov-reason" placeholder="${isSangria ? 'Ex: depósito no cofre' : 'Ex: reforço de troco'}"></div>
+      <div id="mov-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-actions">
+        <button id="mov-cancel">Cancelar</button>
+        <button class="primary" id="mov-save">Confirmar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  document.getElementById('mov-amount').focus();
+  backdrop.querySelector('#mov-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#mov-save').addEventListener('click', async () => {
+    const errEl = backdrop.querySelector('#mov-error');
+    const amount = parseFloat(backdrop.querySelector('#mov-amount').value);
+    errEl.textContent = '';
+    if (!(amount > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
+    const btn = backdrop.querySelector('#mov-save');
+    btn.disabled = true;
+    try {
+      const res = await apiFetch('/api/cash-sessions/movement', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: tipo, amount, reason: backdrop.querySelector('#mov-reason').value.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar'; btn.disabled = false; return; }
+      backdrop.remove();
+      showToast(isSangria ? 'Sangria registrada' : 'Suprimento registrado');
+      loadCaixa();
+    } catch (e) {
+      if (e.message !== 'unauthorized') { errEl.textContent = 'Erro de conexão'; btn.disabled = false; }
+    }
+  });
+}
+
+// Conferência às cegas: o operador digita o contado sem ver o esperado, pra
+// não "ajustar" a contagem até o número bater e esconder furo de caixa.
+function openFechamentoModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'fech-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:360px">
+      <h2>🔒 Fechar caixa</h2>
+      <div class="sub">Conte o dinheiro da gaveta e informe o valor. A conferência aparece depois.</div>
+      <div class="field-group"><label>Dinheiro contado</label><input id="fech-amount" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      <div class="field-group"><label>Observação (opcional)</label><input id="fech-notes" placeholder="Ex: falta de troco no fim do dia"></div>
+      <div id="fech-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <div class="modal-actions">
+        <button id="fech-cancel">Cancelar</button>
+        <button class="primary" id="fech-save">Conferir e fechar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  document.getElementById('fech-amount').focus();
+  backdrop.querySelector('#fech-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#fech-save').addEventListener('click', async () => {
+    const errEl = backdrop.querySelector('#fech-error');
+    const counted = parseFloat(backdrop.querySelector('#fech-amount').value);
+    errEl.textContent = '';
+    if (!(counted >= 0)) { errEl.textContent = 'Informe o valor contado'; return; }
+    const btn = backdrop.querySelector('#fech-save');
+    btn.disabled = true;
+    try {
+      const res = await apiFetch('/api/cash-sessions/close', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ counted_amount: counted, notes: backdrop.querySelector('#fech-notes').value.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Erro ao fechar'; btn.disabled = false; return; }
+      backdrop.remove();
+      showResultadoFechamento(data);
+      loadCaixa();
+    } catch (e) {
+      if (e.message !== 'unauthorized') { errEl.textContent = 'Erro de conexão'; btn.disabled = false; }
+    }
+  });
+}
+
+function showResultadoFechamento(data) {
+  const dif = parseFloat(data.difference);
+  const ok = Math.abs(dif) < 0.005;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'result-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:360px">
+      <h2>Caixa fechado</h2>
+      <div class="sub">Turno encerrado às ${new Date(data.session.closed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+      <div class="cx-diff ${ok ? 'ok' : 'bad'}" style="margin-bottom:14px">
+        <div class="row"><span>Esperado</span><span>${fmt(data.expected)}</span></div>
+        <div class="row"><span>Contado</span><span>${fmt(data.counted)}</span></div>
+        <div class="total" style="color:${ok ? 'var(--success)' : 'var(--danger)'}">
+          <span>${ok ? 'Conferido' : dif < 0 ? 'Falta' : 'Sobra'}</span><span>${ok ? '✓' : fmt(Math.abs(dif))}</span>
+        </div>
+      </div>
+      <div class="cx-section-title">VENDAS DO TURNO</div>
+      ${['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'].map(m => `
+        <div class="cx-mov"><span>${CX_METHOD_LABELS[m]}</span><b>${fmt(data.sales[m].total)}</b></div>
+      `).join('')}
+      <div class="cx-mov" style="border-top:1px solid var(--border);margin-top:4px"><span><b>Total vendido</b></span><b>${fmt(data.totalVendido)}</b></div>
+      <div class="modal-actions" style="margin-top:14px">
+        <button id="result-print">🖨 Imprimir</button>
+        <button class="primary" id="result-ok">Fechar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#result-ok').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#result-print').addEventListener('click', () => printFechamento(data));
+  printFechamento(data);
+}
+
+// Reaproveita o cupom do balcão: cada linha vira um "item" do relatório, com
+// o total no rodapé. Evita um método novo no plugin (e APK novo).
+function printFechamento(data) {
+  const printer = getPrinter();
+  if (!printer?.printCupom) return;
+  const dif = parseFloat(data.difference);
+  const linhas = [
+    ...['dinheiro', 'cartao_debito', 'cartao_credito', 'pix']
+      .filter(m => data.sales[m].total > 0)
+      .map(m => ({ name: CX_METHOD_LABELS[m].replace(/[^\w\sÀ-ú.]/g, '').trim(), quantity: data.sales[m].vendas, total: data.sales[m].total })),
+    { name: 'Fundo de troco', quantity: 1, total: parseFloat(data.session.opening_amount) },
+    { name: 'Suprimentos', quantity: 1, total: data.suprimentos },
+    { name: 'Sangrias', quantity: 1, total: -data.sangrias },
+    { name: 'ESPERADO NA GAVETA', quantity: 1, total: data.expected },
+    { name: 'CONTADO', quantity: 1, total: data.counted },
+    { name: dif < 0 ? 'FALTA' : dif > 0 ? 'SOBRA' : 'CONFERIDO', quantity: 1, total: Math.abs(dif) },
+  ];
+  printer.printCupom({
+    ip: SETTINGS.printer_ip || '', port: parseInt(SETTINGS.printer_port, 10) || 9100,
+    kitchen: false, saleNumber: 0,
+    operator: CURRENT_USER?.username || '',
+    total: data.totalVendido,
+    payment: 'FECHAMENTO DE CAIXA',
+    items: linhas,
+  }).catch(err => showToast('Erro ao imprimir: ' + (err?.message || err)));
+}
+
+async function loadHistorico() {
+  const el = document.getElementById('cx-hist');
+  if (!el) return;
+  try {
+    const res = await apiFetch('/api/cash-sessions?limit=10');
+    const list = await res.json();
+    if (!res.ok || !list.length) { el.innerHTML = '<p style="font-size:12px;color:var(--text2)">Nenhum turno anterior</p>'; return; }
+    el.innerHTML = list.filter(s => s.status === 'fechado').map(s => {
+      const dif = parseFloat(s.difference || 0);
+      const ok = Math.abs(dif) < 0.005;
+      return `
+        <div class="cx-hist">
+          <span>${new Date(s.opened_at).toLocaleDateString('pt-BR')} · ${s.opened_by_name || '—'}</span>
+          <span style="color:${ok ? 'var(--text2)' : 'var(--danger)'};font-weight:600">
+            ${ok ? 'conferido ✓' : (dif < 0 ? 'falta ' : 'sobra ') + fmt(Math.abs(dif))}
+          </span>
+        </div>`;
+    }).join('') || '<p style="font-size:12px;color:var(--text2)">Nenhum turno fechado</p>';
+  } catch (e) { /* silencioso: histórico é acessório */ }
+}
 
 // ── Configurações: abas internas (Cardápio / Impressora) ──
 document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click', () => {

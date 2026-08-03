@@ -88,6 +88,10 @@ router.post('/', async (req, res) => {
       p_discount: discountCents / 100,
       p_total: totalCents / 100,
     });
+    // A função no banco recusa venda sem turno aberto (ver create_sale).
+    if (error && String(error.message || '').includes('CAIXA_FECHADO')) {
+      return res.status(409).json({ error: 'Abra o caixa antes de vender', code: 'CAIXA_FECHADO' });
+    }
     if (error) throw Object.assign(new Error(error.message), { code: error.code });
 
     const sale = data;
