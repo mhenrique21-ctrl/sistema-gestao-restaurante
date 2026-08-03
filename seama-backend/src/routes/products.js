@@ -38,7 +38,8 @@ router.post('/upload', requireRole('admin', 'gerente'), upload.single('image'), 
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, category_id, name, description, image_url, price, code, barcode, active, available, sort_order, print_kitchen
+      `SELECT id, category_id, name, description, image_url, price, code, barcode, active, available,
+              sort_order, print_kitchen, track_stock, stock_qty, stock_min
        FROM products ORDER BY sort_order, name`
     );
     res.json(result.rows);
@@ -68,7 +69,8 @@ router.post('/', requireRole('admin', 'gerente'), async (req, res) => {
 });
 
 router.patch('/:id', requireRole('admin', 'gerente'), async (req, res) => {
-  const { category_id, name, description, image_url, price, code, barcode, sort_order, active, available, print_kitchen } = req.body;
+  const { category_id, name, description, image_url, price, code, barcode, sort_order,
+          active, available, print_kitchen, track_stock, stock_min } = req.body;
   const updates = [];
   const values = [];
   let idx = 1;
@@ -87,6 +89,14 @@ router.patch('/:id', requireRole('admin', 'gerente'), async (req, res) => {
   if (active !== undefined) { updates.push(`active = ${active ? 'TRUE' : 'FALSE'}`); }
   if (available !== undefined) { updates.push(`available = ${available ? 'TRUE' : 'FALSE'}`); }
   if (print_kitchen !== undefined) { updates.push(`print_kitchen = ${print_kitchen ? 'TRUE' : 'FALSE'}`); }
+  if (track_stock !== undefined) { updates.push(`track_stock = ${track_stock ? 'TRUE' : 'FALSE'}`); }
+  // Saldo e mínimo entram como número literal (validado acima), não como $N —
+  // o wrapper de pool.js corrompe placeholders a partir de $10.
+  if (stock_min !== undefined) {
+    const n = parseFloat(stock_min);
+    if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Estoque mínimo inválido' });
+    updates.push(`stock_min = ${n}`);
+  }
   if (!updates.length) return res.status(400).json({ error: 'Nenhum campo pra atualizar' });
   values.push(req.params.id);
   try {

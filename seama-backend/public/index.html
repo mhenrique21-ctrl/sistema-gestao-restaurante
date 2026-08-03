@@ -199,6 +199,43 @@
   .field-row { display: flex; gap: 10px; }
   .field-row .field-group { flex: 1; }
   .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 12px; }
+  /* ── Relatórios ── */
+  #rel-screen { flex: 1; display: none; min-height: 0; flex-direction: column; }
+  #rel-screen.active { display: flex; }
+  #rel-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
+  #rel-periodo { flex-shrink: 0; display: flex; gap: 6px; padding: 10px 14px 4px; }
+  .per-btn { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 6px 14px; font-size: 11.5px; color: var(--text2); }
+  .per-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  #rel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px 18px; }
+  .rel-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-bottom: 14px; }
+  .rel-kpi { background: var(--card); border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px; }
+  .rel-kpi .k { font-size: 10px; color: var(--text2); }
+  .rel-kpi .v { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .rel-kpi .d { font-size: 10px; margin-top: 1px; }
+  .rel-kpi .d.up { color: var(--success); }
+  .rel-kpi .d.down { color: var(--danger); }
+  .rel-kpi .d.flat { color: var(--text2); }
+  .rel-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .rel-card h4 { font-size: 12.5px; font-weight: 600; margin: 0 0 10px; }
+  .rel-head { display: flex; font-size: 10px; color: var(--text2); font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .rel-row { display: flex; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--bg); font-size: 12px; }
+  .rel-row:last-child { border-bottom: none; }
+  .rel-row .bar { height: 4px; background: var(--primary); border-radius: 2px; margin-top: 3px; }
+  .rel-row .bar.low { background: #D8CFC5; }
+  .abc { font-size: 9.5px; font-weight: 700; padding: 2px 5px; border-radius: 4px; }
+  .abc.A { background: #E9F0EA; color: var(--success); }
+  .abc.B { background: #FAF0DE; color: var(--warning); }
+  .abc.C { background: var(--bg); color: var(--text2); }
+  .rel-bars { display: flex; align-items: flex-end; gap: 6px; height: 78px; }
+  .rel-bars .col { flex: 1; text-align: center; }
+  .rel-bars .col .b { background: var(--primary); border-radius: 3px 3px 0 0; }
+  .rel-bars .col .b.dim { background: #D8CFC5; }
+  .rel-bars .col .lb { font-size: 9.5px; color: var(--text2); margin-top: 3px; }
+  .rel-empty { text-align: center; color: var(--text2); font-size: 12.5px; padding: 24px 10px; }
+  .stk-alert { background: #FDF6F5; border-radius: 9px; padding: 10px 12px; margin-top: 11px; }
+  .stk-alert .t { font-size: 11.5px; font-weight: 600; color: var(--danger); margin-bottom: 3px; }
+  .stk-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
+
   /* ── Configurações: usuários ── */
   .usr-row { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
   .usr-row:last-child { border-bottom: none; }
@@ -308,6 +345,21 @@
     <div id="caixa-body"></div>
   </div>
 
+  <div id="rel-screen">
+    <div id="rel-tabs">
+      <button class="cfg-tab active" data-rtab="vendas">📈 Vendas</button>
+      <button class="cfg-tab" data-rtab="produtos">🏆 Produtos</button>
+      <button class="cfg-tab" data-rtab="estoque">📦 Estoque</button>
+    </div>
+    <div id="rel-periodo">
+      <button class="per-btn active" data-dias="0">Hoje</button>
+      <button class="per-btn" data-dias="7">7 dias</button>
+      <button class="per-btn" data-dias="30">30 dias</button>
+      <button class="per-btn" data-dias="90">90 dias</button>
+    </div>
+    <div id="rel-body"></div>
+  </div>
+
   <div id="config-screen">
     <div id="config-tabs">
       <button class="cfg-tab active" data-tab="cardapio">🍽️ Cardápio</button>
@@ -390,7 +442,8 @@
   <div id="footer-nav">
     <button class="nav-btn active" id="nav-vendas"><span class="ic">🧾</span>Vendas</button>
     <button class="nav-btn" id="nav-caixa"><span class="ic">💰</span>Caixa</button>
-    <button class="nav-btn" id="nav-config"><span class="ic">⚙️</span>Configurações</button>
+    <button class="nav-btn" id="nav-relatorios"><span class="ic">📊</span>Relatórios</button>
+    <button class="nav-btn" id="nav-config"><span class="ic">⚙️</span>Config</button>
   </div>
 </div>
 
@@ -884,11 +937,13 @@ function setActiveNav(id) {
 document.getElementById('nav-vendas').addEventListener('click', () => {
   document.getElementById('config-screen').classList.remove('active');
   document.getElementById('caixa-screen').classList.remove('active');
+  document.getElementById('rel-screen').classList.remove('active');
   document.getElementById('main').style.display = 'flex';
   setActiveNav('nav-vendas');
 });
 document.getElementById('nav-caixa').addEventListener('click', () => {
   document.getElementById('config-screen').classList.remove('active');
+  document.getElementById('rel-screen').classList.remove('active');
   document.getElementById('main').style.display = 'none';
   document.getElementById('caixa-screen').classList.add('active');
   setActiveNav('nav-caixa');
@@ -897,11 +952,247 @@ document.getElementById('nav-caixa').addEventListener('click', () => {
 document.getElementById('nav-config').addEventListener('click', () => {
   if (!['admin', 'gerente'].includes(CURRENT_USER?.role)) { showToast('Só admin ou gerente acessa configurações'); return; }
   document.getElementById('caixa-screen').classList.remove('active');
+  document.getElementById('rel-screen').classList.remove('active');
   document.getElementById('main').style.display = 'none';
   document.getElementById('config-screen').classList.add('active');
   setActiveNav('nav-config');
   renderConfigCategories();
 });
+
+// ── Relatórios ───────────────────────────────────────
+const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+let relTab = 'vendas';
+let relDias = 0;
+
+function relRange() {
+  const hoje = new Date();
+  const to = new Date(hoje.getTime() - hoje.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const d = new Date(hoje);
+  d.setDate(d.getDate() - relDias);
+  const from = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return `from=${from}&to=${to}`;
+}
+
+document.getElementById('nav-relatorios').addEventListener('click', () => {
+  if (!['admin', 'gerente'].includes(CURRENT_USER?.role)) { showToast('Só admin ou gerente acessa relatórios'); return; }
+  document.getElementById('config-screen').classList.remove('active');
+  document.getElementById('caixa-screen').classList.remove('active');
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('rel-screen').classList.add('active');
+  setActiveNav('nav-relatorios');
+  loadRelatorio();
+});
+
+document.querySelectorAll('#rel-tabs .cfg-tab').forEach(t => t.addEventListener('click', () => {
+  relTab = t.dataset.rtab;
+  document.querySelectorAll('#rel-tabs .cfg-tab').forEach(x => x.classList.toggle('active', x === t));
+  // Estoque é uma foto do agora; período só faz sentido pras outras abas.
+  document.getElementById('rel-periodo').style.display = relTab === 'estoque' ? 'none' : 'flex';
+  loadRelatorio();
+}));
+
+document.querySelectorAll('.per-btn').forEach(b => b.addEventListener('click', () => {
+  relDias = parseInt(b.dataset.dias, 10);
+  document.querySelectorAll('.per-btn').forEach(x => x.classList.toggle('active', x === b));
+  loadRelatorio();
+}));
+
+async function loadRelatorio() {
+  const el = document.getElementById('rel-body');
+  el.innerHTML = '<p class="rel-empty">Carregando...</p>';
+  try {
+    if (relTab === 'vendas') return renderRelVendas(el);
+    if (relTab === 'produtos') return renderRelProdutos(el);
+    return renderRelEstoque(el);
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p class="rel-empty">Erro ao carregar</p>';
+  }
+}
+
+function variacaoHtml(pct) {
+  if (pct === null || pct === undefined) return '<div class="d flat">sem base anterior</div>';
+  const cls = pct > 0.5 ? 'up' : pct < -0.5 ? 'down' : 'flat';
+  const seta = pct > 0.5 ? '↑' : pct < -0.5 ? '↓' : '→';
+  return `<div class="d ${cls}">${seta} ${Math.abs(pct).toFixed(0)}% vs período anterior</div>`;
+}
+
+async function renderRelVendas(el) {
+  const [sRes, pRes] = await Promise.all([
+    apiFetch(`/api/reports/summary?${relRange()}`),
+    apiFetch(`/api/reports/patterns?${relRange()}`),
+  ]);
+  const s = await sRes.json();
+  const p = await pRes.json();
+  if (!s.atual.vendas) { el.innerHTML = '<p class="rel-empty">Nenhuma venda no período</p>'; return; }
+
+  // Semana e hora só ganham sentido com mais de um dia / volume; num dia só,
+  // o gráfico de dia da semana teria uma barra só.
+  const mostraSemana = relDias > 0 && p.porDiaSemana.length > 1;
+  const maxSemana = Math.max(...p.porDiaSemana.map(d => d.faturamento), 1);
+  const maxHora = Math.max(...p.porHora.map(h => h.faturamento), 1);
+
+  el.innerHTML = `
+    <div class="rel-kpis">
+      <div class="rel-kpi"><div class="k">Faturamento</div><div class="v">${fmt(s.atual.faturamento)}</div>${variacaoHtml(s.comparacao.faturamento)}</div>
+      <div class="rel-kpi"><div class="k">Vendas</div><div class="v">${s.atual.vendas}</div>${variacaoHtml(s.comparacao.vendas)}</div>
+      <div class="rel-kpi"><div class="k">Ticket médio</div><div class="v">${fmt(s.atual.ticketMedio)}</div>${variacaoHtml(s.comparacao.ticketMedio)}</div>
+      <div class="rel-kpi"><div class="k">Itens vendidos</div><div class="v">${s.atual.unidades}</div>${variacaoHtml(s.comparacao.unidades)}</div>
+    </div>
+
+    ${mostraSemana ? `
+      <div class="rel-card">
+        <h4>Faturamento por dia da semana</h4>
+        <div class="rel-bars">
+          ${[0, 1, 2, 3, 4, 5, 6].map(i => {
+            const d = p.porDiaSemana.find(x => x.dia === i);
+            const v = d?.faturamento || 0;
+            const h = Math.max(2, Math.round((v / maxSemana) * 70));
+            return `<div class="col"><div class="b ${v === maxSemana && v > 0 ? '' : 'dim'}" style="height:${h}px"></div><div class="lb">${DIAS_SEMANA[i]}</div></div>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
+
+    <div class="rel-card">
+      <h4>Movimento por hora</h4>
+      ${p.porHora.length ? `
+        <div class="rel-bars">
+          ${p.porHora.map(h => {
+            const alt = Math.max(2, Math.round((h.faturamento / maxHora) * 70));
+            return `<div class="col"><div class="b ${h.faturamento === maxHora ? '' : 'dim'}" style="height:${alt}px"></div><div class="lb">${String(h.hora).padStart(2, '0')}h</div></div>`;
+          }).join('')}
+        </div>
+        <p style="font-size:11px;color:var(--text2);margin:10px 0 0">Pico às ${String(p.porHora.reduce((a, b) => b.faturamento > a.faturamento ? b : a).hora).padStart(2, '0')}h — use pra dimensionar produção e equipe.</p>
+      ` : '<p class="rel-empty">Sem dados</p>'}
+    </div>
+  `;
+}
+
+async function renderRelProdutos(el) {
+  const res = await apiFetch(`/api/reports/products?${relRange()}`);
+  const d = await res.json();
+  if (!d.ranking.length) { el.innerHTML = '<p class="rel-empty">Nenhuma venda no período</p>'; return; }
+  const maxFat = d.ranking[0].faturamento || 1;
+
+  el.innerHTML = `
+    <div class="rel-card">
+      <h4>Mais vendidos · ${fmt(d.totalFaturamento)} no período</h4>
+      <div class="rel-head">
+        <span style="flex:1">PRODUTO</span><span style="width:40px;text-align:right">QTD</span>
+        <span style="width:74px;text-align:right">FATURAM.</span><span style="width:28px;text-align:center">ABC</span>
+      </div>
+      ${d.ranking.map(p => `
+        <div class="rel-row">
+          <div style="flex:1;min-width:0">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+            <div class="bar ${p.abc === 'C' ? 'low' : ''}" style="width:${Math.max(2, (p.faturamento / maxFat) * 100)}%"></div>
+          </div>
+          <span style="width:40px;text-align:right">${p.quantidade}</span>
+          <span style="width:74px;text-align:right;font-weight:600">${fmt(p.faturamento)}</span>
+          <span style="width:28px;text-align:center"><span class="abc ${p.abc}">${p.abc}</span></span>
+        </div>
+      `).join('')}
+      <p style="font-size:10.5px;color:var(--text2);margin:10px 0 0;line-height:1.6">
+        <b>A</b> = os poucos que somam 80% do faturamento (nunca podem faltar) · <b>B</b> = intermediários · <b>C</b> = cauda longa
+      </p>
+    </div>
+
+    <div class="rel-card">
+      <h4>Produtos parados · ${d.parados.length}</h4>
+      ${d.parados.length ? `
+        <p style="font-size:11px;color:var(--text2);margin:0 0 8px">Ativos no cardápio que não venderam nada no período. Candidatos a promoção ou a sair.</p>
+        ${d.parados.map(p => `<div class="rel-row"><span style="flex:1">${p.name}</span><span style="color:var(--text2);font-size:11px">${p.categoria || '—'}</span></div>`).join('')}
+      ` : '<p style="font-size:12px;color:var(--success)">Todos os produtos venderam no período 🎉</p>'}
+    </div>
+  `;
+}
+
+async function renderRelEstoque(el) {
+  const res = await apiFetch('/api/stock');
+  const d = await res.json();
+  if (!d.itens.length) {
+    el.innerHTML = `<div class="rel-card"><h4>Nenhum produto com estoque controlado</h4>
+      <p style="font-size:12px;color:var(--text2);line-height:1.7">Marque "Controlar estoque" no cadastro do produto — em Configurações → Cardápio.<br><br>
+      Vale só pra <b>revenda</b> (bebidas, produtos que você compra prontos e vende como estão). Tapioca e sanduíche são produzidos na hora: o que se consome são os insumos, não o produto pronto.</p></div>`;
+    return;
+  }
+
+  const comprar = d.itens.filter(i => i.sugestaoCompra > 0);
+  el.innerHTML = `
+    <div class="rel-card">
+      <h4>Estoque · giro calculado sobre ${d.giroDias} dia(s)</h4>
+      <div class="rel-head">
+        <span style="flex:1">PRODUTO</span><span style="width:52px;text-align:right">ESTOQ.</span>
+        <span style="width:60px;text-align:right">GIRO/DIA</span><span style="width:70px;text-align:right">COBERTURA</span>
+      </div>
+      ${d.itens.map(i => {
+        const cor = i.cobertura === null ? 'var(--text2)'
+          : i.cobertura < 3 ? 'var(--danger)'
+          : i.cobertura > 20 ? 'var(--warning)' : 'var(--success)';
+        return `
+          <div class="rel-row" style="${i.abaixoMinimo ? 'background:#FDF6F5' : ''}">
+            <span style="flex:1">${i.name}${i.abaixoMinimo ? ' ⚠️' : ''}</span>
+            <span style="width:52px;text-align:right;${i.abaixoMinimo ? 'color:var(--danger);font-weight:600' : ''}">${i.estoque}</span>
+            <span style="width:60px;text-align:right">${i.giroDia}</span>
+            <span style="width:70px;text-align:right;color:${cor};font-weight:600">${i.cobertura === null ? 'parado' : i.cobertura + ' dias'}</span>
+          </div>`;
+      }).join('')}
+      ${comprar.length ? `
+        <div class="stk-alert">
+          <div class="t">🛒 Comprar</div>
+          ${comprar.map(i => `<div class="l">${i.name} — ${i.estoque} em estoque, vende ${i.giroDia}/dia. Sugestão: <b>${i.sugestaoCompra} un</b></div>`).join('')}
+        </div>` : ''}
+      <p style="font-size:10.5px;color:var(--text2);margin:10px 0 0;line-height:1.6">
+        <b>Cobertura</b> é o número que decide a compra: quantos dias o estoque dura no ritmo real de venda. Vermelho = menos de 3 dias · amarelo = mais de 20 dias (capital parado).
+      </p>
+    </div>
+
+    <div class="rel-card">
+      <h4>Lançar movimento</h4>
+      <div class="field-group"><label>Produto</label>
+        <select id="stk-prod">${d.itens.map(i => `<option value="${i.id}">${i.name} (${i.estoque})</option>`).join('')}</select>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label>Tipo</label>
+          <select id="stk-tipo">
+            <option value="entrada">Entrada (compra)</option>
+            <option value="ajuste">Ajuste (contagem)</option>
+            <option value="perda">Perda / quebra</option>
+          </select>
+        </div>
+        <div class="field-group"><label>Quantidade</label><input id="stk-qtd" type="number" step="1" placeholder="0"></div>
+      </div>
+      <div class="field-group"><label>Motivo</label><input id="stk-motivo" placeholder="Ex: nota 1234 do fornecedor"></div>
+      <div id="stk-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+      <button id="stk-save" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:12.5px;font-weight:600">Lançar</button>
+      <p style="font-size:10.5px;color:var(--text2);margin:8px 0 0">Em <b>ajuste</b>, a quantidade informada vira o saldo (contagem física). Entrada soma, perda subtrai.</p>
+    </div>
+  `;
+  document.getElementById('stk-save').addEventListener('click', lancarEstoque);
+}
+
+async function lancarEstoque() {
+  const errEl = document.getElementById('stk-error');
+  const id = document.getElementById('stk-prod').value;
+  const type = document.getElementById('stk-tipo').value;
+  const quantity = parseFloat(document.getElementById('stk-qtd').value);
+  errEl.textContent = '';
+  if (!Number.isFinite(quantity)) { errEl.textContent = 'Informe a quantidade'; return; }
+  if (type !== 'ajuste' && !(quantity > 0)) { errEl.textContent = 'Quantidade deve ser maior que zero'; return; }
+  const btn = document.getElementById('stk-save');
+  btn.disabled = true;
+  try {
+    const res = await apiFetch(`/api/stock/${id}/movement`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, quantity, reason: document.getElementById('stk-motivo').value.trim() || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao lançar'; btn.disabled = false; return; }
+    showToast(`Estoque de ${data.name}: ${data.stock_qty}`);
+    loadRelatorio();
+  } catch (e) {
+    if (e.message !== 'unauthorized') { errEl.textContent = 'Erro de conexão'; btn.disabled = false; }
+  }
+}
 
 // ── Caixa ────────────────────────────────────────────
 // Só dinheiro passa pela gaveta: cartão e PIX entram no faturamento mas não
@@ -1660,6 +1951,11 @@ function openProductModal(productId) {
         <input type="file" id="prod-image-file" accept="image/*" class="hidden">
       </div>
       <label class="toggle-row"><input type="checkbox" id="prod-kitchen" ${prod?.print_kitchen ? 'checked' : ''}> 🍳 Também imprime na cozinha</label>
+      <label class="toggle-row"><input type="checkbox" id="prod-track-stock" ${prod?.track_stock ? 'checked' : ''}> 📦 Controlar estoque</label>
+      <div id="prod-stock-fields" class="${prod?.track_stock ? '' : 'hidden'}">
+        <div class="field-group"><label>Estoque mínimo (alerta)</label><input id="prod-stock-min" type="number" step="1" min="0" value="${prod?.stock_min ?? 0}"></div>
+        <small style="color:var(--text2);font-size:10.5px;display:block;margin:-6px 0 12px">Só pra revenda (bebidas). Produto feito na hora consome insumos, não o produto pronto — controlar aqui nunca fecharia.${prod?.track_stock ? ` Saldo atual: <b>${prod.stock_qty}</b> (altere em Relatórios → Estoque).` : ''}</small>
+      </div>
       ${prod ? `
         <label class="toggle-row"><input type="checkbox" id="prod-active" ${prod.active !== false ? 'checked' : ''}> Produto ativo</label>
         <label class="toggle-row"><input type="checkbox" id="prod-available" ${prod.available !== false ? 'checked' : ''}> Disponível pra venda agora</label>
@@ -1672,6 +1968,9 @@ function openProductModal(productId) {
     </div>
   `;
   document.body.appendChild(backdrop);
+  backdrop.querySelector('#prod-track-stock').addEventListener('change', (e) => {
+    backdrop.querySelector('#prod-stock-fields').classList.toggle('hidden', !e.target.checked);
+  });
   let prodImageUrl = prod?.image_url || null;
   const statusEl = backdrop.querySelector('#prod-image-status');
   const previewEl = backdrop.querySelector('#prod-image-preview');
@@ -1707,6 +2006,8 @@ function openProductModal(productId) {
       code: backdrop.querySelector('#prod-code').value.trim() || null,
       image_url: prodImageUrl,
       print_kitchen: backdrop.querySelector('#prod-kitchen').checked,
+      track_stock: backdrop.querySelector('#prod-track-stock').checked,
+      stock_min: parseFloat(backdrop.querySelector('#prod-stock-min').value) || 0,
     };
     if (!prod) payload.category_id = configActiveCategory;
     if (prod) {
