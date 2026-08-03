@@ -75,6 +75,9 @@
   #header input#search::placeholder { color: #8A7F76; }
   #header .clock { margin-left: auto; color: #B8AFA8; font-size: 11px; text-align: right; line-height: 1.3; }
   #cancel-sale-btn { height: 32px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--danger); background: transparent; color: #E39089; font-size: 12px; font-weight: 600; }
+  #user-btn { height: 32px; padding: 0 12px 0 4px; border-radius: 999px; border: 1px solid #4A4038; background: #2C2522; color: #F6F4F1; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 7px; }
+  #user-btn:active { background: var(--primary); }
+  #user-btn .av { width: 24px; height: 24px; border-radius: 999px; background: var(--primary); color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 
   #main { flex: 1; display: flex; min-height: 0; }
 
@@ -337,6 +340,7 @@
     <div class="brand">Seama<small id="header-sale-info">Nova venda · —</small></div>
     <input id="search" placeholder="Buscar produto...">
     <div class="clock"><span id="clock-date">—</span><br><span id="clock-time">—</span></div>
+    <button id="user-btn" title="Trocar usuário"><span class="av" id="user-initials">—</span><span id="user-name">—</span></button>
     <button id="cancel-sale-btn">Cancelar venda</button>
   </div>
 
@@ -506,6 +510,9 @@ async function apiFetch(path, options = {}) {
   return res;
 }
 
+// Volta pra tela de PIN. Não fecha o caixa de propósito: o turno é da gaveta,
+// não do operador — na troca de turno o próximo continua no mesmo caixa aberto
+// e cada venda segue gravando quem fez.
 function forceLogout(msg) {
   TOKEN = null;
   CURRENT_USER = null;
@@ -522,6 +529,41 @@ function forceLogout(msg) {
   loadOperators();
   if (msg) showToast(msg);
 }
+
+function renderUsuarioAtual() {
+  const nome = CURRENT_USER?.username || '—';
+  document.getElementById('user-name').textContent = nome;
+  document.getElementById('user-initials').textContent = nome.slice(0, 2).toUpperCase();
+}
+
+document.getElementById('user-btn').addEventListener('click', () => {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'user-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:320px">
+      <h2>👤 ${CURRENT_USER?.username || '—'}</h2>
+      <div class="sub">${ROLE_LABELS[CURRENT_USER?.role] || CURRENT_USER?.role || ''}</div>
+      ${cart.length ? `<div style="background:#FDF6F5;border-radius:9px;padding:10px 12px;font-size:11.5px;color:var(--danger);margin-bottom:12px">
+        ⚠️ Há uma venda em andamento com ${cart.length} item(ns). Trocar de usuário vai limpar o carrinho.
+      </div>` : ''}
+      <button id="user-switch" style="width:100%;height:40px;border:1px solid var(--border);border-radius:11px;background:var(--card);font-size:13px;font-weight:600;margin-bottom:8px">🔄 Trocar usuário</button>
+      <div style="font-size:10.5px;color:var(--text2);line-height:1.6;margin-bottom:12px">
+        O caixa continua aberto — o próximo operador segue no mesmo turno, e cada venda registra quem fez.
+      </div>
+      <div class="modal-actions">
+        <button id="user-cancel" style="width:100%">Cancelar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#user-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#user-switch').addEventListener('click', () => {
+    if (cart.length && !confirm('Trocar de usuário vai limpar a venda em andamento. Continuar?')) return;
+    backdrop.remove();
+    forceLogout();
+  });
+});
 function showToast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -615,6 +657,10 @@ async function tryLogin() {
 function enterApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.add('active');
+  renderUsuarioAtual();
+  // Sempre entra na tela de venda. Sem isso, um caixa que loga depois de um
+  // gerente cairia em Relatórios — tela que o perfil dele nem pode abrir.
+  document.getElementById('nav-vendas').click();
   startClock();
   loadCatalog();
   // Carrega config da impressora já no login: printCupom precisa do IP
