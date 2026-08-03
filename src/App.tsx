@@ -799,7 +799,13 @@ const mergeFromServer=(prev:any,updates:any)=>{
       encargos:      byId(s.encargos||[]),
       normalizacoes: byId(s.normalizacoes||[]),
       movEstoque:    byId(s.movEstoque||[]),
-      usuarios:      byId(s.usuarios||[]),
+      // usuarios precisa da MESMA fusão de vendas/contas, não byId (que só
+      // olha o servidor). Bug real: criar um usuário sumia. O salvamento funde
+      // com o servidor ANTES de postar; como o servidor ainda não conhecia o
+      // usuário recém-criado, byId devolvia a lista sem ele e era essa lista
+      // que ia pro POST — o cadastro se apagava a caminho de ser salvo.
+      // mergeDocument.js já trata 'usuarios' como campo mesclável.
+      usuarios:      mergeArrayById(s.usuarios||[],p.usuarios||[],_listaDeletados),
       produtosProducao: unionById(p.produtosProducao||[],s.produtosProducao||[]),
       pedidosProducao:  unionById(p.pedidosProducao||[],s.pedidosProducao||[],true),
       itensProducaoPendentes: unionById(p.itensProducaoPendentes||[],s.itensProducaoPendentes||[]),
