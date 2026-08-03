@@ -53,6 +53,7 @@ app.use('/api/cash-movements', require('./routes/cashMovements'));
 app.use('/api/cash-sessions', require('./routes/cashSessions'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/stock', require('./routes/stock'));
+app.use('/api/supply', require('./routes/supply'));
 app.use('/api/settings', require('./routes/settings'));
 
 app.get('/health', (req, res) => {

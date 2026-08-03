@@ -236,6 +236,24 @@
   .stk-alert .t { font-size: 11.5px; font-weight: 600; color: var(--danger); margin-bottom: 3px; }
   .stk-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
 
+  /* ── Configurações: vínculos de compra ── */
+  .vinc-alert { background: #FDF6F5; border-radius: 10px; padding: 11px 13px; margin-bottom: 12px; }
+  .vinc-alert .t { font-size: 12px; font-weight: 600; color: var(--danger); margin-bottom: 3px; }
+  .vinc-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
+  .vinc-pend { border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px; margin-bottom: 9px; }
+  .vinc-pend .nm { font-size: 12.5px; font-weight: 500; }
+  .vinc-pend .sb { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .vinc-pend .ac { display: flex; gap: 6px; margin-top: 9px; align-items: center; }
+  .vinc-pend .ac select { flex: 1; height: 34px; border-radius: 9px; border: 1px solid var(--border); padding: 0 8px; font-size: 12px; background: var(--card); color: var(--text); }
+  .vinc-pend .ac .v-fator { width: 62px; height: 34px; border-radius: 9px; border: 1px solid var(--border); padding: 0 8px; font-size: 12px; text-align: center; }
+  .vinc-pend .ac .v-save { height: 34px; padding: 0 13px; border: none; border-radius: 9px; background: var(--success); color: #fff; font-size: 12px; font-weight: 600; }
+  .vinc-pend .ac .v-skip { height: 34px; width: 34px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text2); font-size: 13px; }
+  .vinc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
+  .vinc-row:last-child { border-bottom: none; }
+  .vinc-row .nm { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vinc-row .sb { font-size: 11px; color: var(--text2); margin-top: 1px; }
+  .vinc-row .v-del { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 5px 10px; font-size: 11px; color: var(--text2); flex-shrink: 0; }
+
   /* ── Configurações: usuários ── */
   .usr-row { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
   .usr-row:last-child { border-bottom: none; }
@@ -365,6 +383,7 @@
       <button class="cfg-tab active" data-tab="cardapio">🍽️ Cardápio</button>
       <button class="cfg-tab" data-tab="impressora">🖨️ Impressora</button>
       <button class="cfg-tab" data-tab="usuarios">👥 Usuários</button>
+      <button class="cfg-tab" data-tab="vinculos">🔗 Compras</button>
     </div>
 
     <div id="config-body">
@@ -434,6 +453,14 @@
           <div id="usr-list"></div>
           <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
           <button id="usr-mypin-btn" style="height:36px;padding:0 15px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:12.5px;font-weight:600">🔑 Trocar meu PIN</button>
+        </div>
+      </div>
+
+      <div id="config-tab-vinculos" class="cfg-pane">
+        <div class="cfg-form" style="max-width:620px">
+          <h3>Compras vindas do App Gestão</h3>
+          <p class="cfg-hint">Quando você lança uma compra no Gestão para a SEAMA, os itens chegam aqui. O vínculo diz qual produto do cardápio cada item da nota alimenta, e quantas unidades saem de cada embalagem — 1 multipack de 6 vira 6 latas. Feito uma vez, as próximas compras entram sozinhas.</p>
+          <div id="vinc-body"></div>
         </div>
       </div>
     </div>
@@ -1509,7 +1536,116 @@ document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click
   document.querySelectorAll('.cfg-pane').forEach(p => p.classList.toggle('active', p.id === `config-tab-${tab.dataset.tab}`));
   if (tab.dataset.tab === 'impressora') loadPrinterSettings();
   if (tab.dataset.tab === 'usuarios') loadUsuarios();
+  if (tab.dataset.tab === 'vinculos') loadVinculos();
 }));
+
+// ── Configurações: vínculos de compra ────────────────
+async function loadVinculos() {
+  const el = document.getElementById('vinc-body');
+  el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    const res = await apiFetch('/api/supply/links');
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro ao carregar</p>'; return; }
+    renderVinculos(el, d);
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+function renderVinculos(el, d) {
+  const comEstoque = products.filter(p => p.track_stock);
+  el.innerHTML = `
+    ${d.pendentes.length ? `
+      <div class="vinc-alert">
+        <div class="t">⏳ ${d.pendentes.length} item(ns) esperando vínculo</div>
+        <div class="l">Compras que chegaram do Gestão e ainda não entraram no estoque. Nada foi descartado — assim que você vincular, a quantidade retida entra de uma vez.</div>
+      </div>
+      ${d.pendentes.map(p => `
+        <div class="vinc-pend" data-nome="${p.source_name.replace(/"/g, '&quot;')}">
+          <div class="nm">${p.source_name}</div>
+          <div class="sb">${p.quantidade} ${p.unidade || 'un'} retido${p.supplier ? ' · ' + p.supplier : ''}</div>
+          <div class="ac">
+            <select class="v-prod">
+              <option value="">Vincular a...</option>
+              ${comEstoque.map(x => `<option value="${x.id}">${x.name}</option>`).join('')}
+            </select>
+            <input class="v-fator" type="number" step="0.01" min="0.01" value="1" title="Unidades por embalagem">
+            <button class="v-save">Vincular</button>
+            <button class="v-skip" title="Não é produto de revenda">✕</button>
+          </div>
+        </div>
+      `).join('')}
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+    ` : '<p style="font-size:12.5px;color:var(--success);margin-bottom:14px">✓ Nenhum item pendente</p>'}
+
+    <div class="cx-section-title">VÍNCULOS ATIVOS · ${d.links.length}</div>
+    ${d.links.length ? d.links.map(l => `
+      <div class="vinc-row">
+        <div style="flex:1;min-width:0">
+          <div class="nm">${l.source_name}</div>
+          <div class="sb">1 embalagem = ${l.factor} un de <b>${l.product_name}</b></div>
+        </div>
+        <button class="v-del" data-id="${l.id}">Remover</button>
+      </div>
+    `).join('') : '<p style="font-size:12px;color:var(--text2)">Nenhum vínculo ainda. Eles aparecem aqui conforme você vincula os itens que chegam.</p>'}
+
+    ${!comEstoque.length ? `
+      <div class="vinc-alert" style="margin-top:14px">
+        <div class="t">⚠️ Nenhum produto controla estoque</div>
+        <div class="l">Marque "📦 Controlar estoque" no cadastro dos produtos de revenda (aba Cardápio) — só eles podem receber compra.</div>
+      </div>` : ''}
+  `;
+
+  el.querySelectorAll('.vinc-pend').forEach(row => {
+    row.querySelector('.v-save').addEventListener('click', () => vincularPendente(row));
+    row.querySelector('.v-skip').addEventListener('click', () => descartarPendente(row.dataset.nome));
+  });
+  el.querySelectorAll('.v-del').forEach(b => b.addEventListener('click', () => removerVinculo(b.dataset.id)));
+}
+
+async function vincularPendente(row) {
+  const nome = row.dataset.nome;
+  const product_id = row.querySelector('.v-prod').value;
+  const factor = parseFloat(row.querySelector('.v-fator').value);
+  if (!product_id) { showToast('Escolha o produto do cardápio'); return; }
+  if (!(factor > 0)) { showToast('Fator inválido'); return; }
+  const btn = row.querySelector('.v-save');
+  btn.disabled = true;
+  try {
+    const res = await apiFetch('/api/supply/links', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_name: nome, product_id, factor }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro ao vincular'); btn.disabled = false; return; }
+    showToast(data.liberado ? `✅ ${data.liberado} un entraram em ${data.produto}` : `Vinculado a ${data.produto}`);
+    await loadCatalog();
+    loadVinculos();
+  } catch (e) {
+    if (e.message !== 'unauthorized') { showToast('Erro de conexão'); btn.disabled = false; }
+  }
+}
+
+async function descartarPendente(nome) {
+  if (!confirm(`Descartar "${nome}"?\n\nUse quando o item não é produto de revenda — insumo de cozinha que veio na mesma nota, por exemplo. Ele não entra no estoque do PDV.`)) return;
+  try {
+    const res = await apiFetch(`/api/supply/pending?nome=${encodeURIComponent(nome)}`, { method: 'DELETE' });
+    if (!res.ok) { showToast('Erro ao descartar'); return; }
+    showToast('Item descartado');
+    loadVinculos();
+  } catch (e) { if (e.message !== 'unauthorized') showToast('Erro de conexão'); }
+}
+
+async function removerVinculo(id) {
+  if (!confirm('Remover este vínculo? As próximas compras desse item voltam pra fila de pendentes.')) return;
+  try {
+    const res = await apiFetch(`/api/supply/links/${id}`, { method: 'DELETE' });
+    if (!res.ok) { showToast('Erro ao remover'); return; }
+    showToast('Vínculo removido');
+    loadVinculos();
+  } catch (e) { if (e.message !== 'unauthorized') showToast('Erro de conexão'); }
+}
 
 // ── Configurações: usuários ──────────────────────────
 const ROLE_LABELS = { caixa: 'Caixa', gerente: 'Gerente', admin: 'Admin' };
