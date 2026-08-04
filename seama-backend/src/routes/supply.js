@@ -89,7 +89,8 @@ router.post('/purchase', serviceAuth, async (req, res) => {
          VALUES ($1, 'entrada', ${entrada}, ${saldo}, $2) RETURNING id`,
         [link.product_id, `Compra${supplier ? ' – ' + supplier : ''} (App Gestão)`]
       );
-      aplicados.push({ nome, produto: link.product_name, comprado: qtd, entrou: entrada, saldo });
+      aplicados.push({ nome, produto: link.product_name, comprado: qtd, entrou: entrada, saldo,
+                       product_id: link.product_id });
     }
 
     for (const p of pendentes) {
@@ -100,9 +101,15 @@ router.post('/purchase', serviceAuth, async (req, res) => {
       );
     }
 
+    // `applied` guarda o que de fato entrou no estoque, com o produto e a
+    // quantidade JÁ convertida pelo fator. É o que o estorno usa: recalcular
+    // com o fator de hoje devolveria diferente do que entrou, caso o de-para
+    // tenha sido corrigido no meio do caminho.
+    const appliedJson = aplicados.map((a) => ({ nome: a.nome, product_id: a.product_id, entrou: a.entrou }));
     await pool.query(
-      `INSERT INTO purchase_entries (origin_id, supplier, applied_count, pending_count, payload)
-       VALUES ($1, $2, ${aplicados.length}, ${pendentes.length}, ${sqlStr(JSON.stringify({ items }))}::jsonb)
+      `INSERT INTO purchase_entries (origin_id, supplier, applied_count, pending_count, payload, applied)
+       VALUES ($1, $2, ${aplicados.length}, ${pendentes.length}, ${sqlStr(JSON.stringify({ items }))}::jsonb,
+               ${sqlStr(JSON.stringify(appliedJson))}::jsonb)
        RETURNING id`,
       [String(origin_id), supplier || null]
     );
@@ -117,6 +124,79 @@ router.post('/purchase', serviceAuth, async (req, res) => {
     });
   } catch (err) {
     return internalError(res, err, '[supply/purchase]');
+  }
+});
+
+// POST /api/supply/purchase/reverse — desfaz o que uma compra do Gestão trouxe.
+// Chamada quando a nota (ou um item dela) é excluída lá, ou quando a nota é
+// movida pra outra empresa. Sem isso o estoque do PDV fica MAIOR que a
+// realidade e ninguém percebe até a contagem física.
+//
+// Body: { origin_id, items?: ["nome", ...] }  — sem items, estorna a nota toda.
+router.post('/purchase/reverse', serviceAuth, async (req, res) => {
+  const { origin_id } = req.body;
+  if (!origin_id) return res.status(400).json({ error: 'origin_id é obrigatório' });
+  const filtro = Array.isArray(req.body.items) && req.body.items.length
+    ? new Set(req.body.items.map((n) => norm(n)))
+    : null;
+
+  try {
+    const entry = await pool.query(
+      `SELECT origin_id, applied, payload FROM purchase_entries WHERE origin_id = $1`,
+      [String(origin_id)]
+    );
+    if (!entry.rows[0]) return res.json({ ok: true, reverted: 0, message: 'Compra não consta no PDV' });
+
+    // Já estornados não voltam a ser estornados: excluir a nota depois de já
+    // ter excluído um item dela nao pode devolver aquele item duas vezes.
+    const feitos = await pool.query(
+      `SELECT source_name FROM purchase_reversals WHERE origin_id = $1`,
+      [String(origin_id)]
+    );
+    const jaFeito = new Set(feitos.rows.map((r) => norm(r.source_name)));
+
+    const aplicados = entry.rows[0].applied || [];
+    const revertidos = [];
+    for (const a of aplicados) {
+      if (filtro && !filtro.has(norm(a.nome))) continue;
+      if (jaFeito.has(norm(a.nome))) continue;
+      const qtd = parseFloat(a.entrou) || 0;
+      if (!(qtd > 0) || !a.product_id) continue;
+
+      const r = await pool.query(
+        `UPDATE products SET stock_qty = stock_qty - ${qtd} WHERE id = $1 RETURNING stock_qty, name`,
+        [a.product_id]
+      );
+      if (!r.rows[0]) continue;
+      const saldo = parseFloat(r.rows[0].stock_qty);
+      await pool.query(
+        `INSERT INTO stock_movements (product_id, type, quantity, balance_after, reason)
+         VALUES ($1, 'estorno', ${-qtd}, ${saldo}, $2) RETURNING id`,
+        [a.product_id, `Compra excluída no Gestão – ${a.nome}`]
+      );
+      await pool.query(
+        `INSERT INTO purchase_reversals (origin_id, source_name, product_id, quantity)
+         VALUES ($1, $2, $3, ${qtd}) RETURNING id`,
+        [String(origin_id), a.nome, a.product_id]
+      );
+      revertidos.push({ nome: a.nome, produto: r.rows[0].name, devolvido: qtd, saldo });
+    }
+
+    // Item que estava só esperando vínculo sai da fila: a compra não existe
+    // mais, então não faz sentido continuar pedindo o de-para dela. Num estorno
+    // parcial, só o item excluído sai — o resto da nota continua pendente.
+    const filtroSql = filtro
+      ? ` AND upper(regexp_replace(trim(source_name), '\\s+', ' ', 'g')) IN (${[...filtro].map((n) => sqlStr(n)).join(', ')})`
+      : '';
+    const pend = await pool.query(
+      `UPDATE pending_supply_items SET resolved = true
+        WHERE origin_id = $1 AND resolved = false${filtroSql} RETURNING source_name`,
+      [String(origin_id)]
+    );
+
+    res.json({ ok: true, reverted: revertidos.length, detalhes: revertidos, pendentes_removidos: pend.rows.length });
+  } catch (err) {
+    return internalError(res, err, '[supply/reverse]');
   }
 });
 
