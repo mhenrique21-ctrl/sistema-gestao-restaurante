@@ -777,6 +777,27 @@
 </div>
 
 <!-- ── Modal: espelho do cupom de fechamento (confirmar antes de imprimir) ── -->
+<div id="est-acoes-backdrop" class="modal-backdrop hidden">
+  <div class="close2-sheet" style="max-width:360px">
+    <div class="ab-head">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4 8 4 8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg></span>
+      <div>
+        <h3 style="font-size:1.05rem" id="est-acoes-titulo">Produto</h3>
+        <p style="font-size:.78rem" id="est-acoes-saldo">Saldo atual: 0</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:10px">
+      <button class="btn btn-secondary" style="flex:1;font-size:.8rem" onclick="estFormAjuste('contagem')">Contagem</button>
+      <button class="btn btn-secondary" style="flex:1;font-size:.8rem" onclick="estFormAjuste('perda')">Perda</button>
+      <button class="btn btn-secondary" style="flex:1;font-size:.8rem" onclick="estVerExtrato()">Extrato</button>
+    </div>
+    <div id="est-acoes-body"></div>
+    <div class="close2-actions" style="padding-top:10px">
+      <button class="close2-cancel" onclick="closeEstoqueAcoes()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div id="contagem-modal-backdrop" class="modal-backdrop hidden">
   <div class="close2-sheet" style="max-width:340px">
     <div class="ab-head">
@@ -1427,21 +1448,116 @@ function renderEstoque() {
     }
   }
   if (!rows.length) { el.innerHTML = '<div class="cart-empty">Nenhum produto encontrado</div>'; return; }
-  el.innerHTML = rows.map(p => `
+  el.innerHTML = rows.map(p => {
+    // Saldo só aparece pra produto de revenda. Mostrar "0 un" em tapioca —
+    // que é feita na hora e nunca terá saldo — treinaria o operador a ignorar
+    // o número justamente onde ele importa.
+    const baixo = p.track_stock && parseFloat(p.stock_qty) <= parseFloat(p.stock_min);
+    const neg = p.track_stock && parseFloat(p.stock_qty) < 0;
+    const saldo = p.track_stock
+      ? ` · <b style="color:${neg ? '#dc2626' : baixo ? '#d97706' : 'var(--c-text)'}">${p.stock_qty} un</b>${baixo ? ' ⚠️' : ''}`
+      : '';
+    return `
     <div class="estoque-item ${p.available ? '' : 'unavailable'}">
       <div>
         <div class="name">${p.name}</div>
-        <small>${p.category_name} · ${fmt(p.price)}</small>
+        <small>${p.category_name} · ${fmt(p.price)}${saldo}</small>
       </div>
       <div class="estoque-item-actions">
+        ${p.track_stock ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem"
+           onclick="openEstoqueAcoes('${p.id}','${p.name.replace(/'/g, "\\'")}',${p.stock_qty})">📦 Estoque</button>` : ''}
         ${ROLE === 'admin' ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openEditProduct('${p.id}')">✏️ Editar</button>` : ''}
         <label class="switch">
           <input type="checkbox" ${p.available ? 'checked' : ''} onchange="toggleAvailable('${p.id}', this.checked)">
           <span class="slider"></span>
         </label>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+}
+
+// ── Estoque no PDV ────────────────────────────────────
+// Quem percebe que a Coca está acabando é quem está no balcão às oito da
+// noite, não quem abre o painel administrativo. Por isso contagem, perda e
+// extrato ficam aqui, na mesma tela onde o produto já é ligado e desligado.
+let _estProd = null;
+
+function openEstoqueAcoes(id, nome, saldo) {
+  _estProd = { id, nome, saldo };
+  document.getElementById('est-acoes-titulo').textContent = nome;
+  document.getElementById('est-acoes-saldo').textContent = `Saldo atual: ${saldo}`;
+  document.getElementById('est-acoes-body').innerHTML = '';
+  document.getElementById('est-acoes-backdrop').classList.remove('hidden');
+}
+
+function closeEstoqueAcoes() {
+  document.getElementById('est-acoes-backdrop').classList.add('hidden');
+  _estProd = null;
+}
+
+function estFormAjuste(tipo) {
+  const contagem = tipo === 'contagem';
+  document.getElementById('est-acoes-body').innerHTML = `
+    <p style="font-size:.82rem;color:var(--c-muted);line-height:1.5;margin:0 0 10px">
+      ${contagem
+        ? `Conte o que existe de verdade e informe o total. O sistema calcula a diferença sozinho.`
+        : 'Quantidade perdida por quebra, vencimento ou avaria. Ela sai do saldo.'}
+    </p>
+    <input type="number" step="0.001" min="0" id="est-valor" placeholder="0"
+           value="${contagem ? _estProd.saldo : ''}"
+           style="width:100%;padding:12px;font-size:1.2rem;text-align:center;border:2px solid var(--c-border);border-radius:10px">
+    <input type="text" id="est-motivo" placeholder="Motivo (opcional)"
+           style="width:100%;padding:10px;margin-top:8px;border:1px solid var(--c-border);border-radius:8px">
+    <div id="est-erro" style="font-size:.8rem;color:var(--danger);margin-top:8px"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarAjusteEstoque('${tipo}')">
+      ${contagem ? 'Confirmar contagem' : 'Registrar perda'}
+    </button>`;
+  setTimeout(() => document.getElementById('est-valor').focus(), 50);
+}
+
+async function salvarAjusteEstoque(tipo) {
+  const errEl = document.getElementById('est-erro');
+  const valor = parseFloat(document.getElementById('est-valor').value);
+  errEl.textContent = '';
+  if (!Number.isFinite(valor) || valor < 0) { errEl.textContent = 'Informe um valor válido'; return; }
+  try {
+    const res = await fetch(`${API}/api/stock/${_estProd.id}/ajuste`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ tipo, valor, motivo: document.getElementById('est-motivo').value || null }),
+    });
+    const d = await res.json();
+    if (!res.ok) { errEl.textContent = d.error || 'Erro ao ajustar'; return; }
+    showToast(d.ajuste === 0 ? 'Sem diferença — saldo mantido' : `Saldo ajustado para ${d.saldo}`);
+    closeEstoqueAcoes();
+    loadEstoque();
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão';
+  }
+}
+
+async function estVerExtrato() {
+  const body = document.getElementById('est-acoes-body');
+  body.innerHTML = '<p style="font-size:.82rem;color:var(--c-muted)">Carregando...</p>';
+  try {
+    const res = await fetch(`${API}/api/stock/${_estProd.id}/movimentos`, { headers: authHeaders() });
+    const movs = await res.json();
+    if (!res.ok) { body.innerHTML = '<p style="font-size:.82rem;color:var(--danger)">Erro ao carregar</p>'; return; }
+    if (!movs.length) { body.innerHTML = '<p style="font-size:.82rem;color:var(--c-muted)">Nenhum movimento ainda.</p>'; return; }
+    const LAB = { entrada: 'Entrada', venda: 'Venda', ajuste: 'Ajuste', perda: 'Perda', estorno: 'Estorno' };
+    body.innerHTML = `<div style="max-height:46vh;overflow:auto;font-size:.8rem">
+      ${movs.map(m => `
+        <div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--c-border)">
+          <div>
+            <div>${LAB[m.type] || m.type} <b style="color:${parseFloat(m.quantity) < 0 ? '#dc2626' : '#16a34a'}">${parseFloat(m.quantity) > 0 ? '+' : ''}${m.quantity}</b></div>
+            <small style="color:var(--c-muted)">${new Date(m.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${m.reason ? ' · ' + m.reason : ''}</small>
+          </div>
+          <div style="white-space:nowrap;color:var(--c-muted)">saldo ${m.balance_after ?? '—'}</div>
+        </div>`).join('')}
+    </div>`;
+  } catch (e) {
+    body.innerHTML = '<p style="font-size:.82rem;color:var(--danger)">Erro de conexão</p>';
+  }
 }
 
 async function toggleAvailable(id, available) {

@@ -196,7 +196,8 @@ router.get('/admin', authMiddleware, async (req, res) => {
         p.id AS product_id, p.name AS product_name, p.description, p.price,
         p.image_url AS product_image, p.available, p.featured, p.promo_price,
         p.promo_label, p.promo_max_qty, p.sort_order AS product_sort, p.active_days, p.print_target,
-        p.show_kiosk, p.show_delivery
+        p.show_kiosk, p.show_delivery,
+        p.track_stock, p.stock_qty, p.stock_min
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id
       WHERE c.active = true
@@ -215,6 +216,9 @@ router.get('/admin', authMiddleware, async (req, res) => {
         print_target: row.print_target,
         show_kiosk: row.show_kiosk,
         show_delivery: row.show_delivery,
+        track_stock: row.track_stock,
+        stock_qty: row.stock_qty != null ? parseFloat(row.stock_qty) : 0,
+        stock_min: row.stock_min != null ? parseFloat(row.stock_min) : 0,
       });
     }
     res.json(Object.values(cats));
