@@ -3740,6 +3740,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       const destBody=JSON.stringify({...(state||{})[outra],compras:[...novosItens,...((state||{})[outra]?.compras||[])],contas:novaConta?[novaConta,...((state||{})[outra]?.contas||[])]:(state||{})[outra]?.contas||[]});
                       if(setState)setState((prev:any)=>({...prev,[outra]:{...prev[outra],compras:[...novosItens,...(prev[outra]?.compras||[])],contas:novaConta?[novaConta,...(prev[outra]?.contas||[])]:prev[outra]?.contas||[]}}));
                       fetch(`/api/dados/${outra}`,{method:"POST",headers:{"Content-Type":"application/json"},body:destBody}).catch(()=>{});
+                      // Mover pra SEAMA é uma forma de compra chegar na empresa como
+                      // qualquer outra, então tem que descer pro estoque do PDV igual.
+                      // Era o único dos cinco caminhos que criam compra sem avisar o PDV.
+                      enviarCompraSeama(outra,novoGrupoId,nota.fornecedor,novosItens);
                       alert(`✅ Compra transferida para ${outra}`);
                     }} style={{background:"#DBEAFE",color:"#8B5CF6",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={()=>{
