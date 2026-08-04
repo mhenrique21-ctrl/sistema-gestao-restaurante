@@ -51,7 +51,8 @@ router.post('/purchase', serviceAuth, async (req, res) => {
 
     const links = await pool.query(
       `SELECT sl.id, sl.source_name, sl.product_id, sl.factor, p.name AS product_name, p.stock_qty
-       FROM supply_links sl JOIN products p ON p.id = sl.product_id`
+       FROM supply_links sl JOIN products p ON p.id = sl.product_id
+       WHERE sl.active = true`
     );
     const porNome = {};
     links.rows.forEach((l) => { porNome[norm(l.source_name)] = l; });
@@ -117,7 +118,14 @@ router.get('/links', async (req, res) => {
     const links = await pool.query(
       `SELECT sl.id, sl.source_name, sl.factor, sl.product_id, p.name AS product_name
        FROM supply_links sl JOIN products p ON p.id = sl.product_id
-       ORDER BY sl.source_name`
+       WHERE sl.active = true
+       ORDER BY p.name, sl.source_name`
+    );
+    const removidos = await pool.query(
+      `SELECT sl.id, sl.source_name, sl.factor, sl.product_id, p.name AS product_name, sl.removed_at
+       FROM supply_links sl JOIN products p ON p.id = sl.product_id
+       WHERE sl.active = false
+       ORDER BY sl.removed_at DESC`
     );
     const pendentes = await pool.query(
       `SELECT source_name, SUM(quantity) AS quantidade, MAX(unit) AS unidade,
@@ -127,6 +135,7 @@ router.get('/links', async (req, res) => {
     );
     res.json({
       links: links.rows.map((l) => ({ ...l, factor: parseFloat(l.factor) })),
+      removidos: removidos.rows.map((l) => ({ ...l, factor: parseFloat(l.factor) })),
       pendentes: pendentes.rows.map((p) => ({ ...p, quantidade: parseFloat(p.quantidade) })),
     });
   } catch (err) {
@@ -149,10 +158,30 @@ router.post('/links', async (req, res) => {
       return res.status(400).json({ error: `"${prod.rows[0].name}" não controla estoque — marque no cadastro do produto` });
     }
 
-    await pool.query(
-      `INSERT INTO supply_links (source_name, product_id, factor) VALUES ($1, $2, ${factor}) RETURNING id`,
-      [String(source_name).trim(), product_id]
+    // O índice único de nome cobre também os arquivados, então um INSERT cru
+    // esbarraria neles com "já está vinculado" — e o usuário não veria motivo,
+    // porque o vínculo não está na lista. Aqui o arquivado é ressuscitado com
+    // o produto/fator que ele acabou de escolher. Vínculo ATIVO continua dando
+    // conflito, como antes: sobrescrever um vínculo em uso sem avisar seria
+    // trocar o destino do estoque em silêncio.
+    const arquivado = await pool.query(
+      `SELECT id FROM supply_links
+        WHERE active = false
+          AND upper(regexp_replace(trim(source_name), '\\s+', ' ', 'g')) = $1`,
+      [norm(source_name)]
     );
+    if (arquivado.rows[0]) {
+      await pool.query(
+        `UPDATE supply_links SET product_id = $1, factor = ${factor}, active = true, removed_at = NULL
+          WHERE id = $2 RETURNING id`,
+        [product_id, arquivado.rows[0].id]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO supply_links (source_name, product_id, factor) VALUES ($1, $2, ${factor}) RETURNING id`,
+        [String(source_name).trim(), product_id]
+      );
+    }
 
     // Quantidade que ficou retida enquanto não havia vínculo entra agora.
     const retidos = await pool.query(
@@ -192,15 +221,39 @@ router.post('/links', async (req, res) => {
   }
 });
 
-// DELETE /api/supply/links/:id
+// DELETE /api/supply/links/:id — arquiva, não apaga. O que se perde ao remover
+// não é o estoque (que fica) e nem a compra futura (que volta pra pendentes),
+// e sim a conversão de embalagem — "1 embalagem = 21 un". Refazer esse número
+// de memória e errar entra estoque errado sem ninguém perceber, então ele é
+// guardado para o Restaurar devolver exatamente o que era.
 router.delete('/links/:id', async (req, res) => {
   try {
-    const r = await pool.query(`DELETE FROM supply_links WHERE id = $1 RETURNING source_name`, [req.params.id]);
+    const r = await pool.query(
+      `UPDATE supply_links SET active = false, removed_at = NOW()
+        WHERE id = $1 AND active = true RETURNING source_name`,
+      [req.params.id]
+    );
     if (!r.rows[0]) return res.status(404).json({ error: 'Vínculo não encontrado' });
     logAction(req.user.id, 'vinculo_removido', { source_name: r.rows[0].source_name });
     res.json({ ok: true });
   } catch (err) {
     return internalError(res, err, '[supply/links delete]');
+  }
+});
+
+// POST /api/supply/links/:id/restore — desfaz o arquivamento.
+router.post('/links/:id/restore', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE supply_links SET active = true, removed_at = NULL
+        WHERE id = $1 AND active = false RETURNING source_name`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Vínculo não encontrado ou já ativo' });
+    logAction(req.user.id, 'vinculo_restaurado', { source_name: r.rows[0].source_name });
+    res.json({ ok: true, source_name: r.rows[0].source_name });
+  } catch (err) {
+    return internalError(res, err, '[supply/links restore]');
   }
 });
 

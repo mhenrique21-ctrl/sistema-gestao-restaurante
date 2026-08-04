@@ -265,6 +265,14 @@
   .stk-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
 
   /* ── Configurações: vínculos de compra ── */
+  .vinc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .vinc-head input { flex: 1; }
+  .vinc-head .cnt { font-size: 11.5px; color: var(--text2); white-space: nowrap; }
+  .vinc-grupo { border: 1px solid var(--border); border-radius: 11px; margin-bottom: 7px; overflow: hidden; }
+  .vinc-grupo-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 13px; font-size: 12.5px; background: var(--card); cursor: pointer; }
+  .vinc-grupo-head .sb { font-size: 11px; color: var(--text2); font-weight: 400; }
+  .vinc-grupo-head .chev { font-size: 12px; color: var(--text2); flex-shrink: 0; }
+  .vinc-grupo .vinc-row { border: none; border-top: 1px solid var(--border); border-radius: 0; margin: 0; }
   .vinc-alert { background: #FDF6F5; border-radius: 10px; padding: 11px 13px; margin-bottom: 12px; }
   .vinc-alert .t { font-size: 12px; font-weight: 600; color: var(--danger); margin-bottom: 3px; }
   .vinc-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
@@ -1933,6 +1941,9 @@ document.getElementById('adc-add-group').addEventListener('click', async () => {
 });
 
 // ── Configurações: vínculos de compra ────────────────
+let vincBusca = '';
+let vincAbertos = new Set();
+
 async function loadVinculos() {
   const el = document.getElementById('vinc-body');
   el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
@@ -1972,16 +1983,64 @@ function renderVinculos(el, d) {
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
     ` : '<p style="font-size:12.5px;color:var(--success);margin-bottom:14px">✓ Nenhum item pendente</p>'}
 
-    <div class="cx-section-title">VÍNCULOS ATIVOS · ${d.links.length}</div>
-    ${d.links.length ? d.links.map(l => `
-      <div class="vinc-row">
-        <div style="flex:1;min-width:0">
-          <div class="nm">${l.source_name}</div>
-          <div class="sb">1 embalagem = ${l.factor} un de <b>${l.product_name}</b></div>
-        </div>
-        <button class="v-del" data-id="${l.id}">Remover</button>
+    ${(() => {
+      // Agrupado por PRODUTO, não por nome de nota. Nome de nota é ilimitado
+      // (cada sabor, marca e embalagem do fornecedor vira um), enquanto os
+      // produtos são limitados pelo cardápio — é isso que dá teto à tela.
+      const busca = vincBusca.trim().toLowerCase();
+      const visiveis = busca
+        ? d.links.filter(l => l.source_name.toLowerCase().includes(busca) || l.product_name.toLowerCase().includes(busca))
+        : d.links;
+      const porProduto = {};
+      visiveis.forEach(l => (porProduto[l.product_name] = porProduto[l.product_name] || []).push(l));
+      const nomes = Object.keys(porProduto).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+      return `
+      <div class="vinc-head">
+        <input id="vinc-busca" type="text" placeholder="Buscar nome da nota ou produto" value="${vincBusca.replace(/"/g, '&quot;')}">
+        <span class="cnt">${nomes.length} produto(s) · ${visiveis.length} nome(s)</span>
       </div>
-    `).join('') : '<p style="font-size:12px;color:var(--text2)">Nenhum vínculo ainda. Eles aparecem aqui conforme você vincula os itens que chegam.</p>'}
+      ${!d.links.length ? '<p style="font-size:12px;color:var(--text2)">Nenhum vínculo ainda. Eles aparecem aqui conforme você vincula os itens que chegam.</p>'
+        : !nomes.length ? '<p style="font-size:12px;color:var(--text2)">Nada encontrado para essa busca.</p>'
+        : nomes.map(prod => {
+          const itens = porProduto[prod];
+          // Busca abre os grupos: procurar e ainda ter que clicar pra ver o
+          // resultado seria trabalho a mais, não a menos.
+          const aberto = busca ? true : vincAbertos.has(prod);
+          return `
+          <div class="vinc-grupo">
+            <div class="vinc-grupo-head" data-grupo="${prod.replace(/"/g, '&quot;')}">
+              <span><b>${prod}</b> <span class="sb">${itens.length} nome(s) de nota</span></span>
+              <span class="chev">${aberto ? '▴' : '▾'}</span>
+            </div>
+            ${aberto ? itens.map(l => `
+              <div class="vinc-row">
+                <div style="flex:1;min-width:0">
+                  <div class="nm">${l.source_name}</div>
+                  <div class="sb">1 embalagem = ${l.factor} un</div>
+                </div>
+                <button class="v-del" data-id="${l.id}">Remover</button>
+              </div>`).join('') : ''}
+          </div>`;
+        }).join('')}
+
+      ${(d.removidos || []).length ? `
+        <div class="vinc-grupo" style="margin-top:14px">
+          <div class="vinc-grupo-head" data-grupo="__removidos__">
+            <span class="sb">🗄 Removidos (${d.removidos.length})</span>
+            <span class="chev">${vincAbertos.has('__removidos__') ? '▴' : '▾'}</span>
+          </div>
+          ${vincAbertos.has('__removidos__') ? d.removidos.map(l => `
+            <div class="vinc-row">
+              <div style="flex:1;min-width:0">
+                <div class="nm" style="color:var(--text2)">${l.source_name}</div>
+                <div class="sb">→ ${l.product_name} · 1 embalagem = ${l.factor} un</div>
+              </div>
+              <button class="v-restore" data-id="${l.id}">Restaurar</button>
+            </div>`).join('') : ''}
+        </div>` : ''}
+      `;
+    })()}
 
     ${!comEstoque.length ? `
       <div class="vinc-alert" style="margin-top:14px">
@@ -1995,6 +2054,35 @@ function renderVinculos(el, d) {
     row.querySelector('.v-skip').addEventListener('click', () => descartarPendente(row.dataset.nome));
   });
   el.querySelectorAll('.v-del').forEach(b => b.addEventListener('click', () => removerVinculo(b.dataset.id)));
+  el.querySelectorAll('.v-restore').forEach(b => b.addEventListener('click', () => restaurarVinculo(b.dataset.id)));
+  el.querySelectorAll('.vinc-grupo-head').forEach(h => h.addEventListener('click', () => {
+    const g = h.dataset.grupo;
+    if (vincAbertos.has(g)) vincAbertos.delete(g); else vincAbertos.add(g);
+    renderVinculos(el, d);
+  }));
+  const inp = el.querySelector('#vinc-busca');
+  if (inp) {
+    inp.addEventListener('input', () => {
+      vincBusca = inp.value;
+      renderVinculos(el, d);
+      // Re-render troca o input por um novo: sem devolver o foco e o cursor,
+      // o operador digitaria só a primeira letra de cada busca.
+      const novo = el.querySelector('#vinc-busca');
+      if (novo) { novo.focus(); novo.setSelectionRange(novo.value.length, novo.value.length); }
+    });
+  }
+}
+
+async function restaurarVinculo(id) {
+  try {
+    const res = await apiFetch(`/api/supply/links/${id}/restore`, { method: 'POST' });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(d.error || 'Erro ao restaurar'); return; }
+    showToast('Vínculo restaurado');
+    loadVinculos();
+  } catch (e) {
+    if (e.message !== 'unauthorized') showToast('Erro de conexão');
+  }
 }
 
 async function vincularPendente(row) {
@@ -2031,7 +2119,7 @@ async function descartarPendente(nome) {
 }
 
 async function removerVinculo(id) {
-  if (!confirm('Remover este vínculo? As próximas compras desse item voltam pra fila de pendentes.')) return;
+  if (!confirm('Remover este vínculo?\n\nAs próximas compras desse item voltam pra fila de pendentes. O estoque que já entrou não muda, e dá pra restaurar depois em "Removidos".')) return;
   try {
     const res = await apiFetch(`/api/supply/links/${id}`, { method: 'DELETE' });
     if (!res.ok) { showToast('Erro ao remover'); return; }
