@@ -1601,6 +1601,30 @@ function openEditProduct(id) {
         <label>Descrição</label>
         <textarea id="edit-p-desc" rows="3">${(p.description || '').replace(/</g, '&lt;')}</textarea>
       </div>
+      <div class="field-group" style="border-top:1px solid var(--c-border);padding-top:12px">
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+          <input type="checkbox" id="edit-p-track" ${p.track_stock ? 'checked' : ''}
+                 onchange="document.getElementById('edit-p-stock-fields').style.display=this.checked?'':'none'"
+                 style="width:18px;height:18px">
+          <span>📦 Controlar estoque (produto de revenda)</span>
+        </label>
+        <small style="color:var(--c-muted);display:block;line-height:1.5;margin-top:5px">
+          Marque só o que você compra pronto e revende — bebida, chiclete, salgado de fornecedor.
+          Bolo, tapioca e sanduíche são feitos na hora: consomem insumo, não produto pronto.
+        </small>
+      </div>
+      <div id="edit-p-stock-fields" style="display:${p.track_stock ? '' : 'none'}">
+        <div style="display:flex;gap:10px">
+          <div class="field-group" style="flex:1">
+            <label>Estoque atual</label>
+            <input type="number" step="0.001" id="edit-p-qty" value="${p.stock_qty ?? 0}">
+          </div>
+          <div class="field-group" style="flex:1">
+            <label>Estoque mínimo</label>
+            <input type="number" step="0.001" min="0" id="edit-p-min" value="${p.stock_min ?? 0}">
+          </div>
+        </div>
+      </div>
       <div id="edit-p-error" style="color:var(--danger);font-size:.82rem;min-height:18px"></div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="document.getElementById('edit-product-backdrop').remove()">Cancelar</button>
@@ -1617,11 +1641,25 @@ async function saveEditProduct(id) {
   const description = document.getElementById('edit-p-desc').value.trim();
   const errEl = document.getElementById('edit-p-error');
   if (!name || !(price > 0)) { errEl.textContent = 'Nome e preço válido são obrigatórios'; return; }
+
+  const track = document.getElementById('edit-p-track').checked;
+  const qty = parseFloat(document.getElementById('edit-p-qty').value);
+  const min = parseFloat(document.getElementById('edit-p-min').value);
+  if (track && (!Number.isFinite(qty) || !Number.isFinite(min) || min < 0)) {
+    errEl.textContent = 'Informe estoque atual e mínimo válidos'; return;
+  }
+
   try {
     const res = await fetch(`${API}/api/menu/products/${id}`, {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ name, price, description }),
+      body: JSON.stringify({
+        name, price, description,
+        track_stock: track,
+        // Só manda saldo quando o controle está ligado: desmarcar não pode
+        // zerar o estoque de quem só quis parar de controlar por um tempo.
+        ...(track ? { stock_qty: qty, stock_min: min } : {}),
+      }),
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
