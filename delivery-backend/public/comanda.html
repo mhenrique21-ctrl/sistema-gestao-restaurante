@@ -777,6 +777,28 @@
 </div>
 
 <!-- ── Modal: espelho do cupom de fechamento (confirmar antes de imprimir) ── -->
+<div id="contagem-modal-backdrop" class="modal-backdrop hidden">
+  <div class="close2-sheet" style="max-width:340px">
+    <div class="ab-head">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="2"/><circle cx="12" cy="13" r="2.5"/></svg></span>
+      <div>
+        <h3 style="font-size:1.05rem">Conferência da gaveta</h3>
+        <p style="font-size:.78rem">Conte o dinheiro antes de ver o esperado</p>
+      </div>
+    </div>
+    <p style="font-size:.8rem;color:var(--c-muted);line-height:1.5;margin:0 0 10px">
+      Some todo o dinheiro que está na gaveta, incluindo o fundo de troco. Só cédulas e moedas — cartão e pix não entram.
+    </p>
+    <input type="number" step="0.01" min="0" id="contagem-input" placeholder="0,00"
+           style="width:100%;padding:12px;font-size:1.25rem;text-align:center;border:2px solid var(--c-border);border-radius:10px">
+    <div id="contagem-error" style="font-size:.8rem;color:var(--danger);margin-top:8px"></div>
+    <div class="close2-actions" style="padding-top:10px">
+      <button class="close2-cancel" onclick="document.getElementById('contagem-modal-backdrop').classList.add('hidden')">✕ Cancelar</button>
+      <button class="close2-confirm" id="contagem-confirm-btn" onclick="submitFechamento()">Fechar caixa</button>
+    </div>
+  </div>
+</div>
+
 <div id="close-register-modal-backdrop" class="modal-backdrop hidden">
   <div class="close2-sheet" style="max-width:380px">
     <div class="ab-head">
@@ -1510,19 +1532,30 @@ async function loadFinanceiro() {
   const el = document.getElementById('fin-list');
   el.innerHTML = '<div class="cart-empty">Carregando...</div>';
   try {
-    const res = await fetch(`${API}/api/cash-movements`, { headers: authHeaders() });
+    const res = await fetch(`${API}/api/cash-sessions/current`, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     const data = await res.json();
     if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>'; return; }
 
+    CAIXA_SESSION = data.session || null;
+    if (!CAIXA_SESSION) {
+      ['fin-total-abertura','fin-total-sangrias','fin-total-suprimentos','fin-total-saldo']
+        .forEach(id => document.getElementById(id).textContent = fmt(0));
+      renderFinSales({ channels: {}, byMethod: {}, totalGeral: 0 });
+      el.innerHTML = '<div class="cart-empty">Nenhum caixa aberto</div>';
+      return;
+    }
+
     document.getElementById('fin-total-abertura').textContent = fmt(data.totals.abertura);
     document.getElementById('fin-total-sangrias').textContent = fmt(data.totals.sangrias);
     document.getElementById('fin-total-suprimentos').textContent = fmt(data.totals.suprimentos);
-    document.getElementById('fin-total-saldo').textContent = fmt(data.totals.saldo);
+    // "Saldo" agora é o esperado NA GAVETA: fundo + suprimentos - sangrias +
+    // dinheiro de comanda, balcão e retirada. Cartão, pix e entrega ficam fora.
+    document.getElementById('fin-total-saldo').textContent = fmt(data.expected);
     renderFinSales(data.sales);
 
     if (!data.movements.length) {
-      el.innerHTML = '<div class="cart-empty">Nenhuma movimentação hoje</div>';
+      el.innerHTML = '<div class="cart-empty">Nenhuma movimentação neste turno</div>';
       return;
     }
     el.innerHTML = data.movements.map(m => `
@@ -1571,9 +1604,19 @@ function renderFinSales(sales) {
     });
     return;
   }
-  renderFinChannel('fin-sales-comanda', sales.channels.comanda);
-  renderFinChannel('fin-sales-balcao', sales.channels.balcao);
-  renderFinChannel('fin-sales-delivery', sales.channels.delivery);
+  // Canal ausente vira zerado em vez de quebrar a tela inteira: sem turno
+  // aberto, o resumo vem vazio e antes isso derrubava o painel do caixa com
+  // "Erro de conexão", que não tem nada a ver com o que estava acontecendo.
+  const VAZIO = { byMethod: {}, total: 0 };
+  const ch = sales.channels || {};
+  ch.comanda = ch.comanda || VAZIO;
+  ch.balcao = ch.balcao || VAZIO;
+  ch.delivery = ch.delivery || VAZIO;
+  sales.byMethod = sales.byMethod || {};
+
+  renderFinChannel('fin-sales-comanda', ch.comanda);
+  renderFinChannel('fin-sales-balcao', ch.balcao);
+  renderFinChannel('fin-sales-delivery', ch.delivery);
 
   document.getElementById('fin-sales-methods').innerHTML = Object.entries(FIN_SALE_METHOD_LABELS).map(([method, info]) => `
     <div class="fin-summary-card">
@@ -1582,10 +1625,10 @@ function renderFinSales(sales) {
     </div>
   `).join('');
 
-  document.getElementById('fin-sales-total-comanda').textContent = fmt(sales.channels.comanda.total);
-  document.getElementById('fin-sales-total-balcao').textContent = fmt(sales.channels.balcao.total);
-  document.getElementById('fin-sales-total-delivery').textContent = fmt(sales.channels.delivery.total);
-  document.getElementById('fin-sales-total-geral').textContent = fmt(sales.totalGeral);
+  document.getElementById('fin-sales-total-comanda').textContent = fmt(ch.comanda.total);
+  document.getElementById('fin-sales-total-balcao').textContent = fmt(ch.balcao.total);
+  document.getElementById('fin-sales-total-delivery').textContent = fmt(ch.delivery.total);
+  document.getElementById('fin-sales-total-geral').textContent = fmt(sales.totalGeral || 0);
 }
 
 async function submitCashMovement() {
@@ -1597,7 +1640,7 @@ async function submitCashMovement() {
   const btn = document.getElementById('fin-submit-btn');
   btn.disabled = true;
   try {
-    const res = await fetch(`${API}/api/cash-movements`, {
+    const res = await fetch(`${API}/api/cash-sessions/movement`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ type: finType, amount, reason: reason || null }),
@@ -1666,27 +1709,65 @@ function buildCloseRegisterText(data, closedAt) {
   }
   rows.push(line);
   rows.push(padCols('TOTAL VENDIDO', fmt(sales.totalGeral), W));
+  // Conferência da gaveta: só sai quando o turno foi de fato fechado com
+  // contagem. É o bloco que interessa pra quem confere depois.
+  if (data.counted != null) {
+    rows.push(line);
+    rows.push('CONFERENCIA DA GAVETA');
+    rows.push(padCols('Esperado', fmt(data.expected), W));
+    rows.push(padCols('Contado', fmt(data.counted), W));
+    const dif = data.difference || 0;
+    const rotulo = dif === 0 ? 'Diferenca' : (dif > 0 ? 'Sobra' : 'Falta');
+    rows.push(padCols(rotulo, (dif > 0 ? '+' : '') + fmt(dif), W));
+  }
   rows.push(line);
   rows.push('Fechado em ' + dataHora);
   return rows.join('\n');
 }
 
 let closeRegisterClosedAt = null;
+let CAIXA_SESSION = null;   // turno aberto no momento
+let CAIXA_FECHADO = null;   // resultado do último fechamento, pra impressão
 
+// Conferência CEGA: o operador informa o que contou e só então vê o esperado.
+// Mostrar o esperado antes convida a "achar" exatamente aquele valor, e a
+// conferência deixa de conferir qualquer coisa.
 async function closeRegisterPrint() {
-  const btn = document.getElementById('fin-close-register-btn');
-  btn.disabled = true;
+  if (!CAIXA_SESSION) { showToast('Nenhum caixa aberto'); return; }
+  document.getElementById('contagem-input').value = '';
+  document.getElementById('contagem-error').textContent = '';
+  document.getElementById('contagem-modal-backdrop').classList.remove('hidden');
+  setTimeout(() => document.getElementById('contagem-input').focus(), 50);
+}
+
+async function submitFechamento() {
+  const errEl = document.getElementById('contagem-error');
+  const counted = parseFloat(document.getElementById('contagem-input').value);
+  errEl.textContent = '';
+  if (!(counted >= 0)) { errEl.textContent = 'Informe quanto contou na gaveta'; return; }
+  const btn = document.getElementById('contagem-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Fechando...';
   try {
-    const res = await fetch(`${API}/api/cash-movements`, { headers: authHeaders() });
+    const res = await fetch(`${API}/api/cash-sessions/close`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ counted_amount: counted }),
+    });
     const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Erro ao carregar resumo do caixa'); return; }
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao fechar o caixa'; return; }
+
+    CAIXA_FECHADO = data;
+    document.getElementById('contagem-modal-backdrop').classList.add('hidden');
     closeRegisterClosedAt = new Date();
-    document.getElementById('close-register-preview').textContent = buildCloseRegisterText(data, closeRegisterClosedAt);
+    document.getElementById('close-register-preview').textContent =
+      buildCloseRegisterText({ ...data, totals: { ...data.totals, saldo: data.expected } }, closeRegisterClosedAt);
     document.getElementById('close-register-modal-backdrop').classList.remove('hidden');
+    CAIXA_SESSION = null;
+    loadFinanceiro();
   } catch (e) {
-    showToast('Erro de conexão');
+    errEl.textContent = 'Erro de conexão';
   } finally {
-    btn.disabled = false;
+    btn.disabled = false; btn.textContent = 'Fechar caixa';
   }
 }
 
@@ -1703,6 +1784,9 @@ async function confirmCloseRegisterPrint() {
     const res = await fetch(`${API}/api/printers/close-register`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
+      // Manda o turno recém-fechado pra impressão sair com contado, esperado e
+      // diferença — e não o resumo do dia inteiro.
+      body: JSON.stringify({ session_id: CAIXA_FECHADO?.session?.id || null }),
     });
     const data = await res.json();
     if (!res.ok) { showToast(data.error || 'Erro ao fechar caixa'); return; }
@@ -1724,10 +1808,12 @@ function showFinSubtab(subtab) {
 // ── Abertura de caixa (obrigatória ao logar, uma vez por dia) ──
 async function checkAberturaCaixa() {
   try {
-    const res = await fetch(`${API}/api/cash-movements`, { headers: authHeaders() });
+    // Turno, não data: a loja que atravessa a meia-noite continua no mesmo
+    // caixa, e não pede abertura de novo no meio do expediente.
+    const res = await fetch(`${API}/api/cash-sessions/current`, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     const data = await res.json();
-    const hasAbertura = res.ok && (data.movements || []).some(m => m.type === 'abertura');
+    const hasAbertura = res.ok && !!data.session;
     if (hasAbertura) {
       document.getElementById('abertura-modal-backdrop').classList.add('hidden');
       document.getElementById('header-actions').classList.remove('hidden');
@@ -1790,15 +1876,10 @@ async function submitAbertura() {
   btn.disabled = true;
   btn.textContent = 'Abrindo...';
   try {
-    const res = await fetch(`${API}/api/cash-movements`, {
+    const res = await fetch(`${API}/api/cash-sessions/open`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        type: 'abertura',
-        amount: abValorInicialCents / 100,
-        reason: 'Fundo de caixa',
-        breakdown: null,
-      }),
+      body: JSON.stringify({ opening_amount: abValorInicialCents / 100 }),
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar abertura'; btn.disabled = false; btn.textContent = '🏦 Abrir Caixa'; return; }

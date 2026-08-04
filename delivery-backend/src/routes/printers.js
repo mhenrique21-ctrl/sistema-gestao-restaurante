@@ -3,7 +3,7 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 const { broadcastToStation, requestPrinterList } = require('../websocket/hub');
 const pool = require('../db/pool');
 const { internalError } = require('../utils/errors');
-const { getCashSummary, todayBelem } = require('../services/cashSummary');
+const { getCashSummary, todayBelem, getSessionSummary } = require('../services/cashSummary');
 
 const PRINTER_KEYS = ['printer_caixa', 'printer_cozinha', 'printer_balcao'];
 
@@ -121,7 +121,28 @@ router.post('/finalize-order/:id', requireRole('admin'), async (req, res) => {
 router.post('/close-register', requireRole('admin', 'atendente'), async (req, res) => {
   const date = req.body.date || todayBelem();
   try {
-    const summary = await getCashSummary(date);
+    let summary;
+    // Com session_id, imprime o TURNO (com contado/esperado/diferença). Sem ele,
+    // mantém a impressão por data de antes, pra não quebrar quem ainda chamar
+    // do jeito antigo.
+    if (req.body.session_id) {
+      const s = await pool.query(`SELECT * FROM cash_sessions WHERE id = $1`, [req.body.session_id]);
+      if (!s.rows[0]) return res.status(404).json({ error: 'Turno não encontrado' });
+      const sess = s.rows[0];
+      const resumo = await getSessionSummary(sess);
+      summary = {
+        date: (sess.closed_at || sess.opened_at),
+        session: sess,
+        movements: resumo.movements,
+        totals: { ...resumo.totals, saldo: resumo.expected },
+        sales: resumo.sales,
+        expected: resumo.expected,
+        counted: sess.counted_amount != null ? parseFloat(sess.counted_amount) : null,
+        difference: sess.difference != null ? parseFloat(sess.difference) : null,
+      };
+    } else {
+      summary = await getCashSummary(date);
+    }
     summary.operatorName = req.user?.name || null;
     broadcastToStation('caixa', { event: 'close_register', summary });
     res.json({ ok: true, summary });
