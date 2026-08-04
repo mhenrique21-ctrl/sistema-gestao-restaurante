@@ -160,12 +160,16 @@ router.put('/groups/:id/products', requireRole('admin', 'gerente'), async (req, 
   if (!UUID.test(req.params.id)) return res.status(400).json({ error: 'Grupo inválido' });
   const limpos = [...new Set(ids.filter((v) => typeof v === 'string' && UUID.test(v)))];
   try {
-    await pool.query(`DELETE FROM product_addons WHERE group_id = $1`, [req.params.id]);
+    // RETURNING é OBRIGATÓRIO aqui, mesmo sem uso do resultado: o run_sql do
+    // Supabase executa tudo como `WITH __q AS (<query>) SELECT ...`, e o
+    // Postgres recusa uma CTE que modifica dados sem RETURNING. Sem isso o
+    // salvamento morria com "Erro interno".
+    await pool.query(`DELETE FROM product_addons WHERE group_id = $1 RETURNING product_id`, [req.params.id]);
     if (limpos.length) {
       // Um INSERT só: com um por produto, ligar 30 produtos viraria 30 idas ao
       // banco. Os ids já foram validados como uuid acima.
       const valores = limpos.map((pid) => `('${pid}'::uuid, '${req.params.id}'::uuid)`).join(', ');
-      await pool.query(`INSERT INTO product_addons (product_id, group_id) VALUES ${valores} ON CONFLICT DO NOTHING`);
+      await pool.query(`INSERT INTO product_addons (product_id, group_id) VALUES ${valores} ON CONFLICT DO NOTHING RETURNING product_id`);
     }
     res.json({ ok: true, product_ids: limpos });
   } catch (err) {
