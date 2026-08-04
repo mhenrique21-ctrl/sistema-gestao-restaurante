@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { baixarEstoque, devolverEstoque } = require('../services/stock');
 const { internalError } = require('../utils/errors');
 const { idempotent } = require('../middleware/idempotency');
 const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub');
@@ -267,6 +268,14 @@ router.post('/guest', idempotent, async (req, res) => {
       );
       await insertItemAddons(itemResult.rows[0].id, item.addons);
     }
+
+    // Baixa no momento do pedido. Só produtos de revenda; falha aqui vira log,
+    // nunca derruba o pedido que o cliente já fez.
+    await baixarEstoque(resolvedItems, {
+      motivo: 'Venda – pedido delivery',
+      orderId: order.id,
+      userId: req.user?.id || null,
+    });
 
     await pool.query(
       `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,'aguardando_pagamento',$2) RETURNING id`,
@@ -898,6 +907,12 @@ router.post('/', idempotent, async (req, res) => {
       await insertItemAddons(itemResult.rows[0].id, item.addons, client);
     }
 
+    await baixarEstoque(resolvedItems, {
+      motivo: 'Venda – pedido',
+      orderId: order.id,
+      userId: req.user?.id || null,
+    });
+
     // Histórico inicial
     await client.query(
       `INSERT INTO order_status_history (order_id, status, user_id) VALUES ($1,$2,$3) RETURNING id`,
@@ -1003,6 +1018,11 @@ router.post('/from-admin', async (req, res) => {
         [order.id, i.product_id, qty, price, qty * price]
       );
     }
+
+    await baixarEstoque(
+      items.map((i) => ({ product_id: i.product_id, quantity: parseInt(i.quantity) || 1 })),
+      { motivo: 'Venda – pedido pelo PDV', orderId: order.id, userId: req.user?.id || null }
+    );
     // Busca telefone e nome do cliente para enviar WhatsApp
     const cust = await pool.query(
       `SELECT name, phone FROM customers WHERE id = $1`,
@@ -1078,6 +1098,11 @@ router.patch('/:id/status', async (req, res) => {
   }
 
   try {
+    // Status anterior é lido antes do UPDATE: é ele que diz se o cancelamento
+    // é novo (e deve devolver estoque) ou repetido (e não deve devolver de novo).
+    const antes = await pool.query(`SELECT status FROM orders WHERE id = $1`, [req.params.id]);
+    const anterior = antes.rows[0]?.status || null;
+
     const result = await pool.query(
       `UPDATE orders SET status = $1 WHERE id = $2
        RETURNING *, (SELECT name FROM customers WHERE id = customer_id) AS customer_name,
@@ -1092,6 +1117,20 @@ router.patch('/:id/status', async (req, res) => {
     );
 
     broadcastOrderUpdate({ event: 'status_update', order_id: req.params.id, status });
+
+    // Pedido cancelado devolve o estoque que a criação baixou. O guard de
+    // status evita devolver duas vezes se alguém reenviar "cancelado".
+    if (status === 'cancelado' && anterior !== 'cancelado') {
+      const itens = await pool.query(
+        `SELECT product_id, quantity FROM order_items WHERE order_id = $1`,
+        [req.params.id]
+      );
+      await devolverEstoque(itens.rows, {
+        motivo: 'Pedido cancelado',
+        orderId: req.params.id,
+        userId: req.user?.id || null,
+      });
+    }
 
     // Cupom: registra uso definitivo apenas quando pedido fica PRONTO
     if (status === 'pronto' && result.rows[0].coupon_code) {

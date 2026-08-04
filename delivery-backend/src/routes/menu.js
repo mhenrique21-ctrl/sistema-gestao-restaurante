@@ -378,6 +378,20 @@ router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, 
     }
   }
 
+  // Estoque entra como literal SQL, não como parâmetro: o wrapper do pool faz
+  // substituição de string e, acima de $9, o "$1" casa dentro de "$10". A lista
+  // de campos acima já usa 11 posições, então qualquer parâmetro novo aqui
+  // cairia justamente nessa faixa.
+  if (req.body.track_stock !== undefined) updates.push(`track_stock = ${req.body.track_stock ? 'TRUE' : 'FALSE'}`);
+  if (req.body.stock_qty !== undefined) {
+    const v = parseFloat(req.body.stock_qty);
+    if (Number.isFinite(v)) updates.push(`stock_qty = ${v}`);
+  }
+  if (req.body.stock_min !== undefined) {
+    const v = parseFloat(req.body.stock_min);
+    if (Number.isFinite(v) && v >= 0) updates.push(`stock_min = ${v}`);
+  }
+
   if (req.body.active_days !== undefined) {
     const days = Array.isArray(req.body.active_days) && req.body.active_days.length > 0
       ? req.body.active_days.map(Number)

@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { baixarEstoque, devolverEstoque } = require('../services/stock');
 const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub');
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
@@ -275,6 +276,15 @@ router.post('/:id/orders', async (req, res) => {
       await insertItemAddons(itemResult.rows[0].id, item.addons);
     }
 
+    // Baixa no momento do pedido: o produto sai da geladeira agora, não quando
+    // a conta fechar. Vale igual pra comanda, mesa e balcão — todos passam por
+    // aqui. Adicionais não dão baixa: são preparados na hora.
+    await baixarEstoque(resolvedItems, {
+      motivo: 'Venda – comanda ' + (comanda.code || ''),
+      comandaId: comanda.id,
+      userId: req.user?.id,
+    });
+
     const updateResult = await pool.query(
       `UPDATE comandas SET subtotal = subtotal + $1, total = total + $1 WHERE id = $2 RETURNING *`,
       [addedTotal, comanda.id]
@@ -370,6 +380,13 @@ router.delete('/:id/items/:itemId', authMiddleware, requireRole('admin', 'atende
     if (!item) return res.status(404).json({ error: 'Item não encontrado nesta comanda' });
 
     await pool.query(`DELETE FROM comanda_items WHERE id = $1 RETURNING id`, [item.id]);
+
+    // Item removido da comanda volta pro estoque: ele deu baixa ao ser lançado.
+    await devolverEstoque([{ product_id: item.product_id, quantity: item.quantity }], {
+      motivo: 'Item removido da comanda ' + (comanda.code || ''),
+      comandaId: comanda.id,
+      userId: req.user?.id,
+    });
 
     const updateResult = await pool.query(
       `UPDATE comandas SET subtotal = subtotal - $1, total = total - $1 WHERE id = $2 RETURNING *`,
