@@ -634,8 +634,20 @@
   <div class="estoque-toolbar">
     <input type="text" id="estoque-search" placeholder="🔍 Buscar produto..." oninput="renderEstoque()">
     <select id="estoque-cat-filter" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
+    <button class="btn btn-secondary" onclick="abrirInventario()" style="white-space:nowrap">📋 Inventário</button>
   </div>
+  <div id="estoque-cat-acao"></div>
   <div id="estoque-list"><div class="cart-empty">Carregando...</div></div>
+</div>
+
+<!-- ── Inventário: folha de contagem ── -->
+<div id="inventario-screen" class="hidden">
+  <div class="estoque-toolbar">
+    <button class="btn btn-secondary" onclick="fecharInventarioTela()">← Voltar</button>
+    <span id="inv-resumo" style="font-size:.85rem;color:var(--c-muted);flex:1"></span>
+    <button class="btn btn-primary" id="inv-fechar-btn" onclick="confirmarInventario()">Fechar inventário</button>
+  </div>
+  <div id="inv-list"></div>
 </div>
 
 <!-- ── Aba: Financeiro ── -->
@@ -1134,6 +1146,9 @@ function showTab(tab) {
   }
   // sai da comanda aberta se o atendente clicar em outra aba do menu lateral
   document.getElementById('comanda-screen').classList.add('hidden');
+  // O inventário é uma tela dentro de Estoque, não uma aba: trocar de aba
+  // no meio da contagem tem que sair dele, senão fica sobreposto.
+  document.getElementById('inventario-screen')?.classList.add('hidden');
   document.getElementById('switch-comanda-btn').classList.add('hidden');
   document.getElementById('header-actions').classList.remove('hidden');
   if (tab === 'estoque') loadEstoque();
@@ -1507,6 +1522,7 @@ async function loadEstoque() {
 }
 
 function renderEstoque() {
+  renderAcaoCategoria();
   const search = (document.getElementById('estoque-search')?.value || '').toLowerCase().trim();
   const catFilter = document.getElementById('estoque-cat-filter')?.value || '';
   const el = document.getElementById('estoque-list');
@@ -1545,6 +1561,155 @@ function renderEstoque() {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Ligar controle numa categoria inteira ─────────────
+// Marcar 22 bebidas uma a uma é a tarefa que faz alguém desistir no décimo
+// produto. A ação só aparece quando há uma categoria filtrada — fora disso
+// seria um botão perigoso sem alvo claro.
+function renderAcaoCategoria() {
+  const el = document.getElementById('estoque-cat-acao');
+  if (!el) return;
+  const catId = document.getElementById('estoque-cat-filter')?.value || '';
+  const cat = estoqueCats.find(c => c.id === catId);
+  if (!catId || !cat || ROLE !== 'admin') { el.innerHTML = ''; return; }
+
+  const semControle = cat.products.filter(p => !p.track_stock).length;
+  if (!semControle) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;margin-bottom:10px;
+                background:var(--c-card);border:1px solid var(--c-border);border-radius:10px;font-size:.83rem">
+      <span style="flex:1;min-width:180px;color:var(--c-muted)">
+        ${semControle} produto(s) de <b>${cat.name}</b> ainda sem controle de estoque.
+      </span>
+      <button class="btn btn-secondary" style="font-size:.8rem" onclick="marcarCategoria('${catId}','${cat.name.replace(/'/g, "\\'")}',${semControle})">
+        Marcar todos como revenda
+      </button>
+    </div>`;
+}
+
+async function marcarCategoria(catId, nome, quantos) {
+  if (!confirm(`Marcar ${quantos} produto(s) de "${nome}" como revenda?\n\nEles passam a controlar estoque. O saldo de cada um começa em zero — informe a quantidade real depois, pelo Inventário ou pela Contagem.\n\nSe algum for feito na hora, desmarque depois no Editar.`)) return;
+  try {
+    const res = await fetch(`${API}/api/stock/marcar-categoria`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ category_id: catId, track_stock: true }),
+    });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Erro ao marcar'); return; }
+    showToast(`${d.alterados} produto(s) agora controlam estoque`);
+    loadEstoque();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+// ── Inventário em lote ────────────────────────────────
+let invItens = [];
+
+async function abrirInventario() {
+  try {
+    const res = await fetch(`${API}/api/stock/inventario/novo`, { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Erro ao abrir inventário'); return; }
+    if (!d.length) { showToast('Nenhum produto controla estoque ainda'); return; }
+    invItens = d.map(p => ({ ...p, contado: '' }));
+    document.getElementById('estoque-screen').classList.add('hidden');
+    document.getElementById('inventario-screen').classList.remove('hidden');
+    renderInventario();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+function fecharInventarioTela() {
+  document.getElementById('inventario-screen').classList.add('hidden');
+  document.getElementById('estoque-screen').classList.remove('hidden');
+  invItens = [];
+}
+
+function setContado(idx, valor) {
+  invItens[idx].contado = valor;
+  atualizaResumoInv();
+  const dif = document.getElementById(`inv-dif-${idx}`);
+  if (dif) {
+    const d = difInv(invItens[idx]);
+    dif.textContent = d === null ? '—' : (d > 0 ? '+' + d : d);
+    dif.style.color = d === null ? 'var(--c-muted)' : d === 0 ? 'var(--c-muted)' : d < 0 ? 'var(--danger)' : '#16a34a';
+  }
+}
+
+function difInv(it) {
+  if (it.contado === '' || it.contado === null) return null;
+  const c = parseFloat(it.contado);
+  if (!Number.isFinite(c)) return null;
+  return Math.round((c - parseFloat(it.stock_qty)) * 1000) / 1000;
+}
+
+function atualizaResumoInv() {
+  const contados = invItens.filter(i => difInv(i) !== null);
+  const divergentes = contados.filter(i => difInv(i) !== 0);
+  const valor = divergentes.reduce((s, i) => s + difInv(i) * parseFloat(i.price), 0);
+  const el = document.getElementById('inv-resumo');
+  const sinal = valor < 0 ? 'falta' : 'sobra';
+  el.innerHTML = `${contados.length} de ${invItens.length} contados`
+    + (divergentes.length ? ` · ${divergentes.length} divergente(s) · <b style="color:${valor < 0 ? 'var(--danger)' : '#16a34a'}">${sinal} ${fmt(Math.abs(valor))}</b>` : '');
+  document.getElementById('inv-fechar-btn').disabled = contados.length === 0;
+}
+
+function renderInventario() {
+  const el = document.getElementById('inv-list');
+  let catAtual = '';
+  el.innerHTML = invItens.map((it, i) => {
+    const head = it.category_name !== catAtual
+      ? `<div class="side-title" style="margin:14px 0 6px">${it.category_name || 'Sem categoria'}</div>` : '';
+    catAtual = it.category_name;
+    return head + `
+      <div class="estoque-item">
+        <div style="flex:1;min-width:0">
+          <div class="name">${it.name}</div>
+          <small>sistema: ${it.stock_qty}</small>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input type="number" step="0.001" min="0" inputmode="decimal" value=""
+                 placeholder="contar" oninput="setContado(${i}, this.value)"
+                 style="width:92px;padding:9px;text-align:right;border:2px solid var(--c-border);border-radius:8px;font-size:1rem">
+          <span id="inv-dif-${i}" style="min-width:52px;text-align:right;font-weight:700;color:var(--c-muted)">—</span>
+        </div>
+      </div>`;
+  }).join('');
+  atualizaResumoInv();
+}
+
+async function confirmarInventario() {
+  const contados = invItens.filter(i => difInv(i) !== null);
+  if (!contados.length) { showToast('Conte ao menos um produto'); return; }
+  const naoContados = invItens.length - contados.length;
+  const divergentes = contados.filter(i => difInv(i) !== 0).length;
+  // Quem não foi contado é IGNORADO, não zerado — parar no meio não pode
+  // apagar o resto do estoque.
+  if (!confirm(`Fechar o inventário?\n\n${contados.length} produto(s) contados, ${divergentes} com diferença.`
+      + (naoContados ? `\n${naoContados} não contado(s) — o saldo deles fica como está.` : '')
+      + `\n\nOs saldos serão ajustados para o que você contou.`)) return;
+
+  const btn = document.getElementById('inv-fechar-btn');
+  btn.disabled = true; btn.textContent = 'Fechando...';
+  try {
+    const res = await fetch(`${API}/api/stock/inventario`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ itens: contados.map(i => ({ product_id: i.id, counted_qty: parseFloat(i.contado) })) }),
+    });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Erro ao fechar inventário'); return; }
+    showToast(d.divergentes
+      ? `Inventário fechado · ${d.divergentes} diferença(s) · ${fmt(Math.abs(d.valor_diferenca))} ${d.valor_diferenca < 0 ? 'de falta' : 'de sobra'}`
+      : `Inventário fechado · tudo bateu`);
+    fecharInventarioTela();
+    loadEstoque();
+    refreshBadgesMenu();
+  } catch (e) {
+    showToast('Erro de conexão');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Fechar inventário';
+  }
 }
 
 // ── Estoque no PDV ────────────────────────────────────
