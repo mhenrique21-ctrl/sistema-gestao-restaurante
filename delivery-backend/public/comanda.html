@@ -82,21 +82,25 @@
   #main-content { flex: 1; overflow-y: auto; background: var(--c-bg); position: relative; }
 
   /* ── Menu lateral (faixa escura) ───────────────────── */
-  #tab-bar { display: flex; flex-direction: column; width: 230px; min-width: 230px; background: var(--surface); padding: 18px 14px; border-right: 1px solid var(--border); overflow-y: auto; }
+  /* Menu na paleta CLARA. Antes era marrom escuro com texto --muted (#7A6548):
+     3,34:1 de contraste, abaixo do mínimo legível de 4,5:1 — os itens sumiam.
+     Clarear resolve a leitura e ainda encosta o menu no miolo da tela, que já
+     era claro; a faixa escura fazia parecer dois sistemas colados. */
+  #tab-bar { display: flex; flex-direction: column; width: 230px; min-width: 230px; background: var(--c-surface); padding: 18px 14px; border-right: 1px solid var(--c-border); overflow-y: auto; }
   #tab-bar-items { display: flex; flex-direction: column; gap: 8px; flex: 1; }
   .tab-tile {
     flex: none; display: flex; flex-direction: row; align-items: center;
     gap: 12px; width: 100%; padding: 13px 14px; border-radius: 12px;
-    background: transparent; border: none; color: var(--muted);
+    background: transparent; border: none; color: var(--c-text);
     font-weight: 700; font-size: .92rem; letter-spacing: .01em; text-align: left;
   }
   .tab-tile .icon { font-size: 1.3rem; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .tab-tile .icon svg { width: 22px; height: 22px; }
-  .tab-tile.active { background: var(--card-active); color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
+  .tab-tile.active { background: #F5EFE3; color: #7E5F2C; box-shadow: inset 3px 0 0 var(--gold-dim); }
   /* Rótulo de grupo: é o que dá resposta pra "onde fica X?" — a pessoa procura
      pela intenção (vender, dinheiro, estoque), não pelo nome da tela. */
   .nav-group { font-size: .68rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
-    color: var(--muted); opacity: .6; padding: 14px 14px 4px; }
+    color: #7A7164; padding: 14px 14px 4px; }
   .nav-group:first-child { padding-top: 2px; }
   .tab-tile .nav-badge { margin-left: auto; background: var(--gold); color: #1d1d1b;
     border-radius: 999px; min-width: 20px; padding: 1px 7px; font-size: .72rem; font-weight: 800; text-align: center; }
@@ -118,13 +122,13 @@
   #status-turno.fechado .dot { background: var(--danger); }
   @media (max-width: 720px) { #status-operador { display: none; } }
   .tab-tile:active { background: var(--card); }
-  #tab-bar-footer { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 10px; }
+  #tab-bar-footer { border-top: 1px solid var(--c-border); padding-top: 14px; margin-top: 10px; }
   #tab-bar-logout {
     display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border-radius: 12px;
-    background: transparent; border: none; color: var(--muted); font-weight: 700; font-size: .92rem; margin-bottom: 12px;
+    background: transparent; border: none; color: #7A7164; font-weight: 700; font-size: .92rem; margin-bottom: 12px;
   }
-  #tab-bar-logout:active { background: var(--card); color: var(--danger); }
-  #tab-bar-meta { color: var(--muted); font-size: .76rem; display: flex; flex-direction: column; gap: 4px; }
+  #tab-bar-logout:active { background: #FBEAEA; color: var(--danger); }
+  #tab-bar-meta { color: #7A7164; font-size: .76rem; display: flex; flex-direction: column; gap: 4px; }
   #tab-bar-meta span { display: flex; align-items: center; gap: 6px; }
 
   /* ── Tela de login (Abertura do PDV) ──────────────── */
