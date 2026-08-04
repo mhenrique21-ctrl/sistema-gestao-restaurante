@@ -189,9 +189,15 @@
   .cfg-tab { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: 12.5px; font-weight: 500; color: var(--text2); }
   .cfg-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
   #config-body { flex: 1; min-height: 0; display: flex; }
-  .cfg-pane { display: none; flex: 1; min-height: 0; }
+  /* O scroll precisa ficar DENTRO da aba. Sem isso, uma aba mais alta que a
+     tela empurra o layout inteiro e a barra de navegação de baixo sai do
+     lugar, aparecendo no meio da página. Estava só em #config-tab-impressora;
+     Usuários e Compras tinham o mesmo defeito latente, e a aba de Adicionais
+     (que lista todos os produtos) foi a primeira a estourar. */
+  .cfg-pane { display: none; flex: 1; min-height: 0; overflow-y: auto; }
   .cfg-pane.active { display: flex; }
-  #config-tab-impressora { padding: 20px; overflow-y: auto; }
+  #config-tab-impressora { padding: 20px; }
+  #config-tab-adicionais { padding: 20px; }
   .cfg-form { max-width: 460px; }
   .cfg-form h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
   .cfg-hint { font-size: 12.5px; color: var(--text2); margin: 0 0 16px; }
