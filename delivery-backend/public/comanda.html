@@ -93,6 +93,26 @@
   .tab-tile .icon { font-size: 1.3rem; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .tab-tile .icon svg { width: 22px; height: 22px; }
   .tab-tile.active { background: var(--card-active); color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
+  /* Rótulo de grupo: é o que dá resposta pra "onde fica X?" — a pessoa procura
+     pela intenção (vender, dinheiro, estoque), não pelo nome da tela. */
+  .nav-group { font-size: .68rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); opacity: .6; padding: 14px 14px 4px; }
+  .nav-group:first-child { padding-top: 2px; }
+  .tab-tile .nav-badge { margin-left: auto; background: var(--gold); color: #1d1d1b;
+    border-radius: 999px; min-width: 20px; padding: 1px 7px; font-size: .72rem; font-weight: 800; text-align: center; }
+  .tab-tile .nav-badge-alerta { background: var(--danger); color: #fff; }
+  .tab-tile .nav-badge-quiet { background: transparent; color: var(--muted); font-weight: 600; padding: 0; }
+  /* Barra de situação no topo: turno e operador sempre à vista. */
+  #header-actions { display: flex; align-items: center; gap: 10px; }
+  .status-chip { display: flex; align-items: center; gap: 7px; font-size: .8rem; font-weight: 600;
+    color: var(--muted); background: var(--card); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 13px; white-space: nowrap; }
+  .status-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  #status-turno.aberto { color: var(--success); border-color: var(--success); }
+  #status-turno.aberto .dot { background: var(--success); }
+  #status-turno.fechado { color: var(--danger); border-color: var(--danger); }
+  #status-turno.fechado .dot { background: var(--danger); }
+  @media (max-width: 720px) { #status-operador { display: none; } }
   .tab-tile:active { background: var(--card); }
   #tab-bar-footer { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 10px; }
   #tab-bar-logout {
@@ -446,25 +466,15 @@
       <img class="brand-logo-img" src="/logo-confraria-pdv.png" alt="Confraria Café PDV">
     </div>
   </div>
+  <!-- Barra de situação: responde "o caixa está aberto e quanto tem na gaveta"
+       sem precisar navegar até lá. Antes, essas 4 CTAs viviam aqui e disputavam
+       a navegação com o menu lateral — sem critério que dissesse por que Mesas
+       ficava de um lado e Comandas do outro. Agora navegação é só o lateral. -->
   <div id="header-actions" class="hidden">
-    <button class="header-cta" id="fazer-pedido-btn" onclick="openBalcaoSale()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.4"/><circle cx="19" cy="21" r="1.4"/><path d="M1 1h3l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L22 6H6"/></svg>
-      Fazer Pedido
-    </button>
-    <button class="header-cta" id="delivery-btn" onclick="showTab('delivery')">
-      <span class="notif-bell hidden" id="delivery-notif">0</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg>
-      Delivery
-    </button>
-    <button class="header-cta" id="comanda-btn" onclick="showTab('comandas')">
-      <span class="notif-bell hidden" id="comanda-notif">0</span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
-      Comandas
-    </button>
-    <button class="header-cta" id="caixa-btn" onclick="showTab('financeiro')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="18" y1="15" x2="18" y2="15"/></svg>
-      Caixa
-    </button>
+    <div id="status-turno" class="status-chip">
+      <span class="dot"></span><span id="status-turno-txt">Caixa fechado</span>
+    </div>
+    <div class="status-chip" id="status-operador"></div>
   </div>
   <button class="btn btn-secondary hidden" id="switch-comanda-btn" onclick="resetToScan()">🔁 Trocar</button>
 </div>
@@ -472,8 +482,21 @@
 <div id="app-layout">
 <div id="tab-bar" class="hidden">
   <div id="tab-bar-items">
-  <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 7.5 3 12.5S7 22 12 22s9-4.5 9-9.5S17 3 12 3z"/><path d="M9 19c0-4 1-6 2-7.5S13 8 13 5"/></svg></span>Estoque</button>
-  <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9" rx="7" ry="2.6"/><line x1="12" y1="9" x2="12" y2="18"/><line x1="7" y1="19" x2="17" y2="19"/><path d="M9.3 4.8c.7-.9.7-1.4 0-2.3M12.7 4.8c.7-.9.7-1.4 0-2.3"/></svg></span>Mesas</button>
+  <!-- Agrupado por INTENÇÃO. Antes "onde fica Mesas?" não tinha resposta
+       lógica: estava no lateral, e Comandas em cima, sendo a mesma atividade. -->
+  <div class="nav-group">Vender</div>
+  <button class="tab-tile" id="fazer-pedido-btn" onclick="openBalcaoSale()"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.4"/><circle cx="19" cy="21" r="1.4"/><path d="M1 1h3l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L22 6H6"/></svg></span>Fazer pedido</button>
+  <button class="tab-tile" data-tab="comandas" onclick="showTab('comandas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg></span>Comandas<span class="nav-badge hidden" id="comanda-notif">0</span></button>
+  <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9" rx="7" ry="2.6"/><line x1="12" y1="9" x2="12" y2="18"/><line x1="7" y1="19" x2="17" y2="19"/><path d="M9.3 4.8c.7-.9.7-1.4 0-2.3M12.7 4.8c.7-.9.7-1.4 0-2.3"/></svg></span>Mesas<span class="nav-badge nav-badge-quiet hidden" id="mesas-badge"></span></button>
+  <button class="tab-tile" data-tab="delivery" onclick="showTab('delivery')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span>Delivery<span class="nav-badge hidden" id="delivery-notif">0</span></button>
+
+  <div class="nav-group">Dinheiro</div>
+  <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="18" y1="15" x2="18" y2="15"/></svg></span>Caixa</button>
+
+  <div class="nav-group">Estoque</div>
+  <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4 8 4 8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg></span>Produtos<span class="nav-badge nav-badge-alerta hidden" id="estoque-badge"></span></button>
+
+  <div class="nav-group">Ajustes</div>
   <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/><circle cx="12" cy="12" r="6"/><path d="M9 11h5v2a2.5 2.5 0 0 1-2.5 2.5A2.5 2.5 0 0 1 9 13v-2z"/><path d="M14 11.6h.8a1 1 0 1 1 0 2h-.5"/></svg></span>Configurações</button>
   <button class="tab-tile" data-tab="impressora" onclick="showTab('impressora')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 12.5h1.2"/><path d="M6 17h12v4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4z"/></svg></span>Impressoras</button>
   </div>
@@ -1086,6 +1109,7 @@ function resetToScan() {
   document.getElementById('switch-comanda-btn').classList.add('hidden');
   document.getElementById('header-actions').classList.remove('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
+    iniciarStatusBar();
   showTab('comandas');
 }
 
@@ -1102,13 +1126,9 @@ const TAB_SCREENS = {
 
 // Abas que hoje ficam nos botões grandes do topo (Fazer Pedido/Delivery/Comandas/Caixa)
 // em vez da lista lateral — 'financeiro' é a aba real por trás do botão "Caixa".
-const HEADER_CTA_TABS = { comandas: 'comanda-btn', delivery: 'delivery-btn', financeiro: 'caixa-btn' };
 
 function showTab(tab) {
   document.querySelectorAll('.tab-tile').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.querySelectorAll('.header-cta').forEach(b => b.classList.remove('active-tab'));
-  const ctaId = HEADER_CTA_TABS[tab];
-  if (ctaId) document.getElementById(ctaId)?.classList.add('active-tab');
   for (const [key, screenId] of Object.entries(TAB_SCREENS)) {
     document.getElementById(screenId).classList.toggle('hidden', key !== tab);
   }
@@ -1123,6 +1143,57 @@ function showTab(tab) {
   if (tab === 'mesas') loadMesas();
   if (tab === 'comandas') { clearNotif('comanda'); loadBoard(); }
   if (tab === 'delivery') clearNotif('delivery');
+}
+
+// ── Barra de situação e contadores do menu ────────────
+// Turno, gaveta e alerta de estoque ficam à vista o tempo todo. O alerta de
+// mínimo só serve se procurar a pessoa: numa tela que ninguém abre no meio do
+// movimento, ele não existe na prática.
+
+async function refreshStatusBar() {
+  const chip = document.getElementById('status-turno');
+  const txt = document.getElementById('status-turno-txt');
+  const op = document.getElementById('status-operador');
+  if (!chip) return;
+  if (op) op.textContent = USER_NAME ? `${USER_NAME} · ${new Date().toLocaleDateString('pt-BR')}` : '';
+  try {
+    const res = await fetch(`${API}/api/cash-sessions/current`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const d = await res.json();
+    CAIXA_SESSION = d.session || null;
+    if (d.session) {
+      const desde = new Date(d.session.opened_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      chip.className = 'status-chip aberto';
+      txt.textContent = `Caixa aberto ${desde} · gaveta ${fmt(d.expected)}`;
+    } else {
+      chip.className = 'status-chip fechado';
+      txt.textContent = 'Caixa fechado';
+    }
+  } catch (e) { /* sem conexão não trava o atendimento */ }
+}
+
+async function refreshBadgesMenu() {
+  try {
+    const res = await fetch(`${API}/api/stock`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const d = await res.json();
+    const b = document.getElementById('estoque-badge');
+    if (!b) return;
+    b.textContent = d.abaixo || '';
+    b.classList.toggle('hidden', !d.abaixo);
+  } catch (e) { /* idem */ }
+}
+
+let _statusTimers = false;
+function iniciarStatusBar() {
+  refreshStatusBar(); refreshBadgesMenu();
+  // Guarda contra timer duplicado: são quatro caminhos que liberam a tela
+  // (com caixa aberto, sem conexão, após abrir o caixa, e ao trocar de tela),
+  // e cada um passaria por aqui somando mais um intervalo.
+  if (_statusTimers) return;
+  _statusTimers = true;
+  setInterval(refreshStatusBar, 60000);
+  setInterval(refreshBadgesMenu, 120000);
 }
 
 // Aba "Delivery": mostra os pedidos do app (admin.html, aba Pedidos) embutidos
@@ -1972,6 +2043,7 @@ async function checkAberturaCaixa() {
       document.getElementById('abertura-modal-backdrop').classList.add('hidden');
       document.getElementById('header-actions').classList.remove('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
+    iniciarStatusBar();
       resetToScan();
     } else {
       openAberturaModal();
@@ -1980,6 +2052,7 @@ async function checkAberturaCaixa() {
     // sem conexão pra checar: não trava o atendimento, segue normalmente
     document.getElementById('header-actions').classList.remove('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
+    iniciarStatusBar();
     resetToScan();
   }
 }
@@ -2040,6 +2113,7 @@ async function submitAbertura() {
     closeAberturaModal();
     document.getElementById('header-actions').classList.remove('hidden');
     document.getElementById('tab-bar').classList.remove('hidden');
+    iniciarStatusBar();
     resetToScan();
   } catch (e) {
     errEl.textContent = 'Erro de conexão';
