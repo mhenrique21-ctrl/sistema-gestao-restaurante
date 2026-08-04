@@ -91,6 +91,7 @@ app.use('/api/printers', require('./routes/printers'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/comandas', require('./routes/comandas'));
 app.use('/api/cash-movements', require('./routes/cashMovements'));
+app.use('/api/cash-sessions', require('./routes/cashSessions'));
 app.use('/api/meta', require('./routes/meta'));
 app.use('/api/mesas', require('./routes/mesas'));
 app.use('/api/pdv-provision', require('./routes/pdvProvision'));

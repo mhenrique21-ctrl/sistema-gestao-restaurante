@@ -101,4 +101,102 @@ async function getCashSummary(date) {
   };
 }
 
-module.exports = { getCashSummary, todayBelem, SALE_METHODS, SALE_CHANNELS };
+// ── Turno de caixa ────────────────────────────────────────────────────
+// Diferente de getCashSummary, que apura por DATA, aqui a apuração é pela
+// JANELA do turno (abertura até fechamento, ou até agora se ainda aberto).
+// Um dia que vira com a loja aberta continua no mesmo turno, e um dia com dois
+// turnos não mistura a conferência de um com a do outro.
+
+async function getOpenSession() {
+  const r = await pool.query(
+    `SELECT cs.*, u.name AS opened_by_name
+       FROM cash_sessions cs LEFT JOIN users u ON u.id = cs.opened_by
+      WHERE cs.status = 'aberto' LIMIT 1`
+  );
+  return r.rows[0] || null;
+}
+
+// Dinheiro que está FISICAMENTE na gaveta ao fechar.
+//
+// Entra: comanda, balcão e retirada pagos em dinheiro — o cliente pagou no
+// balcão, a nota está ali. Não entra: entrega, porque no momento do
+// fechamento o dinheiro ainda está com o entregador. iFood e 99food não
+// aparecem aqui de forma alguma: não passam pelo PDV, só entram como
+// faturamento no App Gestão.
+//
+// Cartão e pix entram no faturamento do turno, mas nunca no valor a conferir.
+async function getSessionSummary(session) {
+  const ini = session.opened_at;
+  const fim = session.closed_at || new Date().toISOString();
+
+  const movs = await pool.query(
+    `SELECT cm.id, cm.type, cm.amount, cm.reason, cm.created_at, u.name AS created_by_name
+       FROM cash_movements cm LEFT JOIN users u ON u.id = cm.created_by
+      WHERE cm.session_id = $1 ORDER BY cm.created_at ASC`,
+    [session.id]
+  );
+  const soma = (t) => movs.rows.filter((r) => r.type === t).reduce((s, r) => s + parseFloat(r.amount), 0);
+  const sangrias = soma('sangria');
+  const suprimentos = soma('suprimento');
+
+  const pdvRows = await pool.query(
+    `SELECT (CASE WHEN c.code LIKE 'balcao_%' THEN 'balcao' ELSE 'comanda' END) AS channel,
+            ${CP_METHOD_BUCKET_SQL} AS method, COUNT(*) AS qty, COALESCE(SUM(cp.amount), 0) AS total
+       FROM comanda_payments cp JOIN comandas c ON c.id = cp.comanda_id
+      WHERE c.status = 'fechada' AND c.closed_at >= $1 AND c.closed_at <= $2
+      GROUP BY channel, method`,
+    [ini, fim]
+  );
+  const delivRows = await pool.query(
+    `SELECT COALESCE(delivery_type, 'delivery') AS tipo, ${METHOD_BUCKET_SQL} AS method,
+            COUNT(*) AS qty, COALESCE(SUM(total), 0) AS total
+       FROM orders
+      WHERE status <> 'cancelado' AND created_at >= $1 AND created_at <= $2
+      GROUP BY tipo, method`,
+    [ini, fim]
+  );
+
+  const channels = {};
+  for (const ch of SALE_CHANNELS) {
+    channels[ch] = { byMethod: {}, total: 0 };
+    for (const m of SALE_METHODS) channels[ch].byMethod[m] = { qty: 0, total: 0 };
+  }
+  const soma1 = (ch, method, qty, total) => {
+    if (SALE_METHODS.includes(method)) {
+      channels[ch].byMethod[method].qty += qty;
+      channels[ch].byMethod[method].total += total;
+    }
+    channels[ch].total += total;
+  };
+  pdvRows.rows.forEach((r) => soma1(r.channel, r.method, parseInt(r.qty, 10), parseFloat(r.total)));
+
+  let dinheiroRetirada = 0;
+  delivRows.rows.forEach((r) => {
+    const total = parseFloat(r.total);
+    soma1('delivery', r.method, parseInt(r.qty, 10), total);
+    if (r.method === 'dinheiro' && r.tipo === 'retirada') dinheiroRetirada += total;
+  });
+
+  const byMethod = {};
+  for (const m of SALE_METHODS) {
+    byMethod[m] = SALE_CHANNELS.reduce((s, ch) => s + channels[ch].byMethod[m].total, 0);
+  }
+  const totalGeral = SALE_CHANNELS.reduce((s, ch) => s + channels[ch].total, 0);
+
+  const dinheiroNaGaveta =
+    channels.comanda.byMethod.dinheiro.total +
+    channels.balcao.byMethod.dinheiro.total +
+    dinheiroRetirada;
+
+  const abertura = parseFloat(session.opening_amount) || 0;
+  const expected = abertura + suprimentos - sangrias + dinheiroNaGaveta;
+
+  return {
+    movements: [...movs.rows].reverse(),
+    totals: { abertura, sangrias, suprimentos, dinheiroNaGaveta, dinheiroRetirada },
+    sales: { channels, byMethod, totalGeral },
+    expected: Math.round(expected * 100) / 100,
+  };
+}
+
+module.exports = { getCashSummary, todayBelem, SALE_METHODS, SALE_CHANNELS, getOpenSession, getSessionSummary };
