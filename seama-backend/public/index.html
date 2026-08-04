@@ -265,6 +265,26 @@
   .stk-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
 
   /* ── Configurações: vínculos de compra ── */
+  #rel-data { padding: 0 14px 10px; }
+  .cons-wrap { display: flex; gap: 14px; align-items: flex-start; }
+  .cons-lista { flex: 1; min-width: 0; }
+  .cons-detalhe { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; background: var(--card); }
+  .cons-resumo { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); padding: 0 2px 8px; }
+  .cons-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; font-size: 12.5px; cursor: pointer; }
+  .cons-item.sel { border-color: var(--primary); background: var(--card); }
+  .cons-item.canc { opacity: .55; }
+  .cons-item.canc .nm { text-decoration: line-through; }
+  .cons-item.canc .vl { color: var(--danger); font-size: 11.5px; }
+  .cons-tit { font-size: 15px; font-weight: 600; }
+  .badge-canc { font-size: 10px; font-weight: 700; color: #fff; background: var(--danger); border-radius: 6px; padding: 2px 6px; vertical-align: 2px; }
+  .cons-sub { font-size: 11.5px; color: var(--text2); margin: 2px 0 12px; }
+  .cons-linha { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 3px 0; }
+  .cons-linha.add { color: var(--text2); font-size: 11.5px; padding-left: 14px; }
+  .cons-linha.big { font-size: 15px; font-weight: 600; padding-top: 4px; }
+  .cons-tot { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }
+  .cons-acoes { display: flex; gap: 8px; margin-top: 14px; }
+  .cons-acoes button { flex: 1; }
+  @media (max-width: 760px) { .cons-wrap { flex-direction: column; } .cons-detalhe { width: 100%; } }
   .vinc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .vinc-head input { flex: 1; }
   .vinc-head .cnt { font-size: 11.5px; color: var(--text2); white-space: nowrap; }
@@ -405,6 +425,10 @@
       <button class="cfg-tab active" data-rtab="vendas">📈 Vendas</button>
       <button class="cfg-tab" data-rtab="produtos">🏆 Produtos</button>
       <button class="cfg-tab" data-rtab="estoque">📦 Estoque</button>
+      <button class="cfg-tab" data-rtab="consulta">🧾 Consulta</button>
+    </div>
+    <div id="rel-data" style="display:none">
+      <input type="date" id="cons-data">
     </div>
     <div id="rel-periodo">
       <button class="per-btn active" data-dias="0">Hoje</button>
@@ -1272,9 +1296,168 @@ document.querySelectorAll('#rel-tabs .cfg-tab').forEach(t => t.addEventListener(
   relTab = t.dataset.rtab;
   document.querySelectorAll('#rel-tabs .cfg-tab').forEach(x => x.classList.toggle('active', x === t));
   // Estoque é uma foto do agora; período só faz sentido pras outras abas.
-  document.getElementById('rel-periodo').style.display = relTab === 'estoque' ? 'none' : 'flex';
+  // Consulta é venda a venda, então usa data única em vez de período.
+  document.getElementById('rel-periodo').style.display = (relTab === 'estoque' || relTab === 'consulta') ? 'none' : 'flex';
+  document.getElementById('rel-data').style.display = relTab === 'consulta' ? 'flex' : 'none';
+  if (relTab === 'consulta') { loadConsulta(); return; }
   loadRelatorio();
 }));
+
+// ── Consulta venda a venda ───────────────────────────
+let consVendas = [];
+let consSelecionada = null;
+
+function hojeBelem() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Belem' });
+}
+
+async function loadConsulta() {
+  const inp = document.getElementById('cons-data');
+  if (!inp.value) inp.value = hojeBelem();
+  const el = document.getElementById('rel-body');
+  el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    const res = await apiFetch(`/api/sales?date=${inp.value}`);
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro ao carregar</p>'; return; }
+    consVendas = d.sales || [];
+    consSelecionada = null;
+    renderConsulta();
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+function horaBr(iso) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Belem', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderConsulta() {
+  const el = document.getElementById('rel-body');
+  const validas = consVendas.filter(v => v.status === 'concluida');
+  const canceladas = consVendas.length - validas.length;
+  const total = validas.reduce((s, v) => s + parseFloat(v.total), 0);
+
+  el.innerHTML = `
+    <div class="cons-wrap">
+      <div class="cons-lista">
+        <div class="cons-resumo">
+          <span>${validas.length} venda(s)${canceladas ? ` · ${canceladas} cancelada(s)` : ''}</span>
+          <span><b>${fmt(total)}</b></span>
+        </div>
+        ${!consVendas.length ? '<p style="font-size:12.5px;color:var(--text2);padding:8px 2px">Nenhuma venda nessa data.</p>'
+          : consVendas.map(v => {
+            const cancelada = v.status !== 'concluida';
+            return `
+            <div class="cons-item ${consSelecionada === v.id ? 'sel' : ''} ${cancelada ? 'canc' : ''}" data-id="${v.id}">
+              <span class="nm">#${v.sale_number} · ${horaBr(v.created_at)}${v.operator_name ? ' · ' + v.operator_name : ''}</span>
+              <span class="vl">${cancelada ? 'cancelada' : fmt(v.total)}</span>
+            </div>`;
+          }).join('')}
+      </div>
+      <div class="cons-detalhe" id="cons-detalhe">
+        <p style="font-size:12.5px;color:var(--text2)">Toque numa venda pra ver o detalhe.</p>
+      </div>
+    </div>`;
+
+  el.querySelectorAll('.cons-item').forEach(r => r.addEventListener('click', () => abrirVenda(r.dataset.id)));
+  if (consSelecionada) abrirVenda(consSelecionada);
+}
+
+async function abrirVenda(id) {
+  consSelecionada = id;
+  document.querySelectorAll('.cons-item').forEach(r => r.classList.toggle('sel', r.dataset.id === id));
+  const box = document.getElementById('cons-detalhe');
+  box.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    const res = await apiFetch(`/api/sales/${id}`);
+    const v = await res.json();
+    if (!res.ok) { box.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro ao carregar</p>'; return; }
+    const cancelada = v.status !== 'concluida';
+    const podeCancelar = !cancelada && ['gerente', 'admin'].includes(CURRENT_USER?.role);
+
+    box.innerHTML = `
+      <div class="cons-tit">Venda #${v.sale_number} ${cancelada ? '<span class="badge-canc">CANCELADA</span>' : ''}</div>
+      <div class="cons-sub">${new Date(v.created_at).toLocaleString('pt-BR', { timeZone: 'America/Belem' })}${v.operator_name ? ' · ' + v.operator_name : ''}</div>
+      <div class="cons-itens">
+        ${(v.items || []).map(i => {
+          const addons = i.addons || [];
+          const extra = addons.reduce((s, a) => s + parseFloat(a.price) * parseInt(a.quantity, 10), 0);
+          const base = parseFloat(i.unit_price) - extra;
+          return `
+          <div class="cons-linha"><span>${i.quantity}× ${i.product_name}</span><span>${fmt(base * i.quantity)}</span></div>
+          ${addons.map(a => `<div class="cons-linha add"><span>+ ${a.quantity > 1 ? a.quantity + '× ' : ''}${a.name}</span><span>${fmt(parseFloat(a.price) * parseInt(a.quantity, 10) * i.quantity)}</span></div>`).join('')}`;
+        }).join('')}
+      </div>
+      <div class="cons-tot">
+        ${parseFloat(v.discount) > 0 ? `<div class="cons-linha"><span>Desconto</span><span>− ${fmt(v.discount)}</span></div>` : ''}
+        <div class="cons-linha"><span>Pagamento</span><span>${(v.payments || []).map(p => `${PAY_METHOD_LABELS[p.method] || p.method} ${fmt(p.amount)}`).join(' + ')}</span></div>
+        <div class="cons-linha big"><span>Total</span><span>${fmt(v.total)}</span></div>
+      </div>
+      <div class="cons-acoes">
+        <button id="cons-reimp">🖨 Reimprimir</button>
+        ${podeCancelar ? '<button id="cons-canc" style="color:var(--danger)">Cancelar venda</button>' : ''}
+      </div>`;
+
+    box.querySelector('#cons-reimp').addEventListener('click', () => printCupom(v));
+    const bc = box.querySelector('#cons-canc');
+    if (bc) bc.addEventListener('click', () => abrirCancelamento(v));
+  } catch (e) {
+    if (e.message !== 'unauthorized') box.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+function abrirCancelamento(v) {
+  let bd = document.getElementById('canc-backdrop');
+  if (!bd) {
+    bd = document.createElement('div');
+    bd.id = 'canc-backdrop';
+    bd.className = 'modal-backdrop';
+    document.body.appendChild(bd);
+  }
+  bd.innerHTML = `
+    <div class="modal-sheet" style="max-width:380px">
+      <h2>Cancelar venda #${v.sale_number}</h2>
+      <div class="sub">${fmt(v.total)} sai do caixa e do faturamento. Os itens voltam ao estoque. A venda continua registrada como cancelada.</div>
+      <input type="text" id="canc-motivo" placeholder="Motivo (obrigatório)" style="width:100%;margin-top:10px">
+      <div style="font-size:11.5px;color:var(--text2);margin-top:7px">Fica registrado quem cancelou, quando e por quê.</div>
+      <div id="canc-erro" style="font-size:12px;color:var(--danger);margin-top:8px"></div>
+      <div class="modal-actions">
+        <button id="canc-voltar">Voltar</button>
+        <button class="primary" id="canc-ok" style="background:var(--danger);border-color:var(--danger)">Confirmar</button>
+      </div>
+    </div>`;
+  const fechar = () => bd.remove();
+  bd.querySelector('#canc-voltar').addEventListener('click', fechar);
+  bd.querySelector('#canc-motivo').focus();
+  bd.querySelector('#canc-ok').addEventListener('click', async () => {
+    const motivo = bd.querySelector('#canc-motivo').value.trim();
+    const err = bd.querySelector('#canc-erro');
+    if (!motivo) { err.textContent = 'Informe o motivo.'; return; }
+    const btn = bd.querySelector('#canc-ok');
+    btn.disabled = true; btn.textContent = 'Cancelando...';
+    try {
+      const res = await apiFetch(`/api/sales/${v.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: motivo }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        err.textContent = d.error || 'Erro ao cancelar';
+        btn.disabled = false; btn.textContent = 'Confirmar';
+        return;
+      }
+      fechar();
+      showToast(`Venda #${d.sale_number} cancelada${d.itens_devolvidos ? ` · ${d.itens_devolvidos} item(ns) devolvido(s) ao estoque` : ''}`);
+      loadConsulta();
+    } catch (e) {
+      if (e.message !== 'unauthorized') { err.textContent = 'Erro de conexão'; btn.disabled = false; btn.textContent = 'Confirmar'; }
+    }
+  });
+}
+
+document.getElementById('cons-data').addEventListener('change', loadConsulta);
 
 document.querySelectorAll('.per-btn').forEach(b => b.addEventListener('click', () => {
   relDias = parseInt(b.dataset.dias, 10);

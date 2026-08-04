@@ -193,13 +193,28 @@ router.post('/:id/cancel', requireRole('gerente', 'admin'), async (req, res) => 
   const { reason } = req.body;
   if (!reason || !reason.trim()) return res.status(400).json({ error: 'Informe o motivo do cancelamento' });
   try {
-    const result = await pool.query(
-      `UPDATE sales SET status = 'cancelada' WHERE id = $1 AND status = 'concluida' RETURNING id, sale_number, total`,
-      [req.params.id]
-    );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Venda não encontrada ou já cancelada' });
+    // Status e devolução de estoque na mesma transação (ver cancel_sale). Antes
+    // isto era só um UPDATE de status: o valor saía do caixa e do faturamento
+    // corretamente, mas a mercadoria continuava baixada do estoque, furando o
+    // controle em silêncio até a próxima contagem física.
+    const { data, error } = await pool.supabase.rpc('cancel_sale', {
+      p_sale_id: req.params.id,
+      p_user_id: req.user.id,
+    });
+    if (error) {
+      const msg = String(error.message || '');
+      if (msg.includes('VENDA_NAO_ENCONTRADA')) return res.status(404).json({ error: 'Venda não encontrada' });
+      if (msg.includes('VENDA_JA_CANCELADA')) return res.status(409).json({ error: 'Essa venda já está cancelada' });
+      if (msg.includes('TURNO_FECHADO')) {
+        return res.status(409).json({
+          code: 'TURNO_FECHADO',
+          error: 'Só dá pra cancelar venda do turno que está aberto agora. O turno dessa venda já foi fechado e conferido.',
+        });
+      }
+      throw Object.assign(new Error(error.message), { code: error.code });
+    }
     await logAction(req.user.id, 'venda_cancelada', { sale_id: req.params.id, reason: reason.trim() });
-    res.json({ ...result.rows[0], status: 'cancelada' });
+    res.json(data);
   } catch (err) {
     return internalError(res, err, '[sales/cancel]');
   }
