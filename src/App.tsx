@@ -776,10 +776,20 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // toggle/pagarGrupo/save (Contas) sempre carimbam atualizadoEm agora,
       // então o lado que acabou de mudar vence essa fusão.
       contas:        mergeArrayById(s.contas||[],p.contas||[],_listaDeletados),
-      compras:       byId(s.compras||[]),
-      fornecedores:  byId(s.fornecedores||[]),
-      funcionarios:  byId(s.funcionarios||[]),
-      fichasTecnicas:byId(s.fichasTecnicas||[]),
+      // byId olha SÓ o servidor e descarta o que existe apenas no estado local.
+      // Como o salvamento funde com o servidor ANTES de postar, um registro
+      // recém-criado era destruído a caminho de ser salvo — o mesmo bug que
+      // sumia com usuário recém-cadastrado.
+      //
+      // Confirmado em produção (04/08/2026): compras lançadas por cupom/IA
+      // geravam a conta a pagar (campo que já usava mergeArrayById) e chegavam
+      // ao PDV pela ponte, mas a COMPRA sumia do Gestão. A última compra
+      // sobrevivente era de 24/06 na SEAMA e 21/07 na CONFRARIA, enquanto as
+      // contas do mesmo lançamento estavam gravadas no mesmo minuto.
+      compras:       mergeArrayById(s.compras||[],p.compras||[],_listaDeletados),
+      fornecedores:  mergeArrayById(s.fornecedores||[],p.fornecedores||[],_listaDeletados),
+      funcionarios:  mergeArrayById(s.funcionarios||[],p.funcionarios||[],_listaDeletados),
+      fichasTecnicas:mergeArrayById(s.fichasTecnicas||[],p.fichasTecnicas||[],_listaDeletados),
       // materiasPrimas usa a mesma fusão de contas: o ajuste de estoque
       // (Estoque > Confirmar) e a edição de estoqueMinimo carimbam
       // atualizadoEm agora, então essa fusão evita que um poll reverta um
@@ -793,12 +803,15 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // carimba atualizadoEm) — corrigido com a mesma fusão de contas.
       encomendas:       mergeArrayById(s.encomendas||[],p.encomendas||[],_listaDeletados),
       clientesEncomenda:mergeArrayById(s.clientesEncomenda||[],p.clientesEncomenda||[],_listaDeletados),
-      faltas:        byId(s.faltas||[]),
-      adiantamentos: byId(s.adiantamentos||[]),
-      consumacoes:   byId(s.consumacoes||[]),
-      encargos:      byId(s.encargos||[]),
-      normalizacoes: byId(s.normalizacoes||[]),
-      movEstoque:    byId(s.movEstoque||[]),
+      // Mesmo motivo dos campos acima: todos estes já são tratados como
+      // mescláveis pelo servidor (MERGEABLE_FIELDS em mergeDocument.js) — era
+      // só o cliente que continuava jogando fora o que ainda não tinha subido.
+      faltas:        mergeArrayById(s.faltas||[],p.faltas||[],_listaDeletados),
+      adiantamentos: mergeArrayById(s.adiantamentos||[],p.adiantamentos||[],_listaDeletados),
+      consumacoes:   mergeArrayById(s.consumacoes||[],p.consumacoes||[],_listaDeletados),
+      encargos:      mergeArrayById(s.encargos||[],p.encargos||[],_listaDeletados),
+      normalizacoes: mergeArrayById(s.normalizacoes||[],p.normalizacoes||[],_listaDeletados),
+      movEstoque:    mergeArrayById(s.movEstoque||[],p.movEstoque||[],_listaDeletados),
       // usuarios precisa da MESMA fusão de vendas/contas, não byId (que só
       // olha o servidor). Bug real: criar um usuário sumia. O salvamento funde
       // com o servidor ANTES de postar; como o servidor ainda não conhecia o
