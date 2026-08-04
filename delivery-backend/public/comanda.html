@@ -103,14 +103,18 @@
   .tab-tile .nav-badge-alerta { background: var(--danger); color: #fff; }
   .tab-tile .nav-badge-quiet { background: transparent; color: var(--muted); font-weight: 600; padding: 0; }
   /* Barra de situação no topo: turno e operador sempre à vista. */
+  /* Chips ficam sobre o cabeçalho ESCURO: cor de texto tem que vir da paleta
+     das faixas escuras (--cream), não da área clara. E o verde aqui é --green;
+     --success não existe neste arquivo — foi o que deixou o chip sem cor. */
   #header-actions { display: flex; align-items: center; gap: 10px; }
-  .status-chip { display: flex; align-items: center; gap: 7px; font-size: .8rem; font-weight: 600;
-    color: var(--muted); background: var(--card); border: 1px solid var(--border);
-    border-radius: 999px; padding: 6px 13px; white-space: nowrap; }
+  .status-chip { display: flex; align-items: center; gap: 7px; font-size: .82rem; font-weight: 600;
+    color: var(--cream); background: var(--card); border: 1px solid var(--border);
+    border-radius: 999px; padding: 7px 14px; white-space: nowrap; }
   .status-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-  #status-turno.aberto { color: var(--success); border-color: var(--success); }
-  #status-turno.aberto .dot { background: var(--success); }
-  #status-turno.fechado { color: var(--danger); border-color: var(--danger); }
+  #status-operador { color: var(--gold); }
+  #status-turno.aberto { color: var(--green); border-color: var(--green); background: #4CAF8018; }
+  #status-turno.aberto .dot { background: var(--green); }
+  #status-turno.fechado { color: var(--danger); border-color: var(--danger); background: #E0525218; }
   #status-turno.fechado .dot { background: var(--danger); }
   @media (max-width: 720px) { #status-operador { display: none; } }
   .tab-tile:active { background: var(--card); }
@@ -1578,7 +1582,7 @@ function renderAcaoCategoria() {
   if (!semControle) { el.innerHTML = ''; return; }
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;margin-bottom:10px;
-                background:var(--c-card);border:1px solid var(--c-border);border-radius:10px;font-size:.83rem">
+                background:var(--c-surface);border:1px solid var(--c-border);border-radius:10px;font-size:.83rem">
       <span style="flex:1;min-width:180px;color:var(--c-muted)">
         ${semControle} produto(s) de <b>${cat.name}</b> ainda sem controle de estoque.
       </span>
