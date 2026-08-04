@@ -203,6 +203,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="promocoes" onclick="showPage('promocoes',this)">🎉 Promoções</button>
     <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
     <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
+    <button class="nav-btn" data-page="estoque" onclick="showPage('estoque',this)">📦 Estoque</button>
     <button class="nav-btn" data-page="financeiro" onclick="showPage('financeiro',this)">💰 Financeiro</button>
     <button class="nav-btn" data-page="comandas" onclick="showPage('comandas',this)">📇 Comandas</button>
     <button class="nav-btn" data-page="arquivo" onclick="showPage('arquivo',this)">🗄 Arquivo</button>
@@ -534,9 +535,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', comandas:'Comandas', arquivo:'Arquivo' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', estoque:'Estoque', comandas:'Comandas', arquivo:'Arquivo' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, comandas: pageComandas, arquivo: pageArquivo };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, estoque: pageEstoque, comandas: pageComandas, arquivo: pageArquivo };
   pages[page]?.();
 }
 
@@ -599,6 +600,105 @@ function stat(icon, label, val) {
 
 // ── Produtos ──────────────────────────────────────────────────────
 let produtos = [], categorias = [];
+// ── Estoque de revenda ────────────────────────────────
+async function pageEstoque() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<p style="color:#64748b">Carregando...</p>';
+  let d;
+  try { d = await api('GET', '/stock'); }
+  catch (e) { el.innerHTML = '<p style="color:#ef4444">Erro ao carregar estoque</p>'; return; }
+
+  if (!d.itens.length) {
+    el.innerHTML = `
+      <h2>📦 Estoque</h2>
+      <div class="card" style="padding:20px">
+        <p style="color:#94a3b8;margin:0 0 8px">Nenhum produto controla estoque ainda.</p>
+        <p style="color:#64748b;font-size:.85rem;margin:0">
+          Abra um produto em <b>Produtos</b> e ligue "📦 Controlar estoque". Marque só o que você
+          compra pronto e revende — bebida, chiclete, salgado de fornecedor.
+        </p>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <h2>📦 Estoque <span style="font-size:.8rem;color:#64748b;font-weight:400">${d.itens.length} produto(s)</span></h2>
+    ${d.abaixo ? `<div class="card" style="padding:12px 16px;margin-bottom:12px;border-left:3px solid #f59e0b">
+      <b style="color:#f59e0b">${d.abaixo} produto(s) no mínimo ou abaixo</b>
+      <div style="color:#64748b;font-size:.82rem;margin-top:2px">Aparecem primeiro na lista.</div>
+    </div>` : ''}
+    <div class="card" style="padding:0;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:.87rem">
+        <thead><tr style="background:#1e293b">
+          <th style="text-align:left;padding:10px 14px">Produto</th>
+          <th style="text-align:left;padding:10px">Categoria</th>
+          <th style="text-align:right;padding:10px">Saldo</th>
+          <th style="text-align:right;padding:10px">Mínimo</th>
+          <th style="text-align:right;padding:10px 14px">Ações</th>
+        </tr></thead>
+        <tbody>
+          ${d.itens.map(i => `
+            <tr style="border-top:1px solid #334155;${i.abaixo_do_minimo ? 'background:#f59e0b12' : ''}">
+              <td style="padding:10px 14px">${i.name}</td>
+              <td style="padding:10px;color:#64748b">${i.category_name || '—'}</td>
+              <td style="padding:10px;text-align:right;font-weight:600;color:${i.stock_qty < 0 ? '#ef4444' : i.abaixo_do_minimo ? '#f59e0b' : '#e2e8f0'}">${i.stock_qty}</td>
+              <td style="padding:10px;text-align:right;color:#64748b">${i.stock_min}</td>
+              <td style="padding:10px 14px;text-align:right;white-space:nowrap">
+                <button class="btn-sm" onclick="modalAjusteEstoque('${i.id}','${i.name.replace(/'/g, "\\'")}',${i.stock_qty},'contagem')">Contagem</button>
+                <button class="btn-sm" onclick="modalAjusteEstoque('${i.id}','${i.name.replace(/'/g, "\\'")}',${i.stock_qty},'perda')">Perda</button>
+                <button class="btn-sm" onclick="verMovimentos('${i.id}','${i.name.replace(/'/g, "\\'")}')">Extrato</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function modalAjusteEstoque(id, nome, saldoAtual, tipo) {
+  const contagem = tipo === 'contagem';
+  openModal(contagem ? `Contagem — ${nome}` : `Perda — ${nome}`, `
+    <div style="display:grid;gap:10px">
+      <p style="color:#94a3b8;font-size:.85rem;margin:0">
+        ${contagem
+          ? `Saldo no sistema: <b>${saldoAtual}</b>. Conte o que existe de verdade e informe o total — o sistema calcula a diferença.`
+          : 'Informe a quantidade perdida (quebra, vencimento, avaria). Ela sai do saldo.'}
+      </p>
+      <div><label>${contagem ? 'Quantidade contada' : 'Quantidade perdida'}</label>
+        <input id="aj-valor" type="number" step="0.001" min="0" value="${contagem ? saldoAtual : ''}"></div>
+      <div><label>Motivo (opcional)</label><input id="aj-motivo" type="text"></div>
+      <div id="aj-erro" style="color:#ef4444;font-size:.85rem"></div>
+    </div>`, async () => {
+    const valor = parseFloat(document.getElementById('aj-valor').value);
+    if (!Number.isFinite(valor) || valor < 0) { document.getElementById('aj-erro').textContent = 'Informe um valor válido'; return false; }
+    const r = await api('POST', `/stock/${id}/ajuste`, { tipo, valor, motivo: document.getElementById('aj-motivo').value || null });
+    toast(r.ajuste === 0 ? 'Sem diferença — saldo mantido' : `Saldo ajustado para ${r.saldo}`);
+    closeModal(); pageEstoque();
+  });
+}
+
+async function verMovimentos(id, nome) {
+  const movs = await api('GET', `/stock/${id}/movimentos`);
+  const LAB = { entrada: 'Entrada', venda: 'Venda', ajuste: 'Ajuste', perda: 'Perda', estorno: 'Estorno' };
+  openModal(`Extrato — ${nome}`, movs.length ? `
+    <div style="max-height:60vh;overflow:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+        <thead><tr style="background:#1e293b">
+          <th style="text-align:left;padding:8px">Quando</th><th style="text-align:left;padding:8px">Tipo</th>
+          <th style="text-align:right;padding:8px">Qtd</th><th style="text-align:right;padding:8px">Saldo</th>
+          <th style="text-align:left;padding:8px">Motivo</th>
+        </tr></thead>
+        <tbody>${movs.map(m => `
+          <tr style="border-top:1px solid #334155">
+            <td style="padding:8px;color:#64748b">${new Date(m.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+            <td style="padding:8px">${LAB[m.type] || m.type}</td>
+            <td style="padding:8px;text-align:right;color:${parseFloat(m.quantity) < 0 ? '#ef4444' : '#22c55e'}">${parseFloat(m.quantity) > 0 ? '+' : ''}${m.quantity}</td>
+            <td style="padding:8px;text-align:right">${m.balance_after ?? '—'}</td>
+            <td style="padding:8px;color:#64748b">${m.reason || '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '<p style="color:#64748b">Nenhum movimento ainda.</p>', null);
+}
+
 async function pageProdutos() {
   [produtos, categorias] = await Promise.all([
     api('GET', '/menu/admin').then(cats => cats.flatMap(c => c.products.map(p => ({ ...p, category_name: c.name, category_id: c.id })))),
@@ -874,6 +974,23 @@ function modalEditarProduto(id) {
         <small style="color:#64748b">Independente do destino, todos os itens sempre saem no Caixa.</small>
       </div>
       <hr style="border-color:#334155">
+      <div class="row" style="align-items:center;gap:10px">
+        <button type="button" class="toggle ${p.track_stock ? 'on' : ''}" id="f-track-stock"
+                onclick="this.classList.toggle('on');document.getElementById('f-stock-fields').style.display=this.classList.contains('on')?'':'none'"></button>
+        <label style="margin:0">📦 Controlar estoque (produto de revenda)</label>
+      </div>
+      <small style="color:#64748b;display:block;margin:-4px 0 8px">
+        Marque só o que você compra pronto e revende — bebida, chiclete, salgado de fornecedor.
+        Tapioca, sanduíche e café são feitos na hora: consomem insumo, não produto pronto.
+      </small>
+      <div id="f-stock-fields" style="display:${p.track_stock ? '' : 'none'}">
+        <div class="row">
+          <div><label>Estoque atual</label><input id="f-stock-qty" type="number" step="0.001" value="${p.stock_qty ?? 0}"></div>
+          <div><label>Estoque mínimo</label><input id="f-stock-min" type="number" step="0.001" min="0" value="${p.stock_min ?? 0}"></div>
+        </div>
+        <small style="color:#64748b">Abaixo do mínimo, o produto aparece destacado na tela de Estoque.</small>
+      </div>
+      <hr style="border-color:#334155">
       <div id="addons-section"><p style="color:#64748b;font-size:.8rem">Carregando adicionais...</p></div>
     </div>`, async () => {
     await api('PATCH', '/menu/products/' + id, {
@@ -890,6 +1007,9 @@ function modalEditarProduto(id) {
       print_target: v('f-print') || null,
       show_kiosk: document.getElementById('f-show-kiosk').checked,
       show_delivery: document.getElementById('f-show-delivery').checked,
+      track_stock: document.getElementById('f-track-stock').classList.contains('on'),
+      stock_qty: parseFloat(v('f-stock-qty')) || 0,
+      stock_min: parseFloat(v('f-stock-min')) || 0,
     });
     toast('Produto atualizado!'); closeModal(); pageProdutos();
   });
