@@ -174,7 +174,16 @@ router.post('/close', async (req, res) => {
     logAction(req.user.id, 'caixa_fechado', {
       session_id: session.id, expected, counted, difference,
     });
-    res.json({ session: r.rows[0], ...summary, expected, counted, difference });
+
+    // Faturamento do dia sobe pro App Gestão, que é onde vive a DRE. Depois de
+    // o turno já estar fechado no banco e nunca com await no caminho de erro:
+    // se o Gestão estiver fora do ar, o dia fica na fila e vai no próximo
+    // fechamento. Travar o fechamento do caixa por causa de integração seria
+    // deixar a loja parada por um problema que não é dela.
+    const gestaoSync = require('../services/gestaoSync');
+    const sync = await gestaoSync.aoFecharCaixa(gestaoSync.hojeBelem());
+
+    res.json({ session: r.rows[0], ...summary, expected, counted, difference, gestao: sync });
   } catch (err) {
     return internalError(res, err, '[cash-sessions/close]');
   }
