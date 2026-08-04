@@ -167,6 +167,25 @@
   .cx-hist { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
   .cx-hist:last-child { border-bottom: none; }
   #config-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
+  .addon-group { margin: 14px 0 4px; }
+  .addon-group-title { font-size: 12.5px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+  .addon-opt { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 11px; margin-bottom: 6px; background: var(--bg); border: 2px solid var(--border); border-radius: 10px; }
+  .addon-opt.selected { border-color: var(--primary); background: var(--card); }
+  .addon-opt-name { font-size: 13.5px; color: var(--text); }
+  .addon-opt-price { font-size: 12px; color: var(--text2); }
+  .addon-stepper { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .addon-stepper button { width: 30px; height: 30px; border-radius: 999px; border: none; background: var(--primary); color: #fff; font-size: 16px; font-weight: 600; }
+  .addon-stepper button:disabled { background: var(--border); color: var(--text2); }
+  .addon-stepper > span { font-size: 14px; font-weight: 600; min-width: 16px; text-align: center; }
+  .cart-addons { font-size: 11.5px; color: var(--text2); line-height: 1.45; margin: 1px 0 2px; }
+  .adc-group { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; background: var(--card); }
+  .adc-group-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .adc-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .adc-row input[type=text] { flex: 1; }
+  .adc-row input[type=number] { width: 92px; }
+  .adc-prods { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; margin-top: 8px; }
+  .adc-prod { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+  .adc-cat { font-size: 11.5px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 2px; }
   .cfg-tab { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: 12.5px; font-weight: 500; color: var(--text2); }
   .cfg-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
   #config-body { flex: 1; min-height: 0; display: flex; }
@@ -386,6 +405,7 @@
     <div id="config-tabs">
       <button class="cfg-tab active" data-tab="cardapio">🍽️ Cardápio</button>
       <button class="cfg-tab" data-tab="impressora">🖨️ Impressora</button>
+      <button class="cfg-tab" data-tab="adicionais">➕ Adicionais</button>
       <button class="cfg-tab" data-tab="usuarios">👥 Usuários</button>
       <button class="cfg-tab" data-tab="vinculos">🔗 Compras</button>
     </div>
@@ -460,6 +480,15 @@
         </div>
       </div>
 
+      <div id="config-tab-adicionais" class="cfg-pane">
+        <div class="cfg-form" style="max-width:680px">
+          <h3>Grupos de adicionais</h3>
+          <p class="cfg-hint">Um grupo existe uma vez só e vale para todos os produtos marcados nele. Mudou o preço do queijo aqui, mudou em todos os produtos de uma vez. Preço zero aparece como "grátis" na venda.</p>
+          <div id="adc-body"></div>
+          <button id="adc-add-group" style="margin-top:10px">+ Novo grupo</button>
+        </div>
+      </div>
+
       <div id="config-tab-vinculos" class="cfg-pane">
         <div class="cfg-form" style="max-width:620px">
           <h3>Compras vindas do App Gestão</h3>
@@ -488,8 +517,27 @@ let pin = '';
 let categories = [];
 let products = [];
 let activeCategory = null;
-let cart = []; // [{product_id, name, price, quantity}]
+let addonGroups = []; // [{id, name, max_per_item, options:[...], product_ids:[...]}]
+// line_id existe porque a mesma tapioca com queijo e com frango são LINHAS
+// diferentes do carrinho — agrupar por product_id, como antes, somaria as duas
+// numa só e perderia a escolha de acréscimo de uma delas.
+let cart = []; // [{line_id, product_id, name, base_price, price, quantity, addons:[]}]
 let discount = 0;
+let lineSeq = 0;
+
+// Grupos ativos e com opção ativa de um produto. Produto sem grupo mantém o
+// comportamento de hoje: um toque e vai direto pro carrinho.
+function addonGroupsOf(productId) {
+  return addonGroups.filter(g =>
+    g.active !== false &&
+    (g.product_ids || []).includes(productId) &&
+    (g.options || []).some(o => o.active !== false)
+  );
+}
+
+function addonsKey(addons) {
+  return (addons || []).map(a => `${a.option_id}x${a.quantity}`).sort().join('|');
+}
 
 function fmt(v) { return 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ','); }
 function authHeaders(extra) { return Object.assign({ Authorization: 'Bearer ' + TOKEN }, extra || {}); }
@@ -680,14 +728,19 @@ function startClock() {
 
 async function loadCatalog() {
   try {
-    const [catRes, prodRes] = await Promise.all([
+    const [catRes, prodRes, addRes] = await Promise.all([
       apiFetch('/api/categories'),
       apiFetch('/api/products'),
+      apiFetch('/api/addons'),
     ]);
     categories = await catRes.json();
     products = await prodRes.json();
+    addonGroups = await addRes.json();
     if (!Array.isArray(categories)) categories = [];
     if (!Array.isArray(products)) products = [];
+    // Adicionais vêm junto no load: abrir um produto com acréscimo não pode
+    // custar ida ao servidor no meio da venda.
+    if (!Array.isArray(addonGroups)) addonGroups = [];
     renderCategories();
     // Abre numa categoria que tenha produto: se a primeira estiver vazia
     // (categoria recém-criada, ainda sem cadastro), o operador cairia numa
@@ -748,20 +801,144 @@ document.getElementById('search').addEventListener('input', renderProducts);
 function addToCart(productId) {
   const prod = products.find(p => p.id === productId);
   if (!prod || prod.available === false) return;
-  const existing = cart.find(i => i.product_id === productId);
+  if (addonGroupsOf(productId).length) { openAddonModal(prod); return; }
+  pushToCart(prod, []);
+}
+
+// Uma linha por combinação de adicionais. Tocar duas vezes no mesmo produto
+// com os mesmos acréscimos ainda soma quantidade, como antes.
+function pushToCart(prod, addons) {
+  const chave = addonsKey(addons);
+  const existing = cart.find(i => i.product_id === prod.id && addonsKey(i.addons) === chave);
   if (existing) existing.quantity += 1;
-  else cart.push({ product_id: prod.id, name: prod.name, price: parseFloat(prod.price), quantity: 1 });
+  else {
+    const base = parseFloat(prod.price);
+    const extra = addons.reduce((s, a) => s + a.price * a.quantity, 0);
+    cart.push({
+      line_id: `L${++lineSeq}`,
+      product_id: prod.id,
+      name: prod.name,
+      base_price: base,
+      price: base + extra,
+      quantity: 1,
+      addons,
+    });
+  }
   renderCart();
   renderProducts();
 }
 
-function changeCartQty(productId, delta) {
-  const item = cart.find(i => i.product_id === productId);
+function changeCartQty(lineId, delta) {
+  const item = cart.find(i => i.line_id === lineId);
   if (!item) return;
   item.quantity += delta;
-  if (item.quantity <= 0) cart = cart.filter(i => i.product_id !== productId);
+  if (item.quantity <= 0) cart = cart.filter(i => i.line_id !== lineId);
   renderCart();
   renderProducts();
+}
+
+// ── Modal de adicionais ──────────────────────────────
+let addonModalProduct = null;
+let addonModalSel = {}; // option_id -> quantidade
+
+function openAddonModal(prod) {
+  addonModalProduct = prod;
+  addonModalSel = {};
+  renderAddonModal();
+}
+
+function closeAddonModal() {
+  addonModalProduct = null;
+  const b = document.getElementById('addon-modal-backdrop');
+  if (b) b.remove();
+}
+
+function addonModalExtraCents() {
+  let cents = 0;
+  for (const g of addonGroupsOf(addonModalProduct.id)) {
+    for (const o of g.options) {
+      const q = addonModalSel[o.id] || 0;
+      if (q > 0) cents += Math.round(parseFloat(o.price) * 100) * q;
+    }
+  }
+  return cents;
+}
+
+function changeAddonQty(groupId, optionId, delta) {
+  const g = addonGroupsOf(addonModalProduct.id).find(x => x.id === groupId);
+  if (!g) return;
+  const atual = addonModalSel[optionId] || 0;
+  if (delta > 0) {
+    const usados = g.options.reduce((s, o) => s + (addonModalSel[o.id] || 0), 0);
+    if (usados >= (g.max_per_item || 5)) {
+      showToast(`Máximo de ${g.max_per_item || 5} em "${g.name}"`);
+      return;
+    }
+  }
+  const novo = Math.max(0, atual + delta);
+  if (novo === 0) delete addonModalSel[optionId]; else addonModalSel[optionId] = novo;
+  renderAddonModal();
+}
+
+function renderAddonModal() {
+  let backdrop = document.getElementById('addon-modal-backdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'addon-modal-backdrop';
+    backdrop.className = 'modal-backdrop';
+    document.body.appendChild(backdrop);
+  }
+  const prod = addonModalProduct;
+  const grupos = addonGroupsOf(prod.id);
+  const totalCents = Math.round(parseFloat(prod.price) * 100) + addonModalExtraCents();
+
+  backdrop.innerHTML = `
+    <div class="modal-sheet" style="max-width:460px">
+      <h2>${prod.name}</h2>
+      <div class="sub">${fmt(prod.price)}</div>
+      ${grupos.map(g => `
+        <div class="addon-group">
+          <div class="addon-group-title">${g.name}</div>
+          ${g.options.filter(o => o.active !== false).map(o => {
+            const q = addonModalSel[o.id] || 0;
+            const preco = parseFloat(o.price) > 0 ? '+' + fmt(o.price) : 'grátis';
+            return `
+              <div class="addon-opt ${q > 0 ? 'selected' : ''}">
+                <span class="addon-opt-name">${o.name} <span class="addon-opt-price">${preco}</span></span>
+                <span class="addon-stepper">
+                  <button data-g="${g.id}" data-o="${o.id}" data-d="-1" ${q === 0 ? 'disabled' : ''}>−</button>
+                  <span>${q}</span>
+                  <button data-g="${g.id}" data-o="${o.id}" data-d="1">+</button>
+                </span>
+              </div>`;
+          }).join('')}
+        </div>
+      `).join('')}
+      <div class="pay-summary">
+        <div class="cart-line"><span>Total do item</span><span>${fmt(totalCents / 100)}</span></div>
+      </div>
+      <div class="modal-actions">
+        <button id="addon-cancel-btn">Cancelar</button>
+        <button class="primary" id="addon-confirm-btn">Adicionar à venda</button>
+      </div>
+    </div>
+  `;
+
+  backdrop.querySelectorAll('.addon-stepper button').forEach(btn => btn.addEventListener('click', () =>
+    changeAddonQty(btn.dataset.g, btn.dataset.o, parseInt(btn.dataset.d, 10))));
+  backdrop.querySelector('#addon-cancel-btn').addEventListener('click', closeAddonModal);
+  backdrop.querySelector('#addon-confirm-btn').addEventListener('click', () => {
+    const escolhidos = [];
+    for (const g of grupos) {
+      for (const o of g.options) {
+        const q = addonModalSel[o.id] || 0;
+        if (q > 0) escolhidos.push({ option_id: o.id, name: o.name, price: parseFloat(o.price), quantity: q });
+      }
+    }
+    const p = addonModalProduct;
+    closeAddonModal();
+    pushToCart(p, escolhidos);
+  });
 }
 
 function renderCart() {
@@ -774,11 +951,13 @@ function renderCart() {
         <div class="img"></div>
         <div class="info">
           <div class="nm">${i.name}</div>
+          ${(i.addons || []).length ? `<div class="cart-addons">${i.addons.map(a =>
+            `${a.quantity > 1 ? a.quantity + '× ' : ''}${a.name}`).join(', ')}</div>` : ''}
           <div class="un">${fmt(i.price)} un.</div>
           <div class="stepper">
-            <button data-id="${i.product_id}" data-d="-1">−</button>
+            <button data-id="${i.line_id}" data-d="-1">−</button>
             <span>${i.quantity}</span>
-            <button data-id="${i.product_id}" data-d="1">+</button>
+            <button data-id="${i.line_id}" data-d="1">+</button>
           </div>
         </div>
         <div class="sub">${fmt(i.price * i.quantity)}</div>
@@ -897,7 +1076,13 @@ async function confirmSale() {
     const res = await apiFetch('/api/sales', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+        items: cart.map(i => ({
+          product_id: i.product_id,
+          quantity: i.quantity,
+          // Só o id e a quantidade: preço e nome do adicional o servidor
+          // resolve no banco, igual já faz com o preço do produto.
+          addons: (i.addons || []).map(a => ({ option_id: a.option_id, quantity: a.quantity })),
+        })),
         payments: payPayments,
         discount,
       }),
@@ -953,7 +1138,20 @@ function buildCupomItems(sale, onlyKitchen) {
     }
     const qty = parseInt(item.quantity, 10) || 1;
     const unit = parseFloat(item.unit_price) || 0;
-    items.push({ name: item.product_name, quantity: qty, total: unit * qty });
+    const addons = item.addons || [];
+    // unit_price já vem com os acréscimos somados. Na linha do produto entra
+    // só o preço base, e cada adicional sai numa linha indentada logo abaixo —
+    // assim a soma das linhas continua batendo com o total da venda.
+    const extraUnit = addons.reduce((s, a) => s + (parseFloat(a.price) || 0) * (parseInt(a.quantity, 10) || 0), 0);
+    items.push({ name: item.product_name, quantity: qty, total: (unit - extraUnit) * qty });
+    for (const a of addons) {
+      const aQty = parseInt(a.quantity, 10) || 1;
+      items.push({
+        name: `  + ${aQty > 1 ? aQty + '× ' : ''}${a.name}`,
+        quantity: qty,
+        total: (parseFloat(a.price) || 0) * aQty * qty,
+      });
+    }
   }
   return items;
 }
@@ -1583,7 +1781,150 @@ document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click
   if (tab.dataset.tab === 'impressora') loadPrinterSettings();
   if (tab.dataset.tab === 'usuarios') loadUsuarios();
   if (tab.dataset.tab === 'vinculos') loadVinculos();
+  if (tab.dataset.tab === 'adicionais') loadAdicionais();
 }));
+
+// ── Configurações: grupos de adicionais ──────────────
+let adcAberto = null; // id do grupo expandido
+
+async function loadAdicionais() {
+  const el = document.getElementById('adc-body');
+  el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    const res = await apiFetch('/api/addons');
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro ao carregar</p>'; return; }
+    addonGroups = Array.isArray(d) ? d : [];
+    renderAdicionais();
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+async function adcApi(url, method, body) {
+  const res = await apiFetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { showToast(d.error || 'Erro ao salvar'); return null; }
+  return d;
+}
+
+function renderAdicionais() {
+  const el = document.getElementById('adc-body');
+  if (!addonGroups.length) {
+    el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Nenhum grupo ainda. Crie um abaixo.</p>';
+    return;
+  }
+  el.innerHTML = addonGroups.map(g => {
+    const usados = (g.product_ids || []).length;
+    if (adcAberto !== g.id) {
+      return `
+        <div class="adc-group">
+          <div class="adc-group-head">
+            <div>
+              <div style="font-size:13.5px;font-weight:600">${g.name}</div>
+              <div style="font-size:11.5px;color:var(--text2);margin-top:2px">${(g.options || []).length} opções · até ${g.max_per_item} por item · ${usados} produto(s)</div>
+            </div>
+            <button data-open="${g.id}">Editar</button>
+          </div>
+        </div>`;
+    }
+    const porCat = categories.map(c => ({
+      cat: c,
+      prods: products.filter(p => p.category_id === c.id && p.active !== false),
+    })).filter(x => x.prods.length);
+    return `
+      <div class="adc-group">
+        <div class="adc-group-head">
+          <div class="adc-row" style="margin:0;flex:1">
+            <input type="text" data-gname="${g.id}" value="${g.name}" placeholder="Nome do grupo">
+            <input type="number" min="1" data-gmax="${g.id}" value="${g.max_per_item}" title="Máximo por item">
+          </div>
+          <button data-open="">Fechar</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--text2);margin-top:6px">Nome do grupo e quantos acréscimos no máximo por item vendido</div>
+
+        <div style="margin-top:12px">
+          ${(g.options || []).map(o => `
+            <div class="adc-row">
+              <input type="text" data-oname="${o.id}" value="${o.name}">
+              <input type="number" step="0.01" min="0" data-oprice="${o.id}" value="${parseFloat(o.price).toFixed(2)}">
+              <button data-odel="${o.id}" title="Excluir">✕</button>
+            </div>`).join('')}
+          <div class="adc-row">
+            <input type="text" id="adc-new-opt-name" placeholder="Novo adicional">
+            <input type="number" step="0.01" min="0" id="adc-new-opt-price" placeholder="0,00">
+            <button data-oadd="${g.id}">Incluir</button>
+          </div>
+        </div>
+
+        <div class="adc-cat" style="margin-top:16px">Produtos que usam este grupo</div>
+        ${porCat.map(x => `
+          <div class="adc-cat">${x.cat.name}</div>
+          <div class="adc-prods">
+            ${x.prods.map(p => `
+              <label class="adc-prod">
+                <input type="checkbox" data-pid="${p.id}" ${(g.product_ids || []).includes(p.id) ? 'checked' : ''}>
+                <span>${p.name}</span>
+              </label>`).join('')}
+          </div>`).join('')}
+
+        <div class="adc-row" style="margin-top:14px;justify-content:flex-end">
+          <button data-gdel="${g.id}" style="color:var(--danger)">Excluir grupo</button>
+          <button class="primary" data-gsave="${g.id}">Salvar</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
+    adcAberto = b.dataset.open || null;
+    renderAdicionais();
+  }));
+  el.querySelectorAll('[data-odel]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Excluir este adicional? Vendas passadas não são afetadas.')) return;
+    if (await adcApi(`/api/addons/options/${b.dataset.odel}`, 'DELETE')) loadAdicionais();
+  }));
+  el.querySelectorAll('[data-oadd]').forEach(b => b.addEventListener('click', async () => {
+    const nome = el.querySelector('#adc-new-opt-name').value.trim();
+    const preco = el.querySelector('#adc-new-opt-price').value || 0;
+    if (!nome) { showToast('Informe o nome do adicional'); return; }
+    if (await adcApi(`/api/addons/groups/${b.dataset.oadd}/options`, 'POST', { name: nome, price: preco })) loadAdicionais();
+  }));
+  el.querySelectorAll('[data-gdel]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Excluir o grupo inteiro, com suas opções e vínculos? Vendas passadas não são afetadas.')) return;
+    if (await adcApi(`/api/addons/groups/${b.dataset.gdel}`, 'DELETE')) { adcAberto = null; loadAdicionais(); }
+  }));
+  el.querySelectorAll('[data-gsave]').forEach(b => b.addEventListener('click', async () => {
+    const gid = b.dataset.gsave;
+    const nome = el.querySelector(`[data-gname="${gid}"]`).value.trim();
+    const max = el.querySelector(`[data-gmax="${gid}"]`).value;
+    if (!nome) { showToast('Informe o nome do grupo'); return; }
+    b.disabled = true;
+    // Preço e nome de cada opção vão junto: o operador edita tudo na tela e
+    // clica uma vez em Salvar, sem precisar confirmar linha por linha.
+    for (const inp of el.querySelectorAll('[data-oname]')) {
+      const oid = inp.dataset.oname;
+      const preco = el.querySelector(`[data-oprice="${oid}"]`).value || 0;
+      if (!await adcApi(`/api/addons/options/${oid}`, 'PATCH', { name: inp.value.trim(), price: preco })) { b.disabled = false; return; }
+    }
+    if (!await adcApi(`/api/addons/groups/${gid}`, 'PATCH', { name: nome, max_per_item: max })) { b.disabled = false; return; }
+    const ids = [...el.querySelectorAll('[data-pid]')].filter(c => c.checked).map(c => c.dataset.pid);
+    if (!await adcApi(`/api/addons/groups/${gid}/products`, 'PUT', { product_ids: ids })) { b.disabled = false; return; }
+    showToast('Adicionais salvos');
+    adcAberto = null;
+    loadAdicionais();
+  }));
+}
+
+document.getElementById('adc-add-group').addEventListener('click', async () => {
+  const nome = prompt('Nome do novo grupo de adicionais:');
+  if (!nome || !nome.trim()) return;
+  const g = await adcApi('/api/addons/groups', 'POST', { name: nome.trim() });
+  if (g) { adcAberto = g.id; loadAdicionais(); }
+});
 
 // ── Configurações: vínculos de compra ────────────────
 async function loadVinculos() {

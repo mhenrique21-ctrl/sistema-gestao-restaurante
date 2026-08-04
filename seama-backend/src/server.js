@@ -48,6 +48,7 @@ app.use(express.static(require('path').join(__dirname, '../public'), {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/products', require('./routes/products'));
+app.use('/api/addons', require('./routes/addons'));
 app.use('/api/sales', require('./routes/sales'));
 app.use('/api/cash-movements', require('./routes/cashMovements'));
 app.use('/api/cash-sessions', require('./routes/cashSessions'));

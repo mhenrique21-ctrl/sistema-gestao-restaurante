@@ -54,6 +54,24 @@ router.post('/', async (req, res) => {
     const byId = {};
     prodRows.rows.forEach((p) => { byId[p.id] = p; });
 
+    // Adicionais seguem a mesma regra do produto: o preço vem do banco, nunca
+    // do cliente. O JOIN com product_addons também garante que a opção
+    // pertence a um grupo realmente vinculado àquele produto — sem isso, dava
+    // pra pendurar qualquer adicional em qualquer produto pelo navegador.
+    const optionIds = [...new Set(items.flatMap((i) => (i.addons || []).map((a) => a.option_id)))];
+    const permitido = {};
+    if (optionIds.length) {
+      const optRows = await pool.query(
+        `SELECT pa.product_id, o.id, o.name, o.price, o.group_id, g.max_per_item
+           FROM addon_options o
+           JOIN addon_groups g   ON g.id = o.group_id
+           JOIN product_addons pa ON pa.group_id = o.group_id
+          WHERE o.id = ANY(${sqlArray(optionIds, 'uuid')})
+            AND o.active = true AND g.active = true`
+      );
+      optRows.rows.forEach((r) => { permitido[`${r.product_id}|${r.id}`] = r; });
+    }
+
     const resolvedItems = [];
     let subtotalCents = 0;
     for (const item of items) {
@@ -61,9 +79,30 @@ router.post('/', async (req, res) => {
       const qty = parseInt(item.quantity, 10);
       if (!prod) return res.status(400).json({ error: 'Produto não encontrado ou indisponível' });
       if (!(qty > 0)) return res.status(400).json({ error: `Quantidade inválida para "${prod.name}"` });
-      const unitCents = Math.round(parseFloat(prod.price) * 100);
+
+      const addons = [];
+      const porGrupo = {};
+      let addonsCents = 0;
+      for (const a of (item.addons || [])) {
+        const opt = permitido[`${prod.id}|${a.option_id}`];
+        if (!opt) return res.status(400).json({ error: `Adicional inválido para "${prod.name}"` });
+        const aQty = parseInt(a.quantity, 10);
+        if (!(aQty > 0)) return res.status(400).json({ error: `Quantidade inválida em "${opt.name}"` });
+        porGrupo[opt.group_id] = (porGrupo[opt.group_id] || 0) + aQty;
+        if (porGrupo[opt.group_id] > opt.max_per_item) {
+          return res.status(400).json({ error: `Máximo de ${opt.max_per_item} adicionais por item em "${prod.name}"` });
+        }
+        const optCents = Math.round(parseFloat(opt.price) * 100);
+        addonsCents += optCents * aQty;
+        addons.push({ option_id: opt.id, name: opt.name, price: optCents / 100, quantity: aQty });
+      }
+
+      // unit_price já sai com os adicionais somados por unidade, para que
+      // SUM(unit_price*quantity) continue igual a sales.total e o relatório de
+      // faturamento por produto não precise conhecer adicionais.
+      const unitCents = Math.round(parseFloat(prod.price) * 100) + addonsCents;
       subtotalCents += unitCents * qty;
-      resolvedItems.push({ product_id: prod.id, product_name: prod.name, unit_price: unitCents / 100, quantity: qty });
+      resolvedItems.push({ product_id: prod.id, product_name: prod.name, unit_price: unitCents / 100, quantity: qty, addons });
     }
 
     const totalCents = Math.max(0, subtotalCents - discountCents);

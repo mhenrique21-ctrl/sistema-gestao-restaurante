@@ -22,6 +22,31 @@
       "port": 3000,
       "autoPort": false,
       "cwd": "."
+    },
+    {
+      "name": "app-gestao-wt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5174"],
+      "port": 5174,
+      "autoPort": false,
+      "cwd": "app-gestao-wt"
+    },
+    {
+      "name": "seama-backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/server.js"],
+      "port": 4100,
+      "autoPort": false,
+      "cwd": "seama-backend"
+    },
+    {
+      "name": "app-gestao-wt-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["new_server.js"],
+      "port": 3001,
+      "autoPort": false,
+      "cwd": "app-gestao-wt",
+      "env": { "PORT": "3001" }
     }
   ]
 }
