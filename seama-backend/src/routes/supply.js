@@ -57,8 +57,15 @@ router.post('/purchase', serviceAuth, async (req, res) => {
     const porNome = {};
     links.rows.forEach((l) => { porNome[norm(l.source_name)] = l; });
 
+    // Itens já classificados como matéria-prima ou higiene/limpeza não voltam
+    // pra fila: a decisão foi tomada uma vez e fica valendo pras próximas notas.
+    const classif = await pool.query(`SELECT source_name, kind FROM supply_classifications`);
+    const classificadoPorNome = {};
+    classif.rows.forEach((c) => { classificadoPorNome[norm(c.source_name)] = c.kind; });
+
     const aplicados = [];
     const pendentes = [];
+    const classificados = [];
     for (const item of items) {
       const nome = String(item.nome || '').trim();
       const qtd = parseFloat(item.quantidade);
@@ -66,6 +73,8 @@ router.post('/purchase', serviceAuth, async (req, res) => {
 
       const link = porNome[norm(nome)];
       if (!link) {
+        const kind = classificadoPorNome[norm(nome)];
+        if (kind) { classificados.push({ nome, kind }); continue; }
         pendentes.push({ nome, qtd, unidade: item.unidade || 'un' });
         continue;
       }
@@ -101,8 +110,10 @@ router.post('/purchase', serviceAuth, async (req, res) => {
     res.status(201).json({
       applied: aplicados.length,
       pending: pendentes.length,
+      classified: classificados.length,
       detalhes: aplicados,
       pendentes: pendentes.map((p) => p.nome),
+      classificados: classificados.map((c) => c.nome),
     });
   } catch (err) {
     return internalError(res, err, '[supply/purchase]');
@@ -133,10 +144,14 @@ router.get('/links', async (req, res) => {
        FROM pending_supply_items WHERE resolved = false
        GROUP BY source_name ORDER BY MAX(created_at) DESC`
     );
+    const classificados = await pool.query(
+      `SELECT id, source_name, kind FROM supply_classifications ORDER BY kind, source_name`
+    );
     res.json({
       links: links.rows.map((l) => ({ ...l, factor: parseFloat(l.factor) })),
       removidos: removidos.rows.map((l) => ({ ...l, factor: parseFloat(l.factor) })),
       pendentes: pendentes.rows.map((p) => ({ ...p, quantidade: parseFloat(p.quantidade) })),
+      classificados: classificados.rows,
     });
   } catch (err) {
     return internalError(res, err, '[supply/links]');
@@ -254,6 +269,65 @@ router.post('/links/:id/restore', async (req, res) => {
     res.json({ ok: true, source_name: r.rows[0].source_name });
   } catch (err) {
     return internalError(res, err, '[supply/links restore]');
+  }
+});
+
+const KINDS = ['materia_prima', 'higiene_limpeza'];
+
+// POST /api/supply/classify — marca um ou vários nomes como não-revenda.
+// Aceita lista para o botão "classificar todos os pendentes de uma vez", em
+// vez de o operador repetir a mesma decisão dezenove vezes.
+router.post('/classify', async (req, res) => {
+  const { kind } = req.body;
+  const nomes = Array.isArray(req.body.source_names)
+    ? req.body.source_names
+    : (req.body.source_name ? [req.body.source_name] : []);
+  if (!KINDS.includes(kind)) return res.status(400).json({ error: 'Classificação inválida' });
+  const limpos = [...new Set(nomes.map((n) => String(n || '').trim()).filter(Boolean))];
+  if (!limpos.length) return res.status(400).json({ error: 'Informe ao menos um item' });
+
+  try {
+    let gravados = 0;
+    for (const nome of limpos) {
+      // ON CONFLICT no índice normalizado: reclassificar um nome já existente
+      // troca o tipo em vez de estourar erro de duplicado.
+      await pool.query(
+        `INSERT INTO supply_classifications (source_name, kind, created_by)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (upper(regexp_replace(trim(source_name), '\\s+', ' ', 'g')))
+         DO UPDATE SET kind = EXCLUDED.kind, created_by = EXCLUDED.created_by, created_at = NOW()
+         RETURNING id`,
+        [nome, kind, req.user.id]
+      );
+      // Tira da fila o que já estava esperando com esse nome.
+      await pool.query(
+        `UPDATE pending_supply_items SET resolved = true
+          WHERE resolved = false AND upper(regexp_replace(trim(source_name), '\\s+', ' ', 'g')) = $1
+          RETURNING id`,
+        [norm(nome)]
+      );
+      gravados++;
+    }
+    logAction(req.user.id, 'itens_classificados', { kind, quantidade: gravados, nomes: limpos.slice(0, 30) });
+    res.status(201).json({ ok: true, classificados: gravados, kind });
+  } catch (err) {
+    return internalError(res, err, '[supply/classify]');
+  }
+});
+
+// DELETE /api/supply/classify/:id — volta o item pra fila de conciliação.
+// A compra que já passou não é reprocessada: só as próximas voltam a aparecer.
+router.delete('/classify/:id', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `DELETE FROM supply_classifications WHERE id = $1 RETURNING source_name`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Classificação não encontrada' });
+    logAction(req.user.id, 'classificacao_removida', { source_name: r.rows[0].source_name });
+    res.json({ ok: true, source_name: r.rows[0].source_name });
+  } catch (err) {
+    return internalError(res, err, '[supply/classify delete]');
   }
 });
 

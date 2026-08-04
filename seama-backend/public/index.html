@@ -285,6 +285,10 @@
   .cons-acoes { display: flex; gap: 8px; margin-top: 14px; }
   .cons-acoes button { flex: 1; }
   @media (max-width: 760px) { .cons-wrap { flex-direction: column; } .cons-detalhe { width: 100%; } }
+  .vinc-lote { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 9px; font-size: 11.5px; color: var(--text2); }
+  .vinc-lote button { font-size: 11.5px; padding: 5px 10px; }
+  .vinc-pend .ac { flex-wrap: wrap; }
+  .vinc-pend .v-kind { font-size: 11.5px; }
   .vinc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .vinc-head input { flex: 1; }
   .vinc-head .cnt { font-size: 11.5px; color: var(--text2); white-space: nowrap; }
@@ -2126,6 +2130,45 @@ document.getElementById('adc-add-group').addEventListener('click', async () => {
 // ── Configurações: vínculos de compra ────────────────
 let vincBusca = '';
 let vincAbertos = new Set();
+const KIND_LABELS = { materia_prima: 'Matéria-prima', higiene_limpeza: 'Higiene e limpeza' };
+
+// Classificar é decisão que fica valendo pras próximas notas, então em lote
+// a confirmação LISTA os nomes: se um refrigerante entrou no meio dos insumos,
+// ele pararia de dar entrada no estoque sem ninguém perceber.
+async function classificarItens(nomes, kind) {
+  const lista = (nomes || []).filter(Boolean);
+  if (!lista.length) return;
+  const label = KIND_LABELS[kind] || kind;
+  const msg = lista.length === 1
+    ? `Classificar "${lista[0]}" como ${label}?\n\nEle deixa de aparecer na fila e não terá estoque controlado no PDV. A compra continua registrada no Gestão.`
+    : `Classificar ${lista.length} itens como ${label}?\n\n${lista.slice(0, 25).join('\n')}${lista.length > 25 ? `\n... e mais ${lista.length - 25}` : ''}\n\nConfira se nenhum deles é produto de revenda.`;
+  if (!confirm(msg)) return;
+  try {
+    const res = await apiFetch('/api/supply/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_names: lista, kind }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(d.error || 'Erro ao classificar'); return; }
+    showToast(`${d.classificados} item(ns) marcados como ${label}`);
+    loadVinculos();
+  } catch (e) {
+    if (e.message !== 'unauthorized') showToast('Erro de conexão');
+  }
+}
+
+async function desclassificar(id) {
+  try {
+    const res = await apiFetch(`/api/supply/classify/${id}`, { method: 'DELETE' });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(d.error || 'Erro ao desfazer'); return; }
+    showToast('Volta a aparecer na próxima compra');
+    loadVinculos();
+  } catch (e) {
+    if (e.message !== 'unauthorized') showToast('Erro de conexão');
+  }
+}
 
 async function loadVinculos() {
   const el = document.getElementById('vinc-body');
@@ -2146,7 +2189,13 @@ function renderVinculos(el, d) {
     ${d.pendentes.length ? `
       <div class="vinc-alert">
         <div class="t">⏳ ${d.pendentes.length} item(ns) esperando vínculo</div>
-        <div class="l">Compras que chegaram do Gestão e ainda não entraram no estoque. Nada foi descartado — assim que você vincular, a quantidade retida entra de uma vez.</div>
+        <div class="l">Compras que chegaram do Gestão e ainda não entraram no estoque. Nada foi descartado — assim que você vincular, a quantidade retida entra de uma vez. Insumo e material de limpeza não precisam de vínculo: classifique e eles não voltam a aparecer.</div>
+        ${d.pendentes.length > 1 ? `
+          <div class="vinc-lote">
+            <span>Classificar os ${d.pendentes.length} de uma vez:</span>
+            <button class="v-lote" data-kind="materia_prima">Matéria-prima</button>
+            <button class="v-lote" data-kind="higiene_limpeza">Higiene e limpeza</button>
+          </div>` : ''}
       </div>
       ${d.pendentes.map(p => `
         <div class="vinc-pend" data-nome="${p.source_name.replace(/"/g, '&quot;')}">
@@ -2159,7 +2208,8 @@ function renderVinculos(el, d) {
             </select>
             <input class="v-fator" type="number" step="0.01" min="0.01" value="1" title="Unidades por embalagem">
             <button class="v-save">Vincular</button>
-            <button class="v-skip" title="Não é produto de revenda">✕</button>
+            <button class="v-kind" data-kind="materia_prima" title="Não controla estoque no PDV; a compra segue no Gestão">Matéria-prima</button>
+            <button class="v-kind" data-kind="higiene_limpeza" title="Não controla estoque no PDV; a compra segue no Gestão">Higiene e limpeza</button>
           </div>
         </div>
       `).join('')}
@@ -2207,6 +2257,36 @@ function renderVinculos(el, d) {
           </div>`;
         }).join('')}
 
+      ${(() => {
+        const cl = d.classificados || [];
+        if (!cl.length) return '';
+        const buscaC = vincBusca.trim().toLowerCase();
+        const filtrados = buscaC ? cl.filter(c => c.source_name.toLowerCase().includes(buscaC)) : cl;
+        const aberto = buscaC ? true : vincAbertos.has('__classificados__');
+        const porTipo = {};
+        filtrados.forEach(c => (porTipo[c.kind] = porTipo[c.kind] || []).push(c));
+        return `
+        <div class="vinc-grupo" style="margin-top:14px">
+          <div class="vinc-grupo-head" data-grupo="__classificados__">
+            <span class="sb">🚫 Não entram no estoque (${cl.length})</span>
+            <span class="chev">${aberto ? '▴' : '▾'}</span>
+          </div>
+          ${aberto ? `
+            <div style="padding:9px 13px;font-size:11px;color:var(--text2);line-height:1.6;border-top:1px solid var(--border)">
+              Não aparecem mais na fila e não têm estoque controlado aqui. As compras continuam registradas no Gestão, com valor e fornecedor, e seguem entrando no CMV da DRE.
+            </div>
+            ${Object.keys(porTipo).sort().map(k => `
+              <div class="adc-cat" style="padding:6px 13px 0">${KIND_LABELS[k] || k} · ${porTipo[k].length}</div>
+              ${porTipo[k].map(c => `
+                <div class="vinc-row">
+                  <div style="flex:1;min-width:0"><div class="nm" style="color:var(--text2)">${c.source_name}</div></div>
+                  <button class="v-unclass" data-id="${c.id}">Voltar a conciliar</button>
+                </div>`).join('')}`).join('')
+            || '<div style="padding:10px 13px;font-size:12px;color:var(--text2)">Nada encontrado para essa busca.</div>'}
+          ` : ''}
+        </div>`;
+      })()}
+
       ${(d.removidos || []).length ? `
         <div class="vinc-grupo" style="margin-top:14px">
           <div class="vinc-grupo-head" data-grupo="__removidos__">
@@ -2234,8 +2314,12 @@ function renderVinculos(el, d) {
 
   el.querySelectorAll('.vinc-pend').forEach(row => {
     row.querySelector('.v-save').addEventListener('click', () => vincularPendente(row));
-    row.querySelector('.v-skip').addEventListener('click', () => descartarPendente(row.dataset.nome));
+    row.querySelectorAll('.v-kind').forEach(b => b.addEventListener('click', () =>
+      classificarItens([row.dataset.nome], b.dataset.kind)));
   });
+  el.querySelectorAll('.v-lote').forEach(b => b.addEventListener('click', () =>
+    classificarItens(d.pendentes.map(p => p.source_name), b.dataset.kind)));
+  el.querySelectorAll('.v-unclass').forEach(b => b.addEventListener('click', () => desclassificar(b.dataset.id)));
   el.querySelectorAll('.v-del').forEach(b => b.addEventListener('click', () => removerVinculo(b.dataset.id)));
   el.querySelectorAll('.v-restore').forEach(b => b.addEventListener('click', () => restaurarVinculo(b.dataset.id)));
   el.querySelectorAll('.vinc-grupo-head').forEach(h => h.addEventListener('click', () => {
@@ -2291,15 +2375,9 @@ async function vincularPendente(row) {
   }
 }
 
-async function descartarPendente(nome) {
-  if (!confirm(`Descartar "${nome}"?\n\nUse quando o item não é produto de revenda — insumo de cozinha que veio na mesma nota, por exemplo. Ele não entra no estoque do PDV.`)) return;
-  try {
-    const res = await apiFetch(`/api/supply/pending?nome=${encodeURIComponent(nome)}`, { method: 'DELETE' });
-    if (!res.ok) { showToast('Erro ao descartar'); return; }
-    showToast('Item descartado');
-    loadVinculos();
-  } catch (e) { if (e.message !== 'unauthorized') showToast('Erro de conexão'); }
-}
+// descartarPendente foi removida: o descarte resolvia só aquela ocorrência e a
+// decisão se perdia, então o mesmo insumo voltava na nota seguinte. Quem faz
+// esse papel agora é classificarItens, que grava a decisão de uma vez.
 
 async function removerVinculo(id) {
   if (!confirm('Remover este vínculo?\n\nAs próximas compras desse item voltam pra fila de pendentes. O estoque que já entrou não muda, e dá pra restaurar depois em "Removidos".')) return;
