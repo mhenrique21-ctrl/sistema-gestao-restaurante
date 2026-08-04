@@ -405,6 +405,30 @@ const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
   }
 };
 
+// Desfaz no PDV o que a compra trouxe. Chamado ao excluir um item, excluir a
+// nota inteira, ou mover a nota da SEAMA pra outra empresa — nos três casos a
+// compra deixou de valer para a SEAMA, e o estoque tem que acompanhar.
+//
+// Sem nomes, estorna a nota toda. O PDV é idempotente por item, então excluir
+// um item e depois a nota inteira não devolve aquele item duas vezes.
+const estornarCompraSeama = async (empresa, grupoId, nomes) => {
+  if (empresa !== "SEAMA" || !grupoId) return;
+  try {
+    const r = await fetch("/api/seama-estorno", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ origin_id: grupoId, items: nomes || null }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error("[seama-estorno]", d.error || r.status); return; }
+    if (d.reverted > 0) {
+      alert(`📦 PDV Seama: ${d.reverted} item(ns) devolvidos do estoque.`);
+    }
+  } catch (e) {
+    console.error("[seama-estorno]", e.message);
+  }
+};
+
 const parseMoney= (s) => {
   const str=String(s).trim();
   // handles "1.234,56" (pt-BR) or "1234.56" (en) or "1234,56"
@@ -3712,7 +3736,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         </div>
                         <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"#1D4ED8",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
-                        <button onClick={e=>{e.stopPropagation();if(!confirm("Excluir item?"))return;_listaDeletados.add(item.id);const gid=nota.grupoId;(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c)};});}}
+                        <button onClick={e=>{e.stopPropagation();if(!confirm(empresa==="SEAMA"?`Excluir "${item.nomeProduto}"?\n\nSe ele tiver entrado no estoque do PDV, a quantidade será devolvida.`:"Excluir item?"))return;_listaDeletados.add(item.id);const gid=nota.grupoId;(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c)};});estornarCompraSeama(empresa,gid,[item.nomeProduto]);}}
                           style={{background:"none",border:"none",color:"#EF444455",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
                       </div>
                     )}
@@ -3732,7 +3756,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                     }} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir</button>
                     <button className="btn" onClick={()=>{
                       const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
-                      if(!confirm(`Transferir compra #${num} para ${outra}?`))return;
+                      if(!confirm(empresa==="SEAMA"
+                        ?`Transferir compra #${num} para ${outra}?\n\nA compra deixa de ser da SEAMA, então os itens que entraram no estoque do PDV serão devolvidos.`
+                        :`Transferir compra #${num} para ${outra}?${outra==="SEAMA"?"\n\nOs itens de revenda entrarão no estoque do PDV da Seama.":""}`))return;
+                      // Saindo da SEAMA, o estoque do PDV precisa devolver o que entrou —
+                      // senão a compra muda de empresa e a mercadoria fica contada aqui.
+                      estornarCompraSeama(empresa,nota.grupoId,null);
                       const novoGrupoId=uid();
                       const novosItens=itensVivos.map(it=>({...it,id:uid(),grupoId:novoGrupoId}));
                       const contaOrig=(db.contas||[]).find((c:any)=>c.grupoId===nota.grupoId);
@@ -3747,7 +3776,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       alert(`✅ Compra transferida para ${outra}`);
                     }} style={{background:"#DBEAFE",color:"#8B5CF6",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={()=>{
-                      if(!confirm("Excluir esta nota e todos os seus itens?"))return;
+                      if(!confirm(empresa==="SEAMA"?"Excluir esta nota e todos os seus itens?\n\nOs itens que entraram no estoque do PDV serão devolvidos.":"Excluir esta nota e todos os seus itens?"))return;
+                      estornarCompraSeama(empresa,nota.grupoId,null);
                       const cIds=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId).map(c=>c.id);
                       const ctIds=(db.contas||[]).filter(c=>c.grupoId===nota.grupoId).map(c=>c.id);
                       [...cIds,...ctIds].forEach(id=>_listaDeletados.add(id));

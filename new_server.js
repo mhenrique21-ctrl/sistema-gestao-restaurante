@@ -1266,6 +1266,36 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // Estorno: nota (ou item) excluída no Gestão, ou movida pra outra empresa.
+  // Sem isso o estoque do PDV fica maior que a realidade e só aparece na
+  // contagem física.
+  if (req.method === 'POST' && urlPath === '/api/seama-estorno') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { origin_id, items } = JSON.parse(body);
+        if (!origin_id) { res.writeHead(400); res.end(JSON.stringify({ error: 'origin_id é obrigatório' })); return; }
+        const secret = process.env.SEAMA_SERVICE_SECRET;
+        if (!secret) { res.writeHead(500); res.end(JSON.stringify({ error: 'SEAMA_SERVICE_SECRET não configurado neste servidor' })); return; }
+        const base = process.env.SEAMA_PDV_URL || 'https://seama.confrariacafe.com';
+        const upstream = await fetch(`${base}/api/supply/purchase/reverse`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
+          body: JSON.stringify({ origin_id, items }),
+        });
+        const data = await upstream.json().catch(() => ({}));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(upstream.status);
+        res.end(JSON.stringify(data));
+      } catch (e) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Erro ao estornar no PDV: ' + e.message }));
+      }
+    });
+    return;
+  }
+
   // ── Faturamento do dia vindo do PDV ──────────────────────────────────
   // Caminho inverso da ponte de compras: o PDV fecha o caixa e manda o
   // resultado do dia, para a DRE deixar de depender de alguém lembrar de
