@@ -1879,20 +1879,38 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         const backDir = path.join(DADOS_DIR, 'backups', emp.toLowerCase());
         fs.mkdirSync(backDir, { recursive: true });
         if (fs.existsSync(file)) {
+          let existing = null;
           try {
-            const existing = JSON.parse(fs.readFileSync(file, 'utf-8'));
-            // Fusão do documento inteiro no servidor (não só no cliente): sem
-            // isso, dois dispositivos escrevendo perto um do outro faziam o
-            // último POST sobrescrever o arquivo inteiro e apagar qualquer
-            // mudança (marcar conta como paga, item da lista, editar um
-            // funcionário...) que o outro lado já tinha salvo um instante
-            // antes. Mesma lógica de mergeFromServer do App.tsx, só que
-            // aplicada contra o estado que está de fato no arquivo agora,
-            // não o que o cliente achava que estava.
-            incoming = mergeDocument(existing, incoming);
-            const existingContas = (existing.contas||[]).length;
+            existing = JSON.parse(fs.readFileSync(file, 'utf-8'));
+          } catch (e) {
+            console.error(`[POST ${emp}] arquivo atual ilegível, salvando payload do cliente sem fusão:`, e.message);
+          }
+          // A fusão é a única coisa que protege o que já está no arquivo. Se ela
+          // falhar, o comportamento antigo (catch vazio) era seguir adiante e
+          // gravar o payload cru do cliente por cima — apagando em silêncio o
+          // que os outros aparelhos já tinham salvo, sem nada no log. Agora a
+          // falha é registrada, o arquivo bom é preservado numa cópia e o POST
+          // é recusado, para o cliente tentar de novo (o dado continua nele).
+          if (existing) {
+            try {
+              incoming = mergeDocument(existing, incoming);
+            } catch (e) {
+              console.error(`[POST ${emp}] FUSÃO FALHOU — POST recusado, arquivo preservado:`, e);
+              try {
+                fs.writeFileSync(path.join(backDir, `mergefail_${Date.now()}.json`), fs.readFileSync(file));
+              } catch {}
+              res.setHeader('Content-Type', 'application/json');
+              res.writeHead(500);
+              res.end(JSON.stringify({ error: 'Falha ao fundir com os dados do servidor. Nada foi gravado.' }));
+              return;
+            }
+          }
+          // Daqui pra baixo é só backup/rotação: falhar aqui não pode recusar
+          // um POST legítimo (disco cheio, permissão), então segue com log.
+          try {
+            const existingContas = (existing?.contas||[]).length;
             const incomingContas = (incoming.contas||[]).length;
-            const existingVendas = (existing.vendas||[]).length;
+            const existingVendas = (existing?.vendas||[]).length;
             const incomingVendas = (incoming.vendas||[]).length;
             // If incoming data has significantly fewer records than current, save a safety backup
             if (existingContas > 5 && incomingContas === 0 || existingVendas > 5 && incomingVendas === 0) {
@@ -1915,7 +1933,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
                 });
               }
             }
-          } catch {}
+          } catch (e) {
+            console.error(`[POST ${emp}] falha na rotina de backup (salvamento seguiu normalmente):`, e.message);
+          }
         }
         fs.writeFileSync(file, JSON.stringify(incoming));
         res.setHeader('Content-Type', 'application/json');

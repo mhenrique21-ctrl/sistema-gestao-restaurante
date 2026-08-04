@@ -859,6 +859,25 @@ const mergeFromServer=(prev:any,updates:any)=>{
   return migrateDb(next);
 };
 
+// fetch com timeout obrigatório para TODA chamada de sincronização.
+//
+// Bug real (Lista de Compras não atualizava entre usuários): um fetch travado
+// — rede instável do celular na loja, Wi-Fi oscilando, TCP pendurado — nunca
+// resolve nem rejeita. Como o polling desiste enquanto syncTimer.current
+// estiver setado, e quem limpa esse ref é o finally do salvamento, um único
+// fetch pendurado matava o polling DAQUELE aparelho em silêncio, para sempre
+// (até alguém recarregar a página). A tela continuava funcionando e mostrando
+// a lista, só que congelada no estado de antes.
+//
+// Com o abort, a promessa sempre termina (resolve ou rejeita), o finally
+// sempre roda e o polling sempre volta ao ar no ciclo seguinte.
+const SYNC_TIMEOUT_MS=15000;
+const fetchSync=(url:string,opts:any={},ms=SYNC_TIMEOUT_MS)=>{
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),ms);
+  return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(t));
+};
+
 export default function App() {
   const [state,setState] = useState(()=>{
     const loaded=loadData();
@@ -899,7 +918,7 @@ export default function App() {
   // On mount: load both companies from server
   useEffect(()=>{
     Promise.all(["CONFRARIA","SEAMA"].map(emp=>
-      fetch(`/api/dados/${emp}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
+      fetchSync(`/api/dados/${emp}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
     )).then(results=>{
       const updates:any={};
       results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
@@ -916,7 +935,7 @@ export default function App() {
       const seq=saveSeqRef.current;
       const ts=Date.now();
       Promise.all(emps.map(emp=>
-        fetch(`/api/dados/${emp}?_=${ts}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
+        fetchSync(`/api/dados/${emp}?_=${ts}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
       )).then(results=>{
         if(syncTimer.current||directSaveRef.current||saveSeqRef.current!==seq||Date.now()-directSaveEndRef.current<300)return;
         const updates:any={};
@@ -958,7 +977,7 @@ export default function App() {
         await Promise.all(changed.map(async emp=>{
           const merged=await mergeWithServerBeforePost(emp);
           const body=JSON.stringify(withDeletedIds(merged!=null?merged:state[emp]));
-          await fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body});
+          await fetchSync(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body});
         }));
         setSyncStatus("ok");
       }catch{setSyncStatus("erro");}finally{
@@ -976,7 +995,7 @@ export default function App() {
   // outro dispositivo já tinha arquivado/excluído, ao salvar por cima logo em seguida.
   const mergeWithServerBeforePost=async(emp:string):Promise<any>=>{
     try{
-      const r=await fetch(`/api/dados/${emp}?_=${Date.now()}`);
+      const r=await fetchSync(`/api/dados/${emp}?_=${Date.now()}`);
       const serverData=await r.json();
       if(!serverData)return null;
       let mergedEmp:any=null;
@@ -1018,7 +1037,7 @@ export default function App() {
           return prev;
         });
       });
-      fetch(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
+      fetchSync(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
         .then(r=>{if(!r.ok)throw new Error(r.status+"");setSyncStatus("ok");})
         .catch(()=>setSyncStatus("erro"))
         .finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
