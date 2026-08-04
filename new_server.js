@@ -1266,6 +1266,67 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // ── Faturamento do dia vindo do PDV ──────────────────────────────────
+  // Caminho inverso da ponte de compras: o PDV fecha o caixa e manda o
+  // resultado do dia, para a DRE deixar de depender de alguém lembrar de
+  // digitar o faturamento de ontem.
+  if (req.method === 'POST' && urlPath === '/api/venda-pdv') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const secret = process.env.SEAMA_SERVICE_SECRET;
+        if (!secret) { res.writeHead(503); res.end(JSON.stringify({ error: 'Integração não configurada' })); return; }
+        if (req.headers['x-service-secret'] !== secret) {
+          res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
+        }
+
+        const { empresa, data, dinheiro, maquininha, total } = JSON.parse(body);
+        const emp = String(empresa || '').toUpperCase();
+        if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
+
+        const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
+        const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+        const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+        const vendas = Array.isArray(doc.vendas) ? doc.vendas : [];
+        const agora = new Date().toISOString();
+
+        // Idempotência por data: reenviar o mesmo dia ATUALIZA a linha. Sem
+        // isso, dois fechamentos no mesmo dia (dois turnos, ou uma retentativa)
+        // dobrariam o faturamento do mês em silêncio.
+        // origem:"pdv" separa o que veio daqui do que foi digitado à mão — uma
+        // venda lançada manualmente na tela nunca é sobrescrita por este envio.
+        const i = vendas.findIndex(v => v && v.data === data && v.origem === 'pdv');
+        const reg = {
+          id: i >= 0 ? vendas[i].id : `pdv-${emp.toLowerCase()}-${data}`,
+          data,
+          total: num(total),
+          maquininha: num(maquininha),
+          dinheiro: num(dinheiro),
+          ifood: 0, ifoodTaxa: 0, ifoodLiq: 0,
+          '99food': 0, nfoodTaxa: 0, nfoodLiq: 0,
+          delivery: 0,
+          origem: 'pdv',
+          criadoEm: i >= 0 ? (vendas[i].criadoEm || agora) : agora,
+          atualizadoEm: agora,
+        };
+        if (i >= 0) vendas[i] = reg; else vendas.unshift(reg);
+
+        doc.vendas = vendas;
+        fs.writeFileSync(file, JSON.stringify(doc));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, acao: i >= 0 ? 'atualizado' : 'criado', data, total: reg.total }));
+      } catch (e) {
+        console.error('[venda-pdv]', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Erro ao registrar venda do PDV: ' + e.message }));
+      }
+    });
+    return;
+  }
+
   // ── Catálogo real (produtos/categorias do delivery-backend) ──────────
   // Proxy autenticado por token de serviço — o navegador nunca vê o JWT
   // nem o segredo, só fala com este backend.
