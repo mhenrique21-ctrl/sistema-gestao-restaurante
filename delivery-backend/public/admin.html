@@ -205,11 +205,15 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="bairros" onclick="showPage('bairros',this)">📍 Bairros</button>
     <button class="nav-btn" data-page="configuracoes" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
     <button class="nav-btn" data-page="pagamentos" onclick="showPage('pagamentos',this)">💳 Pagamentos</button>
-    <button class="nav-btn" data-page="adicionais" onclick="showPage('adicionais',this)">➕ Adicionais</button>
+<!-- A tela antiga "Adicionais" editava os 17 produtos da categoria de mesmo
+     nome. Eles nunca são vendidos avulsos (confirmado pelo dono), então a
+     página virou resquício e o nome duplicava o do cadastro de grupos. Saiu do
+     menu; os produtos seguem editáveis em Produtos, e a função continua no
+     código caso precise voltar. -->
     <button class="nav-btn" data-page="promocoes" onclick="showPage('promocoes',this)">🎉 Promoções</button>
     <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
     <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
-    <button class="nav-btn" data-page="grupos" onclick="showPage('grupos',this)">➕ Adicionais</button>
+    <button class="nav-btn" data-page="grupos" onclick="showPage('grupos',this)">➕ Adicionais e preparo</button>
     <button class="nav-btn" data-page="estoque" onclick="showPage('estoque',this)">📦 Estoque</button>
     <button class="nav-btn" data-page="financeiro" onclick="showPage('financeiro',this)">💰 Financeiro</button>
     <button class="nav-btn" data-page="comandas" onclick="showPage('comandas',this)">📇 Comandas</button>
