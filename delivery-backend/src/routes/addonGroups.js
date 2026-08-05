@@ -54,9 +54,14 @@ router.post('/', async (req, res) => {
   if (!name || !name.trim()) return res.status(400).json({ error: 'Informe o nome do grupo' });
   if (!KINDS.includes(kind)) return res.status(400).json({ error: 'Tipo inválido' });
   try {
+    // min_select acompanha required. Marcar "obrigatório" com mínimo 0 criava
+    // um grupo que a tela nunca cobrava — count < 0 jamais é verdade. Foi
+    // exatamente o que aconteceu com "Descartáveis", obrigatório em 79
+    // produtos e passando direto.
+    const obrig = !!req.body.required;
     const r = await pool.query(
       `INSERT INTO addon_groups (product_id, name, kind, max_select, min_select, required, sort_order)
-       VALUES (NULL, $1, $2, ${max}, 0, ${req.body.required ? 'TRUE' : 'FALSE'}, 0) RETURNING *`,
+       VALUES (NULL, $1, $2, ${max}, ${obrig ? 1 : 0}, ${obrig ? 'TRUE' : 'FALSE'}, 0) RETURNING *`,
       [name.trim(), kind]
     );
     res.status(201).json({ ...r.rows[0], options: [], products: [] });
@@ -76,7 +81,11 @@ router.patch('/:id', async (req, res) => {
   }
   // Booleanos e números como literal: o wrapper do pool quebra acima de $9.
   if (req.body.max_select !== undefined) updates.push(`max_select = ${parseInt(req.body.max_select, 10) || 1}`);
-  if (req.body.required !== undefined) updates.push(`required = ${req.body.required ? 'TRUE' : 'FALSE'}`);
+  if (req.body.required !== undefined) {
+    // required e min_select andam juntos, senão "obrigatório" vira enfeite.
+    updates.push(`required = ${req.body.required ? 'TRUE' : 'FALSE'}`);
+    updates.push(`min_select = ${req.body.required ? 1 : 0}`);
+  }
   if (req.body.active !== undefined) updates.push(`active = ${req.body.active ? 'TRUE' : 'FALSE'}`);
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);

@@ -1134,12 +1134,33 @@ async function openBalcaoSale() {
   }
 }
 
-async function loadMenuIfNeeded() {
-  if (menu.length) return;
-  const res = await fetch(`${API}/api/menu`);
-  menu = await res.json();
-  activeCategory = menu[0]?.id || null;
+// O cardápio era buscado UMA vez por carregamento de página e ficava em cache
+// para sempre (`if (menu.length) return`). Mudar adicionais, preço ou produto
+// só aparecia no PDV depois de alguém dar F5 — foi o bug relatado: "as
+// configurações dos adicionais não refletem na hora da venda".
+//
+// Agora o cache tem validade curta. Quem está vendendo não pode ficar com
+// cardápio velho, e 60s é curto o bastante pra ninguém notar e longo o
+// bastante pra não pesar no meio do movimento.
+let menuCarregadoEm = 0;
+const MENU_TTL_MS = 60000;
+
+async function loadMenuIfNeeded(forcar = false) {
+  if (!forcar && menu.length && Date.now() - menuCarregadoEm < MENU_TTL_MS) return;
+  try {
+    const res = await fetch(`${API}/api/menu?_=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const novo = await res.json();
+    if (!Array.isArray(novo) || !novo.length) return;   // resposta ruim não apaga o que já funciona
+    menu = novo;
+    menuCarregadoEm = Date.now();
+    if (!activeCategory || !menu.some(c => c.id === activeCategory)) activeCategory = menu[0]?.id || null;
+  } catch (e) { /* offline: segue com o cardápio que já está em memória */ }
 }
+
+// Depois de mexer em adicionais, o cardápio em memória está velho por
+// definição — recarrega na hora, sem esperar o TTL.
+function invalidarMenu() { menuCarregadoEm = 0; }
 
 function resetToScan() {
   comanda = null;
@@ -1716,12 +1737,12 @@ async function addOpcaoPdv(gid) {
   const nome = document.getElementById('ag-nova').value.trim();
   if (!nome) { showToast('Informe o nome da opção'); return; }
   if (await adicApi(`/api/addon-groups/${gid}/options`, 'POST',
-      { name: nome, price: document.getElementById('ag-novo-preco').value || 0 })) loadAdicionais();
+      { name: nome, price: document.getElementById('ag-novo-preco').value || 0 })) { invalidarMenu(); loadAdicionais(); }
 }
 
 async function excluirOpcaoPdv(id) {
   if (!confirm('Excluir esta opção?\n\nVendas passadas não mudam — elas guardam nome e preço no próprio registro.')) return;
-  if (await adicApi(`/api/addon-groups/options/${id}`, 'DELETE')) loadAdicionais();
+  if (await adicApi(`/api/addon-groups/options/${id}`, 'DELETE')) { invalidarMenu(); loadAdicionais(); }
 }
 
 async function salvarGrupoPdv(gid) {
@@ -1741,7 +1762,7 @@ async function salvarGrupoPdv(gid) {
   }
   const ids = [...document.querySelectorAll('[data-ap]')].filter(c => c.checked).map(c => c.dataset.ap);
   if (!await adicApi(`/api/addon-groups/${gid}/products`, 'PUT', { product_ids: ids })) return;
-  showToast('Grupo salvo');
+  showToast('Grupo salvo'); invalidarMenu();
   adicAberto = null;
   loadAdicionais();
 }
@@ -2810,8 +2831,12 @@ function confirmAddToCart() {
   const p = modalProduct;
   for (const g of (p.addon_groups || [])) {
     const count = groupQtySum(g.id);
-    if (g.required && count < g.min_select) {
-      alert(`Selecione ao menos ${g.min_select} opção(ões) em "${g.name}"`);
+    // "Obrigatório" com min_select 0 nunca era cobrado: count < 0 jamais é
+    // verdade. Era o caso de "Descartáveis", obrigatório em 79 produtos e
+    // passando direto. Marcar obrigatório passa a valer ao menos 1.
+    const minimo = g.required ? Math.max(1, g.min_select || 0) : (g.min_select || 0);
+    if (minimo > 0 && count < minimo) {
+      alert(`Selecione ${minimo > 1 ? 'ao menos ' + minimo + ' opções' : 'uma opção'} em "${g.name}"`);
       return;
     }
   }
