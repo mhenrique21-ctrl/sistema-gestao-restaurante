@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { authMiddleware, requireRole } = require('../middleware/auth');
-const { broadcastToStation, requestPrinterList } = require('../websocket/hub');
+const { broadcastToStation, requestPrinterList, estacoesConectadas } = require('../websocket/hub');
 const pool = require('../db/pool');
 const { internalError } = require('../utils/errors');
 const { getCashSummary, todayBelem, getSessionSummary } = require('../services/cashSummary');
@@ -18,6 +18,16 @@ router.get('/', requireRole('admin'), async (req, res) => {
     console.error('[printers/GET]', e.message);
     res.json({ printers: [], error: 'Não foi possível consultar as impressoras' });
   }
+});
+
+// GET /api/printers/status — tem agente de impressão ouvindo agora?
+// O ponto verde do admin indicava a conexão do PRÓPRIO navegador, então ficava
+// verde com o agente desligado — e o operador só descobria pelo papel que não
+// saía. Aqui a resposta é sobre quem realmente imprime.
+router.get('/status', (req, res) => {
+  // role=printer é o agente local; navegador aberto não conta.
+  const agentes = estacoesConectadas().filter((c) => c.role === 'printer');
+  res.json({ online: agentes.length > 0, agentes: agentes.length });
 });
 
 // GET /api/printers/config — lê config de impressoras salva no banco
@@ -59,7 +69,8 @@ router.post('/print-report', requireRole('admin'), (req, res) => {
   const { date, report } = req.body;
   if (!report) return res.status(400).json({ error: 'Dados do relatório ausentes' });
 
-  broadcastToStation('caixa', { event: 'print_report', date, report });
+  const nAg = broadcastToStation('caixa', { event: 'print_report', date, report });
+  if (!nAg) return res.status(503).json({ error: 'Nenhum agente de impressão conectado. Verifique se o computador do caixa está ligado e com o agente aberto.', code: 'SEM_AGENTE' });
   res.json({ ok: true });
 });
 
@@ -92,7 +103,8 @@ router.post('/reprint-order/:id', requireRole('admin'), async (req, res) => {
 
     if (!items.rows.length) return res.status(400).json({ error: 'Pedido sem itens' });
 
-    broadcastToStation('caixa', { event: 'reprint_order', order: order.rows[0], items: items.rows });
+    const n = broadcastToStation('caixa', { event: 'reprint_order', order: order.rows[0], items: items.rows });
+    if (!n) return res.status(503).json({ error: 'Nenhum agente de impressão conectado. Verifique se o computador do caixa está ligado e com o agente aberto.', code: 'SEM_AGENTE' });
     res.json({ ok: true });
   } catch (e) {
     return internalError(res, e, '[printers/reprint-order]');
@@ -109,7 +121,8 @@ router.post('/finalize-order/:id', requireRole('admin'), async (req, res) => {
       [req.params.id]
     );
     if (!r.rows[0]) return res.status(404).json({ error: 'Pedido não encontrado' });
-    broadcastToStation('caixa', { event: 'finalize_order', order: r.rows[0] });
+    const n = broadcastToStation('caixa', { event: 'finalize_order', order: r.rows[0] });
+    if (!n) return res.status(503).json({ error: 'Nenhum agente de impressão conectado. Verifique se o computador do caixa está ligado e com o agente aberto.', code: 'SEM_AGENTE' });
     res.json({ ok: true });
   } catch (e) {
     return internalError(res, e, '[printers/finalize-order]');
@@ -144,7 +157,8 @@ router.post('/close-register', requireRole('admin', 'atendente'), async (req, re
       summary = await getCashSummary(date);
     }
     summary.operatorName = req.user?.name || null;
-    broadcastToStation('caixa', { event: 'close_register', summary });
+    const n = broadcastToStation('caixa', { event: 'close_register', summary });
+    if (!n) return res.status(503).json({ error: 'Nenhum agente de impressão conectado. Verifique se o computador do caixa está ligado e com o agente aberto.', code: 'SEM_AGENTE' });
     res.json({ ok: true, summary });
   } catch (e) {
     return internalError(res, e, '[printers/close-register]');

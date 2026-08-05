@@ -231,7 +231,12 @@ textarea { resize: vertical; min-height: 70px; }
       <h2 id="page-title">Dashboard</h2>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
-      <span id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
+      <span id="ws-dot" title="Conexão deste navegador com o servidor" style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
+      <span id="agente-dot" title="Agente de impressão do computador do caixa"
+            style="display:none;align-items:center;gap:6px;font-size:.78rem;font-weight:700;
+                   padding:4px 10px;border-radius:999px;background:#7f1d1d;color:#fecaca">
+        🖨 Impressão offline
+      </span>
       <button id="theme-btn" onclick="toggleTheme()">🌙 Escuro</button>
       <button class="btn btn-secondary btn-sm" onclick="logout()">Sair</button>
     </div>
@@ -506,7 +511,20 @@ function mostrarBannerNovoPedido(num, waLinkCliente, waLinkAdmin) {
 ;(function wsConnect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws?token=${TOKEN}&station=retaguarda`);
-  ws.onopen = () => document.getElementById('ws-dot').style.background = '#10b981';
+  // Aviso de impressão offline. O ponto ao lado mostra a conexão DESTE
+  // navegador, que fica verde mesmo com o computador do caixa desligado — foi
+  // por isso que "as notas não saem" passou tanto tempo sem explicação.
+  window.checarAgente = async () => {
+    const el = document.getElementById('agente-dot');
+    if (!el) return;
+    try {
+      const r = await fetch('/api/printers/status', { headers: { Authorization: 'Bearer ' + TOKEN } });
+      const d = await r.json();
+      el.style.display = d.online ? 'none' : 'inline-flex';
+    } catch (e) { /* sem rede: o ponto vermelho ao lado já denuncia */ }
+  };
+  if (!window.__agenteTimer) window.__agenteTimer = setInterval(() => window.checarAgente(), 30000);
+  ws.onopen = () => { document.getElementById('ws-dot').style.background = '#10b981'; checarAgente(); };
   ws.onclose = () => { document.getElementById('ws-dot').style.background = '#ef4444'; setTimeout(wsConnect, 3000); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);

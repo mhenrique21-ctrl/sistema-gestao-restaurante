@@ -66,14 +66,38 @@ function broadcastOrderUpdate(payload) {
 }
 
 // Broadcast apenas para uma estação específica
+// Devolve PARA QUANTOS foi enviado. Antes não devolvia nada: sem agente de
+// impressão conectado, a mensagem ia pro vazio, a rota respondia ok e a tela
+// dizia "enviado pra impressão". O papel nunca saía e ninguém era avisado —
+// era o bug de "as notas não estão saindo na impressora".
 function broadcastToStation(station, payload) {
-  if (!wss) return;
+  if (!wss) return 0;
   const message = JSON.stringify({ type: 'station_order', station, ...payload, timestamp: new Date().toISOString() });
+  let impressoras = 0;
   wss.clients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN && (ws.station === station || ws.station === 'retaguarda')) {
       ws.send(message);
+      // Só o agente local (role=printer) põe papel pra fora. O admin aberto no
+      // navegador também escuta 'retaguarda', e contá-lo faria a checagem
+      // passar sempre — dizendo "imprimiu" com a impressora desligada.
+      if (ws.role === 'printer') impressoras++;
     }
   });
+  if (!impressoras) console.warn(`[WS] "${payload?.event}" enviado sem nenhum agente de impressão conectado`);
+  return impressoras;
+}
+
+// Quem está conectado agora — usado pra tela poder dizer "agente de impressão
+// offline" antes de o operador descobrir pelo papel que não saiu.
+function estacoesConectadas() {
+  if (!wss) return [];
+  const out = [];
+  wss.clients.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      out.push({ station: ws.station, name: ws.user?.name || null, role: ws.role || null });
+    }
+  });
+  return out;
 }
 
 function broadcastToRole(role, payload) {
@@ -102,4 +126,4 @@ function requestPrinterList(timeoutMs = 8000) {
   });
 }
 
-module.exports = { initWebSocket, broadcastOrderUpdate, broadcastToStation, broadcastToRole, requestPrinterList };
+module.exports = { initWebSocket, broadcastOrderUpdate, broadcastToStation, broadcastToRole, requestPrinterList, estacoesConectadas };
