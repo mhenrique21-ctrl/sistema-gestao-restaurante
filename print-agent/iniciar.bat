@@ -12,8 +12,14 @@ set PRINT_AGENT_SECRET=COLE_O_SEGREDO_AQUI
 
 REM Nome EXATO de cada impressora como aparece no Windows.
 REM Conferir com: Get-Printer   (ou botao Detectar no admin)
+REM
+REM Esta maquina tem DUAS ELGIN i8 ligadas por USB:
+REM   "ELGIN i8"           -> porta USB003
+REM   "ELGIN i8 (copy 1)"  -> porta USB001
+REM Nao da pra saber pelo nome qual e a do caixa e qual a da cozinha.
+REM Se sair trocado, inverta as duas linhas abaixo e reinicie o agente.
 set PRINTER_CAIXA=ELGIN i8
-set PRINTER_COZINHA=ELGIN i8
+set PRINTER_COZINHA=ELGIN i8 (copy 1)
 set PRINTER_BALCAO=ELGIN i8
 
 if "%PRINT_AGENT_SECRET%"=="COLE_O_SEGREDO_AQUI" (
