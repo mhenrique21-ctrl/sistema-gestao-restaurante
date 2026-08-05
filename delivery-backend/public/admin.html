@@ -684,6 +684,16 @@ function renderGrupoDetalhe(g) {
           <input type="checkbox" id="gr-req" ${g.required?'checked':''}> obrigatório</label>
       </div>
 
+      <div style="margin-top:12px">
+        <div style="font-size:.85rem;color:#94a3b8;margin-bottom:5px">Onde este grupo aparece</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.85rem">
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="gr-pdv" ${g.show_pdv!==false?'checked':''}> Balcão / comanda</label>
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="gr-deli" ${g.show_delivery!==false?'checked':''}> Delivery</label>
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="gr-kiosk" ${g.show_kiosk!==false?'checked':''}> Autoatendimento</label>
+        </div>
+        <small style="color:#64748b">Desmarcar tira a pergunta só daquele canal, sem desativar o grupo inteiro.</small>
+      </div>
+
       <div style="margin-top:14px;font-size:.85rem;color:#94a3b8">Opções</div>
       <div style="display:grid;gap:6px;margin-top:6px">
         ${g.options.map(o => `
@@ -772,6 +782,9 @@ async function salvarGrupo(gid) {
     kind,
     max_select: parseInt(document.getElementById('gr-max').value, 10) || 1,
     required: document.getElementById('gr-req').checked,
+    show_pdv: document.getElementById('gr-pdv').checked,
+    show_delivery: document.getElementById('gr-deli').checked,
+    show_kiosk: document.getElementById('gr-kiosk').checked,
   });
   // Preparo tem preço zero por definição — salvar o grupo como preparo zera as
   // opções, senão sobraria valor cobrado numa seção que diz "não muda o preço".

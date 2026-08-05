@@ -84,6 +84,13 @@ router.get('/', async (req, res) => {
     const todayJs = new Date().getDay(); // 0=Dom, 1=Seg … 6=Sáb
     const channelCol = req.query.channel === 'kiosk' ? 'show_kiosk' : req.query.channel === 'delivery' ? 'show_delivery' : null;
     const channelSql = channelCol ? `AND p.${channelCol} = true` : '';
+    // Grupo de adicional também respeita canal. "Descartáveis" pode fazer
+    // sentido no balcão e não no delivery (que já vai embalado), e antes o
+    // `active` era tudo-ou-nada.
+    // Sem ?channel, nada é filtrado: quem chama assim é o admin, que precisa
+    // enxergar tudo. O PDV passa ?channel=pdv de propósito.
+    const grupoCanalCol = { kiosk: 'show_kiosk', delivery: 'show_delivery', pdv: 'show_pdv' }[req.query.channel];
+    const grupoCanalSql = grupoCanalCol ? `AND g.${grupoCanalCol} = true` : '';
     const result = await pool.query(`
       SELECT
         c.id AS category_id,
@@ -123,6 +130,7 @@ router.get('/', async (req, res) => {
       LEFT JOIN addon_options o ON o.group_id = g.id AND o.active = true
       WHERE g.active = true AND (g.active_days IS NULL OR $1 = ANY(g.active_days))
         AND COALESCE(pa.product_id, g.product_id) IS NOT NULL
+        ${grupoCanalSql}
       ORDER BY g.sort_order, o.sort_order, o.name
     `, [todayJs]);
 

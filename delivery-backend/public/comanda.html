@@ -1148,7 +1148,9 @@ const MENU_TTL_MS = 60000;
 async function loadMenuIfNeeded(forcar = false) {
   if (!forcar && menu.length && Date.now() - menuCarregadoEm < MENU_TTL_MS) return;
   try {
-    const res = await fetch(`${API}/api/menu?_=${Date.now()}`, { cache: 'no-store' });
+    // ?channel=pdv: os produtos continuam vindo todos (o balcão vende tudo),
+    // mas os grupos de adicional respeitam a marcação de canal.
+    const res = await fetch(`${API}/api/menu?channel=pdv&_=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return;
     const novo = await res.json();
     if (!Array.isArray(novo) || !novo.length) return;   // resposta ruim não apaga o que já funciona
@@ -1648,6 +1650,14 @@ function renderAdicPdv() {
               background:${g.kind === 'preparo' ? '#FBF0DC' : '#E4EDF7'};color:${g.kind === 'preparo' ? '#7A5A18' : '#1F4B78'}">${ADIC_KIND[g.kind] || g.kind}</span>
           </div>
           <small>${g.options.length} opção(ões) · ${g.products.length} produto(s) · até ${g.max_select} por item</small>
+          ${(() => {
+            // Só mostra canais quando NÃO está nos três — o normal é aparecer
+            // em tudo, e avisar disso em todo grupo seria ruído.
+            const on = [g.show_pdv !== false && 'Balcão', g.show_delivery !== false && 'Delivery',
+                        g.show_kiosk !== false && 'Autoatendimento'].filter(Boolean);
+            if (on.length === 3) return '';
+            return `<small style="color:var(--orange-dim)">só em: ${on.join(', ') || 'nenhum canal'}</small>`;
+          })()}
         </div>
         <span style="color:var(--c-muted)">▾</span>
       </div>`;
@@ -1670,6 +1680,18 @@ function renderAdicPdv() {
             <input id="ag-max" type="number" min="1" value="${g.max_select}" style="width:70px"></div>
           <label style="display:flex;gap:6px;align-items:center;font-size:.8rem">
             <input type="checkbox" id="ag-req" ${g.required?'checked':''}> obrigatório</label>
+        </div>
+
+        <div>
+          <div style="font-size:.78rem;color:var(--c-muted);margin-bottom:5px">Onde este grupo aparece</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem">
+            <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ag-pdv" ${g.show_pdv!==false?'checked':''}> Balcão / comanda</label>
+            <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ag-deli" ${g.show_delivery!==false?'checked':''}> Delivery</label>
+            <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ag-kiosk" ${g.show_kiosk!==false?'checked':''}> Autoatendimento</label>
+          </div>
+          <small style="color:var(--c-muted);display:block;margin-top:4px">
+            Desmarcar tira a pergunta só daquele canal. Ex: descartável faz sentido no balcão, não no delivery, que já vai embalado.
+          </small>
         </div>
 
         <div>
@@ -1751,6 +1773,9 @@ async function salvarGrupoPdv(gid) {
     name: document.getElementById('ag-nome').value.trim(), kind,
     max_select: parseInt(document.getElementById('ag-max').value, 10) || 1,
     required: document.getElementById('ag-req').checked,
+    show_pdv: document.getElementById('ag-pdv').checked,
+    show_delivery: document.getElementById('ag-deli').checked,
+    show_kiosk: document.getElementById('ag-kiosk').checked,
   })) return;
   // Preparo tem preço zero por definição: salvar como preparo zera as opções,
   // senão sobraria valor cobrado numa seção que diz "não muda o preço".

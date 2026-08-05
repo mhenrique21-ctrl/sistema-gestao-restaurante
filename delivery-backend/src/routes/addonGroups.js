@@ -19,7 +19,8 @@ function erro(res, err, tag) {
 router.get('/', async (req, res) => {
   try {
     const grupos = await pool.query(
-      `SELECT id, name, kind, max_select, required, sort_order, active
+      `SELECT id, name, kind, max_select, required, sort_order, active,
+              show_pdv, show_delivery, show_kiosk
          FROM addon_groups WHERE product_id IS NULL ORDER BY kind, sort_order, name`
     );
     const opcoes = await pool.query(
@@ -87,6 +88,11 @@ router.patch('/:id', async (req, res) => {
     updates.push(`min_select = ${req.body.required ? 1 : 0}`);
   }
   if (req.body.active !== undefined) updates.push(`active = ${req.body.active ? 'TRUE' : 'FALSE'}`);
+  // Canais como literal pelo mesmo motivo dos outros booleanos: o wrapper do
+  // pool substitui $N por string e quebra acima de $9.
+  for (const c of ['show_pdv', 'show_delivery', 'show_kiosk']) {
+    if (req.body[c] !== undefined) updates.push(`${c} = ${req.body[c] ? 'TRUE' : 'FALSE'}`);
+  }
   if (!updates.length) return res.status(400).json({ error: 'Nada para atualizar' });
   values.push(req.params.id);
   try {
