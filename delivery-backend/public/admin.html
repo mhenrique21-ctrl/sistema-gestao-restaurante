@@ -209,6 +209,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="promocoes" onclick="showPage('promocoes',this)">🎉 Promoções</button>
     <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
     <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
+    <button class="nav-btn" data-page="grupos" onclick="showPage('grupos',this)">➕ Adicionais</button>
     <button class="nav-btn" data-page="estoque" onclick="showPage('estoque',this)">📦 Estoque</button>
     <button class="nav-btn" data-page="financeiro" onclick="showPage('financeiro',this)">💰 Financeiro</button>
     <button class="nav-btn" data-page="comandas" onclick="showPage('comandas',this)">📇 Comandas</button>
@@ -541,9 +542,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', estoque:'Estoque', comandas:'Comandas', arquivo:'Arquivo' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', estoque:'Estoque', grupos:'Adicionais e preparo', comandas:'Comandas', arquivo:'Arquivo' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, estoque: pageEstoque, comandas: pageComandas, arquivo: pageArquivo };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, estoque: pageEstoque, grupos: pageGrupos, comandas: pageComandas, arquivo: pageArquivo };
   pages[page]?.();
 }
 
@@ -606,6 +607,185 @@ function stat(icon, label, val) {
 
 // ── Produtos ──────────────────────────────────────────────────────
 let produtos = [], categorias = [];
+// ── Grupos de adicionais e preparo ────────────────────
+// Um grupo existe UMA vez e vale para N produtos. Antes eram 296 grupos e
+// 2.732 opções para 42 opções reais — cada uma repetida ~65 vezes, e mudar um
+// preço custava 66 edições.
+let _grupos = [], _grupoAberto = null;
+const KIND_LABEL = { adicional: 'Adicional', preparo: 'Preparo' };
+
+async function pageGrupos() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<p style="color:#64748b">Carregando...</p>';
+  try {
+    _grupos = await api('GET', '/addon-groups');
+    if (!produtos.length) {
+      produtos = await api('GET', '/menu/admin').then(cats =>
+        cats.flatMap(c => (c.products || []).map(p => ({ ...p, category_name: c.name }))));
+    }
+    renderGrupos();
+  } catch (e) { el.innerHTML = '<p style="color:#ef4444">Erro ao carregar</p>'; }
+}
+
+function renderGrupos() {
+  const el = document.getElementById('content');
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <h2 style="margin:0">Adicionais e preparo</h2>
+        <p style="color:#64748b;font-size:.85rem;margin:4px 0 0">
+          <b>Adicional</b> soma no preço · <b>Preparo</b> é só instrução (açúcar, molho, sabor do combo).
+        </p>
+      </div>
+      <button class="btn btn-primary" onclick="modalNovoGrupo()">+ Novo grupo</button>
+    </div>
+    ${!_grupos.length ? '<div class="card" style="padding:20px;color:#94a3b8">Nenhum grupo ainda.</div>' : ''}
+    ${_grupos.map(g => {
+      const aberto = _grupoAberto === g.id;
+      return `
+      <div class="card" style="padding:0;margin-bottom:10px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer" onclick="abrirGrupo('${aberto ? '' : g.id}')">
+          <div>
+            <span style="font-weight:600">${g.name}</span>
+            <span style="font-size:.72rem;padding:2px 8px;border-radius:999px;margin-left:8px;
+                  background:${g.kind === 'preparo' ? '#78350f' : '#1e3a5f'};color:#e2e8f0">${KIND_LABEL[g.kind] || g.kind}</span>
+            ${g.required ? '<span style="font-size:.72rem;color:#f59e0b;margin-left:6px">obrigatório</span>' : ''}
+            ${!g.active ? '<span style="font-size:.72rem;color:#ef4444;margin-left:6px">inativo</span>' : ''}
+            <div style="font-size:.8rem;color:#64748b;margin-top:2px">
+              ${g.options.length} opção(ões) · ${g.products.length} produto(s) · até ${g.max_select} por item
+            </div>
+          </div>
+          <span style="color:#64748b">${aberto ? '▴' : '▾'}</span>
+        </div>
+        ${aberto ? renderGrupoDetalhe(g) : ''}
+      </div>`;
+    }).join('')}`;
+}
+
+function renderGrupoDetalhe(g) {
+  const porCat = {};
+  produtos.filter(p => p.active !== false).forEach(p => (porCat[p.category_name || 'Sem categoria'] = porCat[p.category_name || 'Sem categoria'] || []).push(p));
+  const ligados = new Set(g.products.map(p => p.product_id));
+  return `
+    <div style="border-top:1px solid #334155;padding:14px 16px">
+      <div class="row" style="align-items:flex-end;gap:10px">
+        <div style="flex:1"><label>Nome</label><input id="gr-nome" value="${g.name.replace(/"/g,'&quot;')}"></div>
+        <div><label>Tipo</label>
+          <select id="gr-kind">
+            <option value="adicional" ${g.kind==='adicional'?'selected':''}>Adicional (soma no preço)</option>
+            <option value="preparo" ${g.kind==='preparo'?'selected':''}>Preparo (não soma)</option>
+          </select></div>
+        <div><label>Máx. por item</label><input id="gr-max" type="number" min="1" value="${g.max_select}" style="width:90px"></div>
+        <label style="display:flex;align-items:center;gap:6px;padding-bottom:8px">
+          <input type="checkbox" id="gr-req" ${g.required?'checked':''}> obrigatório</label>
+      </div>
+
+      <div style="margin-top:14px;font-size:.85rem;color:#94a3b8">Opções</div>
+      <div style="display:grid;gap:6px;margin-top:6px">
+        ${g.options.map(o => `
+          <div style="display:flex;gap:8px;align-items:center">
+            <input value="${o.name.replace(/"/g,'&quot;')}" data-onome="${o.id}" style="flex:1">
+            <input type="number" step="0.01" min="0" value="${o.price.toFixed(2)}" data-opreco="${o.id}" style="width:100px"
+                   ${g.kind === 'preparo' ? 'disabled title="Preparo não tem preço"' : ''}>
+            <button class="btn-sm" onclick="excluirOpcao('${o.id}')">✕</button>
+          </div>`).join('')}
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="gr-nova-opc" placeholder="Nova opção" style="flex:1">
+          <input id="gr-novo-preco" type="number" step="0.01" min="0" placeholder="0,00" style="width:100px">
+          <button class="btn-sm" onclick="addOpcao('${g.id}')">Incluir</button>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;font-size:.85rem;color:#94a3b8">
+        Produtos que usam este grupo <span style="color:#64748b">(${ligados.size} marcados)</span>
+      </div>
+      <div style="max-height:260px;overflow:auto;margin-top:6px;border:1px solid #334155;border-radius:8px;padding:8px">
+        ${Object.keys(porCat).sort().map(cat => `
+          <div style="font-size:.72rem;color:#64748b;text-transform:uppercase;margin:8px 0 4px">${cat}
+            <button class="btn-sm" style="margin-left:8px" onclick="marcarCat('${cat.replace(/'/g,"\\'")}',true)">todos</button>
+            <button class="btn-sm" onclick="marcarCat('${cat.replace(/'/g,"\\'")}',false)">nenhum</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px">
+            ${porCat[cat].map(p => `
+              <label style="display:flex;gap:6px;align-items:center;font-size:.82rem">
+                <input type="checkbox" data-prod="${p.id}" data-cat="${cat.replace(/"/g,'&quot;')}" ${ligados.has(p.id)?'checked':''}>
+                <span>${p.name}</span></label>`).join('')}
+          </div>`).join('')}
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-secondary" onclick="abrirGrupo('')">Fechar</button>
+        <button class="btn btn-primary" onclick="salvarGrupo('${g.id}')">Salvar</button>
+      </div>
+    </div>`;
+}
+
+function abrirGrupo(id) { _grupoAberto = id || null; renderGrupos(); }
+function marcarCat(cat, valor) {
+  document.querySelectorAll(`[data-prod][data-cat="${cat}"]`).forEach(c => { c.checked = valor; });
+}
+
+function modalNovoGrupo() {
+  openModal('Novo grupo', `
+    <div style="display:grid;gap:10px">
+      <div><label>Nome</label><input id="ng-nome" placeholder="Ex: Turbine seu croissant"></div>
+      <div><label>Tipo</label>
+        <select id="ng-kind">
+          <option value="adicional">Adicional — soma no preço</option>
+          <option value="preparo">Preparo — não soma (açúcar, molho, sabor)</option>
+        </select></div>
+      <div><label>Máximo por item</label><input id="ng-max" type="number" min="1" value="1"></div>
+    </div>`, async () => {
+    const nome = document.getElementById('ng-nome').value.trim();
+    if (!nome) { toast('Informe o nome', true); return false; }
+    const g = await api('POST', '/addon-groups', {
+      name: nome, kind: document.getElementById('ng-kind').value,
+      max_select: parseInt(document.getElementById('ng-max').value, 10) || 1,
+    });
+    closeModal(); _grupoAberto = g.id; await pageGrupos();
+  });
+}
+
+async function addOpcao(gid) {
+  const nome = document.getElementById('gr-nova-opc').value.trim();
+  if (!nome) { toast('Informe o nome da opção', true); return; }
+  await api('POST', `/addon-groups/${gid}/options`, {
+    name: nome, price: document.getElementById('gr-novo-preco').value || 0,
+  });
+  await pageGrupos();
+}
+
+async function excluirOpcao(id) {
+  if (!confirm('Excluir esta opção?\n\nVendas passadas não mudam — elas guardam nome e preço do adicional no próprio registro.')) return;
+  await api('DELETE', `/addon-groups/options/${id}`);
+  await pageGrupos();
+}
+
+async function salvarGrupo(gid) {
+  const kind = document.getElementById('gr-kind').value;
+  await api('PATCH', `/addon-groups/${gid}`, {
+    name: document.getElementById('gr-nome').value.trim(),
+    kind,
+    max_select: parseInt(document.getElementById('gr-max').value, 10) || 1,
+    required: document.getElementById('gr-req').checked,
+  });
+  // Preparo tem preço zero por definição — salvar o grupo como preparo zera as
+  // opções, senão sobraria valor cobrado numa seção que diz "não muda o preço".
+  for (const inp of document.querySelectorAll('[data-onome]')) {
+    const oid = inp.dataset.onome;
+    const precoEl = document.querySelector(`[data-opreco="${oid}"]`);
+    await api('PATCH', `/addon-groups/options/${oid}`, {
+      name: inp.value.trim(),
+      price: kind === 'preparo' ? 0 : (precoEl?.value || 0),
+    });
+  }
+  const ids = [...document.querySelectorAll('[data-prod]')].filter(c => c.checked).map(c => c.dataset.prod);
+  await api('PUT', `/addon-groups/${gid}/products`, { product_ids: ids });
+  toast('Grupo salvo');
+  _grupoAberto = null;
+  await pageGrupos();
+}
+
 // ── Estoque de revenda ────────────────────────────────
 async function pageEstoque() {
   const el = document.getElementById('content');

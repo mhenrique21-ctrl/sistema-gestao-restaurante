@@ -268,6 +268,13 @@
   .modal-backdrop { position: fixed; inset: 0; background: rgba(20,16,10,.55); display: flex; align-items: flex-end; justify-content: center; z-index: 100; }
   .modal-sheet { background: var(--c-surface); width: 100%; max-width: 820px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 88vh; overflow-y: auto; box-shadow: 0 -4px 24px rgba(0,0,0,.25); }
   .modal-sheet h3 { font-size: 1.1rem; margin-bottom: 4px; color: var(--gold-dim); }
+  /* Divisor entre "como preparar" (sem preço) e "adicionais" (com preço). Sem
+     ele, o operador lê tudo como se fosse cobrança e hesita em cada escolha. */
+  .addon-sec { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 2px;
+    padding-bottom: 5px; border-bottom: 1px solid var(--c-border); }
+  .addon-sec span { font-size: .78rem; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--c-text); }
+  .addon-sec small { font-size: .72rem; color: var(--c-muted); }
   .addon-group { margin: 14px 0; }
   .addon-group .g-title { font-size: .85rem; font-weight: 700; margin-bottom: 6px; color: var(--c-text); }
   .addon-group .g-title .req { color: var(--danger); font-size: .72rem; font-weight: 600; }
@@ -2534,11 +2541,7 @@ function renderProductModal() {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'product-modal-backdrop';
-  backdrop.innerHTML = `
-    <div class="modal-sheet">
-      <h3>${p.name}</h3>
-      <div style="color:var(--gold-dim);font-weight:700;font-size:.95rem">${fmt(p.promo_price ?? p.price)}</div>
-      ${groups.map(g => `
+  const grupoHtml = (g) => `
         <div class="addon-group">
           <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--c-muted);font-weight:400">(até ${g.max_select}${g.max_select > 1 ? ', repetível' : ''})</span></div>
           <div class="addon-opt-grid">
@@ -2566,8 +2569,23 @@ function renderProductModal() {
               `;
             }).join('')}
           </div>
-        </div>
-      `).join('')}
+        </div>`;
+
+  // Preparo antes de adicional, de propósito: "como fazer" é o que o cliente
+  // fala primeiro, e adicional é o que muda o preço — fica por último, colado
+  // no total, que é onde a conta é conferida.
+  const preparo = groups.filter(g => g.kind === 'preparo');
+  const extras = groups.filter(g => g.kind !== 'preparo');
+  const sec = (titulo, dica) => `<div class="addon-sec"><span>${titulo}</span><small>${dica}</small></div>`;
+
+  backdrop.innerHTML = `
+    <div class="modal-sheet">
+      <h3>${p.name}</h3>
+      <div style="color:var(--gold-dim);font-weight:700;font-size:.95rem">${fmt(p.promo_price ?? p.price)}</div>
+      ${preparo.length ? sec('Como preparar', 'não muda o preço') : ''}
+      ${preparo.map(grupoHtml).join('')}
+      ${extras.length ? sec('Adicionais', 'somam no total') : ''}
+      ${extras.map(grupoHtml).join('')}
       <div class="modal-qty">
         <button onclick="changeModalQty(-1)">−</button>
         <span id="modal-qty-val" style="font-size:1.2rem;font-weight:700">${modalQty}</span>
