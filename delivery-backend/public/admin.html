@@ -3811,6 +3811,9 @@ async function pageImpressoras() {
 
       <div style="display:grid;gap:16px">
 
+        <div id="printer-cfg-erro" style="display:none;padding:12px 16px;border-radius:10px;
+             background:#7f1d1d;color:#fecaca;font-size:.85rem;line-height:1.55"></div>
+
         <div id="printer-detect-box" style="padding:12px 16px;border:1px solid #334155;border-radius:10px;background:rgba(255,255,255,.03);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <span style="font-size:.85rem;color:#94a3b8">Impressoras instaladas no agente local:</span>
           <button class="btn btn-secondary btn-sm" onclick="detectarImpressoras()">🔍 Detectar</button>
@@ -3872,8 +3875,20 @@ async function pageImpressoras() {
     if (cfg.printer_caixa)   document.getElementById('p-caixa').value   = cfg.printer_caixa;
     if (cfg.printer_cozinha) document.getElementById('p-cozinha').value = cfg.printer_cozinha;
     if (cfg.printer_balcao)  document.getElementById('p-balcao').value  = cfg.printer_balcao;
+    PRINTER_CFG_CARREGADA = true;
   } catch(e) {
-    console.warn('Erro ao carregar config impressoras:', e.message);
+    // Antes isto era só um console.warn: a consulta falhava, os campos ficavam
+    // em branco e parecia que nenhuma impressora estava configurada — enquanto
+    // os nomes estavam salvos no banco o tempo todo. Pior, salvar por cima
+    // apagaria a configuração boa.
+    PRINTER_CFG_CARREGADA = false;
+    const box = document.getElementById('printer-cfg-erro');
+    if (box) {
+      box.style.display = 'block';
+      box.textContent = '⚠ Não foi possível ler a configuração salva (' + e.message
+        + '). Os campos abaixo estão vazios por causa disso, NÃO porque não há impressora configurada. '
+        + 'Salvar agora apagaria a configuração — recarregue a página primeiro.';
+    }
   }
 }
 
@@ -3904,8 +3919,16 @@ function usarSelecionada(fieldId) {
   if (field) field.value = sel.value;
 }
 
+let PRINTER_CFG_CARREGADA = false;
+
 async function salvarImpressoras() {
   const saveMsg = document.getElementById('printer-save-msg');
+  // Trava de segurança: se a leitura falhou, os campos em branco não são
+  // "sem impressora", são "não consegui ler". Salvar apagaria a config boa.
+  if (!PRINTER_CFG_CARREGADA) {
+    toast('Recarregue a página antes de salvar — a configuração atual não pôde ser lida.');
+    return;
+  }
   saveMsg.textContent = 'Salvando...';
   try {
     await api('POST', '/printers/config', {

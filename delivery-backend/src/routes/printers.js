@@ -33,7 +33,13 @@ router.get('/status', (req, res) => {
 // GET /api/printers/config — lê config de impressoras salva no banco
 router.get('/config', requireRole('admin'), async (req, res) => {
   try {
-    const r = await pool.query(`SELECT key, value FROM settings WHERE key = ANY($1)`, [PRINTER_KEYS]);
+    // Array NÃO pode ir como parâmetro: o wrapper do pool faz substituição de
+    // string e transforma ['a','b'] em 'a,b' — o Postgres recusa com
+    // "malformed array literal" e a rota devolvia 500. A tela engolia o erro
+    // num console.warn e mostrava os campos em branco, como se nenhuma
+    // impressora estivesse configurada (elas estavam, no banco).
+    const lista = PRINTER_KEYS.map((k) => `'${k}'`).join(',');
+    const r = await pool.query(`SELECT key, value FROM settings WHERE key IN (${lista})`);
     const cfg = {};
     for (const row of r.rows) cfg[row.key] = row.value;
     res.json(cfg);
