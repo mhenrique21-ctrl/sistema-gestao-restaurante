@@ -113,13 +113,16 @@ router.get('/', async (req, res) => {
 
     const addonsResult = await pool.query(`
       SELECT
-        g.id AS group_id, g.product_id, g.name AS group_name, g.min_select,
-        g.max_select, g.required, g.sort_order AS group_sort,
+        g.id AS group_id, COALESCE(pa.product_id, g.product_id) AS product_id,
+        g.name AS group_name, g.min_select,
+        g.max_select, g.required, g.sort_order AS group_sort, g.kind,
         o.id AS option_id, o.name AS option_name, o.price AS option_price,
         o.sort_order AS option_sort
       FROM addon_groups g
+      LEFT JOIN product_addons pa ON pa.group_id = g.id
       LEFT JOIN addon_options o ON o.group_id = g.id AND o.active = true
       WHERE g.active = true AND (g.active_days IS NULL OR $1 = ANY(g.active_days))
+        AND COALESCE(pa.product_id, g.product_id) IS NOT NULL
       ORDER BY g.sort_order, o.sort_order, o.name
     `, [todayJs]);
 
@@ -134,6 +137,9 @@ router.get('/', async (req, res) => {
           min_select: row.min_select,
           max_select: row.max_select,
           required: row.required,
+          // adicional = soma no preço · preparo = só instrução (açúcar, molho,
+          // sabor do combo). A tela usa isso pra separar as duas seções.
+          kind: row.kind || 'adicional',
           options: [],
         };
       }

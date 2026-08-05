@@ -2,6 +2,11 @@ const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { baixarEstoque, devolverEstoque } = require('../services/stock');
+
+// Id do produto inline como literal SQL: os ids das opções já ocupam $1..$N e,
+// acima de $9, o wrapper do pool casa "$1" dentro de "$10". Só aceita uuid.
+const UUID_RE_ADDON = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const sqlUuidAddon = (v) => (UUID_RE_ADDON.test(String(v || '')) ? `'${v}'::uuid` : `NULL`);
 const { internalError } = require('../utils/errors');
 const { idempotent } = require('../middleware/idempotency');
 const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub');
@@ -68,10 +73,15 @@ async function resolveAddons(productId, addons, client = pool) {
 
   const placeholders = optionIds.map((_, i) => `$${i + 1}`).join(',');
   const result = await client.query(
-    `SELECT o.id, o.name, o.price, g.product_id
+    // Mesma regra e mesmo cuidado do balcão: o vínculo é filtrado no SQL,
+    // senão um grupo ligado a dezenas de produtos devolveria uma linha por
+    // produto e o mapa por id guardaria o errado.
+    `SELECT DISTINCT o.id, o.name, o.price
      FROM addon_options o
      JOIN addon_groups g ON g.id = o.group_id
-     WHERE o.id IN (${placeholders}) AND o.active = true`,
+     LEFT JOIN product_addons pa ON pa.group_id = g.id
+     WHERE o.id IN (${placeholders}) AND o.active = true
+       AND (g.product_id = ${sqlUuidAddon(productId)} OR pa.product_id = ${sqlUuidAddon(productId)})`,
     optionIds
   );
 
@@ -81,8 +91,9 @@ async function resolveAddons(productId, addons, client = pool) {
   const resolved = [];
   for (const a of addons) {
     const option = byId[a.addon_option_id];
-    if (!option) throw { status: 400, message: 'Adicional inválido' };
-    if (option.product_id !== productId) throw { status: 400, message: 'Adicional não pertence a este produto' };
+    // A consulta já filtrou por produto: não achar aqui é "não existe OU não
+    // pertence a este produto".
+    if (!option) throw { status: 400, message: 'Adicional não pertence a este produto' };
     resolved.push({
       addon_option_id: option.id,
       name: option.name,

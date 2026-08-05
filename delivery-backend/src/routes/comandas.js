@@ -7,6 +7,12 @@ const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub')
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
 
+// O id do produto entra inline como literal SQL: os ids das opções já ocupam
+// $1..$N e, acima de $9, o wrapper do pool casa "$1" dentro de "$10". Só passa
+// uuid — nada vindo da requisição chega cru ao SQL.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const sqlUuid = (v) => (UUID_RE.test(String(v || '')) ? `'${v}'::uuid` : `NULL`);
+
 // Rotas usadas pelo cliente direto (sem login): resolve/orders/close ficam públicas —
 // o code da comanda (aleatório e imprevisível quando gerado automaticamente) é o que
 // protege o acesso. Cadastro, listagem, remoção de item e reabertura continuam exigindo
@@ -23,10 +29,17 @@ async function resolveAddons(productId, addons) {
 
   const placeholders = optionIds.map((_, i) => `$${i + 1}`).join(',');
   const result = await pool.query(
-    `SELECT o.id, o.name, o.price, g.product_id
+    // O vínculo com o produto é filtrado AQUI, não depois: um grupo canônico
+    // ligado a 63 produtos devolveria 63 linhas por opção, e guardar "a última"
+    // num mapa por id pegaria o produto errado.
+    // Aceita o grupo ligado por product_addons (novo) ou o que pertence ao
+    // produto (legado) — os dois valem durante a transição.
+    `SELECT DISTINCT o.id, o.name, o.price
      FROM addon_options o
      JOIN addon_groups g ON g.id = o.group_id
-     WHERE o.id IN (${placeholders}) AND o.active = true`,
+     LEFT JOIN product_addons pa ON pa.group_id = g.id
+     WHERE o.id IN (${placeholders}) AND o.active = true
+       AND (g.product_id = ${sqlUuid(productId)} OR pa.product_id = ${sqlUuid(productId)})`,
     optionIds
   );
 
@@ -36,8 +49,9 @@ async function resolveAddons(productId, addons) {
   const resolved = [];
   for (const a of addons) {
     const option = byId[a.addon_option_id];
-    if (!option) throw { status: 400, message: 'Adicional inválido' };
-    if (option.product_id !== productId) throw { status: 400, message: 'Adicional não pertence a este produto' };
+    // Não achar aqui já significa "não existe OU não é deste produto" — a
+    // consulta acima só devolve o que pertence a ele.
+    if (!option) throw { status: 400, message: 'Adicional não pertence a este produto' };
     resolved.push({
       addon_option_id: option.id,
       name: option.name,
