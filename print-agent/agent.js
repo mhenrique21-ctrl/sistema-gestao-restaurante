@@ -6,8 +6,28 @@ const path = require('path');
 const os = require('os');
 
 const WS_URL     = 'wss://pedidos.confrariacafe.com/ws';
-const WS_TOKEN   = process.env.AGENT_TOKEN || 'SEU_TOKEN_AQUI';
+const API_URL    = process.env.API_URL || 'https://pedidos.confrariacafe.com';
+// O agente guarda só este segredo, que nunca expira, e troca por um token de
+// 24h a cada conexão (rota /api/printer-agent-token). Antes usava um JWT fixo
+// colado numa variável: quando vencia, o agente parava de imprimir em silêncio
+// e ninguém sabia por quê.
+const AGENT_SECRET = process.env.PRINT_AGENT_SECRET || '';
 const WS_STATION = 'caixa';
+
+async function obterToken() {
+  if (!AGENT_SECRET) {
+    throw new Error('PRINT_AGENT_SECRET não configurado — veja iniciar.bat');
+  }
+  const r = await fetch(`${API_URL}/api/printer-agent-token`, {
+    method: 'POST',
+    headers: { 'x-printer-secret': AGENT_SECRET },
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(`token recusado (${r.status}): ${d.error || 'segredo incorreto?'}`);
+  }
+  return (await r.json()).token;
+}
 const PRINTERS   = {
   caixa:   process.env.PRINTER_CAIXA   || 'CAIXA PRINCIPAL',
   cozinha: process.env.PRINTER_COZINHA || 'ELGIN I8 COZINHA',
@@ -357,8 +377,18 @@ async function handleNewOrder(order, items) {
   }
 }
 
-function connect() {
-  const url = `${WS_URL}?token=${WS_TOKEN}&station=${WS_STATION}&role=printer`;
+async function connect() {
+  let token;
+  try {
+    token = await obterToken();
+  } catch (e) {
+    // Falha ao pegar token não pode matar o agente: a loja pode estar sem
+    // internet por um instante. Avisa e tenta de novo, pra sempre.
+    console.error('[agent] ' + e.message);
+    setTimeout(connect, RECONNECT_MS);
+    return;
+  }
+  const url = `${WS_URL}?token=${token}&station=${WS_STATION}&role=printer`;
   console.log('[agent] Conectando...');
   const ws = new WebSocket(url);
   ws.on('open', () => console.log('[agent] Conectado ao VPS OK'));
