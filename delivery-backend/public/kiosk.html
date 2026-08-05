@@ -92,6 +92,13 @@
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: flex; align-items: flex-end; justify-content: center; z-index: 100; }
   .modal-sheet { background: var(--card); width: 100%; max-width: 560px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 88vh; overflow-y: auto; }
   .modal-sheet h3 { font-size: 1.1rem; margin-bottom: 4px; }
+  /* Divisor entre "como preparar" (sem preço) e "adicionais" (com preço).
+     Fonte maior que no PDV: aqui quem lê está em pé, a um braço de distância. */
+  .addon-sec { display: flex; align-items: baseline; gap: 10px; margin: 20px 0 4px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .addon-sec span { font-size: .95rem; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--gold); }
+  .addon-sec small { font-size: .82rem; color: var(--muted); }
   .addon-group { margin: 14px 0; }
   .addon-group .g-title { font-size: .85rem; font-weight: 700; margin-bottom: 6px; }
   .addon-group .g-title .req { color: var(--danger); font-size: .72rem; font-weight: 600; }
@@ -410,12 +417,44 @@ const CAT_ICONS = {
   'Crepiocas': '🥞', 'Croissant': '🥐', 'Cuscuz': '🌽', 'Sanduíches': '🥪',
 };
 
-async function loadMenuIfNeeded() {
-  if (menu.length) return;
-  const res = await fetch(`${API}/api/menu?channel=kiosk`);
-  menu = await res.json();
-  const offers = getOffers();
-  activeCategory = offers.length > 0 ? 'ofertas' : (visibleCategories()[0]?.id || null);
+// O cardápio era carregado UMA vez na abertura da página e nunca mais. Num
+// totem que fica dias ligado sem ninguém recarregar, preço novo, produto novo
+// e adicional novo simplesmente não chegavam — pior que no PDV, onde alguém
+// acaba dando F5.
+//
+// Agora tem validade curta, e recarregar acontece nos momentos em que ninguém
+// está no meio de um pedido (ver iniciarRecargaMenu abaixo).
+let menuCarregadoEm = 0;
+const MENU_TTL_MS = 120000;
+
+async function loadMenuIfNeeded(forcar = false) {
+  if (!forcar && menu.length && Date.now() - menuCarregadoEm < MENU_TTL_MS) return;
+  try {
+    const res = await fetch(`${API}/api/menu?channel=kiosk&_=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const novo = await res.json();
+    // Resposta ruim não apaga o cardápio bom: um totem sem cardápio é um
+    // totem inútil, e ninguém está lá pra perceber e reiniciar.
+    if (!Array.isArray(novo) || !novo.length) return;
+    menu = novo;
+    menuCarregadoEm = Date.now();
+    const offers = getOffers();
+    if (!activeCategory || (activeCategory !== 'ofertas' && !menu.some(c => c.id === activeCategory))) {
+      activeCategory = offers.length > 0 ? 'ofertas' : (visibleCategories()[0]?.id || null);
+    }
+  } catch (e) { /* offline: segue com o que está em memória */ }
+}
+
+// Recarrega quando o cliente NÃO está no meio de um pedido: ao entrar no
+// descanso de tela e ao acordar dele. Trocar o cardápio embaixo de alguém que
+// está escolhendo seria pior que mostrar preço velho por mais um minuto.
+async function recarregarMenuSeOcioso() {
+  if (cart.length) return;                  // carrinho aberto: não mexe
+  const antes = JSON.stringify(menu.map(c => c.products.length));
+  await loadMenuIfNeeded(true);
+  if (JSON.stringify(menu.map(c => c.products.length)) !== antes) {
+    renderCategorySidebar(); renderCategoryBanner(); renderProductGrid();
+  }
 }
 
 // Ofertas não é uma categoria fixa: agrega produtos com promo_price ativo de
@@ -425,7 +464,11 @@ function getOffers() {
 }
 
 function visibleCategories() {
-  return menu.filter(c => c.name !== 'Ofertas');
+  // Categoria sem produto visível não vai pra barra lateral. O servidor
+  // devolve a categoria mesmo quando todos os produtos dela estão fora deste
+  // canal — era o caso de "Adicionais" depois de tirarmos a venda avulsa:
+  // o cliente via o botão, tocava e caía numa tela vazia.
+  return menu.filter(c => c.name !== 'Ofertas' && (c.products || []).length > 0);
 }
 
 function renderCategorySidebar() {
@@ -490,7 +533,10 @@ function renderProductGrid() {
 // ── Modal de produto (quantidade + adicionais + obs) ──
 // Grupos de adicionais que não fazem sentido pra consumo no salão (só delivery/retirada) —
 // ficam ocultos aqui no autoatendimento, mas continuam normais no app de delivery.
-const KIOSK_HIDDEN_ADDON_GROUPS = ['descartáveis', 'descartavel', 'descartáveis ', 'molhos'];
+// "Descartáveis" e "Molhos" eram escondidos aqui por uma lista fixa no código —
+// o dono não tinha como mudar sem alguém editar o arquivo. Agora quem decide é
+// a marcação de canal do grupo (show_kiosk), editável na tela de Adicionais, e
+// o servidor já não manda o que não é deste canal.
 
 let modalProduct = null;
 let modalSelections = {}; // { [groupId]: { [optionId]: quantidade } }
@@ -502,9 +548,15 @@ function findProduct(id) {
 }
 
 function visibleAddonGroups(p) {
-  return (p.addon_groups || []).filter(g =>
-    g.options && g.options.length && !KIOSK_HIDDEN_ADDON_GROUPS.includes((g.name || '').trim().toLowerCase())
-  );
+  return (p.addon_groups || []).filter(g => g.options && g.options.length);
+}
+
+// Preparo (açúcar, ponto, sabor do combo) não muda o preço; adicional muda.
+// Num totem isso pesa mais que no balcão: não há atendente pra explicar, e o
+// cliente trava quando não sabe o que vai ser cobrado.
+function gruposPorTipo(p) {
+  const gs = visibleAddonGroups(p);
+  return { preparo: gs.filter(g => g.kind === 'preparo'), extras: gs.filter(g => g.kind !== 'preparo') };
 }
 
 function openProductModal(productId) {
@@ -541,7 +593,8 @@ function modalCurrentTotal() {
 
 function renderProductModal() {
   const p = modalProduct;
-  const groups = visibleAddonGroups(p);
+  const { preparo, extras } = gruposPorTipo(p);
+  const secao = (t, d) => `<div class="addon-sec"><span>${t}</span><small>${d}</small></div>`;
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'product-modal-backdrop';
@@ -554,12 +607,15 @@ function renderProductModal() {
         <div class="price-row" style="margin:6px 0 4px">
           ${p.promo_price != null ? `<span class="price-old">${fmt(p.price)}</span><span class="price-new">${fmt(p.promo_price)}</span>` : `<span class="price-new">${fmt(p.price)}</span>`}
         </div>
-        ${groups.map(g => {
+        ${preparo.length ? secao('Como preparar', 'não muda o preço') : ''}
+        ${[...preparo, ...extras].map((g, _i, _arr) => {
+          // Divisor entre as duas seções: entra antes do primeiro adicional.
+          const abreExtras = extras.length && g === extras[0] ? secao('Adicionais', 'somam no total') : '';
           // Com quantidade > 1 no produto (ex: 3x combo), o grupo libera 1 escolha por
           // unidade — 3 combos = até 3 bebidas, mesmo padrão do app de delivery.
           const effectiveMax = g.max_select * modalQty;
           const total = groupTotal(g.id);
-          return `
+          return abreExtras + `
           <div class="addon-group">
             <div class="g-title">${g.name} ${g.required ? '<span class="req">obrigatório</span>' : ''} <span style="color:var(--muted);font-weight:400">${modalQty > 1 ? `(${total}/${effectiveMax})` : `(até ${effectiveMax})`}</span></div>
             ${g.options.map(o => {
@@ -663,8 +719,12 @@ function confirmAddToCart() {
   const p = modalProduct;
   const groups = visibleAddonGroups(p);
   for (const g of groups) {
-    if (g.required && groupTotal(g.id) < g.min_select) {
-      alert(`Selecione ao menos ${g.min_select} opção(ões) em "${g.name}"`);
+    // "Obrigatório" com min_select 0 nunca era cobrado: count < 0 jamais é
+    // verdade. Mesmo defeito que existia no PDV. Marcar obrigatório passa a
+    // valer ao menos 1.
+    const minimo = g.required ? Math.max(1, g.min_select || 0) : (g.min_select || 0);
+    if (minimo > 0 && groupTotal(g.id) < minimo) {
+      alert(`Selecione ${minimo > 1 ? 'ao menos ' + minimo + ' opções' : 'uma opção'} em "${g.name}"`);
       return;
     }
   }
@@ -938,6 +998,9 @@ function wakeUp() {
   if (screensaverTimer) { clearInterval(screensaverTimer); screensaverTimer = null; }
   resetToMenu();
   resetIdleTimer();
+  // Cliente novo chegando: melhor momento pra atualizar o cardápio, porque
+  // ninguém está escolhendo nada ainda.
+  recarregarMenuSeOcioso();
 }
 
 ['click','touchstart','keydown'].forEach(evt => document.addEventListener(evt, () => {
@@ -957,6 +1020,11 @@ async function init() {
   renderProductGrid();
   showAppScreen();
   resetIdleTimer();
+
+  // Rede de segurança: um totem pode passar horas com movimento constante e
+  // nunca entrar no descanso de tela. A cada 2 min tenta atualizar, e só age
+  // se ninguém estiver com carrinho aberto.
+  setInterval(recarregarMenuSeOcioso, MENU_TTL_MS);
 }
 init();
 </script>
