@@ -77,10 +77,12 @@ function broadcastToStation(station, payload) {
   wss.clients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN && (ws.station === station || ws.station === 'retaguarda')) {
       ws.send(message);
-      // Só o agente local (role=printer) põe papel pra fora. O admin aberto no
-      // navegador também escuta 'retaguarda', e contá-lo faria a checagem
-      // passar sempre — dizendo "imprimiu" com a impressora desligada.
-      if (ws.role === 'printer') impressoras++;
+      // Quem imprime: o agente identificado por role=printer OU qualquer
+      // cliente na PRÓPRIA estação de destino. O agente em produção conecta
+      // só com station=caixa, sem role — exigir role fazia o servidor recusar
+      // uma impressão que funcionaria. O admin no navegador fica em
+      // 'retaguarda', que recebe a mensagem mas não conta como impressora.
+      if (ws.role === 'printer' || ws.station === station) impressoras++;
     }
   });
   if (!impressoras) console.warn(`[WS] "${payload?.event}" enviado sem nenhum agente de impressão conectado`);

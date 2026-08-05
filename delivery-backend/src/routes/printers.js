@@ -25,8 +25,10 @@ router.get('/', requireRole('admin'), async (req, res) => {
 // verde com o agente desligado — e o operador só descobria pelo papel que não
 // saía. Aqui a resposta é sobre quem realmente imprime.
 router.get('/status', (req, res) => {
-  // role=printer é o agente local; navegador aberto não conta.
-  const agentes = estacoesConectadas().filter((c) => c.role === 'printer');
+  // Conta quem realmente imprime: o agente por role=printer OU quem está na
+  // estação 'caixa' — o agente em produção conecta assim, sem role. O admin
+  // no navegador fica em 'retaguarda' e segue de fora.
+  const agentes = estacoesConectadas().filter((c) => c.role === 'printer' || c.station === 'caixa');
   res.json({ online: agentes.length > 0, agentes: agentes.length });
 });
 
