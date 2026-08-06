@@ -491,7 +491,10 @@
   #delivery-iframe { width: 100%; height: 100%; border: none; display: block; background: var(--c-bg); }
 
   /* ── Estoque ──────────────────────────────────────── */
-  #estoque-screen, #configuracoes-screen, #mesas-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
+  #configuracoes-screen, #mesas-screen { max-width: 720px; margin: 0 auto; padding: 20px; }
+  /* Produtos usava os mesmos 720px das telas de formulário e sobrava metade da
+     largura vazia, enquanto 157 produtos empilhavam 12 telas de rolagem. */
+  #estoque-screen { max-width: 1500px; margin: 0 auto; padding: 16px 20px 40px; }
   .estoque-toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
   .estoque-toolbar input, .estoque-toolbar select { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .9rem; }
   .estoque-toolbar input { flex: 1; }
@@ -509,6 +512,48 @@
   .estoque-item .name { font-weight: 700; color: var(--c-text); font-size: .92rem; }
   .estoque-item small { color: var(--c-muted); }
   .estoque-item-actions { display: flex; align-items: center; gap: 10px; }
+
+  /* ── Produtos: cabeçalho fixo, pastilhas e grade ────── */
+  .prod-topo { position: sticky; top: 0; z-index: 4; background: var(--c-bg); padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--c-border); }
+  .prod-busca { display: flex; gap: 8px; align-items: center; }
+  .prod-busca input { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .9rem; }
+  .prod-contagem { font-size: .8rem; color: var(--c-muted); white-space: nowrap; }
+  .prod-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .prod-chip { border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); border-radius: 999px;
+    padding: 6px 13px; font-size: .8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+  .prod-chip b { font-weight: 700; color: var(--c-muted); font-size: .74rem; }
+  .prod-chip.on { background: var(--gold); border-color: var(--gold); color: #fff; }
+  .prod-chip.on b { color: rgba(255,255,255,.8); }
+  /* Pastilhas de problema em âmbar: não são categorias, são coisas a resolver. */
+  .prod-alertas .prod-chip { border-color: #E8D3A8; background: #FDF7EC; color: #8A6412; }
+  .prod-alertas .prod-chip.on { background: #B4801A; border-color: #B4801A; color: #fff; }
+  .prod-alertas .prod-chip b { color: inherit; opacity: .7; }
+
+  .prod-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 8px; margin-top: 12px; }
+  .prod-grupo { grid-column: 1 / -1; font-size: .78rem; font-weight: 800; color: var(--c-muted); text-transform: uppercase;
+    letter-spacing: .06em; margin: 12px 0 2px; }
+  .prod-grupo:first-child { margin-top: 2px; }
+  .prod-card { display: flex; align-items: center; gap: 10px; background: var(--c-surface); border: 1px solid var(--c-border);
+    border-left: 3px solid var(--gold); border-radius: 10px; padding: 8px 10px; }
+  .prod-card.off { border-left-color: var(--c-border); background: repeating-linear-gradient(135deg, var(--c-surface) 0 8px, #F4EFE6 8px 10px); }
+  .prod-card.off .prod-nome { color: var(--c-muted); text-decoration: line-through; }
+  .prod-foto { width: 42px; height: 42px; min-width: 42px; border-radius: 8px; object-fit: cover; background: var(--c-border); }
+  .prod-semfoto { width: 42px; height: 42px; min-width: 42px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; background: #FDF7EC; border: 1px dashed #DDC59A; color: #B4801A; }
+  .prod-meio { flex: 1; min-width: 0; }
+  .prod-nome { font-weight: 700; font-size: .88rem; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prod-sub { font-size: .72rem; color: var(--c-muted); display: flex; align-items: center; gap: 5px; margin-top: 1px; }
+  /* Canais como pastilha ligada/desligada: um clique troca, sem abrir o cadastro. */
+  .prod-canal { border: none; background: none; font-size: .78rem; line-height: 1; padding: 2px; border-radius: 5px; }
+  .prod-canal.off { opacity: .25; filter: grayscale(1); }
+  .prod-preco { border: 1px solid transparent; background: none; color: var(--gold-dim); font-weight: 800; font-size: .88rem;
+    width: 78px; text-align: right; padding: 5px 6px; border-radius: 7px; font-family: inherit; }
+  .prod-preco:hover { border-color: var(--c-border); }
+  .prod-preco:focus { border-color: var(--gold); background: var(--c-bg); outline: none; }
+  .prod-btn { border: 1px solid var(--c-border); background: var(--c-surface); border-radius: 7px; padding: 5px 7px; font-size: .78rem; }
+  .prod-card .switch { width: 38px; height: 21px; }
+  .prod-card .switch .slider::before { height: 15px; width: 15px; }
+  .prod-card .switch input:checked + .slider::before { transform: translateX(17px); }
   .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .switch .slider { position: absolute; cursor: pointer; inset: 0; background: var(--c-border); border-radius: 999px; transition: .15s; }
@@ -731,10 +776,19 @@
 
 <!-- ── Aba: Estoque ── -->
 <div id="estoque-screen" class="hidden">
-  <div class="estoque-toolbar">
-    <input type="text" id="estoque-search" placeholder="🔍 Buscar produto..." oninput="renderEstoque()">
-    <select id="estoque-cat-filter" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
-    <button class="btn btn-secondary" onclick="abrirInventario()" style="white-space:nowrap">📋 Inventário</button>
+  <!-- Busca e filtros grudam no topo: com 157 produtos, rolar até o fim e
+       precisar voltar pra trocar de categoria era o gesto mais repetido. -->
+  <div class="prod-topo">
+    <div class="prod-busca">
+      <input type="text" id="estoque-search" placeholder="🔍 Buscar produto..." oninput="renderEstoque()">
+      <!-- Mantido pra não quebrar quem lê o filtro; quem manda agora são as
+           pastilhas, que mostram a contagem sem precisar abrir a lista. -->
+      <select id="estoque-cat-filter" class="hidden" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
+      <span id="prod-contagem" class="prod-contagem"></span>
+      <button class="btn btn-secondary" onclick="abrirInventario()" style="white-space:nowrap">📋 Inventário</button>
+    </div>
+    <div class="prod-chips" id="prod-cats"></div>
+    <div class="prod-chips prod-alertas" id="prod-flags"></div>
   </div>
   <div id="estoque-cat-acao"></div>
   <div id="estoque-list"><div class="cart-empty">Carregando...</div></div>
@@ -1718,46 +1772,162 @@ async function loadEstoque() {
   }
 }
 
+// Filtros de problema. São os quatro estados que dão trabalho de achar hoje:
+// só se descobre que um produto está sem foto ou fora do totem abrindo o
+// cadastro dele, um por um.
+const PROD_FLAGS = {
+  semfoto:   { rotulo: '📷 Sem foto',        teste: p => !p.image_url },
+  off:       { rotulo: '⛔ Desativados',      teste: p => !p.available },
+  semtotem:  { rotulo: '🖥 Fora do totem',    teste: p => p.show_kiosk === false },
+  semdeliv:  { rotulo: '🛵 Fora do delivery', teste: p => p.show_delivery === false },
+  baixo:     { rotulo: '⚠️ Estoque baixo',    teste: p => p.track_stock && parseFloat(p.stock_qty) <= parseFloat(p.stock_min) },
+};
+let prodFlagAtivo = '';
+
+function setProdCat(id) {
+  document.getElementById('estoque-cat-filter').value = id;
+  renderEstoque();
+}
+
+function setProdFlag(f) {
+  prodFlagAtivo = (prodFlagAtivo === f) ? '' : f;
+  renderEstoque();
+}
+
+function renderProdChips(catFilter) {
+  const total = estoqueCats.reduce((s, c) => s + c.products.length, 0);
+  document.getElementById('prod-cats').innerHTML =
+    `<button class="prod-chip ${catFilter ? '' : 'on'}" onclick="setProdCat('')">Todas <b>${total}</b></button>` +
+    estoqueCats.map(c => `<button class="prod-chip ${catFilter === c.id ? 'on' : ''}"
+      onclick="setProdCat('${c.id}')">${c.name} <b>${c.products.length}</b></button>`).join('');
+
+  // Só mostra a pastilha de um problema que exista de fato — um "0 sem foto"
+  // ocupando espaço é ruído, e some sozinho quando o problema acaba.
+  const todos = estoqueCats.flatMap(c => c.products);
+  document.getElementById('prod-flags').innerHTML = Object.entries(PROD_FLAGS).map(([k, f]) => {
+    const n = todos.filter(f.teste).length;
+    return n ? `<button class="prod-chip ${prodFlagAtivo === k ? 'on' : ''}"
+      onclick="setProdFlag('${k}')">${f.rotulo} <b>${n}</b></button>` : '';
+  }).join('');
+}
+
 function renderEstoque() {
   renderAcaoCategoria();
   const search = (document.getElementById('estoque-search')?.value || '').toLowerCase().trim();
   const catFilter = document.getElementById('estoque-cat-filter')?.value || '';
   const el = document.getElementById('estoque-list');
+  renderProdChips(catFilter);
+
   const rows = [];
   for (const cat of estoqueCats) {
     if (catFilter && cat.id !== catFilter) continue;
     for (const p of cat.products) {
       if (search && !p.name.toLowerCase().includes(search)) continue;
+      if (prodFlagAtivo && !PROD_FLAGS[prodFlagAtivo].teste(p)) continue;
       rows.push({ ...p, category_name: cat.name });
     }
   }
+  const cont = document.getElementById('prod-contagem');
+  if (cont) cont.textContent = rows.length === 1 ? '1 produto' : `${rows.length} produtos`;
   if (!rows.length) { el.innerHTML = '<div class="cart-empty">Nenhum produto encontrado</div>'; return; }
-  el.innerHTML = rows.map(p => {
+
+  // Sem filtro de categoria, a lista vira uma sequência de blocos com título.
+  // Repetir "Bolos e Tortas" em 11 linhas seguidas não informava nada.
+  const agrupar = !catFilter && !search;
+  let ultimaCat = null;
+  el.innerHTML = `<div class="prod-grade">` + rows.map(p => {
+    let cabecalho = '';
+    if (agrupar && p.category_name !== ultimaCat) {
+      ultimaCat = p.category_name;
+      cabecalho = `<div class="prod-grupo">${p.category_name}</div>`;
+    }
     // Saldo só aparece pra produto de revenda. Mostrar "0 un" em tapioca —
     // que é feita na hora e nunca terá saldo — treinaria o operador a ignorar
     // o número justamente onde ele importa.
     const baixo = p.track_stock && parseFloat(p.stock_qty) <= parseFloat(p.stock_min);
     const neg = p.track_stock && parseFloat(p.stock_qty) < 0;
     const saldo = p.track_stock
-      ? ` · <b style="color:${neg ? '#dc2626' : baixo ? '#d97706' : 'var(--c-text)'}">${p.stock_qty} un</b>${baixo ? ' ⚠️' : ''}`
-      : '';
-    return `
-    <div class="estoque-item ${p.available ? '' : 'unavailable'}">
-      <div>
-        <div class="name">${p.name}</div>
-        <small>${p.category_name} · ${fmt(p.price)}${saldo}</small>
+      ? `<b style="color:${neg ? '#dc2626' : baixo ? '#d97706' : 'var(--c-text)'}">${p.stock_qty} un</b>${baixo ? ' ⚠️' : ''}`
+      : (agrupar ? '' : p.category_name);
+    const foto = p.image_url
+      ? `<img class="prod-foto" src="${p.image_url}" loading="lazy" alt="">`
+      : `<span class="prod-semfoto" title="Sem foto">📷</span>`;
+    const admin = ROLE === 'admin';
+    return cabecalho + `
+    <div class="prod-card ${p.available ? '' : 'off'}">
+      ${foto}
+      <div class="prod-meio">
+        <div class="prod-nome" title="${(p.name || '').replace(/"/g, '&quot;')}">${p.name}</div>
+        <div class="prod-sub">
+          <button class="prod-canal ${p.show_kiosk === false ? 'off' : ''}" title="Aparece no totem"
+            ${admin ? `onclick="toggleCanal('${p.id}','show_kiosk',${p.show_kiosk === false})"` : 'disabled'}>🖥</button>
+          <button class="prod-canal ${p.show_delivery === false ? 'off' : ''}" title="Aparece no delivery"
+            ${admin ? `onclick="toggleCanal('${p.id}','show_delivery',${p.show_delivery === false})"` : 'disabled'}>🛵</button>
+          <span>${saldo}</span>
+        </div>
       </div>
-      <div class="estoque-item-actions">
-        ${p.track_stock ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem"
-           onclick="openEstoqueAcoes('${p.id}','${p.name.replace(/'/g, "\\'")}',${p.stock_qty})">📦 Estoque</button>` : ''}
-        ${ROLE === 'admin' ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openEditProduct('${p.id}')">✏️ Editar</button>` : ''}
-        <label class="switch">
-          <input type="checkbox" ${p.available ? 'checked' : ''} onchange="toggleAvailable('${p.id}', this.checked)">
-          <span class="slider"></span>
-        </label>
-      </div>
+      <input class="prod-preco" value="${parseFloat(p.price).toFixed(2).replace('.', ',')}"
+        ${admin ? `onblur="salvarPrecoRapido('${p.id}', this)" onkeydown="if(event.key==='Enter')this.blur()"` : 'readonly'}>
+      ${p.track_stock ? `<button class="prod-btn" title="Movimentar estoque"
+         onclick="openEstoqueAcoes('${p.id}','${p.name.replace(/'/g, "\\'")}',${p.stock_qty})">📦</button>` : ''}
+      ${admin ? `<button class="prod-btn" title="Editar" onclick="openEditProduct('${p.id}')">✏️</button>` : ''}
+      <label class="switch">
+        <input type="checkbox" ${p.available ? 'checked' : ''} onchange="toggleAvailable('${p.id}', this.checked)">
+        <span class="slider"></span>
+      </label>
     </div>`;
-  }).join('');
+  }).join('') + `</div>`;
+}
+
+// Preço direto na linha. Trocar preço é a edição mais frequente e era a que
+// mais custava: abrir o cadastro, achar o campo, salvar, esperar recarregar.
+async function salvarPrecoRapido(id, input) {
+  const p = estoqueCats.flatMap(c => c.products).find(x => x.id === id);
+  if (!p) return;
+  const valor = parseFloat(String(input.value).replace(/\./g, '').replace(',', '.'));
+  const atual = parseFloat(p.price);
+  if (!Number.isFinite(valor) || valor <= 0) {
+    input.value = atual.toFixed(2).replace('.', ',');
+    showToast('Preço inválido');
+    return;
+  }
+  if (Math.abs(valor - atual) < 0.005) { input.value = atual.toFixed(2).replace('.', ','); return; }
+  try {
+    const res = await fetch(`${API}/api/menu/products/${id}`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ price: valor }),
+    });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'Erro ao salvar preço');
+    p.price = valor;
+    input.value = valor.toFixed(2).replace('.', ',');
+    showToast(`${p.name}: ${fmt(valor)}`);
+  } catch (e) {
+    input.value = atual.toFixed(2).replace('.', ',');
+    showToast(e.message);
+  }
+}
+
+// Liga/desliga o produto num canal sem abrir o cadastro. Os 18 produtos fora
+// do totem e 17 fora do delivery de hoje foram configurados um a um.
+async function toggleCanal(id, campo, novoValor) {
+  try {
+    const res = await fetch(`${API}/api/menu/products/${id}`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ [campo]: novoValor }),
+    });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'Erro ao salvar');
+    const p = estoqueCats.flatMap(c => c.products).find(x => x.id === id);
+    if (p) p[campo] = novoValor;
+    renderEstoque();
+  } catch (e) {
+    showToast(e.message);
+  }
 }
 
 // ── Adicionais e preparo, dentro do PDV ───────────────
