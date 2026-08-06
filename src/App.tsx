@@ -385,11 +385,25 @@ const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
       body: JSON.stringify({
         origin_id: grupoId,
         supplier: fornecedor || null,
-        items: itens.map((i) => ({
-          nome: i.nomeProduto,
-          quantidade: i.quantidade,
-          unidade: i.unidade || "un",
-        })),
+        items: itens.map((i) => {
+          // Custo unitário da NOTA. O PDV converte pra unidade dele usando o
+          // fator do de-para (1 multipack = 6 latas), então aqui vai o valor
+          // como está na compra, sem conversão.
+          // Nem toda compra traz valorUnitario preenchido — quando falta, deriva
+          // do total da linha. Se nem isso existir, manda nulo em vez de zero:
+          // custo zero mentiria na margem, nulo aparece como "—".
+          const qtd = parseFloat(i.quantidade) || 0;
+          const vu = parseFloat(i.valorUnitario);
+          const total = parseMoney(i.valor);
+          const unit = Number.isFinite(vu) && vu > 0 ? vu
+                     : (total > 0 && qtd > 0 ? total / qtd : null);
+          return {
+            nome: i.nomeProduto,
+            quantidade: i.quantidade,
+            unidade: i.unidade || "un",
+            valor_unitario: unit,
+          };
+        }),
       }),
     });
     const d = await r.json().catch(() => ({}));
