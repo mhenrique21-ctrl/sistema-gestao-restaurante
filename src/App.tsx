@@ -1151,6 +1151,7 @@ export default function App() {
     ]},
     {id:"estoque",label:"Estoque",icon:"📦",children:[
       {id:"est-inv",label:"Inventário",icon:"📦",sub:"inventario"},
+      {id:"est-cont",label:"Contagem",icon:"📝",sub:"contagem"},
       {id:"est-ana",label:"Análise",icon:"📊",sub:"analise"},
       {id:"est-mov",label:"Movimentações",icon:"📋",sub:"movimentacoes"},
       {id:"est-proj",label:"Projeção de compras",icon:"📊",sub:"projecao"},
@@ -6661,6 +6662,192 @@ const REGRAS_CAT:Record<string,{dias:number,perecivel:"alta"|"media"|"baixa",cmv
   "limpeza":   {dias:30, perecivel:"baixa", cmv:false, icon:"🧹"},
 };
 
+// ===================== CONTAGEM EM LOTE =====================
+// O ajuste item a item já existia, mas com 115 insumos ninguém termina: são
+// 115 modais. Aqui a lista inteira fica numa tela só, e a pessoa vai digitando
+// enquanto anda pela despensa.
+//
+// Fechar a contagem também calcula o CONSUMO REAL do período:
+//   estoque anterior + compras − contado = consumido
+// É esse número que a compra sozinha não dá — comprar 20 kg não quer dizer que
+// 20 kg foram usados.
+function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,setSub:(s:string)=>void}){
+  const hoje=today();
+  const [desde,setDesde]=useState(hoje.slice(0,8)+"01");
+  const [busca,setBusca]=useState("");
+  const [soComEstoque,setSoComEstoque]=useState(true);
+  const [contado,setContado]=useState<Record<string,string>>({});
+  const [salvando,setSalvando]=useState(false);
+  const [resultado,setResultado]=useState<any>(null);
+
+  const mps=useMemo(()=>{
+    const todas=(db.materiasPrimas||[]) as any[];
+    const b=busca.trim().toLowerCase();
+    return todas
+      .filter(m=>!soComEstoque||(m.estoqueAtual||0)>0)
+      .filter(m=>!b||(m.nome||"").toLowerCase().includes(b))
+      .sort((a,b2)=>String(a.categoria||"").localeCompare(String(b2.categoria||""),"pt-BR")
+                  ||String(a.nome||"").localeCompare(String(b2.nome||""),"pt-BR"));
+  },[db.materiasPrimas,busca,soComEstoque]);
+
+  // Compras do insumo desde a data de referência, para o consumo real.
+  const comprasPor=useMemo(()=>{
+    const mapa:Record<string,number>={};
+    (db.compras||[]).forEach((c:any)=>{
+      if(c.excluido||!c.data||c.data<desde)return;
+      const k=normNome(c.nomeProduto);
+      mapa[k]=(mapa[k]||0)+(parseFloat(c.quantidade)||0);
+    });
+    return mapa;
+  },[db.compras,desde]);
+
+  const dif=(m:any)=>{
+    const v=contado[m.id];
+    if(v===undefined||v==="")return null;
+    const n=parseFloat(v);
+    if(!Number.isFinite(n)||n<0)return null;
+    return Math.round((n-(m.estoqueAtual||0))*1000)/1000;
+  };
+
+  const contados=mps.filter(m=>dif(m)!==null);
+  const divergentes=contados.filter(m=>dif(m)!==0);
+  const valorDif=divergentes.reduce((s,m)=>s+dif(m)!*(m.ultimoValor||0),0);
+
+  const fechar=()=>{
+    if(!contados.length)return alert("Conte ao menos um insumo.");
+    const naoContados=mps.length-contados.length;
+    if(!confirm(`Fechar a contagem?\n\n${contados.length} insumo(s) contados, ${divergentes.length} com diferença.`
+      +(naoContados?`\n${naoContados} não contado(s) — o saldo deles fica como está.`:"")
+      +`\n\nOs saldos serão ajustados para o que você contou.`))return;
+
+    setSalvando(true);
+    const now=new Date().toISOString();
+    const ajustes=divergentes.map(m=>({mp:m,d:dif(m)!,novo:parseFloat(contado[m.id])}));
+
+    // Só os divergentes viram movimento. Registrar 115 ajustes de zero
+    // encheria o histórico e esconderia os que importam.
+    (setDbAndSave||setDb)((d:any)=>({...d,
+      materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>{
+        const a=ajustes.find(x=>x.mp.id===m.id);
+        return a?{...m,estoqueAtual:a.novo,atualizadoEm:now}:m;
+      }),
+      movEstoque:[
+        ...ajustes.map(a=>({
+          id:uid(),mpId:a.mp.id,mpNome:a.mp.nome,tipo:"ajuste",
+          quantidade:Math.abs(a.d),unidade:a.mp.unidade||"un",custo:a.mp.ultimoValor||0,
+          data:hoje,descricao:`Contagem (sistema ${(a.mp.estoqueAtual||0)}, contado ${a.novo})`,
+          criadoEm:now,
+        })),
+        ...(d.movEstoque||[]),
+      ],
+    }));
+
+    // Consumo real, calculado ANTES de o saldo mudar.
+    const consumo=contados.map(m=>{
+      const compras=comprasPor[normNome(m.nome)]||0;
+      const anterior=m.estoqueAtual||0;
+      const fim=parseFloat(contado[m.id]);
+      return {nome:m.nome,unidade:m.unidade||"un",anterior,compras,fim,
+              consumido:Math.round((anterior+compras-fim)*1000)/1000,
+              valor:(anterior+compras-fim)*(m.ultimoValor||0)};
+    }).filter(x=>x.consumido>0).sort((a,b)=>b.valor-a.valor);
+
+    setResultado({contados:contados.length,divergentes:divergentes.length,valorDif,consumo,desde});
+    setContado({});
+    setSalvando(false);
+  };
+
+  if(resultado)return <div>
+    <BackBar label="Inventário" onClick={()=>{setResultado(null);setSub("inventario");}}/>
+    <div className="card" style={{marginBottom:12}}>
+      <div className="section-title" style={{marginBottom:8}}>✅ Contagem fechada</div>
+      <div style={{fontSize:12.5,lineHeight:1.9}}>
+        {resultado.contados} insumo(s) contados · <b>{resultado.divergentes}</b> com diferença<br/>
+        Diferença em valor: <b style={{color:resultado.valorDif<0?"#EF4444":"#22C55E"}}>{fmtMoney(Math.abs(resultado.valorDif))} {resultado.valorDif<0?"a menos":"a mais"}</b>
+      </div>
+    </div>
+    <div className="card">
+      <div className="section-title" style={{marginBottom:4}}>Consumo real desde {resultado.desde.split("-").reverse().join("/")}</div>
+      <div style={{fontSize:11,color:"var(--text2)",marginBottom:10,lineHeight:1.6}}>
+        estoque anterior + compras − contado. É o que saiu de verdade, incluindo desperdício.
+      </div>
+      {!resultado.consumo.length
+        ? <div style={{fontSize:12.5,color:"var(--text2)"}}>Nenhum consumo apurado.</div>
+        : resultado.consumo.slice(0,40).map((c:any,i:number)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px 90px",gap:8,padding:"7px 0",
+                                 borderBottom:"1px solid var(--border)",fontSize:12.5}}>
+              <span>{c.nome}<span style={{display:"block",fontSize:10.5,color:"var(--text2)"}}>
+                tinha {c.anterior} · comprou {c.compras} · sobrou {c.fim}</span></span>
+              <span style={{textAlign:"right"}}>{c.consumido.toLocaleString("pt-BR",{maximumFractionDigits:2})} {c.unidade}</span>
+              <span style={{textAlign:"right"}}>{fmtMoney(c.valor)}</span>
+            </div>))}
+    </div>
+  </div>;
+
+  return <div>
+    <BackBar label="Inventário" onClick={()=>setSub("inventario")}/>
+
+    <div className="card" style={{marginBottom:12}}>
+      <div className="section-title" style={{marginBottom:10}}>📝 Contagem de insumos</div>
+      <div className="row" style={{gap:6,flexWrap:"wrap",marginBottom:8}}>
+        <input placeholder="🔍 Buscar insumo" value={busca} onChange={e=>setBusca(e.target.value)} className="inp"/>
+        <input type="date" value={desde} onChange={e=>setDesde(e.target.value)} className="inp" style={{maxWidth:150}}/>
+      </div>
+      <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,cursor:"pointer"}}>
+        <input type="checkbox" checked={soComEstoque} onChange={e=>setSoComEstoque(e.target.checked)}/>
+        Só insumos com estoque registrado
+      </label>
+      <div style={{fontSize:11,color:"var(--text2)",marginTop:6,lineHeight:1.6}}>
+        A data é o início do período: o consumo real será calculado contra as compras feitas desde ela.
+      </div>
+    </div>
+
+    <div className="card" style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <div style={{fontSize:12.5,color:"var(--text2)"}}>
+        <b style={{color:"var(--text)"}}>{contados.length}</b> de {mps.length} contados
+        {divergentes.length>0&&<> · <b style={{color:"var(--text)"}}>{divergentes.length}</b> com diferença</>}
+      </div>
+      {divergentes.length>0&&<div style={{fontSize:13,fontWeight:700,color:valorDif<0?"#EF4444":"#22C55E"}}>
+        {valorDif<0?"falta":"sobra"} {fmtMoney(Math.abs(valorDif))}
+      </div>}
+      <button className="btn" disabled={!contados.length||salvando} onClick={fechar}
+        style={{background:contados.length?"#6366F1":"var(--border)",color:contados.length?"#fff":"#888",padding:"9px 16px",fontSize:12.5}}>
+        {salvando?"Fechando...":"Fechar contagem"}
+      </button>
+    </div>
+
+    {!mps.length
+      ? <div className="card" style={{textAlign:"center",padding:22,color:"var(--text2)",fontSize:12.5}}>Nenhum insumo encontrado.</div>
+      : <div className="card" style={{padding:0,overflow:"hidden"}}>
+          {mps.map((m:any,i:number)=>{
+            const d=dif(m);
+            const cat=i===0||mps[i-1].categoria!==m.categoria?m.categoria:null;
+            return <div key={m.id}>
+              {cat&&<div style={{padding:"8px 12px",background:"var(--bg3)",fontSize:10.5,fontWeight:700,
+                                 color:"var(--text2)",textTransform:"uppercase",letterSpacing:.4}}>{cat||"outros"}</div>}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 92px 62px",gap:8,alignItems:"center",
+                           padding:"9px 12px",borderBottom:"1px solid var(--border)",fontSize:12.5}}>
+                <span>{m.nome}<span style={{display:"block",fontSize:10.5,color:"var(--text2)"}}>
+                  sistema: {(m.estoqueAtual||0).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unidade||"un"}</span></span>
+                <input type="number" min="0" step="0.001" inputMode="decimal" placeholder="contar"
+                  value={contado[m.id]??""} onChange={e=>setContado(c=>({...c,[m.id]:e.target.value}))}
+                  className="inp" style={{textAlign:"right",padding:"8px"}}/>
+                <span style={{textAlign:"right",fontWeight:700,
+                              color:d===null?"var(--text3)":d===0?"var(--text3)":d<0?"#EF4444":"#22C55E"}}>
+                  {d===null?"—":d===0?"ok":(d>0?"+":"")+d.toLocaleString("pt-BR",{maximumFractionDigits:2})}
+                </span>
+              </div>
+            </div>;
+          })}
+        </div>}
+
+    <div style={{fontSize:10.5,color:"var(--text2)",lineHeight:1.7,marginTop:10,padding:"0 2px"}}>
+      Quem não for contado fica com o saldo atual — parar no meio não zera o resto.
+      Só os insumos com diferença viram movimento no histórico.
+    </div>
+  </div>;
+}
+
 function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
 
   const [sub,setSub]=useState(pendingSub||"inventario");
@@ -6876,6 +7063,8 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
     })()}
 
     {/* ===== ANÁLISE ===== */}
+    {sub==="contagem"&&<ContagemInsumos db={db} setDb={setDb} setDbAndSave={setDbAndSave} setSub={setSub}/>}
+
     {sub==="analise"&&<BackBar label="Inventário" onClick={()=>setSub("inventario")}/>}
     {sub==="analise"&&(()=>{
       const hoje2=new Date();
