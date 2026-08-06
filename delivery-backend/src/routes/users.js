@@ -228,6 +228,85 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// Tudo que aponta pra um usuário. Metade dessas chaves está como SET NULL, ou
+// seja: apagar a conta funcionaria e trocaria por NULL quem abriu a comanda,
+// quem lançou o item, quem atendeu o pedido. Num sistema onde se confere caixa
+// isso é apagar prova, e sem aviso nenhum.
+const VINCULOS = [
+  { tabela: 'cash_movements', coluna: 'created_by', rotulo: 'movimentações de caixa' },
+  { tabela: 'cash_sessions', coluna: 'opened_by', rotulo: 'aberturas de caixa' },
+  { tabela: 'cash_sessions', coluna: 'closed_by', rotulo: 'fechamentos de caixa' },
+  { tabela: 'comandas', coluna: 'opened_by', rotulo: 'comandas abertas' },
+  { tabela: 'comandas', coluna: 'closed_by', rotulo: 'comandas fechadas' },
+  { tabela: 'comanda_items', coluna: 'added_by', rotulo: 'itens lançados em comanda' },
+  { tabela: 'orders', coluna: 'user_id', rotulo: 'pedidos' },
+  { tabela: 'order_status_history', coluna: 'user_id', rotulo: 'mudanças de status de pedido' },
+  { tabela: 'stock_movements', coluna: 'created_by', rotulo: 'movimentações de estoque' },
+  { tabela: 'stock_counts', coluna: 'created_by', rotulo: 'contagens de estoque' },
+  { tabela: 'supply_classifications', coluna: 'created_by', rotulo: 'classificações de compra' },
+];
+
+async function historicoDoUsuario(id) {
+  const partes = VINCULOS.map(
+    (v, i) => `(SELECT COUNT(*) FROM ${v.tabela} WHERE ${v.coluna} = $1) AS c${i}`
+  ).join(', ');
+  const r = await pool.query(`SELECT ${partes}`, [id]);
+  const linha = r.rows[0] || {};
+  return VINCULOS
+    .map((v, i) => ({ rotulo: v.rotulo, n: parseInt(linha[`c${i}`], 10) || 0 }))
+    .filter((v) => v.n > 0);
+}
+
+// GET /api/users/:id/historico — o que impede a exclusão, pra tela poder
+// avisar ANTES de a pessoa clicar em excluir.
+router.get('/:id/historico', async (req, res) => {
+  try {
+    const vinculos = await historicoDoUsuario(req.params.id);
+    res.json({ vinculos, total: vinculos.reduce((s, v) => s + v.n, 0) });
+  } catch (err) {
+    return internalError(res, err, '[users/historico]');
+  }
+});
+
+// DELETE /api/users/:id — só apaga conta que nunca operou nada. Com histórico,
+// o certo é desativar: o acesso é cortado do mesmo jeito e o registro de quem
+// fez o quê continua de pé.
+router.delete('/:id', async (req, res) => {
+  try {
+    const r0 = await pool.query(`SELECT id, name, role, active FROM users WHERE id = $1`, [req.params.id]);
+    const alvo = r0.rows[0];
+    if (!alvo) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    if (String(alvo.id) === String(req.user?.id)) {
+      return res.status(400).json({ error: 'Você não pode excluir a sua própria conta.' });
+    }
+    if (alvo.role === 'admin' && alvo.active && (await contarAdminsAtivos(alvo.id)) === 0) {
+      return res.status(400).json({
+        error: `${alvo.name} é o único administrador ativo. Promova outra pessoa antes de excluir.`,
+        code: 'ULTIMO_ADMIN',
+      });
+    }
+
+    const vinculos = await historicoDoUsuario(alvo.id);
+    if (vinculos.length) {
+      return res.status(409).json({
+        error: `${alvo.name} tem histórico no sistema e não pode ser excluído — apagar a conta apagaria o registro de quem fez essas operações. Desative o acesso: o efeito é o mesmo e o histórico fica.`,
+        code: 'TEM_HISTORICO',
+        vinculos,
+      });
+    }
+
+    await pool.query(`DELETE FROM users WHERE id = $1 RETURNING id`, [alvo.id]);
+    invalidarUsuario(alvo.id);
+    // A auditoria não tem chave estrangeira pra users justamente por isso: o
+    // registro de que a conta existiu e foi excluída sobrevive à exclusão.
+    await registrar(req, alvo, 'excluiu', { role: alvo.role });
+    res.json({ ok: true });
+  } catch (err) {
+    return internalError(res, err, '[users/DELETE]');
+  }
+});
+
 // POST /api/users/:id/revoke — botão de pânico: celular perdido, gente demitida.
 router.post('/:id/revoke', async (req, res) => {
   try {

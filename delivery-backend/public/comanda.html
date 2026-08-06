@@ -574,6 +574,8 @@
   .usr-selo.ok { background: rgba(31,122,85,.1); border-color: #9CCBB6; color: #1F7A55; }
   .usr-acoes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .usr-acoes .prod-btn { padding: 6px 10px; font-size: .78rem; }
+  /* Excluir fica visualmente separado das outras ações: é a única sem volta. */
+  .usr-acoes .usr-del { color: var(--danger); border-color: #E8C4C4; }
   .usr-vazio { font-size: .8rem; color: var(--c-muted); padding: 16px 2px; }
 
   .usr-cargo-op { display: block; width: 100%; text-align: left; border: 2px solid var(--c-border); background: var(--c-bg);
@@ -1829,6 +1831,7 @@ function renderUsuarios() {
         <button class="prod-btn" onclick="resetarSenha('${u.id}')">${u.id === euSou ? '🔑 Minha senha' : '🔑 Nova senha'}</button>
         <button class="prod-btn" onclick="gerenciarPin('${u.id}')">${u.tem_pin ? '🔢 PIN' : '🔢 Criar PIN'}</button>
         <button class="prod-btn" onclick="encerrarSessoes('${u.id}')" title="Derruba o acesso em qualquer aparelho">🚪 Encerrar sessões</button>
+        ${u.id === euSou ? '' : `<button class="prod-btn usr-del" onclick="excluirUsuario('${u.id}')" title="Só é possível em conta que nunca operou nada">🗑 Excluir</button>`}
         <label class="switch" title="${u.active ? 'Desativar acesso' : 'Reativar acesso'}">
           <input type="checkbox" ${u.active ? 'checked' : ''} onchange="alternarUsuario('${u.id}', this.checked, this)">
           <span class="slider"></span>
@@ -2069,6 +2072,60 @@ async function alternarUsuario(id, ativo, input) {
     showToast(ativo ? `${u?.name} reativado` : `${u?.name} desativado — acesso cortado`);
     loadUsuarios();
   } catch (e) { input.checked = !ativo; showToast('Erro de conexão'); }
+}
+
+// Excluir consulta o histórico ANTES de perguntar qualquer coisa. Perguntar
+// "tem certeza?" e só então descobrir que não dá é o pior dos dois mundos:
+// assusta quem podia apagar e frustra quem não podia.
+async function excluirUsuario(id) {
+  const u = _usuarios.find(x => x.id === id);
+  if (!u) return;
+  let dados;
+  try {
+    const res = await fetch(`${API}/api/users/${id}/historico`, { headers: authHeaders() });
+    if (!res.ok) throw new Error();
+    dados = await res.json();
+  } catch (e) { showToast('Não consegui conferir o histórico deste usuário'); return; }
+
+  if (dados.total > 0) {
+    const lista = dados.vinculos.map(v => `<li>${v.n} ${v.rotulo}</li>`).join('');
+    usrModal(`${u.name} não pode ser excluído`, `
+      <div class="usr-aviso" style="margin:0 0 12px">
+        Esta conta já operou no sistema. Excluir apagaria o registro de quem fez estas operações:
+      </div>
+      <ul style="font-size:.84rem;line-height:1.7;margin:0 0 12px 20px;color:var(--c-text)">${lista}</ul>
+      <div class="usr-aviso" style="margin:0">
+        <b>Desative em vez de excluir.</b> O acesso é cortado exatamente do mesmo jeito —
+        senha e PIN param de funcionar e as sessões abertas caem — e o histórico continua
+        respondendo quem fez o quê.
+      </div>`,
+      u.active ? 'Desativar o acesso' : 'Entendi', async () => {
+        if (!u.active) { document.getElementById('usr-modal-backdrop').remove(); return; }
+        const ok = await patchUsuario(id, { active: false }, `${u.name} desativado — acesso cortado`);
+        if (ok) loadUsuarios();
+      });
+    return;
+  }
+
+  usrModal(`Excluir ${u.name}?`, `
+    <p style="font-size:.86rem;line-height:1.6;color:var(--c-text)">
+      Esta conta nunca operou nada no sistema — sem venda, sem comanda, sem movimento de
+      caixa ou estoque. Dá pra apagar sem perder registro nenhum.
+    </p>
+    <div class="usr-aviso" style="margin:12px 0 0">
+      A exclusão não tem volta. Fica registrada no histórico de acessos, com o seu nome.
+    </div>`, 'Excluir definitivamente', async () => {
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/users/${id}`, { method: 'DELETE', headers: authHeaders() });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao excluir'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast(`${u.name} excluído`);
+      loadUsuarios();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
 }
 
 async function encerrarSessoes(id) {
