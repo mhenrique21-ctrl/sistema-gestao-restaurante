@@ -9,6 +9,11 @@ router.use(authMiddleware, requireRole('gerente', 'admin'));
 const TZ = 'America/Belem';
 const GIRO_DIAS = 30; // janela pra medir velocidade de venda
 
+// Valor entra como literal SQL escapado, não como parâmetro: o wrapper do pool
+// faz substituição de string e corrompe a partir de $10 (o "$1" casa dentro de
+// "$10"). Aqui os filtros são poucos, mas o padrão evita a armadilha.
+const sqlStr = (v) => `'${String(v).replace(/'/g, "''")}'`;
+
 // GET /api/stock — produtos de revenda com giro e cobertura.
 // O número que decide a compra não é o saldo, é a COBERTURA: quantos dias o
 // estoque atual dura no ritmo real de venda. 24 unidades pode ser pouco
@@ -120,6 +125,84 @@ router.get('/:id/movements', async (req, res) => {
     res.json(r.rows);
   } catch (err) {
     return internalError(res, err, '[stock/movements]');
+  }
+});
+
+// GET /api/stock/entradas?de=&ate=&fornecedor= — extrato do que entrou.
+// Fornecedor e data vêm de purchase_entries pelo origin_id, não do texto do
+// motivo: interpretar string quebraria no primeiro fornecedor com travessão
+// no nome.
+router.get('/entradas', async (req, res) => {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : null;
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : null;
+  const forn = (req.query.fornecedor || '').trim();
+
+  try {
+    const filtros = [`sm.type = 'entrada'`];
+    if (de)  filtros.push(`DATE(sm.created_at AT TIME ZONE '${TZ}') >= ${sqlStr(de)}`);
+    if (ate) filtros.push(`DATE(sm.created_at AT TIME ZONE '${TZ}') <= ${sqlStr(ate)}`);
+    // Entrada anterior a esta versão não tem origin_id, então pe.supplier é
+    // nulo nela. Tentei religar essas 26 pelo horário: só 8 casavam sem
+    // ambiguidade, e um vínculo parcial faria o filtro esconder metade das
+    // linhas sem avisar. Casar também pelo texto do motivo cobre as antigas
+    // sem inventar vínculo que não dá pra provar.
+    if (forn) filtros.push(`(pe.supplier = ${sqlStr(forn)} OR sm.reason LIKE ${sqlStr('%' + forn + '%')})`);
+
+    const r = await pool.query(
+      `SELECT sm.id, sm.created_at, sm.quantity, sm.unit_cost, sm.reason, sm.origin_id,
+              p.name AS produto, p.price AS preco_venda,
+              pe.supplier AS fornecedor
+         FROM stock_movements sm
+         JOIN products p ON p.id = sm.product_id
+         LEFT JOIN purchase_entries pe ON pe.origin_id = sm.origin_id
+        WHERE ${filtros.join(' AND ')}
+        ORDER BY sm.created_at DESC
+        LIMIT 500`
+    );
+
+    const linhas = r.rows.map((m) => {
+      const qtd = parseFloat(m.quantity);
+      const custo = m.unit_cost != null ? parseFloat(m.unit_cost) : null;
+      return {
+        id: m.id, data: m.created_at, produto: m.produto,
+        // Nota antiga não tem origin_id: cai no texto do motivo, que ao menos
+        // diz de quem veio, mesmo sem dar pra filtrar.
+        fornecedor: m.fornecedor || (m.reason || '').replace(/^Compra\s*–\s*/, '').replace(/\s*\(App Gestão\)$/, '') || null,
+        quantidade: qtd,
+        custo_unitario: custo,
+        total: custo != null ? Math.round(custo * qtd * 100) / 100 : null,
+        preco_venda: parseFloat(m.preco_venda),
+        origin_id: m.origin_id,
+      };
+    });
+
+    // Só soma o que tem custo. Misturar linha sem custo no total daria um
+    // número menor que o real e ninguém saberia por quê.
+    const comCusto = linhas.filter((l) => l.total != null);
+    res.json({
+      linhas,
+      resumo: {
+        movimentos: linhas.length,
+        notas: new Set(linhas.map((l) => l.origin_id).filter(Boolean)).size,
+        sem_custo: linhas.length - comCusto.length,
+        total: Math.round(comCusto.reduce((s, l) => s + l.total, 0) * 100) / 100,
+      },
+    });
+  } catch (err) {
+    return internalError(res, err, '[stock/entradas]');
+  }
+});
+
+// GET /api/stock/fornecedores — para o filtro do extrato.
+router.get('/fornecedores', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT DISTINCT supplier FROM purchase_entries
+        WHERE supplier IS NOT NULL AND trim(supplier) <> '' ORDER BY supplier`
+    );
+    res.json(r.rows.map((x) => x.supplier));
+  } catch (err) {
+    return internalError(res, err, '[stock/fornecedores]');
   }
 });
 

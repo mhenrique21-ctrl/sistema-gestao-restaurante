@@ -265,6 +265,23 @@
   .stk-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
 
   /* ── Configurações: vínculos de compra ── */
+  .ent-filtros { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .ent-filtros select { flex: 1; min-width: 170px; }
+  .ent-resumo { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 10px 13px; background: var(--card); border-radius: 10px; font-size: 12.5px; color: var(--text2); }
+  .ent-resumo span, .ent-resumo b { color: var(--text); }
+  .ent-resumo b { font-size: 15px; }
+  .ent-aviso { margin-top: 8px; padding: 9px 12px; border-radius: 9px; background: #FDF6F5;
+    font-size: 11.5px; color: var(--text2); line-height: 1.55; }
+  .ent-lista { margin-top: 10px; }
+  /* Números à direita: alinhados, a coluna vira uma pilha que dá pra conferir
+     de cima a baixo sem ler cada linha inteira. */
+  .ent-linha { display: grid; grid-template-columns: 1fr 58px 84px 88px; gap: 8px; align-items: center;
+    padding: 9px 11px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .ent-linha span:not(:first-child) { text-align: right; }
+  .ent-linha small { display: block; font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .ent-head { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px; }
   #rel-data { padding: 0 14px 10px; }
   .cons-wrap { display: flex; gap: 14px; align-items: flex-start; }
   .cons-lista { flex: 1; min-width: 0; }
@@ -429,6 +446,7 @@
       <button class="cfg-tab active" data-rtab="vendas">📈 Vendas</button>
       <button class="cfg-tab" data-rtab="produtos">🏆 Produtos</button>
       <button class="cfg-tab" data-rtab="estoque">📦 Estoque</button>
+      <button class="cfg-tab" data-rtab="entradas">📥 Entradas</button>
       <button class="cfg-tab" data-rtab="consulta">🧾 Consulta</button>
     </div>
     <div id="rel-data" style="display:none">
@@ -1301,11 +1319,80 @@ document.querySelectorAll('#rel-tabs .cfg-tab').forEach(t => t.addEventListener(
   document.querySelectorAll('#rel-tabs .cfg-tab').forEach(x => x.classList.toggle('active', x === t));
   // Estoque é uma foto do agora; período só faz sentido pras outras abas.
   // Consulta é venda a venda, então usa data única em vez de período.
-  document.getElementById('rel-periodo').style.display = (relTab === 'estoque' || relTab === 'consulta') ? 'none' : 'flex';
+  // Entradas tem período próprio (de/até), não os botões de 7/30/90 dias.
+  document.getElementById('rel-periodo').style.display =
+    (relTab === 'estoque' || relTab === 'consulta' || relTab === 'entradas') ? 'none' : 'flex';
   document.getElementById('rel-data').style.display = relTab === 'consulta' ? 'flex' : 'none';
   if (relTab === 'consulta') { loadConsulta(); return; }
+  if (relTab === 'entradas') { loadEntradas(); return; }
   loadRelatorio();
 }));
+
+// ── Extrato de entradas ──────────────────────────────
+let entFornecedores = null;
+
+function primeiroDiaDoMes() {
+  const h = hojeBelem();            // 'YYYY-MM-DD' no fuso de Belém
+  return h.slice(0, 8) + '01';
+}
+
+async function loadEntradas() {
+  const el = document.getElementById('rel-body');
+  el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    if (!entFornecedores) {
+      const rf = await apiFetch('/api/stock/fornecedores');
+      entFornecedores = rf.ok ? await rf.json() : [];
+    }
+    const de = document.getElementById('ent-de')?.value || primeiroDiaDoMes();
+    const ate = document.getElementById('ent-ate')?.value || hojeBelem();
+    const forn = document.getElementById('ent-forn')?.value || '';
+    const qs = `de=${de}&ate=${ate}` + (forn ? `&fornecedor=${encodeURIComponent(forn)}` : '');
+    const res = await apiFetch(`/api/stock/entradas?${qs}`);
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro ao carregar</p>'; return; }
+    renderEntradas(el, d, { de, ate, forn });
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+function renderEntradas(el, d, f) {
+  const r = d.resumo;
+  el.innerHTML = `
+    <div class="ent-filtros">
+      <input type="date" id="ent-de" value="${f.de}">
+      <span style="color:var(--text2);font-size:12px">até</span>
+      <input type="date" id="ent-ate" value="${f.ate}">
+      <select id="ent-forn">
+        <option value="">Todos os fornecedores</option>
+        ${(entFornecedores || []).map(x => `<option value="${x.replace(/"/g,'&quot;')}" ${x === f.forn ? 'selected' : ''}>${x}</option>`).join('')}
+      </select>
+    </div>
+
+    <div class="ent-resumo">
+      <div><span>${r.movimentos}</span> entrada(s) · <span>${r.notas}</span> nota(s)</div>
+      <div><b>${fmt(r.total)}</b> em compras</div>
+    </div>
+    ${r.sem_custo ? `<div class="ent-aviso">${r.sem_custo} entrada(s) sem custo informado — não entram no total. São compras lançadas antes de a ponte passar a enviar o valor.</div>` : ''}
+
+    ${!d.linhas.length ? '<p style="font-size:12.5px;color:var(--text2);padding:10px 2px">Nenhuma entrada no período.</p>'
+      : `<div class="ent-lista">
+          <div class="ent-linha ent-head">
+            <span>Produto · fornecedor</span><span>Qtd</span><span>Custo un.</span><span>Total</span>
+          </div>
+          ${d.linhas.map(l => `
+            <div class="ent-linha">
+              <span><b>${l.produto}</b><small>${l.fornecedor || 'sem fornecedor'} · ${new Date(l.data).toLocaleDateString('pt-BR', { timeZone: 'America/Belem' })}</small></span>
+              <span>${l.quantidade}</span>
+              <span>${l.custo_unitario != null ? fmt(l.custo_unitario) : '—'}</span>
+              <span>${l.total != null ? fmt(l.total) : '—'}</span>
+            </div>`).join('')}
+        </div>`}`;
+
+  ['ent-de', 'ent-ate', 'ent-forn'].forEach(id =>
+    document.getElementById(id).addEventListener('change', loadEntradas));
+}
 
 // ── Consulta venda a venda ───────────────────────────
 let consVendas = [];

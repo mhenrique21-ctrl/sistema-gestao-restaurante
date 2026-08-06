@@ -97,9 +97,9 @@ router.post('/purchase', serviceAuth, async (req, res) => {
       );
       const saldo = r.rows[0] ? parseFloat(r.rows[0].stock_qty) : null;
       await pool.query(
-        `INSERT INTO stock_movements (product_id, type, quantity, balance_after, reason, unit_cost)
-         VALUES ($1, 'entrada', ${entrada}, ${saldo}, $2, ${custoUn != null ? custoUn : 'NULL'}) RETURNING id`,
-        [link.product_id, `Compra${supplier ? ' – ' + supplier : ''} (App Gestão)`]
+        `INSERT INTO stock_movements (product_id, type, quantity, balance_after, reason, unit_cost, origin_id)
+         VALUES ($1, 'entrada', ${entrada}, ${saldo}, $2, ${custoUn != null ? custoUn : 'NULL'}, $3) RETURNING id`,
+        [link.product_id, `Compra${supplier ? ' – ' + supplier : ''} (App Gestão)`, String(origin_id)]
       );
       aplicados.push({ nome, produto: link.product_name, comprado: qtd, entrou: entrada, saldo,
                        custo_unitario: custoUn, product_id: link.product_id });
