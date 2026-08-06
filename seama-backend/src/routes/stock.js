@@ -240,6 +240,81 @@ router.get('/entradas', async (req, res) => {
   }
 });
 
+// GET /api/stock/margens — margem por produto e variação do custo de compra.
+//
+// Ordenado pela PIOR margem: o que precisa de decisão aparece primeiro. Uma
+// lista alfabética esconderia justamente o item que está sendo vendido perto
+// do custo.
+router.get('/margens', async (req, res) => {
+  try {
+    const prods = await pool.query(
+      `SELECT id, name, price, last_cost, last_cost_at, stock_qty
+         FROM products WHERE track_stock = true AND active = true`
+    );
+
+    // Duas últimas entradas COM custo de cada produto: é a comparação que
+    // revela "subiu e o preço de venda não acompanhou". Custos iguais não
+    // contam como variação.
+    const hist = await pool.query(
+      `SELECT product_id, unit_cost, created_at,
+              ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY created_at DESC) AS pos
+         FROM stock_movements
+        WHERE type = 'entrada' AND unit_cost IS NOT NULL`
+    );
+    const porProduto = {};
+    hist.rows.forEach((h) => {
+      const pos = parseInt(h.pos, 10);
+      if (pos > 2) return;
+      (porProduto[h.product_id] = porProduto[h.product_id] || [])[pos - 1] =
+        { custo: parseFloat(h.unit_cost), data: h.created_at };
+    });
+
+    const itens = prods.rows.map((p) => {
+      const preco = parseFloat(p.price);
+      const custo = p.last_cost != null ? parseFloat(p.last_cost) : null;
+      const h = porProduto[p.id] || [];
+      const anterior = h[1] ? h[1].custo : null;
+      const variacao = anterior != null && h[0] && anterior > 0
+        ? Math.round(((h[0].custo - anterior) / anterior) * 1000) / 10
+        : null;
+      return {
+        id: p.id, nome: p.name, preco, custo,
+        custo_em: p.last_cost_at,
+        custo_anterior: anterior,
+        variacao_pct: variacao,
+        margem_pct: custo != null && preco > 0
+          ? Math.round((100 * (preco - custo) / preco) * 10) / 10 : null,
+        lucro_unitario: custo != null ? Math.round((preco - custo) * 100) / 100 : null,
+        valor_estoque: custo != null ? Math.round(custo * parseFloat(p.stock_qty) * 100) / 100 : null,
+      };
+    });
+
+    // Sem custo vai pro fim: não é margem ruim, é margem desconhecida, e
+    // misturar as duas faria o topo da lista mentir.
+    itens.sort((a, b) => {
+      if (a.margem_pct == null && b.margem_pct == null) return a.nome.localeCompare(b.nome, 'pt-BR');
+      if (a.margem_pct == null) return 1;
+      if (b.margem_pct == null) return -1;
+      return a.margem_pct - b.margem_pct;
+    });
+
+    const comCusto = itens.filter((i) => i.custo != null);
+    res.json({
+      itens,
+      resumo: {
+        total: itens.length,
+        sem_custo: itens.length - comCusto.length,
+        valor_estoque: Math.round(comCusto.reduce((s, i) => s + (i.valor_estoque || 0), 0) * 100) / 100,
+        // Alerta que costuma pagar a implementação: custo subiu mais de 5% e
+        // o preço de venda continuou o mesmo.
+        subiram: comCusto.filter((i) => i.variacao_pct != null && i.variacao_pct > 5).length,
+      },
+    });
+  } catch (err) {
+    return internalError(res, err, '[stock/margens]');
+  }
+});
+
 // GET /api/stock/fornecedores — para o filtro do extrato.
 router.get('/fornecedores', async (req, res) => {
   try {

@@ -265,6 +265,14 @@
   .stk-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
 
   /* ── Configurações: vínculos de compra ── */
+  .mrg-linha { display: grid; grid-template-columns: 1fr 66px 66px 66px 62px; gap: 8px; align-items: center;
+    padding: 9px 11px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .mrg-linha span:not(:first-child) { text-align: right; }
+  .mrg-linha small { display: block; font-size: 10.5px; margin-top: 2px; }
+  .mrg-click { cursor: pointer; }
+  .mrg-click:hover { background: var(--card); }
+  .mrg-alerta { margin-top: 8px; padding: 10px 12px; border-radius: 9px; background: #FDF6F5;
+    font-size: 12px; color: var(--danger); line-height: 1.55; }
   .rel-row-click { cursor: pointer; }
   .rel-row-click:hover { background: var(--card) !important; }
   .ficha-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 12px 0 4px; }
@@ -461,6 +469,7 @@
       <button class="cfg-tab" data-rtab="produtos">🏆 Produtos</button>
       <button class="cfg-tab" data-rtab="estoque">📦 Estoque</button>
       <button class="cfg-tab" data-rtab="entradas">📥 Entradas</button>
+      <button class="cfg-tab" data-rtab="margem">💰 Margem</button>
       <button class="cfg-tab" data-rtab="consulta">🧾 Consulta</button>
     </div>
     <div id="rel-data" style="display:none">
@@ -1335,12 +1344,62 @@ document.querySelectorAll('#rel-tabs .cfg-tab').forEach(t => t.addEventListener(
   // Consulta é venda a venda, então usa data única em vez de período.
   // Entradas tem período próprio (de/até), não os botões de 7/30/90 dias.
   document.getElementById('rel-periodo').style.display =
-    (relTab === 'estoque' || relTab === 'consulta' || relTab === 'entradas') ? 'none' : 'flex';
+    (relTab === 'estoque' || relTab === 'consulta' || relTab === 'entradas' || relTab === 'margem') ? 'none' : 'flex';
   document.getElementById('rel-data').style.display = relTab === 'consulta' ? 'flex' : 'none';
   if (relTab === 'consulta') { loadConsulta(); return; }
   if (relTab === 'entradas') { loadEntradas(); return; }
+  if (relTab === 'margem')   { loadMargens(); return; }
   loadRelatorio();
 }));
+
+// ── Margem por produto ───────────────────────────────
+async function loadMargens() {
+  const el = document.getElementById('rel-body');
+  el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    const res = await apiFetch('/api/stock/margens');
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro ao carregar</p>'; return; }
+    renderMargens(el, d);
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+function renderMargens(el, d) {
+  const r = d.resumo;
+  const corMargem = (m) => m == null ? 'var(--text2)' : m < 20 ? 'var(--danger)' : m < 35 ? 'var(--warning)' : 'var(--success)';
+
+  el.innerHTML = `
+    <div class="ent-resumo">
+      <div><span>${r.total}</span> produto(s) de revenda</div>
+      <div><b>${fmt(r.valor_estoque)}</b> parados em estoque</div>
+    </div>
+
+    ${r.subiram ? `<div class="mrg-alerta">⚠️ ${r.subiram} produto(s) com custo de compra mais alto que na compra anterior. Confira se o preço de venda acompanhou.</div>` : ''}
+    ${r.sem_custo ? `<div class="ent-aviso">${r.sem_custo} de ${r.total} produto(s) ainda sem custo conhecido — só passam a ter depois de entrarem por uma compra lançada no Gestão. Aparecem no fim da lista com "—", não como margem ruim.</div>` : ''}
+
+    <div class="ent-lista">
+      <div class="mrg-linha ent-head">
+        <span>Produto</span><span>Custo</span><span>Venda</span><span>Lucro</span><span>Margem</span>
+      </div>
+      ${d.itens.map(i => `
+        <div class="mrg-linha mrg-click" data-ficha="${i.id}">
+          <span><b>${i.nome}</b>${i.variacao_pct != null && i.variacao_pct !== 0
+            ? `<small style="color:${i.variacao_pct > 0 ? 'var(--danger)' : 'var(--success)'}">custo ${i.variacao_pct > 0 ? 'subiu' : 'caiu'} ${Math.abs(i.variacao_pct)}% desde a compra anterior</small>` : ''}</span>
+          <span>${i.custo != null ? fmt(i.custo) : '—'}</span>
+          <span>${fmt(i.preco)}</span>
+          <span>${i.lucro_unitario != null ? fmt(i.lucro_unitario) : '—'}</span>
+          <span style="color:${corMargem(i.margem_pct)};font-weight:600">${i.margem_pct != null ? i.margem_pct + '%' : '—'}</span>
+        </div>`).join('')}
+    </div>
+    <p style="font-size:10.5px;color:var(--text2);margin:10px 0 0;line-height:1.6">
+      Ordenado pela <b>pior margem primeiro</b> — o que precisa de decisão aparece no topo. Margem é sobre o preço de venda. Toque num produto para abrir a ficha.
+    </p>`;
+
+  el.querySelectorAll('[data-ficha]').forEach(x =>
+    x.addEventListener('click', () => abrirFicha(x.dataset.ficha)));
+}
 
 // ── Ficha do produto ─────────────────────────────────
 // Cada linha traz o saldo DEPOIS dela. É isso que permite reconstruir o
