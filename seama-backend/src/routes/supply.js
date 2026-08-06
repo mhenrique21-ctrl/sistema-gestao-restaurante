@@ -78,19 +78,31 @@ router.post('/purchase', serviceAuth, async (req, res) => {
         pendentes.push({ nome, qtd, unidade: item.unidade || 'un' });
         continue;
       }
-      const entrada = qtd * parseFloat(link.factor);
+      const fator = parseFloat(link.factor);
+      const entrada = qtd * fator;
+
+      // Custo na UNIDADE DO PDV: a nota diz "1 multipack por R$ 18,00" e o PDV
+      // controla latas, então o custo por lata é 18/6. Sem dividir pelo fator,
+      // margem e valor de estoque sairiam 6x errados justamente nos itens de
+      // maior giro. Nota antiga (ou sem valor) grava NULL, e as telas mostram
+      // "—" em vez de fingir que o custo é zero.
+      const vUn = parseFloat(item.valor_unitario);
+      const custoUn = Number.isFinite(vUn) && vUn >= 0 && fator > 0 ? vUn / fator : null;
+
       const r = await pool.query(
-        `UPDATE products SET stock_qty = stock_qty + ${entrada} WHERE id = $1 RETURNING stock_qty`,
+        `UPDATE products SET stock_qty = stock_qty + ${entrada}
+           ${custoUn != null ? `, last_cost = ${custoUn}, last_cost_at = NOW()` : ''}
+          WHERE id = $1 RETURNING stock_qty`,
         [link.product_id]
       );
       const saldo = r.rows[0] ? parseFloat(r.rows[0].stock_qty) : null;
       await pool.query(
-        `INSERT INTO stock_movements (product_id, type, quantity, balance_after, reason)
-         VALUES ($1, 'entrada', ${entrada}, ${saldo}, $2) RETURNING id`,
+        `INSERT INTO stock_movements (product_id, type, quantity, balance_after, reason, unit_cost)
+         VALUES ($1, 'entrada', ${entrada}, ${saldo}, $2, ${custoUn != null ? custoUn : 'NULL'}) RETURNING id`,
         [link.product_id, `Compra${supplier ? ' – ' + supplier : ''} (App Gestão)`]
       );
       aplicados.push({ nome, produto: link.product_name, comprado: qtd, entrou: entrada, saldo,
-                       product_id: link.product_id });
+                       custo_unitario: custoUn, product_id: link.product_id });
     }
 
     for (const p of pendentes) {
