@@ -265,6 +265,20 @@
   .stk-alert .l { font-size: 11px; color: var(--text2); line-height: 1.6; }
 
   /* ── Configurações: vínculos de compra ── */
+  .rel-row-click { cursor: pointer; }
+  .rel-row-click:hover { background: var(--card) !important; }
+  .ficha-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 12px 0 4px; }
+  .ficha-cards > div { background: var(--bg); border-radius: 9px; padding: 8px 9px; text-align: center; }
+  .ficha-cards span { display: block; font-size: 10.5px; color: var(--text2); }
+  .ficha-cards b { font-size: 13.5px; }
+  .ficha-lista { margin-top: 12px; max-height: 44vh; overflow-y: auto; }
+  .ficha-linha { display: grid; grid-template-columns: 62px 1fr 56px 52px; gap: 8px; align-items: center;
+    padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .ficha-linha .dt { font-size: 11.5px; color: var(--text2); }
+  .ficha-linha .dt small, .ficha-linha .ds small { display: block; font-size: 10.5px; color: var(--text2); }
+  .ficha-linha .qt, .ficha-linha .sd { text-align: right; font-weight: 600; }
+  .ficha-linha .sd { color: var(--text2); font-weight: 400; }
+  .ficha-rodape { font-size: 10.5px; color: var(--text2); margin-top: 8px; }
   .ent-filtros { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .ent-filtros select { flex: 1; min-width: 170px; }
   .ent-resumo { display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -1328,6 +1342,76 @@ document.querySelectorAll('#rel-tabs .cfg-tab').forEach(t => t.addEventListener(
   loadRelatorio();
 }));
 
+// ── Ficha do produto ─────────────────────────────────
+// Cada linha traz o saldo DEPOIS dela. É isso que permite reconstruir o
+// estoque em qualquer data e achar onde a conta começou a divergir — com o
+// saldo atual sozinho, não dá.
+const MOV_LABEL = {
+  entrada: { txt: 'Entrada',  cor: 'var(--success)' },
+  venda:   { txt: 'Venda',    cor: 'var(--text)'    },
+  ajuste:  { txt: 'Contagem', cor: 'var(--warning)' },
+  perda:   { txt: 'Perda',    cor: 'var(--danger)'  },
+  estorno: { txt: 'Estorno',  cor: 'var(--warning)' },
+};
+
+async function abrirFicha(productId) {
+  let bd = document.getElementById('ficha-backdrop');
+  if (!bd) {
+    bd = document.createElement('div');
+    bd.id = 'ficha-backdrop';
+    bd.className = 'modal-backdrop';
+    document.body.appendChild(bd);
+  }
+  bd.innerHTML = '<div class="modal-sheet" style="max-width:560px"><p style="font-size:12.5px;color:var(--text2)">Carregando...</p></div>';
+  try {
+    const res = await apiFetch(`/api/stock/${productId}/movements`);
+    const d = await res.json();
+    if (!res.ok) { bd.remove(); showToast(d.error || 'Erro ao abrir ficha'); return; }
+    renderFicha(bd, d);
+  } catch (e) {
+    bd.remove();
+    if (e.message !== 'unauthorized') showToast('Erro de conexão');
+  }
+}
+
+function renderFicha(bd, d) {
+  const p = d.produto;
+  bd.innerHTML = `
+    <div class="modal-sheet" style="max-width:560px">
+      <h2>${p.nome}</h2>
+      <div class="sub">saldo ${p.saldo}${p.minimo > 0 ? ` · mínimo ${p.minimo}` : ''}</div>
+
+      <div class="ficha-cards">
+        <div><span>Custo</span><b>${p.custo != null ? fmt(p.custo) : '—'}</b></div>
+        <div><span>Venda</span><b>${fmt(p.preco)}</b></div>
+        <div><span>Margem</span><b style="color:${p.margem_pct == null ? 'var(--text2)' : p.margem_pct < 20 ? 'var(--danger)' : 'var(--success)'}">${p.margem_pct != null ? p.margem_pct + '%' : '—'}</b></div>
+        <div><span>Em estoque</span><b>${p.valor_estoque != null ? fmt(p.valor_estoque) : '—'}</b></div>
+      </div>
+      ${p.custo == null ? '<div class="ent-aviso">Sem custo conhecido: este produto ainda não entrou por uma compra lançada depois que a ponte passou a enviar o valor.</div>' : ''}
+
+      ${!d.movimentos.length ? '<p style="font-size:12.5px;color:var(--text2);padding:12px 2px">Nenhum movimento registrado.</p>'
+        : `<div class="ficha-lista">
+            ${d.movimentos.map(m => {
+              const L = MOV_LABEL[m.tipo] || { txt: m.tipo, cor: 'var(--text2)' };
+              const sinal = m.quantidade > 0 ? '+' : '';
+              return `
+                <div class="ficha-linha">
+                  <span class="dt">${new Date(m.data).toLocaleDateString('pt-BR', { timeZone: 'America/Belem' })}<small>${new Date(m.data).toLocaleTimeString('pt-BR', { timeZone: 'America/Belem', hour: '2-digit', minute: '2-digit' })}</small></span>
+                  <span class="ds"><b style="color:${L.cor}">${L.txt}</b>${m.origem ? `<small>${m.origem}</small>` : ''}</span>
+                  <span class="qt" style="color:${m.quantidade < 0 ? 'var(--danger)' : 'var(--success)'}">${sinal}${m.quantidade}</span>
+                  <span class="sd">${m.saldo_depois != null ? m.saldo_depois : '—'}</span>
+                </div>`;
+            }).join('')}
+          </div>
+          <div class="ficha-rodape">A última coluna é o saldo depois do movimento.</div>`}
+
+      <div class="modal-actions">
+        <button id="ficha-fechar">Fechar</button>
+      </div>
+    </div>`;
+  bd.querySelector('#ficha-fechar').addEventListener('click', () => bd.remove());
+}
+
 // ── Extrato de entradas ──────────────────────────────
 let entFornecedores = null;
 
@@ -1688,7 +1772,7 @@ async function renderRelEstoque(el) {
           : i.cobertura < 3 ? 'var(--danger)'
           : i.cobertura > 20 ? 'var(--warning)' : 'var(--success)';
         return `
-          <div class="rel-row" style="${i.abaixoMinimo ? 'background:#FDF6F5' : ''}">
+          <div class="rel-row rel-row-click" data-ficha="${i.id}" style="${i.abaixoMinimo ? 'background:#FDF6F5' : ''}">
             <span style="flex:1">${i.name}${i.abaixoMinimo ? ' ⚠️' : ''}</span>
             <span style="width:52px;text-align:right;${i.abaixoMinimo ? 'color:var(--danger);font-weight:600' : ''}">${i.estoque}</span>
             <span style="width:60px;text-align:right">${i.giroDia}</span>
@@ -1727,6 +1811,8 @@ async function renderRelEstoque(el) {
     </div>
   `;
   document.getElementById('stk-save').addEventListener('click', lancarEstoque);
+  el.querySelectorAll('[data-ficha]').forEach(r =>
+    r.addEventListener('click', () => abrirFicha(r.dataset.ficha)));
 }
 
 async function lancarEstoque() {

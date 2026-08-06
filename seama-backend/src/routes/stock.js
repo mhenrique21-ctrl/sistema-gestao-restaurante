@@ -112,17 +112,64 @@ router.post('/:id/movement', async (req, res) => {
 });
 
 // GET /api/stock/:id/movements — extrato de um produto
+// GET /api/stock/:id/movements — ficha do produto: cabeçalho + linha do tempo.
+// Cada linha traz o saldo DEPOIS dela (balance_after), que é o que permite
+// reconstruir o estoque em qualquer data e achar onde a conta começou a
+// divergir — com o saldo atual sozinho, não dá.
 router.get('/:id/movements', async (req, res) => {
   try {
-    const r = await pool.query(
-      `SELECT sm.id, sm.type, sm.quantity, sm.balance_after, sm.reason, sm.created_at,
-              u.username AS created_by_name
-       FROM stock_movements sm LEFT JOIN users u ON u.id = sm.created_by
-       WHERE sm.product_id = $1
-       ORDER BY sm.created_at DESC LIMIT 50`,
+    const prod = await pool.query(
+      `SELECT id, name, stock_qty, stock_min, price, last_cost, last_cost_at
+         FROM products WHERE id = $1`,
       [req.params.id]
     );
-    res.json(r.rows);
+    if (!prod.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
+    const p = prod.rows[0];
+
+    const r = await pool.query(
+      `SELECT sm.id, sm.type, sm.quantity, sm.balance_after, sm.reason, sm.created_at,
+              sm.unit_cost, sm.origin_id,
+              u.username AS created_by_name,
+              s.sale_number,
+              pe.supplier
+       FROM stock_movements sm
+       LEFT JOIN users u ON u.id = sm.created_by
+       LEFT JOIN sales s ON s.id = sm.sale_id
+       LEFT JOIN purchase_entries pe ON pe.origin_id = sm.origin_id
+       WHERE sm.product_id = $1
+       ORDER BY sm.created_at DESC LIMIT 200`,
+      [req.params.id]
+    );
+
+    const custo = p.last_cost != null ? parseFloat(p.last_cost) : null;
+    const preco = parseFloat(p.price);
+    res.json({
+      produto: {
+        id: p.id, nome: p.name,
+        saldo: parseFloat(p.stock_qty),
+        minimo: parseFloat(p.stock_min),
+        preco,
+        custo,
+        custo_em: p.last_cost_at,
+        // Margem sobre o preço de venda. Sem custo conhecido, null — a tela
+        // mostra "—" em vez de fingir 100%.
+        margem_pct: custo != null && preco > 0 ? Math.round((100 * (preco - custo) / preco) * 10) / 10 : null,
+        valor_estoque: custo != null ? Math.round(custo * parseFloat(p.stock_qty) * 100) / 100 : null,
+      },
+      movimentos: r.rows.map((m) => ({
+        id: m.id, tipo: m.type, data: m.created_at,
+        quantidade: parseFloat(m.quantity),
+        saldo_depois: m.balance_after != null ? parseFloat(m.balance_after) : null,
+        custo_unitario: m.unit_cost != null ? parseFloat(m.unit_cost) : null,
+        // Quem originou: venda tem número, compra tem fornecedor, ajuste tem
+        // o operador. Sem isso a linha do tempo vira uma lista de números.
+        origem: m.sale_number ? `Venda #${m.sale_number}`
+              : m.supplier ? m.supplier
+              : (m.reason || '').replace(/^Compra\s*–\s*/, '').replace(/\s*\(App Gestão\)$/, '') || null,
+        motivo: m.reason,
+        operador: m.created_by_name,
+      })),
+    });
   } catch (err) {
     return internalError(res, err, '[stock/movements]');
   }
