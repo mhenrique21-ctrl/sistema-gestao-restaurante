@@ -42,9 +42,20 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 
   try {
+    // LIMIT 1 sem ORDER BY era um empate resolvido pelo Postgres como bem
+    // entendesse. Com "mario" e "MARIO" cadastrados, os dois casam em
+    // LOWER(name) e o login passou a cair na conta errada — comparando a senha
+    // digitada contra o hash de outra pessoa. Pior: a ordem física muda quando
+    // uma das linhas é atualizada, então o login "funcionava" até alguém trocar
+    // uma senha e parava de funcionar sem ninguém mexer no código.
+    //
+    // Agora quem casa exatamente vence, e o empate restante cai na conta mais
+    // antiga — determinístico nos dois casos.
     const result = await pool.query(
       `SELECT id, name, email, password_hash, role, active, permissions, must_change_password
-       FROM users WHERE LOWER(name) = LOWER($1) OR LOWER(email) = LOWER($1) LIMIT 1`,
+         FROM users WHERE LOWER(name) = LOWER($1) OR LOWER(email) = LOWER($1)
+        ORDER BY (name = $1) DESC, (email = $1) DESC, created_at
+        LIMIT 1`,
       [identifier]
     );
 
@@ -83,9 +94,14 @@ router.post('/login-pin', loginLimiter, async (req, res) => {
   if (!identifier || !pin) return res.status(400).json({ error: 'Informe o operador e o PIN' });
 
   try {
+    // Mesmo empate do login por senha. Aqui só interessa quem tem PIN — se
+    // duas contas têm o mesmo nome variando maiúscula e só uma cadastrou PIN,
+    // é obviamente essa que a pessoa quis. Entre as que têm, vence a exata.
     const result = await pool.query(
       `SELECT id, name, email, role, active, permissions, pin_hash, must_change_password
-         FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+         FROM users WHERE LOWER(name) = LOWER($1) AND pin_hash IS NOT NULL
+        ORDER BY (name = $1) DESC, created_at
+        LIMIT 1`,
       [identifier]
     );
     const user = result.rows[0];

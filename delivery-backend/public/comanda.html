@@ -1781,6 +1781,20 @@ function renderUsuarios() {
   const euSou = meuId();
   let html = '';
 
+  // Nomes que só diferem de maiúscula deixam o login ambíguo. Já trancou o
+  // dono do sistema pra fora, então é o primeiro aviso da tela.
+  const porMinuscula = {};
+  _usuarios.forEach(u => {
+    const k = String(u.name || '').toLowerCase();
+    (porMinuscula[k] = porMinuscula[k] || []).push(u.name);
+  });
+  const colisoes = Object.values(porMinuscula).filter(l => l.length > 1);
+  if (colisoes.length) {
+    html += colisoes.map(l => `<div class="usr-aviso">🔴 <b>Dois usuários com o mesmo nome: ${l.map(n => `"${n}"`).join(' e ')}.</b>
+      Só a maiúscula muda, e o login não distingue os dois — quem digitar esse nome pode cair na conta errada.
+      Renomeie um deles em Editar, ou desative o que não for usado.</div>`).join('');
+  }
+
   // Um administrador só é uma emergência silenciosa: perder essa conta tranca
   // a loja por fora, e o aviso só aparece quando é o caso.
   if (admins <= 1) {

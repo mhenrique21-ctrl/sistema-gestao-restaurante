@@ -51,6 +51,17 @@ async function registrar(req, alvo, action, details) {
   }
 }
 
+// O índice único de `name` é sensível a maiúsculas, então "mario" e "MARIO"
+// convivem — e o login, que busca por LOWER(name), passa a ter dois candidatos.
+// Já derrubou o acesso do dono do sistema. Barra na entrada.
+async function nomeEmUso(nome, exceto) {
+  const r = await pool.query(
+    `SELECT name FROM users WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 1`,
+    [nome, exceto || '00000000-0000-0000-0000-000000000000']
+  );
+  return r.rows[0]?.name || null;
+}
+
 async function contarAdminsAtivos(exceto) {
   const r = await pool.query(
     `SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND active = true AND id <> $1`,
@@ -98,6 +109,12 @@ router.post('/', async (req, res) => {
   if (erro) return res.status(400).json({ error: erro });
 
   try {
+    const conflito = await nomeEmUso(nome);
+    if (conflito) {
+      return res.status(409).json({
+        error: `Já existe o usuário "${conflito}". Nomes que só mudam de maiúscula confundem o login — escolha outro nome.`,
+      });
+    }
     const hash = await bcrypt.hash(password, 10);
     const email = req.body.email?.trim() || `${nome.toLowerCase().replace(/\s+/g, '.')}@interno.local`;
     // Nasce obrigado a trocar a senha: quem cadastrou sabe a senha provisória,
@@ -146,6 +163,12 @@ router.patch('/:id', async (req, res) => {
     if (req.body.name !== undefined) {
       const nome = String(req.body.name).trim();
       if (!nome) return res.status(400).json({ error: 'Nome não pode ficar vazio' });
+      const conflito = await nomeEmUso(nome, req.params.id);
+      if (conflito) {
+        return res.status(409).json({
+          error: `Já existe o usuário "${conflito}". Nomes que só mudam de maiúscula confundem o login — escolha outro nome.`,
+        });
+      }
       updates.push(`name = $${idx++}`); values.push(nome); mudou.name = nome;
     }
     if (req.body.role !== undefined) {
