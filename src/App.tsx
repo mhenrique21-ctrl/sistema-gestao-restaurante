@@ -376,13 +376,19 @@ const mesclarProdutosDuplicados=(d:any,{canonicoId,idsRemovidos,nomeFinal}:{cano
 // vínculo fica numa fila lá, esperando o de-para — nada some em silêncio.
 // Falhar aqui nunca pode derrubar a compra: ela já foi gravada no Gestão, e o
 // reenvio é seguro (o PDV recusa grupoId repetido).
+// Empresas que têm PDV com estoque próprio. Antes só a SEAMA tinha; a
+// verificação estava escrita no meio da função, e por isso compra lançada pra
+// CONFRARIA simplesmente não descia.
+const EMPRESAS_COM_PDV = ["SEAMA", "CONFRARIA"];
+
 const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
-  if (empresa !== "SEAMA" || !grupoId || !itens?.length) return;
+  if (!EMPRESAS_COM_PDV.includes(empresa) || !grupoId || !itens?.length) return;
   try {
     const r = await fetch("/api/seama-estoque", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        empresa,
         origin_id: grupoId,
         supplier: fornecedor || null,
         items: itens.map((i) => {
@@ -426,12 +432,12 @@ const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
 // Sem nomes, estorna a nota toda. O PDV é idempotente por item, então excluir
 // um item e depois a nota inteira não devolve aquele item duas vezes.
 const estornarCompraSeama = async (empresa, grupoId, nomes) => {
-  if (empresa !== "SEAMA" || !grupoId) return;
+  if (!EMPRESAS_COM_PDV.includes(empresa) || !grupoId) return;
   try {
     const r = await fetch("/api/seama-estorno", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ origin_id: grupoId, items: nomes || null }),
+      body: JSON.stringify({ empresa, origin_id: grupoId, items: nomes || null }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { console.error("[seama-estorno]", d.error || r.status); return; }

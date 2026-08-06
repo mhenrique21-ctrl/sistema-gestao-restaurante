@@ -1237,18 +1237,39 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // Proxy autenticado por segredo de serviço: o navegador nunca vê a
   // credencial, só fala com este backend. O PDV é a fonte da verdade do
   // estoque dos itens de revenda; aqui a compra só é empurrada pra lá.
+  // Cada PDV tem seu próprio segredo e endereço. Antes isto estava fixo na
+  // SEAMA, então compra lançada pra CONFRARIA não chegava a lugar nenhum.
+  // Sem chave configurada, a rota diz QUAL variável falta, em vez de
+  // encaminhar pro PDV errado.
+  const pdvDaEmpresa = (emp) => {
+    const e = String(emp || 'SEAMA').toUpperCase();
+    // A Confraria reaproveita o GESTAO_SERVICE_SECRET, que os dois lados já
+    // usam nas rotas de catálogo — nada novo pra configurar no servidor.
+    if (e === 'CONFRARIA') return {
+      secret: process.env.GESTAO_SERVICE_SECRET,
+      base: process.env.CONFRARIA_PDV_URL || 'https://pedidos.confrariacafe.com',
+      envVar: 'GESTAO_SERVICE_SECRET',
+    };
+    return {
+      secret: process.env.SEAMA_SERVICE_SECRET,
+      base: process.env.SEAMA_PDV_URL || 'https://seama.confrariacafe.com',
+      envVar: 'SEAMA_SERVICE_SECRET',
+    };
+  };
+
   if (req.method === 'POST' && urlPath === '/api/seama-estoque') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
       try {
-        const { origin_id, supplier, items } = JSON.parse(body);
+        const { empresa, origin_id, supplier, items } = JSON.parse(body);
         if (!origin_id || !Array.isArray(items) || !items.length) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'origin_id e items são obrigatórios' })); return;
         }
-        const secret = process.env.SEAMA_SERVICE_SECRET;
-        if (!secret) { res.writeHead(500); res.end(JSON.stringify({ error: 'SEAMA_SERVICE_SECRET não configurado neste servidor' })); return; }
-        const base = process.env.SEAMA_PDV_URL || 'https://seama.confrariacafe.com';
+        const alvo = pdvDaEmpresa(empresa);
+        const secret = alvo.secret;
+        if (!secret) { res.writeHead(500); res.end(JSON.stringify({ error: alvo.envVar + ' não configurado neste servidor' })); return; }
+        const base = alvo.base;
         const upstream = await fetch(`${base}/api/supply/purchase`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
@@ -1274,11 +1295,12 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     req.on('data', c => body += c);
     req.on('end', async () => {
       try {
-        const { origin_id, items } = JSON.parse(body);
+        const { empresa, origin_id, items } = JSON.parse(body);
         if (!origin_id) { res.writeHead(400); res.end(JSON.stringify({ error: 'origin_id é obrigatório' })); return; }
-        const secret = process.env.SEAMA_SERVICE_SECRET;
-        if (!secret) { res.writeHead(500); res.end(JSON.stringify({ error: 'SEAMA_SERVICE_SECRET não configurado neste servidor' })); return; }
-        const base = process.env.SEAMA_PDV_URL || 'https://seama.confrariacafe.com';
+        const alvo = pdvDaEmpresa(empresa);
+        const secret = alvo.secret;
+        if (!secret) { res.writeHead(500); res.end(JSON.stringify({ error: alvo.envVar + ' não configurado neste servidor' })); return; }
+        const base = alvo.base;
         const upstream = await fetch(`${base}/api/supply/purchase/reverse`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
