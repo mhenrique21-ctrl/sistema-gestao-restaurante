@@ -554,6 +554,45 @@
   .prod-card .switch { width: 38px; height: 21px; }
   .prod-card .switch .slider::before { height: 15px; width: 15px; }
   .prod-card .switch input:checked + .slider::before { transform: translateX(17px); }
+
+  /* ── Usuários ─────────────────────────────────────── */
+  .usr-abas { display: flex; gap: 6px; flex: 1; }
+  .usr-card { display: flex; align-items: center; gap: 14px; background: var(--c-surface); border: 1px solid var(--c-border);
+    border-left: 3px solid var(--gold); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; flex-wrap: wrap; }
+  .usr-card.off { border-left-color: var(--c-border); background: repeating-linear-gradient(135deg, var(--c-surface) 0 8px, #F4EFE6 8px 10px); }
+  .usr-card.off .usr-nome { color: var(--c-muted); text-decoration: line-through; }
+  .usr-av { width: 42px; height: 42px; min-width: 42px; border-radius: 50%; background: var(--gold); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.05rem; }
+  .usr-card.off .usr-av { background: var(--c-border); color: var(--c-muted); }
+  .usr-meio { flex: 1; min-width: 210px; }
+  .usr-nome { font-weight: 800; font-size: .95rem; color: var(--c-text); }
+  .usr-sub { font-size: .75rem; color: var(--c-muted); margin-top: 2px; }
+  .usr-selos { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+  .usr-selo { font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--c-border); color: var(--c-muted); }
+  .usr-selo.cargo { background: rgba(160,109,34,.12); border-color: var(--gold-dim); color: var(--gold-dim); }
+  .usr-selo.alerta { background: #FDF7EC; border-color: #E8D3A8; color: #8A6412; }
+  .usr-selo.ok { background: rgba(31,122,85,.1); border-color: #9CCBB6; color: #1F7A55; }
+  .usr-acoes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .usr-acoes .prod-btn { padding: 6px 10px; font-size: .78rem; }
+  .usr-vazio { font-size: .8rem; color: var(--c-muted); padding: 16px 2px; }
+
+  .usr-cargo-op { display: block; width: 100%; text-align: left; border: 2px solid var(--c-border); background: var(--c-bg);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 7px; }
+  .usr-cargo-op.on { border-color: var(--gold); background: rgba(160,109,34,.08); }
+  .usr-cargo-op b { display: block; font-size: .88rem; color: var(--c-text); }
+  .usr-cargo-op span { display: block; font-size: .74rem; color: var(--c-muted); line-height: 1.45; margin-top: 2px; }
+  /* Barra de força da senha: feedback imediato vale mais que uma regra escrita
+     que ninguém lê antes de digitar. */
+  .usr-forca { height: 5px; border-radius: 999px; background: var(--c-border); overflow: hidden; margin-top: 6px; }
+  .usr-forca i { display: block; height: 100%; width: 0; transition: width .2s, background .2s; }
+  .usr-forca-txt { font-size: .72rem; color: var(--c-muted); margin-top: 4px; display: block; }
+  .usr-aviso { background: #FDF7EC; border: 1px solid #E8D3A8; color: #8A6412; border-radius: 10px;
+    padding: 10px 12px; font-size: .78rem; line-height: 1.5; margin-bottom: 12px; }
+  .usr-audit-item { display: flex; align-items: baseline; gap: 10px; background: var(--c-surface); border: 1px solid var(--c-border);
+    border-radius: 9px; padding: 9px 12px; margin-bottom: 6px; font-size: .82rem; flex-wrap: wrap; }
+  .usr-audit-item .quando { color: var(--c-muted); font-size: .74rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .usr-audit-item .oque { flex: 1; min-width: 200px; color: var(--c-text); }
+  .usr-audit-item .oque b { font-weight: 800; }
   .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .switch .slider { position: absolute; cursor: pointer; inset: 0; background: var(--c-border); border-radius: 999px; transition: .15s; }
@@ -733,10 +772,10 @@
         </div>
 
         <div class="login-section-title">Usuário</div>
-        <input id="login-usuario" list="login-usuario-list" type="text" placeholder="Nome de usuário" autocomplete="username" style="width:100%;padding:13px 14px;border-radius:10px;border:1px solid var(--c-border);background:var(--c-bg);color:var(--c-text);font-size:1rem;margin-bottom:14px">
+        <input id="login-usuario" list="login-usuario-list" type="text" placeholder="Nome de usuário" autocomplete="username" oninput="atualizarOpcaoPin()" style="width:100%;padding:13px 14px;border-radius:10px;border:1px solid var(--c-border);background:var(--c-bg);color:var(--c-text);font-size:1rem;margin-bottom:14px">
         <datalist id="login-usuario-list"></datalist>
 
-        <div class="login-section-title">Senha de acesso</div>
+        <div class="login-section-title" id="login-campo-titulo">Senha de acesso</div>
         <div class="login-pass-wrap">
           <span class="lic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
           <input id="login-senha" type="password" placeholder="Digite sua senha" autocomplete="current-password">
@@ -748,10 +787,13 @@
         <div id="login-error"></div>
         <button id="login-btn" onclick="doLogin()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Acessar PDV
+          <span id="login-btn-txt">Acessar PDV</span>
         </button>
 
         <div class="login-footlinks">
+          <!-- Só aparece pra quem tem PIN cadastrado; um atalho que erra sempre
+               ensina a equipe a ignorar o atalho. -->
+          <a id="login-modo-pin" class="hidden" onclick="alternarModoPin()">🔢 Entrar com PIN</a>
           <a onclick="showToast('Contate um administrador para redefinir sua senha.')">❓ Esqueci minha senha</a>
           <a onclick="window.location.href='/home.html'">🏠 Voltar ao menu</a>
         </div>
@@ -994,7 +1036,17 @@
   </div>
   <div id="cfg-subtab-clientes" class="hidden placeholder-screen"><span class="icon">👥</span><h2>Clientes</h2><p>Em construção — em breve por aqui.</p></div>
   <div id="cfg-subtab-relatorios" class="hidden placeholder-screen"><span class="icon">📊</span><h2>Relatórios</h2><p>Em construção — em breve por aqui.</p></div>
-  <div id="cfg-subtab-usuarios" class="hidden placeholder-screen"><span class="icon">🔐</span><h2>Usuários</h2><p>Em construção — em breve por aqui.</p></div>
+  <div id="cfg-subtab-usuarios" class="hidden">
+    <div class="estoque-toolbar">
+      <div class="usr-abas">
+        <button class="prod-chip on" id="usr-aba-lista" onclick="setUsrAba('lista')">👤 Operadores</button>
+        <button class="prod-chip" id="usr-aba-audit" onclick="setUsrAba('audit')">📋 Histórico de acessos</button>
+      </div>
+      <button class="btn btn-primary" id="usr-novo-btn" onclick="novoUsuario()" style="white-space:nowrap">+ Novo operador</button>
+    </div>
+    <div id="usr-lista"><div class="cart-empty">Carregando...</div></div>
+    <div id="usr-audit" class="hidden"><div class="cart-empty">Carregando...</div></div>
+  </div>
 </div>
 <div id="impressora-screen" class="hidden placeholder-screen"><span class="icon">🖨️</span><h2>Impressora</h2><p>Em construção — em breve por aqui.</p></div>
 
@@ -1279,7 +1331,38 @@ async function loadPdvOperators() {
     const ops = await res.json();
     if (!res.ok || !Array.isArray(ops)) return;
     list.innerHTML = ops.map(op => `<option value="${op.name}">`).join('');
+    _operadoresComPin = ops.filter(o => o.tem_pin).map(o => String(o.name).toLowerCase());
+    atualizarOpcaoPin();
   } catch (e) {}
+}
+
+// ── Entrada por PIN ──────────────────────────────────
+// Digitar senha longa em tablet a cada troca de turno faz a equipe escolher
+// senha curta ou deixar a sessão aberta o dia todo. O PIN resolve o balcão sem
+// enfraquecer o painel administrativo, onde a senha continua obrigatória.
+let _operadoresComPin = [], _modoPin = false;
+
+function atualizarOpcaoPin() {
+  const nome = (document.getElementById('login-usuario')?.value || '').trim().toLowerCase();
+  const tem = nome && _operadoresComPin.includes(nome);
+  document.getElementById('login-modo-pin')?.classList.toggle('hidden', !tem);
+  if (!tem && _modoPin) alternarModoPin();
+}
+
+function alternarModoPin() {
+  _modoPin = !_modoPin;
+  const campo = document.getElementById('login-senha');
+  campo.value = '';
+  campo.type = 'password';
+  campo.placeholder = _modoPin ? 'Digite seu PIN' : 'Digite sua senha';
+  campo.setAttribute('inputmode', _modoPin ? 'numeric' : 'text');
+  campo.style.letterSpacing = _modoPin ? '.5em' : '.04em';
+  campo.style.textAlign = _modoPin ? 'center' : '';
+  document.getElementById('login-campo-titulo').textContent = _modoPin ? 'PIN de acesso' : 'Senha de acesso';
+  document.getElementById('login-btn-txt').textContent = _modoPin ? 'Entrar com PIN' : 'Acessar PDV';
+  document.getElementById('login-modo-pin').textContent = _modoPin ? '🔒 Entrar com senha' : '🔢 Entrar com PIN';
+  document.getElementById('login-error').textContent = '';
+  campo.focus();
 }
 
 function toggleSenhaVisivel() {
@@ -1294,7 +1377,8 @@ async function doLogin() {
   const btn = document.getElementById('login-btn');
   erro.textContent = '';
   if (!nome) { erro.textContent = 'Selecione um operador'; return; }
-  if (!senha) { erro.textContent = 'Digite sua senha'; return; }
+  if (!senha) { erro.textContent = _modoPin ? 'Digite seu PIN' : 'Digite sua senha'; return; }
+  if (_modoPin) return doLoginPin(nome, senha);
   btn.disabled = true;
   const originalHtml = btn.innerHTML;
   btn.textContent = 'Entrando...';
@@ -1311,20 +1395,109 @@ async function doLogin() {
     TOKEN = data.token;
     ROLE = data.user.role;
     USER_NAME = data.user.name || nome;
-    localStorage.setItem(TOKEN_KEY, TOKEN);
-    localStorage.setItem(ROLE_KEY, ROLE);
-    localStorage.setItem(NAME_KEY, USER_NAME);
-    localStorage.setItem('pdv_staff', JSON.stringify({ name: USER_NAME }));
-    document.getElementById('login-screen').classList.add('hidden');
-    startTabBarClock();
-    connectWS();
-    checkAberturaCaixa();
+    // Senha provisória: entra com o token, mas antes de qualquer coisa escolhe
+    // uma senha que só ela sabe. Sem isso quem cadastrou continua sabendo a
+    // senha, e nada feito nessa conta prova quem foi.
+    if (data.user.must_change_password) { pedirTrocaDeSenha(senha); return; }
+    entrarNoPdv();
   } catch (err) {
     erro.textContent = err.message;
   } finally {
     btn.innerHTML = originalHtml;
     btn.disabled = false;
   }
+}
+
+async function doLoginPin(nome, pin) {
+  const erro = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/auth/login-pin`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nome, pin }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      // Quem ainda deve trocar a senha volta pro modo senha, senão o PIN vira
+      // o jeito de nunca trocar.
+      if (data.code === 'TROCAR_SENHA') { alternarModoPin(); erro.textContent = data.error; return; }
+      throw new Error(data.error || 'Operador ou PIN inválido');
+    }
+    if (!['admin', 'atendente'].includes(data.user?.role)) throw new Error('Este login não tem acesso a comandas');
+    if (loginStatusTimer) { clearInterval(loginStatusTimer); loginStatusTimer = null; }
+    TOKEN = data.token; ROLE = data.user.role; USER_NAME = data.user.name || nome;
+    entrarNoPdv();
+  } catch (e) {
+    erro.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function entrarNoPdv() {
+  localStorage.setItem(TOKEN_KEY, TOKEN);
+  localStorage.setItem(ROLE_KEY, ROLE);
+  localStorage.setItem(NAME_KEY, USER_NAME);
+  localStorage.setItem('pdv_staff', JSON.stringify({ name: USER_NAME }));
+  document.getElementById('login-screen').classList.add('hidden');
+  startTabBarClock();
+  connectWS();
+  checkAberturaCaixa();
+}
+
+// Troca obrigatória da senha provisória. Não tem botão de pular: pular é
+// exatamente o que faria a medida não valer nada.
+function pedirTrocaDeSenha(senhaAtual) {
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop';
+  bd.id = 'troca-senha-backdrop';
+  bd.innerHTML = `<div class="modal-sheet" style="max-width:440px">
+    <h3>🔒 Escolha sua senha</h3>
+    <p style="font-size:.82rem;color:var(--c-muted);line-height:1.5;margin:6px 0 14px">
+      A senha atual foi criada por outra pessoa. Escolha uma que só você saiba —
+      é o que faz cada venda, sangria e fechamento ficarem no seu nome de verdade.
+    </p>
+    <div class="field-group">
+      <label>Nova senha</label>
+      <input type="password" id="ts-nova" autocomplete="new-password" oninput="atualizarForca(this)">
+      <div class="usr-forca"><i id="usr-forca-bar"></i></div>
+      <small class="usr-forca-txt" id="usr-forca-txt"></small>
+    </div>
+    <div class="field-group">
+      <label>Repita a nova senha</label>
+      <input type="password" id="ts-conf" autocomplete="new-password">
+    </div>
+    <div id="ts-erro" style="color:var(--danger);font-size:.82rem;min-height:18px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="width:100%" id="ts-ok">Salvar e entrar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bd);
+  const err = document.getElementById('ts-erro');
+  document.getElementById('ts-ok').addEventListener('click', async () => {
+    const nova = document.getElementById('ts-nova').value;
+    const conf = document.getElementById('ts-conf').value;
+    err.textContent = '';
+    if (nova !== conf) { err.textContent = 'As duas senhas não são iguais'; return; }
+    const btn = document.getElementById('ts-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/auth/change-password`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ current_password: senhaAtual, new_password: nova }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { err.textContent = d.error || 'Não consegui trocar a senha'; return; }
+      // Trocar a senha encerra as sessões, inclusive a que acabou de nascer —
+      // o servidor devolve um token novo pra esta continuar valendo.
+      if (d.token) TOKEN = d.token;
+      bd.remove();
+      showToast('Senha alterada. Bem-vindo!');
+      entrarNoPdv();
+    } catch (e) { err.textContent = 'Erro de conexão'; } finally { btn.disabled = false; }
+  });
+  setTimeout(() => document.getElementById('ts-nova')?.focus(), 60);
 }
 
 // ── Resolver comanda ────────────────────────────────
@@ -1537,6 +1710,368 @@ function showCfgSubtab(tab) {
     document.getElementById(screenId).classList.toggle('hidden', key !== tab);
   }
   if (tab === 'comandas') loadCfgComandas();
+  if (tab === 'usuarios') loadUsuarios();
+}
+
+// ── Aba Configurações → Usuários ────────────────────────
+// Os cargos abaixo descrevem o acesso que o sistema realmente concede: só
+// 'admin' e 'atendente' abrem alguma rota protegida. Prometer mais granularidade
+// do que existe seria pior que não ter tela nenhuma.
+const USR_CARGOS = {
+  admin: { nome: 'Administrador', icone: '👑',
+    desc: 'Acesso total: produtos, preços, usuários, compras, caixa e relatórios.' },
+  atendente: { nome: 'Caixa / Atendente', icone: '🧾',
+    desc: 'Vende, lança comanda, abre e fecha o caixa, faz sangria e imprime. Não mexe em preço, produto nem usuário.' },
+  cozinha: { nome: 'Cozinha', icone: '🍳',
+    desc: 'Só a tela de pedidos da cozinha. Nenhuma tela de gestão.' },
+  entregador: { nome: 'Entregador', icone: '🛵',
+    desc: 'Só entra no sistema. Nenhuma tela de gestão.' },
+  operador: { nome: 'Operador (cargo antigo)', icone: '📦',
+    desc: 'Cargo herdado, sem acesso a nenhuma tela protegida. Use Caixa no lugar dele.' },
+};
+const USR_CARGOS_NOVOS = ['admin', 'atendente', 'cozinha', 'entregador'];
+
+let _usuarios = [], _usrAba = 'lista';
+
+function setUsrAba(aba) {
+  _usrAba = aba;
+  document.getElementById('usr-aba-lista').classList.toggle('on', aba === 'lista');
+  document.getElementById('usr-aba-audit').classList.toggle('on', aba === 'audit');
+  document.getElementById('usr-lista').classList.toggle('hidden', aba !== 'lista');
+  document.getElementById('usr-audit').classList.toggle('hidden', aba !== 'audit');
+  document.getElementById('usr-novo-btn').classList.toggle('hidden', aba !== 'lista');
+  if (aba === 'audit') loadUsrAudit();
+}
+
+async function loadUsuarios() {
+  const el = document.getElementById('usr-lista');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/users`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (res.status === 403) { el.innerHTML = '<div class="cart-empty">Só administrador gerencia usuários</div>'; return; }
+    _usuarios = await res.json();
+    renderUsuarios();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro ao carregar usuários</div>';
+  }
+}
+
+function tempoDesde(iso) {
+  if (!iso) return null;
+  const dias = Math.floor((Date.now() - new Date(iso)) / 86400000);
+  if (dias === 0) return 'hoje';
+  if (dias === 1) return 'ontem';
+  if (dias < 30) return `há ${dias} dias`;
+  const meses = Math.floor(dias / 30);
+  return `há ${meses} ${meses === 1 ? 'mês' : 'meses'}`;
+}
+
+function renderUsuarios() {
+  const el = document.getElementById('usr-lista');
+  const admins = _usuarios.filter(u => u.role === 'admin' && u.active).length;
+  let html = '';
+
+  // Um administrador só é uma emergência silenciosa: perder essa conta tranca
+  // a loja por fora, e o aviso só aparece quando é o caso.
+  if (admins <= 1) {
+    html += `<div class="usr-aviso">⚠️ <b>Só há ${admins} administrador ativo.</b>
+      Se essa conta for perdida ou bloqueada, ninguém consegue cadastrar usuário, mudar preço
+      nem fechar o caixa como administrador. Cadastre um segundo administrador de confiança.</div>`;
+  }
+
+  html += _usuarios.map(u => {
+    const cargo = USR_CARGOS[u.role] || { nome: u.role, icone: '👤', desc: '' };
+    const inicial = (u.name || '?').trim().charAt(0).toUpperCase();
+    const acesso = tempoDesde(u.last_login_at);
+    const selos = [`<span class="usr-selo cargo">${cargo.icone} ${cargo.nome}</span>`];
+    if (!u.active) selos.push('<span class="usr-selo">Desativado</span>');
+    if (u.must_change_password) selos.push('<span class="usr-selo alerta">Senha provisória</span>');
+    if (u.tem_pin) selos.push('<span class="usr-selo ok">PIN ativo</span>');
+    // Conta parada é a que vaza sem ninguém notar.
+    if (u.active && !u.last_login_at) selos.push('<span class="usr-selo alerta">Nunca acessou</span>');
+    else if (u.active && (Date.now() - new Date(u.last_login_at)) > 60 * 86400000) {
+      selos.push('<span class="usr-selo alerta">Parada há mais de 60 dias</span>');
+    }
+    return `
+    <div class="usr-card ${u.active ? '' : 'off'}">
+      <div class="usr-av">${inicial}</div>
+      <div class="usr-meio">
+        <div class="usr-nome">${u.name}</div>
+        <div class="usr-sub">Último acesso: ${acesso || 'nunca'}</div>
+        <div class="usr-selos">${selos.join('')}</div>
+      </div>
+      <div class="usr-acoes">
+        <button class="prod-btn" onclick="editarUsuario('${u.id}')">✏️ Editar</button>
+        <button class="prod-btn" onclick="resetarSenha('${u.id}')">🔑 Nova senha</button>
+        <button class="prod-btn" onclick="gerenciarPin('${u.id}')">${u.tem_pin ? '🔢 PIN' : '🔢 Criar PIN'}</button>
+        <button class="prod-btn" onclick="encerrarSessoes('${u.id}')" title="Derruba o acesso em qualquer aparelho">🚪 Encerrar sessões</button>
+        <label class="switch" title="${u.active ? 'Desativar acesso' : 'Reativar acesso'}">
+          <input type="checkbox" ${u.active ? 'checked' : ''} onchange="alternarUsuario('${u.id}', this.checked, this)">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = html || '<div class="usr-vazio">Nenhum usuário cadastrado.</div>';
+}
+
+// Medidor de força: comprimento pesa mais que variedade, que é o que a
+// literatura de senha mostra e o oposto do que as regras de símbolo obrigam.
+function forcaDaSenha(s) {
+  if (!s) return { pct: 0, cor: '#ccc', txt: '' };
+  let p = Math.min(60, s.length * 8);
+  if (/[a-z]/.test(s) && /[A-Z]/.test(s)) p += 12;
+  if (/\d/.test(s)) p += 12;
+  if (/[^\w]/.test(s)) p += 16;
+  if (/^(.)\1+$/.test(s)) p = 10;
+  p = Math.min(100, p);
+  if (s.length < 6) return { pct: Math.min(p, 25), cor: '#D33A3A', txt: 'Curta demais — mínimo 6 caracteres' };
+  if (p < 55) return { pct: p, cor: '#D33A3A', txt: 'Fraca' };
+  if (p < 80) return { pct: p, cor: '#B4801A', txt: 'Razoável' };
+  return { pct: p, cor: '#1F7A55', txt: 'Boa' };
+}
+
+function atualizarForca(input) {
+  const f = forcaDaSenha(input.value);
+  const barra = document.getElementById('usr-forca-bar');
+  const txt = document.getElementById('usr-forca-txt');
+  if (!barra) return;
+  barra.style.width = f.pct + '%';
+  barra.style.background = f.cor;
+  txt.textContent = f.txt;
+  txt.style.color = f.cor;
+}
+
+function usrCargoSeletor(atual) {
+  const lista = USR_CARGOS_NOVOS.includes(atual) || !atual ? USR_CARGOS_NOVOS : [...USR_CARGOS_NOVOS, atual];
+  return lista.map(k => {
+    const c = USR_CARGOS[k];
+    return `<button type="button" class="usr-cargo-op ${k === atual ? 'on' : ''}" data-cargo="${k}"
+      onclick="document.querySelectorAll('.usr-cargo-op').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+      <b>${c.icone} ${c.nome}</b><span>${c.desc}</span></button>`;
+  }).join('');
+}
+
+function usrModal(titulo, corpo, acaoRotulo, acaoFn) {
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop';
+  bd.id = 'usr-modal-backdrop';
+  bd.innerHTML = `<div class="modal-sheet" style="max-width:520px">
+    <h3>${titulo}</h3>
+    <div style="margin-top:12px">${corpo}</div>
+    <div id="usr-modal-erro" style="color:var(--danger);font-size:.82rem;min-height:18px;margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('usr-modal-backdrop').remove()">Cancelar</button>
+      <button class="btn btn-primary" id="usr-modal-ok">${acaoRotulo}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bd);
+  document.getElementById('usr-modal-ok').addEventListener('click', acaoFn);
+  return bd;
+}
+
+function usrErro(msg) { document.getElementById('usr-modal-erro').textContent = msg || ''; }
+
+function novoUsuario() {
+  usrModal('Novo operador', `
+    <div class="field-group">
+      <label>Nome de usuário (é com ele que a pessoa entra)</label>
+      <input type="text" id="usr-nome" autocomplete="off" placeholder="Ex: joana">
+    </div>
+    <div class="field-group">
+      <label>Senha provisória</label>
+      <input type="text" id="usr-senha" autocomplete="off" oninput="atualizarForca(this)" placeholder="mínimo 6 caracteres">
+      <div class="usr-forca"><i id="usr-forca-bar"></i></div>
+      <small class="usr-forca-txt" id="usr-forca-txt"></small>
+    </div>
+    <div class="field-group">
+      <label>Cargo</label>
+      ${usrCargoSeletor('atendente')}
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      🔒 A pessoa será obrigada a trocar essa senha no primeiro acesso. É o que faz
+      valer o registro: enquanto você souber a senha dela, uma sangria feita nesse
+      login não prova quem foi.
+    </div>`, 'Cadastrar', async () => {
+    const name = document.getElementById('usr-nome').value.trim();
+    const password = document.getElementById('usr-senha').value;
+    const role = document.querySelector('.usr-cargo-op.on')?.dataset.cargo || 'atendente';
+    if (!name) return usrErro('Informe o nome de usuário');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/users`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ name, password, role }),
+      });
+      const d = await res.json();
+      if (!res.ok) { usrErro(d.error || 'Erro ao cadastrar'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast(`${name} cadastrado como ${USR_CARGOS[role].nome}`);
+      loadUsuarios();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+}
+
+function editarUsuario(id) {
+  const u = _usuarios.find(x => x.id === id);
+  if (!u) return;
+  usrModal(`Editar ${u.name}`, `
+    <div class="field-group">
+      <label>Nome de usuário</label>
+      <input type="text" id="usr-nome" value="${(u.name || '').replace(/"/g, '&quot;')}" autocomplete="off">
+    </div>
+    <div class="field-group">
+      <label>Cargo</label>
+      ${usrCargoSeletor(u.role)}
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      Mudar o cargo encerra as sessões abertas desta pessoa — ela entra de novo já com o acesso novo.
+    </div>`, 'Salvar', async () => {
+    const name = document.getElementById('usr-nome').value.trim();
+    const role = document.querySelector('.usr-cargo-op.on')?.dataset.cargo;
+    if (!name) return usrErro('Nome não pode ficar vazio');
+    const corpo = {};
+    if (name !== u.name) corpo.name = name;
+    if (role && role !== u.role) corpo.role = role;
+    if (!Object.keys(corpo).length) { document.getElementById('usr-modal-backdrop').remove(); return; }
+    await patchUsuario(id, corpo, 'Alterações salvas');
+  });
+}
+
+function resetarSenha(id) {
+  const u = _usuarios.find(x => x.id === id);
+  if (!u) return;
+  usrModal(`Nova senha para ${u.name}`, `
+    <div class="field-group">
+      <label>Senha provisória</label>
+      <input type="text" id="usr-senha" autocomplete="off" oninput="atualizarForca(this)" placeholder="mínimo 6 caracteres">
+      <div class="usr-forca"><i id="usr-forca-bar"></i></div>
+      <small class="usr-forca-txt" id="usr-forca-txt"></small>
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      Trocar a senha derruba as sessões abertas desta pessoa, e ela terá que
+      escolher uma senha nova no próximo acesso.
+    </div>`, 'Trocar senha', async () => {
+    const password = document.getElementById('usr-senha').value;
+    await patchUsuario(id, { password }, `Senha de ${u.name} trocada`);
+  });
+}
+
+async function patchUsuario(id, corpo, sucesso) {
+  const btn = document.getElementById('usr-modal-ok');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/users/${id}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(corpo),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { usrErro(d.error || 'Erro ao salvar'); return false; }
+    document.getElementById('usr-modal-backdrop')?.remove();
+    showToast(sucesso);
+    loadUsuarios();
+    return true;
+  } catch (e) { usrErro('Erro de conexão'); return false; }
+  finally { if (btn) btn.disabled = false; }
+}
+
+async function alternarUsuario(id, ativo, input) {
+  const u = _usuarios.find(x => x.id === id);
+  if (!ativo && !confirm(`Desativar ${u?.name}?\n\nO acesso é cortado na hora, em qualquer aparelho onde a conta estiver aberta.`)) {
+    input.checked = true; return;
+  }
+  try {
+    const res = await fetch(`${API}/api/users/${id}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ active: ativo }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { input.checked = !ativo; showToast(d.error || 'Erro ao salvar'); loadUsuarios(); return; }
+    showToast(ativo ? `${u?.name} reativado` : `${u?.name} desativado — acesso cortado`);
+    loadUsuarios();
+  } catch (e) { input.checked = !ativo; showToast('Erro de conexão'); }
+}
+
+async function encerrarSessoes(id) {
+  const u = _usuarios.find(x => x.id === id);
+  if (!confirm(`Encerrar as sessões de ${u?.name}?\n\nQualquer aparelho logado com essa conta cai imediatamente e precisa entrar de novo. A conta continua ativa.`)) return;
+  try {
+    const res = await fetch(`${API}/api/users/${id}/revoke`, { method: 'POST', headers: authHeaders() });
+    const d = await res.json().catch(() => ({}));
+    showToast(res.ok ? `Sessões de ${u?.name} encerradas` : (d.error || 'Erro'));
+    if (res.ok) loadUsuarios();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+function gerenciarPin(id) {
+  const u = _usuarios.find(x => x.id === id);
+  if (!u) return;
+  usrModal(`PIN de ${u.name}`, `
+    <div class="field-group">
+      <label>PIN de 4 a 6 dígitos</label>
+      <input type="text" id="usr-pin" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Ex: 4820"
+             style="font-size:1.5rem;text-align:center;letter-spacing:.4em">
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      O PIN vale só para entrar no PDV, no aparelho do balcão. No painel administrativo
+      a senha completa continua sendo exigida. É o que evita a equipe escolher senha
+      curta só porque digita ela vinte vezes por dia num tablet.
+    </div>
+    ${u.tem_pin ? `<button class="btn btn-secondary" style="width:100%;margin-top:12px" onclick="removerPin('${id}')">Remover o PIN desta pessoa</button>` : ''}
+  `, u.tem_pin ? 'Trocar PIN' : 'Criar PIN', async () => {
+    const pin = document.getElementById('usr-pin').value.trim();
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/users/${id}/pin`, {
+        method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ pin }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao salvar o PIN'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast(`PIN de ${u.name} definido`);
+      loadUsuarios();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+}
+
+async function removerPin(id) {
+  try {
+    const res = await fetch(`${API}/api/users/${id}/pin`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) { usrErro('Erro ao remover o PIN'); return; }
+    document.getElementById('usr-modal-backdrop')?.remove();
+    showToast('PIN removido');
+    loadUsuarios();
+  } catch (e) { usrErro('Erro de conexão'); }
+}
+
+async function loadUsrAudit() {
+  const el = document.getElementById('usr-audit');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/users/audit`, { headers: authHeaders() });
+    if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar o histórico</div>'; return; }
+    const linhas = await res.json();
+    if (!linhas.length) {
+      el.innerHTML = '<div class="usr-vazio">Nada registrado ainda. A partir de agora, toda criação, desativação, troca de cargo ou de senha aparece aqui.</div>';
+      return;
+    }
+    el.innerHTML = linhas.map(l => {
+      const d = new Date(l.created_at);
+      const det = l.details || {};
+      const extra = det.role ? ` (${USR_CARGOS[det.role]?.nome || det.role})` : '';
+      return `<div class="usr-audit-item">
+        <span class="quando">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span class="oque"><b>${l.actor_name || '—'}</b> ${l.action} <b>${l.target_name || '—'}</b>${extra}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
 }
 
 let cfgComandasData = [];
