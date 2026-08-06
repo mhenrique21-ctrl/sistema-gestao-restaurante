@@ -270,6 +270,25 @@
   .modal-sheet h3 { font-size: 1.1rem; margin-bottom: 4px; color: var(--gold-dim); }
   /* Divisor entre "como preparar" (sem preço) e "adicionais" (com preço). Sem
      ele, o operador lê tudo como se fosse cobrança e hesita em cada escolha. */
+  /* Destaques do autoatendimento */
+  .dest-card { display: flex; gap: 12px; border: 1px solid var(--c-border); border-radius: 12px;
+    padding: 12px; margin-bottom: 10px; background: var(--c-surface); }
+  .dest-off { opacity: .55; }
+  /* Prévia na proporção da tela do totem, pra dar noção de enquadramento. */
+  .dest-img { width: 150px; min-width: 150px; height: 94px; border-radius: 9px; background: #EFE9E0;
+    background-size: cover; background-position: center; display: flex; align-items: center;
+    justify-content: center; font-size: .7rem; color: var(--c-muted); }
+  .dest-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .dest-info input, .dest-info select { width: 100%; }
+  .dest-info .d-title { font-weight: 600; }
+  .dest-row { display: flex; gap: 6px; }
+  .dest-row .d-price { max-width: 120px; }
+  .dest-row button { padding: 0 12px; }
+  .dest-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .8rem; }
+  .dest-acoes label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .dest-info small { font-size: .7rem; color: var(--c-muted); line-height: 1.5; }
+  @media (max-width: 700px) { .dest-card { flex-direction: column; } .dest-img { width: 100%; } }
+
   /* Entradas e margem */
   .ent-resumo { display: flex; justify-content: space-between; align-items: center; gap: 10px;
     padding: 11px 14px; background: var(--c-surface); border: 1px solid var(--c-border);
@@ -565,6 +584,7 @@
   <button class="tab-tile" data-tab="compras" onclick="showTab('compras')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span>Compras<span class="nav-badge nav-badge-alerta hidden" id="compras-badge"></span></button>
 
   <div class="nav-group">Ajustes</div>
+  <button class="tab-tile" data-tab="destaques" onclick="showTab('destaques')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.1 8.6 22 9.6 17 14.5 18.2 21.5 12 18.2 5.8 21.5 7 14.5 2 9.6 8.9 8.6 12 2"/></svg></span>Destaques</button>
   <button class="tab-tile" data-tab="adicionais" onclick="showTab('adicionais')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>Adicionais</button>
   <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/><circle cx="12" cy="12" r="6"/><path d="M9 11h5v2a2.5 2.5 0 0 1-2.5 2.5A2.5 2.5 0 0 1 9 13v-2z"/><path d="M14 11.6h.8a1 1 0 1 1 0 2h-.5"/></svg></span>Configurações</button>
   <button class="tab-tile" data-tab="impressora" onclick="showTab('impressora')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 12.5h1.2"/><path d="M6 17h12v4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4z"/></svg></span>Impressoras</button>
@@ -721,6 +741,15 @@
 </div>
 
 <!-- ── Inventário: folha de contagem ── -->
+<!-- ── Destaques do autoatendimento ── -->
+<div id="destaques-screen" class="hidden">
+  <div class="estoque-toolbar">
+    <span style="font-size:.85rem;color:var(--c-muted);flex:1">Aparecem no descanso de tela do tablet de autoatendimento, em rodízio a cada 5 segundos.</span>
+    <button class="btn btn-primary" onclick="novoDestaque()" style="white-space:nowrap">+ Novo destaque</button>
+  </div>
+  <div id="destaques-body"><div class="cart-empty">Carregando...</div></div>
+</div>
+
 <!-- ── Extrato de entradas ── -->
 <div id="entradas-screen" class="hidden">
   <div class="estoque-toolbar" id="ent-filtros"></div>
@@ -1260,6 +1289,7 @@ const TAB_SCREENS = {
   compras: 'compras-screen',
   entradas: 'entradas-screen',
   margem: 'margem-screen',
+  destaques: 'destaques-screen',
 };
 
 // Abas que hoje ficam nos botões grandes do topo (Fazer Pedido/Delivery/Comandas/Caixa)
@@ -1279,6 +1309,7 @@ function showTab(tab) {
   document.getElementById('header-actions').classList.remove('hidden');
   if (tab === 'estoque') loadEstoque();
   if (tab === 'compras') loadCompras();
+  if (tab === 'destaques') loadDestaques();
   if (tab === 'entradas') loadEntradas();
   if (tab === 'margem') loadMargens();
   if (tab === 'financeiro') loadFinanceiro();
@@ -2017,6 +2048,139 @@ async function confirmarInventario() {
   } finally {
     btn.disabled = false; btn.textContent = 'Fechar inventário';
   }
+}
+
+// ── Destaques do autoatendimento ──────────────────────
+// Sem imagem o destaque não entra no rodízio: o descanso de tela é uma tela
+// cheia de foto, e um destaque só com texto viraria um retângulo preto.
+let _destaques = [];
+
+async function loadDestaques() {
+  const el = document.getElementById('destaques-body');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    if (!estoqueCats.length) {
+      const rp = await fetch(`${API}/api/menu/admin`, { headers: authHeaders() });
+      if (rp.ok) estoqueCats = await rp.json();
+    }
+    const res = await fetch(`${API}/api/highlights/admin`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (res.status === 403) { el.innerHTML = '<div class="cart-empty">Só administrador edita destaques</div>'; return; }
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = `<div class="cart-empty">${d.error || 'Erro ao carregar'}</div>`; return; }
+    _destaques = d;
+    renderDestaques(el);
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function renderDestaques(el) {
+  const ativosComFoto = _destaques.filter(h => h.active && (h.image_url || h.product_image));
+  const prods = estoqueCats.flatMap(c => c.products || []);
+
+  el.innerHTML = `
+    ${!ativosComFoto.length ? `
+      <div class="vinc-alert">
+        <div class="t">⚠️ Nenhum destaque ativo com imagem</div>
+        <div class="l">O descanso de tela cai no comportamento antigo: produtos em promoção que tenham foto. Se não houver nenhum, o tablet simplesmente não mostra descanso.</div>
+      </div>` : `
+      <div class="ent-resumo" style="margin-bottom:12px">
+        <div><span>${ativosComFoto.length}</span> ${ativosComFoto.length === 1 ? 'destaque no ar' : 'destaques no rodízio'}</div>
+        <div style="font-size:.75rem;color:var(--c-muted)">${ativosComFoto.length === 1 ? 'imagem fixa na tela' : `troca a cada 5s — volta completa em ${ativosComFoto.length * 5}s`}</div>
+      </div>`}
+
+    ${!_destaques.length ? '<p style="font-size:.8rem;color:var(--c-muted);padding:10px 2px">Nenhum destaque cadastrado ainda.</p>'
+      : _destaques.map((h, i) => {
+        const img = h.image_url || h.product_image;
+        return `
+        <div class="dest-card ${h.active ? '' : 'dest-off'}">
+          <div class="dest-img" style="${img ? `background-image:url('${img}')` : ''}">
+            ${!img ? '<span>sem imagem</span>' : ''}
+          </div>
+          <div class="dest-info">
+            <input class="d-title" data-id="${h.id}" value="${(h.title || '').replace(/"/g, '&quot;')}" placeholder="Título">
+            <input class="d-sub" data-id="${h.id}" value="${(h.subtitle || '').replace(/"/g, '&quot;')}" placeholder="Subtítulo (opcional)">
+            <div class="dest-row">
+              <input class="d-img" data-id="${h.id}" value="${(h.image_url || '').replace(/"/g, '&quot;')}" placeholder="Endereço da imagem">
+              <input class="d-price" data-id="${h.id}" value="${(h.price_label || '').replace(/"/g, '&quot;')}" placeholder="Ex: R$ 12,00">
+            </div>
+            <div class="dest-row">
+              <select class="d-prod" data-id="${h.id}">
+                <option value="">Sem produto vinculado</option>
+                ${prods.map(p => `<option value="${p.id}" ${h.product_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+              </select>
+              <button class="d-up" data-i="${i}" ${i === 0 ? 'disabled' : ''} title="Subir">↑</button>
+              <button class="d-down" data-i="${i}" ${i === _destaques.length - 1 ? 'disabled' : ''} title="Descer">↓</button>
+            </div>
+            <div class="dest-acoes">
+              <label><input type="checkbox" class="d-active" data-id="${h.id}" ${h.active ? 'checked' : ''}> Ativo</label>
+              <button class="d-save" data-id="${h.id}">Salvar</button>
+              <button class="d-del" data-id="${h.id}" style="color:var(--danger)">Excluir</button>
+            </div>
+            <small>Vincular um produto preenche a imagem e o preço automaticamente quando você deixa os campos em branco.</small>
+          </div>
+        </div>`;
+      }).join('')}`;
+
+  el.querySelectorAll('.d-save').forEach(b => b.addEventListener('click', () => salvarDestaque(b.dataset.id)));
+  el.querySelectorAll('.d-del').forEach(b => b.addEventListener('click', () => excluirDestaque(b.dataset.id)));
+  el.querySelectorAll('.d-active').forEach(c => c.addEventListener('change', () =>
+    patchDestaque(c.dataset.id, { active: c.checked })));
+  el.querySelectorAll('.d-up').forEach(b => b.addEventListener('click', () => moverDestaque(+b.dataset.i, -1)));
+  el.querySelectorAll('.d-down').forEach(b => b.addEventListener('click', () => moverDestaque(+b.dataset.i, +1)));
+}
+
+async function destApi(url, method, body) {
+  const res = await fetch(`${API}${url}`, {
+    method,
+    headers: authHeaders(body ? { 'Content-Type': 'application/json' } : {}),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { showToast(d.error || 'Erro ao salvar'); return null; }
+  return d;
+}
+
+async function novoDestaque() {
+  const titulo = prompt('Título do destaque:');
+  if (!titulo || !titulo.trim()) return;
+  if (!await destApi('/api/highlights', 'POST', { title: titulo.trim() })) return;
+  showToast('Destaque criado — agora informe a imagem');
+  loadDestaques();
+}
+
+async function salvarDestaque(id) {
+  const v = (cls) => document.querySelector(`.${cls}[data-id="${id}"]`)?.value ?? '';
+  const title = v('d-title').trim();
+  if (!title) { showToast('Informe o título'); return; }
+  if (!await patchDestaque(id, {
+    title, subtitle: v('d-sub').trim(), image_url: v('d-img').trim(),
+    price_label: v('d-price').trim(), product_id: v('d-prod') || null,
+  })) return;
+  showToast('Destaque salvo');
+  loadDestaques();
+}
+
+async function patchDestaque(id, campos) {
+  return destApi(`/api/highlights/${id}`, 'PATCH', campos);
+}
+
+async function excluirDestaque(id) {
+  if (!confirm('Excluir este destaque?')) return;
+  if (!await destApi(`/api/highlights/${id}`, 'DELETE')) return;
+  showToast('Destaque excluído');
+  loadDestaques();
+}
+
+// A ordem define a sequência do rodízio. Grava os dois que trocaram de lugar.
+async function moverDestaque(i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= _destaques.length) return;
+  const a = _destaques[i], b = _destaques[j];
+  await patchDestaque(a.id, { sort_order: j });
+  await patchDestaque(b.id, { sort_order: i });
+  loadDestaques();
 }
 
 // ── Extrato de entradas ───────────────────────────────

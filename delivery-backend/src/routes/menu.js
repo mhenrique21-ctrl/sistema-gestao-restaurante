@@ -201,6 +201,31 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/menu/populares — ids mais vendidos nos últimos 30 dias.
+// Público (o totem não tem login) e só devolve id + quantidade: serve pro selo
+// "mais pedido", não é relatório de faturamento.
+router.get('/populares', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT product_id, SUM(quantity)::int AS qtd FROM (
+        SELECT product_id, quantity FROM comanda_items WHERE created_at >= now() - interval '30 days'
+        UNION ALL
+        SELECT product_id, quantity FROM order_items WHERE created_at >= now() - interval '30 days'
+      ) x
+      WHERE product_id IS NOT NULL
+      GROUP BY product_id
+      ORDER BY qtd DESC
+      LIMIT 8
+    `);
+    res.set('Cache-Control', 'public, max-age=600');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[menu/populares]', err.message);
+    // Selo é enfeite: falhar aqui não pode derrubar o cardápio do totem.
+    res.json([]);
+  }
+});
+
 // GET /api/menu/admin — todos os produtos incluindo indisponíveis (admin)
 router.get('/admin', authMiddleware, async (req, res) => {
   try {
