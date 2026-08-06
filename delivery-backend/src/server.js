@@ -92,6 +92,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/comandas', require('./routes/comandas'));
 app.use('/api/cash-movements', require('./routes/cashMovements'));
 app.use('/api/cash-sessions', require('./routes/cashSessions'));
+app.use('/api/supply', require('./routes/supply'));
 app.use('/api/stock', require('./routes/stock'));
 app.use('/api/addon-groups', require('./routes/addonGroups'));
 app.use('/api/meta', require('./routes/meta'));
