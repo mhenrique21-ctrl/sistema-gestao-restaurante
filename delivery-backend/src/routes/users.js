@@ -157,6 +157,16 @@ router.patch('/:id', async (req, res) => {
       mudou.active = !!req.body.active;
     }
     if (req.body.password) {
+      // Trocar a própria senha por aqui deixa o dono sem saber a senha nova se
+      // ele fechar a tela, e ainda derrubava a sessão dele no mesmo instante.
+      // O caminho certo pra si mesmo é POST /auth/change-password, que pede a
+      // senha atual e devolve um token novo.
+      if (String(req.params.id) === String(req.user?.id)) {
+        return res.status(400).json({
+          error: 'Para trocar a sua própria senha use "Minha senha", que pede a senha atual e mantém você conectado.',
+          code: 'USE_MINHA_SENHA',
+        });
+      }
       const erro = validarSenha(req.body.password, mudou.name || atual.name);
       if (erro) return res.status(400).json({ error: erro });
       updates.push(`password_hash = $${idx++}`);

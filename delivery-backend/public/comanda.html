@@ -1389,7 +1389,15 @@ async function doLogin() {
       body: JSON.stringify({ name: nome, password: senha }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
+    if (!res.ok) {
+      // Senha recusada de quem tem PIN: quase sempre é senha redefinida por um
+      // admin. Sem essa dica a pessoa fica tentando a senha antiga sem saber que
+      // existe outra porta aberta.
+      if (res.status === 401 && _operadoresComPin.includes(nome.toLowerCase())) {
+        throw new Error('Senha não confere. Se ela foi redefinida, use "🔢 Entrar com PIN" logo abaixo.');
+      }
+      throw new Error(data.error || 'Credenciais inválidas');
+    }
     if (!['admin', 'atendente'].includes(data.user?.role)) throw new Error('Este login não tem acesso a comandas');
     if (loginStatusTimer) { clearInterval(loginStatusTimer); loginStatusTimer = null; }
     TOKEN = data.token;
@@ -1770,6 +1778,7 @@ function tempoDesde(iso) {
 function renderUsuarios() {
   const el = document.getElementById('usr-lista');
   const admins = _usuarios.filter(u => u.role === 'admin' && u.active).length;
+  const euSou = meuId();
   let html = '';
 
   // Um administrador só é uma emergência silenciosa: perder essa conta tranca
@@ -1803,7 +1812,7 @@ function renderUsuarios() {
       </div>
       <div class="usr-acoes">
         <button class="prod-btn" onclick="editarUsuario('${u.id}')">✏️ Editar</button>
-        <button class="prod-btn" onclick="resetarSenha('${u.id}')">🔑 Nova senha</button>
+        <button class="prod-btn" onclick="resetarSenha('${u.id}')">${u.id === euSou ? '🔑 Minha senha' : '🔑 Nova senha'}</button>
         <button class="prod-btn" onclick="gerenciarPin('${u.id}')">${u.tem_pin ? '🔢 PIN' : '🔢 Criar PIN'}</button>
         <button class="prod-btn" onclick="encerrarSessoes('${u.id}')" title="Derruba o acesso em qualquer aparelho">🚪 Encerrar sessões</button>
         <label class="switch" title="${u.active ? 'Desativar acesso' : 'Reativar acesso'}">
@@ -1941,22 +1950,75 @@ function editarUsuario(id) {
   });
 }
 
+// Id de quem está logado, lido do próprio token. Serve pra distinguir "resetar
+// a senha de outra pessoa" de "trocar a minha" — são operações diferentes e
+// tratar as duas igual já trancou o dono do sistema pra fora.
+function meuId() {
+  try { return JSON.parse(atob(String(TOKEN).split('.')[1])).id || null; }
+  catch (e) { return null; }
+}
+
 function resetarSenha(id) {
   const u = _usuarios.find(x => x.id === id);
   if (!u) return;
+  if (id === meuId()) return minhaSenha();
   usrModal(`Nova senha para ${u.name}`, `
+    <div class="usr-aviso" style="margin:0 0 12px">
+      ⚠️ <b>A senha atual de ${u.name} deixa de funcionar agora.</b> Anote a senha
+      provisória abaixo e entregue a ela — sem essa senha ela não entra. As sessões
+      abertas dela caem na hora e ela terá que escolher uma senha definitiva no
+      próximo acesso.
+    </div>
     <div class="field-group">
-      <label>Senha provisória</label>
+      <label>Senha provisória para entregar a ${u.name}</label>
       <input type="text" id="usr-senha" autocomplete="off" oninput="atualizarForca(this)" placeholder="mínimo 6 caracteres">
       <div class="usr-forca"><i id="usr-forca-bar"></i></div>
       <small class="usr-forca-txt" id="usr-forca-txt"></small>
+    </div>`, 'Trocar a senha dela', async () => {
+    const password = document.getElementById('usr-senha').value;
+    await patchUsuario(id, { password }, `Senha de ${u.name} trocada — entregue a senha provisória a ela`);
+  });
+}
+
+// Trocar a própria senha: pede a atual, não marca pendência e devolve token
+// novo, então quem trocou continua conectado.
+function minhaSenha() {
+  usrModal('Trocar a minha senha', `
+    <div class="field-group">
+      <label>Senha atual</label>
+      <input type="password" id="ms-atual" autocomplete="current-password">
+    </div>
+    <div class="field-group">
+      <label>Nova senha</label>
+      <input type="password" id="ms-nova" autocomplete="new-password" oninput="atualizarForca(this)">
+      <div class="usr-forca"><i id="usr-forca-bar"></i></div>
+      <small class="usr-forca-txt" id="usr-forca-txt"></small>
+    </div>
+    <div class="field-group">
+      <label>Repita a nova senha</label>
+      <input type="password" id="ms-conf" autocomplete="new-password">
     </div>
     <div class="usr-aviso" style="margin:0">
-      Trocar a senha derruba as sessões abertas desta pessoa, e ela terá que
-      escolher uma senha nova no próximo acesso.
-    </div>`, 'Trocar senha', async () => {
-    const password = document.getElementById('usr-senha').value;
-    await patchUsuario(id, { password }, `Senha de ${u.name} trocada`);
+      Você continua conectado aqui. As sessões desta conta em outros aparelhos caem.
+    </div>`, 'Salvar minha senha', async () => {
+    const atual = document.getElementById('ms-atual').value;
+    const nova = document.getElementById('ms-nova').value;
+    const conf = document.getElementById('ms-conf').value;
+    if (nova !== conf) return usrErro('As duas senhas novas não são iguais');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/auth/change-password`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ current_password: atual, new_password: nova }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Não consegui trocar a senha'); return; }
+      if (d.token) { TOKEN = d.token; localStorage.setItem(TOKEN_KEY, TOKEN); }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast('Sua senha foi alterada');
+      loadUsuarios();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
   });
 }
 
