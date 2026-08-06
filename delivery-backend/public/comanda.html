@@ -565,7 +565,57 @@
   .field-group input, .field-group textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .92rem; font-family: inherit; }
 
   /* ── Financeiro ───────────────────────────────────── */
-  #financeiro-screen { max-width: 640px; margin: 0 auto; padding: 20px; }
+  #financeiro-screen { max-width: 1180px; margin: 0 auto; padding: 20px; }
+
+  /* ── Caixa: gaveta × eletrônico ───────────────────── */
+  .cx-topo { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .cx-bloco { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; }
+  .cx-bloco header { margin-bottom: 12px; }
+  .cx-bloco h3 { font-size: 1rem; font-weight: 800; color: var(--c-text); }
+  .cx-bloco header small { font-size: .76rem; color: var(--c-muted); }
+  /* A gaveta é o bloco que decide o fechamento: ganha a borda dourada. */
+  .cx-gaveta { border-color: var(--gold-dim); box-shadow: 0 2px 12px rgba(160,109,34,.1); }
+
+  /* Extrato vertical em vez de cartões: o "esperado" passa a ser visivelmente
+     o resultado das linhas de cima, e não um quarto número solto. */
+  .cx-conta { display: flex; flex-direction: column; }
+  .cx-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--c-border); font-size: .87rem; }
+  .cx-linha:last-child { border-bottom: none; }
+  .cx-linha .rot { color: var(--c-text); display: flex; align-items: baseline; gap: 6px; }
+  .cx-linha .rot i { font-style: normal; font-size: .72rem; color: var(--c-muted); }
+  .cx-linha .val { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cx-linha .val.mais { color: #1F7A55; }
+  .cx-linha .val.menos { color: var(--danger); }
+  /* Zero não compete com valor real pela atenção. */
+  .cx-linha.zerada .rot, .cx-linha.zerada .val { color: var(--c-muted); font-weight: 600; opacity: .7; }
+
+  .cx-esperado { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px;
+    background: rgba(160,109,34,.12); border: 1px solid var(--gold-dim); border-radius: 10px; padding: 12px 14px; }
+  .cx-esperado span { font-size: .84rem; font-weight: 700; color: var(--gold-dim); }
+  .cx-esperado b { font-size: 1.45rem; font-weight: 900; color: var(--gold-dim); font-variant-numeric: tabular-nums; }
+  .cx-esperado.neutro { background: var(--c-bg); border-color: var(--c-border); }
+  .cx-esperado.neutro span, .cx-esperado.neutro b { color: var(--c-text); }
+  .cx-fechar { width: 100%; margin-top: 12px; padding: 13px; font-size: .95rem; }
+  .cx-nota { font-size: .74rem; color: var(--c-muted); line-height: 1.5; margin-top: 9px; }
+
+  .cx-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .cx-kpi { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 9px; padding: 9px 10px; text-align: center; }
+  .cx-kpi span { display: block; font-size: .68rem; color: var(--c-muted); font-weight: 700; }
+  .cx-kpi b { display: block; font-size: 1rem; font-weight: 800; color: var(--c-text); margin-top: 2px; }
+
+  /* Canal × forma é uma matriz. Em cartões viravam 12 caixinhas onde não dava
+     pra comparar linha com linha nem coluna com coluna. */
+  .cx-matriz-wrap { overflow-x: auto; margin-bottom: 24px; }
+  .cx-matriz { width: 100%; border-collapse: collapse; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px; overflow: hidden; }
+  .cx-matriz th, .cx-matriz td { padding: 10px 12px; text-align: right; font-size: .85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cx-matriz th:first-child, .cx-matriz td:first-child { text-align: left; }
+  .cx-matriz thead th { background: var(--c-bg); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--c-muted); border-bottom: 1px solid var(--c-border); }
+  .cx-matriz tbody tr + tr td { border-top: 1px solid var(--c-border); }
+  .cx-matriz td.zero { color: var(--c-border); }
+  .cx-matriz td.tot, .cx-matriz th.tot { font-weight: 800; background: rgba(160,109,34,.06); }
+  .cx-matriz tfoot td { border-top: 2px solid var(--gold-dim); font-weight: 800; background: rgba(160,109,34,.1); color: var(--gold-dim); }
+  .cx-matriz .qtd { display: block; font-size: .68rem; font-weight: 600; color: var(--c-muted); }
+  .cx-matriz .canal { font-weight: 700; color: var(--c-text); }
   .fin-subtab-bar { display: flex; gap: 6px; margin-bottom: 18px; }
   .fin-subtab { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: .82rem; color: var(--c-muted); }
   .fin-subtab.active { background: var(--gold); color: var(--surface); border-color: var(--gold); }
@@ -850,42 +900,44 @@
   </div>
 
   <div id="fin-subtab-caixa">
-    <div class="fin-summary">
-      <div class="fin-summary-card">
-        <span class="label">🏦 Fundo de caixa</span>
-        <span class="value" id="fin-total-abertura">R$ 0,00</span>
-      </div>
-      <div class="fin-summary-card">
-        <span class="label">🔻 Sangrias hoje</span>
-        <span class="value negative" id="fin-total-sangrias">R$ 0,00</span>
-      </div>
-      <div class="fin-summary-card">
-        <span class="label">🔺 Suprimentos hoje</span>
-        <span class="value positive" id="fin-total-suprimentos">R$ 0,00</span>
-      </div>
-      <div class="fin-summary-card">
-        <span class="label">💰 Saldo esperado</span>
-        <span class="value" id="fin-total-saldo">R$ 0,00</span>
-      </div>
+    <div class="cx-topo">
+      <!-- Coluna 1: a gaveta. É a única conta que o operador precisa fazer pra
+           fechar, e agora é lida de cima pra baixo como uma conta mesmo — os
+           quatro cartões soltos escondiam de onde saía o "esperado". -->
+      <section class="cx-bloco cx-gaveta">
+        <header>
+          <h3>💵 Dinheiro na gaveta</h3>
+          <small>O que você deve contar ao fechar</small>
+        </header>
+        <div class="cx-conta" id="cx-conta"></div>
+        <div class="cx-esperado">
+          <span>Esperado na gaveta</span>
+          <b id="fin-total-saldo">R$ 0,00</b>
+        </div>
+        <button class="btn btn-primary cx-fechar" id="fin-close-register-btn" onclick="closeRegisterPrint()">
+          🖨 Contar e fechar o caixa
+        </button>
+        <p class="cx-nota" id="cx-nota-gaveta"></p>
+      </section>
+
+      <!-- Coluna 2: o que não está na gaveta. Separar isso é o ponto: R$ 427,40
+           em PIX com R$ 0,01 esperado na gaveta parecia erro, e não é. -->
+      <section class="cx-bloco">
+        <header>
+          <h3>🏦 Não passa pela gaveta</h3>
+          <small>Confira com a maquininha e o banco</small>
+        </header>
+        <div class="cx-conta" id="cx-eletronico"></div>
+        <div class="cx-esperado neutro">
+          <span>Total eletrônico</span>
+          <b id="cx-total-eletronico">R$ 0,00</b>
+        </div>
+        <div class="cx-kpis" id="cx-kpis"></div>
+      </section>
     </div>
 
-    <div class="side-title">Vendas em Comanda</div>
-    <div class="fin-summary" id="fin-sales-comanda"></div>
-    <div class="side-title">Vendas no Balcão</div>
-    <div class="fin-summary" id="fin-sales-balcao"></div>
-    <div class="side-title">Vendas no Delivery</div>
-    <div class="fin-summary" id="fin-sales-delivery"></div>
-
-    <div class="side-title">Total por forma de pagamento (Comanda + Balcão + Delivery)</div>
-    <div class="fin-summary" id="fin-sales-methods"></div>
-    <div class="fin-sales-total">
-      <div class="fin-sales-total-card"><span>📇 Total Comanda</span><span id="fin-sales-total-comanda">R$ 0,00</span></div>
-      <div class="fin-sales-total-card"><span>🏪 Total Balcão</span><span id="fin-sales-total-balcao">R$ 0,00</span></div>
-      <div class="fin-sales-total-card"><span>🛵 Total Delivery</span><span id="fin-sales-total-delivery">R$ 0,00</span></div>
-    </div>
-    <div class="fin-sales-grand"><span>Total vendido hoje</span><span id="fin-sales-total-geral">R$ 0,00</span></div>
-
-    <button class="btn btn-primary" style="width:100%;margin-bottom:24px" id="fin-close-register-btn" onclick="closeRegisterPrint()">🖨 Fechar Caixa e Imprimir</button>
+    <div class="side-title">Vendas do turno por canal e forma de pagamento</div>
+    <div class="cx-matriz-wrap"><table class="cx-matriz" id="cx-matriz"></table></div>
 
     <div class="fin-form">
       <div class="fin-form-tabs">
@@ -3154,21 +3206,30 @@ async function loadFinanceiro() {
     if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>'; return; }
 
     CAIXA_SESSION = data.session || null;
+    const btnFechar = document.getElementById('fin-close-register-btn');
     if (!CAIXA_SESSION) {
-      ['fin-total-abertura','fin-total-sangrias','fin-total-suprimentos','fin-total-saldo']
-        .forEach(id => document.getElementById(id).textContent = fmt(0));
-      renderFinSales({ channels: {}, byMethod: {}, totalGeral: 0 });
+      renderFinGaveta({}, 0);
+      renderFinSales({ channels: {}, byMethod: {}, totalGeral: 0 }, {});
+      document.getElementById('cx-nota-gaveta').textContent = 'Nenhum caixa aberto no momento.';
+      btnFechar.disabled = true;
       el.innerHTML = '<div class="cart-empty">Nenhum caixa aberto</div>';
       return;
     }
 
-    document.getElementById('fin-total-abertura').textContent = fmt(data.totals.abertura);
-    document.getElementById('fin-total-sangrias').textContent = fmt(data.totals.sangrias);
-    document.getElementById('fin-total-suprimentos').textContent = fmt(data.totals.suprimentos);
-    // "Saldo" agora é o esperado NA GAVETA: fundo + suprimentos - sangrias +
+    btnFechar.disabled = false;
+    // "Esperado" é o que deve estar NA GAVETA: fundo + suprimentos - sangrias +
     // dinheiro de comanda, balcão e retirada. Cartão, pix e entrega ficam fora.
-    document.getElementById('fin-total-saldo').textContent = fmt(data.expected);
-    renderFinSales(data.sales);
+    renderFinGaveta(data.totals, data.expected);
+    renderFinSales(data.sales, data.totals);
+
+    const aberto = new Date(CAIXA_SESSION.opened_at);
+    const horas = Math.floor((Date.now() - aberto) / 3600000);
+    const minutos = Math.floor(((Date.now() - aberto) % 3600000) / 60000);
+    document.getElementById('cx-nota-gaveta').textContent =
+      `Turno aberto às ${aberto.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+      + `${CAIXA_SESSION.opened_by_name ? ' por ' + CAIXA_SESSION.opened_by_name : ''}`
+      + ` · ${horas}h${String(minutos).padStart(2, '0')} em aberto. `
+      + 'Você informa quanto contou antes de ver o esperado — a conferência só vale assim.';
 
     if (!data.movements.length) {
       el.innerHTML = '<div class="cart-empty">Nenhuma movimentação neste turno</div>';
@@ -3198,53 +3259,74 @@ const FIN_SALE_METHOD_LABELS = {
   pix: { icon: '📱', label: 'PIX' },
 };
 
-function renderFinChannel(elId, channelData) {
-  const el = document.getElementById(elId);
-  if (!channelData) { el.innerHTML = ''; return; }
-  el.innerHTML = Object.entries(FIN_SALE_METHOD_LABELS).map(([method, info]) => {
-    const s = channelData.byMethod[method] || { qty: 0, total: 0 };
-    return `
-      <div class="fin-summary-card">
-        <span class="label">${info.icon} ${info.label}</span>
-        <span class="value">${fmt(s.total)}</span>
-        <span class="sub">${s.qty} venda${s.qty === 1 ? '' : 's'}</span>
-      </div>
-    `;
-  }).join('');
+const FIN_CANAL_LABELS = { comanda: '📇 Comanda', balcao: '🏪 Balcão', delivery: '🛵 Delivery' };
+
+function cxLinha(rotulo, valor, { sinal = '', nota = '' } = {}) {
+  const zero = !valor;
+  const classe = sinal === '-' ? 'menos' : sinal === '+' ? 'mais' : '';
+  return `<div class="cx-linha ${zero ? 'zerada' : ''}">
+    <span class="rot">${rotulo}${nota ? `<i>${nota}</i>` : ''}</span>
+    <span class="val ${zero ? '' : classe}">${sinal === '-' ? '− ' : sinal === '+' ? '+ ' : ''}${fmt(valor)}</span>
+  </div>`;
 }
 
-function renderFinSales(sales) {
-  if (!sales) {
-    ['fin-sales-comanda', 'fin-sales-balcao', 'fin-sales-delivery', 'fin-sales-methods'].forEach(id => {
-      document.getElementById(id).innerHTML = '';
-    });
-    return;
-  }
+// Extrato da gaveta: cada parcela que entra ou sai do dinheiro físico, na ordem
+// em que a conta acontece. O "esperado" embaixo é a soma visível disso.
+function renderFinGaveta(t, expected) {
+  document.getElementById('cx-conta').innerHTML =
+    cxLinha('🏦 Fundo de troco', t.abertura || 0, { sinal: '+', nota: 'abertura' }) +
+    cxLinha('💵 Dinheiro recebido', (t.dinheiroNaGaveta || 0) - (t.dinheiroRetirada || 0), { sinal: '+', nota: 'comanda e balcão' }) +
+    cxLinha('🛍 Dinheiro de retirada', t.dinheiroRetirada || 0, { sinal: '+', nota: 'cliente buscou na loja' }) +
+    cxLinha('🔺 Suprimentos', t.suprimentos || 0, { sinal: '+', nota: 'reforço' }) +
+    cxLinha('🔻 Sangrias', t.sangrias || 0, { sinal: '-', nota: 'retiradas' });
+  document.getElementById('fin-total-saldo').textContent = fmt(expected || 0);
+}
+
+function renderFinSales(sales, totals) {
+  const t = totals || {};
   // Canal ausente vira zerado em vez de quebrar a tela inteira: sem turno
   // aberto, o resumo vem vazio e antes isso derrubava o painel do caixa com
   // "Erro de conexão", que não tem nada a ver com o que estava acontecendo.
-  const VAZIO = { byMethod: {}, total: 0 };
+  const VAZIO = { byMethod: {}, total: 0, tickets: 0 };
+  sales = sales || { channels: {}, byMethod: {}, totalGeral: 0 };
   const ch = sales.channels || {};
-  ch.comanda = ch.comanda || VAZIO;
-  ch.balcao = ch.balcao || VAZIO;
-  ch.delivery = ch.delivery || VAZIO;
-  sales.byMethod = sales.byMethod || {};
+  for (const k of Object.keys(FIN_CANAL_LABELS)) ch[k] = ch[k] || VAZIO;
+  const bm = sales.byMethod = sales.byMethod || {};
 
-  renderFinChannel('fin-sales-comanda', ch.comanda);
-  renderFinChannel('fin-sales-balcao', ch.balcao);
-  renderFinChannel('fin-sales-delivery', ch.delivery);
+  // ── Bloco eletrônico ──
+  const eletronicos = ['cartao_debito', 'cartao_credito', 'pix'];
+  const DESTINO = { cartao_debito: 'cai na maquininha', cartao_credito: 'cai na maquininha', pix: 'cai na conta' };
+  const totalEletronico = eletronicos.reduce((s, m) => s + (bm[m] || 0), 0);
+  document.getElementById('cx-eletronico').innerHTML = eletronicos.map(m => {
+    const info = FIN_SALE_METHOD_LABELS[m];
+    return cxLinha(`${info.icon} ${info.label}`, bm[m] || 0, { nota: DESTINO[m] });
+  }).join('');
+  document.getElementById('cx-total-eletronico').textContent = fmt(totalEletronico);
 
-  document.getElementById('fin-sales-methods').innerHTML = Object.entries(FIN_SALE_METHOD_LABELS).map(([method, info]) => `
-    <div class="fin-summary-card">
-      <span class="label">${info.icon} ${info.label}</span>
-      <span class="value">${fmt(sales.byMethod[method] || 0)}</span>
-    </div>
-  `).join('');
+  const tickets = t.tickets || 0;
+  document.getElementById('cx-kpis').innerHTML = `
+    <div class="cx-kpi"><span>Vendido no turno</span><b>${fmt(sales.totalGeral || 0)}</b></div>
+    <div class="cx-kpi"><span>Vendas</span><b>${tickets}</b></div>
+    <div class="cx-kpi"><span>Ticket médio</span><b>${tickets ? fmt(t.ticketMedio || 0) : '—'}</b></div>`;
 
-  document.getElementById('fin-sales-total-comanda').textContent = fmt(ch.comanda.total);
-  document.getElementById('fin-sales-total-balcao').textContent = fmt(ch.balcao.total);
-  document.getElementById('fin-sales-total-delivery').textContent = fmt(ch.delivery.total);
-  document.getElementById('fin-sales-total-geral').textContent = fmt(sales.totalGeral || 0);
+  // ── Matriz canal × forma ──
+  const metodos = Object.entries(FIN_SALE_METHOD_LABELS);
+  const cel = (v, extra = '') => `<td class="${v ? '' : 'zero'}${extra}">${fmt(v)}</td>`;
+  const corpo = Object.entries(FIN_CANAL_LABELS).map(([k, rot]) => {
+    const c = ch[k];
+    return `<tr>
+      <td class="canal">${rot}<span class="qtd">${c.tickets || 0} venda${c.tickets === 1 ? '' : 's'}</span></td>
+      ${metodos.map(([m]) => {
+        const s = c.byMethod[m] || { qty: 0, total: 0 };
+        return `<td class="${s.total ? '' : 'zero'}">${fmt(s.total)}${s.qty ? `<span class="qtd">${s.qty}×</span>` : ''}</td>`;
+      }).join('')}
+      ${cel(c.total, ' tot')}
+    </tr>`;
+  }).join('');
+  document.getElementById('cx-matriz').innerHTML = `
+    <thead><tr><th>Canal</th>${metodos.map(([, i]) => `<th>${i.icon} ${i.label}</th>`).join('')}<th class="tot">Total</th></tr></thead>
+    <tbody>${corpo}</tbody>
+    <tfoot><tr><td>Total do turno</td>${metodos.map(([m]) => `<td>${fmt(bm[m] || 0)}</td>`).join('')}<td>${fmt(sales.totalGeral || 0)}</td></tr></tfoot>`;
 }
 
 async function submitCashMovement() {
@@ -3292,52 +3374,125 @@ function padCols(left, right, width) {
   return left + ' '.repeat(gap) + right;
 }
 
+// Impressora térmica não tem acento; sai caractere trocado ou um quadradinho.
+function semAcento(s) {
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function hm(d) { return new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+function dm(d) { return new Date(d).toLocaleDateString('pt-BR'); }
+
 function buildCloseRegisterText(data, closedAt) {
   const W = 42; // 80mm ~ 42 colunas em fonte monoespaçada compacta
   const line = '-'.repeat(W);
+  const forte = '='.repeat(W);
+  const centro = (s) => ' '.repeat(Math.max(0, Math.floor((W - s.length) / 2))) + s;
   const t = data.totals || {};
+  const sess = data.session || {};
   const sales = data.sales || { channels: {}, byMethod: {}, totalGeral: 0 };
-  const dataHora = closedAt.toLocaleDateString('pt-BR') + ' ' + closedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const dataHora = dm(closedAt) + ' ' + hm(closedAt);
   const rows = [];
-  rows.push('       CONFRARIA CAFE');
+
+  // ── Cabeçalho: quem abriu, quem fechou, quanto tempo. Sem isso o papel não
+  // serve de comprovante — não dá pra saber a que turno ele se refere.
+  rows.push(centro('CONFRARIA CAFE'));
+  rows.push(centro('FECHAMENTO DE CAIXA'));
+  rows.push(forte);
+  if (sess.id) rows.push('Turno ' + String(sess.id).slice(0, 8).toUpperCase());
+  if (sess.opened_at) {
+    rows.push(padCols('Abertura', dm(sess.opened_at) + ' ' + hm(sess.opened_at), W));
+    if (sess.opened_by_name) rows.push('  por ' + semAcento(sess.opened_by_name));
+  }
+  rows.push(padCols('Fechamento', dataHora, W));
+  if (USER_NAME) rows.push('  por ' + semAcento(USER_NAME));
+  if (sess.opened_at) {
+    const ms = new Date(sess.closed_at || closedAt) - new Date(sess.opened_at);
+    const h = Math.floor(ms / 3600000), mi = Math.floor((ms % 3600000) / 60000);
+    rows.push(padCols('Duracao do turno', `${h}h${String(mi).padStart(2, '0')}`, W));
+  }
+
+  // ── Bloco 1: a gaveta, aberta parcela por parcela.
+  rows.push(forte);
+  rows.push('DINHEIRO NA GAVETA');
   rows.push(line);
-  rows.push('FECHAMENTO DE CAIXA');
-  rows.push(dataHora + (USER_NAME ? ' · ' + USER_NAME : ''));
+  const recebido = (t.dinheiroNaGaveta || 0) - (t.dinheiroRetirada || 0);
+  rows.push(padCols('Fundo de troco', '+ ' + fmt(t.abertura || 0), W));
+  rows.push(padCols('Dinheiro recebido', '+ ' + fmt(recebido), W));
+  if (t.dinheiroRetirada) rows.push(padCols('Dinheiro de retirada', '+ ' + fmt(t.dinheiroRetirada), W));
+  rows.push(padCols('Suprimentos', '+ ' + fmt(t.suprimentos || 0), W));
+  rows.push(padCols('Sangrias', '- ' + fmt(t.sangrias || 0), W));
   rows.push(line);
-  rows.push(padCols('Fundo de caixa', fmt(t.abertura), W));
-  rows.push(padCols('Sangrias', '-' + fmt(t.sangrias), W));
-  rows.push(padCols('Suprimentos', fmt(t.suprimentos), W));
-  rows.push(padCols('Saldo esperado', fmt(t.saldo), W));
+  rows.push(padCols('ESPERADO NA GAVETA', fmt(data.expected != null ? data.expected : t.saldo || 0), W));
+  if (data.counted != null) {
+    rows.push(padCols('CONTADO', fmt(data.counted), W));
+    const dif = data.difference || 0;
+    // "FALTA -R$ 3,51" tem sinal duplicado. A palavra já diz a direção.
+    if (dif === 0) rows.push(padCols('CONFERE', 'diferenca zero', W));
+    else rows.push(padCols(dif > 0 ? 'SOBRA NA GAVETA' : 'FALTA NA GAVETA', fmt(Math.abs(dif)), W));
+  }
+
+  // ── Extrato das movimentações: sangria sem rastro é o buraco clássico de
+  // conferência de caixa. Aqui sai hora, motivo e quem fez.
+  const movs = (data.movements || []).filter(m => m.type !== 'abertura');
+  if (movs.length) {
+    rows.push(forte);
+    rows.push('SANGRIAS E SUPRIMENTOS');
+    rows.push(line);
+    for (const m of [...movs].reverse()) {
+      const sinal = m.type === 'sangria' ? '- ' : '+ ';
+      rows.push(padCols(`${hm(m.created_at)} ${m.type === 'sangria' ? 'Sangria' : 'Suprimento'}`, sinal + fmt(m.amount), W));
+      const detalhe = [m.reason, m.created_by_name].filter(Boolean).map(semAcento).join(' - ');
+      if (detalhe) rows.push('      ' + detalhe.slice(0, W - 6));
+    }
+  }
+
+  // ── Bloco 2: o que não está na gaveta e precisa bater com outra fonte.
+  rows.push(forte);
+  rows.push('NAO PASSA PELA GAVETA');
+  rows.push('(conferir com maquininha e banco)');
   rows.push(line);
+  const eletronicos = { cartao_debito: 'Debito', cartao_credito: 'Credito', pix: 'PIX' };
+  let totalEletronico = 0;
+  for (const [m, rot] of Object.entries(eletronicos)) {
+    const v = sales.byMethod[m] || 0;
+    totalEletronico += v;
+    rows.push(padCols(rot, fmt(v), W));
+  }
+  rows.push(line);
+  rows.push(padCols('TOTAL ELETRONICO', fmt(totalEletronico), W));
+
+  // ── Bloco 3: vendas por canal, com a forma detalhada.
+  rows.push(forte);
+  rows.push('VENDAS POR CANAL');
   for (const [ch, title] of Object.entries(CLOSE_CHANNEL_LABELS)) {
-    const chData = sales.channels[ch] || { byMethod: {}, total: 0 };
-    rows.push(padCols(title, fmt(chData.total), W));
+    const chData = sales.channels[ch] || { byMethod: {}, total: 0, tickets: 0 };
+    rows.push(line);
+    rows.push(padCols(title + (chData.tickets ? ` (${chData.tickets}x)` : ''), fmt(chData.total), W));
     for (const [method, label] of Object.entries(CLOSE_METHOD_LABELS)) {
       const s = chData.byMethod[method] || { qty: 0, total: 0 };
       if (!s.qty) continue;
       rows.push(padCols(`  ${label} ${s.qty}x`, fmt(s.total), W));
     }
   }
+
+  rows.push(forte);
+  rows.push('RESUMO DO TURNO');
   rows.push(line);
-  rows.push('TOTAL POR FORMA');
   for (const [method, label] of Object.entries(CLOSE_METHOD_LABELS)) {
-    rows.push(padCols(label, fmt(sales.byMethod[method] || 0), W));
+    rows.push(padCols('  ' + label, fmt(sales.byMethod[method] || 0), W));
   }
-  rows.push(line);
-  rows.push(padCols('TOTAL VENDIDO', fmt(sales.totalGeral), W));
-  // Conferência da gaveta: só sai quando o turno foi de fato fechado com
-  // contagem. É o bloco que interessa pra quem confere depois.
-  if (data.counted != null) {
-    rows.push(line);
-    rows.push('CONFERENCIA DA GAVETA');
-    rows.push(padCols('Esperado', fmt(data.expected), W));
-    rows.push(padCols('Contado', fmt(data.counted), W));
-    const dif = data.difference || 0;
-    const rotulo = dif === 0 ? 'Diferenca' : (dif > 0 ? 'Sobra' : 'Falta');
-    rows.push(padCols(rotulo, (dif > 0 ? '+' : '') + fmt(dif), W));
+  rows.push(padCols('TOTAL VENDIDO', fmt(sales.totalGeral || 0), W));
+  if (t.tickets) {
+    rows.push(padCols('Vendas', String(t.tickets), W));
+    rows.push(padCols('Ticket medio', fmt(t.ticketMedio || 0), W));
   }
-  rows.push(line);
-  rows.push('Fechado em ' + dataHora);
+
+  // Linha de assinatura: o papel vira comprovante de quem conferiu a gaveta.
+  rows.push(forte);
+  rows.push('');
+  rows.push('Conferido por: ' + '_'.repeat(W - 15));
+  rows.push('');
+  rows.push(centro('Fechado em ' + dataHora));
   return rows.join('\n');
 }
 

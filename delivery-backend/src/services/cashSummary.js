@@ -156,9 +156,21 @@ async function getSessionSummary(session) {
     [ini, fim]
   );
 
+  // Contagem de vendas de verdade, pra calcular ticket médio. Não dá pra somar
+  // o qty por forma de pagamento: uma comanda paga metade no cartão e metade em
+  // dinheiro tem duas linhas em comanda_payments e viraria duas vendas.
+  const ticketRows = await pool.query(
+    `SELECT (CASE WHEN c.code LIKE 'balcao_%' THEN 'balcao' ELSE 'comanda' END) AS channel,
+            COUNT(*) AS tickets
+       FROM comandas c
+      WHERE c.status = 'fechada' AND c.closed_at >= $1 AND c.closed_at <= $2
+      GROUP BY channel`,
+    [ini, fim]
+  );
+
   const channels = {};
   for (const ch of SALE_CHANNELS) {
-    channels[ch] = { byMethod: {}, total: 0 };
+    channels[ch] = { byMethod: {}, total: 0, tickets: 0 };
     for (const m of SALE_METHODS) channels[ch].byMethod[m] = { qty: 0, total: 0 };
   }
   const soma1 = (ch, method, qty, total) => {
@@ -169,11 +181,16 @@ async function getSessionSummary(session) {
     channels[ch].total += total;
   };
   pdvRows.rows.forEach((r) => soma1(r.channel, r.method, parseInt(r.qty, 10), parseFloat(r.total)));
+  ticketRows.rows.forEach((r) => { channels[r.channel].tickets = parseInt(r.tickets, 10); });
 
   let dinheiroRetirada = 0;
   delivRows.rows.forEach((r) => {
     const total = parseFloat(r.total);
-    soma1('delivery', r.method, parseInt(r.qty, 10), total);
+    const qty = parseInt(r.qty, 10);
+    soma1('delivery', r.method, qty, total);
+    // Um pedido de entrega tem uma forma de pagamento só, então aqui somar o
+    // qty é a contagem certa de vendas.
+    channels.delivery.tickets += qty;
     if (r.method === 'dinheiro' && r.tipo === 'retirada') dinheiroRetirada += total;
   });
 
@@ -191,9 +208,16 @@ async function getSessionSummary(session) {
   const abertura = parseFloat(session.opening_amount) || 0;
   const expected = abertura + suprimentos - sangrias + dinheiroNaGaveta;
 
+  // Eletrônico = o que NÃO está na gaveta e precisa bater com o extrato da
+  // maquininha e do banco. É a outra metade da conferência, e até agora
+  // nenhuma tela dizia qual era.
+  const eletronico = byMethod.cartao_debito + byMethod.cartao_credito + byMethod.pix;
+  const tickets = SALE_CHANNELS.reduce((s, ch) => s + channels[ch].tickets, 0);
+
   return {
     movements: [...movs.rows].reverse(),
-    totals: { abertura, sangrias, suprimentos, dinheiroNaGaveta, dinheiroRetirada },
+    totals: { abertura, sangrias, suprimentos, dinheiroNaGaveta, dinheiroRetirada, eletronico, tickets,
+              ticketMedio: tickets ? Math.round((totalGeral / tickets) * 100) / 100 : 0 },
     sales: { channels, byMethod, totalGeral },
     expected: Math.round(expected * 100) / 100,
   };
