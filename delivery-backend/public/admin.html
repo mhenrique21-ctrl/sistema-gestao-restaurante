@@ -898,7 +898,14 @@ function modalAjusteEstoque(id, nome, saldoAtual, tipo) {
 }
 
 async function verMovimentos(id, nome) {
-  const movs = await api('GET', `/stock/${id}/movimentos`);
+  const _d = await api('GET', `/stock/${id}/movimentos`);
+  // A rota passou a devolver { produto, movimentos }. Aceita os dois formatos
+  // pra não quebrar se o backend estiver atrasado em relação a esta tela.
+  const movs = (Array.isArray(_d) ? _d : _d.movimentos || []).map(m => ({
+    type: m.tipo || m.type, quantity: m.quantidade ?? m.quantity,
+    balance_after: m.saldo_depois ?? m.balance_after,
+    reason: m.origem || m.motivo || m.reason, created_at: m.data || m.created_at,
+  }));
   const LAB = { entrada: 'Entrada', venda: 'Venda', ajuste: 'Ajuste', perda: 'Perda', estorno: 'Estorno' };
   openModal(`Extrato — ${nome}`, movs.length ? `
     <div style="max-height:60vh;overflow:auto">

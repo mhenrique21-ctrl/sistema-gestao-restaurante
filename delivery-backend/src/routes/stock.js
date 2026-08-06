@@ -42,15 +42,61 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/stock/:id/movimentos — extrato de um produto.
+// GET /api/stock/:id/movimentos — ficha do produto: cabeçalho + linha do tempo.
+// Cada linha traz o saldo DEPOIS dela (balance_after), que é o que permite
+// reconstruir o estoque em qualquer data e achar onde a conta começou a
+// divergir. Com o saldo atual sozinho, você sabe que faltam 3 unidades mas
+// não desde quando.
 router.get('/:id/movimentos', async (req, res) => {
   try {
-    const r = await pool.query(
-      `SELECT sm.type, sm.quantity, sm.balance_after, sm.reason, sm.created_at, u.name AS created_by_name
-         FROM stock_movements sm LEFT JOIN users u ON u.id = sm.created_by
-        WHERE sm.product_id = $1 ORDER BY sm.created_at DESC LIMIT 100`,
+    const prod = await pool.query(
+      `SELECT id, name, stock_qty, stock_min, price, last_cost, last_cost_at
+         FROM products WHERE id = $1`,
       [req.params.id]
     );
-    res.json(r.rows);
+    if (!prod.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
+    const p = prod.rows[0];
+
+    const r = await pool.query(
+      `SELECT sm.id, sm.type, sm.quantity, sm.balance_after, sm.reason, sm.created_at,
+              sm.unit_cost, sm.origin_id, sm.order_id, sm.comanda_id,
+              u.name AS created_by_name, pe.supplier,
+              o.order_number, c.code AS comanda_code
+         FROM stock_movements sm
+         LEFT JOIN users u ON u.id = sm.created_by
+         LEFT JOIN purchase_entries pe ON pe.origin_id = sm.origin_id
+         LEFT JOIN orders o ON o.id = sm.order_id
+         LEFT JOIN comandas c ON c.id = sm.comanda_id
+        WHERE sm.product_id = $1 ORDER BY sm.created_at DESC LIMIT 200`,
+      [req.params.id]
+    );
+
+    const custo = p.last_cost != null ? parseFloat(p.last_cost) : null;
+    const preco = parseFloat(p.price);
+    res.json({
+      produto: {
+        id: p.id, nome: p.name,
+        saldo: parseFloat(p.stock_qty), minimo: parseFloat(p.stock_min),
+        preco, custo, custo_em: p.last_cost_at,
+        // Sem custo conhecido, null. A tela mostra "—" em vez de fingir 100%.
+        margem_pct: custo != null && preco > 0 ? Math.round((100 * (preco - custo) / preco) * 10) / 10 : null,
+        valor_estoque: custo != null ? Math.round(custo * parseFloat(p.stock_qty) * 100) / 100 : null,
+      },
+      movimentos: r.rows.map((m) => ({
+        id: m.id, tipo: m.type, data: m.created_at,
+        quantidade: parseFloat(m.quantity),
+        saldo_depois: m.balance_after != null ? parseFloat(m.balance_after) : null,
+        custo_unitario: m.unit_cost != null ? parseFloat(m.unit_cost) : null,
+        // De onde veio: pedido tem número, comanda tem código, compra tem
+        // fornecedor. Sem isso a linha do tempo vira uma lista de números.
+        origem: m.order_number ? `Pedido #${m.order_number}`
+              : m.comanda_code ? (String(m.comanda_code).startsWith('balcao_') ? 'Balcão' : `Comanda ${m.comanda_code}`)
+              : m.supplier ? m.supplier
+              : (m.reason || '').replace(/^Compra\s*–\s*/, '').replace(/\s*\(App Gestão\)$/, '') || null,
+        motivo: m.reason,
+        operador: m.created_by_name,
+      })),
+    });
   } catch (err) {
     return erro(res, err, '[stock/movimentos]');
   }
@@ -214,6 +260,135 @@ router.get('/inventario', async (req, res) => {
     res.json(r.rows);
   } catch (err) {
     return erro(res, err, '[stock/inventario/list]');
+  }
+});
+
+// GET /api/stock/entradas?de=&ate=&fornecedor= — extrato do que entrou.
+// Fornecedor sai de purchase_entries pelo origin_id, não do texto do motivo:
+// interpretar string quebraria no primeiro fornecedor com travessão no nome.
+router.get('/entradas', async (req, res) => {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : null;
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : null;
+  const forn = (req.query.fornecedor || '').trim();
+
+  try {
+    const filtros = [`sm.type = 'entrada'`];
+    if (de)  filtros.push(`DATE(sm.created_at AT TIME ZONE 'America/Belem') >= ${sqlStr(de)}`);
+    if (ate) filtros.push(`DATE(sm.created_at AT TIME ZONE 'America/Belem') <= ${sqlStr(ate)}`);
+    // Casa também pelo texto do motivo: entrada lançada à mão pela tela de
+    // ajuste não tem nota, e ficaria de fora de um filtro só por origin_id.
+    if (forn) filtros.push(`(pe.supplier = ${sqlStr(forn)} OR sm.reason LIKE ${sqlStr('%' + forn + '%')})`);
+
+    const r = await pool.query(
+      `SELECT sm.id, sm.created_at, sm.quantity, sm.unit_cost, sm.reason, sm.origin_id,
+              p.name AS produto, p.price AS preco_venda, pe.supplier AS fornecedor
+         FROM stock_movements sm
+         JOIN products p ON p.id = sm.product_id
+         LEFT JOIN purchase_entries pe ON pe.origin_id = sm.origin_id
+        WHERE ${filtros.join(' AND ')}
+        ORDER BY sm.created_at DESC LIMIT 500`
+    );
+
+    const linhas = r.rows.map((m) => {
+      const qtd = parseFloat(m.quantity);
+      const custo = m.unit_cost != null ? parseFloat(m.unit_cost) : null;
+      return {
+        id: m.id, data: m.created_at, produto: m.produto,
+        fornecedor: m.fornecedor || (m.reason || '').replace(/^Compra\s*–\s*/, '').replace(/\s*\(App Gestão\)$/, '') || null,
+        quantidade: qtd,
+        custo_unitario: custo,
+        total: custo != null ? Math.round(custo * qtd * 100) / 100 : null,
+        origin_id: m.origin_id,
+      };
+    });
+
+    // Só soma o que tem custo. Contar entrada sem custo como zero daria um
+    // total menor que o real, e ninguém saberia por quê.
+    const comCusto = linhas.filter((l) => l.total != null);
+    res.json({
+      linhas,
+      resumo: {
+        movimentos: linhas.length,
+        notas: new Set(linhas.map((l) => l.origin_id).filter(Boolean)).size,
+        sem_custo: linhas.length - comCusto.length,
+        total: Math.round(comCusto.reduce((s, l) => s + l.total, 0) * 100) / 100,
+      },
+    });
+  } catch (err) {
+    return erro(res, err, '[stock/entradas]');
+  }
+});
+
+// GET /api/stock/margens — margem por produto e variação do custo de compra.
+// Ordenado pela PIOR margem: o que precisa de decisão aparece primeiro. Uma
+// lista alfabética esconderia justamente o item vendido perto do custo.
+router.get('/margens', async (req, res) => {
+  try {
+    const prods = await pool.query(
+      `SELECT id, name, price, last_cost, last_cost_at, stock_qty
+         FROM products WHERE track_stock = true AND available = true`
+    );
+    const hist = await pool.query(
+      `SELECT product_id, unit_cost, created_at,
+              ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY created_at DESC) AS pos
+         FROM stock_movements WHERE type = 'entrada' AND unit_cost IS NOT NULL`
+    );
+    const porProduto = {};
+    hist.rows.forEach((h) => {
+      const pos = parseInt(h.pos, 10);
+      if (pos > 2) return;
+      (porProduto[h.product_id] = porProduto[h.product_id] || [])[pos - 1] = { custo: parseFloat(h.unit_cost) };
+    });
+
+    const itens = prods.rows.map((p) => {
+      const preco = parseFloat(p.price);
+      const custo = p.last_cost != null ? parseFloat(p.last_cost) : null;
+      const h = porProduto[p.id] || [];
+      const anterior = h[1] ? h[1].custo : null;
+      return {
+        id: p.id, nome: p.name, preco, custo, custo_em: p.last_cost_at,
+        custo_anterior: anterior,
+        variacao_pct: anterior != null && h[0] && anterior > 0
+          ? Math.round(((h[0].custo - anterior) / anterior) * 1000) / 10 : null,
+        margem_pct: custo != null && preco > 0 ? Math.round((100 * (preco - custo) / preco) * 10) / 10 : null,
+        lucro_unitario: custo != null ? Math.round((preco - custo) * 100) / 100 : null,
+        valor_estoque: custo != null ? Math.round(custo * parseFloat(p.stock_qty) * 100) / 100 : null,
+      };
+    });
+
+    // Sem custo vai pro FIM: não é margem ruim, é margem desconhecida, e
+    // misturar as duas faria o topo da lista mentir.
+    itens.sort((a, b) => {
+      if (a.margem_pct == null && b.margem_pct == null) return a.nome.localeCompare(b.nome, 'pt-BR');
+      if (a.margem_pct == null) return 1;
+      if (b.margem_pct == null) return -1;
+      return a.margem_pct - b.margem_pct;
+    });
+
+    const comCusto = itens.filter((i) => i.custo != null);
+    res.json({
+      itens,
+      resumo: {
+        total: itens.length,
+        sem_custo: itens.length - comCusto.length,
+        valor_estoque: Math.round(comCusto.reduce((s, i) => s + (i.valor_estoque || 0), 0) * 100) / 100,
+        subiram: comCusto.filter((i) => i.variacao_pct != null && i.variacao_pct > 5).length,
+      },
+    });
+  } catch (err) {
+    return erro(res, err, '[stock/margens]');
+  }
+});
+
+router.get('/fornecedores', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT DISTINCT supplier FROM purchase_entries
+        WHERE supplier IS NOT NULL AND trim(supplier) <> '' ORDER BY supplier`
+    );
+    res.json(r.rows.map((x) => x.supplier));
+  } catch (err) {
+    return erro(res, err, '[stock/fornecedores]');
   }
 });
 

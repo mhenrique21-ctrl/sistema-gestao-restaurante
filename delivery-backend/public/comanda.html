@@ -270,6 +270,27 @@
   .modal-sheet h3 { font-size: 1.1rem; margin-bottom: 4px; color: var(--gold-dim); }
   /* Divisor entre "como preparar" (sem preço) e "adicionais" (com preço). Sem
      ele, o operador lê tudo como se fosse cobrança e hesita em cada escolha. */
+  /* Entradas e margem */
+  .ent-resumo { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 11px 14px; background: var(--c-surface); border: 1px solid var(--c-border);
+    border-radius: 10px; font-size: .8rem; color: var(--c-muted); }
+  .ent-resumo span, .ent-resumo b { color: var(--c-text); }
+  .ent-resumo b { font-size: 1rem; }
+  .ent-aviso { margin-top: 8px; padding: 9px 12px; border-radius: 9px; background: #FDF6F5;
+    font-size: .72rem; color: var(--c-muted); line-height: 1.55; }
+  .ent-lista { margin-top: 10px; }
+  /* Números à direita: a coluna vira uma pilha que dá pra conferir de cima a
+     baixo sem ler cada linha inteira. */
+  .ent-linha { display: grid; grid-template-columns: 1fr 56px 84px 88px; gap: 8px; align-items: center;
+    padding: 9px 11px; border-bottom: 1px solid var(--c-border); font-size: .8rem; }
+  .mrg-linha { display: grid; grid-template-columns: 1fr 66px 66px 66px 62px; gap: 8px; align-items: center;
+    padding: 9px 11px; border-bottom: 1px solid var(--c-border); font-size: .8rem; }
+  .ent-linha span:not(:first-child), .mrg-linha span:not(:first-child) { text-align: right; }
+  .ent-linha small, .mrg-linha small { display: block; font-size: .68rem; color: var(--c-muted); margin-top: 2px; }
+  .ent-head { font-size: .68rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: .4px; }
+  .mrg-alerta { margin-top: 8px; padding: 10px 12px; border-radius: 9px; background: #FEF2F2;
+    font-size: .76rem; color: var(--danger); line-height: 1.55; }
+
   /* Conciliação de compras */
   .vinc-alert { background: #FDF6F5; border-radius: 10px; padding: 11px 13px; margin-bottom: 12px; }
   .vinc-alert .t { font-size: 12px; font-weight: 600; color: var(--danger); margin-bottom: 3px; }
@@ -539,6 +560,8 @@
   <div class="nav-group">Estoque</div>
   <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4 8 4 8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg></span>Produtos<span class="nav-badge nav-badge-alerta hidden" id="estoque-badge"></span></button>
 
+  <button class="tab-tile" data-tab="entradas" onclick="showTab('entradas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg></span>Entradas</button>
+  <button class="tab-tile" data-tab="margem" onclick="showTab('margem')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg></span>Margem<span class="nav-badge nav-badge-alerta hidden" id="margem-badge"></span></button>
   <button class="tab-tile" data-tab="compras" onclick="showTab('compras')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span>Compras<span class="nav-badge nav-badge-alerta hidden" id="compras-badge"></span></button>
 
   <div class="nav-group">Ajustes</div>
@@ -698,6 +721,17 @@
 </div>
 
 <!-- ── Inventário: folha de contagem ── -->
+<!-- ── Extrato de entradas ── -->
+<div id="entradas-screen" class="hidden">
+  <div class="estoque-toolbar" id="ent-filtros"></div>
+  <div id="entradas-body"><div class="cart-empty">Carregando...</div></div>
+</div>
+
+<!-- ── Margem por produto ── -->
+<div id="margem-screen" class="hidden">
+  <div id="margem-body"><div class="cart-empty">Carregando...</div></div>
+</div>
+
 <!-- ── Compras vindas do App Gestão ── -->
 <div id="compras-screen" class="hidden">
   <div class="estoque-toolbar">
@@ -1224,6 +1258,8 @@ const TAB_SCREENS = {
   impressora: 'impressora-screen',
   adicionais: 'adicionais-screen',
   compras: 'compras-screen',
+  entradas: 'entradas-screen',
+  margem: 'margem-screen',
 };
 
 // Abas que hoje ficam nos botões grandes do topo (Fazer Pedido/Delivery/Comandas/Caixa)
@@ -1243,6 +1279,8 @@ function showTab(tab) {
   document.getElementById('header-actions').classList.remove('hidden');
   if (tab === 'estoque') loadEstoque();
   if (tab === 'compras') loadCompras();
+  if (tab === 'entradas') loadEntradas();
+  if (tab === 'margem') loadMargens();
   if (tab === 'financeiro') loadFinanceiro();
   if (tab === 'delivery') loadDeliveryOrders();
   if (tab === 'configuracoes') { loadCfgComandas(); }
@@ -1981,6 +2019,109 @@ async function confirmarInventario() {
   }
 }
 
+// ── Extrato de entradas ───────────────────────────────
+let entFornecedores = null;
+
+function hojeBelem() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Belem' }); }
+function primeiroDiaDoMes() { return hojeBelem().slice(0, 8) + '01'; }
+
+async function loadEntradas() {
+  const el = document.getElementById('entradas-body');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    if (!entFornecedores) {
+      const rf = await fetch(`${API}/api/stock/fornecedores`, { headers: authHeaders() });
+      entFornecedores = rf.ok ? await rf.json() : [];
+    }
+    const de = document.getElementById('ent-de')?.value || primeiroDiaDoMes();
+    const ate = document.getElementById('ent-ate')?.value || hojeBelem();
+    const forn = document.getElementById('ent-forn')?.value || '';
+    const qs = `de=${de}&ate=${ate}` + (forn ? `&fornecedor=${encodeURIComponent(forn)}` : '');
+    const res = await fetch(`${API}/api/stock/entradas?${qs}`, { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = `<div class="cart-empty">${d.error || 'Erro ao carregar'}</div>`; return; }
+    renderEntradas(el, d, { de, ate, forn });
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function renderEntradas(el, d, f) {
+  const r = d.resumo;
+  document.getElementById('ent-filtros').innerHTML = `
+    <input type="date" id="ent-de" value="${f.de}" style="max-width:150px">
+    <span style="font-size:.8rem;color:var(--c-muted)">até</span>
+    <input type="date" id="ent-ate" value="${f.ate}" style="max-width:150px">
+    <select id="ent-forn" style="flex:1;min-width:150px">
+      <option value="">Todos os fornecedores</option>
+      ${(entFornecedores || []).map(x => `<option value="${x.replace(/"/g, '&quot;')}" ${x === f.forn ? 'selected' : ''}>${x}</option>`).join('')}
+    </select>`;
+
+  el.innerHTML = `
+    <div class="ent-resumo">
+      <div><span>${r.movimentos}</span> entrada(s) · <span>${r.notas}</span> nota(s)</div>
+      <div><b>${fmt(r.total)}</b> em compras</div>
+    </div>
+    ${r.sem_custo ? `<div class="ent-aviso">${r.sem_custo} entrada(s) sem custo informado — não entram no total. São compras lançadas antes de a ponte passar a enviar o valor.</div>` : ''}
+    ${!d.linhas.length ? '<p style="font-size:.8rem;color:var(--c-muted);padding:10px 2px">Nenhuma entrada no período.</p>'
+      : `<div class="ent-lista">
+          <div class="ent-linha ent-head"><span>Produto · fornecedor</span><span>Qtd</span><span>Custo un.</span><span>Total</span></div>
+          ${d.linhas.map(l => `
+            <div class="ent-linha">
+              <span><b>${l.produto}</b><small>${l.fornecedor || 'sem fornecedor'} · ${new Date(l.data).toLocaleDateString('pt-BR', { timeZone: 'America/Belem' })}</small></span>
+              <span>${l.quantidade}</span>
+              <span>${l.custo_unitario != null ? fmt(l.custo_unitario) : '—'}</span>
+              <span>${l.total != null ? fmt(l.total) : '—'}</span>
+            </div>`).join('')}
+        </div>`}`;
+
+  ['ent-de', 'ent-ate', 'ent-forn'].forEach(id =>
+    document.getElementById(id)?.addEventListener('change', loadEntradas));
+}
+
+// ── Margem por produto ────────────────────────────────
+async function loadMargens() {
+  const el = document.getElementById('margem-body');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/stock/margens`, { headers: authHeaders() });
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = `<div class="cart-empty">${d.error || 'Erro ao carregar'}</div>`; return; }
+    renderMargens(el, d);
+    const b = document.getElementById('margem-badge');
+    if (b) { b.textContent = d.resumo.subiram || ''; b.classList.toggle('hidden', !d.resumo.subiram); }
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function renderMargens(el, d) {
+  const r = d.resumo;
+  const cor = (m) => m == null ? 'var(--c-muted)' : m < 20 ? 'var(--danger)' : m < 35 ? '#d97706' : '#16a34a';
+  el.innerHTML = `
+    <div class="ent-resumo">
+      <div><span>${r.total}</span> produto(s) de revenda</div>
+      <div><b>${fmt(r.valor_estoque)}</b> parados em estoque</div>
+    </div>
+    ${r.subiram ? `<div class="mrg-alerta">⚠️ ${r.subiram} produto(s) com custo de compra mais alto que na compra anterior. Confira se o preço de venda acompanhou.</div>` : ''}
+    ${r.sem_custo ? `<div class="ent-aviso">${r.sem_custo} de ${r.total} produto(s) ainda sem custo conhecido — só passam a ter depois de entrarem por uma compra lançada no Gestão. Aparecem no fim da lista com "—", não como margem ruim.</div>` : ''}
+    <div class="ent-lista">
+      <div class="mrg-linha ent-head"><span>Produto</span><span>Custo</span><span>Venda</span><span>Lucro</span><span>Margem</span></div>
+      ${d.itens.map(i => `
+        <div class="mrg-linha">
+          <span><b>${i.nome}</b>${i.variacao_pct != null && i.variacao_pct !== 0
+            ? `<small style="color:${i.variacao_pct > 0 ? 'var(--danger)' : '#16a34a'}">custo ${i.variacao_pct > 0 ? 'subiu' : 'caiu'} ${Math.abs(i.variacao_pct)}% desde a compra anterior</small>` : ''}</span>
+          <span>${i.custo != null ? fmt(i.custo) : '—'}</span>
+          <span>${fmt(i.preco)}</span>
+          <span>${i.lucro_unitario != null ? fmt(i.lucro_unitario) : '—'}</span>
+          <span style="color:${cor(i.margem_pct)};font-weight:700">${i.margem_pct != null ? i.margem_pct + '%' : '—'}</span>
+        </div>`).join('')}
+    </div>
+    <p style="font-size:.72rem;color:var(--c-muted);margin:10px 0 0;line-height:1.6">
+      Ordenado pela <b>pior margem primeiro</b> — o que precisa de decisão aparece no topo. Margem é sobre o preço de venda.
+    </p>`;
+}
+
 // ── Conciliação de compras vindas do Gestão ───────────
 // Dois problemas que o de-para resolve: a nota traz o nome do fornecedor
 // ("REFRIG COCA COLA MULTIPACK 6X350ML"), não o do cardápio; e a embalagem
@@ -2286,8 +2427,16 @@ async function estVerExtrato() {
   body.innerHTML = '<p style="font-size:.82rem;color:var(--c-muted)">Carregando...</p>';
   try {
     const res = await fetch(`${API}/api/stock/${_estProd.id}/movimentos`, { headers: authHeaders() });
-    const movs = await res.json();
+    const d = await res.json();
     if (!res.ok) { body.innerHTML = '<p style="font-size:.82rem;color:var(--danger)">Erro ao carregar</p>'; return; }
+    // A rota passou a devolver { produto, movimentos } em vez de uma lista.
+    // Aceita os dois formatos pra não quebrar se o backend estiver atrasado
+    // em relação a esta tela.
+    const movs = (Array.isArray(d) ? d : d.movimentos || []).map(m => ({
+      type: m.tipo || m.type, quantity: m.quantidade ?? m.quantity,
+      balance_after: m.saldo_depois ?? m.balance_after,
+      reason: m.origem || m.motivo || m.reason, created_at: m.data || m.created_at,
+    }));
     if (!movs.length) { body.innerHTML = '<p style="font-size:.82rem;color:var(--c-muted)">Nenhum movimento ainda.</p>'; return; }
     const LAB = { entrada: 'Entrada', venda: 'Venda', ajuste: 'Ajuste', perda: 'Perda', estorno: 'Estorno' };
     body.innerHTML = `<div style="max-height:46vh;overflow:auto;font-size:.8rem">
