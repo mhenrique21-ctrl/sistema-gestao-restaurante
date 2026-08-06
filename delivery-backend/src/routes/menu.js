@@ -18,7 +18,7 @@ const upload = multer({
 router.post('/upload', authMiddleware, requireRole('admin'), upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
-  const allowedFolders = ['products', 'banner', 'logo'];
+  const allowedFolders = ['products', 'banner', 'logo', 'destaques'];
   const folder = allowedFolders.includes(req.body.folder) ? req.body.folder : 'products';
   const ext = (req.file.originalname.match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0];
   const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;

@@ -283,6 +283,10 @@
   .dest-info .d-title { font-weight: 600; }
   .dest-row { display: flex; gap: 6px; }
   .dest-row .d-price { max-width: 120px; }
+  .d-foto { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer;
+    background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 8px; padding: 8px 12px;
+    font-size: .82rem; font-weight: 600; }
+  .d-status { font-size: .75rem; color: var(--c-muted); flex: 1; }
   .dest-row button { padding: 0 12px; }
   .dest-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .8rem; }
   .dest-acoes label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -2095,16 +2099,20 @@ function renderDestaques(el) {
         const img = h.image_url || h.product_image;
         return `
         <div class="dest-card ${h.active ? '' : 'dest-off'}">
-          <div class="dest-img" style="${img ? `background-image:url('${img}')` : ''}">
+          <div class="dest-img" id="dimg-${h.id}" style="${img ? `background-image:url('${img}')` : ''}">
             ${!img ? '<span>sem imagem</span>' : ''}
           </div>
           <div class="dest-info">
             <input class="d-title" data-id="${h.id}" value="${(h.title || '').replace(/"/g, '&quot;')}" placeholder="Título">
             <input class="d-sub" data-id="${h.id}" value="${(h.subtitle || '').replace(/"/g, '&quot;')}" placeholder="Subtítulo (opcional)">
             <div class="dest-row">
-              <input class="d-img" data-id="${h.id}" value="${(h.image_url || '').replace(/"/g, '&quot;')}" placeholder="Endereço da imagem">
+              <label class="d-foto">📷 Enviar foto
+                <input type="file" accept="image/*" class="d-file" data-id="${h.id}" hidden>
+              </label>
+              <span class="d-status" id="dst-${h.id}"></span>
               <input class="d-price" data-id="${h.id}" value="${(h.price_label || '').replace(/"/g, '&quot;')}" placeholder="Ex: R$ 12,00">
             </div>
+            <input class="d-img" data-id="${h.id}" value="${(h.image_url || '').replace(/"/g, '&quot;')}" placeholder="ou cole o endereço de uma imagem">
             <div class="dest-row">
               <select class="d-prod" data-id="${h.id}">
                 <option value="">Sem produto vinculado</option>
@@ -2129,6 +2137,41 @@ function renderDestaques(el) {
     patchDestaque(c.dataset.id, { active: c.checked })));
   el.querySelectorAll('.d-up').forEach(b => b.addEventListener('click', () => moverDestaque(+b.dataset.i, -1)));
   el.querySelectorAll('.d-down').forEach(b => b.addEventListener('click', () => moverDestaque(+b.dataset.i, +1)));
+  el.querySelectorAll('.d-file').forEach(f => f.addEventListener('change', () => enviarFotoDestaque(f)));
+}
+
+// Envia a foto direto do computador, pelo mesmo caminho que o cadastro de
+// produto usa. Sem isso o dono só conseguiria usar imagem que já estivesse
+// hospedada em algum lugar — o que na prática significaria não usar.
+async function enviarFotoDestaque(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const id = inputEl.dataset.id;
+  const status = document.getElementById(`dst-${id}`);
+  status.textContent = 'Enviando...';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    fd.append('folder', 'destaques');
+    const res = await fetch(`${API}/api/menu/upload`, { method: 'POST', headers: authHeaders(), body: fd });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erro ao enviar a foto');
+    // Grava na hora: se só preenchesse o campo, sair da tela sem clicar em
+    // Salvar perderia a foto que acabou de subir.
+    document.querySelector(`.d-img[data-id="${id}"]`).value = d.url;
+    const prev = document.getElementById(`dimg-${id}`);
+    prev.style.backgroundImage = `url('${d.url}')`;
+    prev.innerHTML = '';
+    if (await patchDestaque(id, { image_url: d.url })) {
+      status.textContent = '✓ enviada';
+      loadDestaques();
+    } else {
+      status.textContent = '';
+    }
+  } catch (e) {
+    status.textContent = '';
+    showToast(e.message);
+  }
 }
 
 async function destApi(url, method, body) {
