@@ -287,6 +287,13 @@
     background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 8px; padding: 8px 12px;
     font-size: .82rem; font-weight: 600; }
   .d-status { font-size: .75rem; color: var(--c-muted); flex: 1; }
+
+  /* Editor de foto */
+  .foto-palco { background: #14100A; border-radius: 12px; overflow: hidden; display: flex; justify-content: center; }
+  #foto-canvas { width: 100%; max-width: 640px; height: auto; display: block; cursor: grab; touch-action: none; }
+  #foto-canvas:active { cursor: grabbing; }
+  .foto-controles { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: .82rem; color: var(--c-muted); }
+  .foto-controles input[type=range] { flex: 1; accent-color: var(--gold-dim); }
   .dest-row button { padding: 0 12px; }
   .dest-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .8rem; }
   .dest-acoes label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -983,6 +990,31 @@
     <div class="close2-actions" style="padding-top:10px">
       <button class="close2-cancel" onclick="document.getElementById('contagem-modal-backdrop').classList.add('hidden')">✕ Cancelar</button>
       <button class="close2-confirm" id="contagem-confirm-btn" onclick="submitFechamento()">Fechar caixa</button>
+    </div>
+  </div>
+</div>
+
+<!-- Editor de foto do destaque: recorta na proporção da tela do totem -->
+<div id="foto-editor-backdrop" class="modal-backdrop hidden">
+  <div class="close2-sheet" style="max-width:700px">
+    <div class="ab-head">
+      <span class="ic">🖼️</span>
+      <div>
+        <h3 style="font-size:1.05rem">Enquadrar a foto</h3>
+        <p style="font-size:.78rem">Arraste pra escolher o que aparece. Sai em 1600 × 1000.</p>
+      </div>
+    </div>
+    <div class="foto-palco">
+      <canvas id="foto-canvas" width="640" height="400"></canvas>
+    </div>
+    <div class="foto-controles">
+      <span>Zoom</span>
+      <input type="range" id="foto-zoom" min="1" max="4" step="0.02" value="1" oninput="zoomFoto(this.value)">
+      <button type="button" class="btn btn-secondary" onclick="girarFoto()" title="Girar 90°">↻ Girar</button>
+    </div>
+    <div class="close2-actions" style="padding-top:10px">
+      <button class="close2-cancel" onclick="fecharEditorFoto()">✕ Cancelar</button>
+      <button class="close2-confirm" onclick="usarFotoEditada()">Usar esta foto</button>
     </div>
   </div>
 </div>
@@ -2106,8 +2138,11 @@ function renderDestaques(el) {
             <input class="d-title" data-id="${h.id}" value="${(h.title || '').replace(/"/g, '&quot;')}" placeholder="Título">
             <input class="d-sub" data-id="${h.id}" value="${(h.subtitle || '').replace(/"/g, '&quot;')}" placeholder="Subtítulo (opcional)">
             <div class="dest-row">
-              <label class="d-foto">📷 Enviar foto
+              <label class="d-foto">🖼️ Do computador
                 <input type="file" accept="image/*" class="d-file" data-id="${h.id}" hidden>
+              </label>
+              <label class="d-foto">📸 Tirar agora
+                <input type="file" accept="image/*" capture="environment" class="d-file" data-id="${h.id}" hidden>
               </label>
               <span class="d-status" id="dst-${h.id}"></span>
               <input class="d-price" data-id="${h.id}" value="${(h.price_label || '').replace(/"/g, '&quot;')}" placeholder="Ex: R$ 12,00">
@@ -2126,7 +2161,8 @@ function renderDestaques(el) {
               <button class="d-save" data-id="${h.id}">Salvar</button>
               <button class="d-del" data-id="${h.id}" style="color:var(--danger)">Excluir</button>
             </div>
-            <small>Vincular um produto preenche a imagem e o preço automaticamente quando você deixa os campos em branco.</small>
+            <small>Tamanho ideal: <b>1600 × 1000</b> (deitada, proporção 16:10) — o editor entrega exatamente isso, então pode mandar a foto original.
+              Vincular um produto preenche a imagem e o preço automaticamente quando você deixa os campos em branco.</small>
           </div>
         </div>`;
       }).join('')}`;
@@ -2140,15 +2176,174 @@ function renderDestaques(el) {
   el.querySelectorAll('.d-file').forEach(f => f.addEventListener('change', () => enviarFotoDestaque(f)));
 }
 
-// Envia a foto direto do computador, pelo mesmo caminho que o cadastro de
-// produto usa. Sem isso o dono só conseguiria usar imagem que já estivesse
-// hospedada em algum lugar — o que na prática significaria não usar.
-async function enviarFotoDestaque(inputEl) {
+// ── Editor de foto do destaque ────────────────────────
+// A tela do totem é deitada e a foto ocupa ela inteira. Foto de celular vem
+// em pé e com 4 MB: sem cortar, o navegador corta sozinho pelo meio e quase
+// sempre decepa o produto. Aqui quem decide o enquadramento é quem cadastra,
+// e o que sobe já é 1600×1000 comprimido.
+const FOTO_L = 1600, FOTO_A = 1000;   // proporção 16:10, a mesma do tablet
+const EDIT_L = 640, EDIT_A = 400;     // prévia na tela, mesma proporção
+
+let ed = null; // { img, id, escala, escalaMin, x, y, arrastando, px, py }
+
+// Foto de celular chega com 4000px e 5 MB. Como o destino tem 1600px, reduz
+// logo na entrada: o editor fica fluido e o giro não estoura a memória da
+// máquina do caixa.
+const FOTO_MAX_ENTRADA = 2400;
+
+function canvasParaImagem(cv) {
+  return new Promise((ok, falha) => {
+    cv.toBlob(blob => {
+      if (!blob) return falha(new Error('Não consegui processar a foto'));
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => { URL.revokeObjectURL(url); ok(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); falha(new Error('Não consegui processar a foto')); };
+      img.src = url;
+    }, 'image/jpeg', 0.92);
+  });
+}
+
+async function normalizarFoto(img) {
+  const maior = Math.max(img.width, img.height);
+  if (maior <= FOTO_MAX_ENTRADA) return img;
+  const f = FOTO_MAX_ENTRADA / maior;
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(img.width * f);
+  cv.height = Math.round(img.height * f);
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  return canvasParaImagem(cv);
+}
+
+function enviarFotoDestaque(inputEl) {
   const file = inputEl.files[0];
   if (!file) return;
   const id = inputEl.dataset.id;
+  inputEl.value = '';               // permite reescolher o mesmo arquivo depois
+  const img = new Image();
+  img.onload = async () => {
+    URL.revokeObjectURL(img.src);
+    try { abrirEditorFoto(await normalizarFoto(img), id); }
+    catch (e) { showToast(e.message); }
+  };
+  img.onerror = () => { URL.revokeObjectURL(img.src); showToast('Não consegui abrir esse arquivo'); };
+  img.src = URL.createObjectURL(file);
+}
+
+function abrirEditorFoto(img, id) {
+  // Começa no maior zoom-out que ainda preenche a moldura inteira, centralizado.
+  const escalaMin = Math.max(EDIT_L / img.width, EDIT_A / img.height);
+  ed = { img, id, escala: escalaMin, escalaMin, x: 0, y: 0, arrastando: false, px: 0, py: 0 };
+  centralizarFoto();
+  document.getElementById('foto-editor-backdrop').classList.remove('hidden');
+  document.getElementById('foto-zoom').value = '1';
+  desenharEditor();
+}
+
+function centralizarFoto() {
+  ed.x = (EDIT_L - ed.img.width * ed.escala) / 2;
+  ed.y = (EDIT_A - ed.img.height * ed.escala) / 2;
+  limitarFoto();
+}
+
+// A moldura nunca pode ficar com faixa vazia: prende o deslocamento nas bordas.
+function limitarFoto() {
+  const l = ed.img.width * ed.escala, a = ed.img.height * ed.escala;
+  ed.x = Math.min(0, Math.max(EDIT_L - l, ed.x));
+  ed.y = Math.min(0, Math.max(EDIT_A - a, ed.y));
+}
+
+function desenharEditor() {
+  const cv = document.getElementById('foto-canvas');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, EDIT_L, EDIT_A);
+  ctx.drawImage(ed.img, ed.x, ed.y, ed.img.width * ed.escala, ed.img.height * ed.escala);
+}
+
+function zoomFoto(mult) {
+  const cx = EDIT_L / 2, cy = EDIT_A / 2;
+  const nova = ed.escalaMin * parseFloat(mult);
+  // Mantém o centro da moldura no mesmo ponto da foto ao aproximar/afastar.
+  ed.x = cx - (cx - ed.x) * (nova / ed.escala);
+  ed.y = cy - (cy - ed.y) * (nova / ed.escala);
+  ed.escala = nova;
+  limitarFoto();
+  desenharEditor();
+}
+
+// Gira 90° recriando a imagem já rotacionada: assim o resto do editor continua
+// tratando tudo como uma foto normal, sem transformação acumulada.
+async function girarFoto() {
+  if (!ed) return;
+  const t = document.createElement('canvas');
+  t.width = ed.img.height; t.height = ed.img.width;
+  const c = t.getContext('2d');
+  c.translate(t.width / 2, t.height / 2);
+  c.rotate(Math.PI / 2);
+  c.drawImage(ed.img, -ed.img.width / 2, -ed.img.height / 2);
+  try { abrirEditorFoto(await canvasParaImagem(t), ed.id); }
+  catch (e) { showToast(e.message); }
+}
+
+function fecharEditorFoto() {
+  document.getElementById('foto-editor-backdrop').classList.add('hidden');
+  ed = null;
+}
+
+function iniciarArrasto(e) {
+  if (!ed) return;
+  const p = e.touches ? e.touches[0] : e;
+  ed.arrastando = true; ed.px = p.clientX; ed.py = p.clientY;
+}
+
+function moverArrasto(e) {
+  if (!ed || !ed.arrastando) return;
+  e.preventDefault();
+  const p = e.touches ? e.touches[0] : e;
+  const cv = document.getElementById('foto-canvas');
+  // O canvas é exibido menor que sua resolução interna: converte o movimento.
+  const fator = EDIT_L / cv.getBoundingClientRect().width;
+  ed.x += (p.clientX - ed.px) * fator;
+  ed.y += (p.clientY - ed.py) * fator;
+  ed.px = p.clientX; ed.py = p.clientY;
+  limitarFoto();
+  desenharEditor();
+}
+
+function soltarArrasto() { if (ed) ed.arrastando = false; }
+
+// Solta no documento, não no canvas: quem arrasta rápido tira o dedo/mouse de
+// cima da moldura e a foto ficaria grudada no cursor.
+(function ligarArrastoDaFoto() {
+  const cv = document.getElementById('foto-canvas');
+  cv.addEventListener('mousedown', iniciarArrasto);
+  cv.addEventListener('touchstart', iniciarArrasto, { passive: true });
+  document.addEventListener('mousemove', moverArrasto);
+  document.addEventListener('touchmove', moverArrasto, { passive: false });
+  document.addEventListener('mouseup', soltarArrasto);
+  document.addEventListener('touchend', soltarArrasto);
+})();
+
+function usarFotoEditada() {
+  const id = ed.id;
+  const fator = FOTO_L / EDIT_L;
+  const cv = document.createElement('canvas');
+  cv.width = FOTO_L; cv.height = FOTO_A;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, FOTO_L, FOTO_A);
+  ctx.drawImage(ed.img, ed.x * fator, ed.y * fator,
+                ed.img.width * ed.escala * fator, ed.img.height * ed.escala * fator);
+  fecharEditorFoto();
+  cv.toBlob(blob => {
+    if (!blob) { showToast('Não consegui preparar a foto'); return; }
+    subirFotoDestaque(new File([blob], 'destaque.jpg', { type: 'image/jpeg' }), id);
+  }, 'image/jpeg', 0.85);
+}
+
+async function subirFotoDestaque(file, id) {
   const status = document.getElementById(`dst-${id}`);
-  status.textContent = 'Enviando...';
+  if (status) status.textContent = 'Enviando...';
   try {
     const fd = new FormData();
     fd.append('image', file);
@@ -2158,18 +2353,14 @@ async function enviarFotoDestaque(inputEl) {
     if (!res.ok) throw new Error(d.error || 'Erro ao enviar a foto');
     // Grava na hora: se só preenchesse o campo, sair da tela sem clicar em
     // Salvar perderia a foto que acabou de subir.
-    document.querySelector(`.d-img[data-id="${id}"]`).value = d.url;
-    const prev = document.getElementById(`dimg-${id}`);
-    prev.style.backgroundImage = `url('${d.url}')`;
-    prev.innerHTML = '';
     if (await patchDestaque(id, { image_url: d.url })) {
-      status.textContent = '✓ enviada';
+      showToast('Foto atualizada');
       loadDestaques();
-    } else {
+    } else if (status) {
       status.textContent = '';
     }
   } catch (e) {
-    status.textContent = '';
+    if (status) status.textContent = '';
     showToast(e.message);
   }
 }
