@@ -1128,6 +1128,7 @@ export default function App() {
       {id:"compras-hist",label:"Histórico",icon:"📋",sub:"lista"},
       {id:"compras-forn",label:"Fornecedores",icon:"🏭",sub:"forn"},
       {id:"compras-prod",label:"Insumos",icon:"📦",sub:"produtos"},
+      {id:"compras-cons",label:"Consumo",icon:"📊",sub:"consumo"},
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
       {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
@@ -2483,6 +2484,194 @@ const reconciliarLista=(d:any,nomesComprados:string[])=>{
   return{...d,listaCompras:novaLista};
   }catch{return d;}
 };
+
+// ===================== CONSUMO DE INSUMOS =====================
+// Quanto de cada insumo foi COMPRADO num período, e como se compara com o
+// período anterior de mesmo tamanho.
+//
+// Isto é gasto por COMPRA, não consumo real. Comprar 20 kg de queijo em agosto
+// não quer dizer que 20 kg foram usados — parte pode ter ido pra prateleira. O
+// consumo real exige contagem de estoque; a tela diz isso, pra ninguém decidir
+// achando que é outra coisa.
+const normNome = (s:any) => String(s||"").trim().replace(/\s+/g," ").toUpperCase();
+
+function agruparCompras(compras:any[], de:string, ate:string){
+  const mapa:Record<string,any> = {};
+  compras.forEach((c:any)=>{
+    if(c.excluido) return;
+    const d = c.data || "";
+    if(!d || d < de || d > ate) return;
+    const chave = normNome(c.nomeProduto);
+    if(!chave) return;
+    const m = mapa[chave] || (mapa[chave] = {
+      nome: c.nomeProduto, categoria: c.categoria || "outros",
+      qtd: 0, valor: 0, compras: 0, unidades: new Set<string>(), fornecedores: new Set<string>(),
+    });
+    m.qtd += parseFloat(c.quantidade) || 0;
+    m.valor += parseMoney(c.valor);
+    m.compras += 1;
+    if(c.unidade) m.unidades.add(String(c.unidade));
+    if(c.fornecedor) m.fornecedores.add(String(c.fornecedor));
+  });
+  return mapa;
+}
+
+function ConsumoInsumos({db,setSubTab}:{db:any,setSubTab:(s:string)=>void}){
+  const hoje = today();
+  const [de,setDe] = useState(hoje.slice(0,8)+"01");
+  const [ate,setAte] = useState(hoje);
+  const [cat,setCat] = useState("");
+  const [busca,setBusca] = useState("");
+  const [ordem,setOrdem] = useState<"valor"|"variacao"|"nome">("valor");
+
+  const compras = db.compras || [];
+
+  // Período anterior de MESMO tamanho, logo antes. Comparar 5 dias de agosto
+  // com julho inteiro daria uma queda falsa de 80%.
+  const perAnt = useMemo(()=>{
+    const dIni = new Date(de+"T12:00:00"), dFim = new Date(ate+"T12:00:00");
+    const n = Math.max(1, Math.round((dFim.getTime()-dIni.getTime())/86400000)+1);
+    const antFim = new Date(dIni.getTime()-86400000);
+    const antIni = new Date(antFim.getTime()-(n-1)*86400000);
+    const iso = (x:Date)=>x.toISOString().slice(0,10);
+    return {de:iso(antIni), ate:iso(antFim), dias:n};
+  },[de,ate]);
+
+  const linhas = useMemo(()=>{
+    const atual = agruparCompras(compras, de, ate);
+    const ant = agruparCompras(compras, perAnt.de, perAnt.ate);
+    const out = Object.entries(atual).map(([k,m]:any)=>{
+      const a = ant[k];
+      // Só compara quantidade quando a unidade é a mesma nos dois períodos:
+      // 10 kg contra 3 pacotes não é queda de 70%.
+      const mesmaUn = a && [...m.unidades].sort().join("/") === [...a.unidades].sort().join("/");
+      return {
+        chave:k, nome:m.nome, categoria:m.categoria,
+        qtd:m.qtd, valor:m.valor, compras:m.compras,
+        unidade:[...m.unidades].join("/") || "un",
+        conflitoUnidade:(m.unidades as Set<string>).size > 1,
+        fornecedores:[...m.fornecedores] as string[],
+        valorAnt: a ? a.valor : null,
+        varQtd: mesmaUn && a.qtd>0 ? ((m.qtd-a.qtd)/a.qtd)*100 : null,
+        varValor: a && a.valor>0 ? ((m.valor-a.valor)/a.valor)*100 : null,
+        novo: !a,
+      };
+    });
+    const b = busca.trim().toLowerCase();
+    return out
+      .filter(x=>!cat || x.categoria===cat)
+      .filter(x=>!b || x.nome.toLowerCase().includes(b))
+      .sort((x,y)=> ordem==="nome" ? x.nome.localeCompare(y.nome,"pt-BR")
+                  : ordem==="variacao" ? (Math.abs(y.varValor??-1)-Math.abs(x.varValor??-1))
+                  : y.valor-x.valor);
+  },[compras,de,ate,perAnt,cat,busca,ordem]);
+
+  const totalAtual = linhas.reduce((s,l)=>s+l.valor,0);
+  const totalAnt = linhas.reduce((s,l)=>s+(l.valorAnt||0),0);
+  const varTotal = totalAnt>0 ? ((totalAtual-totalAnt)/totalAnt)*100 : null;
+  const cats = [...new Set(compras.map((c:any)=>c.categoria).filter(Boolean))].sort();
+  const subiram = linhas.filter(l=>l.varValor!=null && l.varValor>20);
+
+  const setMes = (delta:number)=>{
+    const d = new Date(de+"T12:00:00"); d.setMonth(d.getMonth()+delta, 1);
+    const ini = new Date(d.getFullYear(), d.getMonth(), 1);
+    const fim = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    const iso = (x:Date)=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+    setDe(iso(ini)); setAte(iso(fim) > hoje ? hoje : iso(fim));
+  };
+
+  const Var = ({v}:{v:number|null}) => v==null
+    ? <span style={{color:"var(--text3)"}}>—</span>
+    : <span style={{color: v>0?"#EF4444":v<0?"#22C55E":"var(--text3)", fontWeight:600}}>{v>0?"+":""}{v.toFixed(0)}%</span>;
+
+  return <div>
+    <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
+
+    <div className="card" style={{marginBottom:12}}>
+      <div className="section-title" style={{marginBottom:10}}>📊 Consumo por período</div>
+      <div className="row" style={{marginBottom:8,gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <button className="btn" onClick={()=>setMes(-1)} style={{padding:"7px 11px",fontSize:12}}>‹ mês</button>
+        <input type="date" value={de} onChange={e=>setDe(e.target.value)} className="inp" style={{maxWidth:150}}/>
+        <span style={{fontSize:12,color:"var(--text2)"}}>até</span>
+        <input type="date" value={ate} onChange={e=>setAte(e.target.value)} className="inp" style={{maxWidth:150}}/>
+        <button className="btn" onClick={()=>setMes(1)} style={{padding:"7px 11px",fontSize:12}}>mês ›</button>
+      </div>
+      <div style={{fontSize:11,color:"var(--text2)",lineHeight:1.6}}>
+        {perAnt.dias} dia(s) · comparando com {perAnt.de.split("-").reverse().join("/")} a {perAnt.ate.split("-").reverse().join("/")}, período de mesmo tamanho logo antes.
+      </div>
+    </div>
+
+    <div className="card" style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontSize:11,color:"var(--text2)"}}>{linhas.length} insumo(s) comprado(s)</div>
+        <div style={{fontSize:19,fontWeight:700}}>{fmtMoney(totalAtual)}</div>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontSize:11,color:"var(--text2)"}}>período anterior</div>
+        <div style={{fontSize:13}}>{fmtMoney(totalAnt)} <Var v={varTotal}/></div>
+      </div>
+    </div>
+
+    {subiram.length>0&&<div className="card" style={{marginBottom:12,background:"#FEF2F2",border:"1px solid #FECACA"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#B91C1C",marginBottom:5}}>⚠️ {subiram.length} insumo(s) com gasto mais de 20% acima</div>
+      <div style={{fontSize:11,color:"#7F1D1D",lineHeight:1.7}}>
+        {subiram.slice(0,6).map(l=>`${l.nome} (+${l.varValor!.toFixed(0)}%)`).join(" · ")}
+        {subiram.length>6?` e mais ${subiram.length-6}`:""}
+      </div>
+    </div>}
+
+    <div className="card" style={{marginBottom:12}}>
+      <div className="row" style={{gap:6,flexWrap:"wrap"}}>
+        <input placeholder="🔍 Buscar insumo" value={busca} onChange={e=>setBusca(e.target.value)} className="inp"/>
+        <select value={cat} onChange={e=>setCat(e.target.value)} className="inp" style={{maxWidth:170}}>
+          <option value="">Todas categorias</option>
+          {cats.map((c:any)=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={ordem} onChange={e=>setOrdem(e.target.value as any)} className="inp" style={{maxWidth:150}}>
+          <option value="valor">Maior gasto</option>
+          <option value="variacao">Maior variação</option>
+          <option value="nome">Nome</option>
+        </select>
+      </div>
+    </div>
+
+    {!linhas.length
+      ? <div className="card" style={{textAlign:"center",padding:22,color:"var(--text2)",fontSize:12.5}}>Nenhuma compra nesse período.</div>
+      : <div className="card" style={{padding:0,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 76px 92px 62px",gap:8,padding:"9px 12px",
+                       borderBottom:"1px solid var(--border)",fontSize:10.5,color:"var(--text2)",
+                       textTransform:"uppercase",letterSpacing:.4}}>
+            <span>Insumo</span><span style={{textAlign:"right"}}>Qtd</span>
+            <span style={{textAlign:"right"}}>Gasto</span><span style={{textAlign:"right"}}>Varia</span>
+          </div>
+          {linhas.map(l=>(
+            <div key={l.chave} style={{display:"grid",gridTemplateColumns:"1fr 76px 92px 62px",gap:8,
+                                       padding:"9px 12px",borderBottom:"1px solid var(--border)",fontSize:12.5,alignItems:"center"}}>
+              <span>
+                <b>{l.nome}</b>
+                <span style={{display:"block",fontSize:10.5,color:"var(--text2)",marginTop:2}}>
+                  {l.compras}× · {l.fornecedores.length===1?l.fornecedores[0]:`${l.fornecedores.length} fornecedor(es)`}
+                  {l.novo?" · novo no período":""}
+                  {l.conflitoUnidade?" · ⚠ unidades diferentes":""}
+                </span>
+              </span>
+              <span style={{textAlign:"right"}}>
+                {l.qtd.toLocaleString("pt-BR",{maximumFractionDigits:2})}
+                <span style={{display:"block",fontSize:10,color:"var(--text2)"}}>{l.unidade}</span>
+              </span>
+              <span style={{textAlign:"right"}}>{fmtMoney(l.valor)}</span>
+              <span style={{textAlign:"right"}}><Var v={l.varValor}/></span>
+            </div>
+          ))}
+        </div>}
+
+    <div style={{fontSize:10.5,color:"var(--text2)",lineHeight:1.7,marginTop:10,padding:"0 2px"}}>
+      Isto é o que foi <b>comprado</b>, não o que foi consumido. Comprar 20 kg de queijo não quer dizer
+      que 20 kg foram usados — parte pode ter ido pra prateleira. Saber o consumo real exige contar o
+      estoque no início e no fim do período.
+    </div>
+  </div>;
+}
 
 function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,state?:any,setState?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const [subTab,setSubTab]=useState(pendingSub||"novo");
@@ -3844,6 +4033,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       ))}
       {!(db.fornecedores||[]).length&&<EmptyState msg="Nenhum fornecedor cadastrado"/>}
     </div>}
+
+    {subTab==="consumo"&&<ConsumoInsumos db={db} setSubTab={setSubTab}/>}
 
     {subTab==="produtos"&&<div>
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
