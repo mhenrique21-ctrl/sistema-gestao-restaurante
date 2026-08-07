@@ -2049,6 +2049,10 @@ let CAIXA = null;
 async function loadCaixa() {
   const el = document.getElementById('caixa-body');
   el.innerHTML = '<p style="text-align:center;color:var(--text2);font-size:13px;padding:30px">Carregando...</p>';
+  // Confere a permissão antes de desenhar: é a tela onde sangria e suprimento
+  // aparecem, então uma permissão concedida agora vale ao abrir o Caixa, sem
+  // o operador precisar sair e entrar.
+  if (await atualizarUsuarioAtual()) showToast('Suas permissões foram atualizadas');
   try {
     const res = await apiFetch('/api/cash-sessions/current');
     CAIXA = await res.json();
@@ -3358,10 +3362,31 @@ async function deleteProduct(id) {
   } catch (e) { if (e.message !== 'unauthorized') showToast('Erro de conexão'); }
 }
 
+// Recarrega quem é o usuário a partir do servidor. O CURRENT_USER vinha só do
+// login e ficava congelado no localStorage — um perfil ou permissão alterado
+// pelo admin só valia depois de sair e entrar de novo, e nada avisava isso.
+async function atualizarUsuarioAtual() {
+  try {
+    const res = await apiFetch('/api/auth/me');
+    if (!res.ok) return false;
+    const u = await res.json();
+    const mudouPermissao = CURRENT_USER && (
+      CURRENT_USER.role !== u.role ||
+      !!CURRENT_USER.can_sangria !== !!u.can_sangria ||
+      !!CURRENT_USER.can_suprimento !== !!u.can_suprimento
+    );
+    CURRENT_USER = u;
+    localStorage.setItem('seama_user', JSON.stringify(u));
+    return mudouPermissao;
+  } catch (e) { return false; }
+}
+
 // ── Init ─────────────────────────────────────────────
 if (TOKEN) {
   try { CURRENT_USER = JSON.parse(localStorage.getItem('seama_user') || 'null'); } catch (e) {}
   enterApp();
+  // Em segundo plano, pra não atrasar a abertura do PDV.
+  atualizarUsuarioAtual();
 } else {
   loadOperators();
 }

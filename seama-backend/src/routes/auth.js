@@ -68,7 +68,8 @@ router.post('/login', loginLimiter, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, username, pin_hash, role, active FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`,
+      `SELECT id, username, pin_hash, role, active, can_sangria, can_suprimento, sangria_limit
+         FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`,
       [username.trim()]
     );
 
@@ -93,7 +94,17 @@ router.post('/login', loginLimiter, async (req, res) => {
     pool.query(`UPDATE users SET last_login_at = NOW() WHERE id = $1 RETURNING id`, [user.id])
       .catch((e) => console.error('[auth/last_login]', e.message));
 
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+    // As permissões de caixa vão no login: é daqui que o front monta o
+    // CURRENT_USER, e sem elas os botões de sangria/suprimento nunca aparecem
+    // por mais que estejam marcadas no cadastro.
+    res.json({
+      token,
+      user: {
+        id: user.id, username: user.username, role: user.role,
+        can_sangria: user.can_sangria, can_suprimento: user.can_suprimento,
+        sangria_limit: user.sangria_limit,
+      },
+    });
   } catch (err) {
     return internalError(res, err, '[auth/login]');
   }
