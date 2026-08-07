@@ -134,6 +134,29 @@ router.post('/', async (req, res) => {
     if (error) throw Object.assign(new Error(error.message), { code: error.code });
 
     const sale = data;
+
+    // Gravado depois da venda, e não dentro de create_sale, pra não mexer na
+    // assinatura da função que grava venda+itens+pagamentos atomicamente.
+    // Falhar aqui não pode derrubar uma venda já registrada: cash_received é
+    // informação de balcão, não entra em nenhuma conta de caixa.
+    let cashReceived = parseFloat(req.body.cash_received);
+    if (!Number.isFinite(cashReceived) || cashReceived <= 0) cashReceived = null;
+    // Só faz sentido com dinheiro envolvido, e nunca abaixo do que foi pago em
+    // dinheiro — o troco não pode ser negativo.
+    const dinheiroCents = payments
+      .filter((p) => p.method === 'dinheiro')
+      .reduce((s, p) => s + Math.round(parseFloat(p.amount) * 100), 0);
+    if (cashReceived != null && Math.round(cashReceived * 100) >= dinheiroCents && dinheiroCents > 0) {
+      try {
+        await pool.query(`UPDATE sales SET cash_received = ${cashReceived.toFixed(2)} WHERE id = $1 RETURNING id`, [sale.id]);
+      } catch (e) {
+        console.error('[sales/cash_received]', e.message);
+        cashReceived = null;
+      }
+    } else {
+      cashReceived = null;
+    }
+
     if (discountCents > 0) {
       logAction(req.user.id, 'desconto_aplicado', { sale_id: sale.id, discount: discountCents / 100 });
     }
@@ -144,6 +167,7 @@ router.post('/', async (req, res) => {
       subtotal: subtotalCents / 100,
       discount: discountCents / 100,
       total: totalCents / 100,
+      cash_received: cashReceived,
       items: resolvedItems,
       payments,
     });

@@ -389,6 +389,26 @@
   .pay-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
   .pay-list-item { display: flex; justify-content: space-between; align-items: center; background: var(--bg); border-radius: 10px; padding: 8px 12px; font-size: 12.5px; }
   .pay-list-item button { background: none; border: none; color: var(--danger); font-size: 13px; font-weight: 700; }
+  .pay-cash-label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 5px; }
+  .pay-cash-input { font-size: 20px !important; height: 48px !important; text-align: right; font-weight: 600; }
+  .pay-quick { display: flex; gap: 6px; margin: 8px 0 10px; flex-wrap: wrap; }
+  .pay-quick-btn { flex: 1; min-width: 62px; height: 34px; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--card); font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .pay-quick-btn:active { background: var(--bg); }
+  /* Bloco do troco: cor diz o estado antes de a pessoa ler o número. */
+  .pay-troco { display: flex; justify-content: space-between; align-items: baseline;
+    border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; background: var(--bg); }
+  .pay-troco span { font-size: 13px; color: var(--text2); }
+  .pay-troco b { font-size: 26px; font-weight: 700; color: var(--text2); }
+  .pay-troco.tem-troco { background: #FAEEDA; }
+  .pay-troco.tem-troco span { color: #854F0B; }
+  .pay-troco.tem-troco b { color: #854F0B; }
+  .pay-troco.exato { background: #E1F5EE; }
+  .pay-troco.exato span, .pay-troco.exato b { color: #0F6E56; }
+  .pay-troco.exato b { font-size: 18px; }
+  .pay-troco.falta { background: #FCEBEB; }
+  .pay-troco.falta span, .pay-troco.falta b { color: #A32D2D; }
+  .pay-troco-linha span { color: #854F0B !important; font-weight: 700; }
   .pay-summary { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
   .modal-actions { display: flex; gap: 10px; }
   .modal-actions button { flex: 1; height: 42px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); font-size: 13.5px; font-weight: 600; }
@@ -1080,6 +1100,28 @@ function cartTotalCents() {
 function payPaidCents() { return payPayments.reduce((s, p) => s + Math.round(p.amount * 100), 0); }
 function payRemainingCents() { return Math.max(0, cartTotalCents() - payPaidCents()); }
 
+// Quanto o cliente entregou fica guardado na própria linha do pagamento, não
+// num acumulador à parte: remover a linha da lista tem que devolver o troco ao
+// estado anterior, e com acumulador separado sobraria um troco fantasma.
+function payCashReceivedCents() {
+  return payPayments.reduce((s, p) => s + Math.round((p.received || 0) * 100), 0);
+}
+function payCashPaidCents() {
+  return payPayments.filter(p => p.method === 'dinheiro').reduce((s, p) => s + Math.round(p.amount * 100), 0);
+}
+function payTrocoCents() { return Math.max(0, payCashReceivedCents() - payCashPaidCents()); }
+
+// Atalhos de cédula calculados a partir do total: numa venda de R$ 27 não faz
+// sentido oferecer R$ 20. Entram as notas iguais ou maiores e a dezena acima.
+function sugestoesDeNota(totalCents) {
+  const t = totalCents / 100;
+  const s = new Set([t]);
+  for (const c of [5, 10, 20, 50, 100, 200]) if (c >= t) s.add(c);
+  const dezena = Math.ceil(t / 10) * 10;
+  if (dezena > t) s.add(dezena);
+  return [...s].sort((a, b) => a - b).slice(0, 5);
+}
+
 function openPayModal() {
   payPayments = [];
   payMethodSelected = null;
@@ -1095,6 +1137,8 @@ function renderPayModal() {
     document.body.appendChild(backdrop);
   }
   const remaining = payRemainingCents();
+  const emDinheiro = payMethodSelected === 'dinheiro';
+  const troco = payTrocoCents();
   backdrop.innerHTML = `
     <div class="modal-sheet">
       <h2>Receber pagamento</h2>
@@ -1104,18 +1148,42 @@ function renderPayModal() {
           <button class="pay-method-btn ${payMethodSelected === m ? 'selected' : ''}" data-m="${m}">${label}</button>
         `).join('')}
       </div>
-      <div class="pay-amount-row">
-        <input type="number" step="0.01" id="pay-amount-input" placeholder="0,00" value="${remaining > 0 ? (remaining / 100).toFixed(2) : ''}">
-        <button id="pay-add-btn">Adicionar</button>
-      </div>
+      ${emDinheiro ? `
+        <label class="pay-cash-label">Quanto o cliente entregou?</label>
+        <div class="pay-amount-row">
+          <input type="number" step="0.01" id="pay-amount-input" class="pay-cash-input"
+                 placeholder="0,00" value="${(remaining / 100).toFixed(2)}">
+          <button id="pay-add-btn">Adicionar</button>
+        </div>
+        <div class="pay-quick">
+          ${sugestoesDeNota(remaining).map(v => `
+            <button class="pay-quick-btn" data-v="${v}">${v === remaining / 100 ? 'Exato' : fmt(v)}</button>
+          `).join('')}
+        </div>
+        <div class="pay-troco" id="pay-troco-box">
+          <span id="pay-troco-label">Troco</span>
+          <b id="pay-troco-valor">—</b>
+        </div>
+      ` : `
+        <div class="pay-amount-row">
+          <input type="number" step="0.01" id="pay-amount-input" placeholder="0,00" value="${remaining > 0 ? (remaining / 100).toFixed(2) : ''}">
+          <button id="pay-add-btn">Adicionar</button>
+        </div>
+      `}
       <div class="pay-list">
         ${payPayments.map((p, i) => `
-          <div class="pay-list-item"><span>${PAY_METHOD_LABELS[p.method]} — ${fmt(p.amount)}</span><button data-i="${i}">✕</button></div>
+          <div class="pay-list-item">
+            <span>${PAY_METHOD_LABELS[p.method]} — ${fmt(p.amount)}${
+              p.received && p.received > p.amount ? ` <i style="color:var(--text2);font-style:normal">(entregou ${fmt(p.received)})</i>` : ''
+            }</span>
+            <button data-i="${i}">✕</button>
+          </div>
         `).join('')}
       </div>
       <div class="pay-summary">
         <div class="cart-line"><span>Recebido</span><span>${fmt(payPaidCents() / 100)}</span></div>
         <div class="cart-line"><span>Restante</span><span>${fmt(remaining / 100)}</span></div>
+        ${troco > 0 ? `<div class="cart-line pay-troco-linha"><span>Troco a devolver</span><span>${fmt(troco / 100)}</span></div>` : ''}
       </div>
       <div id="pay-error"></div>
       <div class="modal-actions">
@@ -1128,12 +1196,57 @@ function renderPayModal() {
     payMethodSelected = btn.dataset.m;
     renderPayModal();
   }));
+  // Troco ao vivo enquanto digita, antes mesmo de adicionar.
+  const inputEl = backdrop.querySelector('#pay-amount-input');
+  if (emDinheiro) {
+    const atualizarTroco = () => {
+      const cents = Math.round((parseFloat(inputEl.value) || 0) * 100);
+      const box = backdrop.querySelector('#pay-troco-box');
+      const lbl = backdrop.querySelector('#pay-troco-label');
+      const val = backdrop.querySelector('#pay-troco-valor');
+      box.className = 'pay-troco';
+      if (!cents) { lbl.textContent = 'Troco'; val.textContent = '—'; return; }
+      if (cents < remaining) {
+        // Não é erro: o cliente pode estar dividindo com cartão. Mostra o que
+        // ainda falta em vez de acusar valor inválido.
+        box.classList.add('falta');
+        lbl.textContent = 'Ainda vai faltar';
+        val.textContent = fmt((remaining - cents) / 100);
+      } else if (cents === remaining) {
+        box.classList.add('exato');
+        lbl.textContent = 'Troco';
+        val.textContent = 'Sem troco';
+      } else {
+        box.classList.add('tem-troco');
+        lbl.textContent = 'Troco';
+        val.textContent = fmt((cents - remaining) / 100);
+      }
+    };
+    inputEl.addEventListener('input', atualizarTroco);
+    atualizarTroco();
+    backdrop.querySelectorAll('.pay-quick-btn').forEach(b => b.addEventListener('click', () => {
+      inputEl.value = parseFloat(b.dataset.v).toFixed(2);
+      atualizarTroco();
+      inputEl.focus();
+    }));
+  }
+
   backdrop.querySelector('#pay-add-btn').addEventListener('click', () => {
     const errEl = backdrop.querySelector('#pay-error');
     if (!payMethodSelected) { errEl.textContent = 'Escolha uma forma de pagamento'; return; }
-    const amount = parseFloat(backdrop.querySelector('#pay-amount-input').value);
-    if (!(amount > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
-    payPayments.push({ method: payMethodSelected, amount });
+    const digitado = parseFloat(inputEl.value);
+    if (!(digitado > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
+
+    if (payMethodSelected === 'dinheiro') {
+      // O que o cliente entregou não é o que a venda recebeu. Registra o menor
+      // entre o entregue e o que falta — o excedente é troco, não faturamento,
+      // e não pode inflar nem a venda nem o esperado na gaveta.
+      const entregue = Math.round(digitado * 100);
+      const aplicado = Math.min(entregue, remaining);
+      payPayments.push({ method: 'dinheiro', amount: aplicado / 100, received: entregue / 100 });
+    } else {
+      payPayments.push({ method: payMethodSelected, amount: digitado });
+    }
     payMethodSelected = null;
     renderPayModal();
   });
@@ -1166,7 +1279,10 @@ async function confirmSale() {
           // resolve no banco, igual já faz com o preço do produto.
           addons: (i.addons || []).map(a => ({ option_id: a.option_id, quantity: a.quantity })),
         })),
-        payments: payPayments,
+        // O servidor só aceita method e amount; received é informação do
+        // balcão e vai separado, em cash_received.
+        payments: payPayments.map(p => ({ method: p.method, amount: p.amount })),
+        cash_received: payCashReceivedCents() > 0 ? payCashReceivedCents() / 100 : null,
         discount,
       }),
     });
@@ -1247,9 +1363,32 @@ function cupomJob(sale, items, ip, port, kitchen) {
     saleNumber: sale.sale_number,
     operator: CURRENT_USER?.username || '',
     total: items.reduce((s, i) => s + i.total, 0),
-    payment: kitchen ? '' : (sale.payments || []).map(p => PAY_SHORT[p.method] || p.method).join(' + '),
+    // O troco vai colado na linha de pagamento porque é o campo que o APK do
+    // tablet já imprime. Mandar num campo novo só apareceria depois de
+    // atualizar o app em cada tablet — assim sai hoje.
+    payment: kitchen ? '' : montarLinhaPagamento(sale),
+    // Campos estruturados pro APK usar quando for atualizado; o app atual
+    // ignora o que não conhece.
+    cashReceived: sale.cash_received || null,
+    change: trocoDaVenda(sale),
     items,
   };
+}
+
+function trocoDaVenda(sale) {
+  if (!sale.cash_received) return null;
+  const dinheiro = (sale.payments || [])
+    .filter(p => p.method === 'dinheiro')
+    .reduce((s, p) => s + Math.round(parseFloat(p.amount) * 100), 0);
+  const t = Math.round(parseFloat(sale.cash_received) * 100) - dinheiro;
+  return t > 0 ? t / 100 : null;
+}
+
+function montarLinhaPagamento(sale) {
+  const base = (sale.payments || []).map(p => PAY_SHORT[p.method] || p.method).join(' + ');
+  const troco = trocoDaVenda(sale);
+  if (!troco) return base;
+  return `${base} | Recebido ${fmt(sale.cash_received)} | TROCO ${fmt(troco)}`;
 }
 
 // Balcão recebe o cupom completo (com preços e total); cozinha recebe só os
