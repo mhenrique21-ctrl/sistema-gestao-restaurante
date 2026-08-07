@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
-const { authMiddleware, requireRole } = require('../middleware/auth');
+const { authMiddleware, requireRole, podeMovimentarCaixa } = require('../middleware/auth');
 const { internalError } = require('../utils/errors');
 const { logAction } = require('../utils/audit');
 
@@ -118,12 +118,36 @@ router.post('/open', async (req, res) => {
   }
 });
 
-// POST /api/cash-sessions/movement — sangria ou suprimento (gerente/admin)
-router.post('/movement', requireRole('gerente', 'admin'), async (req, res) => {
-  const { type, reason } = req.body;
+// POST /api/cash-sessions/movement — sangria ou suprimento. Gerente e admin
+// podem pelo perfil; caixa só se o dono tiver marcado a permissão no cadastro.
+router.post('/movement', async (req, res) => {
+  const { type } = req.body;
+  const reason = (req.body.reason || '').trim();
   const amount = parseFloat(req.body.amount);
   if (!['sangria', 'suprimento'].includes(type)) return res.status(400).json({ error: 'Tipo inválido' });
   if (!(amount > 0)) return res.status(400).json({ error: 'Valor inválido' });
+
+  if (!podeMovimentarCaixa(req.user, type)) {
+    return res.status(403).json({
+      error: type === 'sangria'
+        ? 'Você não tem permissão para registrar sangria. Peça a um gerente.'
+        : 'Você não tem permissão para registrar suprimento. Peça a um gerente.',
+    });
+  }
+  // Motivo obrigatório em sangria. Dinheiro saindo da gaveta sem justificativa
+  // escrita é exatamente o registro que não responde nada numa conferência.
+  if (type === 'sangria' && !reason) {
+    return res.status(400).json({ error: 'Informe o motivo da sangria (ex: levado ao cofre, pagamento de fornecedor)' });
+  }
+  // Teto por sangria de quem opera com permissão delegada. Sem ele, "pode fazer
+  // sangria" e "pode esvaziar a gaveta" viram a mesma coisa.
+  const delegado = req.user.role !== 'gerente' && req.user.role !== 'admin';
+  if (type === 'sangria' && delegado && req.user.sangria_limit != null && amount > req.user.sangria_limit) {
+    return res.status(403).json({
+      error: `Sua sangria é limitada a R$ ${req.user.sangria_limit.toFixed(2).replace('.', ',')} por vez. Para um valor maior, chame um gerente.`,
+    });
+  }
+
   try {
     const s = await pool.query(`SELECT * FROM cash_sessions WHERE status = 'aberto' LIMIT 1`);
     const session = s.rows[0];

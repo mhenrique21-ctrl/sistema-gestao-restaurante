@@ -103,7 +103,8 @@ router.post('/login', loginLimiter, async (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, username, role, active FROM users WHERE id = $1`,
+      `SELECT id, username, role, active, can_sangria, can_suprimento, sangria_limit
+         FROM users WHERE id = $1`,
       [req.user.id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -114,6 +115,17 @@ router.get('/me', authMiddleware, async (req, res) => {
 });
 
 // POST /api/auth/users — admin cadastra um colaborador (username + PIN)
+// Normaliza as permissões de caixa vindas do corpo da requisição em literais
+// SQL. Limite só faz sentido junto com a permissão de sangria — sem ela, é um
+// número guardado que não protege nada.
+function permissoesDeCaixa(body) {
+  const sangria = body.can_sangria === true || body.can_sangria === 'true';
+  const suprimento = body.can_suprimento === true || body.can_suprimento === 'true';
+  const bruto = parseFloat(body.sangria_limit);
+  const limite = sangria && Number.isFinite(bruto) && bruto > 0 ? bruto.toFixed(2) : 'NULL';
+  return { sangria: sangria ? 'TRUE' : 'FALSE', suprimento: suprimento ? 'TRUE' : 'FALSE', limite };
+}
+
 router.post('/users', authMiddleware, requireRole('admin'), async (req, res) => {
   const { username, pin, role } = req.body;
   if (!username || !pin) return res.status(400).json({ error: 'Usuário e PIN são obrigatórios' });
@@ -124,8 +136,13 @@ router.post('/users', authMiddleware, requireRole('admin'), async (req, res) => 
 
   try {
     const pinHash = await bcrypt.hash(String(pin), 10);
+    // Permissões de caixa entram como literal SQL: o wrapper do pool substitui
+    // $N por string e um booleano viraria 'true' com aspas.
+    const p = permissoesDeCaixa(req.body);
     const result = await pool.query(
-      `INSERT INTO users (username, pin_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, active`,
+      `INSERT INTO users (username, pin_hash, role, can_sangria, can_suprimento, sangria_limit)
+       VALUES ($1, $2, $3, ${p.sangria}, ${p.suprimento}, ${p.limite})
+       RETURNING id, username, role, active, can_sangria, can_suprimento, sangria_limit`,
       [username.trim(), pinHash, role]
     );
     logAction(req.user.id, 'usuario_criado', { user_id: result.rows[0].id, username: username.trim(), role });
@@ -202,11 +219,19 @@ router.patch('/users/:id', authMiddleware, requireRole('admin'), async (req, res
       const pinHash = await bcrypt.hash(String(pin), 10);
       updates.push(`pin_hash = $${idx++}`); values.push(pinHash);
     }
+    // Permissões de caixa como literal SQL (booleano não sobrevive à
+    // substituição de $N feita pelo wrapper do pool).
+    const mexeuPermissao = ['can_sangria', 'can_suprimento', 'sangria_limit'].some((k) => req.body[k] !== undefined);
+    if (mexeuPermissao) {
+      const p = permissoesDeCaixa(req.body);
+      updates.push(`can_sangria = ${p.sangria}`, `can_suprimento = ${p.suprimento}`, `sangria_limit = ${p.limite}`);
+    }
     if (!updates.length) return res.status(400).json({ error: 'Nenhum campo pra atualizar' });
     values.push(alvoId);
 
     const result = await pool.query(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, username, role, active`,
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}
+       RETURNING id, username, role, active, can_sangria, can_suprimento, sangria_limit`,
       values
     );
 
@@ -219,6 +244,16 @@ router.patch('/users/:id', authMiddleware, requireRole('admin'), async (req, res
     if (active !== undefined && active !== atual.active) {
       logAction(req.user.id, active ? 'usuario_reativado' : 'usuario_desativado', { user_id: alvoId, username: atual.username });
     }
+    // Quem passou a poder mexer no dinheiro da gaveta, e quem autorizou: é a
+    // primeira pergunta quando um fechamento não bate.
+    if (mexeuPermissao) {
+      logAction(req.user.id, 'permissao_caixa_alterada', {
+        user_id: alvoId, username: atual.username,
+        can_sangria: result.rows[0].can_sangria,
+        can_suprimento: result.rows[0].can_suprimento,
+        sangria_limit: result.rows[0].sangria_limit,
+      });
+    }
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Já existe um usuário com esse nome' });
@@ -229,7 +264,11 @@ router.patch('/users/:id', authMiddleware, requireRole('admin'), async (req, res
 // GET /api/auth/users — admin lista todos (inclusive inativos)
 router.get('/users', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const result = await pool.query(`SELECT id, username, role, active, created_at, last_login_at FROM users ORDER BY username`);
+    const result = await pool.query(
+      `SELECT id, username, role, active, created_at, last_login_at,
+              can_sangria, can_suprimento, sangria_limit
+         FROM users ORDER BY username`
+    );
     res.json(result.rows);
   } catch (err) {
     return internalError(res, err, '[auth/users list]');

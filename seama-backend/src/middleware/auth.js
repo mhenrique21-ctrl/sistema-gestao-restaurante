@@ -21,17 +21,35 @@ async function authMiddleware(req, res, next) {
   }
 
   try {
-    const r = await pool.query(`SELECT id, username, role, active FROM users WHERE id = $1`, [payload.id]);
+    const r = await pool.query(
+      `SELECT id, username, role, active, can_sangria, can_suprimento, sangria_limit
+         FROM users WHERE id = $1`,
+      [payload.id]
+    );
     const user = r.rows[0];
     if (!user || !user.active) {
       return res.status(401).json({ error: 'Usuário inativo ou removido' });
     }
-    req.user = { id: user.id, username: user.username, role: user.role };
+    req.user = {
+      id: user.id, username: user.username, role: user.role,
+      can_sangria: user.can_sangria, can_suprimento: user.can_suprimento,
+      sangria_limit: user.sangria_limit == null ? null : parseFloat(user.sangria_limit),
+    };
     next();
   } catch (err) {
     console.error('[auth/middleware]', err.message);
     return res.status(500).json({ error: 'Erro ao validar sessão' });
   }
+}
+
+// Sangria e suprimento: gerente e admin podem pelo perfil; caixa só com a
+// permissão marcada no cadastro dele. Quem decide isso é o dono, caso a caso —
+// numa loja o caixa leva o excedente ao cofre, em outra só o gerente encosta na
+// gaveta, e nenhum perfil fixo cobre as duas realidades.
+function podeMovimentarCaixa(user, tipo) {
+  if (!user) return false;
+  if (user.role === 'gerente' || user.role === 'admin') return true;
+  return tipo === 'sangria' ? !!user.can_sangria : !!user.can_suprimento;
 }
 
 function requireRole(...roles) {
@@ -44,4 +62,4 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { authMiddleware, requireRole };
+module.exports = { authMiddleware, requireRole, podeMovimentarCaixa };

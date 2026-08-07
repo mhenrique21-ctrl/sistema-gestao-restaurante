@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const pool = require('../db/pool');
-const { authMiddleware, requireRole } = require('../middleware/auth');
+const { authMiddleware, requireRole, podeMovimentarCaixa } = require('../middleware/auth');
 const { internalError } = require('../utils/errors');
 const { logAction } = require('../utils/audit');
 const { todayBelem } = require('../utils/date');
@@ -64,8 +64,24 @@ router.post('/', async (req, res) => {
   if (!(parseFloat(amount) > 0)) {
     return res.status(400).json({ error: 'Valor inválido' });
   }
-  if (type === 'sangria' && !['gerente', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Só gerente ou admin pode registrar sangria' });
+  // Esta rota deixava QUALQUER usuário logado registrar suprimento e abertura —
+  // só sangria era protegida. Suprimento infla o esperado da gaveta, então quem
+  // lança um suprimento falso esconde uma falta no fechamento. Agora as duas
+  // seguem a mesma regra da rota de turno.
+  if (type !== 'abertura' && !podeMovimentarCaixa(req.user, type)) {
+    return res.status(403).json({ error: `Você não tem permissão para registrar ${type}. Peça a um gerente.` });
+  }
+  if (type === 'abertura' && !['gerente', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Só gerente ou admin abre o caixa' });
+  }
+  if (type === 'sangria' && !(reason || '').trim()) {
+    return res.status(400).json({ error: 'Informe o motivo da sangria' });
+  }
+  const delegado = req.user.role !== 'gerente' && req.user.role !== 'admin';
+  if (type === 'sangria' && delegado && req.user.sangria_limit != null && parseFloat(amount) > req.user.sangria_limit) {
+    return res.status(403).json({
+      error: `Sua sangria é limitada a R$ ${req.user.sangria_limit.toFixed(2).replace('.', ',')} por vez.`,
+    });
   }
   try {
     if (type === 'abertura') {

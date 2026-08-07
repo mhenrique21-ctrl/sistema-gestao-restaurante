@@ -1948,6 +1948,10 @@ function renderCaixaAberto(el) {
   const s = CAIXA.session;
   const abertura = parseFloat(s.opening_amount);
   const isGerente = ['admin', 'gerente'].includes(CURRENT_USER?.role);
+  // Cada botão tem a sua permissão. O caixa pode ter recebido só suprimento,
+  // que é o caso comum: colocar troco pode, tirar dinheiro não.
+  const podeSangria = isGerente || !!CURRENT_USER?.can_sangria;
+  const podeSuprimento = isGerente || !!CURRENT_USER?.can_suprimento;
   const hora = new Date(s.opened_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   el.innerHTML = `
@@ -1977,10 +1981,8 @@ function renderCaixaAberto(el) {
       </div>
 
       <div class="cx-actions">
-        ${isGerente ? `
-          <button id="cx-sangria-btn">🔻 Sangria</button>
-          <button id="cx-suprimento-btn">🔺 Suprimento</button>
-        ` : ''}
+        ${podeSuprimento ? '<button id="cx-suprimento-btn">🔺 Suprimento</button>' : ''}
+        ${podeSangria ? '<button id="cx-sangria-btn">🔻 Sangria</button>' : ''}
         <button class="danger" id="cx-close-btn">🔒 Fechar caixa</button>
       </div>
 
@@ -2004,10 +2006,8 @@ function renderCaixaAberto(el) {
       </div>` : ''}
   `;
 
-  if (isGerente) {
-    document.getElementById('cx-sangria-btn').addEventListener('click', () => openMovimentoModal('sangria'));
-    document.getElementById('cx-suprimento-btn').addEventListener('click', () => openMovimentoModal('suprimento'));
-  }
+  if (podeSangria) document.getElementById('cx-sangria-btn').addEventListener('click', () => openMovimentoModal('sangria'));
+  if (podeSuprimento) document.getElementById('cx-suprimento-btn').addEventListener('click', () => openMovimentoModal('suprimento'));
   document.getElementById('cx-close-btn').addEventListener('click', openFechamentoModal);
 }
 
@@ -2035,6 +2035,11 @@ async function abrirCaixa() {
 
 function openMovimentoModal(tipo) {
   const isSangria = tipo === 'sangria';
+  // Gerente e admin não têm teto; o limite só vale pra quem opera com
+  // permissão delegada.
+  const delegado = !['admin', 'gerente'].includes(CURRENT_USER?.role);
+  const limiteSangria = delegado && CURRENT_USER?.sangria_limit != null
+    ? parseFloat(CURRENT_USER.sangria_limit) : null;
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'mov-modal-backdrop';
@@ -2043,7 +2048,12 @@ function openMovimentoModal(tipo) {
       <h2>${isSangria ? '🔻 Sangria' : '🔺 Suprimento'}</h2>
       <div class="sub">${isSangria ? 'Retirada de dinheiro da gaveta' : 'Entrada de dinheiro na gaveta'}</div>
       <div class="field-group"><label>Valor</label><input id="mov-amount" type="number" step="0.01" min="0" placeholder="0,00"></div>
-      <div class="field-group"><label>Motivo</label><input id="mov-reason" placeholder="${isSangria ? 'Ex: depósito no cofre' : 'Ex: reforço de troco'}"></div>
+      <div class="field-group">
+        <label>Motivo${isSangria ? '' : ' (opcional)'}</label>
+        <input id="mov-reason" placeholder="${isSangria ? 'Ex: depósito no cofre' : 'Ex: reforço de troco'}">
+        ${isSangria && limiteSangria != null
+          ? `<small style="color:var(--text2);font-size:10.5px">Seu limite por sangria: ${fmt(limiteSangria)}</small>` : ''}
+      </div>
       <div id="mov-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
       <div class="modal-actions">
         <button id="mov-cancel">Cancelar</button>
@@ -2057,14 +2067,22 @@ function openMovimentoModal(tipo) {
   backdrop.querySelector('#mov-save').addEventListener('click', async () => {
     const errEl = backdrop.querySelector('#mov-error');
     const amount = parseFloat(backdrop.querySelector('#mov-amount').value);
+    const motivo = backdrop.querySelector('#mov-reason').value.trim();
     errEl.textContent = '';
     if (!(amount > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
+    // As mesmas regras existem no servidor; aqui é só pra não fazer a pessoa
+    // esperar a viagem de ida e volta pra descobrir.
+    if (isSangria && !motivo) { errEl.textContent = 'Informe o motivo da sangria'; return; }
+    if (isSangria && limiteSangria != null && amount > limiteSangria) {
+      errEl.textContent = `Acima do seu limite de ${fmt(limiteSangria)} por sangria. Chame um gerente.`;
+      return;
+    }
     const btn = backdrop.querySelector('#mov-save');
     btn.disabled = true;
     try {
       const res = await apiFetch('/api/cash-sessions/movement', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: tipo, amount, reason: backdrop.querySelector('#mov-reason').value.trim() || null }),
+        body: JSON.stringify({ type: tipo, amount, reason: motivo || null }),
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar'; btn.disabled = false; return; }
@@ -2647,6 +2665,19 @@ function ultimoAcesso(u) {
     : `último acesso ${d.toLocaleDateString('pt-BR')}`;
 }
 
+// Quem pode mexer no dinheiro da gaveta precisa aparecer na lista. Uma
+// permissão que só existe dentro do cadastro é uma permissão que ninguém
+// revisa — e essa é justamente a que se esquece de tirar quando alguém sai.
+function permissoesResumo(u) {
+  if (['admin', 'gerente'].includes(u.role)) return '';
+  const p = [];
+  if (u.can_suprimento) p.push('suprimento');
+  if (u.can_sangria) {
+    p.push(u.sangria_limit != null ? `sangria até ${fmt(u.sangria_limit)}` : 'sangria sem limite');
+  }
+  return p.length ? ` · <span style="color:var(--warn,#b4801a)">🔑 ${p.join(' e ')}</span>` : '';
+}
+
 function renderUsuarios() {
   const el = document.getElementById('usr-list');
   el.innerHTML = USUARIOS.map(u => {
@@ -2659,7 +2690,7 @@ function renderUsuarios() {
             <span class="tag role-${u.role}">${ROLE_LABELS[u.role]}</span>
             ${u.active ? '' : '<span class="tag off">inativo</span>'}
           </div>
-          <div class="sub">${souEu ? 'Você · ' : ''}${ultimoAcesso(u)}</div>
+          <div class="sub">${souEu ? 'Você · ' : ''}${ultimoAcesso(u)}${permissoesResumo(u)}</div>
         </div>
         <button data-id="${u.id}">Editar</button>
       </div>`;
@@ -2695,6 +2726,19 @@ function openUsuarioModal(userId) {
         <input id="usr-pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••••">
         <small style="color:var(--text2);font-size:10.5px">Evite sequências (123456) ou dígito repetido</small>
       </div>
+      <!-- Só aparece pra Caixa: gerente e admin já movimentam a gaveta pelo
+           perfil, e mostrar caixinha marcada e travada só confunde. -->
+      <div class="field-group" id="usr-caixa-perms">
+        <label>Movimentar dinheiro da gaveta</label>
+        <label class="toggle-row"><input type="checkbox" id="usr-can-suprimento" ${u?.can_suprimento ? 'checked' : ''}> Pode registrar <b>suprimento</b> (colocar dinheiro)</label>
+        <label class="toggle-row"><input type="checkbox" id="usr-can-sangria" ${u?.can_sangria ? 'checked' : ''}> Pode registrar <b>sangria</b> (retirar dinheiro)</label>
+        <div id="usr-limite-wrap" style="margin-top:8px">
+          <label style="font-size:11px">Limite por sangria (vazio = sem limite)</label>
+          <input id="usr-sangria-limit" type="number" step="0.01" min="0" placeholder="Ex: 200,00"
+                 value="${u?.sangria_limit != null ? u.sangria_limit : ''}">
+          <small style="color:var(--text2);font-size:10.5px">Acima desse valor, só gerente. Motivo é sempre obrigatório na sangria.</small>
+        </div>
+      </div>
       ${u && !souEu ? `
         <label class="toggle-row"><input type="checkbox" id="usr-active" ${u.active ? 'checked' : ''}> Usuário ativo</label>
       ` : ''}
@@ -2708,9 +2752,24 @@ function openUsuarioModal(userId) {
   document.body.appendChild(backdrop);
 
   let role = u?.role || 'caixa';
+
+  // O bloco de permissões acompanha o perfil escolhido na hora: marcar Gerente
+  // esconde as caixinhas, porque elas deixam de decidir qualquer coisa.
+  const permsEl = backdrop.querySelector('#usr-caixa-perms');
+  const chkSangria = backdrop.querySelector('#usr-can-sangria');
+  const limiteWrap = backdrop.querySelector('#usr-limite-wrap');
+  function atualizarPerms() {
+    permsEl.style.display = role === 'caixa' ? '' : 'none';
+    // Limite sem permissão de sangria é um número que não protege nada.
+    limiteWrap.style.display = chkSangria.checked ? '' : 'none';
+  }
+  chkSangria.addEventListener('change', atualizarPerms);
+  atualizarPerms();
+
   backdrop.querySelectorAll('.role-opt').forEach(b => b.addEventListener('click', () => {
     role = b.dataset.role;
     backdrop.querySelectorAll('.role-opt').forEach(x => x.classList.toggle('selected', x.dataset.role === role));
+    atualizarPerms();
   }));
   backdrop.querySelector('#usr-cancel').addEventListener('click', () => backdrop.remove());
   backdrop.querySelector('#usr-save').addEventListener('click', async () => {
@@ -2726,6 +2785,18 @@ function openUsuarioModal(userId) {
     if (novoPin) payload.pin = novoPin;
     const chk = backdrop.querySelector('#usr-active');
     if (chk) payload.active = chk.checked;
+    // Gerente e admin movimentam a gaveta pelo perfil; mandar as caixinhas
+    // deles deixaria uma permissão pendurada que voltaria a valer se um dia o
+    // perfil fosse rebaixado pra Caixa.
+    if (role === 'caixa') {
+      payload.can_sangria = chkSangria.checked;
+      payload.can_suprimento = backdrop.querySelector('#usr-can-suprimento').checked;
+      payload.sangria_limit = backdrop.querySelector('#usr-sangria-limit').value || null;
+    } else {
+      payload.can_sangria = false;
+      payload.can_suprimento = false;
+      payload.sangria_limit = null;
+    }
 
     const btn = backdrop.querySelector('#usr-save');
     btn.disabled = true;
