@@ -90,14 +90,27 @@
   .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; text-align: left; color: var(--text); display: flex; flex-direction: column; box-shadow: var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
   .product-card:active { transform: scale(.97); box-shadow: var(--shadow-lg); }
   .thumb-wrap { position: relative; }
-  .product-card .thumb { width: 100%; height: 148px; object-fit: cover; background: var(--card-active); display: block; }
+  /* As fotos do cardápio são quadradas (400x400, 1254x1254, 200x200) e estavam
+     num espaço deitado de 249x148 com object-fit: cover — o recorte jogava fora
+     101px de altura, 41% da imagem. O produto perdia topo e base, e o selo de
+     oferta ainda cobria o que restava.
+     Com 4/3 e contain a foto entra inteira: nada é cortado, ela renderiza maior
+     que antes (187px de lado contra 148 recortados) e o card cresce só 39px.
+     As faixas laterais usam o mesmo creme do bloco de "sem foto", então parecem
+     parte do desenho e não sobra. */
+  .product-card .thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; display: block;
+    background: linear-gradient(135deg, #F3E9D8 0%, #EADBC2 100%); }
   /* Produto sem foto não fica com buraco branco: recebe um bloco creme com o
      ícone da categoria. Boa parte do cardápio ainda não tem imagem. */
-  .thumb-fallback { width: 100%; height: 148px; display: flex; align-items: center; justify-content: center; font-size: 3rem;
+  .thumb-fallback { width: 100%; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; font-size: 3rem;
     background: linear-gradient(135deg, #F3E9D8 0%, #EADBC2 100%); }
-  .off-badge { position: absolute; top: 8px; left: 8px; width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg,#ff4d4d,#ff8c00); box-shadow: 0 2px 8px rgba(255,77,77,.55); color: #fff; font-weight: 900; font-size: 10px; line-height: 1.1; text-align: center; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
-  .top-badge { position: absolute; top: 8px; right: 8px; background: rgba(36,28,19,.86); color: #FFD98A; font-size: .66rem; font-weight: 800;
-    letter-spacing: .04em; text-transform: uppercase; padding: 5px 9px; border-radius: 999px; }
+  /* O selo de desconto fica na faixa lateral criada pelo contain, encostado no
+     canto — cobre alguns pixels da foto, não o produto. */
+  .off-badge { position: absolute; top: 6px; left: 6px; width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,#ff4d4d,#ff8c00); box-shadow: 0 2px 8px rgba(255,77,77,.55); color: #fff; font-weight: 900; font-size: 10px; line-height: 1.1; text-align: center; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
+  /* "Mais pedido" tem 112px de largura: por cima da foto, tapava o produto.
+     Desceu pro corpo do card, onde informa sem esconder nada. */
+  .top-badge { display: inline-block; background: rgba(36,28,19,.9); color: #FFD98A; font-size: .64rem; font-weight: 800;
+    letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; margin-bottom: 5px; }
   .esgotado-badge { position: absolute; inset: 0; background: rgba(255,255,255,.72); display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: .9rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
   .product-card .body { padding: 12px 14px 14px; flex: 1; display: flex; flex-direction: column; }
@@ -606,9 +619,9 @@ function renderProductGrid() {
       <div class="thumb-wrap">
         ${img}
         ${p.promo_price != null ? `<span class="off-badge">${Math.round((1 - p.promo_price / p.price) * 100)}%<br>OFF</span>` : ''}
-        ${maisPedidos.includes(p.id) ? '<span class="top-badge">⭐ Mais pedido</span>' : ''}
       </div>
       <div class="body">
+        ${maisPedidos.includes(p.id) ? '<div class="top-badge">⭐ Mais pedido</div>' : ''}
         ${activeCategory === 'ofertas' && p.categoryName && p.categoryName !== 'Ofertas' ? `<div class="card-tag">${p.categoryName}</div>` : ''}
         <div class="name">${p.name}</div>
         ${p.description ? `<div class="desc">${p.description}</div>` : ''}

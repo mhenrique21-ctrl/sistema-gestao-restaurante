@@ -605,6 +605,28 @@
   .fiado-sub.alerta { color: var(--danger); font-weight: 700; }
   .fiado-saldo { font-weight: 800; font-size: 1.1rem; text-align: right; min-width: 90px; }
   .fiado-acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* Extrato */
+  .ext-periodo { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
+  .ext-periodo label { font-size: .75rem; color: var(--c-muted); font-weight: 700; display: flex; flex-direction: column; gap: 4px; }
+  .ext-periodo input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-bg); color: var(--c-text); font-size: .9rem; }
+  .ext-anterior { font-size: .8rem; color: var(--c-muted); background: var(--c-bg); border-radius: 8px; padding: 8px 11px; margin-bottom: 8px; }
+  .ext-tabela { border: 1px solid var(--c-border); border-radius: 10px; overflow: hidden; max-height: 34vh; overflow-y: auto; margin-bottom: 12px; }
+  .ext-linha { display: grid; grid-template-columns: 48px 1fr 92px 92px; gap: 6px; padding: 9px 12px; font-size: .84rem;
+    border-bottom: 1px solid var(--c-border); align-items: baseline; }
+  .ext-linha:last-child { border-bottom: none; }
+  .ext-linha.pago { background: rgba(31,122,85,.07); }
+  .ext-linha.pago .ext-desc, .ext-linha.pago .ext-valor { color: #1F7A55; font-weight: 700; }
+  .ext-data { color: var(--c-muted); font-size: .78rem; }
+  .ext-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ext-valor, .ext-saldo { text-align: right; font-variant-numeric: tabular-nums; }
+  .ext-saldo { color: var(--c-muted); font-size: .8rem; }
+  .ext-resumo { background: var(--c-bg); border-radius: 10px; padding: 12px 14px; }
+  .ext-resumo > div { display: flex; justify-content: space-between; font-size: .86rem; padding: 3px 0; color: var(--c-muted); }
+  .ext-resumo > div b { color: var(--c-text); }
+  .ext-resumo .ext-total { border-top: 1px solid var(--c-border); margin-top: 7px; padding-top: 9px; font-size: 1rem; }
+  .ext-resumo .ext-total b { font-size: 1.25rem; color: var(--gold-dim); }
+  .pay-method-btn.sel { border-color: var(--gold); background: rgba(160,109,34,.1); }
   .usr-vazio { font-size: .8rem; color: var(--c-muted); padding: 16px 2px; }
 
   .usr-cargo-op { display: block; width: 100%; text-align: left; border: 2px solid var(--c-border); background: var(--c-bg);
@@ -1938,12 +1960,211 @@ function renderFiadoLista() {
       </div>
       <div class="fiado-saldo">${fmt(saldo)}</div>
       <div class="fiado-acoes">
+        <button class="prod-btn" onclick="abrirExtratoFiado('${p.id}')">📄 Extrato</button>
         <button class="prod-btn" onclick="editarPessoaFiado('${p.id}')">✏️ Editar</button>
         <button class="prod-btn" onclick="${p.blocked ? `desbloquearFiado('${p.id}')` : `bloquearFiado('${p.id}','${(p.name || '').replace(/'/g, "\\'")}')`}">
           ${p.blocked ? '🔓 Desbloquear' : '🚫 Bloquear'}</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Extrato por período, com pagamento ──────────────────
+let _extrato = null;
+
+function primeiroDiaDoMes() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toLocaleDateString('en-CA');
+}
+function hojeISO() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Belem' }); }
+
+async function abrirExtratoFiado(id, de, ate) {
+  de = de || primeiroDiaDoMes();
+  ate = ate || hojeISO();
+  const bd = document.getElementById('extrato-backdrop') || (() => {
+    const d = document.createElement('div');
+    d.className = 'modal-backdrop'; d.id = 'extrato-backdrop';
+    document.body.appendChild(d); return d;
+  })();
+  bd.innerHTML = '<div class="modal-sheet" style="max-width:640px"><div class="cart-empty">Carregando...</div></div>';
+  try {
+    const res = await fetch(`${API}/api/fiado/pessoas/${id}/extrato?de=${de}&ate=${ate}`, { headers: authHeaders() });
+    if (!res.ok) { bd.innerHTML = '<div class="modal-sheet"><div class="cart-empty">Erro ao carregar o extrato</div></div>'; return; }
+    _extrato = await res.json();
+    renderExtratoFiado();
+  } catch (e) {
+    bd.innerHTML = '<div class="modal-sheet"><div class="cart-empty">Erro de conexão</div></div>';
+  }
+}
+
+function renderExtratoFiado() {
+  const j = _extrato, p = j.pessoa;
+  const saldo = parseFloat(j.saldo_atual) || 0;
+  const bd = document.getElementById('extrato-backdrop');
+  bd.innerHTML = `<div class="modal-sheet" style="max-width:640px">
+    <h3>${p.name} <span class="usr-selo cargo">${p.tipo === 'colaborador' ? '🧑‍🍳 Colaborador' : '👤 Cliente'}</span></h3>
+    <p style="font-size:.8rem;color:var(--c-muted);margin:2px 0 12px">${p.phone || ''}</p>
+
+    <div class="ext-periodo">
+      <label>De <input type="date" id="ext-de" value="${j.periodo.de}"></label>
+      <label>Até <input type="date" id="ext-ate" value="${j.periodo.ate}"></label>
+      <button class="prod-btn" onclick="abrirExtratoFiado('${p.id}', document.getElementById('ext-de').value, document.getElementById('ext-ate').value)">Filtrar</button>
+    </div>
+
+    ${parseFloat(j.saldo_anterior) ? `<div class="ext-anterior">Saldo antes do período: <b>${fmt(j.saldo_anterior)}</b></div>` : ''}
+
+    <div class="ext-tabela">
+      ${j.linhas.length ? j.linhas.map(l => {
+        const v = parseFloat(l.amount);
+        const pago = v < 0;
+        const d = new Date(l.created_at);
+        return `<div class="ext-linha ${pago ? 'pago' : ''}">
+          <span class="ext-data">${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+          <span class="ext-desc">${pago ? 'Pagamento' + (l.payment_method ? ' · ' + (PAY_LABELS[l.payment_method] || l.payment_method) : '') : (l.description || 'Consumo')}</span>
+          <span class="ext-valor">${pago ? '−' : ''}${fmt(Math.abs(v))}</span>
+          <span class="ext-saldo">${fmt(l.balance_after)}</span>
+        </div>`;
+      }).join('') : '<div class="usr-vazio">Nenhum movimento neste período.</div>'}
+    </div>
+
+    <div class="ext-resumo">
+      <div><span>Consumo do período</span><b>${fmt(j.consumo_periodo)}</b></div>
+      <div><span>Pago no período</span><b>−${fmt(j.pago_periodo)}</b></div>
+      <div class="ext-total"><span>Saldo em aberto</span><b>${fmt(saldo)}</b></div>
+    </div>
+
+    <div class="modal-actions" style="flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="document.getElementById('extrato-backdrop').remove()">Fechar</button>
+      <button class="btn btn-secondary" onclick="enviarExtratoWhatsApp()">💬 WhatsApp</button>
+      <button class="btn btn-secondary" onclick="imprimirExtratoFiado()">🖨 Imprimir</button>
+      ${saldo > 0 ? `<button class="btn btn-primary" onclick="abrirPagamentoFiado()">💰 Receber</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function textoExtrato() {
+  const j = _extrato;
+  const dt = s => new Date(s + 'T12:00:00').toLocaleDateString('pt-BR');
+  const linhas = j.linhas.map(l => {
+    const v = parseFloat(l.amount);
+    const d = new Date(l.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    return `${d}  ${v < 0 ? 'PAGO' : (l.description || 'Consumo').slice(0, 22)}  ${v < 0 ? '-' : ''}${fmt(Math.abs(v))}`;
+  }).join('\n');
+  return `*CONFRARIA CAFÉ*\nExtrato de ${j.pessoa.name}\n${dt(j.periodo.de)} a ${dt(j.periodo.ate)}\n\n${linhas}\n\nConsumo do período: ${fmt(j.consumo_periodo)}\nPago no período: ${fmt(j.pago_periodo)}\n*Saldo em aberto: ${fmt(j.saldo_atual)}*`;
+}
+
+function enviarExtratoWhatsApp() {
+  const fone = (_extrato.pessoa.phone || '').replace(/\D/g, '');
+  if (!fone) { showToast('Essa pessoa não tem telefone cadastrado'); return; }
+  const numero = fone.length <= 11 ? '55' + fone : fone;
+  window.open(`https://wa.me/${numero}?text=${encodeURIComponent(textoExtrato())}`, '_blank');
+}
+
+function imprimirExtratoFiado() {
+  const w = window.open('', '_blank', 'width=420,height=620');
+  if (!w) { showToast('Libere as janelas pop-up para imprimir'); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>Extrato — ${_extrato.pessoa.name}</title>
+    <body style="font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap;padding:20px">${textoExtrato().replace(/\*/g, '')}</body>`);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
+// Pagamento: total ou parcial. O recibo sai depois de confirmado, com o saldo
+// restante impresso — é o que evita discussão sobre quanto ainda falta.
+function abrirPagamentoFiado() {
+  const j = _extrato, saldo = parseFloat(j.saldo_atual);
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop'; bd.id = 'pagfiado-backdrop';
+  bd.innerHTML = `<div class="modal-sheet" style="max-width:430px">
+    <h3>Receber de ${j.pessoa.name}</h3>
+    <p style="font-size:.82rem;color:var(--c-muted);margin:4px 0 14px">Saldo em aberto: <b style="color:var(--c-text)">${fmt(saldo)}</b></p>
+    <div class="field-group">
+      <label>Quanto está recebendo?</label>
+      <input type="number" step="0.01" min="0.01" max="${saldo}" id="pf-valor" value="${saldo.toFixed(2)}"
+             style="font-size:1.4rem;text-align:right">
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="prod-btn" style="flex:1" onclick="document.getElementById('pf-valor').value='${saldo.toFixed(2)}';atualizarRestante()">Tudo</button>
+        <button class="prod-btn" style="flex:1" onclick="document.getElementById('pf-valor').value='${(saldo/2).toFixed(2)}';atualizarRestante()">Metade</button>
+      </div>
+    </div>
+    <div class="field-group">
+      <label>Forma</label>
+      <div class="pay-method-grid" id="pf-formas">
+        ${['dinheiro','pix','cartao_debito','cartao_credito'].map((m,i) => `
+          <button type="button" class="pay-method-btn ${i===0?'sel':''}" data-m="${m}"
+            onclick="document.querySelectorAll('#pf-formas .pay-method-btn').forEach(b=>b.classList.remove('sel'));this.classList.add('sel')">
+            <span class="ic">${PAY_ICONS[m]}</span>${PAY_LABELS[m].toUpperCase()}
+          </button>`).join('')}
+      </div>
+    </div>
+    <div class="usr-aviso" id="pf-restante" style="margin:0"></div>
+    <div id="usr-modal-erro" style="color:var(--danger);font-size:.82rem;min-height:18px;margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('pagfiado-backdrop').remove()">Cancelar</button>
+      <button class="btn btn-primary" id="pf-ok" onclick="confirmarPagamentoFiado()">Receber e imprimir recibo</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bd);
+  document.getElementById('pf-valor').addEventListener('input', atualizarRestante);
+  atualizarRestante();
+}
+
+function atualizarRestante() {
+  const saldo = parseFloat(_extrato.saldo_atual);
+  const v = parseFloat(document.getElementById('pf-valor').value) || 0;
+  const resta = Math.round((saldo - v) * 100) / 100;
+  const el = document.getElementById('pf-restante');
+  if (v > saldo + 0.005) { el.textContent = `Valor maior que o saldo de ${fmt(saldo)}.`; return; }
+  el.innerHTML = resta <= 0.005
+    ? '✅ Quita a dívida por completo.'
+    : `Pagamento parcial — vai continuar devendo <b>${fmt(resta)}</b>.`;
+}
+
+async function confirmarPagamentoFiado() {
+  const valor = parseFloat(document.getElementById('pf-valor').value);
+  const metodo = document.querySelector('#pf-formas .pay-method-btn.sel')?.dataset.m;
+  const err = document.getElementById('usr-modal-erro');
+  if (!(valor > 0)) { err.textContent = 'Informe um valor válido'; return; }
+  if (!metodo) { err.textContent = 'Escolha a forma de pagamento'; return; }
+  const btn = document.getElementById('pf-ok');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/fiado/pessoas/${_extrato.pessoa.id}/pagamento`, {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ amount: valor, payment_method: metodo }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { err.textContent = d.error || 'Erro ao registrar o pagamento'; return; }
+    document.getElementById('pagfiado-backdrop').remove();
+    imprimirRecibo(d, metodo);
+    // Sem turno aberto o dinheiro entra mas não tem em qual fechamento aparecer.
+    if (d.sem_turno_aberto) showToast('⚠️ Recebido, mas não há caixa aberto — o valor não vai aparecer em nenhum fechamento');
+    else showToast(d.quitado ? `${d.pessoa.name} quitou a dívida` : `Recebido ${fmt(valor)} · resta ${fmt(d.saldo_restante)}`);
+    abrirExtratoFiado(_extrato.pessoa.id, _extrato.periodo.de, _extrato.periodo.ate);
+    loadFiado();
+  } catch (e) { err.textContent = 'Erro de conexão'; } finally { btn.disabled = false; }
+}
+
+function imprimirRecibo(d, metodo) {
+  const w = window.open('', '_blank', 'width=380,height=560');
+  if (!w) { showToast('Recebido. Libere as janelas pop-up para imprimir o recibo.'); return; }
+  const agora = new Date().toLocaleString('pt-BR');
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>Recibo</title>
+    <body style="font-family:ui-monospace,monospace;font-size:12px;padding:18px;line-height:1.6">
+      <div style="text-align:center;font-weight:700">CONFRARIA CAFÉ</div>
+      <div style="text-align:center;margin-bottom:12px">RECIBO DE PAGAMENTO</div>
+      <div>${d.pessoa.name}</div>
+      <hr style="border:none;border-top:1px dashed #999">
+      <div>Saldo anterior ..... ${fmt(d.saldo_anterior)}</div>
+      <div><b>RECEBIDO ........... ${fmt(d.saldo_anterior - d.saldo_restante)}</b></div>
+      <div>Forma .............. ${PAY_LABELS[metodo] || metodo}</div>
+      <hr style="border:none;border-top:1px dashed #999">
+      <div><b>SALDO RESTANTE ..... ${fmt(d.saldo_restante)}</b></div>
+      <div style="margin-top:10px;font-size:10px">${agora} · ${USER_NAME || ''}</div>
+      <div style="text-align:center;margin-top:14px;font-size:10px">Recebemos e damos quitação</div>
+    </body>`);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
 }
 
 function novaPessoaFiado() {

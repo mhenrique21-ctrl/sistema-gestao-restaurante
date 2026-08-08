@@ -206,10 +206,30 @@ async function getSessionSummary(session) {
   }
   const totalGeral = SALE_CHANNELS.reduce((s, ch) => s + channels[ch].total, 0);
 
+  // Recebimento de fiado: dinheiro de uma venda de OUTRO dia chegando hoje.
+  // Entra na gaveta e NUNCA no faturamento — a receita já foi contada quando a
+  // venda fiada aconteceu. Somar de novo faturaria duas vezes o mesmo café.
+  // Por isso fica fora de channels/byMethod e entra só na conta da gaveta.
+  const fiadoRows = await pool.query(
+    `SELECT payment_method AS method, COALESCE(SUM(-amount), 0) AS total, COUNT(*) AS qty
+       FROM credit_entries
+      WHERE tipo = 'pagamento' AND created_at >= $1 AND created_at <= $2
+      GROUP BY payment_method`,
+    [ini, fim]
+  );
+  let fiadoDinheiro = 0, fiadoEletronico = 0, fiadoRecebido = 0;
+  fiadoRows.rows.forEach((r) => {
+    const v = parseFloat(r.total);
+    fiadoRecebido += v;
+    if (r.method === 'dinheiro') fiadoDinheiro += v;
+    else fiadoEletronico += v;
+  });
+
   const dinheiroNaGaveta =
     channels.comanda.byMethod.dinheiro.total +
     channels.balcao.byMethod.dinheiro.total +
-    dinheiroRetirada;
+    dinheiroRetirada +
+    fiadoDinheiro;
 
   const abertura = parseFloat(session.opening_amount) || 0;
   const expected = abertura + suprimentos - sangrias + dinheiroNaGaveta;
@@ -217,13 +237,16 @@ async function getSessionSummary(session) {
   // Eletrônico = o que NÃO está na gaveta e precisa bater com o extrato da
   // maquininha e do banco. É a outra metade da conferência, e até agora
   // nenhuma tela dizia qual era.
-  const eletronico = byMethod.cartao_debito + byMethod.cartao_credito + byMethod.pix;
+  const eletronico = byMethod.cartao_debito + byMethod.cartao_credito + byMethod.pix + fiadoEletronico;
   const tickets = SALE_CHANNELS.reduce((s, ch) => s + channels[ch].tickets, 0);
 
   return {
     movements: [...movs.rows].reverse(),
     totals: { abertura, sangrias, suprimentos, dinheiroNaGaveta, dinheiroRetirada, eletronico, tickets,
-              ticketMedio: tickets ? Math.round((totalGeral / tickets) * 100) / 100 : 0 },
+              ticketMedio: tickets ? Math.round((totalGeral / tickets) * 100) / 100 : 0,
+              // Separado de propósito: a tela precisa poder explicar de onde veio
+              // dinheiro que não corresponde a nenhuma venda de hoje.
+              fiadoRecebido, fiadoDinheiro },
     sales: { channels, byMethod, totalGeral },
     expected: Math.round(expected * 100) / 100,
   };

@@ -186,6 +186,65 @@ router.get('/pessoas/:id/extrato', async (req, res) => {
   }
 });
 
+// POST /api/fiado/pessoas/:id/pagamento — recebe, total ou parcial.
+//
+// A regra que mais dá errado em PDV: este dinheiro ENTRA na gaveta hoje, mas
+// NÃO é faturamento — a receita já foi reconhecida no dia da venda fiada.
+// Contar de novo faturaria duas vezes o mesmo café; não contar na gaveta faria
+// o fechamento acusar sobra e parecer erro do operador.
+router.post('/pessoas/:id/pagamento', async (req, res) => {
+  const valor = parseFloat(req.body.amount);
+  const metodo = req.body.payment_method;
+  const METODOS = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito'];
+  if (!(valor > 0)) return res.status(400).json({ error: 'Informe um valor válido' });
+  if (!METODOS.includes(metodo)) return res.status(400).json({ error: 'Forma de pagamento inválida' });
+
+  try {
+    const p = await pool.query(`SELECT id, name, tipo FROM customers WHERE id = $1`, [req.params.id]);
+    if (!p.rows[0]) return res.status(404).json({ error: 'Pessoa não encontrada' });
+
+    const s = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS saldo FROM credit_entries WHERE customer_id = $1`,
+      [req.params.id]
+    );
+    const saldo = parseFloat(s.rows[0].saldo);
+    if (saldo <= 0) return res.status(400).json({ error: `${p.rows[0].name} não tem saldo em aberto` });
+    // Receber mais que o devido criaria saldo negativo — crédito na casa, que
+    // ninguém pediu e ninguém controla. Parcial é permitido; a mais, não.
+    if (valor - saldo > 0.005) {
+      return res.status(400).json({
+        error: `Valor maior que o saldo em aberto (${saldo.toFixed(2).replace('.', ',')})`,
+        saldo,
+      });
+    }
+
+    // Amarra o recebimento ao turno aberto: é ele que vai explicar o dinheiro
+    // a mais na gaveta no fechamento de hoje.
+    const turno = await pool.query(`SELECT id FROM cash_sessions WHERE status = 'aberto' LIMIT 1`);
+
+    const linha = await lancar({
+      customerId: req.params.id,
+      tipo: 'pagamento',
+      amount: -valor,
+      paymentMethod: metodo,
+      sessionId: turno.rows[0]?.id || null,
+      description: req.body.description || null,
+      userId: req.user?.id || null,
+    });
+
+    res.status(201).json({
+      lancamento: linha,
+      pessoa: p.rows[0],
+      saldo_anterior: saldo,
+      saldo_restante: Math.round((saldo - valor) * 100) / 100,
+      quitado: Math.abs(saldo - valor) < 0.005,
+      sem_turno_aberto: !turno.rows[0],
+    });
+  } catch (err) {
+    return internalError(res, err, '[fiado/pagamento]');
+  }
+});
+
 // Lançamento na razão. Exportado porque quem chama é o fechamento da comanda.
 //
 // O saldo novo sai de SUM(amount) na mesma instrução do INSERT — não dá pra
