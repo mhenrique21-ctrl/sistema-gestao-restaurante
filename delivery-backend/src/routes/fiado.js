@@ -245,6 +245,38 @@ router.post('/pessoas/:id/pagamento', async (req, res) => {
   }
 });
 
+// GET /api/fiado/folha — o que está pendente de virar desconto em folha.
+router.get('/folha', async (req, res) => {
+  const { mesAnterior, pendentes } = require('../services/fiadoFolha');
+  const ref = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : mesAnterior();
+  try {
+    const lista = await pendentes(ref);
+    res.json({
+      mes: ref,
+      total: lista.reduce((s, p) => s + p.saldo, 0),
+      pendentes: lista,
+      // Sem vínculo com o funcionário da Gestão, o envio depende de casar pelo
+      // nome — e a tela precisa avisar antes de o mês virar.
+      sem_vinculo: lista.filter((p) => !p.funcionario_gestao_id).map((p) => p.name),
+    });
+  } catch (err) {
+    return internalError(res, err, '[fiado/folha]');
+  }
+});
+
+// POST /api/fiado/fechar-mes — dispara na mão. O automático roda de hora em
+// hora, mas dá pra antecipar ou repetir uma tentativa que falhou.
+router.post('/fechar-mes', requireRole('admin'), async (req, res) => {
+  const { mesAnterior, fecharMes } = require('../services/fiadoFolha');
+  const ref = /^\d{4}-\d{2}$/.test(req.body.mes || '') ? req.body.mes : mesAnterior();
+  try {
+    const r = await fecharMes(ref, { userId: req.user?.id || null });
+    res.json(r);
+  } catch (err) {
+    return internalError(res, err, '[fiado/fechar-mes]');
+  }
+});
+
 // Lançamento na razão. Exportado porque quem chama é o fechamento da comanda.
 //
 // O saldo novo sai de SUM(amount) na mesma instrução do INSERT — não dá pra

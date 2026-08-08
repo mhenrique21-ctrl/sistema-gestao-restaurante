@@ -122,6 +122,9 @@ app.use((err, req, res, _next) => {
 // WebSocket
 initWebSocket(server);
 
+// Fecha o fiado dos colaboradores do mês vencido e manda pra folha na Gestão.
+require('./services/fiadoFolha').iniciarFechamentoAutomatico();
+
 const PORT = parseInt(process.env.PORT) || 4000;
 server.listen(PORT, () => {
   console.log(`\n🚀 Delivery Backend - Confraria`);
