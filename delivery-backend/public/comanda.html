@@ -576,6 +576,35 @@
   .usr-acoes .prod-btn { padding: 6px 10px; font-size: .78rem; }
   /* Excluir fica visualmente separado das outras ações: é a única sem volta. */
   .usr-acoes .usr-del { color: var(--danger); border-color: #E8C4C4; }
+
+  /* ── Tablets: QR de provisionamento ───────────────── */
+  .tab-qr-wrap { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: start;
+    background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 14px; padding: 22px; max-width: 900px; }
+  @media (max-width: 780px) { .tab-qr-wrap { grid-template-columns: 1fr; } }
+  .tab-qr-centro { text-align: center; }
+  .tab-qr-mesas { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tab-qr-mesas button { width: 46px; height: 42px; border-radius: 9px; border: 1px solid var(--c-border);
+    background: var(--c-bg); color: var(--c-text); font-weight: 700; font-size: .9rem; }
+  .tab-qr-mesas button.on { background: var(--gold); border-color: var(--gold); color: #fff; }
+  /* Fundo branco obrigatório: leitor de QR erra em fundo creme com pouco contraste. */
+  #tab-qr-box { display: inline-block; background: #fff; padding: 16px; border-radius: 12px; border: 1px solid var(--c-border); }
+  #tab-qr-box img, #tab-qr-box canvas { display: block; }
+  .tab-qr-legenda { margin-top: 10px; font-weight: 800; font-size: 1.05rem; color: var(--c-text); }
+  .tab-qr-url { margin-top: 16px; font-family: ui-monospace, monospace; font-size: .8rem; color: var(--c-muted);
+    background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 8px; padding: 9px 11px; word-break: break-all; }
+
+  /* ── Fiado ────────────────────────────────────────── */
+  .fiado-card { display: flex; align-items: center; gap: 14px; background: var(--c-surface); border: 1px solid var(--c-border);
+    border-left: 3px solid var(--gold); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; flex-wrap: wrap; }
+  .fiado-card.zerado { border-left-color: var(--c-border); }
+  .fiado-card.parado { border-left-color: var(--danger); }
+  .fiado-card.bloqueado { background: repeating-linear-gradient(135deg, var(--c-surface) 0 8px, #F4EFE6 8px 10px); }
+  .fiado-meio { flex: 1; min-width: 200px; }
+  .fiado-nome { font-weight: 800; font-size: .95rem; }
+  .fiado-sub { font-size: .75rem; color: var(--c-muted); margin-top: 2px; }
+  .fiado-sub.alerta { color: var(--danger); font-weight: 700; }
+  .fiado-saldo { font-weight: 800; font-size: 1.1rem; text-align: right; min-width: 90px; }
+  .fiado-acoes { display: flex; gap: 6px; flex-wrap: wrap; }
   .usr-vazio { font-size: .8rem; color: var(--c-muted); padding: 16px 2px; }
 
   .usr-cargo-op { display: block; width: 100%; text-align: left; border: 2px solid var(--c-border); background: var(--c-bg);
@@ -1027,6 +1056,8 @@
     <button class="fin-subtab" data-cfgtab="clientes" onclick="showCfgSubtab('clientes')">👥 Clientes</button>
     <button class="fin-subtab" data-cfgtab="relatorios" onclick="showCfgSubtab('relatorios')">📊 Relatórios</button>
     <button class="fin-subtab" data-cfgtab="usuarios" onclick="showCfgSubtab('usuarios')">🔐 Usuários</button>
+    <button class="fin-subtab" data-cfgtab="fiado" onclick="showCfgSubtab('fiado')">📒 Fiado</button>
+    <button class="fin-subtab" data-cfgtab="tablets" onclick="showCfgSubtab('tablets')">📱 Tablets</button>
   </div>
 
   <div id="cfg-subtab-comandas">
@@ -1048,6 +1079,44 @@
     </div>
     <div id="usr-lista"><div class="cart-empty">Carregando...</div></div>
     <div id="usr-audit" class="hidden"><div class="cart-empty">Carregando...</div></div>
+  </div>
+
+  <!-- ── Fiado: quem pode levar fiado e quanto deve ── -->
+  <div id="cfg-subtab-fiado" class="hidden">
+    <div class="estoque-toolbar">
+      <input type="text" id="fiado-filtro" placeholder="🔍 Buscar pessoa..." oninput="renderFiadoLista()">
+      <span id="fiado-resumo" class="prod-contagem"></span>
+      <button class="btn btn-primary" onclick="novaPessoaFiado()" style="white-space:nowrap">+ Nova pessoa</button>
+    </div>
+    <div class="prod-chips" id="fiado-chips" style="margin-bottom:12px"></div>
+    <div id="fiado-lista"><div class="cart-empty">Carregando...</div></div>
+  </div>
+
+  <!-- ── Tablets: QR pra provisionar o totem das mesas ── -->
+  <div id="cfg-subtab-tablets" class="hidden">
+    <div class="tab-qr-wrap">
+      <div class="tab-qr-lado">
+        <h3 style="font-size:1.05rem;margin-bottom:4px">Configurar um tablet de mesa</h3>
+        <p style="font-size:.84rem;color:var(--c-muted);line-height:1.6;margin-bottom:16px">
+          Escolha a mesa, pegue o tablet e aponte a câmera dele para o código ao lado.
+          Ele abre o autoatendimento já configurado naquela mesa — sem digitar nada.
+        </p>
+        <label style="font-size:.78rem;font-weight:700;color:var(--c-muted);display:block;margin-bottom:6px">MESA</label>
+        <div class="tab-qr-mesas" id="tab-qr-mesas"></div>
+        <label style="font-size:.78rem;font-weight:700;color:var(--c-muted);display:block;margin:14px 0 6px">OU DIGITE O NÚMERO</label>
+        <input type="number" id="tab-qr-mesa-input" min="1" max="999" placeholder="Ex: 12"
+               oninput="renderQrTablet()" style="width:120px;padding:10px;border-radius:8px;border:1px solid var(--c-border);background:var(--c-bg);color:var(--c-text);font-size:1.1rem;text-align:center">
+        <div class="tab-qr-url" id="tab-qr-url"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-secondary" onclick="copiarUrlTablet()">📋 Copiar endereço</button>
+          <button class="btn btn-secondary" onclick="imprimirQrTablet()">🖨 Imprimir</button>
+        </div>
+      </div>
+      <div class="tab-qr-lado tab-qr-centro">
+        <div id="tab-qr-box"></div>
+        <div id="tab-qr-legenda" class="tab-qr-legenda"></div>
+      </div>
+    </div>
   </div>
 </div>
 <div id="impressora-screen" class="hidden placeholder-screen"><span class="icon">🖨️</span><h2>Impressora</h2><p>Em construção — em breve por aqui.</p></div>
@@ -1712,6 +1781,8 @@ const CFG_SUBTAB_SCREENS = {
   clientes: 'cfg-subtab-clientes',
   relatorios: 'cfg-subtab-relatorios',
   usuarios: 'cfg-subtab-usuarios',
+  fiado: 'cfg-subtab-fiado',
+  tablets: 'cfg-subtab-tablets',
 };
 
 function showCfgSubtab(tab) {
@@ -1721,6 +1792,281 @@ function showCfgSubtab(tab) {
   }
   if (tab === 'comandas') loadCfgComandas();
   if (tab === 'usuarios') loadUsuarios();
+  if (tab === 'fiado') loadFiado();
+  if (tab === 'tablets') iniciarQrTablet();
+}
+
+// ── Configurações → Tablets ─────────────────────────────
+// Provisionar tablet digitando número de mesa em teclado virtual é onde se põe
+// o 4 na mesa 7 e ninguém percebe até o pedido sair errado. Com o QR, o próprio
+// endereço leva a mesa.
+let qrTabletMesa = null;
+
+function iniciarQrTablet() {
+  const el = document.getElementById('tab-qr-mesas');
+  el.innerHTML = Array.from({ length: 12 }, (_, i) => i + 1)
+    .map(n => `<button data-n="${n}" onclick="escolherMesaQr(${n})">${n}</button>`).join('');
+  renderQrTablet();
+}
+
+function escolherMesaQr(n) {
+  document.getElementById('tab-qr-mesa-input').value = n;
+  renderQrTablet();
+}
+
+function urlDoTablet() {
+  const n = parseInt(document.getElementById('tab-qr-mesa-input')?.value, 10);
+  const base = `${location.origin}/kiosk.html`;
+  return (n > 0 && n < 1000) ? `${base}?mesa=${n}` : base;
+}
+
+function renderQrTablet() {
+  const n = parseInt(document.getElementById('tab-qr-mesa-input')?.value, 10);
+  qrTabletMesa = (n > 0 && n < 1000) ? n : null;
+  document.querySelectorAll('#tab-qr-mesas button').forEach(b =>
+    b.classList.toggle('on', +b.dataset.n === qrTabletMesa));
+
+  const url = urlDoTablet();
+  document.getElementById('tab-qr-url').textContent = url;
+  document.getElementById('tab-qr-legenda').textContent =
+    qrTabletMesa ? `Mesa ${qrTabletMesa}` : 'Sem mesa definida — o tablet vai perguntar';
+
+  const box = document.getElementById('tab-qr-box');
+  box.innerHTML = '';
+  if (window.QRCode) new QRCode(box, { text: url, width: 230, height: 230 });
+  else box.innerHTML = '<div class="cart-empty" style="width:230px">Gerador de QR não carregou</div>';
+}
+
+function copiarUrlTablet() {
+  const url = urlDoTablet();
+  navigator.clipboard?.writeText(url)
+    .then(() => showToast('Endereço copiado'))
+    .catch(() => showToast(url));
+}
+
+// Impressão pela janela do navegador: é papel comum pra colar embaixo da mesa,
+// não cupom térmico — não passa pelo agente nem pelas impressoras do balcão.
+function imprimirQrTablet() {
+  const box = document.getElementById('tab-qr-box');
+  const img = box.querySelector('img') || box.querySelector('canvas');
+  if (!img) { showToast('Gere o código antes de imprimir'); return; }
+  const dados = img.tagName === 'IMG' ? img.src : img.toDataURL();
+  const w = window.open('', '_blank', 'width=420,height=560');
+  if (!w) { showToast('Libere as janelas pop-up para imprimir'); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>Tablet — ${qrTabletMesa ? 'Mesa ' + qrTabletMesa : 'autoatendimento'}</title>
+    <body style="font-family:system-ui,sans-serif;text-align:center;padding:30px">
+      <h2 style="margin:0 0 4px">Confraria Café</h2>
+      <p style="margin:0 0 18px;color:#666;font-size:14px">Aponte a câmera do tablet</p>
+      <img src="${dados}" style="width:280px;height:280px">
+      <h1 style="margin:14px 0 4px">${qrTabletMesa ? 'Mesa ' + qrTabletMesa : 'Autoatendimento'}</h1>
+      <p style="font-family:monospace;font-size:11px;color:#888;word-break:break-all">${urlDoTablet()}</p>
+    </body>`);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
+// ── Configurações → Fiado ───────────────────────────────
+// Sem limite de crédito, o número que importa não é o saldo: é há quanto tempo
+// ele está parado. R$ 40 de três meses atrás é pior que R$ 400 de ontem.
+let _fiado = [], _fiadoTipo = '';
+
+async function loadFiado() {
+  const el = document.getElementById('fiado-lista');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/fiado`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>'; return; }
+    _fiado = await res.json();
+    renderFiadoLista();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function diasDesde(iso) {
+  if (!iso) return null;
+  return Math.floor((Date.now() - new Date(iso)) / 86400000);
+}
+
+function setFiadoTipo(t) { _fiadoTipo = (_fiadoTipo === t) ? '' : t; renderFiadoLista(); }
+
+function renderFiadoLista() {
+  const busca = (document.getElementById('fiado-filtro')?.value || '').toLowerCase().trim();
+  const el = document.getElementById('fiado-lista');
+
+  const nClientes = _fiado.filter(p => p.tipo === 'cliente').length;
+  const nColabs = _fiado.filter(p => p.tipo === 'colaborador').length;
+  document.getElementById('fiado-chips').innerHTML = `
+    <button class="prod-chip ${_fiadoTipo ? '' : 'on'}" onclick="setFiadoTipo('')">Todos <b>${_fiado.length}</b></button>
+    <button class="prod-chip ${_fiadoTipo === 'cliente' ? 'on' : ''}" onclick="setFiadoTipo('cliente')">Clientes <b>${nClientes}</b></button>
+    <button class="prod-chip ${_fiadoTipo === 'colaborador' ? 'on' : ''}" onclick="setFiadoTipo('colaborador')">Colaboradores <b>${nColabs}</b></button>`;
+
+  const lista = _fiado.filter(p =>
+    (!_fiadoTipo || p.tipo === _fiadoTipo) &&
+    (!busca || (p.name || '').toLowerCase().includes(busca) || (p.phone || '').includes(busca)));
+
+  const aReceber = lista.reduce((s, p) => s + (parseFloat(p.saldo) || 0), 0);
+  document.getElementById('fiado-resumo').textContent =
+    `${lista.length} pessoa${lista.length === 1 ? '' : 's'} · ${fmt(aReceber)} a receber`;
+
+  if (!lista.length) {
+    el.innerHTML = `<div class="usr-vazio">Ninguém habilitado para fiado ainda.
+      Use <b>+ Nova pessoa</b> — quem já é cliente do delivery aparece na busca e não precisa ser recadastrado.</div>`;
+    return;
+  }
+
+  el.innerHTML = lista.map(p => {
+    const saldo = parseFloat(p.saldo) || 0;
+    const dias = diasDesde(p.ultimo_acerto || p.ultimo_consumo);
+    let classe = saldo <= 0 ? 'zerado' : '';
+    let sub = p.tipo === 'colaborador' ? 'Colaborador' : 'Cliente';
+    if (p.phone) sub += ' · ' + p.phone;
+    let subClasse = '';
+    if (saldo > 0 && dias !== null && dias >= 30) {
+      classe = 'parado';
+      subClasse = 'alerta';
+      sub = `Sem acertar há ${dias} dias · ` + sub;
+    }
+    if (p.blocked) classe += ' bloqueado';
+    return `
+    <div class="fiado-card ${classe}">
+      <div class="usr-av">${(p.name || '?').charAt(0).toUpperCase()}</div>
+      <div class="fiado-meio">
+        <div class="fiado-nome">${p.name}${p.blocked ? ' <span class="usr-selo">Bloqueado</span>' : ''}</div>
+        <div class="fiado-sub ${subClasse}">${sub}</div>
+      </div>
+      <div class="fiado-saldo">${fmt(saldo)}</div>
+      <div class="fiado-acoes">
+        <button class="prod-btn" onclick="editarPessoaFiado('${p.id}')">✏️ Editar</button>
+        <button class="prod-btn" onclick="${p.blocked ? `desbloquearFiado('${p.id}')` : `bloquearFiado('${p.id}','${(p.name || '').replace(/'/g, "\\'")}')`}">
+          ${p.blocked ? '🔓 Desbloquear' : '🚫 Bloquear'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function novaPessoaFiado() {
+  usrModal('Nova pessoa no fiado', `
+    <div class="field-group">
+      <label>Tipo</label>
+      <button type="button" class="usr-cargo-op on" data-tipo="cliente"
+        onclick="document.querySelectorAll('[data-tipo]').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+        <b>👤 Cliente</b><span>O saldo fica em aberto até ele pagar.</span></button>
+      <button type="button" class="usr-cargo-op" data-tipo="colaborador"
+        onclick="document.querySelectorAll('[data-tipo]').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+        <b>🧑‍🍳 Colaborador</b><span>Entra no desconto da folha do mês.</span></button>
+    </div>
+    <div class="field-group">
+      <label>Nome completo</label>
+      <input type="text" id="fi-nome" autocomplete="off">
+    </div>
+    <div class="field-group">
+      <label>Telefone</label>
+      <input type="text" id="fi-fone" inputmode="numeric" autocomplete="off" placeholder="96 98812-4470">
+    </div>
+    <div class="field-group">
+      <label>CPF <span style="font-weight:400;color:var(--c-muted)">(opcional)</span></label>
+      <input type="text" id="fi-cpf" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      Se esse telefone já for de um cliente do delivery, o fiado é ligado no cadastro
+      que já existe — não cria uma segunda ficha da mesma pessoa.
+    </div>`, 'Cadastrar', async () => {
+    const name = document.getElementById('fi-nome').value.trim();
+    const phone = document.getElementById('fi-fone').value.trim();
+    const cpf = document.getElementById('fi-cpf').value.trim();
+    const tipo = document.querySelector('[data-tipo].on')?.dataset.tipo || 'cliente';
+    if (!name) return usrErro('Informe o nome');
+    if (!phone.replace(/\D/g, '')) return usrErro('Informe o telefone');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/fiado/pessoas`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ name, phone, cpf: cpf || null, tipo }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao cadastrar'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast(`${name} habilitado para fiado`);
+      loadFiado();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+}
+
+function editarPessoaFiado(id) {
+  const p = _fiado.find(x => x.id === id);
+  if (!p) return;
+  usrModal(`Editar ${p.name}`, `
+    <div class="field-group">
+      <label>Tipo</label>
+      <button type="button" class="usr-cargo-op ${p.tipo === 'cliente' ? 'on' : ''}" data-tipo="cliente"
+        onclick="document.querySelectorAll('[data-tipo]').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+        <b>👤 Cliente</b><span>O saldo fica em aberto até ele pagar.</span></button>
+      <button type="button" class="usr-cargo-op ${p.tipo === 'colaborador' ? 'on' : ''}" data-tipo="colaborador"
+        onclick="document.querySelectorAll('[data-tipo]').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+        <b>🧑‍🍳 Colaborador</b><span>Entra no desconto da folha do mês.</span></button>
+    </div>
+    <div class="field-group">
+      <label>Nome</label>
+      <input type="text" id="fi-nome" value="${(p.name || '').replace(/"/g, '&quot;')}">
+    </div>
+    <div class="field-group">
+      <label>Telefone</label>
+      <input type="text" id="fi-fone" value="${p.phone || ''}">
+    </div>`, 'Salvar', async () => {
+    const corpo = {
+      name: document.getElementById('fi-nome').value.trim(),
+      phone: document.getElementById('fi-fone').value.trim(),
+      tipo: document.querySelector('[data-tipo].on')?.dataset.tipo,
+    };
+    if (!corpo.name) return usrErro('Nome não pode ficar vazio');
+    await patchFiado(id, corpo, 'Alterações salvas');
+  });
+}
+
+async function patchFiado(id, corpo, sucesso) {
+  const btn = document.getElementById('usr-modal-ok');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/fiado/pessoas/${id}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(corpo),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { usrErro(d.error || 'Erro ao salvar'); return false; }
+    document.getElementById('usr-modal-backdrop')?.remove();
+    showToast(sucesso);
+    loadFiado();
+    return true;
+  } catch (e) { usrErro('Erro de conexão'); return false; }
+  finally { if (btn) btn.disabled = false; }
+}
+
+// Bloquear não apaga a dívida: só impede novas compras fiadas. O saldo continua
+// aparecendo e continua cobrável.
+async function bloquearFiado(id, nome) {
+  if (!confirm(`Bloquear ${nome} para novas compras fiadas?\n\nA dívida atual continua registrada e cobrável. Só impede levar mais fiado.`)) return;
+  try {
+    const res = await fetch(`${API}/api/fiado/pessoas/${id}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ blocked: true }),
+    });
+    showToast(res.ok ? `${nome} bloqueado para fiado` : 'Erro ao bloquear');
+    if (res.ok) loadFiado();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+async function desbloquearFiado(id) {
+  try {
+    const res = await fetch(`${API}/api/fiado/pessoas/${id}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ blocked: false }),
+    });
+    showToast(res.ok ? 'Desbloqueado' : 'Erro ao desbloquear');
+    if (res.ok) loadFiado();
+  } catch (e) { showToast('Erro de conexão'); }
 }
 
 // ── Aba Configurações → Usuários ────────────────────────
@@ -4996,7 +5342,8 @@ async function abrirSeletorFiado() {
       const lista = await res.json();
       if (!lista.length) {
         el.innerHTML = `<div class="usr-vazio">Ninguém encontrado.
-          Cadastre a pessoa em <b>Configurações → Fiado</b> antes de vender fiado para ela.</div>`;
+          Só quem está habilitado em <b>Configurações → Fiado</b> pode levar fiado.
+          ${ROLE === 'admin' ? '<br><br><button class="btn btn-secondary" onclick="irCadastrarFiado()">Abrir Configurações → Fiado</button>' : ''}</div>`;
         return;
       }
       el.innerHTML = lista.map(p => {
@@ -5022,6 +5369,13 @@ async function abrirSeletorFiado() {
   input.addEventListener('input', () => { clearTimeout(fiadoBusca); fiadoBusca = setTimeout(buscar, 250); });
   buscar();
   setTimeout(() => input.focus(), 60);
+}
+
+// Sair do fechamento pra cadastrar perderia a comanda montada. Fecha só o
+// seletor e avisa — o fechamento continua aberto atrás.
+function irCadastrarFiado() {
+  document.getElementById('fiado-seletor-backdrop')?.remove();
+  showToast('Cadastre a pessoa em Configurações → Fiado e volte para fechar a comanda');
 }
 
 function escolherFiado(id, nome, valorCents) {
