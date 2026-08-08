@@ -7,6 +7,7 @@ const METHOD_BUCKET_SQL = `CASE
   WHEN payment_method IN ('cartao_credito', 'Cartão de Crédito') THEN 'cartao_credito'
   WHEN payment_method IN ('cartao_debito', 'Cartão de Débito') THEN 'cartao_debito'
   WHEN payment_method IN ('pix', 'pix_auto') THEN 'pix'
+  WHEN payment_method IN ('fiado') THEN 'fiado'
   ELSE 'outros'
 END`;
 // Mesma normalização, mas pra cp.method (comanda_payments) em vez de payment_method direto.
@@ -15,9 +16,14 @@ const CP_METHOD_BUCKET_SQL = `CASE
   WHEN cp.method IN ('cartao_credito', 'Cartão de Crédito') THEN 'cartao_credito'
   WHEN cp.method IN ('cartao_debito', 'Cartão de Débito') THEN 'cartao_debito'
   WHEN cp.method IN ('pix', 'pix_auto') THEN 'pix'
+  WHEN cp.method IN ('fiado') THEN 'fiado'
   ELSE 'outros'
 END`;
-const SALE_METHODS = ['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'];
+// Fiado é forma de pagamento da VENDA, não entrada de dinheiro. Precisa
+// aparecer aqui, senão ele cai em "outros": some da tabela por forma mas
+// continua no total, e o fechamento fica com uma diferença sem explicação.
+// O esperado na gaveta não muda — ele só soma 'dinheiro' (ver dinheiroNaGaveta).
+const SALE_METHODS = ['dinheiro', 'cartao_debito', 'cartao_credito', 'pix', 'fiado'];
 const SALE_CHANNELS = ['comanda', 'balcao', 'delivery'];
 
 // "Hoje" no fuso de Belém (não UTC) — depois das 21h local já é o dia seguinte em UTC,

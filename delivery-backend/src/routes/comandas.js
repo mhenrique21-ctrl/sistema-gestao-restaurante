@@ -6,6 +6,7 @@ const { baixarEstoque, devolverEstoque } = require('../services/stock');
 const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub');
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
+const { lancar: lancarFiado } = require('./fiado');
 
 // O id do produto entra inline como literal SQL: os ids das opções já ocupam
 // $1..$N e, acima de $9, o wrapper do pool casa "$1" dentro de "$10". Só passa
@@ -420,7 +421,7 @@ router.delete('/:id/items/:itemId', authMiddleware, requireRole('admin', 'atende
 // não é mais chamado pelo cliente direto (kiosk.html só solicita, via /request-close).
 router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   const { payments, includeTaxa = true } = req.body;
-  const validMethods = ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro'];
+  const validMethods = ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro', 'fiado'];
 
   if (!Array.isArray(payments) || !payments.length) {
     return res.status(400).json({ error: 'Informe ao menos uma forma de pagamento' });
@@ -428,6 +429,28 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
   for (const p of payments) {
     if (!validMethods.includes(p.method)) return res.status(400).json({ error: 'Forma de pagamento inválida' });
     if (!(parseFloat(p.amount) > 0)) return res.status(400).json({ error: 'Valor de pagamento inválido' });
+  }
+
+  // Fiado não é dinheiro entrando: é venda faturada com recebimento adiado.
+  // Sem saber de quem é a dívida, o lançamento não tem dono e o valor vira um
+  // buraco no caixa que ninguém consegue cobrar depois.
+  const fiados = payments.filter((p) => p.method === 'fiado');
+  if (fiados.length > 1) {
+    return res.status(400).json({ error: 'Use uma única linha de fiado por comanda' });
+  }
+  let pessoaFiado = null;
+  if (fiados.length) {
+    if (!fiados[0].customer_id) {
+      return res.status(400).json({ error: 'Escolha quem está levando fiado' });
+    }
+    const pf = await pool.query(
+      `SELECT id, name, tipo, blocked, fiado_ativo FROM customers WHERE id = $1`,
+      [fiados[0].customer_id]
+    );
+    pessoaFiado = pf.rows[0];
+    if (!pessoaFiado) return res.status(404).json({ error: 'Pessoa não encontrada' });
+    if (!pessoaFiado.fiado_ativo) return res.status(400).json({ error: `${pessoaFiado.name} não está habilitado para fiado` });
+    if (pessoaFiado.blocked) return res.status(400).json({ error: `${pessoaFiado.name} está bloqueado para fiado` });
   }
 
   try {
@@ -486,6 +509,21 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
         `INSERT INTO comanda_payments (comanda_id, method, amount) VALUES ($1,$2,$3) RETURNING id`,
         [comanda.id, p.method, parseFloat(p.amount)]
       );
+    }
+
+    // Lança na razão do fiado depois de a comanda estar fechada: se este passo
+    // falhasse antes, a pessoa ficaria devendo uma comanda que continua aberta.
+    let lancamentoFiado = null;
+    if (pessoaFiado) {
+      const valor = parseFloat(fiados[0].amount);
+      lancamentoFiado = await lancarFiado({
+        customerId: pessoaFiado.id,
+        tipo: 'consumo',
+        amount: valor,
+        comandaId: comanda.id,
+        description: comanda.label || originalCode,
+        userId: req.user?.id || null,
+      });
     }
 
     const items = await loadComandaItems(comanda.id);
