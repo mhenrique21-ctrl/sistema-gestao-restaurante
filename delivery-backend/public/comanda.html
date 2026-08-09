@@ -1491,6 +1491,7 @@
       <div>
         <h3 style="font-size:1.05rem">Enquadrar a foto</h3>
         <p style="font-size:.78rem">Arraste pra escolher o que aparece. Sai em 1600 × 1000.</p>
+        <p id="foto-aviso-pequena" class="hidden" style="color:#f59e0b;font-size:.75rem;margin-top:4px">⚠️ Essa foto é pequena e vai sair borrada. Se tiver uma versão maior, use ela.</p>
       </div>
     </div>
     <div class="foto-palco">
@@ -5289,6 +5290,12 @@ function abrirEditorFoto(img, id) {
   document.getElementById('foto-editor-backdrop').classList.remove('hidden');
   document.getElementById('foto-zoom').value = '1';
   desenharEditor();
+
+  // Foto de origem menor que o destino final (1600×1000) precisa ser ampliada
+  // pra preencher a moldura — quanto maior essa ampliação, mais borrada sai.
+  // Acima de 1.4x já fica perceptível, então avisa quem está cadastrando.
+  const escalaFinal = escalaMin * (FOTO_L / EDIT_L);
+  document.getElementById('foto-aviso-pequena')?.classList.toggle('hidden', escalaFinal <= 1.4);
 }
 
 function centralizarFoto() {
@@ -5307,6 +5314,8 @@ function limitarFoto() {
 function desenharEditor() {
   const cv = document.getElementById('foto-canvas');
   const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.clearRect(0, 0, EDIT_L, EDIT_A);
   ctx.drawImage(ed.img, ed.x, ed.y, ed.img.width * ed.escala, ed.img.height * ed.escala);
 }
@@ -5381,6 +5390,8 @@ function usarFotoEditada() {
   const cv = document.createElement('canvas');
   cv.width = FOTO_L; cv.height = FOTO_A;
   const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, FOTO_L, FOTO_A);
   ctx.drawImage(ed.img, ed.x * fator, ed.y * fator,
