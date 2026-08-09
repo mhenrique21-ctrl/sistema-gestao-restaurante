@@ -5389,9 +5389,10 @@ function usarFotoEditada() {
   cv.toBlob(blob => {
     if (!blob) { showToast('Não consegui preparar a foto'); return; }
     const arquivo = new File([blob], 'foto.jpg', { type: 'image/jpeg' });
-    // O mesmo editor serve o destaque e o cadastro de produto — muda só quem
-    // recebe o arquivo pronto.
+    // O mesmo editor serve destaque, produto novo e edição de produto
+    // existente — muda só quem recebe o arquivo pronto.
     if (id === '__produto__') subirFotoProduto(arquivo);
+    else if (id.startsWith('__produto_editar__:')) subirFotoProdutoExistente(arquivo, id.slice('__produto_editar__:'.length));
     else subirFotoDestaque(arquivo, id);
   }, 'image/jpeg', 0.85);
 }
@@ -5952,6 +5953,14 @@ function openEditProduct(id) {
         <label>Descrição</label>
         <textarea id="edit-p-desc" rows="3">${(p.description || '').replace(/</g, '&lt;')}</textarea>
       </div>
+      <div class="field-group">
+        <label>Foto</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="edit-p-preview" class="np-preview" ${p.image_url ? `style="background-image:url('${p.image_url}')"` : ''}>${p.image_url ? '' : '🍽'}</div>
+          <label class="d-foto">🖼️ Do computador<input type="file" accept="image/*" id="edit-p-file1" hidden></label>
+          <label class="d-foto">📸 Tirar agora<input type="file" accept="image/*" capture="environment" id="edit-p-file2" hidden></label>
+        </div>
+      </div>
       <div class="field-group" style="border-top:1px solid var(--c-border);padding-top:12px">
         <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
           <input type="checkbox" id="edit-p-track" ${p.track_stock ? 'checked' : ''}
@@ -5984,6 +5993,55 @@ function openEditProduct(id) {
     </div>
   `;
   document.body.appendChild(backdrop);
+  ['edit-p-file1', 'edit-p-file2'].forEach(fid =>
+    document.getElementById(fid).addEventListener('change', (e) => enviarFotoProdutoExistente(e.target, id)));
+}
+
+// Abre o mesmo editor de recorte do cadastro novo, mas marcado com o id real
+// do produto — usarFotoEditada() reconhece o prefixo e sabe que é PATCH num
+// produto que já existe, não POST de um produto novo.
+function enviarFotoProdutoExistente(inputEl, productId) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  inputEl.value = '';
+  const img = new Image();
+  img.onload = async () => {
+    URL.revokeObjectURL(img.src);
+    try { abrirEditorFoto(await normalizarFoto(img), '__produto_editar__:' + productId); }
+    catch (e) { showToast(e.message); }
+  };
+  img.onerror = () => { URL.revokeObjectURL(img.src); showToast('Não consegui abrir esse arquivo'); };
+  img.src = URL.createObjectURL(file);
+}
+
+// Sobe a foto e já salva no produto direto — diferente do cadastro novo (que
+// só guarda a URL até o "Salvar" geral), aqui o produto já existe, então a
+// foto vale por si só: a pessoa pode trocar só a foto sem mexer em mais nada.
+async function subirFotoProdutoExistente(file, productId) {
+  const pv = document.getElementById('edit-p-preview');
+  if (pv) { pv.style.backgroundImage = ''; pv.textContent = '⏳'; }
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    fd.append('folder', 'products');
+    const res = await fetchComPrazo(`${API}/api/menu/upload`, { method: 'POST', headers: authHeaders(), body: fd });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erro ao enviar a foto');
+    const res2 = await fetchComPrazo(`${API}/api/menu/products/${productId}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ image_url: d.url }),
+    });
+    const d2 = await res2.json().catch(() => ({}));
+    if (!res2.ok) throw new Error(d2.error || 'Erro ao salvar a foto no produto');
+    const p = estoqueCats.flatMap(c => c.products).find(x => x.id === productId);
+    if (p) p.image_url = d.url;
+    if (pv) { pv.style.backgroundImage = `url('${d.url}')`; pv.textContent = ''; }
+    renderEstoque();
+    showToast('Foto atualizada');
+  } catch (e) {
+    if (pv) { pv.style.backgroundImage = ''; pv.textContent = '🍽'; }
+    showToast(e.message);
+  }
 }
 
 async function saveEditProduct(id) {
