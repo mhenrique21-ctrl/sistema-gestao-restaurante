@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Emergência">
+<title>Emergência — Confraria Café</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --subtle: #64748b;
+    --danger: #ef4444; --danger-bg: rgba(239,68,68,.15);
+    --ok: #22c55e; --ok-bg: rgba(34,197,94,.15);
+    --accent: #7c3aed;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text);
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-top: env(safe-area-inset-top);
+  }
+  button, input { font-family: inherit; }
+  .hide { display: none !important; }
+
+  /* ── Login ── */
+  #login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 36px 28px; width: 100%; max-width: 380px; text-align: center; }
+  #login-box .emoji { font-size: 2.4rem; margin-bottom: 8px; }
+  #login-box h1 { font-size: 1.2rem; font-weight: 800; margin: 0 0 2px; }
+  #login-box p.sub { color: var(--subtle); font-size: .8rem; margin: 0 0 24px; }
+  .field { text-align: left; margin-bottom: 14px; }
+  .field label { color: var(--muted); font-size: .75rem; font-weight: 600; display: block; margin-bottom: 5px; }
+  .field input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 13px 14px; font-size: 1rem; outline: none; }
+  .field input:focus { border-color: var(--accent); }
+  #login-erro { color: #f87171; font-size: .8rem; margin: 4px 0 12px; display: none; }
+  .btn-primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 15px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+  .btn-primary:active { opacity: .8; }
+  .btn-primary:disabled { opacity: .5; }
+
+  /* ── App shell ── */
+  #topbar { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+  #topbar h1 { font-size: 1rem; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px; }
+  #topbar button { background: none; border: none; color: var(--muted); font-size: .78rem; font-weight: 600; cursor: pointer; padding: 6px 4px; }
+
+  #tabs { padding: 16px; max-width: 640px; margin: 0 auto; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  .card h2 { font-size: .85rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin: 0 0 12px; }
+
+  /* ── Loja ── */
+  #loja-banner { border-radius: 12px; padding: 16px; text-align: center; font-weight: 800; font-size: 1rem; margin-bottom: 14px; }
+  #loja-banner.aberta { background: var(--ok-bg); color: #4ade80; border: 1px solid rgba(74,222,128,.3); }
+  #loja-banner.fechada { background: var(--danger-bg); color: #f87171; border: 1px solid rgba(248,113,113,.3); }
+  .btn-toggle-loja { width: 100%; border: none; border-radius: 12px; padding: 18px; font-size: 1.05rem; font-weight: 800; cursor: pointer; }
+  .btn-toggle-loja.to-close { background: var(--danger); color: #fff; }
+  .btn-toggle-loja.to-open { background: var(--ok); color: #052e12; }
+  .btn-toggle-loja:disabled { opacity: .5; }
+
+  /* ── Produtos ── */
+  #prod-busca { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 12px 14px; font-size: .95rem; outline: none; margin-bottom: 12px; }
+  #prod-busca:focus { border-color: var(--accent); }
+  .prod-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .prod-row:last-child { border-bottom: none; }
+  .prod-info { flex: 1; min-width: 0; }
+  .prod-nome { font-size: .92rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prod-cat { font-size: .72rem; color: var(--subtle); }
+  .prod-preco { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 6px 9px; font-size: .85rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .prod-preco-input { width: 78px; background: var(--bg); border: 1px solid var(--accent); color: var(--text); border-radius: 8px; padding: 6px 8px; font-size: .85rem; text-align: right; }
+  .switch { position: relative; width: 46px; height: 27px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider { position: absolute; inset: 0; background: var(--border); border-radius: 27px; cursor: pointer; transition: background .15s; }
+  .switch .slider::before { content: ""; position: absolute; width: 21px; height: 21px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; }
+  .switch input:checked + .slider { background: var(--ok); }
+  .switch input:checked + .slider::before { transform: translateX(19px); }
+  .switch input:disabled + .slider { opacity: .5; }
+  #prod-vazio, #ped-vazio { text-align: center; color: var(--subtle); font-size: .85rem; padding: 24px 0; }
+  #prod-loading, #ped-loading { text-align: center; color: var(--subtle); font-size: .85rem; padding: 24px 0; }
+
+  /* ── Pedidos ── */
+  .ped-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .ped-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .ped-cliente { font-weight: 700; font-size: .92rem; }
+  .ped-hora { font-size: .75rem; color: var(--subtle); }
+  .ped-info { font-size: .8rem; color: var(--muted); margin-bottom: 10px; }
+  .ped-status { display: inline-block; font-size: .68rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; background: var(--border); color: var(--text); text-transform: uppercase; margin-right: 6px; }
+  .ped-status.cancelado { background: var(--danger-bg); color: #f87171; }
+  .ped-status.entregue { background: var(--ok-bg); color: #4ade80; }
+  .btn-cancelar { width: 100%; background: none; border: 1px solid var(--danger); color: #f87171; border-radius: 8px; padding: 10px; font-size: .82rem; font-weight: 700; cursor: pointer; margin-top: 4px; }
+  .btn-cancelar.confirmando { background: var(--danger); color: #fff; }
+  .btn-cancelar:disabled { opacity: .5; }
+
+  /* ── Bottom nav ── */
+  #bottomnav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+  #bottomnav button { flex: 1; background: none; border: none; color: var(--subtle); padding: 10px 4px 8px; font-size: .68rem; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  #bottomnav button .ic { font-size: 1.3rem; }
+  #bottomnav button.active { color: var(--accent); }
+
+  .toast { position: fixed; bottom: calc(84px + env(safe-area-inset-bottom)); left: 16px; right: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-size: .85rem; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.4); z-index: 20; transition: opacity .2s, transform .2s; }
+  .toast.err { border-color: var(--danger); color: #f87171; }
+  .toast.ok { border-color: var(--ok); color: #4ade80; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div id="login-box">
+    <div class="emoji">🚨</div>
+    <h1>Confraria Café</h1>
+    <p class="sub">Acesso emergencial</p>
+    <div class="field">
+      <label>Nome</label>
+      <input id="login-nome" type="text" autocomplete="username" placeholder="Seu nome de usuário">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input id="login-senha" type="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <div id="login-erro"></div>
+    <button class="btn-primary" id="login-btn" onclick="doLogin()">Entrar</button>
+  </div>
+</div>
+
+<div id="app" class="hide">
+  <div id="topbar">
+    <h1>🚨 Emergência</h1>
+    <button onclick="doLogout()">Sair</button>
+  </div>
+
+  <div id="tabs">
+    <div class="tab-panel active" id="tab-loja">
+      <div class="card">
+        <h2>Status da loja</h2>
+        <div id="loja-banner">Carregando...</div>
+        <button class="btn-toggle-loja" id="btn-loja-toggle" disabled onclick="alternarLoja()">Carregando...</button>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-produtos">
+      <div class="card">
+        <h2>Produtos</h2>
+        <input id="prod-busca" type="text" placeholder="Buscar produto..." oninput="renderProdutos()">
+        <div id="prod-loading">Carregando...</div>
+        <div id="prod-vazio" class="hide">Nenhum produto encontrado.</div>
+        <div id="prod-lista"></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-pedidos">
+      <div class="card">
+        <h2>Pedidos de hoje</h2>
+        <div id="ped-loading">Carregando...</div>
+        <div id="ped-vazio" class="hide">Nenhum pedido hoje.</div>
+        <div id="ped-lista"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="bottomnav" class="hide">
+  <button id="nav-loja" class="active" onclick="trocarAba('loja')"><span class="ic">🏪</span>Loja</button>
+  <button id="nav-produtos" onclick="trocarAba('produtos')"><span class="ic">🍽️</span>Produtos</button>
+  <button id="nav-pedidos" onclick="trocarAba('pedidos')"><span class="ic">🧾</span>Pedidos</button>
+</div>
+
+<script>
+// ── Auth (mesma chave do admin.html — sessão é compartilhada no mesmo navegador) ──
+let TOKEN = localStorage.getItem('admin_token');
+
+function parseJwt(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
+}
+
+function mostrarLogin() {
+  document.getElementById('login-screen').classList.remove('hide');
+  document.getElementById('app').classList.add('hide');
+  document.getElementById('bottomnav').classList.add('hide');
+  document.getElementById('login-senha')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+}
+
+function mostrarApp() {
+  document.getElementById('login-screen').classList.add('hide');
+  document.getElementById('app').classList.remove('hide');
+  document.getElementById('bottomnav').classList.remove('hide');
+  carregarLoja();
+  carregarProdutos();
+  carregarPedidos();
+}
+
+async function doLogin() {
+  const nome = document.getElementById('login-nome').value.trim();
+  const senha = document.getElementById('login-senha').value;
+  const erro = document.getElementById('login-erro');
+  const btn = document.getElementById('login-btn');
+  if (!nome || !senha) { erro.textContent = 'Preencha nome e senha'; erro.style.display = 'block'; return; }
+  btn.textContent = 'Entrando...'; btn.disabled = true;
+  erro.style.display = 'none';
+  try {
+    const res = await fetchComPrazo('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nome, password: senha }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
+    if (!['admin', 'operador'].includes(data.user?.role)) throw new Error('Acesso não autorizado');
+    TOKEN = data.token;
+    localStorage.setItem('admin_token', TOKEN);
+    mostrarApp();
+  } catch (err) {
+    erro.textContent = err.name === 'AbortError' ? 'Sem resposta do servidor — tente de novo' : err.message;
+    erro.style.display = 'block';
+  } finally {
+    btn.textContent = 'Entrar'; btn.disabled = false;
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem('admin_token');
+  TOKEN = null;
+  location.reload();
+}
+
+// ── Helpers ──
+const FETCH_PRAZO_MS = 15000;
+function fetchComPrazo(url, opcoes = {}, prazoMs = FETCH_PRAZO_MS) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), prazoMs);
+  return fetch(url, { ...opcoes, signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
+async function api(method, path, body) {
+  const res = await fetchComPrazo('/api' + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { doLogout(); throw new Error('Sessão expirada'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Erro');
+  return data;
+}
+
+function normTexto(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+let toastTimer = null;
+function toast(msg, tipo = 'ok') {
+  clearTimeout(toastTimer);
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = 'toast ' + tipo;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  toastTimer = setTimeout(() => el.remove(), 3500);
+}
+
+function fmtMoeda(v) {
+  return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+}
+
+// ── Navegação ──
+function trocarAba(nome) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('#bottomnav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + nome).classList.add('active');
+  document.getElementById('nav-' + nome).classList.add('active');
+}
+
+// ── Loja aberta/fechada ──
+async function carregarLoja() {
+  try {
+    const s = await api('GET', '/settings');
+    renderLoja(s.store_closed_manual === 'true' || s.store_closed_manual === true);
+  } catch (err) {
+    toast('Erro ao carregar status da loja: ' + err.message, 'err');
+  }
+}
+
+function renderLoja(fechada) {
+  const banner = document.getElementById('loja-banner');
+  const btn = document.getElementById('btn-loja-toggle');
+  banner.textContent = fechada ? '🔴 Loja fechada manualmente' : '🟢 Loja aberta normalmente';
+  banner.className = fechada ? 'fechada' : 'aberta';
+  btn.disabled = false;
+  btn.dataset.fechada = fechada ? '1' : '0';
+  if (fechada) {
+    btn.textContent = 'Reabrir a loja';
+    btn.className = 'btn-toggle-loja to-open';
+  } else {
+    btn.textContent = 'Pausar a loja agora';
+    btn.className = 'btn-toggle-loja to-close';
+  }
+}
+
+async function alternarLoja() {
+  const btn = document.getElementById('btn-loja-toggle');
+  const fechadaAgora = btn.dataset.fechada === '1';
+  const novoEstado = !fechadaAgora;
+  if (novoEstado && !confirm('Pausar a loja agora? Clientes não vão conseguir finalizar pedidos.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  try {
+    await api('PATCH', '/settings', { store_closed_manual: String(novoEstado) });
+    renderLoja(novoEstado);
+    toast(novoEstado ? 'Loja pausada' : 'Loja reaberta');
+  } catch (err) {
+    toast('Erro: ' + err.message, 'err');
+    renderLoja(fechadaAgora);
+  }
+}
+
+// ── Produtos ──
+let _produtosCache = [];
+
+async function carregarProdutos() {
+  try {
+    const cats = await api('GET', '/menu/admin');
+    _produtosCache = [];
+    for (const cat of cats) {
+      for (const p of (cat.products || [])) {
+        _produtosCache.push({ ...p, category_name: cat.name });
+      }
+    }
+    document.getElementById('prod-loading').classList.add('hide');
+    renderProdutos();
+  } catch (err) {
+    document.getElementById('prod-loading').textContent = 'Erro ao carregar: ' + err.message;
+  }
+}
+
+function renderProdutos() {
+  const termo = normTexto(document.getElementById('prod-busca').value.trim());
+  const lista = document.getElementById('prod-lista');
+  const vazio = document.getElementById('prod-vazio');
+  const filtrados = termo
+    ? _produtosCache.filter(p => normTexto(p.name).includes(termo))
+    : _produtosCache;
+
+  lista.innerHTML = '';
+  vazio.classList.toggle('hide', filtrados.length > 0);
+
+  for (const p of filtrados) {
+    const row = document.createElement('div');
+    row.className = 'prod-row';
+    row.innerHTML = `
+      <div class="prod-info">
+        <div class="prod-nome">${escapeHtml(p.name)}</div>
+        <div class="prod-cat">${escapeHtml(p.category_name)}</div>
+      </div>
+      <button class="prod-preco" data-id="${p.id}" onclick="editarPreco('${p.id}', this)">${fmtMoeda(p.price)}</button>
+      <label class="switch">
+        <input type="checkbox" ${p.available ? 'checked' : ''} onchange="alternarDisponivel('${p.id}', this)">
+        <span class="slider"></span>
+      </label>
+    `;
+    lista.appendChild(row);
+  }
+}
+
+function editarPreco(id, btn) {
+  const atual = _produtosCache.find(p => p.id === id);
+  if (!atual) return;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '0.01';
+  input.min = '0';
+  input.className = 'prod-preco-input';
+  input.value = atual.price;
+  btn.replaceWith(input);
+  input.focus();
+  input.select();
+
+  const confirmar = async () => {
+    const novoPreco = parseFloat(input.value);
+    if (!Number.isFinite(novoPreco) || novoPreco < 0) { renderProdutos(); return; }
+    if (novoPreco === Number(atual.price)) { renderProdutos(); return; }
+    input.disabled = true;
+    try {
+      await api('PATCH', '/menu/products/' + id, { price: novoPreco });
+      atual.price = novoPreco;
+      toast('Preço atualizado');
+    } catch (err) {
+      toast('Erro: ' + err.message, 'err');
+    }
+    renderProdutos();
+  };
+  input.addEventListener('blur', confirmar);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+}
+
+async function alternarDisponivel(id, checkbox) {
+  const atual = _produtosCache.find(p => p.id === id);
+  const novoEstado = checkbox.checked;
+  checkbox.disabled = true;
+  try {
+    await api('PATCH', '/menu/products/' + id + '/available', { available: novoEstado });
+    if (atual) atual.available = novoEstado;
+    toast(novoEstado ? 'Produto disponível' : 'Produto marcado como indisponível');
+  } catch (err) {
+    checkbox.checked = !novoEstado;
+    toast('Erro: ' + err.message, 'err');
+  } finally {
+    checkbox.disabled = false;
+  }
+}
+
+// ── Pedidos de hoje ──
+const STATUS_LABEL = {
+  aguardando_pagamento: 'Aguard. pagamento', pago: 'Pago', confirmado: 'Confirmado',
+  em_preparo: 'Em preparo', pronto: 'Pronto', saiu_para_entrega: 'Saiu p/ entrega',
+  entregue: 'Entregue', cancelado: 'Cancelado',
+};
+const STATUS_CANCELAVEL = ['aguardando_pagamento', 'pago', 'confirmado', 'em_preparo', 'pronto', 'saiu_para_entrega'];
+
+async function carregarPedidos() {
+  try {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const data = await api('GET', '/orders?date=' + hoje + '&limit=100');
+    document.getElementById('ped-loading').classList.add('hide');
+    renderPedidos(data.data || []);
+  } catch (err) {
+    document.getElementById('ped-loading').textContent = 'Erro ao carregar: ' + err.message;
+  }
+}
+
+function renderPedidos(pedidos) {
+  const lista = document.getElementById('ped-lista');
+  const vazio = document.getElementById('ped-vazio');
+  vazio.classList.toggle('hide', pedidos.length > 0);
+  lista.innerHTML = '';
+
+  for (const p of pedidos) {
+    const hora = new Date(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const podeCancel = STATUS_CANCELAVEL.includes(p.status);
+    const card = document.createElement('div');
+    card.className = 'ped-card';
+    card.innerHTML = `
+      <div class="ped-top">
+        <span class="ped-cliente">${escapeHtml(p.customer_name || 'Cliente')}</span>
+        <span class="ped-hora">${hora}</span>
+      </div>
+      <div class="ped-info">${p.item_count} ${p.item_count == 1 ? 'item' : 'itens'} · ${fmtMoeda(p.total)}</div>
+      <span class="ped-status ${p.status}">${STATUS_LABEL[p.status] || p.status}</span>
+      ${podeCancel ? `<button class="btn-cancelar" data-id="${p.id}" onclick="cancelarPedido('${p.id}', this)">Cancelar pedido</button>` : ''}
+    `;
+    lista.appendChild(card);
+  }
+}
+
+async function cancelarPedido(id, btn) {
+  if (!btn.classList.contains('confirmando')) {
+    btn.classList.add('confirmando');
+    btn.textContent = 'Toque de novo para confirmar';
+    setTimeout(() => {
+      if (btn.classList.contains('confirmando')) {
+        btn.classList.remove('confirmando');
+        btn.textContent = 'Cancelar pedido';
+      }
+    }, 4000);
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Cancelando...';
+  try {
+    await api('PATCH', '/orders/' + id + '/status', { status: 'cancelado', reason: 'Cancelado via acesso emergencial' });
+    toast('Pedido cancelado');
+    carregarPedidos();
+  } catch (err) {
+    toast('Erro: ' + err.message, 'err');
+    btn.disabled = false;
+    btn.classList.remove('confirmando');
+    btn.textContent = 'Cancelar pedido';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── Bootstrap (por último — depende de tudo acima já declarado) ──
+if (TOKEN && parseJwt(TOKEN)) {
+  mostrarApp();
+} else {
+  mostrarLogin();
+}
+</script>
+</body>
+</html>
