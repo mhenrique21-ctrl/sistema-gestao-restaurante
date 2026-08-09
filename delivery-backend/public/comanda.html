@@ -2858,27 +2858,36 @@ async function vincularInsumoCompra(nomeNota, unidadeNota) {
 }
 
 function vincBuscarInsumo() {
-  const bruto = document.getElementById('vinc-busca').value.trim();
-  const termo = normTexto(bruto);
   const resDiv = document.getElementById('vinc-resultados');
-  _vincInsumoSelecionado = null;
-  document.getElementById('vinc-selecionado').classList.add('hidden');
-  if (!termo) { resDiv.innerHTML = ''; return; }
+  // Mesma blindagem da busca de ingrediente das Fichas técnicas: sem isto,
+  // uma exceção aqui deixava o campo com texto digitado e nada embaixo, sem
+  // nenhum aviso.
+  try {
+    const bruto = document.getElementById('vinc-busca').value.trim();
+    const termo = normTexto(bruto);
+    _vincInsumoSelecionado = null;
+    document.getElementById('vinc-selecionado').classList.add('hidden');
+    if (!termo) { resDiv.innerHTML = ''; return; }
 
-  // Nos dois sentidos: a busca abre já preenchida com o texto INTEIRO da nota
-  // ("CAFE COADO 500G TP"), bem mais longo que o nome curto do insumo
-  // cadastrado ("Café coado") — só checar se o nome do insumo contém o texto
-  // digitado nunca bateria nesse caso, que é o mais comum aqui.
-  _vincAchados = _insumos.filter(i => {
-    const nomeIns = normTexto(i.nome);
-    return nomeIns.includes(termo) || termo.includes(nomeIns);
-  });
-  const linhas = _vincAchados.length
-    ? _vincAchados.map((i, idx) => `<div class="ft-busca-item" onclick="vincEscolherInsumo(${idx})">
-        <span>🥕 ${i.nome}</span><span class="qtd">${i.unidade_base}</span></div>`).join('')
-    : `<div class="ft-busca-vazio">Nenhum insumo com esse nome ainda.</div>`;
-  resDiv.innerHTML = linhas + `<div class="ft-busca-item ft-busca-novo" onclick="criarInsumoDaCompra()">
-      ➕ Cadastrar novo insumo "<b>${bruto.replace(/</g, '&lt;')}</b>"</div>`;
+    // Nos dois sentidos: a busca abre já preenchida com o texto INTEIRO da nota
+    // ("CAFE COADO 500G TP"), bem mais longo que o nome curto do insumo
+    // cadastrado ("Café coado") — só checar se o nome do insumo contém o texto
+    // digitado nunca bateria nesse caso, que é o mais comum aqui.
+    _vincAchados = (_insumos || []).filter(i => {
+      const nomeIns = normTexto(i.nome);
+      return nomeIns.includes(termo) || termo.includes(nomeIns);
+    });
+    const linhas = _vincAchados.length
+      ? _vincAchados.map((i, idx) => `<div class="ft-busca-item" onclick="vincEscolherInsumo(${idx})">
+          <span>🥕 ${i.nome}</span><span class="qtd">${i.unidade_base}</span></div>`).join('')
+      : `<div class="ft-busca-vazio">Nenhum insumo com esse nome ainda.</div>`;
+    resDiv.innerHTML = linhas + `<div class="ft-busca-item ft-busca-novo" onclick="criarInsumoDaCompra()">
+        ➕ Cadastrar novo insumo "<b>${bruto.replace(/</g, '&lt;')}</b>"</div>`;
+  } catch (e) {
+    console.error('[vincBuscarInsumo]', e);
+    resDiv.innerHTML = `<div class="ft-busca-vazio" style="color:var(--danger)">
+      ⚠️ Erro ao buscar: ${(e.message || e).toString().replace(/</g, '&lt;')}. Toque em "Cancelar" e tente de novo.</div>`;
+  }
 }
 
 function vincEscolherInsumo(idx) {
@@ -3293,30 +3302,42 @@ function renderFichaEditor(ficha, produtoOrigem) {
 // Sempre mostra a opção de cadastrar, mesmo com resultado: o nome buscado pode
 // ser parecido mas não ser o insumo certo.
 function ftBuscarIngrediente() {
-  const termo = normTexto(document.getElementById('ft-busca-ing').value);
   const resDiv = document.getElementById('ft-busca-resultados');
-  if (!termo) { resDiv.classList.add('hidden'); resDiv.innerHTML = ''; _ftBuscaResultados = []; return; }
-  // Nos dois sentidos — mesmo raciocínio da busca de insumo em Compras: sem
-  // acento e funciona tanto digitando um pedaço curto quanto um nome inteiro.
-  const bate = nome => { const n = normTexto(nome); return n.includes(termo) || termo.includes(n); };
+  // Antes, qualquer exceção aqui (estado inesperado, campo ausente) morria
+  // silenciosa dentro do oninput: o campo ficava com o texto digitado e nada
+  // aparecia embaixo, sem nenhum aviso — a pessoa não tinha como saber se
+  // devia esperar, tentar de novo ou chamar alguém. Agora aparece um erro
+  // visível bem onde ela está olhando, em vez de nada.
+  try {
+    const termo = normTexto(document.getElementById('ft-busca-ing').value);
+    if (!termo) { resDiv.classList.add('hidden'); resDiv.innerHTML = ''; _ftBuscaResultados = []; return; }
+    // Nos dois sentidos — mesmo raciocínio da busca de insumo em Compras: sem
+    // acento e funciona tanto digitando um pedaço curto quanto um nome inteiro.
+    const bate = nome => { const n = normTexto(nome); return n.includes(termo) || termo.includes(n); };
 
-  const insumos = _insumos.filter(i => bate(i.nome))
-    .map(i => ({ tipo: 'insumo', id: i.id, nome: i.nome, unidade: i.unidade_base, icone: '🥕' }));
-  const subs = _ftSubReceitas.filter(s => s.id !== _ftContextoAtual.fichaId && bate(s.nome))
-    .map(s => ({ tipo: 'sub_ficha', id: s.id, nome: s.nome, unidade: s.rendimento_unidade, icone: '🧪' }));
-  _ftBuscaResultados = [...insumos, ...subs];
+    const insumos = (_insumos || []).filter(i => bate(i.nome))
+      .map(i => ({ tipo: 'insumo', id: i.id, nome: i.nome, unidade: i.unidade_base, icone: '🥕' }));
+    const subs = (_ftSubReceitas || []).filter(s => s.id !== _ftContextoAtual?.fichaId && bate(s.nome))
+      .map(s => ({ tipo: 'sub_ficha', id: s.id, nome: s.nome, unidade: s.rendimento_unidade, icone: '🧪' }));
+    _ftBuscaResultados = [...insumos, ...subs];
 
-  const linhas = _ftBuscaResultados.length
-    ? _ftBuscaResultados.map((x, i) => `
-      <div class="ft-busca-item" onclick="ftEscolherIngrediente(${i})">
-        <span>${x.icone} ${x.nome}</span><span class="qtd">${x.unidade}</span>
-      </div>`).join('')
-    : `<div class="ft-busca-vazio">Nada com esse nome ainda.</div>`;
-  const criarNovo = `<div class="ft-busca-item ft-busca-novo" onclick="ftCriarInsumoDoBusca()">
-      ➕ Cadastrar insumo "<b>${termo.replace(/</g, '&lt;')}</b>"</div>`;
+    const linhas = _ftBuscaResultados.length
+      ? _ftBuscaResultados.map((x, i) => `
+        <div class="ft-busca-item" onclick="ftEscolherIngrediente(${i})">
+          <span>${x.icone} ${x.nome}</span><span class="qtd">${x.unidade}</span>
+        </div>`).join('')
+      : `<div class="ft-busca-vazio">Nada com esse nome ainda.</div>`;
+    const criarNovo = `<div class="ft-busca-item ft-busca-novo" onclick="ftCriarInsumoDoBusca()">
+        ➕ Cadastrar insumo "<b>${termo.replace(/</g, '&lt;')}</b>"</div>`;
 
-  resDiv.innerHTML = linhas + criarNovo;
-  resDiv.classList.remove('hidden');
+    resDiv.innerHTML = linhas + criarNovo;
+    resDiv.classList.remove('hidden');
+  } catch (e) {
+    console.error('[ftBuscarIngrediente]', e);
+    resDiv.innerHTML = `<div class="ft-busca-vazio" style="color:var(--danger)">
+      ⚠️ Erro ao buscar: ${(e.message || e).toString().replace(/</g, '&lt;')}. Toque em "Fechar" e abra a ficha de novo.</div>`;
+    resDiv.classList.remove('hidden');
+  }
 }
 
 function ftEscolherIngrediente(idx) {
