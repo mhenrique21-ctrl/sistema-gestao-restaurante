@@ -2949,7 +2949,9 @@ function criarInsumoDaCompra() {
     if (!nome) return usrErro('Informe o nome');
     if (!(fator > 0)) return usrErro('O fator precisa ser maior que zero');
     const btn = document.getElementById('usr-modal-ok');
+    const rotuloOriginal = btn.textContent;
     btn.disabled = true;
+    btn.textContent = 'Cadastrando...';
     try {
       const res = await fetch(`${API}/api/insumos/da-compra`, {
         method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -2962,7 +2964,12 @@ function criarInsumoDaCompra() {
         ? `Insumo "${nome}" criado · 1 = ${fator} ${unidade}`
         : `"${nomeNota}" entrou no insumo "${nome}" que já existia`);
       loadCompras();
-    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+    } catch (e) {
+      usrErro('Erro de conexão — o insumo pode não ter sido criado. Tente de novo.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = rotuloOriginal;
+    }
   });
 }
 
@@ -3395,7 +3402,12 @@ function ftCriarInsumoDoBusca() {
     const unidade = document.querySelector('.ins-un.on')?.dataset.un;
     if (!nome) return usrErro('Informe o nome');
     const btn = document.getElementById('usr-modal-ok');
+    // Sem isto o botão ficava do mesmo jeito por até 3 chamadas de rede em
+    // sequência — numa conexão mais lenta parece travado, e a pessoa clica de
+    // novo ou desiste achando que não funcionou.
+    const rotuloOriginal = btn.textContent;
     btn.disabled = true;
+    btn.textContent = 'Cadastrando...';
     try {
       const res = await fetch(`${API}/api/insumos`, {
         method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -3403,17 +3415,30 @@ function ftCriarInsumoDoBusca() {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { usrErro(d.error || 'Erro ao cadastrar'); return; }
+      // O insumo criado já vem completo na resposta — soma na lista local em
+      // vez de recarregar tudo do servidor. Uma chamada de rede a menos, e uma
+      // chance a menos de algo falhar depois que o modal já não existe mais.
+      _insumos.push(d);
+      let ficha = null;
+      try {
+        const res2 = await fetch(`${API}/api/fichas-tecnicas/${contexto.fichaId}`, { headers: authHeaders() });
+        if (res2.ok) ficha = await res2.json();
+      } catch (e) { /* a ficha recarrega quando a pessoa abrir de novo; o insumo já está criado */ }
       document.getElementById('usr-modal-backdrop').remove();
-      const ri = await fetch(`${API}/api/insumos`, { headers: authHeaders() });
-      if (ri.ok) _insumos = await ri.json();
-      const res2 = await fetch(`${API}/api/fichas-tecnicas/${contexto.fichaId}`, { headers: authHeaders() });
-      if (res2.ok) {
-        renderFichaEditor(await res2.json(), contexto.produtoOrigem);
+      if (ficha) {
+        renderFichaEditor(ficha, contexto.produtoOrigem);
         _ftBuscaResultados = [{ tipo: 'insumo', id: d.id, nome: d.nome, unidade: d.unidade_base, icone: '🥕' }];
         ftEscolherIngrediente(0);
       }
       showToast(`Insumo "${nome}" cadastrado`);
-    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+    } catch (e) {
+      usrErro('Erro de conexão — o insumo pode não ter sido criado. Tente de novo.');
+    } finally {
+      // btn pode já não estar na tela (modal fechado no caminho de sucesso) —
+      // mexer num nó removido não quebra nada em JS, só não faz efeito visual.
+      btn.disabled = false;
+      btn.textContent = rotuloOriginal;
+    }
   });
 }
 
