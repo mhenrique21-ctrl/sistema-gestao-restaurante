@@ -232,6 +232,17 @@ router.post('/:id/embalagens', async (req, res) => {
       `INSERT INTO insumo_embalagens (insumo_id, nome_nota, fator) VALUES ($1, $2, $3) RETURNING *`,
       [req.params.id, nome, fator]
     );
+    // Sem isto, ligar um nome de nota a um insumo JÁ EXISTENTE nunca marcava o
+    // item como resolvido — ele saía da fila de Insumos (porque passou a ter
+    // embalagem) mas ficava preso pra sempre na fila de Compras, que só olha
+    // pending_supply_items.resolved. Só o caminho que cria insumo NOVO
+    // (POST /da-compra) fazia esse UPDATE; este endpoint, usado tanto pela
+    // aba Insumos quanto pela Compras, também precisa.
+    await pool.query(
+      `UPDATE pending_supply_items SET resolved = true
+        WHERE resolved = false AND upper(regexp_replace(trim(source_name), '\\s+', ' ', 'g')) = upper(regexp_replace(trim($1), '\\s+', ' ', 'g')) RETURNING id`,
+      [nome]
+    );
     res.status(201).json(r.rows[0]);
   } catch (err) {
     if (err.code === '23505') {

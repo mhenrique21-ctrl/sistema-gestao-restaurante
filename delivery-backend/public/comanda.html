@@ -2796,7 +2796,108 @@ const PALPITE_UNIDADE = {
   l: { base: 'ml', fator: 1000 }, lt: { base: 'ml', fator: 1000 }, ml: { base: 'ml', fator: 1 },
 };
 
-function virarInsumo(nomeNota, unidadeNota) {
+// Minúsculo + sem acento, pra comparar "QUEIJO MUSSARELA" (como vem na nota,
+// sem cedilha nem acento) com "Queijo muçarela" (como está cadastrado).
+function normTexto(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+
+// Vincular insumo, a partir de uma linha de Compras. Busca primeiro — "veio
+// como QUEIJO MUSSARELA FAT KG, já tenho Queijo muçarela?" — e só cai no
+// cadastro de um insumo novo se a busca não achar nada.
+//
+// Antes disso existia só o caminho de sempre criar (virarInsumo), que exigia
+// digitar o nome existente letra por letra pra mesclar — sem acento, sem
+// busca, fácil de duplicar sem querer.
+let _vincContexto = null; // { nomeNota, unidadeNota }
+let _vincInsumoSelecionado = null;
+let _vincAchados = [];
+
+async function vincularInsumoCompra(nomeNota, unidadeNota) {
+  if (!_insumos.length) {
+    try {
+      const ri = await fetch(`${API}/api/insumos`, { headers: authHeaders() });
+      if (ri.ok) _insumos = await ri.json();
+    } catch (e) { /* segue sem — a busca so nao acha nada, e o cadastro continua funcionando */ }
+  }
+  _vincContexto = { nomeNota, unidadeNota };
+  _vincInsumoSelecionado = null;
+
+  usrModal('Vincular insumo', `
+    <p style="font-size:.82rem;color:var(--c-muted);line-height:1.5;margin:0 0 10px">
+      Veio na nota como <b style="color:var(--c-text)">${nomeNota}</b>
+    </p>
+    <div class="field-group">
+      <label>Já existe esse insumo? Busque pelo nome</label>
+      <input type="text" id="vinc-busca" autocomplete="off" value="${nomeNota.replace(/"/g, '&quot;')}" oninput="vincBuscarInsumo()">
+    </div>
+    <div id="vinc-resultados" class="ft-busca-resultados"></div>
+    <div id="vinc-selecionado" class="ft-ing-selecionado hidden" style="margin-top:8px">
+      <span id="vinc-selecionado-nome"></span>
+      <input type="number" step="0.0001" min="0" id="vinc-fator" title="1 na nota equivale a quanto">
+      <span class="un" id="vinc-selecionado-un"></span>
+    </div>`, 'Vincular', async () => {
+    if (!_vincInsumoSelecionado) return usrErro('Escolha um insumo na lista, ou cadastre um novo');
+    const fator = parseFloat(document.getElementById('vinc-fator').value);
+    if (!(fator > 0)) return usrErro('Fator deve ser maior que zero');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/insumos/${_vincInsumoSelecionado.id}/embalagens`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ nome_nota: nomeNota, fator }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao vincular'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast(`"${nomeNota}" → ${_vincInsumoSelecionado.nome} · 1 = ${fator} ${_vincInsumoSelecionado.unidade_base}`);
+      loadCompras();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+  vincBuscarInsumo(); // já roda com o nome da nota preenchido, sem esperar a pessoa digitar
+}
+
+function vincBuscarInsumo() {
+  const bruto = document.getElementById('vinc-busca').value.trim();
+  const termo = normTexto(bruto);
+  const resDiv = document.getElementById('vinc-resultados');
+  _vincInsumoSelecionado = null;
+  document.getElementById('vinc-selecionado').classList.add('hidden');
+  if (!termo) { resDiv.innerHTML = ''; return; }
+
+  // Nos dois sentidos: a busca abre já preenchida com o texto INTEIRO da nota
+  // ("CAFE COADO 500G TP"), bem mais longo que o nome curto do insumo
+  // cadastrado ("Café coado") — só checar se o nome do insumo contém o texto
+  // digitado nunca bateria nesse caso, que é o mais comum aqui.
+  _vincAchados = _insumos.filter(i => {
+    const nomeIns = normTexto(i.nome);
+    return nomeIns.includes(termo) || termo.includes(nomeIns);
+  });
+  const linhas = _vincAchados.length
+    ? _vincAchados.map((i, idx) => `<div class="ft-busca-item" onclick="vincEscolherInsumo(${idx})">
+        <span>🥕 ${i.nome}</span><span class="qtd">${i.unidade_base}</span></div>`).join('')
+    : `<div class="ft-busca-vazio">Nenhum insumo com esse nome ainda.</div>`;
+  resDiv.innerHTML = linhas + `<div class="ft-busca-item ft-busca-novo" onclick="criarInsumoDaCompra()">
+      ➕ Cadastrar novo insumo "<b>${bruto.replace(/</g, '&lt;')}</b>"</div>`;
+}
+
+function vincEscolherInsumo(idx) {
+  const i = _vincAchados[idx];
+  if (!i) return;
+  _vincInsumoSelecionado = i;
+  document.getElementById('vinc-selecionado-nome').textContent = `🥕 ${i.nome}`;
+  document.getElementById('vinc-selecionado-un').textContent = i.unidade_base;
+  document.getElementById('vinc-fator').value = 1;
+  document.getElementById('vinc-selecionado').classList.remove('hidden');
+  document.getElementById('vinc-fator').focus();
+}
+
+// Busca não achou nada (ou achou algo parecido, mas não é o certo) — cadastra
+// do zero. Reaproveita /da-compra, que já sabe mesclar em vez de duplicar se
+// o nome digitado bater exatamente com um insumo existente.
+function criarInsumoDaCompra() {
+  const { nomeNota, unidadeNota } = _vincContexto;
+  const nomeSugerido = document.getElementById('vinc-busca').value.trim() || nomeNota;
   const palpite = PALPITE_UNIDADE[String(unidadeNota || '').toLowerCase()] || { base: 'un', fator: 1 };
   const explica = {
     g: 'A nota veio em <b>kg</b>: 1 na nota = 1000 g.',
@@ -2804,14 +2905,15 @@ function virarInsumo(nomeNota, unidadeNota) {
     un: 'A nota veio em <b>' + (unidadeNota || 'un') + '</b>: 1 na nota = 1 unidade.',
   };
   const dica = palpite.fator === 1000 ? explica[palpite.base] : explica.un;
+  document.getElementById('usr-modal-backdrop')?.remove();
 
-  usrModal('Cadastrar como insumo', `
+  usrModal('Novo insumo', `
     <p style="font-size:.82rem;color:var(--c-muted);line-height:1.5;margin:0 0 12px">
       Veio na nota como <b style="color:var(--c-text)">${nomeNota}</b>
     </p>
     <div class="field-group">
       <label>Nome do insumo — como você chama na cozinha</label>
-      <input type="text" id="vi-nome" autocomplete="off" value="${nomeNota.replace(/"/g, '&quot;')}">
+      <input type="text" id="vi-nome" autocomplete="off" value="${nomeSugerido.replace(/"/g, '&quot;')}">
     </div>
     <div class="field-group">
       <label>Unidade base</label>
@@ -2829,8 +2931,8 @@ function virarInsumo(nomeNota, unidadeNota) {
         Se for pacote com várias unidades, ponha a quantidade do pacote.</small>
     </div>
     <div class="usr-aviso" style="margin:0">
-      Se já existir um insumo com esse nome, esta embalagem entra <b>nele</b> em vez de criar outro —
-      é assim que várias embalagens do mesmo item passam a somar juntas.
+      Se o nome digitado bater exatamente com um insumo que já existe, esta embalagem entra
+      <b>nele</b> em vez de criar outro.
     </div>`, 'Cadastrar insumo', async () => {
     const nome = document.getElementById('vi-nome').value.trim();
     const unidade = document.querySelector('.ins-un.on')?.dataset.un;
@@ -3191,13 +3293,16 @@ function renderFichaEditor(ficha, produtoOrigem) {
 // Sempre mostra a opção de cadastrar, mesmo com resultado: o nome buscado pode
 // ser parecido mas não ser o insumo certo.
 function ftBuscarIngrediente() {
-  const termo = document.getElementById('ft-busca-ing').value.trim().toLowerCase();
+  const termo = normTexto(document.getElementById('ft-busca-ing').value);
   const resDiv = document.getElementById('ft-busca-resultados');
   if (!termo) { resDiv.classList.add('hidden'); resDiv.innerHTML = ''; _ftBuscaResultados = []; return; }
+  // Nos dois sentidos — mesmo raciocínio da busca de insumo em Compras: sem
+  // acento e funciona tanto digitando um pedaço curto quanto um nome inteiro.
+  const bate = nome => { const n = normTexto(nome); return n.includes(termo) || termo.includes(n); };
 
-  const insumos = _insumos.filter(i => i.nome.toLowerCase().includes(termo))
+  const insumos = _insumos.filter(i => bate(i.nome))
     .map(i => ({ tipo: 'insumo', id: i.id, nome: i.nome, unidade: i.unidade_base, icone: '🥕' }));
-  const subs = _ftSubReceitas.filter(s => s.id !== _ftContextoAtual.fichaId && s.nome.toLowerCase().includes(termo))
+  const subs = _ftSubReceitas.filter(s => s.id !== _ftContextoAtual.fichaId && bate(s.nome))
     .map(s => ({ tipo: 'sub_ficha', id: s.id, nome: s.nome, unidade: s.rendimento_unidade, icone: '🧪' }));
   _ftBuscaResultados = [...insumos, ...subs];
 
@@ -5510,7 +5615,7 @@ function renderCompras(el, d) {
   el.querySelectorAll('.vinc-pend').forEach(row => {
     row.querySelector('.c-save').addEventListener('click', () => vincularPendente(row));
     row.querySelector('.c-insumo')?.addEventListener('click', (e) =>
-      virarInsumo(row.dataset.nome, e.currentTarget.dataset.unit));
+      vincularInsumoCompra(row.dataset.nome, e.currentTarget.dataset.unit));
     row.querySelectorAll('.c-kind').forEach(b => b.addEventListener('click', () =>
       classificarItens([row.dataset.nome], b.dataset.kind)));
   });
