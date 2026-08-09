@@ -475,6 +475,12 @@ function resetToMenu() {
 
 // ── Cardápio ─────────────────────────────────────────
 // Mesmo mapeamento usado em delivery-app/src/pages/MenuPage.jsx
+// O ícone agora é campo da categoria, editável no PDV. A lista abaixo ficou
+// só como rede: categoria criada antes disso pode ter o campo vazio.
+function iconeDaCategoria(cat) {
+  return cat?.icon || CAT_ICONS[cat?.name] || '🍽';
+}
+
 const CAT_ICONS = {
   'Café': '☕', 'Cafés': '☕', 'Bebidas': '🥤', 'Bolos': '🎂', 'Bolos e Tortas': '🎂',
   'Tortas': '🎂', 'Salgados': '🥐', 'Doces': '🍬', 'Tapiocas': '🫓',
@@ -562,7 +568,7 @@ function renderCategorySidebar() {
   html += visibleCategories().map(c => `
     <button class="cat-btn ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">
       ${c.image_url ? `<img class="cat-thumb" src="${c.image_url}">`
-                    : `<span class="cat-emoji">${CAT_ICONS[c.name] || '🍽'}</span>`}
+                    : `<span class="cat-emoji">${iconeDaCategoria(c)}</span>`}
       ${c.name}
     </button>
   `).join('');
@@ -590,15 +596,18 @@ function renderCategoryBanner() {
   // Sem foto o banner encolhe pra uma faixa de título: 140px de cinza vazio
   // roubavam a primeira fileira de produtos da vista.
   banner.classList.toggle('com-foto', !!cat?.image_url);
-  title.textContent = cat ? `${CAT_ICONS[cat.name] || '🍽'} ${cat.name}` : '';
+  title.textContent = cat ? `${iconeDaCategoria(cat)} ${cat.name}` : '';
 }
 
 // Ícone de reserva pra produto sem foto: usa o da categoria do produto, não
 // o da categoria aberta — em "Ofertas" os produtos vêm de categorias variadas.
 function iconeDoProduto(p) {
-  if (p.categoryName) return CAT_ICONS[p.categoryName] || '🍽';
-  const cat = menu.find(c => (c.products || []).some(x => x.id === p.id));
-  return CAT_ICONS[cat?.name] || '🍽';
+  // Em "Ofertas" o produto carrega o nome da categoria de origem, mas não o
+  // objeto dela — então procura a categoria de verdade pra pegar o ícone.
+  const cat = p.categoryName
+    ? menu.find(c => c.name === p.categoryName)
+    : menu.find(c => (c.products || []).some(x => x.id === p.id));
+  return iconeDaCategoria(cat);
 }
 
 function renderProductGrid() {

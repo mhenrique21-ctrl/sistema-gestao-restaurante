@@ -16,12 +16,20 @@ router.get('/', async (req, res) => {
 
 // POST /api/categories
 router.post('/', requireRole('admin'), async (req, res) => {
-  const { name, description, sort_order, image_url } = req.body;
+  const { name, description, image_url, icon } = req.body;
   if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+  // Sem sort_order informado, entra no fim em vez de empatar em 0 com todas as
+  // outras — empate faz a ordem no totem depender do desempate por nome, e a
+  // categoria nova aparece no meio sem explicação.
+  const ordem = Number.isInteger(parseInt(req.body.sort_order, 10))
+    ? parseInt(req.body.sort_order, 10)
+    : null;
+  const ordemSql = ordem === null ? '(SELECT COALESCE(MAX(sort_order) + 1, 0) FROM categories)' : ordem;
   try {
     const r = await pool.query(
-      'INSERT INTO categories (name, description, sort_order, image_url) VALUES ($1,$2,$3,$4) RETURNING *',
-      [name, description, sort_order || 0, image_url]
+      `INSERT INTO categories (name, description, sort_order, image_url, icon)
+       VALUES ($1, $2, ${ordemSql}, $3, $4) RETURNING *`,
+      [name.trim(), description || null, image_url || null, icon || null]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -47,7 +55,7 @@ router.get('/:id/products', async (req, res) => {
 
 // PATCH /api/categories/:id
 router.patch('/:id', requireRole('admin'), async (req, res) => {
-  const fields = ['name', 'description', 'sort_order', 'image_url', 'active', 'printer'];
+  const fields = ['name', 'description', 'sort_order', 'image_url', 'active', 'printer', 'icon'];
   const updates = [], values = [];
   let idx = 1;
   for (const f of fields) {

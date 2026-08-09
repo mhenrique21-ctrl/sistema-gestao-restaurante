@@ -98,6 +98,7 @@ router.get('/', async (req, res) => {
         c.description AS category_description,
         c.image_url AS category_image,
         c.sort_order AS category_sort,
+        c.icon AS category_icon,
         p.id AS product_id,
         p.name AS product_name,
         p.description AS product_description,
@@ -169,6 +170,7 @@ router.get('/', async (req, res) => {
           description: row.category_description,
           image_url: row.category_image,
           sort_order: row.category_sort,
+          icon: row.category_icon,
           products: [],
         };
       }

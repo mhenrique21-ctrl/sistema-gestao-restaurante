@@ -627,6 +627,32 @@
   .ins-emb button { border: none; background: none; color: var(--danger); font-size: .85rem; font-weight: 700; }
   .ins-mov { display: flex; justify-content: space-between; gap: 10px; font-size: .76rem; padding: 4px 0;
     color: var(--c-muted); font-variant-numeric: tabular-nums; }
+
+  /* ── Novo produto ─────────────────────────────────── */
+  .np-dest { border: 2px solid var(--c-border); background: var(--c-bg); border-radius: 10px;
+    padding: 11px 4px; font-size: .8rem; color: var(--c-text); }
+  .np-dest.on { border-color: var(--gold); background: rgba(160,109,34,.08); color: var(--gold-dim); font-weight: 700; }
+  .np-canal { flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border: 1px solid var(--c-border); border-radius: 10px; font-size: .84rem; cursor: pointer; }
+  .np-canal input { width: 17px; height: 17px; }
+  .np-preview { width: 68px; height: 51px; min-width: 68px; border-radius: 10px; display: flex;
+    align-items: center; justify-content: center; font-size: 1.3rem;
+    background: linear-gradient(135deg,#F3E9D8,#EADBC2); background-size: cover; background-position: center; }
+
+  /* ── Categorias ───────────────────────────────────── */
+  .cat-item { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px;
+    padding: 9px 11px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .cat-item.off { opacity: .55; background: repeating-linear-gradient(135deg, var(--c-surface) 0 8px, #F4EFE6 8px 10px); }
+  .cat-item .ic { font-size: 1.15rem; width: 28px; text-align: center; }
+  .cat-item .nm { font-size: .88rem; font-weight: 700; }
+  .cat-item .sb { font-size: .72rem; color: var(--c-muted); margin-top: 1px; }
+  .cat-item .mid { flex: 1; min-width: 0; }
+  .cat-item button { border: 1px solid var(--c-border); background: var(--c-bg); border-radius: 7px;
+    padding: 5px 8px; font-size: .76rem; }
+  .cat-item button:disabled { opacity: .3; }
+  .cat-aviso { background: #FDF7EC; border: 1px solid #E8D3A8; color: #8A6412; border-radius: 8px;
+    padding: 8px 10px; font-size: .74rem; line-height: 1.5; margin-top: 8px; }
+  .cat-nova { border-top: 1px solid var(--c-border); margin-top: 14px; padding-top: 14px; }
   .prod-preco { border: 1px solid transparent; background: none; color: var(--gold-dim); font-weight: 800; font-size: .88rem;
     width: 78px; text-align: right; padding: 5px 6px; border-radius: 7px; font-family: inherit; }
   .prod-preco:hover { border-color: var(--c-border); }
@@ -1013,6 +1039,7 @@
       <select id="estoque-cat-filter" class="hidden" onchange="renderEstoque()"><option value="">Todas categorias</option></select>
       <span id="prod-contagem" class="prod-contagem"></span>
       <button class="btn btn-secondary" onclick="abrirInventario()" style="white-space:nowrap">📋 Inventário</button>
+      <button class="btn btn-primary" id="prod-novo-btn" onclick="novoProduto()" style="white-space:nowrap">+ Novo produto</button>
     </div>
     <div class="prod-chips" id="prod-cats"></div>
     <div class="prod-chips prod-alertas" id="prod-flags"></div>
@@ -1190,6 +1217,7 @@
     <button class="fin-subtab" data-cfgtab="relatorios" onclick="showCfgSubtab('relatorios')">📊 Relatórios</button>
     <button class="fin-subtab" data-cfgtab="usuarios" onclick="showCfgSubtab('usuarios')">🔐 Usuários</button>
     <button class="fin-subtab" data-cfgtab="fiado" onclick="showCfgSubtab('fiado')">📒 Fiado</button>
+    <button class="fin-subtab" data-cfgtab="categorias" onclick="showCfgSubtab('categorias')">🗂 Categorias</button>
     <button class="fin-subtab" data-cfgtab="tablets" onclick="showCfgSubtab('tablets')">📱 Tablets</button>
   </div>
 
@@ -1226,6 +1254,34 @@
   </div>
 
   <!-- ── Tablets: QR pra provisionar o totem das mesas ── -->
+  <div id="cfg-subtab-categorias" class="hidden">
+    <div class="estoque-toolbar">
+      <span style="font-size:.85rem;color:var(--c-muted);flex:1">
+        A ordem aqui é a ordem no totem e no delivery. Categoria com produto não se exclui — se desativa.
+      </span>
+    </div>
+    <div id="cat-lista"><div class="cart-empty">Carregando...</div></div>
+    <div class="cat-nova">
+      <div style="font-size:.88rem;font-weight:700;margin-bottom:10px">Nova categoria</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div style="width:76px">
+          <label style="font-size:.72rem;color:var(--c-muted);display:block;margin-bottom:4px">Ícone</label>
+          <input type="text" id="cat-novo-icone" maxlength="4" placeholder="🍨"
+                 style="width:100%;height:42px;text-align:center;font-size:1.2rem;border-radius:8px;
+                        border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-text)">
+        </div>
+        <div style="flex:1;min-width:180px">
+          <label style="font-size:.72rem;color:var(--c-muted);display:block;margin-bottom:4px">Nome</label>
+          <input type="text" id="cat-novo-nome" placeholder="Ex: Sobremesas"
+                 style="width:100%;height:42px;border-radius:8px;border:1px solid var(--c-border);
+                        background:var(--c-surface);color:var(--c-text);padding:0 12px">
+        </div>
+        <button class="btn btn-primary" onclick="criarCategoria()" style="height:42px">Criar</button>
+      </div>
+      <div id="cat-erro" style="color:var(--danger);font-size:.8rem;min-height:18px;margin-top:6px"></div>
+    </div>
+  </div>
+
   <div id="cfg-subtab-tablets" class="hidden">
     <div class="tab-qr-wrap">
       <div class="tab-qr-lado">
@@ -1918,6 +1974,7 @@ const CFG_SUBTAB_SCREENS = {
   usuarios: 'cfg-subtab-usuarios',
   fiado: 'cfg-subtab-fiado',
   tablets: 'cfg-subtab-tablets',
+  categorias: 'cfg-subtab-categorias',
 };
 
 function showCfgSubtab(tab) {
@@ -1929,6 +1986,152 @@ function showCfgSubtab(tab) {
   if (tab === 'usuarios') loadUsuarios();
   if (tab === 'fiado') loadFiado();
   if (tab === 'tablets') iniciarQrTablet();
+  if (tab === 'categorias') loadCategorias();
+}
+
+// ── Configurações → Categorias ───────────────────────
+// Criar categoria só existia no admin.html. E o ícone dela vivia numa lista
+// fixa dentro do kiosk.html — categoria nova caía num prato genérico e só
+// mexendo no código dava pra arrumar. Agora é dado, editável aqui.
+let _categorias = [];
+
+async function loadCategorias() {
+  const el = document.getElementById('cat-lista');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const [rc, rp] = await Promise.all([
+      fetch(`${API}/api/categories`, { headers: authHeaders() }),
+      fetch(`${API}/api/menu/admin`, { headers: authHeaders() }),
+    ]);
+    if (rc.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (rc.status === 403) { el.innerHTML = '<div class="cart-empty">Só administrador gerencia categorias</div>'; return; }
+    _categorias = await rc.json();
+    if (rp.ok) estoqueCats = await rp.json();
+    renderCategorias();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>';
+  }
+}
+
+function renderCategorias() {
+  const el = document.getElementById('cat-lista');
+  const ordenadas = [..._categorias].sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name, 'pt-BR'));
+  const contar = (id) => (estoqueCats.find(c => c.id === id)?.products || []).length;
+
+  el.innerHTML = ordenadas.map((c, i) => {
+    const n = contar(c.id);
+    const semCanal = (estoqueCats.find(x => x.id === c.id)?.products || [])
+      .every(p => p.show_kiosk === false && p.show_delivery === false);
+    return `
+    <div class="cat-item ${c.active ? '' : 'off'}">
+      <span class="ic">${c.icon || '🍽'}</span>
+      <div class="mid">
+        <div class="nm">${c.name}</div>
+        <div class="sb">${n} produto(s)${!c.active ? ' · desativada' : ''}${n && semCanal ? ' · não aparece no totem nem no delivery' : ''}</div>
+        ${c.name === 'Ofertas' ? `<div class="cat-aviso">O totem monta a aba <b>Ofertas</b> sozinho, com quem tem preço
+          promocional, e esconde esta categoria da barra lateral. Produto colocado aqui sem promoção fica invisível no totem.</div>` : ''}
+      </div>
+      <button onclick="moverCategoria(${i}, -1)" ${i === 0 ? 'disabled' : ''} title="Subir">↑</button>
+      <button onclick="moverCategoria(${i}, 1)" ${i === ordenadas.length - 1 ? 'disabled' : ''} title="Descer">↓</button>
+      <button onclick="editarCategoria('${c.id}')">Editar</button>
+      <button onclick="alternarCategoria('${c.id}', ${!c.active})" ${c.active ? '' : 'style="color:var(--green)"'}>
+        ${c.active ? 'Desativar' : 'Reativar'}</button>
+    </div>`;
+  }).join('');
+}
+
+async function criarCategoria() {
+  const nome = document.getElementById('cat-novo-nome').value.trim();
+  const icone = document.getElementById('cat-novo-icone').value.trim();
+  const err = document.getElementById('cat-erro');
+  err.textContent = '';
+  if (!nome) { err.textContent = 'Informe o nome'; return; }
+  try {
+    const res = await fetch(`${API}/api/categories`, {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name: nome, icon: icone || null }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { err.textContent = d.error || 'Erro ao criar'; return; }
+    document.getElementById('cat-novo-nome').value = '';
+    document.getElementById('cat-novo-icone').value = '';
+    showToast(`Categoria "${nome}" criada`);
+    loadCategorias();
+  } catch (e) { err.textContent = 'Erro de conexão'; }
+}
+
+function editarCategoria(id) {
+  const c = _categorias.find(x => x.id === id);
+  if (!c) return;
+  usrModal(`Editar ${c.name}`, `
+    <div style="display:flex;gap:8px">
+      <div class="field-group" style="width:80px">
+        <label>Ícone</label>
+        <input type="text" id="ec-icone" maxlength="4" value="${(c.icon || '').replace(/"/g, '&quot;')}"
+               style="text-align:center;font-size:1.2rem">
+      </div>
+      <div class="field-group" style="flex:1">
+        <label>Nome</label>
+        <input type="text" id="ec-nome" value="${(c.name || '').replace(/"/g, '&quot;')}">
+      </div>
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      O ícone aparece na barra lateral do totem e no bloco dos produtos sem foto.
+      Deixando vazio, entra um prato genérico.
+    </div>`, 'Salvar', async () => {
+    const nome = document.getElementById('ec-nome').value.trim();
+    if (!nome) return usrErro('Nome não pode ficar vazio');
+    await patchCategoria(id, { name: nome, icon: document.getElementById('ec-icone').value.trim() || null }, 'Categoria salva');
+  });
+}
+
+async function patchCategoria(id, corpo, sucesso) {
+  const btn = document.getElementById('usr-modal-ok');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/categories/${id}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(corpo),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { usrErro(d.error || 'Erro ao salvar'); showToast(d.error || 'Erro ao salvar'); return false; }
+    document.getElementById('usr-modal-backdrop')?.remove();
+    if (sucesso) showToast(sucesso);
+    loadCategorias();
+    return true;
+  } catch (e) { usrErro('Erro de conexão'); return false; }
+  finally { if (btn) btn.disabled = false; }
+}
+
+async function alternarCategoria(id, ativar) {
+  const c = _categorias.find(x => x.id === id);
+  const n = (estoqueCats.find(x => x.id === id)?.products || []).length;
+  if (!ativar && !confirm(`Desativar "${c?.name}"?\n\n${n ? `Os ${n} produtos dela somem do totem e do delivery, mas continuam cadastrados.` : 'Ela não tem produtos.'}\n\nDá pra reativar quando quiser.`)) return;
+  await patchCategoria(id, { active: ativar }, ativar ? `${c?.name} reativada` : `${c?.name} desativada`);
+}
+
+// Troca a posição com a vizinha. Reordenar por arrastar seria bonito e pior:
+// num tablet, arrastar lista é como se erra a ordem sem perceber.
+async function moverCategoria(indice, direcao) {
+  const ordenadas = [..._categorias].sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name, 'pt-BR'));
+  const alvo = ordenadas[indice], vizinha = ordenadas[indice + direcao];
+  if (!alvo || !vizinha) return;
+  try {
+    // Reescreve a ordem inteira: os valores atuais podem ter empates herdados
+    // do cadastro antigo, e trocar só dois não resolveria empate.
+    ordenadas.splice(indice, 1);
+    ordenadas.splice(indice + direcao, 0, alvo);
+    for (let i = 0; i < ordenadas.length; i++) {
+      if (ordenadas[i].sort_order === i) continue;
+      await fetch(`${API}/api/categories/${ordenadas[i].id}`, {
+        method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ sort_order: i }),
+      });
+      ordenadas[i].sort_order = i;
+    }
+    _categorias = ordenadas;
+    renderCategorias();
+  } catch (e) { showToast('Erro ao reordenar'); }
 }
 
 // ── Configurações → Tablets ─────────────────────────────
@@ -2830,7 +3033,7 @@ function usrCargoSeletor(atual) {
   }).join('');
 }
 
-function usrModal(titulo, corpo, acaoRotulo, acaoFn) {
+function usrModal(titulo, corpo, acaoRotulo, acaoFn, opcoes = {}) {
   const bd = document.createElement('div');
   bd.className = 'modal-backdrop';
   bd.id = 'usr-modal-backdrop';
@@ -2840,11 +3043,13 @@ function usrModal(titulo, corpo, acaoRotulo, acaoFn) {
     <div id="usr-modal-erro" style="color:var(--danger);font-size:.82rem;min-height:18px;margin-top:8px"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="document.getElementById('usr-modal-backdrop').remove()">Cancelar</button>
+      ${opcoes.extra ? `<button class="btn btn-secondary" id="usr-modal-extra">${opcoes.extra.rotulo}</button>` : ''}
       <button class="btn btn-primary" id="usr-modal-ok">${acaoRotulo}</button>
     </div>
   </div>`;
   document.body.appendChild(bd);
   document.getElementById('usr-modal-ok').addEventListener('click', acaoFn);
+  if (opcoes.extra) document.getElementById('usr-modal-extra').addEventListener('click', opcoes.extra.fn);
   return bd;
 }
 
@@ -3592,6 +3797,200 @@ async function salvarPrecoRapido(id, input) {
   }
 }
 
+// ── Cadastro de produto ──────────────────────────────
+// Criar produto só existia no admin.html, num endereço separado e com login
+// próprio. O PDV virou o lugar onde o cardápio é trabalhado — preço, foto,
+// destino, canais — mas para criar era preciso sair.
+let _novoProdFoto = null;   // url da foto enviada antes de salvar
+
+// Lê o que a categoria escolhida já usa e sugere o mesmo. Ataca direto os 64
+// produtos sem destino: quase todos são de gente que não sabia que o campo
+// existia. Padrão certo faz do descuido exceção em vez de regra.
+function padroesDaCategoria(catId) {
+  const cat = estoqueCats.find(c => c.id === catId);
+  const ps = cat?.products || [];
+  if (!ps.length) return { destino: '', kiosk: true, delivery: true, n: 0, nome: cat?.name || '' };
+  const conta = (f) => ps.reduce((m, p) => { const k = f(p); m[k] = (m[k] || 0) + 1; return m; }, {});
+  const maisComum = (m) => Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0];
+  return {
+    destino: maisComum(conta(p => p.print_target || '')) || '',
+    kiosk: maisComum(conta(p => String(p.show_kiosk !== false))) === 'true',
+    delivery: maisComum(conta(p => String(p.show_delivery !== false))) === 'true',
+    n: ps.length,
+    nome: cat.name,
+  };
+}
+
+function novoProduto() {
+  if (!estoqueCats.length) return showToast('Carregue os produtos antes');
+  _novoProdFoto = null;
+  const cats = estoqueCats.filter(c => c.name !== 'Ofertas');
+  const primeira = cats[0]?.id || estoqueCats[0].id;
+
+  usrModal('Novo produto', `
+    <div class="field-group">
+      <label>Nome</label>
+      <input type="text" id="np-nome" autocomplete="off" placeholder="Ex: Tapioca de camarão">
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="field-group" style="flex:1.4">
+        <label>Categoria</label>
+        <select id="np-cat" onchange="aplicarPadroesCategoria()">
+          ${estoqueCats.map(c => `<option value="${c.id}" ${c.id === primeira ? 'selected' : ''}>${c.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field-group" style="flex:1">
+        <label>Preço (R$)</label>
+        <input type="number" step="0.01" min="0" id="np-preco" placeholder="0,00">
+      </div>
+    </div>
+
+    <div id="np-herdado" class="usr-aviso" style="margin:0 0 12px"></div>
+    <div id="np-ofertas" class="hidden" style="background:#FDF7EC;border:1px solid #E8D3A8;color:#8A6412;
+         border-radius:10px;padding:10px 12px;font-size:.78rem;line-height:1.5;margin-bottom:12px">
+      ⚠️ O totem monta a aba <b>Ofertas</b> sozinho, com quem tem preço promocional, e por isso esconde
+      esta categoria da barra lateral. <b>Sem promoção, este produto não vai aparecer no totem.</b>
+    </div>
+
+    <div class="field-group">
+      <label>Ficha de preparo sai em</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        ${[['cozinha', '🍳 Cozinha'], ['balcao', '🏪 Balcão'], ['', '— Nenhuma']].map(([v, r]) => `
+          <button type="button" class="np-dest" data-v="${v}"
+            onclick="document.querySelectorAll('.np-dest').forEach(b=>b.classList.remove('on'));this.classList.add('on')">${r}</button>`).join('')}
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label>Onde aparece</label>
+      <div style="display:flex;gap:8px">
+        <label class="np-canal"><input type="checkbox" id="np-kiosk"> 🖥 Totem</label>
+        <label class="np-canal"><input type="checkbox" id="np-deliv"> 🛵 Delivery</label>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label>Foto <span style="color:var(--c-muted);font-weight:400">(opcional)</span></label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="np-preview" class="np-preview">🍽</div>
+        <label class="d-foto">🖼️ Do computador<input type="file" accept="image/*" id="np-file1" hidden></label>
+        <label class="d-foto">📸 Tirar agora<input type="file" accept="image/*" capture="environment" id="np-file2" hidden></label>
+      </div>
+      <small style="display:block;color:var(--c-muted);font-size:.74rem;line-height:1.5;margin-top:6px">
+        Sem foto, o totem mostra o ícone da categoria. Dá pra pôr depois — hoje 76 produtos estão assim.</small>
+    </div>
+
+    <div class="field-group">
+      <label>Descrição <span style="color:var(--c-muted);font-weight:400">(opcional)</span></label>
+      <textarea id="np-desc" rows="2" placeholder="Aparece no totem e no delivery, abaixo do nome"></textarea>
+    </div>`,
+    'Salvar', () => salvarNovoProduto(false), { extra: { rotulo: 'Salvar e criar outro', fn: () => salvarNovoProduto(true) } });
+
+  aplicarPadroesCategoria();
+  ['np-file1', 'np-file2'].forEach(id =>
+    document.getElementById(id).addEventListener('change', (e) => enviarFotoProduto(e.target)));
+}
+
+function aplicarPadroesCategoria() {
+  const catId = document.getElementById('np-cat').value;
+  const p = padroesDaCategoria(catId);
+  document.querySelectorAll('.np-dest').forEach(b => b.classList.toggle('on', b.dataset.v === p.destino));
+  document.getElementById('np-kiosk').checked = p.kiosk;
+  document.getElementById('np-deliv').checked = p.delivery;
+  document.getElementById('np-ofertas').classList.toggle('hidden', p.nome !== 'Ofertas');
+  const av = document.getElementById('np-herdado');
+  if (!p.n) {
+    av.textContent = 'Categoria vazia — escolha o destino e os canais abaixo.';
+  } else {
+    const d = { cozinha: 'saem na cozinha', balcao: 'saem no balcão', '': 'não geram ficha de preparo' }[p.destino];
+    const canais = p.kiosk && p.delivery ? 'aparecem nos dois canais'
+      : p.kiosk ? 'aparecem só no totem' : p.delivery ? 'aparecem só no delivery' : 'não aparecem em nenhum canal';
+    av.innerHTML = `Os <b>${p.n}</b> produtos de <b>${p.nome}</b> ${d} e ${canais}. Deixei igual — mude abaixo se este for diferente.`;
+  }
+}
+
+// Usa o mesmo editor de enquadramento dos destaques: a foto entra recortada na
+// proporção certa e comprimida, em vez de 5 MB direto da câmera.
+function enviarFotoProduto(inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  inputEl.value = '';
+  const img = new Image();
+  img.onload = async () => {
+    URL.revokeObjectURL(img.src);
+    try { abrirEditorFoto(await normalizarFoto(img), '__produto__'); }
+    catch (e) { showToast(e.message); }
+  };
+  img.onerror = () => { URL.revokeObjectURL(img.src); showToast('Não consegui abrir esse arquivo'); };
+  img.src = URL.createObjectURL(file);
+}
+
+// A foto sobe antes do produto existir: guarda a URL e só amarra no salvar.
+// Se a pessoa desistir, sobra um arquivo órfão no storage — preço baixo perto
+// de exigir salvar o produto primeiro só pra depois poder escolher a foto.
+async function subirFotoProduto(file) {
+  const pv = document.getElementById('np-preview');
+  if (pv) pv.textContent = '⏳';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    fd.append('folder', 'products');
+    const res = await fetch(`${API}/api/menu/upload`, { method: 'POST', headers: authHeaders(), body: fd });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Erro ao enviar a foto');
+    _novoProdFoto = d.url;
+    if (pv) { pv.style.backgroundImage = `url('${d.url}')`; pv.textContent = ''; }
+    showToast('Foto pronta');
+  } catch (e) {
+    if (pv) pv.textContent = '🍽';
+    showToast(e.message);
+  }
+}
+
+async function salvarNovoProduto(criarOutro) {
+  const nome = document.getElementById('np-nome').value.trim();
+  const catId = document.getElementById('np-cat').value;
+  const preco = parseFloat(document.getElementById('np-preco').value);
+  if (!nome) return usrErro('Informe o nome');
+  if (!(preco > 0)) return usrErro('Informe um preço válido');
+
+  const corpo = {
+    category_id: catId,
+    name: nome,
+    price: preco,
+    description: document.getElementById('np-desc').value.trim() || null,
+    print_target: document.querySelector('.np-dest.on')?.dataset.v || null,
+    show_kiosk: document.getElementById('np-kiosk').checked,
+    show_delivery: document.getElementById('np-deliv').checked,
+    image_url: _novoProdFoto,
+  };
+  const btns = document.querySelectorAll('#usr-modal-backdrop .modal-actions button');
+  btns.forEach(b => b.disabled = true);
+  try {
+    const res = await fetch(`${API}/api/menu/products`, {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(corpo),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { usrErro(d.error || 'Erro ao criar o produto'); return; }
+    showToast(`${nome} criado`);
+    if (criarOutro) {
+      // Mantém categoria e padrões: cadastrar produto raramente é um só, é
+      // uma leva. Limpa só o que muda de um pro outro.
+      _novoProdFoto = null;
+      ['np-nome', 'np-preco', 'np-desc'].forEach(id => document.getElementById(id).value = '');
+      const pv = document.getElementById('np-preview');
+      pv.style.backgroundImage = ''; pv.textContent = '🍽';
+      document.getElementById('np-nome').focus();
+      usrErro('');
+    } else {
+      document.getElementById('usr-modal-backdrop').remove();
+    }
+    loadEstoque();
+  } catch (e) { usrErro('Erro de conexão'); }
+  finally { btns.forEach(b => b.disabled = false); }
+}
+
 // Gira o destino da ficha de preparo: cozinha → balcão → nenhuma → cozinha.
 // Três estados num clique só, no lugar de abrir o cadastro pra cada produto.
 const CICLO_DESTINO = { '': 'cozinha', cozinha: 'balcao', balcao: '' };
@@ -4263,7 +4662,11 @@ function usarFotoEditada() {
   fecharEditorFoto();
   cv.toBlob(blob => {
     if (!blob) { showToast('Não consegui preparar a foto'); return; }
-    subirFotoDestaque(new File([blob], 'destaque.jpg', { type: 'image/jpeg' }), id);
+    const arquivo = new File([blob], 'foto.jpg', { type: 'image/jpeg' });
+    // O mesmo editor serve o destaque e o cadastro de produto — muda só quem
+    // recebe o arquivo pronto.
+    if (id === '__produto__') subirFotoProduto(arquivo);
+    else subirFotoDestaque(arquivo, id);
   }, 'image/jpeg', 0.85);
 }
 
