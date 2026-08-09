@@ -804,6 +804,21 @@
   .ft-picker select { flex: 1; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .86rem; }
   .ft-picker input { width: 90px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .86rem; text-align: center; }
 
+  /* Busca de ingrediente (substitui o <select> longo) */
+  .ft-add-box { position: relative; margin-top: 6px; }
+  .ft-add-box > input[type=text] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .86rem; }
+  .ft-busca-resultados { margin-top: 4px; max-height: 220px; overflow-y: auto; border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-surface); }
+  .ft-busca-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; font-size: .84rem; border-bottom: 1px solid var(--c-border); }
+  .ft-busca-item:last-child { border-bottom: none; }
+  .ft-busca-item:hover { background: var(--c-bg); cursor: pointer; }
+  .ft-busca-item .qtd { color: var(--c-muted); font-size: .74rem; }
+  .ft-busca-item.ft-busca-novo { color: var(--gold-dim); font-weight: 700; }
+  .ft-busca-vazio { padding: 9px 12px; font-size: .8rem; color: var(--c-muted); }
+  .ft-ing-selecionado { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; background: rgba(160,109,34,.08); border-radius: 8px; }
+  .ft-ing-selecionado #ft-ing-selecionado-nome { flex: 1; font-size: .85rem; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ft-ing-selecionado input { width: 74px; padding: 7px 8px; border-radius: 6px; border: 1px solid var(--c-border); text-align: center; }
+  .ft-ing-selecionado .un { font-size: .78rem; color: var(--c-muted); }
+
   /* ── Financeiro ───────────────────────────────────── */
   #financeiro-screen { max-width: 1180px; margin: 0 auto; padding: 20px; }
 
@@ -3106,7 +3121,15 @@ function ftAlternarModo(btn) {
     modo === 'unidades' ? 'Rende quantas porções?' : 'Rende quantos gramas/mililitros?';
 }
 
+// Ficha aberta no momento — lida por toda ação do editor (adicionar, remover,
+// criar insumo na hora) em vez de cada botão carregar fichaId/produtoOrigem
+// no próprio onclick. Nome de produto com aspas ou apóstrofo (comum em
+// cardápio) quebrava esse embutimento antes.
+let _ftContextoAtual = null; // { fichaId, produtoOrigem }
+let _ftBuscaResultados = [];
+
 function renderFichaEditor(ficha, produtoOrigem) {
+  _ftContextoAtual = { fichaId: ficha.id, produtoOrigem };
   const preco = produtoOrigem?.price != null ? parseFloat(produtoOrigem.price) : null;
   const margem = preco && preco > 0 ? ((preco - ficha.custo_por_unidade) / preco) * 100 : null;
 
@@ -3116,14 +3139,10 @@ function renderFichaEditor(ficha, produtoOrigem) {
       <span class="nome">${it.nome}</span>
       <span class="qtd">${(+it.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${it.unidade || ''}</span>
       <span class="qtd">${fmt(it.custo)}</span>
-      <button onclick="removerItemFicha('${it.id}','${ficha.id}',${JSON.stringify(produtoOrigem || null).replace(/"/g, '&quot;')})" title="Remover">✕</button>
+      <button onclick="removerItemFicha('${it.id}')" title="Remover">✕</button>
     </div>`).join('') || '<p style="font-size:.8rem;color:var(--c-muted);padding:8px 0">Nenhum ingrediente ainda.</p>';
 
-  const opcoesInsumos = _insumos.length
-    ? _insumos.map(i => `<option value="i:${i.id}">🥕 ${i.nome} (${i.unidade_base})</option>`).join('')
-    : '';
-  const opcoesSub = _ftSubReceitas.filter(s => s.id !== ficha.id)
-    .map(s => `<option value="s:${s.id}">🧪 ${s.nome} (${s.rendimento_unidade})</option>`).join('');
+  const semNada = !_insumos.length && !_ftSubReceitas.filter(s => s.id !== ficha.id).length;
 
   usrModal(ficha.nome, `
     <div class="ft-rend-box">
@@ -3133,7 +3152,7 @@ function renderFichaEditor(ficha, produtoOrigem) {
         <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
           <input type="number" step="0.001" min="0.001" id="ft-edit-rend" value="${ficha.rendimento_qtd}" style="width:90px;padding:6px 8px;border-radius:6px;border:1px solid var(--c-border)">
           <span style="font-size:.84rem">${ficha.rendimento_unidade}</span>
-          <button class="btn btn-secondary" style="padding:5px 10px;font-size:.76rem" onclick="salvarRendimento('${ficha.id}')">Salvar</button>
+          <button class="btn btn-secondary" style="padding:5px 10px;font-size:.76rem" onclick="salvarRendimento()">Salvar</button>
         </div>
       </div>
       ${ficha.incompleta ? '<span style="font-size:.72rem;color:var(--danger)">⚠️ custo incompleto</span>' : ''}
@@ -3141,16 +3160,19 @@ function renderFichaEditor(ficha, produtoOrigem) {
 
     <div id="ft-itens-lista">${linhas}</div>
 
-    <div class="ft-picker">
-      <select id="ft-add-select">
-        <option value="">+ Adicionar ingrediente...</option>
-        ${opcoesInsumos ? `<optgroup label="Insumos">${opcoesInsumos}</optgroup>` : ''}
-        ${opcoesSub ? `<optgroup label="Sub-receitas">${opcoesSub}</optgroup>` : ''}
-      </select>
-      <input type="number" step="0.001" min="0.001" id="ft-add-qtd" placeholder="qtd">
-      <button class="btn btn-secondary" onclick="adicionarItemFicha('${ficha.id}',${JSON.stringify(produtoOrigem || null).replace(/"/g, '&quot;')})">Adicionar</button>
+    <div class="ft-add-box" id="ft-add-box">
+      <label style="font-size:.75rem;font-weight:700;color:var(--c-muted);display:block;margin-bottom:5px">Adicionar ingrediente</label>
+      <input type="text" id="ft-busca-ing" placeholder="🔍 Buscar insumo ou sub-receita..." autocomplete="off" oninput="ftBuscarIngrediente()">
+      <div id="ft-busca-resultados" class="ft-busca-resultados hidden"></div>
+      <div id="ft-ing-selecionado" class="ft-ing-selecionado hidden">
+        <span id="ft-ing-selecionado-nome"></span>
+        <input type="number" step="0.001" min="0.001" id="ft-add-qtd" placeholder="qtd">
+        <span class="un" id="ft-ing-selecionado-un"></span>
+        <button class="btn btn-primary" style="padding:6px 12px;font-size:.78rem" onclick="confirmarAdicionarItemFicha()">Adicionar</button>
+        <button onclick="ftLimparSelecao()" title="Cancelar" style="background:none;border:none;color:var(--danger);font-size:1rem">✕</button>
+      </div>
     </div>
-    ${!opcoesInsumos && !opcoesSub ? '<p style="font-size:.78rem;color:var(--c-muted)">Cadastre insumos na aba Insumos antes de montar a receita.</p>' : ''}
+    ${semNada ? '<p style="font-size:.78rem;color:var(--c-muted);margin-top:8px">Nenhum insumo cadastrado ainda — busque um nome acima pra criar o primeiro.</p>' : ''}
 
     <div class="ft-resumo">
       <div class="linha"><span>Custo total</span><span>${fmt(ficha.custo_total)}</span></div>
@@ -3164,7 +3186,113 @@ function renderFichaEditor(ficha, produtoOrigem) {
     { extra: { rotulo: '🗑 Excluir ficha', fn: () => excluirFicha(ficha.id, ficha.nome) } });
 }
 
-async function salvarRendimento(fichaId) {
+// Busca por nome entre insumos e sub-receitas ao mesmo tempo — não faz
+// sentido a pessoa saber de antemão se "queijo" é insumo cru ou uma sub-receita.
+// Sempre mostra a opção de cadastrar, mesmo com resultado: o nome buscado pode
+// ser parecido mas não ser o insumo certo.
+function ftBuscarIngrediente() {
+  const termo = document.getElementById('ft-busca-ing').value.trim().toLowerCase();
+  const resDiv = document.getElementById('ft-busca-resultados');
+  if (!termo) { resDiv.classList.add('hidden'); resDiv.innerHTML = ''; _ftBuscaResultados = []; return; }
+
+  const insumos = _insumos.filter(i => i.nome.toLowerCase().includes(termo))
+    .map(i => ({ tipo: 'insumo', id: i.id, nome: i.nome, unidade: i.unidade_base, icone: '🥕' }));
+  const subs = _ftSubReceitas.filter(s => s.id !== _ftContextoAtual.fichaId && s.nome.toLowerCase().includes(termo))
+    .map(s => ({ tipo: 'sub_ficha', id: s.id, nome: s.nome, unidade: s.rendimento_unidade, icone: '🧪' }));
+  _ftBuscaResultados = [...insumos, ...subs];
+
+  const linhas = _ftBuscaResultados.length
+    ? _ftBuscaResultados.map((x, i) => `
+      <div class="ft-busca-item" onclick="ftEscolherIngrediente(${i})">
+        <span>${x.icone} ${x.nome}</span><span class="qtd">${x.unidade}</span>
+      </div>`).join('')
+    : `<div class="ft-busca-vazio">Nada com esse nome ainda.</div>`;
+  const criarNovo = `<div class="ft-busca-item ft-busca-novo" onclick="ftCriarInsumoDoBusca()">
+      ➕ Cadastrar insumo "<b>${termo.replace(/</g, '&lt;')}</b>"</div>`;
+
+  resDiv.innerHTML = linhas + criarNovo;
+  resDiv.classList.remove('hidden');
+}
+
+function ftEscolherIngrediente(idx) {
+  const x = _ftBuscaResultados[idx];
+  if (!x) return;
+  document.getElementById('ft-busca-ing').value = '';
+  document.getElementById('ft-busca-resultados').classList.add('hidden');
+  const box = document.getElementById('ft-add-box');
+  box.dataset.tipo = x.tipo;
+  box.dataset.id = x.id;
+  document.getElementById('ft-ing-selecionado-nome').textContent = `${x.icone} ${x.nome}`;
+  document.getElementById('ft-ing-selecionado-un').textContent = x.unidade;
+  document.getElementById('ft-ing-selecionado').classList.remove('hidden');
+  const qtdInput = document.getElementById('ft-add-qtd');
+  qtdInput.value = '';
+  qtdInput.focus();
+}
+
+function ftLimparSelecao() {
+  const box = document.getElementById('ft-add-box');
+  delete box.dataset.tipo; delete box.dataset.id;
+  document.getElementById('ft-ing-selecionado').classList.add('hidden');
+}
+
+// Cadastra o insumo sem sair da ficha: fecha este modal, abre o de cadastro
+// (não dá pra empilhar dois — os dois usam o mesmo id de backdrop), e ao
+// salvar volta pra cá com o insumo novo já selecionado, faltando só a
+// quantidade.
+function ftCriarInsumoDoBusca() {
+  const nomeSugerido = document.getElementById('ft-busca-ing').value.trim();
+  const contexto = _ftContextoAtual;
+  document.getElementById('usr-modal-backdrop')?.remove();
+  usrModal('Novo insumo', `
+    <div class="field-group">
+      <label>Nome — como você chama na cozinha</label>
+      <input type="text" id="ins-nome" autocomplete="off" value="${nomeSugerido.replace(/"/g, '&quot;')}">
+    </div>
+    <div class="field-group">
+      <label>Unidade base</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">
+        ${Object.entries(INS_UNIDADES).map(([k, v], i) => `
+          <button type="button" class="ins-un ${i === 0 ? 'on' : ''}" data-un="${k}"
+            onclick="document.querySelectorAll('.ins-un').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+            <b>${k}</b><span>${v}</span></button>`).join('')}
+      </div>
+    </div>
+    <div class="field-group">
+      <label>Categoria (opcional)</label>
+      <input type="text" id="ins-cat" autocomplete="off">
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      Volta pra ficha assim que salvar, já com este insumo escolhido — só falta a quantidade.
+    </div>`, 'Cadastrar e voltar', async () => {
+    const nome = document.getElementById('ins-nome').value.trim();
+    const unidade = document.querySelector('.ins-un.on')?.dataset.un;
+    if (!nome) return usrErro('Informe o nome');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/insumos`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ nome, unidade_base: unidade, categoria: document.getElementById('ins-cat').value.trim() || null }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao cadastrar'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      const ri = await fetch(`${API}/api/insumos`, { headers: authHeaders() });
+      if (ri.ok) _insumos = await ri.json();
+      const res2 = await fetch(`${API}/api/fichas-tecnicas/${contexto.fichaId}`, { headers: authHeaders() });
+      if (res2.ok) {
+        renderFichaEditor(await res2.json(), contexto.produtoOrigem);
+        _ftBuscaResultados = [{ tipo: 'insumo', id: d.id, nome: d.nome, unidade: d.unidade_base, icone: '🥕' }];
+        ftEscolherIngrediente(0);
+      }
+      showToast(`Insumo "${nome}" cadastrado`);
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+}
+
+async function salvarRendimento() {
+  const fichaId = _ftContextoAtual.fichaId;
   const qtd = parseFloat(document.getElementById('ft-edit-rend').value);
   if (!(qtd > 0)) return showToast('Rendimento inválido');
   try {
@@ -3179,13 +3307,14 @@ async function salvarRendimento(fichaId) {
   } catch (e) { showToast('Erro de conexão'); }
 }
 
-async function adicionarItemFicha(fichaId, produtoOrigem) {
-  const valor = document.getElementById('ft-add-select').value;
+async function confirmarAdicionarItemFicha() {
+  const { fichaId, produtoOrigem } = _ftContextoAtual;
+  const box = document.getElementById('ft-add-box');
+  const tipo = box.dataset.tipo, id = box.dataset.id;
   const qtd = parseFloat(document.getElementById('ft-add-qtd').value);
-  if (!valor) return showToast('Escolha um ingrediente');
+  if (!tipo || !id) return showToast('Busque e escolha um ingrediente');
   if (!(qtd > 0)) return showToast('Informe a quantidade');
-  const [tipo, id] = valor.split(':');
-  const corpo = tipo === 's' ? { sub_ficha_id: id, quantidade: qtd } : { insumo_id: id, quantidade: qtd };
+  const corpo = tipo === 'sub_ficha' ? { sub_ficha_id: id, quantidade: qtd } : { insumo_id: id, quantidade: qtd };
   try {
     const res = await fetch(`${API}/api/fichas-tecnicas/${fichaId}/itens`, {
       method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -3200,7 +3329,8 @@ async function adicionarItemFicha(fichaId, produtoOrigem) {
   } catch (e) { showToast('Erro de conexão'); }
 }
 
-async function removerItemFicha(itemId, fichaId, produtoOrigem) {
+async function removerItemFicha(itemId) {
+  const { fichaId, produtoOrigem } = _ftContextoAtual;
   try {
     const res = await fetch(`${API}/api/fichas-tecnicas/itens/${itemId}`, { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) return showToast('Erro ao remover');
