@@ -1544,6 +1544,19 @@ function authHeaders(extra) {
   return Object.assign({ Authorization: 'Bearer ' + TOKEN }, extra || {});
 }
 
+// fetch com prazo. Sem isto, uma pilha de rede degradada (aba que voltou de
+// um estado suspenso, WebSocket morto, o que for) podia deixar um fetch()
+// PENDENTE PRA SEMPRE — a Promise nunca resolve nem rejeita, o try/catch
+// nunca dispara, o botão fica desabilitado com "Salvando..." pro resto da
+// vida da aba, sem erro nenhum na tela nem no console. 15s é folgado o
+// bastante pra uma chamada normal contra o Supabase RPC nunca ser afetado.
+const FETCH_PRAZO_MS = 15000;
+function fetchComPrazo(url, opcoes = {}, prazoMs = FETCH_PRAZO_MS) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), prazoMs);
+  return fetch(url, { ...opcoes, signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
 function fmt(v) { return 'R$ ' + parseFloat(v || 0).toFixed(2).replace('.', ','); }
 
 // ── Aviso em tempo real de pedidos feitos pelo tablet (kiosk.html) ──
@@ -3074,7 +3087,7 @@ async function loadFichasTecnicas() {
   const el = document.getElementById('ft-lista');
   el.innerHTML = '<div class="cart-empty">Carregando...</div>';
   try {
-    const res = await fetch(`${API}/api/fichas-tecnicas/produtos`, { headers: authHeaders() });
+    const res = await fetchComPrazo(`${API}/api/fichas-tecnicas/produtos`, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     if (res.status === 403) { el.innerHTML = '<div class="cart-empty">Só administrador gerencia fichas técnicas</div>'; return; }
     _ftProdutos = res.ok ? await res.json() : [];
@@ -3147,7 +3160,7 @@ function renderFichasLista() {
 
 async function carregarSubReceitas() {
   try {
-    const res = await fetch(`${API}/api/fichas-tecnicas/sub-receitas`, { headers: authHeaders() });
+    const res = await fetchComPrazo(`${API}/api/fichas-tecnicas/sub-receitas`, { headers: authHeaders() });
     _ftSubReceitas = res.ok ? await res.json() : [];
   } catch (e) { _ftSubReceitas = []; }
 }
@@ -3160,17 +3173,17 @@ async function abrirFichaEditor(produto) {
   // técnicas sem antes passar por Insumos ainda não tem essa lista em memória.
   if (!_insumos.length) {
     try {
-      const ri = await fetch(`${API}/api/insumos`, { headers: authHeaders() });
+      const ri = await fetchComPrazo(`${API}/api/insumos`, { headers: authHeaders() });
       if (ri.ok) _insumos = await ri.json();
     } catch (e) { /* segue sem — o aviso "cadastre insumos" cobre esse caso */ }
   }
   await carregarSubReceitas();
   if (!produto.tem_ficha) return criarFichaPara(produto);
   try {
-    const res = await fetch(`${API}/api/fichas-tecnicas/${produto.ficha_id}`, { headers: authHeaders() });
+    const res = await fetchComPrazo(`${API}/api/fichas-tecnicas/${produto.ficha_id}`, { headers: authHeaders() });
     if (!res.ok) return showToast('Erro ao abrir a ficha');
     renderFichaEditor(await res.json(), produto);
-  } catch (e) { showToast('Erro de conexão'); }
+  } catch (e) { showToast('Erro de conexão — verifique sua internet e tente de novo.'); }
 }
 
 function criarFichaPara(produto) {
@@ -3286,7 +3299,7 @@ function renderFichaEditor(ficha, produtoOrigem) {
         <span id="ft-ing-selecionado-nome"></span>
         <input type="number" step="0.001" min="0.001" id="ft-add-qtd" placeholder="qtd">
         <span class="un" id="ft-ing-selecionado-un"></span>
-        <button class="btn btn-primary" style="padding:6px 12px;font-size:.78rem" onclick="confirmarAdicionarItemFicha()">Adicionar</button>
+        <button class="btn btn-primary" id="ft-add-confirmar" style="padding:6px 12px;font-size:.78rem" onclick="confirmarAdicionarItemFicha()">Adicionar</button>
         <button onclick="ftLimparSelecao()" title="Cancelar" style="background:none;border:none;color:var(--danger);font-size:1rem">✕</button>
       </div>
     </div>
@@ -3401,6 +3414,14 @@ function ftCriarInsumoDoBusca() {
     const nome = document.getElementById('ins-nome').value.trim();
     const unidade = document.querySelector('.ins-un.on')?.dataset.un;
     if (!nome) return usrErro('Informe o nome');
+    if (!contexto?.fichaId) {
+      // Nunca deveria acontecer (o contexto é fixado assim que a ficha abre),
+      // mas SE acontecesse antes desta guarda, a URL da próxima chamada virava
+      // ".../undefined" — servidor recusa, cai no catch, e sem esta mensagem
+      // específica não haveria pista nenhuma do que causou o erro.
+      usrErro('A tela perdeu a referência da ficha. Feche e abra de novo.');
+      return;
+    }
     const btn = document.getElementById('usr-modal-ok');
     // Sem isto o botão ficava do mesmo jeito por até 3 chamadas de rede em
     // sequência — numa conexão mais lenta parece travado, e a pessoa clica de
@@ -3409,7 +3430,7 @@ function ftCriarInsumoDoBusca() {
     btn.disabled = true;
     btn.textContent = 'Cadastrando...';
     try {
-      const res = await fetch(`${API}/api/insumos`, {
+      const res = await fetchComPrazo(`${API}/api/insumos`, {
         method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ nome, unidade_base: unidade, categoria: document.getElementById('ins-cat').value.trim() || null }),
       });
@@ -3421,7 +3442,7 @@ function ftCriarInsumoDoBusca() {
       _insumos.push(d);
       let ficha = null;
       try {
-        const res2 = await fetch(`${API}/api/fichas-tecnicas/${contexto.fichaId}`, { headers: authHeaders() });
+        const res2 = await fetchComPrazo(`${API}/api/fichas-tecnicas/${contexto.fichaId}`, { headers: authHeaders() });
         if (res2.ok) ficha = await res2.json();
       } catch (e) { /* a ficha recarrega quando a pessoa abrir de novo; o insumo já está criado */ }
       document.getElementById('usr-modal-backdrop').remove();
@@ -3432,7 +3453,9 @@ function ftCriarInsumoDoBusca() {
       }
       showToast(`Insumo "${nome}" cadastrado`);
     } catch (e) {
-      usrErro('Erro de conexão — o insumo pode não ter sido criado. Tente de novo.');
+      usrErro(e.name === 'AbortError'
+        ? 'O servidor demorou demais pra responder. Confira sua internet e tente de novo.'
+        : 'Erro de conexão — o insumo pode não ter sido criado. Tente de novo.');
     } finally {
       // btn pode já não estar na tela (modal fechado no caminho de sucesso) —
       // mexer num nó removido não quebra nada em JS, só não faz efeito visual.
@@ -3443,11 +3466,12 @@ function ftCriarInsumoDoBusca() {
 }
 
 async function salvarRendimento() {
+  if (!_ftContextoAtual?.fichaId) return showToast('A tela perdeu a referência da ficha. Feche e abra de novo.');
   const fichaId = _ftContextoAtual.fichaId;
   const qtd = parseFloat(document.getElementById('ft-edit-rend').value);
   if (!(qtd > 0)) return showToast('Rendimento inválido');
   try {
-    const res = await fetch(`${API}/api/fichas-tecnicas/${fichaId}`, {
+    const res = await fetchComPrazo(`${API}/api/fichas-tecnicas/${fichaId}`, {
       method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ rendimento_qtd: qtd }),
     });
@@ -3455,10 +3479,13 @@ async function salvarRendimento() {
     showToast('Rendimento atualizado');
     document.getElementById('usr-modal-backdrop')?.remove();
     loadFichasTecnicas();
-  } catch (e) { showToast('Erro de conexão'); }
+  } catch (e) {
+    showToast(e.name === 'AbortError' ? 'O servidor demorou demais. Tente de novo.' : 'Erro de conexão');
+  }
 }
 
 async function confirmarAdicionarItemFicha() {
+  if (!_ftContextoAtual?.fichaId) return showToast('A tela perdeu a referência da ficha. Feche e abra de novo.');
   const { fichaId, produtoOrigem } = _ftContextoAtual;
   const box = document.getElementById('ft-add-box');
   const tipo = box.dataset.tipo, id = box.dataset.id;
@@ -3466,30 +3493,64 @@ async function confirmarAdicionarItemFicha() {
   if (!tipo || !id) return showToast('Busque e escolha um ingrediente');
   if (!(qtd > 0)) return showToast('Informe a quantidade');
   const corpo = tipo === 'sub_ficha' ? { sub_ficha_id: id, quantidade: qtd } : { insumo_id: id, quantidade: qtd };
+  const btn = document.getElementById('ft-add-confirmar');
+  const rotuloOriginal = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Adicionando...'; }
   try {
-    const res = await fetch(`${API}/api/fichas-tecnicas/${fichaId}/itens`, {
+    const res = await fetchComPrazo(`${API}/api/fichas-tecnicas/${fichaId}/itens`, {
       method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(corpo),
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) return showToast(d.error || 'Erro ao adicionar');
-    document.getElementById('usr-modal-backdrop')?.remove();
-    const res2 = await fetch(`${API}/api/fichas-tecnicas/${fichaId}`, { headers: authHeaders() });
-    if (res2.ok) renderFichaEditor(await res2.json(), produtoOrigem);
+    // Busca a ficha atualizada ANTES de fechar o modal — se essa busca falhar,
+    // o modal antigo (ainda mostrando o item recém-adicionado como pendente de
+    // recalcular) continua na tela em vez de desaparecer sem voltar. O item já
+    // foi salvo no servidor de qualquer forma; só a exibição do custo ficaria
+    // desatualizada até a pessoa reabrir.
+    let ficha = null;
+    try {
+      const res2 = await fetchComPrazo(`${API}/api/fichas-tecnicas/${fichaId}`, { headers: authHeaders() });
+      if (res2.ok) ficha = await res2.json();
+    } catch (e) { /* item já foi adicionado; só o recálculo de custo na tela que vai esperar a próxima abertura */ }
+    if (ficha) {
+      document.getElementById('usr-modal-backdrop')?.remove();
+      renderFichaEditor(ficha, produtoOrigem);
+    } else {
+      showToast('Ingrediente adicionado — reabra a ficha pra ver o custo atualizado');
+    }
     loadFichasTecnicas();
-  } catch (e) { showToast('Erro de conexão'); }
+  } catch (e) {
+    showToast(e.name === 'AbortError' ? 'O servidor demorou demais. Tente de novo.' : 'Erro de conexão');
+  } finally {
+    // Se a ficha recarregou, este btn é do modal antigo (já fora da tela) —
+    // mexer nele não quebra nada, só não tem efeito visual, o que é o
+    // esperado nesse caso.
+    if (btn) { btn.disabled = false; btn.textContent = rotuloOriginal; }
+  }
 }
 
 async function removerItemFicha(itemId) {
+  if (!_ftContextoAtual?.fichaId) return showToast('A tela perdeu a referência da ficha. Feche e abra de novo.');
   const { fichaId, produtoOrigem } = _ftContextoAtual;
   try {
-    const res = await fetch(`${API}/api/fichas-tecnicas/itens/${itemId}`, { method: 'DELETE', headers: authHeaders() });
+    const res = await fetchComPrazo(`${API}/api/fichas-tecnicas/itens/${itemId}`, { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) return showToast('Erro ao remover');
-    document.getElementById('usr-modal-backdrop')?.remove();
-    const res2 = await fetch(`${API}/api/fichas-tecnicas/${fichaId}`, { headers: authHeaders() });
-    if (res2.ok) renderFichaEditor(await res2.json(), produtoOrigem);
+    let ficha = null;
+    try {
+      const res2 = await fetchComPrazo(`${API}/api/fichas-tecnicas/${fichaId}`, { headers: authHeaders() });
+      if (res2.ok) ficha = await res2.json();
+    } catch (e) { /* item já foi removido no servidor; só a tela que vai esperar a próxima abertura */ }
+    if (ficha) {
+      document.getElementById('usr-modal-backdrop')?.remove();
+      renderFichaEditor(ficha, produtoOrigem);
+    } else {
+      showToast('Ingrediente removido — reabra a ficha pra ver o custo atualizado');
+    }
     loadFichasTecnicas();
-  } catch (e) { showToast('Erro de conexão'); }
+  } catch (e) {
+    showToast(e.name === 'AbortError' ? 'O servidor demorou demais. Tente de novo.' : 'Erro de conexão');
+  }
 }
 
 async function excluirFicha(fichaId, nome) {
@@ -3689,6 +3750,16 @@ function usrCargoSeletor(atual) {
 }
 
 function usrModal(titulo, corpo, acaoRotulo, acaoFn, opcoes = {}) {
+  // Defesa incondicional, não depende de cada um dos 20+ lugares que chamam
+  // usrModal lembrar de limpar o anterior. Sem isto, um backdrop antigo que
+  // ficasse na tela (por qualquer motivo) faria dois elementos existirem com
+  // o MESMO id "usr-modal-ok" — e document.getElementById sempre resolve pro
+  // primeiro do documento, que seria o antigo, escondido embaixo do novo.
+  // O clique do usuário ia no botão visível (o novo), mas o addEventListener
+  // tinha sido ligado no botão errado (o velho) — clicar não fazia nada,
+  // sem erro nenhum, porque tecnicamente nenhum ouvinte estava sendo
+  // acionado. Impossível de ver sem inspecionar o DOM.
+  document.getElementById('usr-modal-backdrop')?.remove();
   const bd = document.createElement('div');
   bd.className = 'modal-backdrop';
   bd.id = 'usr-modal-backdrop';
