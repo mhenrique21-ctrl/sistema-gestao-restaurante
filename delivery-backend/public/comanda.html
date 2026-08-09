@@ -556,6 +556,30 @@
   .cat-acao-txt { flex: 1; min-width: 200px; color: var(--c-muted); }
   .cat-acao-btns { display: flex; gap: 6px; flex-wrap: wrap; }
   .cat-acao-btns .btn { font-size: .78rem; padding: 6px 10px; }
+
+  /* ── Histórico de fechamentos ─────────────────────── */
+  .hist-resumo { font-size: .85rem; color: var(--c-muted); margin-bottom: 12px; }
+  .hist-cols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 820px) { .hist-cols { grid-template-columns: 1fr; } }
+  .hist-item { background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid var(--c-border);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 7px; cursor: pointer; }
+  .hist-item:active { background: var(--c-bg); }
+  .hist-topo { display: flex; align-items: baseline; gap: 8px; }
+  .hist-data { font-size: .92rem; font-weight: 700; flex: 1; }
+  .hist-data small { font-weight: 400; color: var(--c-muted); font-size: .74rem; margin-left: 4px; }
+  .hist-dif { font-size: .92rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .hist-sub { font-size: .74rem; color: var(--c-muted); margin-top: 3px; }
+  .hist-det-head { border-bottom: 1px solid var(--c-border); padding-bottom: 10px; margin-bottom: 10px; }
+  .hist-det-head b { font-size: .95rem; display: block; }
+  .hist-det-head small { font-size: .76rem; color: var(--c-muted); }
+  #hist-detalhe { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 12px; padding: 14px 16px; }
+  .hist-linha { display: flex; justify-content: space-between; gap: 12px; font-size: .85rem; padding: 5px 0;
+    font-variant-numeric: tabular-nums; }
+  .hist-linha.topo { border-top: 1px solid var(--c-border); margin-top: 3px; padding-top: 8px; }
+  .hist-bloco { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--c-border); }
+  .hist-bloco p { font-size: .74rem; color: var(--c-muted); margin: 0 0 6px; }
+  .hist-aviso { background: #FDF7EC; border: 1px solid #E8D3A8; color: #8A6412; border-radius: 8px;
+    padding: 9px 11px; font-size: .78rem; line-height: 1.5; margin-top: 8px; }
   .prod-preco { border: 1px solid transparent; background: none; color: var(--gold-dim); font-weight: 800; font-size: .88rem;
     width: 78px; text-align: right; padding: 5px 6px; border-radius: 7px; font-family: inherit; }
   .prod-preco:hover { border-color: var(--c-border); }
@@ -1002,6 +1026,15 @@
 <div id="financeiro-screen" class="hidden">
   <div id="fin-subtab-bar" class="fin-subtab-bar">
     <button class="fin-subtab active" data-subtab="caixa" onclick="showFinSubtab('caixa')">💵 Caixa</button>
+    <button class="fin-subtab" data-subtab="historico" onclick="showFinSubtab('historico')">📋 Fechamentos</button>
+  </div>
+
+  <div id="fin-subtab-historico" class="hidden">
+    <div id="hist-resumo" class="hist-resumo"></div>
+    <div class="hist-cols">
+      <div id="hist-lista"><div class="cart-empty">Carregando...</div></div>
+      <div id="hist-detalhe"><div class="cart-empty">Escolha um turno ao lado</div></div>
+    </div>
   </div>
 
   <div id="fin-subtab-caixa">
@@ -4905,6 +4938,137 @@ async function confirmCloseRegisterPrint() {
 function showFinSubtab(subtab) {
   document.querySelectorAll('.fin-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === subtab));
   document.getElementById('fin-subtab-caixa').classList.toggle('hidden', subtab !== 'caixa');
+  document.getElementById('fin-subtab-historico').classList.toggle('hidden', subtab !== 'historico');
+  if (subtab === 'historico') loadHistoricoTurnos();
+}
+
+// ── Histórico de fechamentos ─────────────────────────
+// As rotas GET /api/cash-sessions e /:id existiam desde sempre e nunca foram
+// chamadas: fechava o caixa e o turno sumia da tela. O dado estava guardado,
+// só não havia como olhar.
+let _turnos = [];
+
+// "R$ -4,80" com o sinal grudado no cifrão se lê mal numa tela de conferência.
+// Sinal na frente, valor sempre positivo.
+function fmtDif(v) {
+  const n = parseFloat(v || 0);
+  if (Math.abs(n) < 0.005) return 'exato';
+  return (n < 0 ? '−' : '+') + fmt(Math.abs(n));
+}
+function corDif(v) {
+  const n = parseFloat(v || 0);
+  if (Math.abs(n) < 0.005) return 'var(--green)';
+  return n < 0 ? 'var(--danger)' : '#B4801A';
+}
+
+async function loadHistoricoTurnos() {
+  const el = document.getElementById('hist-lista');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/cash-sessions`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>'; return; }
+    _turnos = await res.json();
+    renderHistoricoTurnos();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
+}
+
+function renderHistoricoTurnos() {
+  const el = document.getElementById('hist-lista');
+  const fechados = _turnos.filter(t => t.status !== 'aberto');
+  if (!fechados.length) {
+    el.innerHTML = '<div class="cart-empty">Nenhum turno fechado ainda</div>';
+    document.getElementById('hist-resumo').textContent = '';
+    return;
+  }
+
+  // A diferença acumulada é o número que interessa no topo. Faturamento já
+  // aparece em toda parte; sobra e falta some assim que a tela fecha.
+  const soma = fechados.reduce((s, t) => s + parseFloat(t.difference || 0), 0);
+  document.getElementById('hist-resumo').innerHTML =
+    `${fechados.length} turno(s) fechado(s) · diferença acumulada ` +
+    `<b style="color:${corDif(soma)}">${Math.abs(soma) < 0.005 ? 'zero' : fmtDif(soma)}</b>`;
+
+  el.innerHTML = fechados.map(t => {
+    const cor = corDif(t.difference);
+    const ini = new Date(t.opened_at), fim = t.closed_at ? new Date(t.closed_at) : null;
+    const hora = d => d ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+    return `
+    <div class="hist-item" style="border-left-color:${cor}" onclick="abrirTurno('${t.id}')">
+      <div class="hist-topo">
+        <span class="hist-data">${ini.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+          <small>${ini.toLocaleDateString('pt-BR', { weekday: 'short' })}</small></span>
+        <span class="hist-dif" style="color:${cor}">${fmtDif(t.difference)}</span>
+      </div>
+      <div class="hist-sub">
+        ${t.opened_by_name || '—'} · ${hora(ini)} às ${hora(fim)} ·
+        esperado ${fmt(t.expected_amount)} · contado ${fmt(t.counted_amount)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function abrirTurno(id) {
+  const el = document.getElementById('hist-detalhe');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/cash-sessions/${id}`, { headers: authHeaders() });
+    if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar o turno</div>'; return; }
+    const d = await res.json();
+    const s = d.session, t = d.totals, v = d.sales;
+    const cor = corDif(s.difference);
+    const ini = new Date(s.opened_at), fim = s.closed_at ? new Date(s.closed_at) : null;
+    const hora = x => x ? x.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+    const linha = (rot, val, extra = '') =>
+      `<div class="hist-linha ${extra}"><span>${rot}</span><span>${val}</span></div>`;
+
+    el.innerHTML = `
+      <div class="hist-det-head">
+        <div>
+          <b>Turno de ${ini.toLocaleDateString('pt-BR')}</b>
+          <small>${s.opened_by_name || '—'} ${hora(ini)} · fechado ${hora(fim)}${s.closed_by_name && s.closed_by_name !== s.opened_by_name ? ' por ' + s.closed_by_name : ''}</small>
+        </div>
+      </div>
+      ${linha('Fundo de abertura', fmt(t.abertura))}
+      ${linha('Dinheiro de vendas', fmt(t.dinheiroNaGaveta))}
+      ${linha('Suprimentos', fmt(t.suprimentos))}
+      ${linha('Sangrias', '−' + fmt(t.sangrias))}
+      ${linha('<b>Esperado na gaveta</b>', '<b>' + fmt(s.expected_amount) + '</b>', 'topo')}
+      ${(() => {
+        // As quatro linhas acima são recalculadas agora; o "esperado" é o que
+        // foi gravado na hora do fechamento. Divergir significa que algo mudou
+        // depois — venda cancelada, sangria excluída. É informação, não erro,
+        // mas precisa aparecer em vez de ficar como número que não fecha.
+        const recalc = parseFloat(t.abertura) + parseFloat(t.dinheiroNaGaveta)
+                     + parseFloat(t.suprimentos) - parseFloat(t.sangrias);
+        const grav = parseFloat(s.expected_amount || 0);
+        if (Math.abs(recalc - grav) < 0.005) return '';
+        return `<div class="hist-aviso">⚠️ Refazendo a conta hoje dá <b>${fmt(recalc)}</b>, e no fechamento foi gravado
+          <b>${fmt(grav)}</b>. Algum lançamento deste turno mudou depois — venda cancelada ou movimentação excluída.
+          A conferência da época usou o valor gravado.</div>`;
+      })()}
+      ${linha('Contado', fmt(s.counted_amount))}
+      ${linha(`<b style="color:${cor}">Diferença</b>`, `<b style="color:${cor}">${fmtDif(s.difference)}</b>`, 'topo')}
+
+      <div class="hist-bloco">
+        <p>Não entra na gaveta — conferir com a maquininha</p>
+        ${linha('Débito', fmt(v.byMethod.cartao_debito))}
+        ${linha('Crédito', fmt(v.byMethod.cartao_credito))}
+        ${linha('PIX', fmt(v.byMethod.pix))}
+        ${linha('<b>Total vendido no turno</b>', '<b>' + fmt(v.totalGeral) + '</b>', 'topo')}
+      </div>
+
+      ${s.notes ? `<div class="hist-bloco"><p>Observação do fechamento</p><div style="font-size:.84rem">${s.notes}</div></div>` : ''}
+
+      ${d.movements?.length ? `<div class="hist-bloco"><p>Sangrias e suprimentos</p>${d.movements.map(m =>
+        linha(`${FIN_TYPE_LABELS[m.type] || m.type}${m.reason ? ' — ' + m.reason : ''}`,
+              (m.type === 'sangria' ? '−' : '+') + fmt(m.amount))).join('')}</div>` : ''}
+    `;
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
 }
 
 // ── Abertura de caixa (obrigatória ao logar, uma vez por dia) ──
