@@ -580,6 +580,53 @@
   .hist-bloco p { font-size: .74rem; color: var(--c-muted); margin: 0 0 6px; }
   .hist-aviso { background: #FDF7EC; border: 1px solid #E8D3A8; color: #8A6412; border-radius: 8px;
     padding: 9px 11px; font-size: .78rem; line-height: 1.5; margin-top: 8px; }
+
+  /* ── Insumos ──────────────────────────────────────── */
+  #insumos-screen { max-width: 1400px; margin: 0 auto; padding: 16px 20px 40px; }
+  .ins-cols { display: grid; grid-template-columns: 1fr 1.15fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .ins-cols { grid-template-columns: 1fr; } }
+  .ins-titulo { font-size: .78rem; font-weight: 800; color: var(--c-muted); text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: 8px; }
+  .ins-resumo { font-size: .8rem; color: var(--c-muted); margin-bottom: 8px; }
+  .ins-vazio { font-size: .82rem; color: var(--c-muted); line-height: 1.6; padding: 20px 14px;
+    background: var(--c-surface); border: 1px dashed var(--c-border); border-radius: 10px; }
+  .ins-card { background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid var(--gold);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; }
+  .ins-card:active { background: var(--c-bg); }
+  .ins-card-topo { display: flex; align-items: baseline; gap: 10px; }
+  .ins-nome { font-weight: 700; font-size: .9rem; flex: 1; }
+  .ins-saldo { font-weight: 800; font-size: .9rem; font-variant-numeric: tabular-nums; }
+  .ins-card-sub { font-size: .73rem; color: var(--c-muted); margin-top: 3px; }
+
+  /* A fila de conciliação em âmbar: é trabalho pendente, não um estado normal. */
+  .ins-pend { background: #FDF7EC; border: 1px solid #E8D3A8; border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; }
+  .ins-pend-nome { font-size: .84rem; font-weight: 700; color: #6E4E0E; word-break: break-word; }
+  .ins-pend-sub { font-size: .72rem; color: #8A6412; margin: 2px 0 8px; }
+  .ins-pend-form { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ins-pend-form select { flex: 1; min-width: 150px; height: 34px; border-radius: 8px;
+    border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .8rem; }
+  .ins-pend-form span { font-size: .78rem; color: #8A6412; }
+  .ins-pend-form input { width: 74px; height: 34px; border-radius: 8px; border: 1px solid var(--c-border);
+    background: var(--c-surface); color: var(--c-text); font-size: .84rem; text-align: center; }
+  .ins-pend-form .btn { font-size: .78rem; padding: 7px 12px; }
+
+  .ins-un { border: 2px solid var(--c-border); background: var(--c-bg); border-radius: 10px; padding: 9px 4px; text-align: center; }
+  .ins-un.on { border-color: var(--gold); background: rgba(160,109,34,.08); }
+  .ins-un b { display: block; font-size: .95rem; color: var(--c-text); }
+  .ins-un span { display: block; font-size: .68rem; color: var(--c-muted); margin-top: 1px; }
+
+  .ins-det-topo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+  .ins-det-topo > div { background: var(--c-bg); border-radius: 8px; padding: 9px 10px; }
+  .ins-det-topo span { display: block; font-size: .68rem; color: var(--c-muted); }
+  .ins-det-topo b { font-size: .92rem; font-variant-numeric: tabular-nums; }
+  .ins-bloco { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--c-border); }
+  .ins-bloco p { font-size: .72rem; color: var(--c-muted); margin: 0 0 7px; }
+  .ins-emb { display: flex; align-items: center; gap: 8px; background: var(--c-bg); border-radius: 8px;
+    padding: 7px 10px; margin-bottom: 5px; font-size: .76rem; }
+  .ins-emb code { flex: 1; word-break: break-all; font-size: .74rem; }
+  .ins-emb button { border: none; background: none; color: var(--danger); font-size: .85rem; font-weight: 700; }
+  .ins-mov { display: flex; justify-content: space-between; gap: 10px; font-size: .76rem; padding: 4px 0;
+    color: var(--c-muted); font-variant-numeric: tabular-nums; }
   .prod-preco { border: 1px solid transparent; background: none; color: var(--gold-dim); font-weight: 800; font-size: .88rem;
     width: 78px; text-align: right; padding: 5px 6px; border-radius: 7px; font-family: inherit; }
   .prod-preco:hover { border-color: var(--c-border); }
@@ -812,6 +859,7 @@
   <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4 8 4 8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg></span>Produtos<span class="nav-badge nav-badge-alerta hidden" id="estoque-badge"></span></button>
 
   <button class="tab-tile" data-tab="entradas" onclick="showTab('entradas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg></span>Entradas</button>
+  <button class="tab-tile" data-tab="insumos" onclick="showTab('insumos')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 8V5.5A2.5 2.5 0 0 1 11.5 3h1A2.5 2.5 0 0 1 15 5.5V8"/></svg></span>Insumos<span class="nav-badge nav-badge-alerta hidden" id="insumos-badge"></span></button>
   <button class="tab-tile" data-tab="margem" onclick="showTab('margem')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg></span>Margem<span class="nav-badge nav-badge-alerta hidden" id="margem-badge"></span></button>
   <button class="tab-tile" data-tab="compras" onclick="showTab('compras')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span>Compras<span class="nav-badge nav-badge-alerta hidden" id="compras-badge"></span></button>
 
@@ -1115,6 +1163,26 @@
   <div class="side-title" style="margin-top:18px">🌤 Área externa</div>
   <div id="mesas-externa-list"><div class="cart-empty">Carregando...</div></div>
 </div>
+<!-- ── Aba: Insumos ── -->
+<div id="insumos-screen" class="hidden">
+  <div class="estoque-toolbar">
+    <span style="font-size:.85rem;color:var(--c-muted);flex:1">
+      Matéria-prima como você usa na cozinha. Cada insumo junta as várias embalagens que aparecem nas notas.
+    </span>
+    <button class="btn btn-primary" onclick="novoInsumo()" style="white-space:nowrap">+ Novo insumo</button>
+  </div>
+  <div class="ins-cols">
+    <div>
+      <div class="ins-titulo">Insumos cadastrados</div>
+      <div id="ins-lista"><div class="cart-empty">Carregando...</div></div>
+    </div>
+    <div>
+      <div class="ins-titulo">Aguardando conciliação <span id="ins-pend-n"></span></div>
+      <div id="ins-pendentes"><div class="cart-empty">Carregando...</div></div>
+    </div>
+  </div>
+</div>
+
 <div id="configuracoes-screen" class="hidden">
   <div id="cfg-section-tabs" class="fin-subtab-bar">
     <button class="fin-subtab active" data-cfgtab="comandas" onclick="showCfgSubtab('comandas')">📇 Cadastro de comandas</button>
@@ -1749,6 +1817,7 @@ const TAB_SCREENS = {
   entradas: 'entradas-screen',
   margem: 'margem-screen',
   destaques: 'destaques-screen',
+  insumos: 'insumos-screen',
 };
 
 // Abas que hoje ficam nos botões grandes do topo (Fazer Pedido/Delivery/Comandas/Caixa)
@@ -1769,6 +1838,7 @@ function showTab(tab) {
   if (tab === 'estoque') loadEstoque();
   if (tab === 'compras') loadCompras();
   if (tab === 'destaques') loadDestaques();
+  if (tab === 'insumos') loadInsumos();
   if (tab === 'entradas') loadEntradas();
   if (tab === 'margem') loadMargens();
   if (tab === 'financeiro') loadFinanceiro();
@@ -2330,6 +2400,208 @@ async function desbloquearFiado(id) {
     });
     showToast(res.ok ? 'Desbloqueado' : 'Erro ao desbloquear');
     if (res.ok) loadFiado();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+// ── Aba Insumos ──────────────────────────────────────
+// O insumo é a matéria-prima como a cozinha usa; as embalagens são como ela
+// chega na nota. "Coca-Cola lata" é um insumo, e `REFRIG PACK COCA COLA
+// 6X350ML` e `REFRI LT 350ML COCA COLA` são duas embalagens dele — uma vale 6
+// unidades, a outra vale 1. Sem esse fator, somar as quantidades da nota dá um
+// número que não significa nada.
+let _insumos = [], _pendentes = [];
+
+const INS_UNIDADES = { g: 'gramas', ml: 'mililitros', un: 'unidades' };
+
+async function loadInsumos() {
+  const el = document.getElementById('ins-lista');
+  const pe = document.getElementById('ins-pendentes');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(`${API}/api/insumos`, { headers: authHeaders() }),
+      fetch(`${API}/api/insumos/pendentes`, { headers: authHeaders() }),
+    ]);
+    if (r1.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (r1.status === 403) { el.innerHTML = '<div class="cart-empty">Só administrador gerencia insumos</div>'; pe.innerHTML = ''; return; }
+    _insumos = r1.ok ? await r1.json() : [];
+    _pendentes = r2.ok ? await r2.json() : [];
+    renderInsumos();
+    renderPendentes();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>';
+  }
+}
+
+function renderInsumos() {
+  const el = document.getElementById('ins-lista');
+  if (!_insumos.length) {
+    el.innerHTML = `<div class="ins-vazio">Nenhum insumo cadastrado ainda.<br><br>
+      Comece pelos que você mais usa — depois de ligar as embalagens uma vez,
+      toda nota futura daquele fornecedor entra sozinha.</div>`;
+    return;
+  }
+  const total = _insumos.reduce((s, i) => s + parseFloat(i.valor_estoque || 0), 0);
+  el.innerHTML = `<div class="ins-resumo">${_insumos.length} insumo(s) · estoque avaliado em <b>${fmt(total)}</b></div>` +
+    _insumos.map(i => `
+    <div class="ins-card" onclick="abrirInsumo('${i.id}')">
+      <div class="ins-card-topo">
+        <span class="ins-nome">${i.nome}</span>
+        <span class="ins-saldo">${(+i.saldo).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${i.unidade_base}</span>
+      </div>
+      <div class="ins-card-sub">
+        ${i.categoria ? i.categoria + ' · ' : ''}${i.embalagens} embalagem(ns) ·
+        custo médio ${fmt(i.custo_medio)}/${i.unidade_base}
+        ${+i.valor_estoque > 0 ? ` · em estoque ${fmt(i.valor_estoque)}` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function renderPendentes() {
+  const el = document.getElementById('ins-pendentes');
+  document.getElementById('ins-pend-n').textContent = _pendentes.length ? `(${_pendentes.length})` : '';
+  // Selo no menu: a fila cresce sozinha a cada nota importada e é fácil esquecer.
+  const badge = document.getElementById('insumos-badge');
+  if (badge) {
+    badge.textContent = _pendentes.length > 99 ? '99+' : _pendentes.length;
+    badge.classList.toggle('hidden', !_pendentes.length);
+  }
+  if (!_pendentes.length) {
+    el.innerHTML = '<div class="ins-vazio">Nada esperando. Toda linha das notas já está ligada a um insumo.</div>';
+    return;
+  }
+  if (!_insumos.length) {
+    el.innerHTML = `<div class="ins-vazio">${_pendentes.length} nomes vieram das notas e esperam conciliação.<br><br>
+      Crie o primeiro insumo ao lado para começar a ligá-los.</div>`;
+    return;
+  }
+  const opcoes = _insumos.map(i => `<option value="${i.id}">${i.nome} (${i.unidade_base})</option>`).join('');
+  el.innerHTML = _pendentes.map((p, idx) => `
+    <div class="ins-pend">
+      <div class="ins-pend-nome">${p.source_name}</div>
+      <div class="ins-pend-sub">
+        ${(+p.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${p.unit} ·
+        ${p.vezes}x em nota${p.fornecedores ? ' · ' + p.fornecedores : ''}
+      </div>
+      <div class="ins-pend-form">
+        <select id="pv-ins-${idx}">${opcoes}</select>
+        <span>1 =</span>
+        <input type="number" step="0.0001" min="0" id="pv-fat-${idx}" value="1" title="Quantos da unidade base cada 1 da nota vale">
+        <button class="btn btn-secondary" onclick="ligarEmbalagem(${idx})">Ligar</button>
+      </div>
+    </div>`).join('');
+}
+
+async function ligarEmbalagem(idx) {
+  const p = _pendentes[idx];
+  const insId = document.getElementById(`pv-ins-${idx}`).value;
+  const fator = parseFloat(document.getElementById(`pv-fat-${idx}`).value);
+  if (!insId) return showToast('Escolha o insumo');
+  if (!(fator > 0)) return showToast('O fator precisa ser maior que zero');
+  const ins = _insumos.find(i => i.id === insId);
+  try {
+    const res = await fetch(`${API}/api/insumos/${insId}/embalagens`, {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ nome_nota: p.source_name, fator }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return showToast(d.error || 'Erro ao ligar');
+    showToast(`"${p.source_name}" → ${ins.nome} · 1 = ${fator} ${ins.unidade_base}`);
+    loadInsumos();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+function novoInsumo() {
+  usrModal('Novo insumo', `
+    <div class="field-group">
+      <label>Nome — como você chama na cozinha</label>
+      <input type="text" id="ins-nome" autocomplete="off" placeholder="Ex: Queijo muçarela">
+    </div>
+    <div class="field-group">
+      <label>Unidade base</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">
+        ${Object.entries(INS_UNIDADES).map(([k, v], i) => `
+          <button type="button" class="ins-un ${i === 0 ? 'on' : ''}" data-un="${k}"
+            onclick="document.querySelectorAll('.ins-un').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+            <b>${k}</b><span>${v}</span></button>`).join('')}
+      </div>
+      <small style="display:block;color:var(--c-muted);font-size:.74rem;line-height:1.5;margin-top:6px">
+        Tudo que entrar vira essa unidade. Compra em kg entra com fator 1000 em gramas;
+        litro entra com 1000 em mililitros.
+      </small>
+    </div>
+    <div class="field-group">
+      <label>Categoria (opcional)</label>
+      <input type="text" id="ins-cat" autocomplete="off" placeholder="Ex: Laticínios">
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      A unidade base <b>não pode ser trocada depois</b> — mudaria a escala de todo o
+      histórico em silêncio. Escolha pensando em como você mede na receita.
+    </div>`, 'Cadastrar', async () => {
+    const nome = document.getElementById('ins-nome').value.trim();
+    const unidade = document.querySelector('.ins-un.on')?.dataset.un;
+    if (!nome) return usrErro('Informe o nome');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/insumos`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ nome, unidade_base: unidade, categoria: document.getElementById('ins-cat').value.trim() || null }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao cadastrar'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast(`${nome} cadastrado`);
+      loadInsumos();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+}
+
+async function abrirInsumo(id) {
+  try {
+    const res = await fetch(`${API}/api/insumos/${id}`, { headers: authHeaders() });
+    if (!res.ok) return showToast('Erro ao abrir o insumo');
+    const i = await res.json();
+    const mov = (i.movimentos || []).slice(0, 12);
+    usrModal(i.nome, `
+      <div class="ins-det-topo">
+        <div><span>Saldo</span><b>${(+i.saldo).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${i.unidade_base}</b></div>
+        <div><span>Custo médio</span><b>${fmt(i.custo_medio)}/${i.unidade_base}</b></div>
+        <div><span>Em estoque</span><b>${fmt(i.saldo * i.custo_medio)}</b></div>
+      </div>
+
+      <div class="ins-bloco">
+        <p>Embalagens ligadas${i.embalagens.length ? '' : ' — nenhuma ainda'}</p>
+        ${i.embalagens.map(e => `
+          <div class="ins-emb">
+            <code>${e.nome_nota}</code>
+            <span>1 = ${(+e.fator).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} ${i.unidade_base}</span>
+            <button onclick="removerEmbalagem('${e.id}','${id}')" title="Desligar">✕</button>
+          </div>`).join('')}
+      </div>
+
+      <div class="ins-bloco">
+        <p>Últimos movimentos${mov.length ? '' : ' — nenhum'}</p>
+        ${mov.map(m => {
+          const d = new Date(m.created_at);
+          const sinal = +m.quantidade >= 0 ? '+' : '';
+          return `<div class="ins-mov">
+            <span>${d.toLocaleDateString('pt-BR')} ${m.tipo}${m.observacao ? ' · ' + m.observacao : ''}</span>
+            <span>${m.tipo === 'ajuste' ? '=' : sinal}${(+m.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} → ${(+m.saldo_apos).toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</span>
+          </div>`;
+        }).join('')}
+      </div>`, 'Fechar', () => document.getElementById('usr-modal-backdrop').remove());
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+async function removerEmbalagem(embId, insId) {
+  if (!confirm('Desligar essa embalagem?\n\nAs próximas notas com esse nome voltam para a fila de conciliação. O que já entrou no estoque não muda.')) return;
+  try {
+    const res = await fetch(`${API}/api/insumos/embalagens/${embId}`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) return showToast('Erro ao desligar');
+    document.getElementById('usr-modal-backdrop')?.remove();
+    showToast('Embalagem desligada');
+    loadInsumos();
   } catch (e) { showToast('Erro de conexão'); }
 }
 
