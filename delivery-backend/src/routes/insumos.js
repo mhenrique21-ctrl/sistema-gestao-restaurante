@@ -42,8 +42,16 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/insumos/pendentes — nomes que já vieram em nota e ainda não estão
-// ligados a insumo nenhum. É a fila de trabalho da conciliação.
+// GET /api/insumos/pendentes — a fila de conciliação de insumos.
+//
+// Não é a mesma fila da tela de Compras. Ali "pendente" é o que ainda não foi
+// tratado de forma nenhuma (19 nomes). Aqui interessa também o que já foi
+// classificado como matéria-prima: isso é resolvido para as Compras, mas é
+// exatamente o candidato a insumo.
+//
+// Ficam de fora: o que virou produto de revenda (tem supply_link) e o que foi
+// classificado como higiene e limpeza — esse é despesa direta, não entra em
+// ficha técnica.
 router.get('/pendentes', async (req, res) => {
   try {
     const r = await pool.query(
@@ -51,16 +59,96 @@ router.get('/pendentes', async (req, res) => {
               SUM(p.quantity) AS quantidade,
               COUNT(*)::int AS vezes,
               MAX(p.created_at) AS ultima,
-              string_agg(DISTINCT p.supplier, ' · ') AS fornecedores
+              string_agg(DISTINCT p.supplier, ' · ') AS fornecedores,
+              bool_or(NOT p.resolved) AS tem_pendente,
+              MAX(c.kind) AS classificacao
          FROM pending_supply_items p
-         LEFT JOIN insumo_embalagens e ON lower(e.nome_nota) = lower(p.source_name)
+         LEFT JOIN insumo_embalagens e ON upper(regexp_replace(trim(e.nome_nota), '\\s+', ' ', 'g')) = upper(regexp_replace(trim(p.source_name), '\\s+', ' ', 'g'))
+         LEFT JOIN supply_links sl ON sl.active = true
+                                  AND upper(regexp_replace(trim(sl.source_name), '\\s+', ' ', 'g'))
+                                    = upper(regexp_replace(trim(p.source_name), '\\s+', ' ', 'g'))
+         LEFT JOIN supply_classifications c
+                ON upper(regexp_replace(trim(c.source_name), '\\s+', ' ', 'g'))
+                 = upper(regexp_replace(trim(p.source_name), '\\s+', ' ', 'g'))
         WHERE e.id IS NULL
+          AND sl.id IS NULL
+          AND (c.kind IS NULL OR c.kind = 'materia_prima')
+          AND (NOT p.resolved OR c.kind = 'materia_prima')
         GROUP BY p.source_name, p.unit
         ORDER BY COUNT(*) DESC, p.source_name`
     );
     res.json(r.rows);
   } catch (err) {
     return internalError(res, err, '[insumos/pendentes]');
+  }
+});
+
+// Unidade da nota → unidade base + fator. É só um palpite de partida: quem
+// cadastra confirma. Mas acertar o comum evita digitar 1000 toda vez.
+const DA_UNIDADE = {
+  kg: { base: 'g', fator: 1000 },
+  g: { base: 'g', fator: 1 },
+  l: { base: 'ml', fator: 1000 },
+  lt: { base: 'ml', fator: 1000 },
+  ml: { base: 'ml', fator: 1 },
+};
+function sugerirUnidade(unidadeNota) {
+  return DA_UNIDADE[String(unidadeNota || '').trim().toLowerCase()] || { base: 'un', fator: 1 };
+}
+
+// POST /api/insumos/da-compra — cria o insumo já ligado à linha da nota.
+// Serve o caminho natural: a pessoa está olhando "Camarão Rosa, 3,02 kg" na
+// tela de Compras e quer dizer "isso é um insumo" sem trocar de tela, criar o
+// cadastro do zero e voltar pra ligar o nome.
+router.post('/da-compra', async (req, res) => {
+  const origem = String(req.body.source_name || '').trim();
+  if (!origem) return res.status(400).json({ error: 'Informe o item da compra' });
+  const nome = String(req.body.nome || origem).trim();
+  const palpite = sugerirUnidade(req.body.unit);
+  const unidade = UNIDADES.includes(req.body.unidade_base) ? req.body.unidade_base : palpite.base;
+  const fator = Number.isFinite(parseFloat(req.body.fator)) && parseFloat(req.body.fator) > 0
+    ? parseFloat(req.body.fator) : palpite.fator;
+
+  try {
+    const jaLigado = await pool.query(
+      `SELECT i.nome FROM insumo_embalagens e JOIN insumos i ON i.id = e.insumo_id
+        WHERE upper(regexp_replace(trim(e.nome_nota), '\\s+', ' ', 'g')) = upper(regexp_replace(trim($1), '\\s+', ' ', 'g'))`, [origem]
+    );
+    if (jaLigado.rows[0]) {
+      return res.status(409).json({ error: `"${origem}" já está ligado ao insumo "${jaLigado.rows[0].nome}"` });
+    }
+
+    // Insumo com o mesmo nome já existe? Então é só mais uma embalagem dele —
+    // que é o caso das três Coca-Colas. Criar um segundo insumo homônimo seria
+    // o erro que o índice único impede, mas com uma mensagem pior.
+    const existente = await pool.query(
+      `SELECT id, nome, unidade_base FROM insumos WHERE lower(nome) = lower($1) AND ativo = true`, [nome]
+    );
+    let insumo = existente.rows[0];
+    let criado = false;
+    if (!insumo) {
+      const novo = await pool.query(
+        `INSERT INTO insumos (nome, unidade_base, categoria) VALUES ($1, $2, $3) RETURNING *`,
+        [nome, unidade, req.body.categoria || null]
+      );
+      insumo = novo.rows[0];
+      criado = true;
+    }
+
+    const emb = await pool.query(
+      `INSERT INTO insumo_embalagens (insumo_id, nome_nota, fator) VALUES ($1, $2, $3) RETURNING *`,
+      [insumo.id, origem, fator]
+    );
+    // Sai da fila de Compras: já foi decidido o que ele é.
+    await pool.query(
+      `UPDATE pending_supply_items SET resolved = true
+        WHERE resolved = false AND upper(regexp_replace(trim(source_name), '\\s+', ' ', 'g')) = upper(regexp_replace(trim($1), '\\s+', ' ', 'g')) RETURNING id`, [origem]
+    );
+
+    res.status(201).json({ insumo, embalagem: emb.rows[0], criado });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Esse item já está ligado a um insumo' });
+    return internalError(res, err, '[insumos/da-compra]');
   }
 });
 
@@ -151,7 +239,7 @@ router.post('/:id/embalagens', async (req, res) => {
       // manda a pessoa procurar em 20 cadastros.
       const dono = await pool.query(
         `SELECT i.nome FROM insumo_embalagens e JOIN insumos i ON i.id = e.insumo_id
-          WHERE lower(e.nome_nota) = lower($1)`, [nome]
+          WHERE upper(regexp_replace(trim(e.nome_nota), '\\s+', ' ', 'g')) = upper(regexp_replace(trim($1), '\\s+', ' ', 'g'))`, [nome]
       ).catch(() => ({ rows: [] }));
       return res.status(409).json({
         error: dono.rows[0]

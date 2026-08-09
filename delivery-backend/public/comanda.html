@@ -2511,6 +2511,74 @@ async function ligarEmbalagem(idx) {
   } catch (e) { showToast('Erro de conexão'); }
 }
 
+// Transforma uma linha da nota em insumo sem sair da tela de Compras. O
+// caminho natural é esse: a pessoa está olhando "Camarão Rosa, 3,02 kg" e quer
+// dizer "isso é matéria-prima" — não trocar de tela, criar cadastro do zero e
+// voltar pra ligar o nome.
+const PALPITE_UNIDADE = {
+  kg: { base: 'g', fator: 1000 }, g: { base: 'g', fator: 1 },
+  l: { base: 'ml', fator: 1000 }, lt: { base: 'ml', fator: 1000 }, ml: { base: 'ml', fator: 1 },
+};
+
+function virarInsumo(nomeNota, unidadeNota) {
+  const palpite = PALPITE_UNIDADE[String(unidadeNota || '').toLowerCase()] || { base: 'un', fator: 1 };
+  const explica = {
+    g: 'A nota veio em <b>kg</b>: 1 na nota = 1000 g.',
+    ml: 'A nota veio em <b>litro</b>: 1 na nota = 1000 ml.',
+    un: 'A nota veio em <b>' + (unidadeNota || 'un') + '</b>: 1 na nota = 1 unidade.',
+  };
+  const dica = palpite.fator === 1000 ? explica[palpite.base] : explica.un;
+
+  usrModal('Cadastrar como insumo', `
+    <p style="font-size:.82rem;color:var(--c-muted);line-height:1.5;margin:0 0 12px">
+      Veio na nota como <b style="color:var(--c-text)">${nomeNota}</b>
+    </p>
+    <div class="field-group">
+      <label>Nome do insumo — como você chama na cozinha</label>
+      <input type="text" id="vi-nome" autocomplete="off" value="${nomeNota.replace(/"/g, '&quot;')}">
+    </div>
+    <div class="field-group">
+      <label>Unidade base</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">
+        ${Object.entries(INS_UNIDADES).map(([k, v]) => `
+          <button type="button" class="ins-un ${k === palpite.base ? 'on' : ''}" data-un="${k}"
+            onclick="document.querySelectorAll('.ins-un').forEach(b=>b.classList.remove('on'));this.classList.add('on')">
+            <b>${k}</b><span>${v}</span></button>`).join('')}
+      </div>
+    </div>
+    <div class="field-group">
+      <label>1 unidade da nota equivale a quanto?</label>
+      <input type="number" step="0.0001" min="0" id="vi-fator" value="${palpite.fator}">
+      <small style="display:block;color:var(--c-muted);font-size:.74rem;line-height:1.5;margin-top:5px">${dica}
+        Se for pacote com várias unidades, ponha a quantidade do pacote.</small>
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      Se já existir um insumo com esse nome, esta embalagem entra <b>nele</b> em vez de criar outro —
+      é assim que várias embalagens do mesmo item passam a somar juntas.
+    </div>`, 'Cadastrar insumo', async () => {
+    const nome = document.getElementById('vi-nome').value.trim();
+    const unidade = document.querySelector('.ins-un.on')?.dataset.un;
+    const fator = parseFloat(document.getElementById('vi-fator').value);
+    if (!nome) return usrErro('Informe o nome');
+    if (!(fator > 0)) return usrErro('O fator precisa ser maior que zero');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/insumos/da-compra`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ source_name: nomeNota, nome, unidade_base: unidade, fator }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao cadastrar'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      showToast(d.criado
+        ? `Insumo "${nome}" criado · 1 = ${fator} ${unidade}`
+        : `"${nomeNota}" entrou no insumo "${nome}" que já existia`);
+      loadCompras();
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+}
+
 function novoInsumo() {
   usrModal('Novo insumo', `
     <div class="field-group">
@@ -4445,6 +4513,8 @@ function renderCompras(el, d) {
             </select>
             <input class="c-fator" type="number" step="0.01" min="0.01" value="1" title="Unidades por embalagem">
             <button class="c-save">Vincular</button>
+            <button class="c-insumo" data-unit="${p.unidade || 'un'}"
+              title="Vira matéria-prima com saldo e custo próprios, para ficha técnica">🥄 Insumo</button>
             <button class="c-kind" data-kind="materia_prima" title="Não controla estoque no PDV">Matéria-prima</button>
             <button class="c-kind" data-kind="higiene_limpeza" title="Não controla estoque no PDV">Higiene e limpeza</button>
           </div>
@@ -4532,6 +4602,8 @@ function renderCompras(el, d) {
 
   el.querySelectorAll('.vinc-pend').forEach(row => {
     row.querySelector('.c-save').addEventListener('click', () => vincularPendente(row));
+    row.querySelector('.c-insumo')?.addEventListener('click', (e) =>
+      virarInsumo(row.dataset.nome, e.currentTarget.dataset.unit));
     row.querySelectorAll('.c-kind').forEach(b => b.addEventListener('click', () =>
       classificarItens([row.dataset.nome], b.dataset.kind)));
   });
