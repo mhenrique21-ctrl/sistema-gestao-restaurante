@@ -546,6 +546,16 @@
   /* Canais como pastilha ligada/desligada: um clique troca, sem abrir o cadastro. */
   .prod-canal { border: none; background: none; font-size: .78rem; line-height: 1; padding: 2px; border-radius: 5px; }
   .prod-canal.off { opacity: .25; filter: grayscale(1); }
+  /* Destino da ficha de preparo. Sem destino fica âmbar em vez de apagado: não
+     é "desligado", é "ninguém decidiu" — e são 61 produtos assim. */
+  .prod-dest { border: 1px solid var(--c-border); background: var(--c-bg); font-size: .72rem; line-height: 1;
+    padding: 3px 5px; border-radius: 5px; margin-left: 2px; }
+  .prod-dest.vazio { border-color: #E8D3A8; background: #FDF7EC; color: #B4801A; }
+  .cat-acao-barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px;
+    margin-bottom: 8px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; font-size: .83rem; }
+  .cat-acao-txt { flex: 1; min-width: 200px; color: var(--c-muted); }
+  .cat-acao-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cat-acao-btns .btn { font-size: .78rem; padding: 6px 10px; }
   .prod-preco { border: 1px solid transparent; background: none; color: var(--gold-dim); font-weight: 800; font-size: .88rem;
     width: 78px; text-align: right; padding: 5px 6px; border-radius: 7px; font-family: inherit; }
   .prod-preco:hover { border-color: var(--c-border); }
@@ -3068,8 +3078,17 @@ const PROD_FLAGS = {
   semtotem:  { rotulo: '🖥 Fora do totem',    teste: p => p.show_kiosk === false },
   semdeliv:  { rotulo: '🛵 Fora do delivery', teste: p => p.show_delivery === false },
   baixo:     { rotulo: '⚠️ Estoque baixo',    teste: p => p.track_stock && parseFloat(p.stock_qty) <= parseFloat(p.stock_min) },
+  semdestino:{ rotulo: '🖨 Sem destino',      teste: p => !p.print_target },
 };
 let prodFlagAtivo = '';
+
+// Para onde vai a ficha de preparo. O cupom do cliente sai sempre no caixa —
+// isso aqui é só a segunda via, de produção.
+const DESTINOS = {
+  cozinha: { rotulo: 'Cozinha', icone: '🍳' },
+  balcao:  { rotulo: 'Balcão',  icone: '🏪' },
+  '':      { rotulo: 'Nenhuma', icone: '—'  },
+};
 
 function setProdCat(id) {
   document.getElementById('estoque-cat-filter').value = id;
@@ -3150,6 +3169,9 @@ function renderEstoque() {
             ${admin ? `onclick="toggleCanal('${p.id}','show_kiosk',${p.show_kiosk === false})"` : 'disabled'}>🖥</button>
           <button class="prod-canal ${p.show_delivery === false ? 'off' : ''}" title="Aparece no delivery"
             ${admin ? `onclick="toggleCanal('${p.id}','show_delivery',${p.show_delivery === false})"` : 'disabled'}>🛵</button>
+          <button class="prod-dest ${p.print_target ? '' : 'vazio'}"
+            title="Ficha de preparo: ${DESTINOS[p.print_target || ''].rotulo}${admin ? ' — clique para trocar' : ''}"
+            ${admin ? `onclick="ciclarDestino('${p.id}')"` : 'disabled'}>${DESTINOS[p.print_target || ''].icone}</button>
           <span>${saldo}</span>
         </div>
       </div>
@@ -3193,6 +3215,53 @@ async function salvarPrecoRapido(id, input) {
     showToast(`${p.name}: ${fmt(valor)}`);
   } catch (e) {
     input.value = atual.toFixed(2).replace('.', ',');
+    showToast(e.message);
+  }
+}
+
+// Gira o destino da ficha de preparo: cozinha → balcão → nenhuma → cozinha.
+// Três estados num clique só, no lugar de abrir o cadastro pra cada produto.
+const CICLO_DESTINO = { '': 'cozinha', cozinha: 'balcao', balcao: '' };
+
+async function ciclarDestino(id) {
+  const p = estoqueCats.flatMap(c => c.products).find(x => x.id === id);
+  if (!p) return;
+  const novo = CICLO_DESTINO[p.print_target || ''];
+  try {
+    const res = await fetch(`${API}/api/menu/products/${id}`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ print_target: novo || null }),
+    });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'Erro ao salvar');
+    p.print_target = novo || null;
+    renderEstoque();
+    showToast(`${p.name}: ficha vai para ${DESTINOS[novo].rotulo.toLowerCase()}`);
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+// Aplica o destino na categoria inteira. É o que resolve os 61 sem destino e a
+// categoria Bebidas, hoje dividida entre cozinha, balcão e nenhum.
+async function destinoEmLote(catId, destino) {
+  const cat = estoqueCats.find(c => c.id === catId);
+  if (!cat) return;
+  const nome = DESTINOS[destino || ''].rotulo.toLowerCase();
+  if (!confirm(`Mandar a ficha de preparo de TODOS os ${cat.products.length} produtos de "${cat.name}" para ${nome}?\n\nO cupom do cliente continua saindo no caixa em qualquer caso.`)) return;
+  try {
+    const res = await fetch(`${API}/api/menu/destino-lote`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ category_id: catId, destino: destino || null }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'Erro ao aplicar');
+    showToast(d.alterados ? `${d.alterados} produto(s) alterado(s)` : 'Todos já estavam assim');
+    loadEstoque();
+  } catch (e) {
     showToast(e.message);
   }
 }
@@ -3405,18 +3474,45 @@ function renderAcaoCategoria() {
   const cat = estoqueCats.find(c => c.id === catId);
   if (!catId || !cat || ROLE !== 'admin') { el.innerHTML = ''; return; }
 
+  let html = '';
+
+  // Destino da ficha de preparo em lote. Só aparece quando a categoria está
+  // dividida ou tem produto sem destino — categoria já uniforme não precisa.
+  const porDestino = {};
+  cat.products.forEach(p => { const k = p.print_target || ''; porDestino[k] = (porDestino[k] || 0) + 1; });
+  const destinos = Object.keys(porDestino);
+  if (destinos.length > 1 || destinos[0] === '') {
+    const resumo = destinos.map(k => `${porDestino[k]} ${DESTINOS[k].rotulo.toLowerCase()}`).join(' · ');
+    html += `
+    <div class="cat-acao-barra">
+      <span class="cat-acao-txt">
+        ${destinos.length > 1
+          ? `<b>${cat.name}</b> está dividida entre destinos de impressão: ${resumo}.`
+          : `Os ${porDestino['']} produtos de <b>${cat.name}</b> não geram ficha de preparo.`}
+      </span>
+      <span class="cat-acao-btns">
+        <button class="btn btn-secondary" onclick="destinoEmLote('${catId}','cozinha')">🍳 Todos p/ cozinha</button>
+        <button class="btn btn-secondary" onclick="destinoEmLote('${catId}','balcao')">🏪 Todos p/ balcão</button>
+        <button class="btn btn-secondary" onclick="destinoEmLote('${catId}','')">— Nenhuma</button>
+      </span>
+    </div>`;
+  }
+
   const semControle = cat.products.filter(p => !p.track_stock).length;
-  if (!semControle) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;margin-bottom:10px;
-                background:var(--c-surface);border:1px solid var(--c-border);border-radius:10px;font-size:.83rem">
-      <span style="flex:1;min-width:180px;color:var(--c-muted)">
+  if (semControle) {
+    html += `
+    <div class="cat-acao-barra">
+      <span class="cat-acao-txt">
         ${semControle} produto(s) de <b>${cat.name}</b> ainda sem controle de estoque.
       </span>
-      <button class="btn btn-secondary" style="font-size:.8rem" onclick="marcarCategoria('${catId}','${cat.name.replace(/'/g, "\\'")}',${semControle})">
-        Marcar todos como revenda
-      </button>
+      <span class="cat-acao-btns">
+        <button class="btn btn-secondary" onclick="marcarCategoria('${catId}','${cat.name.replace(/'/g, "\\'")}',${semControle})">
+          Marcar todos como revenda
+        </button>
+      </span>
     </div>`;
+  }
+  el.innerHTML = html;
 }
 
 async function marcarCategoria(catId, nome, quantos) {

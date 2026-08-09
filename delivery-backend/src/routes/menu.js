@@ -476,6 +476,35 @@ router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, 
   }
 });
 
+// POST /api/menu/destino-lote — define o destino de impressão de uma categoria
+// inteira. Hoje 61 produtos estão sem destino e "Bebidas" está dividida em três
+// destinos diferentes; corrigir um a um é o que faz alguém desistir no décimo.
+//
+// destino aceita 'cozinha', 'balcao' ou null (sem ficha de preparo).
+router.post('/destino-lote', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { category_id } = req.body;
+  const destino = req.body.destino ?? null;
+  if (!category_id) return res.status(400).json({ error: 'Informe a categoria' });
+  if (destino !== null && !['cozinha', 'balcao'].includes(destino)) {
+    return res.status(400).json({ error: 'Destino inválido' });
+  }
+  // Literal em vez de $N: o wrapper do pool substitui string, e um valor nulo
+  // como parâmetro viraria a palavra NULL entre aspas.
+  const valor = destino === null ? 'NULL' : `'${destino}'`;
+  const comparacao = destino === null ? 'print_target IS NOT NULL' : `print_target IS DISTINCT FROM ${valor}`;
+  try {
+    const r = await pool.query(
+      `UPDATE products SET print_target = ${valor}
+        WHERE category_id = $1 AND ${comparacao}
+        RETURNING id, name`,
+      [category_id]
+    );
+    res.json({ ok: true, alterados: r.rows.length, produtos: r.rows.map((p) => p.name) });
+  } catch (err) {
+    return internalError(res, err, '[menu/destino-lote]');
+  }
+});
+
 // DELETE /api/menu/products/:id — remover produto (admin)
 router.delete('/products/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
