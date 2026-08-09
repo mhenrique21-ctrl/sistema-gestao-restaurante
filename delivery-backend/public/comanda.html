@@ -1490,7 +1490,7 @@
       <span class="ic">🖼️</span>
       <div>
         <h3 style="font-size:1.05rem">Enquadrar a foto</h3>
-        <p style="font-size:.78rem">Arraste pra escolher o que aparece. Sai em 1600 × 1000.</p>
+        <p id="foto-editor-sub" style="font-size:.78rem">Arraste pra escolher o que aparece.</p>
         <p id="foto-aviso-pequena" class="hidden" style="color:#f59e0b;font-size:.75rem;margin-top:4px">⚠️ Essa foto é pequena e vai sair borrada. Se tiver uma versão maior, use ela.</p>
       </div>
     </div>
@@ -5233,8 +5233,18 @@ function renderDestaques(el) {
 // em pé e com 4 MB: sem cortar, o navegador corta sozinho pelo meio e quase
 // sempre decepa o produto. Aqui quem decide o enquadramento é quem cadastra,
 // e o que sobe já é 1600×1000 comprimido.
-const FOTO_L = 1600, FOTO_A = 1000;   // proporção 16:10, a mesma do tablet
-const EDIT_L = 640, EDIT_A = 400;     // prévia na tela, mesma proporção
+// Nenhuma foto de produto aparece maior que ~560px em qualquer tela do sistema
+// (cardápio, PDV, admin, estoque) — só o totem de Destaques ocupa a tela
+// cheia do tablet e por isso continua saindo em 1600×1000.
+const DESTAQUE_L = 1600, DESTAQUE_A = 1000; // proporção 16:10, a mesma do tablet
+const PRODUTO_L = 800, PRODUTO_A = 500;     // mesma proporção, folga confortável pra tela retina
+const EDIT_L = 640, EDIT_A = 400;           // prévia na tela, mesma proporção das duas saídas acima
+
+function tamanhoSaidaFoto(id) {
+  return (id === '__produto__' || id?.startsWith('__produto_editar__:'))
+    ? { L: PRODUTO_L, A: PRODUTO_A }
+    : { L: DESTAQUE_L, A: DESTAQUE_A };
+}
 
 let ed = null; // { img, id, escala, escalaMin, x, y, arrastando, px, py }
 
@@ -5291,10 +5301,14 @@ function abrirEditorFoto(img, id) {
   document.getElementById('foto-zoom').value = '1';
   desenharEditor();
 
-  // Foto de origem menor que o destino final (1600×1000) precisa ser ampliada
-  // pra preencher a moldura — quanto maior essa ampliação, mais borrada sai.
+  const { L, A } = tamanhoSaidaFoto(id);
+  const subtitulo = document.getElementById('foto-editor-sub');
+  if (subtitulo) subtitulo.textContent = `Arraste pra escolher o que aparece. Sai em ${L} × ${A}.`;
+
+  // Foto de origem menor que o destino final precisa ser ampliada pra
+  // preencher a moldura — quanto maior essa ampliação, mais borrada sai.
   // Acima de 1.4x já fica perceptível, então avisa quem está cadastrando.
-  const escalaFinal = escalaMin * (FOTO_L / EDIT_L);
+  const escalaFinal = escalaMin * (L / EDIT_L);
   document.getElementById('foto-aviso-pequena')?.classList.toggle('hidden', escalaFinal <= 1.4);
 }
 
@@ -5386,14 +5400,15 @@ function soltarArrasto() { if (ed) ed.arrastando = false; }
 
 function usarFotoEditada() {
   const id = ed.id;
-  const fator = FOTO_L / EDIT_L;
+  const { L, A } = tamanhoSaidaFoto(id);
+  const fator = L / EDIT_L;
   const cv = document.createElement('canvas');
-  cv.width = FOTO_L; cv.height = FOTO_A;
+  cv.width = L; cv.height = A;
   const ctx = cv.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, FOTO_L, FOTO_A);
+  ctx.fillRect(0, 0, L, A);
   ctx.drawImage(ed.img, ed.x * fator, ed.y * fator,
                 ed.img.width * ed.escala * fator, ed.img.height * ed.escala * fator);
   fecharEditorFoto();
