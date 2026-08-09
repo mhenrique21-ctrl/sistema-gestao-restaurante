@@ -763,6 +763,47 @@
   .field-group label { display: block; font-size: .75rem; font-weight: 700; color: var(--c-muted); margin-bottom: 4px; }
   .field-group input, .field-group textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .92rem; font-family: inherit; }
 
+  /* ── Fichas técnicas ──────────────────────────────── */
+  #fichas-screen { max-width: 1500px; margin: 0 auto; padding: 16px 20px 40px; }
+  .ft-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; margin-top: 12px; }
+  .ft-grupo { grid-column: 1 / -1; font-size: .78rem; font-weight: 800; color: var(--c-muted); text-transform: uppercase;
+    letter-spacing: .06em; margin: 12px 0 2px; }
+  .ft-grupo:first-child { margin-top: 2px; }
+  .ft-card { display: flex; align-items: center; gap: 10px; background: var(--c-surface); border: 1px solid var(--c-border);
+    border-left: 3px solid var(--c-border); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+  .ft-card:hover { border-left-color: var(--gold); background: var(--c-bg); }
+  .ft-card.com-ficha { border-left-color: var(--green, #1F7A55); }
+  .ft-card.margem-baixa { border-left-color: var(--danger); }
+  .ft-foto, .ft-semfoto { width: 36px; height: 36px; min-width: 36px; border-radius: 8px; object-fit: cover; }
+  .ft-semfoto { display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    background: linear-gradient(135deg, #F3E9D8 0%, #EADBC2 100%); }
+  .ft-meio { flex: 1; min-width: 0; }
+  .ft-nome { font-weight: 700; font-size: .87rem; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ft-sub { font-size: .72rem; color: var(--c-muted); margin-top: 1px; }
+  .ft-selo { font-size: .68rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .ft-selo.sem { background: #FDF7EC; color: #8A6412; }
+  .ft-selo.boa { background: rgba(31,122,85,.1); color: #1F7A55; }
+  .ft-selo.ruim { background: rgba(211,58,58,.1); color: var(--danger); }
+
+  /* Editor de ficha técnica */
+  .ft-rend-box { background: rgba(160,109,34,.08); border: 1.5px solid var(--gold); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+  .ft-rend-modo { display: flex; gap: 5px; margin-bottom: 6px; }
+  .ft-rend-modo button { padding: 6px 11px; border-radius: 7px; font-size: .74rem; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); }
+  .ft-rend-modo button.on { border: 2px solid var(--gold); background: var(--c-bg); color: var(--gold-dim); font-weight: 700; }
+  .ft-item-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--c-bg); border-radius: 8px; margin-bottom: 6px; font-size: .84rem; }
+  .ft-item-row.sub { background: rgba(160,109,34,.08); }
+  .ft-item-row .tag-sub { font-size: .62rem; font-weight: 800; background: var(--gold); color: #fff; padding: 2px 7px; border-radius: 999px; flex-shrink: 0; }
+  .ft-item-row .nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ft-item-row .qtd { color: var(--c-muted); white-space: nowrap; }
+  .ft-item-row button { background: none; border: none; color: var(--danger); font-size: .9rem; padding: 2px 4px; }
+  .ft-resumo { background: var(--c-bg); border-radius: 10px; padding: 12px 14px; margin-top: 10px; }
+  .ft-resumo .linha { display: flex; justify-content: space-between; font-size: .84rem; padding: 3px 0; color: var(--c-muted); }
+  .ft-resumo .margem { display: flex; justify-content: space-between; padding-top: 7px; margin-top: 4px; border-top: 1px solid var(--c-border); font-weight: 700; font-size: .92rem; }
+  .ft-picker { display: flex; gap: 8px; margin-bottom: 10px; }
+  .ft-picker select { flex: 1; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .86rem; }
+  .ft-picker input { width: 90px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); font-size: .86rem; text-align: center; }
+
   /* ── Financeiro ───────────────────────────────────── */
   #financeiro-screen { max-width: 1180px; margin: 0 auto; padding: 20px; }
 
@@ -886,6 +927,7 @@
 
   <button class="tab-tile" data-tab="entradas" onclick="showTab('entradas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg></span>Entradas</button>
   <button class="tab-tile" data-tab="insumos" onclick="showTab('insumos')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 8V5.5A2.5 2.5 0 0 1 11.5 3h1A2.5 2.5 0 0 1 15 5.5V8"/></svg></span>Insumos<span class="nav-badge nav-badge-alerta hidden" id="insumos-badge"></span></button>
+  <button class="tab-tile" data-tab="fichas" onclick="showTab('fichas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></span>Fichas técnicas</button>
   <button class="tab-tile" data-tab="margem" onclick="showTab('margem')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg></span>Margem<span class="nav-badge nav-badge-alerta hidden" id="margem-badge"></span></button>
   <button class="tab-tile" data-tab="compras" onclick="showTab('compras')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span>Compras<span class="nav-badge nav-badge-alerta hidden" id="compras-badge"></span></button>
 
@@ -1208,6 +1250,20 @@
       <div id="ins-pendentes"><div class="cart-empty">Carregando...</div></div>
     </div>
   </div>
+</div>
+
+<!-- ── Aba: Fichas técnicas ── -->
+<div id="fichas-screen" class="hidden">
+  <div class="prod-topo">
+    <div class="prod-busca">
+      <input type="text" id="ft-search" placeholder="🔍 Buscar produto..." oninput="renderFichasLista()">
+      <span class="prod-contagem" id="ft-contagem"></span>
+      <button class="btn btn-secondary" onclick="abrirSubReceitas()" style="white-space:nowrap">🧪 Sub-receitas</button>
+    </div>
+    <div class="prod-chips" id="ft-cats"></div>
+    <div class="prod-chips prod-alertas" id="ft-flags"></div>
+  </div>
+  <div id="ft-lista"><div class="cart-empty">Carregando...</div></div>
 </div>
 
 <div id="configuracoes-screen" class="hidden">
@@ -1874,6 +1930,7 @@ const TAB_SCREENS = {
   margem: 'margem-screen',
   destaques: 'destaques-screen',
   insumos: 'insumos-screen',
+  fichas: 'fichas-screen',
 };
 
 // Abas que hoje ficam nos botões grandes do topo (Fazer Pedido/Delivery/Comandas/Caixa)
@@ -1895,6 +1952,7 @@ function showTab(tab) {
   if (tab === 'compras') loadCompras();
   if (tab === 'destaques') loadDestaques();
   if (tab === 'insumos') loadInsumos();
+  if (tab === 'fichas') loadFichasTecnicas();
   if (tab === 'entradas') loadEntradas();
   if (tab === 'margem') loadMargens();
   if (tab === 'financeiro') loadFinanceiro();
@@ -2874,6 +2932,322 @@ async function removerEmbalagem(embId, insId) {
     showToast('Embalagem desligada');
     loadInsumos();
   } catch (e) { showToast('Erro de conexão'); }
+}
+
+// ── Aba: Fichas técnicas ──────────────────────────────
+let _ftProdutos = [], _ftCatAtiva = '', _ftFlagAtiva = '', _ftSubReceitas = [];
+
+async function loadFichasTecnicas() {
+  const el = document.getElementById('ft-lista');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/fichas-tecnicas/produtos`, { headers: authHeaders() });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (res.status === 403) { el.innerHTML = '<div class="cart-empty">Só administrador gerencia fichas técnicas</div>'; return; }
+    _ftProdutos = res.ok ? await res.json() : [];
+    renderFichasLista();
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>';
+  }
+}
+
+const FT_FLAGS = {
+  sem:   { rotulo: '📋 Sem ficha',    teste: p => !p.tem_ficha },
+  boa:   { rotulo: '✅ Margem boa',   teste: p => p.tem_ficha && p.margem_pct != null && p.margem_pct >= 50 },
+  ruim:  { rotulo: '⚠️ Margem baixa', teste: p => p.tem_ficha && p.margem_pct != null && p.margem_pct < 30 },
+};
+
+function setFtCat(id) { _ftCatAtiva = id; renderFichasLista(); }
+function setFtFlag(f) { _ftFlagAtiva = (_ftFlagAtiva === f) ? '' : f; renderFichasLista(); }
+
+function renderFichasLista() {
+  const el = document.getElementById('ft-lista');
+  const search = (document.getElementById('ft-search')?.value || '').toLowerCase().trim();
+
+  const categorias = [...new Set(_ftProdutos.map(p => p.categoria))];
+  document.getElementById('ft-cats').innerHTML =
+    `<button class="prod-chip ${_ftCatAtiva ? '' : 'on'}" onclick="setFtCat('')">Todas <b>${_ftProdutos.length}</b></button>` +
+    categorias.map(c => {
+      const n = _ftProdutos.filter(p => p.categoria === c).length;
+      return `<button class="prod-chip ${_ftCatAtiva === c ? 'on' : ''}" onclick="setFtCat('${c.replace(/'/g, "\\'")}')">${c} <b>${n}</b></button>`;
+    }).join('');
+
+  document.getElementById('ft-flags').innerHTML = Object.entries(FT_FLAGS).map(([k, f]) => {
+    const n = _ftProdutos.filter(f.teste).length;
+    return n ? `<button class="prod-chip ${_ftFlagAtiva === k ? 'on' : ''}" onclick="setFtFlag('${k}')">${f.rotulo} <b>${n}</b></button>` : '';
+  }).join('');
+
+  let lista = _ftProdutos;
+  if (_ftCatAtiva) lista = lista.filter(p => p.categoria === _ftCatAtiva);
+  if (_ftFlagAtiva) lista = lista.filter(p => FT_FLAGS[_ftFlagAtiva].teste(p));
+  if (search) lista = lista.filter(p => p.name.toLowerCase().includes(search));
+
+  const cont = document.getElementById('ft-contagem');
+  if (cont) cont.textContent = lista.length === 1 ? '1 produto' : `${lista.length} produtos`;
+  if (!lista.length) { el.innerHTML = '<div class="cart-empty">Nenhum produto encontrado</div>'; return; }
+
+  const agrupar = !_ftCatAtiva && !search;
+  let ultimaCat = null;
+  el.innerHTML = `<div class="ft-grade">` + lista.map(p => {
+    let cabecalho = '';
+    if (agrupar && p.categoria !== ultimaCat) { ultimaCat = p.categoria; cabecalho = `<div class="ft-grupo">${p.categoria}</div>`; }
+    const foto = p.image_url ? `<img class="ft-foto" src="${p.image_url}" loading="lazy" alt="">` : `<span class="ft-semfoto">🍽</span>`;
+    let selo, classe = '';
+    if (!p.tem_ficha) { selo = '<span class="ft-selo sem">Sem ficha</span>'; }
+    else if (p.margem_pct == null) { selo = '<span class="ft-selo sem">Sem preço</span>'; }
+    else {
+      classe = p.margem_pct < 30 ? 'margem-baixa' : 'com-ficha';
+      const cor = p.margem_pct < 30 ? 'ruim' : (p.margem_pct >= 50 ? 'boa' : 'sem');
+      selo = `<span class="ft-selo ${cor}">${p.incompleta ? '⚠️ ' : ''}${p.margem_pct.toFixed(0)}%</span>`;
+    }
+    return cabecalho + `
+    <div class="ft-card ${classe}" onclick="abrirFichaEditor(${JSON.stringify(p).replace(/"/g, '&quot;')})">
+      ${foto}
+      <div class="ft-meio">
+        <div class="ft-nome">${p.name}</div>
+        <div class="ft-sub">${agrupar ? fmt(p.price) : p.categoria + ' · ' + fmt(p.price)}</div>
+      </div>
+      ${selo}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+async function carregarSubReceitas() {
+  try {
+    const res = await fetch(`${API}/api/fichas-tecnicas/sub-receitas`, { headers: authHeaders() });
+    _ftSubReceitas = res.ok ? await res.json() : [];
+  } catch (e) { _ftSubReceitas = []; }
+}
+
+// Abre a ficha de um produto. Se ele ainda não tem ficha, cria na hora com o
+// rendimento que a pessoa escolher — sem uma tela de criação separada, porque
+// "criar a ficha" e "editar a ficha" são o mesmo formulário em qualquer estágio.
+async function abrirFichaEditor(produto) {
+  // O picker de ingredientes precisa dos insumos carregados — quem abre Fichas
+  // técnicas sem antes passar por Insumos ainda não tem essa lista em memória.
+  if (!_insumos.length) {
+    try {
+      const ri = await fetch(`${API}/api/insumos`, { headers: authHeaders() });
+      if (ri.ok) _insumos = await ri.json();
+    } catch (e) { /* segue sem — o aviso "cadastre insumos" cobre esse caso */ }
+  }
+  await carregarSubReceitas();
+  if (!produto.tem_ficha) return criarFichaPara(produto);
+  try {
+    const res = await fetch(`${API}/api/fichas-tecnicas/${produto.ficha_id}`, { headers: authHeaders() });
+    if (!res.ok) return showToast('Erro ao abrir a ficha');
+    renderFichaEditor(await res.json(), produto);
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+function criarFichaPara(produto) {
+  const ehSubReceita = !produto.id;
+  usrModal(ehSubReceita ? 'Nova sub-receita' : `Nova ficha — ${produto.name}`, `
+    ${ehSubReceita ? `
+    <div class="field-group">
+      <label>Nome da sub-receita</label>
+      <input type="text" id="ft-sub-nome" autocomplete="off" placeholder="Ex: Massa de coxinha desfiada">
+    </div>` : ''}
+    <div class="field-group">
+      <label>Esta receita rende em</label>
+      <div class="ft-rend-modo">
+        <button type="button" class="on" data-modo="unidades" onclick="ftAlternarModo(this)">🍽 Unidades</button>
+        <button type="button" data-modo="peso" onclick="ftAlternarModo(this)">⚖️ Peso</button>
+      </div>
+    </div>
+    <div class="field-group" id="ft-rend-campos">
+      <label>Rende quantas porções?</label>
+      <input type="number" step="1" min="1" id="ft-rend-qtd" value="1">
+    </div>
+    <div class="field-group hidden" id="ft-rend-rotulo-wrap">
+      <label>Como você chama a porção?</label>
+      <input type="text" id="ft-rend-rotulo" placeholder="Ex: fatias, salgados, unidades">
+    </div>
+    <div class="field-group hidden" id="ft-rend-peso-wrap">
+      <label>Unidade do peso</label>
+      <div style="display:flex;gap:7px">
+        <button type="button" class="ins-un on" data-peso="g" onclick="document.querySelectorAll('.ft-rend-peso-wrap .ins-un,#ft-rend-peso-wrap .ins-un').forEach(b=>b.classList.remove('on'));this.classList.add('on')" style="flex:1"><b>g</b></button>
+        <button type="button" class="ins-un" data-peso="ml" onclick="document.querySelectorAll('#ft-rend-peso-wrap .ins-un').forEach(b=>b.classList.remove('on'));this.classList.add('on')" style="flex:1"><b>ml</b></button>
+      </div>
+    </div>`, 'Criar ficha', async () => {
+    const modo = document.querySelector('.ft-rend-modo button.on')?.dataset.modo;
+    const qtd = parseFloat(document.getElementById('ft-rend-qtd').value);
+    const rotulo = modo === 'unidades' ? document.getElementById('ft-rend-rotulo').value.trim() : document.querySelector('#ft-rend-peso-wrap .ins-un.on')?.dataset.peso;
+    const nome = ehSubReceita ? document.getElementById('ft-sub-nome').value.trim() : produto.name;
+    if (ehSubReceita && !nome) return usrErro('Informe o nome da sub-receita');
+    if (!(qtd > 0)) return usrErro('Rendimento deve ser maior que zero');
+    if (modo === 'unidades' && !rotulo) return usrErro('Diga como chamar a porção (ex: fatias)');
+    const btn = document.getElementById('usr-modal-ok');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/fichas-tecnicas`, {
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ produto_id: produto.id || null, nome, rendimento_modo: modo, rendimento_qtd: qtd, rendimento_unidade: rotulo }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { usrErro(d.error || 'Erro ao criar'); return; }
+      document.getElementById('usr-modal-backdrop').remove();
+      if (ehSubReceita) { showToast(`Sub-receita "${nome}" criada`); abrirSubReceitas(); }
+      else abrirFichaEditor({ ...produto, tem_ficha: true, ficha_id: d.id });
+    } catch (e) { usrErro('Erro de conexão'); } finally { btn.disabled = false; }
+  });
+  // Rendimento em unidade permite fração (ex: 0.5 fatia em receita futura?) —
+  // não, mantém inteiro por padrão mas o campo aceita decimal se precisar.
+  document.getElementById('ft-rend-qtd').step = '0.001';
+}
+
+function ftAlternarModo(btn) {
+  document.querySelectorAll('.ft-rend-modo button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const modo = btn.dataset.modo;
+  document.getElementById('ft-rend-rotulo-wrap').classList.toggle('hidden', modo !== 'unidades');
+  document.getElementById('ft-rend-peso-wrap').classList.toggle('hidden', modo !== 'peso');
+  document.getElementById('ft-rend-campos').querySelector('label').textContent =
+    modo === 'unidades' ? 'Rende quantas porções?' : 'Rende quantos gramas/mililitros?';
+}
+
+function renderFichaEditor(ficha, produtoOrigem) {
+  const preco = produtoOrigem?.price != null ? parseFloat(produtoOrigem.price) : null;
+  const margem = preco && preco > 0 ? ((preco - ficha.custo_por_unidade) / preco) * 100 : null;
+
+  const linhas = (ficha.itens || []).map(it => `
+    <div class="ft-item-row ${it.tipo === 'sub_ficha' ? 'sub' : ''}">
+      ${it.tipo === 'sub_ficha' ? '<span class="tag-sub">SUB</span>' : ''}
+      <span class="nome">${it.nome}</span>
+      <span class="qtd">${(+it.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${it.unidade || ''}</span>
+      <span class="qtd">${fmt(it.custo)}</span>
+      <button onclick="removerItemFicha('${it.id}','${ficha.id}',${JSON.stringify(produtoOrigem || null).replace(/"/g, '&quot;')})" title="Remover">✕</button>
+    </div>`).join('') || '<p style="font-size:.8rem;color:var(--c-muted);padding:8px 0">Nenhum ingrediente ainda.</p>';
+
+  const opcoesInsumos = _insumos.length
+    ? _insumos.map(i => `<option value="i:${i.id}">🥕 ${i.nome} (${i.unidade_base})</option>`).join('')
+    : '';
+  const opcoesSub = _ftSubReceitas.filter(s => s.id !== ficha.id)
+    .map(s => `<option value="s:${s.id}">🧪 ${s.nome} (${s.rendimento_unidade})</option>`).join('');
+
+  usrModal(ficha.nome, `
+    <div class="ft-rend-box">
+      <span style="font-size:1.2rem">${ficha.rendimento_modo === 'peso' ? '⚖️' : '🍽'}</span>
+      <div style="flex:1">
+        <div style="font-size:.72rem;color:var(--gold-dim);font-weight:700;text-transform:uppercase">Rende</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+          <input type="number" step="0.001" min="0.001" id="ft-edit-rend" value="${ficha.rendimento_qtd}" style="width:90px;padding:6px 8px;border-radius:6px;border:1px solid var(--c-border)">
+          <span style="font-size:.84rem">${ficha.rendimento_unidade}</span>
+          <button class="btn btn-secondary" style="padding:5px 10px;font-size:.76rem" onclick="salvarRendimento('${ficha.id}')">Salvar</button>
+        </div>
+      </div>
+      ${ficha.incompleta ? '<span style="font-size:.72rem;color:var(--danger)">⚠️ custo incompleto</span>' : ''}
+    </div>
+
+    <div id="ft-itens-lista">${linhas}</div>
+
+    <div class="ft-picker">
+      <select id="ft-add-select">
+        <option value="">+ Adicionar ingrediente...</option>
+        ${opcoesInsumos ? `<optgroup label="Insumos">${opcoesInsumos}</optgroup>` : ''}
+        ${opcoesSub ? `<optgroup label="Sub-receitas">${opcoesSub}</optgroup>` : ''}
+      </select>
+      <input type="number" step="0.001" min="0.001" id="ft-add-qtd" placeholder="qtd">
+      <button class="btn btn-secondary" onclick="adicionarItemFicha('${ficha.id}',${JSON.stringify(produtoOrigem || null).replace(/"/g, '&quot;')})">Adicionar</button>
+    </div>
+    ${!opcoesInsumos && !opcoesSub ? '<p style="font-size:.78rem;color:var(--c-muted)">Cadastre insumos na aba Insumos antes de montar a receita.</p>' : ''}
+
+    <div class="ft-resumo">
+      <div class="linha"><span>Custo total</span><span>${fmt(ficha.custo_total)}</span></div>
+      <div class="linha"><span>Custo por ${ficha.rendimento_unidade}</span><span>${fmt(ficha.custo_por_unidade)}</span></div>
+      ${preco != null ? `
+        <div class="linha"><span>Preço de venda</span><span>${fmt(preco)}</span></div>
+        <div class="margem"><span>Margem bruta</span>
+          <span style="color:${margem < 30 ? 'var(--danger)' : 'var(--green,#1F7A55)'}">${fmt(preco - ficha.custo_por_unidade)} · ${margem.toFixed(1)}%</span>
+        </div>` : ''}
+    </div>`, 'Fechar', () => document.getElementById('usr-modal-backdrop').remove(),
+    { extra: { rotulo: '🗑 Excluir ficha', fn: () => excluirFicha(ficha.id, ficha.nome) } });
+}
+
+async function salvarRendimento(fichaId) {
+  const qtd = parseFloat(document.getElementById('ft-edit-rend').value);
+  if (!(qtd > 0)) return showToast('Rendimento inválido');
+  try {
+    const res = await fetch(`${API}/api/fichas-tecnicas/${fichaId}`, {
+      method: 'PATCH', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ rendimento_qtd: qtd }),
+    });
+    if (!res.ok) return showToast('Erro ao salvar');
+    showToast('Rendimento atualizado');
+    document.getElementById('usr-modal-backdrop')?.remove();
+    loadFichasTecnicas();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+async function adicionarItemFicha(fichaId, produtoOrigem) {
+  const valor = document.getElementById('ft-add-select').value;
+  const qtd = parseFloat(document.getElementById('ft-add-qtd').value);
+  if (!valor) return showToast('Escolha um ingrediente');
+  if (!(qtd > 0)) return showToast('Informe a quantidade');
+  const [tipo, id] = valor.split(':');
+  const corpo = tipo === 's' ? { sub_ficha_id: id, quantidade: qtd } : { insumo_id: id, quantidade: qtd };
+  try {
+    const res = await fetch(`${API}/api/fichas-tecnicas/${fichaId}/itens`, {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(corpo),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return showToast(d.error || 'Erro ao adicionar');
+    document.getElementById('usr-modal-backdrop')?.remove();
+    const res2 = await fetch(`${API}/api/fichas-tecnicas/${fichaId}`, { headers: authHeaders() });
+    if (res2.ok) renderFichaEditor(await res2.json(), produtoOrigem);
+    loadFichasTecnicas();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+async function removerItemFicha(itemId, fichaId, produtoOrigem) {
+  try {
+    const res = await fetch(`${API}/api/fichas-tecnicas/itens/${itemId}`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) return showToast('Erro ao remover');
+    document.getElementById('usr-modal-backdrop')?.remove();
+    const res2 = await fetch(`${API}/api/fichas-tecnicas/${fichaId}`, { headers: authHeaders() });
+    if (res2.ok) renderFichaEditor(await res2.json(), produtoOrigem);
+    loadFichasTecnicas();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+async function excluirFicha(fichaId, nome) {
+  if (!confirm(`Excluir a ficha de "${nome}"?\n\nOs ingredientes cadastrados somem. Se algum produto usa esta receita como sub-receita, a exclusão é recusada.`)) return;
+  try {
+    const res = await fetch(`${API}/api/fichas-tecnicas/${fichaId}`, { method: 'DELETE', headers: authHeaders() });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return showToast(d.error || 'Erro ao excluir');
+    document.getElementById('usr-modal-backdrop')?.remove();
+    showToast('Ficha excluída');
+    loadFichasTecnicas();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+// ── Sub-receitas (fichas sem produto — só ingrediente de outras) ──────
+async function abrirSubReceitas() {
+  await carregarSubReceitas();
+  renderSubReceitasModal();
+}
+
+function renderSubReceitasModal() {
+  const lista = _ftSubReceitas.map(s => `
+    <div class="ft-item-row" onclick="abrirFichaEditor({id:'${s.id}',tem_ficha:true,ficha_id:'${s.id}',name:'${s.nome.replace(/'/g, "\\'")}',price:null})" style="cursor:pointer">
+      <span class="nome">🧪 ${s.nome}</span>
+      <span class="qtd">rende ${s.rendimento_qtd} ${s.rendimento_unidade}</span>
+      <span class="qtd">${fmt(s.custo_por_unidade)}/${s.rendimento_unidade}</span>
+    </div>`).join('') || '<p style="font-size:.82rem;color:var(--c-muted)">Nenhuma sub-receita ainda.</p>';
+
+  usrModal('Sub-receitas', `
+    <p style="font-size:.82rem;color:var(--c-muted);line-height:1.5;margin:0 0 12px">
+      Preparos intermediários — massa, molho, recheio — que não são vendidos sozinhos,
+      só entram como ingrediente de outras fichas. O custo deles se propaga automaticamente.
+    </p>
+    ${lista}`, 'Nova sub-receita', () => { document.getElementById('usr-modal-backdrop').remove(); novaSubReceita(); },
+    { extra: { rotulo: 'Fechar', fn: () => document.getElementById('usr-modal-backdrop').remove() } });
+}
+
+function novaSubReceita() {
+  criarFichaPara({ id: null, name: '(sub-receita)', tem_ficha: false, price: null, __subReceita: true });
 }
 
 // ── Aba Configurações → Usuários ────────────────────────

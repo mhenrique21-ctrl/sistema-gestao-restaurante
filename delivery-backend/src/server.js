@@ -94,6 +94,7 @@ app.use('/api/cash-movements', require('./routes/cashMovements'));
 app.use('/api/cash-sessions', require('./routes/cashSessions'));
 app.use('/api/supply', require('./routes/supply'));
 app.use('/api/insumos', require('./routes/insumos'));
+app.use('/api/fichas-tecnicas', require('./routes/fichasTecnicas'));
 app.use('/api/fiado', require('./routes/fiado'));
 app.use('/api/highlights', require('./routes/highlights'));
 app.use('/api/stock', require('./routes/stock'));
