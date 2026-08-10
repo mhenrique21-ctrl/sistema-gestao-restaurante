@@ -298,7 +298,27 @@
   .ent-lista { margin-top: 10px; }
   /* Números à direita: alinhados, a coluna vira uma pilha que dá pra conferir
      de cima a baixo sem ler cada linha inteira. */
-  .ent-linha { display: grid; grid-template-columns: 1fr 58px 84px 88px; gap: 8px; align-items: center;
+  .cont-lista { margin-top: 4px; }
+  .cont-linha { display: grid; grid-template-columns: 1fr 62px 92px 60px; gap: 8px; align-items: center;
+                padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .cont-linha span:not(:first-child) { text-align: right; }
+  .cont-head { font-size: 10.5px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+  .cont-inp { width: 100%; padding: 5px 7px; border-radius: 7px; border: 1px solid var(--border2); text-align: right; }
+  .cont-dif { font-weight: 600; }
+  .ent-acao { background: none; border: 1px solid var(--border2); border-radius: 7px; padding: 4px 7px;
+              font-size: 12px; cursor: pointer; color: var(--text2); }
+  .ent-acao:hover { border-color: var(--acc); color: var(--text); }
+  .ent-edit { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+              padding: 10px; margin-top: 8px; border-radius: 9px; background: var(--bg3); }
+  .ent-edit label { font-size: 11px; color: var(--text2); display: flex; flex-direction: column; gap: 3px; }
+  .ent-edit input { width: 110px; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--border2); }
+  .ent-edit .sp { flex: 1; }
+  .ent-edit button { padding: 7px 12px; border-radius: 7px; border: none; font-size: 12.5px;
+                     font-weight: 600; cursor: pointer; }
+  .ent-salvar { background: var(--acc); color: #fff; }
+  .ent-cancelar { background: var(--bg4); color: var(--text2); }
+  .ent-excluir { background: #FEE2E2; color: #B91C1C; }
+  .ent-linha { display: grid; grid-template-columns: 1fr 58px 84px 88px 40px; gap: 8px; align-items: center;
     padding: 9px 11px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
   .ent-linha span:not(:first-child) { text-align: right; }
   .ent-linha small { display: block; font-size: 11px; color: var(--text2); margin-top: 2px; }
@@ -352,6 +372,17 @@
   .vinc-row .nm { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vinc-row .sb { font-size: 11px; color: var(--text2); margin-top: 1px; }
   .vinc-row .v-del { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 5px 10px; font-size: 11px; color: var(--text2); flex-shrink: 0; }
+  .vinc-row .v-fat-edit { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 5px 10px; font-size: 11px; color: var(--text2); flex-shrink: 0; cursor: pointer; }
+  .vinc-row .v-fat-edit:hover { border-color: var(--acc); color: var(--text); }
+  .vinc-fator-box { padding: 11px 13px; background: var(--bg3); border-top: 1px solid var(--border);
+                    display: flex; flex-direction: column; gap: 9px; }
+  .vinc-fator-box label { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  .vinc-fator-box input[type=number] { width: 92px; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--border2); }
+  .vinc-fator-box .vf-check { font-size: 11.5px; line-height: 1.4; align-items: flex-start; }
+  .vinc-fator-box .vf-acoes { display: flex; gap: 8px; justify-content: flex-end; }
+  .vinc-fator-box button { padding: 7px 13px; border-radius: 7px; border: none; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .vinc-fator-box .vf-salvar { background: var(--acc); color: #fff; }
+  .vinc-fator-box .vf-cancelar { background: var(--bg4); color: var(--text2); }
 
   /* ── Configurações: usuários ── */
   .usr-row { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
@@ -1612,6 +1643,8 @@ function renderFicha(bd, d) {
 
 // ── Extrato de entradas ──────────────────────────────
 let entFornecedores = null;
+let entEditando = null;   // id do movimento aberto pra correção
+let entUltimo = null;     // último payload renderizado
 
 function primeiroDiaDoMes() {
   const h = hojeBelem();            // 'YYYY-MM-DD' no fuso de Belém
@@ -1661,7 +1694,7 @@ function renderEntradas(el, d, f) {
     ${!d.linhas.length ? '<p style="font-size:12.5px;color:var(--text2);padding:10px 2px">Nenhuma entrada no período.</p>'
       : `<div class="ent-lista">
           <div class="ent-linha ent-head">
-            <span>Produto · fornecedor</span><span>Qtd</span><span>Custo un.</span><span>Total</span>
+            <span>Produto · fornecedor</span><span>Qtd</span><span>Custo un.</span><span>Total</span><span></span>
           </div>
           ${d.linhas.map(l => `
             <div class="ent-linha">
@@ -1669,11 +1702,78 @@ function renderEntradas(el, d, f) {
               <span>${l.quantidade}</span>
               <span>${l.custo_unitario != null ? fmt(l.custo_unitario) : '—'}</span>
               <span>${l.total != null ? fmt(l.total) : '—'}</span>
+              <span><button class="ent-acao" data-editar="${l.id}" title="Corrigir esta entrada">✏️</button></span>
+              ${entEditando === l.id ? `
+                <div class="ent-edit">
+                  <label>Quantidade
+                    <input type="number" id="ent-q" step="0.001" min="0.001" value="${l.quantidade}">
+                  </label>
+                  <label>Custo unitário
+                    <input type="number" id="ent-c" step="0.0001" min="0" value="${l.custo_unitario != null ? l.custo_unitario : ''}" placeholder="—">
+                  </label>
+                  <span class="sp"></span>
+                  <button class="ent-excluir" data-excluir="${l.id}">Excluir</button>
+                  <button class="ent-cancelar" data-cancelar="1">Cancelar</button>
+                  <button class="ent-salvar" data-salvar="${l.id}">Salvar</button>
+                </div>` : ''}
             </div>`).join('')}
         </div>`}`;
 
   ['ent-de', 'ent-ate', 'ent-forn'].forEach(id =>
     document.getElementById(id).addEventListener('change', loadEntradas));
+
+  // Guarda o payload pra alternar o modo de edição sem refazer a busca —
+  // reconsultar a cada clique no lápis perderia o que já foi digitado.
+  entUltimo = { d, f };
+  el.querySelectorAll('[data-editar]').forEach(b =>
+    b.addEventListener('click', () => { entEditando = b.dataset.editar; renderEntradas(el, d, f); }));
+  el.querySelectorAll('[data-cancelar]').forEach(b =>
+    b.addEventListener('click', () => { entEditando = null; renderEntradas(el, d, f); }));
+  el.querySelectorAll('[data-salvar]').forEach(b =>
+    b.addEventListener('click', () => salvarEntrada(b.dataset.salvar, b)));
+  el.querySelectorAll('[data-excluir]').forEach(b =>
+    b.addEventListener('click', () => excluirEntrada(b.dataset.excluir, b)));
+}
+
+async function salvarEntrada(id, btn) {
+  const qtd = parseFloat(document.getElementById('ent-q').value);
+  const custoTxt = document.getElementById('ent-c').value.trim();
+  if (!(qtd > 0)) { alert('A quantidade precisa ser maior que zero.'); return; }
+  // Campo vazio significa "sem custo informado", que é diferente de zero:
+  // custo zero mentiria na margem, ausente aparece como "—".
+  const custo = custoTxt === '' ? null : parseFloat(custoTxt);
+  if (custoTxt !== '' && !(custo >= 0)) { alert('Custo inválido.'); return; }
+
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    const res = await apiFetch(`/api/stock/entradas/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantidade: qtd, custo_unitario: custo }),
+    });
+    const r = await res.json();
+    if (!res.ok) { alert(r.error || 'Não consegui salvar'); btn.disabled = false; btn.textContent = 'Salvar'; return; }
+    entEditando = null;
+    await loadEntradas();
+    alert(`✅ ${r.produto}: saldo do estoque agora é ${r.saldo}.`);
+  } catch (e) {
+    if (e.message !== 'unauthorized') { alert('Erro de conexão'); btn.disabled = false; btn.textContent = 'Salvar'; }
+  }
+}
+
+async function excluirEntrada(id, btn) {
+  if (!confirm('Excluir esta entrada? A quantidade sai do estoque e o saldo é recalculado.')) return;
+  btn.disabled = true; btn.textContent = 'Excluindo...';
+  try {
+    const res = await apiFetch(`/api/stock/entradas/${id}`, { method: 'DELETE' });
+    const r = await res.json();
+    if (!res.ok) { alert(r.error || 'Não consegui excluir'); btn.disabled = false; btn.textContent = 'Excluir'; return; }
+    entEditando = null;
+    await loadEntradas();
+    alert(`🗑️ Entrada removida. ${r.produto}: saldo do estoque agora é ${r.saldo}.`);
+  } catch (e) {
+    if (e.message !== 'unauthorized') { alert('Erro de conexão'); btn.disabled = false; btn.textContent = 'Excluir'; }
+  }
 }
 
 // ── Consulta venda a venda ───────────────────────────
@@ -1947,6 +2047,10 @@ async function renderRelProdutos(el) {
   `;
 }
 
+let contagemAberta = false;
+let contagemValores = {};   // { product_id: valor digitado }
+let contagemMotivo = '';
+
 async function renderRelEstoque(el) {
   const res = await apiFetch('/api/stock');
   const d = await res.json();
@@ -2007,10 +2111,91 @@ async function renderRelEstoque(el) {
       <button id="stk-save" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:12.5px;font-weight:600">Lançar</button>
       <p style="font-size:10.5px;color:var(--text2);margin:8px 0 0">Em <b>ajuste</b>, a quantidade informada vira o saldo (contagem física). Entrada soma, perda subtrai.</p>
     </div>
+
+    <div class="rel-card">
+      <h4>📋 Contagem de inventário</h4>
+      ${!contagemAberta ? `
+        <p style="font-size:12px;color:var(--text2);line-height:1.7;margin:0 0 10px">
+          Conte a prateleira e digite o que existe de verdade. O saldo do sistema passa a ser o contado, e a diferença fica registrada no extrato de cada produto.
+        </p>
+        <button id="cont-iniciar" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:12.5px;font-weight:600">Iniciar contagem</button>
+      ` : `
+        <p style="font-size:11px;color:var(--text2);margin:0 0 10px">Deixe em branco o que não contou — só o que for preenchido é ajustado.</p>
+        <div class="cont-lista">
+          <div class="cont-linha cont-head"><span>Produto</span><span>Sistema</span><span>Contado</span><span>Dif.</span></div>
+          ${d.itens.map(i => {
+            const v = contagemValores[i.id];
+            const dif = v === undefined || v === '' ? null : (parseFloat(v) - i.estoque);
+            return `
+            <div class="cont-linha">
+              <span>${i.name}</span>
+              <span class="cont-sis">${i.estoque}</span>
+              <span><input class="cont-inp" data-pid="${i.id}" type="number" step="0.001" min="0" value="${v === undefined ? '' : v}" placeholder="—"></span>
+              <span class="cont-dif" style="color:${dif === null ? 'var(--text2)' : dif === 0 ? 'var(--text2)' : dif > 0 ? 'var(--success)' : 'var(--danger)'}">${
+                dif === null ? '—' : dif === 0 ? 'ok' : (dif > 0 ? '+' : '') + Math.round(dif * 1000) / 1000}</span>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="field-group" style="margin-top:10px"><label>Motivo</label>
+          <input id="cont-motivo" placeholder="Ex: contagem do dia 10/08" value="${contagemMotivo.replace(/"/g, '&quot;')}">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="cont-cancelar" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:var(--bg4);color:var(--text2);font-size:12.5px;font-weight:600">Cancelar</button>
+          <button id="cont-aplicar" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:12.5px;font-weight:600">Aplicar contagem</button>
+        </div>
+      `}
+    </div>
   `;
   document.getElementById('stk-save').addEventListener('click', lancarEstoque);
   el.querySelectorAll('[data-ficha]').forEach(r =>
     r.addEventListener('click', () => abrirFicha(r.dataset.ficha)));
+
+  document.getElementById('cont-iniciar')?.addEventListener('click', () => {
+    contagemAberta = true; contagemValores = {}; contagemMotivo = ''; loadRelatorio();
+  });
+  document.getElementById('cont-cancelar')?.addEventListener('click', () => {
+    contagemAberta = false; contagemValores = {}; loadRelatorio();
+  });
+  document.getElementById('cont-aplicar')?.addEventListener('click', aplicarContagem);
+  // Recalcula a diferença sem redesenhar a lista: um re-render a cada tecla
+  // tiraria o foco do campo e tornaria a digitação impossível.
+  el.querySelectorAll('.cont-inp').forEach(inp => inp.addEventListener('input', () => {
+    contagemValores[inp.dataset.pid] = inp.value;
+    const linha = inp.closest('.cont-linha');
+    const sis = parseFloat(linha.querySelector('.cont-sis').textContent);
+    const alvo = linha.querySelector('.cont-dif');
+    if (inp.value === '') { alvo.textContent = '—'; alvo.style.color = 'var(--text2)'; return; }
+    const dif = Math.round((parseFloat(inp.value) - sis) * 1000) / 1000;
+    alvo.textContent = Number.isNaN(dif) ? '—' : dif === 0 ? 'ok' : (dif > 0 ? '+' : '') + dif;
+    alvo.style.color = Number.isNaN(dif) || dif === 0 ? 'var(--text2)' : dif > 0 ? 'var(--success)' : 'var(--danger)';
+  }));
+  document.getElementById('cont-motivo')?.addEventListener('input', e => { contagemMotivo = e.target.value; });
+}
+
+async function aplicarContagem() {
+  const itens = Object.entries(contagemValores)
+    .filter(([, v]) => v !== '' && v != null && Number.isFinite(parseFloat(v)))
+    .map(([product_id, v]) => ({ product_id, contado: parseFloat(v) }));
+  if (!itens.length) { showToast('Preencha ao menos um produto contado'); return; }
+
+  const btn = document.getElementById('cont-aplicar');
+  btn.disabled = true; btn.textContent = 'Aplicando...';
+  try {
+    const res = await apiFetch('/api/stock/contagem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itens, motivo: contagemMotivo }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(d.error || 'Erro ao aplicar'); btn.disabled = false; btn.textContent = 'Aplicar contagem'; return; }
+    contagemAberta = false; contagemValores = {}; contagemMotivo = '';
+    await loadRelatorio();
+    showToast(d.ajustados.length
+      ? `${d.ajustados.length} produto(s) ajustado(s) · ${d.sobra} com sobra, ${d.falta} com falta`
+      : 'Contagem bateu com o sistema — nada a ajustar');
+  } catch (e) {
+    if (e.message !== 'unauthorized') { showToast('Erro de conexão'); btn.disabled = false; btn.textContent = 'Aplicar contagem'; }
+  }
 }
 
 async function lancarEstoque() {
@@ -2523,6 +2708,7 @@ document.getElementById('adc-add-group').addEventListener('click', async () => {
 // ── Configurações: vínculos de compra ────────────────
 let vincBusca = '';
 let vincAbertos = new Set();
+let vincFatorEditando = null;   // id do vínculo com o fator aberto pra correção
 const KIND_LABELS = { materia_prima: 'Matéria-prima', higiene_limpeza: 'Higiene e limpeza' };
 
 // Classificar é decisão que fica valendo pras próximas notas, então em lote
@@ -2560,6 +2746,39 @@ async function desclassificar(id) {
     loadVinculos();
   } catch (e) {
     if (e.message !== 'unauthorized') showToast('Erro de conexão');
+  }
+}
+
+// Trocar o fator sem reprocessar deixa o estrago no passado: a nota que entrou
+// multiplicada continua multiplicada. Por isso a caixa vem marcada.
+async function salvarFator(id, btn) {
+  const fator = parseFloat(document.getElementById('vf-valor').value);
+  const reprocessar = document.getElementById('vf-repro').checked;
+  if (!(fator > 0)) { showToast('O fator precisa ser maior que zero'); return; }
+
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    const res = await apiFetch(`/api/supply/links/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ factor: fator, reprocessar }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { showToast(d.error || 'Erro ao salvar'); btn.disabled = false; btn.textContent = 'Salvar'; return; }
+    vincFatorEditando = null;
+    await loadVinculos();
+    if (d.inalterado) { showToast('O fator já era esse'); return; }
+    if (d.entradas_ajustadas) {
+      // Não localizada é entrada que existiu na nota mas cujo movimento não foi
+      // achado (apagado, ou já corrigido na mão). Dizer o número evita a leitura
+      // de que corrigiu tudo.
+      showToast(`${d.entradas_ajustadas} entrada(s) recalculada(s) · ${d.produto} agora tem ${d.saldo}`
+        + (d.nao_localizadas ? ` · ${d.nao_localizadas} não localizada(s)` : ''));
+    } else {
+      showToast(reprocessar ? 'Fator salvo — nenhuma entrada anterior usou o fator antigo' : 'Fator salvo para as próximas compras');
+    }
+  } catch (e) {
+    if (e.message !== 'unauthorized') { showToast('Erro de conexão'); btn.disabled = false; btn.textContent = 'Salvar'; }
   }
 }
 
@@ -2645,8 +2864,23 @@ function renderVinculos(el, d) {
                   <div class="nm">${l.source_name}</div>
                   <div class="sb">1 embalagem = ${l.factor} un</div>
                 </div>
+                <button class="v-fat-edit" data-id="${l.id}" title="Corrigir o fator">✏️ Fator</button>
                 <button class="v-del" data-id="${l.id}">Remover</button>
-              </div>`).join('') : ''}
+              </div>
+              ${vincFatorEditando === l.id ? `
+                <div class="vinc-fator-box">
+                  <label>1 embalagem =
+                    <input type="number" id="vf-valor" step="0.001" min="0.001" value="${l.factor}"> un
+                  </label>
+                  <label class="vf-check">
+                    <input type="checkbox" id="vf-repro" checked>
+                    Corrigir também as entradas já lançadas com o fator antigo
+                  </label>
+                  <div class="vf-acoes">
+                    <button class="vf-cancelar">Cancelar</button>
+                    <button class="vf-salvar" data-id="${l.id}">Salvar</button>
+                  </div>
+                </div>` : ''}`).join('') : ''}
           </div>`;
         }).join('')}
 
@@ -2714,6 +2948,14 @@ function renderVinculos(el, d) {
     classificarItens(d.pendentes.map(p => p.source_name), b.dataset.kind)));
   el.querySelectorAll('.v-unclass').forEach(b => b.addEventListener('click', () => desclassificar(b.dataset.id)));
   el.querySelectorAll('.v-del').forEach(b => b.addEventListener('click', () => removerVinculo(b.dataset.id)));
+  el.querySelectorAll('.v-fat-edit').forEach(b => b.addEventListener('click', () => {
+    vincFatorEditando = vincFatorEditando === b.dataset.id ? null : b.dataset.id;
+    loadVinculos();
+  }));
+  el.querySelectorAll('.vf-cancelar').forEach(b => b.addEventListener('click', () => {
+    vincFatorEditando = null; loadVinculos();
+  }));
+  el.querySelectorAll('.vf-salvar').forEach(b => b.addEventListener('click', () => salvarFator(b.dataset.id, b)));
   el.querySelectorAll('.v-restore').forEach(b => b.addEventListener('click', () => restaurarVinculo(b.dataset.id)));
   el.querySelectorAll('.vinc-grupo-head').forEach(h => h.addEventListener('click', () => {
     const g = h.dataset.grupo;

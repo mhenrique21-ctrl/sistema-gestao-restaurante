@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { internalError } = require('../utils/errors');
 const { logAction } = require('../utils/audit');
+const { recalcularCorrente, reancorarUltimoCusto } = require('../utils/estoque');
 
 // Nome vindo da NF-e varia em caixa e espaçamento entre uma nota e outra.
 // Sem normalizar, "COCA COLA" e "Coca  Cola" viram dois vínculos distintos.
@@ -325,6 +326,107 @@ router.post('/links', async (req, res) => {
       return res.status(409).json({ error: 'Esse item já está vinculado' });
     }
     return internalError(res, err, '[supply/links create]');
+  }
+});
+
+// PATCH /api/supply/links/:id — corrige o fator de conversão.
+//
+// O erro que motivou isto: o fator foi preenchido com o número que aparece no
+// NOME do produto ("DROPS HALLS 21X10" virou fator 21), quando a nota já vinha
+// em unidades. 21 unidades entraram como 441, e o custo caiu de R$ 1,23 pra
+// R$ 0,06. Trocar o fator só para as próximas notas deixaria o estrago no
+// passado, então `reprocessar` refaz as entradas que já usaram o fator antigo.
+//
+// A reconstrução parte de purchase_entries.applied, que guarda quanto ENTROU
+// de fato em cada nota. Dividindo pelo fator antigo se recupera a quantidade
+// original da nota, e daí se aplica o fator novo. Recalcular pela nota bruta
+// seria pior: se o de-para mudou no meio do caminho, o número não fecharia.
+router.patch('/links/:id', async (req, res) => {
+  const factor = parseFloat(req.body.factor);
+  const reprocessar = req.body.reprocessar === true;
+  if (!(factor > 0)) return res.status(400).json({ error: 'Fator deve ser maior que zero' });
+
+  try {
+    const atual = await pool.query(
+      `SELECT sl.id, sl.source_name, sl.factor, sl.product_id, p.name AS produto
+         FROM supply_links sl JOIN products p ON p.id = sl.product_id
+        WHERE sl.id = $1`,
+      [req.params.id]
+    );
+    const link = atual.rows[0];
+    if (!link) return res.status(404).json({ error: 'Vínculo não encontrado' });
+
+    const fatorAntigo = parseFloat(link.factor);
+    if (fatorAntigo === factor) return res.json({ ok: true, inalterado: true, entradas_ajustadas: 0 });
+
+    await pool.query(`UPDATE supply_links SET factor = ${factor} WHERE id = $1 RETURNING id`, [link.id]);
+
+    let ajustadas = 0;
+    let naoLocalizadas = 0;
+    if (reprocessar) {
+      const notas = await pool.query(
+        `SELECT origin_id, applied FROM purchase_entries
+          WHERE applied @> ${sqlStr(JSON.stringify([{ nome: link.source_name }]))}::jsonb`
+      );
+
+      for (const nota of notas.rows) {
+        const aplicados = Array.isArray(nota.applied) ? nota.applied : [];
+        // Uma nota pode trazer o mesmo nome em mais de uma linha; cada uma virou
+        // um movimento próprio. Consome um movimento por linha pra não corrigir
+        // duas vezes a mesma e deixar a outra intacta.
+        const usados = new Set();
+        const novosAplicados = [];
+        for (const item of aplicados) {
+          if (norm(item.nome) !== norm(link.source_name)) { novosAplicados.push(item); continue; }
+          const entrouAntes = parseFloat(item.entrou);
+          const qtdNota = entrouAntes / fatorAntigo;
+          const entrouAgora = qtdNota * factor;
+
+          const cand = await pool.query(
+            `SELECT id, unit_cost FROM stock_movements
+              WHERE origin_id = $1 AND product_id = $2 AND type = 'entrada' AND quantity = ${entrouAntes}
+              ORDER BY created_at`,
+            [String(nota.origin_id), link.product_id]
+          );
+          const alvo = cand.rows.find((m) => !usados.has(m.id));
+          if (!alvo) { naoLocalizadas++; novosAplicados.push(item); continue; }
+          usados.add(alvo.id);
+
+          // Custo acompanha o fator: o total pago pela linha não mudou, só o
+          // número de unidades em que ele é dividido.
+          const custoAntes = alvo.unit_cost != null ? parseFloat(alvo.unit_cost) : null;
+          const custoAgora = custoAntes != null ? (custoAntes * fatorAntigo) / factor : null;
+          await pool.query(
+            `UPDATE stock_movements SET unit_cost = ${custoAgora === null ? 'NULL' : custoAgora}
+              WHERE id = $1 RETURNING id`,
+            [alvo.id]
+          );
+          await recalcularCorrente(link.product_id, { porId: { [alvo.id]: entrouAgora } });
+          ajustadas++;
+          novosAplicados.push({ ...item, entrou: entrouAgora });
+        }
+        await pool.query(
+          `UPDATE purchase_entries SET applied = ${sqlStr(JSON.stringify(novosAplicados))}::jsonb
+            WHERE origin_id = $1 RETURNING origin_id`,
+          [String(nota.origin_id)]
+        );
+      }
+      if (ajustadas) await reancorarUltimoCusto(link.product_id);
+    }
+
+    const saldo = await pool.query(`SELECT stock_qty FROM products WHERE id = $1`, [link.product_id]);
+    logAction(req.user.id, 'vinculo_fator_alterado', {
+      source_name: link.source_name, produto: link.produto,
+      de: fatorAntigo, para: factor, entradas_ajustadas: ajustadas,
+    });
+    res.json({
+      ok: true, produto: link.produto,
+      entradas_ajustadas: ajustadas,
+      nao_localizadas: naoLocalizadas,
+      saldo: saldo.rows[0] ? parseFloat(saldo.rows[0].stock_qty) : null,
+    });
+  } catch (err) {
+    return internalError(res, err, '[supply/links patch]');
   }
 });
 

@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { internalError } = require('../utils/errors');
 const { logAction } = require('../utils/audit');
+const { recalcularCorrente, reancorarUltimoCusto } = require('../utils/estoque');
 
 router.use(authMiddleware, requireRole('gerente', 'admin'));
 
@@ -108,6 +109,74 @@ router.post('/:id/movement', async (req, res) => {
     res.status(201).json({ id: prod.id, name: prod.name, stock_qty: novo });
   } catch (err) {
     return internalError(res, err, '[stock/movement]');
+  }
+});
+
+// POST /api/stock/contagem — inventário: o saldo contado na prateleira VIRA o
+// saldo do sistema, produto a produto.
+//
+// Em lote e não um a um porque contagem é feita de uma vez: fechar 13 produtos
+// em 13 telas separadas convida a parar no meio, e metade contada é pior que
+// nada — some a referência de quando a conta estava certa.
+//
+// Só grava o que divergiu. Produto que bateu não vira movimento: encheria o
+// extrato de linhas de zero e esconderia as diferenças que importam.
+router.post('/contagem', async (req, res) => {
+  const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
+  if (!itens.length) return res.status(400).json({ error: 'Informe ao menos um produto contado' });
+  if (itens.length > 300) return res.status(400).json({ error: 'Contagem grande demais para um envio só' });
+
+  const motivo = String(req.body.motivo || '').trim() || 'Contagem de inventário';
+
+  // Valida tudo antes de gravar qualquer coisa: uma contagem meio aplicada
+  // deixaria o estoque num estado que ninguém sabe descrever.
+  const limpos = [];
+  for (const it of itens) {
+    const contado = parseFloat(it.contado);
+    if (!it.product_id || !Number.isFinite(contado) || contado < 0) {
+      return res.status(400).json({ error: 'Há item com produto ou quantidade inválida' });
+    }
+    limpos.push({ product_id: String(it.product_id), contado });
+  }
+
+  try {
+    const ajustados = [];
+    const semMudanca = [];
+    const ignorados = [];
+
+    for (const it of limpos) {
+      const p = await pool.query(
+        `SELECT id, name, stock_qty, track_stock FROM products WHERE id = $1`,
+        [it.product_id]
+      );
+      const prod = p.rows[0];
+      if (!prod || !prod.track_stock) { ignorados.push(it.product_id); continue; }
+
+      const antes = parseFloat(prod.stock_qty);
+      const delta = it.contado - antes;
+      if (delta === 0) { semMudanca.push(prod.name); continue; }
+
+      await pool.query(`UPDATE products SET stock_qty = ${it.contado} WHERE id = $1 RETURNING id`, [prod.id]);
+      await pool.query(
+        `INSERT INTO stock_movements (product_id, type, quantity, balance_after, reason, created_by)
+         VALUES ($1, 'ajuste', ${delta}, ${it.contado}, $2, $3) RETURNING id`,
+        [prod.id, motivo, req.user.id]
+      );
+      ajustados.push({ produto: prod.name, de: antes, para: it.contado, diferenca: delta });
+    }
+
+    logAction(req.user.id, 'contagem_inventario', {
+      motivo, ajustados: ajustados.length, sem_mudanca: semMudanca.length,
+      itens: ajustados.slice(0, 40),
+    });
+    res.json({
+      ok: true,
+      ajustados, sem_mudanca: semMudanca.length, ignorados: ignorados.length,
+      sobra: ajustados.filter((a) => a.diferenca > 0).length,
+      falta: ajustados.filter((a) => a.diferenca < 0).length,
+    });
+  } catch (err) {
+    return internalError(res, err, '[stock/contagem]');
   }
 });
 
@@ -237,6 +306,89 @@ router.get('/entradas', async (req, res) => {
     });
   } catch (err) {
     return internalError(res, err, '[stock/entradas]');
+  }
+});
+
+// ── Correção de entrada lançada errada ────────────────────────────────
+// Entrada com fator de embalagem errado entra multiplicada (21 unidades viram
+// 441) e contamina saldo E custo médio. Sem uma forma de corrigir, a saída era
+// refazer a nota inteira na mão. O recálculo da corrente do produto vive em
+// utils/estoque porque a troca de fator do vínculo precisa do mesmo cálculo.
+
+// Carrega o movimento e recusa o que não é entrada: mexer numa linha de venda
+// aqui deixaria o estoque divergente do que foi de fato vendido.
+async function carregarEntrada(id) {
+  const r = await pool.query(
+    `SELECT sm.id, sm.product_id, sm.type, sm.quantity, sm.unit_cost, p.name AS produto
+       FROM stock_movements sm JOIN products p ON p.id = sm.product_id
+      WHERE sm.id = $1`,
+    [id]
+  );
+  return r.rows[0] || null;
+}
+
+// PATCH /api/stock/entradas/:id — corrige quantidade e/ou custo de uma entrada
+router.patch('/entradas/:id', async (req, res) => {
+  const temQtd = req.body.quantidade !== undefined;
+  const temCusto = req.body.custo_unitario !== undefined;
+  if (!temQtd && !temCusto) return res.status(400).json({ error: 'Informe a quantidade ou o custo' });
+
+  const quantidade = temQtd ? parseFloat(req.body.quantidade) : null;
+  if (temQtd && !(Number.isFinite(quantidade) && quantidade > 0)) {
+    return res.status(400).json({ error: 'Quantidade deve ser maior que zero' });
+  }
+  // Custo nulo é legítimo (nota antiga sem valor); negativo não é.
+  const custo = temCusto && req.body.custo_unitario !== null ? parseFloat(req.body.custo_unitario) : null;
+  if (temCusto && req.body.custo_unitario !== null && !(Number.isFinite(custo) && custo >= 0)) {
+    return res.status(400).json({ error: 'Custo inválido' });
+  }
+
+  try {
+    const mov = await carregarEntrada(req.params.id);
+    if (!mov) return res.status(404).json({ error: 'Entrada não encontrada' });
+    if (mov.type !== 'entrada') return res.status(400).json({ error: 'Só entradas podem ser corrigidas por aqui' });
+
+    const antes = { quantidade: parseFloat(mov.quantity), custo: mov.unit_cost != null ? parseFloat(mov.unit_cost) : null };
+
+    if (temCusto) {
+      await pool.query(
+        `UPDATE stock_movements SET unit_cost = ${custo === null ? 'NULL' : custo} WHERE id = $1 RETURNING id`,
+        [mov.id]
+      );
+    }
+    const saldo = await recalcularCorrente(mov.product_id, { id: mov.id, quantidade: temQtd ? quantidade : null });
+    const ultimoCusto = temCusto ? await reancorarUltimoCusto(mov.product_id) : undefined;
+
+    logAction(req.user.id, 'entrada_corrigida', {
+      movimento: mov.id, produto: mov.produto,
+      de: antes, para: { quantidade: temQtd ? quantidade : antes.quantidade, custo: temCusto ? custo : antes.custo },
+    });
+    res.json({ ok: true, produto: mov.produto, saldo, ultimo_custo: ultimoCusto });
+  } catch (err) {
+    return internalError(res, err, '[stock/entradas patch]');
+  }
+});
+
+// DELETE /api/stock/entradas/:id — remove uma entrada lançada em duplicidade
+router.delete('/entradas/:id', async (req, res) => {
+  try {
+    const mov = await carregarEntrada(req.params.id);
+    if (!mov) return res.status(404).json({ error: 'Entrada não encontrada' });
+    if (mov.type !== 'entrada') return res.status(400).json({ error: 'Só entradas podem ser excluídas por aqui' });
+
+    // Recalcula ANTES de apagar: o saldo de abertura é derivado do primeiro
+    // movimento da corrente, e se a linha excluída for justamente essa, apagar
+    // primeiro faria a abertura absorver a quantidade que deveria sumir.
+    const saldo = await recalcularCorrente(mov.product_id, { id: mov.id, excluir: true });
+    await pool.query(`DELETE FROM stock_movements WHERE id = $1 RETURNING id`, [mov.id]);
+    const ultimoCusto = await reancorarUltimoCusto(mov.product_id);
+
+    logAction(req.user.id, 'entrada_excluida', {
+      movimento: mov.id, produto: mov.produto, quantidade: parseFloat(mov.quantity),
+    });
+    res.json({ ok: true, produto: mov.produto, saldo, ultimo_custo: ultimoCusto });
+  } catch (err) {
+    return internalError(res, err, '[stock/entradas delete]');
   }
 });
 
