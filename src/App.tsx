@@ -413,15 +413,27 @@ const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
       }),
     });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) { console.error("[seama-estoque]", d.error || r.status); return; }
+    const pdv = empresa === "CONFRARIA" ? "PDV Confraria" : "PDV Seama";
+    // Falha aqui era só console.error: a compra salvava na Gestão e não descia
+    // pro PDV sem ninguém perceber. Um segredo de serviço trocado deixou a
+    // ponte da Seama muda por dois dias. Erro de integração agora aparece.
+    if (!r.ok) {
+      alert(`⚠️ A compra foi salva na Gestão, mas NÃO entrou no estoque do ${pdv}.\n\nMotivo: ${d.error || `erro ${r.status}`}\n\nCorrija e lance a entrada no PDV manualmente, senão o estoque fica menor que a realidade.`);
+      return;
+    }
     if (d.duplicated) return;
     if (d.pending > 0) {
-      alert(`📦 PDV Seama: ${d.applied} item(ns) entraram no estoque.\n\n⚠️ ${d.pending} item(ns) aguardam vínculo — abra o PDV em Configurações → Compras para indicar a qual produto do cardápio correspondem.`);
+      alert(`📦 ${pdv}: ${d.applied} item(ns) entraram no estoque.\n\n⚠️ ${d.pending} item(ns) aguardam vínculo — abra o PDV em Configurações → Compras para indicar a qual produto do cardápio correspondem.`);
     } else if (d.applied > 0) {
-      alert(`📦 PDV Seama: ${d.applied} item(ns) entraram no estoque automaticamente.`);
+      alert(`📦 ${pdv}: ${d.applied} item(ns) entraram no estoque automaticamente.`);
+    } else if (d.classified > 0) {
+      // Tudo já classificado como matéria-prima/limpeza: não entra no estoque
+      // de revenda de propósito. Sem esta linha a tela não dizia nada, e
+      // "nada aconteceu" é indistinguível de "a ponte quebrou".
+      alert(`📦 ${pdv}: nenhum item de revenda nesta nota — ${d.classified} item(ns) já classificados como matéria-prima/limpeza.`);
     }
   } catch (e) {
-    console.error("[seama-estoque]", e.message);
+    alert(`⚠️ A compra foi salva na Gestão, mas não consegui falar com o PDV: ${e.message}\n\nO estoque do PDV NÃO foi atualizado.`);
   }
 };
 
@@ -440,12 +452,18 @@ const estornarCompraSeama = async (empresa, grupoId, nomes) => {
       body: JSON.stringify({ empresa, origin_id: grupoId, items: nomes || null }),
     });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) { console.error("[seama-estorno]", d.error || r.status); return; }
+    const pdv = empresa === "CONFRARIA" ? "PDV Confraria" : "PDV Seama";
+    // Estorno mudo é pior que envio mudo: o estoque do PDV fica MAIOR que a
+    // realidade e só aparece na contagem física.
+    if (!r.ok) {
+      alert(`⚠️ A compra saiu da Gestão, mas o estoque do ${pdv} NÃO foi estornado.\n\nMotivo: ${d.error || `erro ${r.status}`}\n\nBaixe a quantidade no PDV manualmente, senão o estoque fica maior que a realidade.`);
+      return;
+    }
     if (d.reverted > 0) {
-      alert(`📦 PDV Seama: ${d.reverted} item(ns) devolvidos do estoque.`);
+      alert(`📦 ${pdv}: ${d.reverted} item(ns) devolvidos do estoque.`);
     }
   } catch (e) {
-    console.error("[seama-estorno]", e.message);
+    alert(`⚠️ A compra saiu da Gestão, mas não consegui falar com o PDV: ${e.message}\n\nO estoque do PDV NÃO foi estornado.`);
   }
 };
 
