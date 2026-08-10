@@ -443,8 +443,14 @@ const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
 //
 // Sem nomes, estorna a nota toda. O PDV é idempotente por item, então excluir
 // um item e depois a nota inteira não devolve aquele item duas vezes.
-const estornarCompraSeama = async (empresa, grupoId, nomes) => {
+//
+// `silencioso` é para o estorno em lote (apagar todo o histórico): um alerta
+// por nota viraria dezenas de cliques. Nesse modo a falha é LANÇADA em vez de
+// alertada, e quem chamou conta quantas falharam e avisa uma vez só.
+const estornarCompraSeama = async (empresa, grupoId, nomes, opcoes = {}) => {
   if (!EMPRESAS_COM_PDV.includes(empresa) || !grupoId) return;
+  const { silencioso = false } = opcoes;
+  const pdv = empresa === "CONFRARIA" ? "PDV Confraria" : "PDV Seama";
   try {
     const r = await fetch("/api/seama-estorno", {
       method: "POST",
@@ -452,17 +458,18 @@ const estornarCompraSeama = async (empresa, grupoId, nomes) => {
       body: JSON.stringify({ empresa, origin_id: grupoId, items: nomes || null }),
     });
     const d = await r.json().catch(() => ({}));
-    const pdv = empresa === "CONFRARIA" ? "PDV Confraria" : "PDV Seama";
     // Estorno mudo é pior que envio mudo: o estoque do PDV fica MAIOR que a
     // realidade e só aparece na contagem física.
     if (!r.ok) {
+      if (silencioso) throw new Error(d.error || `erro ${r.status}`);
       alert(`⚠️ A compra saiu da Gestão, mas o estoque do ${pdv} NÃO foi estornado.\n\nMotivo: ${d.error || `erro ${r.status}`}\n\nBaixe a quantidade no PDV manualmente, senão o estoque fica maior que a realidade.`);
       return;
     }
-    if (d.reverted > 0) {
+    if (d.reverted > 0 && !silencioso) {
       alert(`📦 ${pdv}: ${d.reverted} item(ns) devolvidos do estoque.`);
     }
   } catch (e) {
+    if (silencioso) throw e;
     alert(`⚠️ A compra saiu da Gestão, mas não consegui falar com o PDV: ${e.message}\n\nO estoque do PDV NÃO foi estornado.`);
   }
 };
@@ -1392,7 +1399,7 @@ export default function App() {
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} setState={setState} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="contas"     && <Contas db={db} setDb={setDb} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
@@ -3833,12 +3840,26 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div className="section-title" style={{margin:0}}>Histórico de Compras</div>
-        {(db.compras||[]).length>0&&<button className="btn" onClick={()=>{
-          if(!confirm(`⚠️ Apagar TODO o histórico de compras da ${empresa}?\n\n${(db.compras||[]).length} registro(s) serão removidos permanentemente.\n\nDigite "CONFIRMAR" para continuar.`))return;
+        {(db.compras||[]).length>0&&<button className="btn" onClick={async()=>{
+          const grupos=[...new Set((db.compras||[]).map(c=>c.grupoId).filter(Boolean))];
+          const temPdv=["SEAMA","CONFRARIA"].includes(String(empresa||"").toUpperCase());
+          if(!confirm(`⚠️ Apagar TODO o histórico de compras da ${empresa}?\n\n${(db.compras||[]).length} registro(s) serão removidos permanentemente.`
+            +(temPdv?`\n\nAntes de apagar, a quantidade de ${grupos.length} nota(s) será devolvida no estoque do PDV.`:"")
+            +`\n\nDigite "CONFIRMAR" para continuar.`))return;
           const confirmacao=window.prompt('Digite CONFIRMAR para apagar todo o histórico de compras:');
           if(confirmacao!=="CONFIRMAR")return alert("Cancelado. Nenhum dado foi removido.");
-          const compraGrupos=new Set((db.compras||[]).map(c=>c.grupoId).filter(Boolean));
-          (setDbAndSave||setDb)((d:any)=>({...d,compras:[],contas:(d.contas||[]).filter((c:any)=>!compraGrupos.has(c.grupoId))}));
+
+          // Estorna ANTES de apagar: depois de limpar o histórico não há mais de
+          // onde tirar os grupos, e o estoque do PDV ficaria inflado pra sempre,
+          // aparecendo só na contagem física.
+          if(temPdv&&grupos.length){
+            let falhas=0;
+            for(const gid of grupos){
+              try{ await estornarCompraSeama(empresa,gid,null,{silencioso:true}); }catch{ falhas++; }
+            }
+            if(falhas)alert(`⚠️ ${falhas} de ${grupos.length} nota(s) não puderam ser estornadas no PDV. Confira o estoque por lá antes de considerar fechado.`);
+          }
+          (setDbAndSave||setDb)((d:any)=>({...d,compras:[],contas:(d.contas||[]).filter((c:any)=>!grupos.includes(c.grupoId))}));
           alert("✅ Histórico de compras e lançamentos financeiros apagados.");
         }} style={{background:"#FEE2E2",color:"#EF4444",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
       </div>
@@ -7512,7 +7533,7 @@ function baixarXmlNFe(xmlNFe:string,nNF:string,fornecedor:string){
 }
 
 // ===================== CONTAS =====================
-function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,empresa?:string,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const fPagOpts=["dinheiro","pix","cartão débito","cartão crédito","boleto","transferência","outros"];
   const emptyForm={descricao:"",categoria:"",valor:"",vencimento:today(),status:"pendente",tipo:"saida",formaPag:"",fornecedor:"",recorrente:false,parcelas:"2",periodo:"mes",diasSemana:[1,2,3,4,5],anexo:null as any};
   const [subTab,setSubTab]=useState(pendingSub||"lista");
@@ -7526,6 +7547,7 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
   const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
   const [verConta,setVerConta]=useState<any>(null);
   const [verGrupo,setVerGrupo]=useState<string|null>(null);
+  const [contaCompraExcluir,setContaCompraExcluir]=useState<any>(null);
   const [collapsedDates,setCollapsedDates]=useState<Set<string>>(new Set());
   const [recorrenteCollapsed,setRecorrenteCollapsed]=useState(false);
   const toggleDateCollapse=(d:string)=>setCollapsedDates(prev=>{const n=new Set(prev);if(n.has(d))n.delete(d);else n.add(d);return n;});
@@ -7595,7 +7617,40 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
     setSubTab("novo");
     setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);
   };
-  const del=(id:string)=>{_listaDeletados.add(id);(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));};
+  // Conta gerada por compra é a mesma coisa que a compra: apagar só ela deixava
+  // os itens órfãos no histórico e o estoque do PDV inflado, sem nada na tela
+  // indicando isso. Mas apagar tudo nem sempre é o que se quer — conta lançada
+  // em duplicidade acontece, e aí a compra está certa. Por isso pergunta.
+  const del=(id:string)=>{
+    const conta=(db.contas||[]).find((c:any)=>c.id===id);
+    if(conta?.origem==="compra"&&conta?.grupoId){setContaCompraExcluir(conta);return;}
+    _listaDeletados.add(id);
+    (setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==id)}));
+  };
+
+  // Só o lançamento: a compra e o estoque do PDV ficam como estão.
+  const excluirSoLancamento=(conta:any)=>{
+    _listaDeletados.add(conta.id);
+    (setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.id!==conta.id)}));
+    setContaCompraExcluir(null);
+  };
+
+  // A compra inteira: tira a conta, tira os itens do histórico e devolve a
+  // quantidade no estoque do PDV. O estorno é idempotente por item, então
+  // excluir aqui depois de já ter excluído pela tela Compras não devolve duas
+  // vezes.
+  const excluirCompraInteira=(conta:any)=>{
+    const gid=conta.grupoId;
+    const itens=(db.compras||[]).filter((c:any)=>(c.grupoId||c.id)===gid);
+    _listaDeletados.add(conta.id);
+    itens.forEach((i:any)=>_listaDeletados.add(i.id));
+    (setDbAndSave||setDb)((d:any)=>({...d,
+      contas:(d.contas||[]).filter((c:any)=>c.id!==conta.id),
+      compras:(d.compras||[]).filter((c:any)=>(c.grupoId||c.id)!==gid),
+    }));
+    estornarCompraSeama(empresa,gid,null);
+    setContaCompraExcluir(null);
+  };
   const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;const ids=(db.contas||[]).filter((c:any)=>c.grupoRecorr===gid).map((c:any)=>c.id);ids.forEach(id=>_listaDeletados.add(id));(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};
   const pagarGrupo=(gid:string)=>(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.grupoRecorr===gid?{...c,status:"pago",atualizadoEm:new Date().toISOString()}:c)}));
   const toggle=(id:string)=>(setDbAndSave||setDb)((d:any)=>{
@@ -7674,6 +7729,42 @@ function Contas({db,setDb,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:a
       })}
       {contasAtrasadas.length>3&&<div className="muted" style={{fontSize:11,marginTop:6,textAlign:"center"}}>+{contasAtrasadas.length-3} outras contas em atraso</div>}
     </div>}
+    {contaCompraExcluir&&(()=>{
+      const gid=contaCompraExcluir.grupoId;
+      const itens=(db.compras||[]).filter((c:any)=>(c.grupoId||c.id)===gid);
+      const temPdv=["SEAMA","CONFRARIA"].includes(String(empresa||"").toUpperCase());
+      return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:210,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+        onClick={()=>setContaCompraExcluir(null)}>
+        <div className="card" onClick={(e:any)=>e.stopPropagation()} style={{width:"100%",maxWidth:440}}>
+          <div style={{fontSize:15,fontWeight:800,marginBottom:6}}>🗑️ Excluir o quê?</div>
+          <div className="muted" style={{fontSize:12,lineHeight:1.6,marginBottom:14}}>
+            <b>{contaCompraExcluir.descricao}</b><br/>
+            Esse lançamento veio de uma compra com {itens.length} item(ns) no histórico
+            {temPdv?" e que pode ter entrado no estoque do PDV":""}.
+          </div>
+
+          <button className="btn" onClick={()=>excluirSoLancamento(contaCompraExcluir)}
+            style={{width:"100%",textAlign:"left" as const,padding:"11px 13px",marginBottom:9,background:"var(--bg3)",border:"1px solid var(--border2)"}}>
+            <div style={{fontWeight:700,fontSize:13}}>Só o lançamento financeiro</div>
+            <div className="muted" style={{fontSize:11,marginTop:3,lineHeight:1.5}}>
+              A compra continua no histórico{temPdv?" e o estoque do PDV não muda":""}. Use quando a conta a pagar foi lançada em duplicidade.
+            </div>
+          </button>
+
+          <button className="btn" onClick={()=>excluirCompraInteira(contaCompraExcluir)}
+            style={{width:"100%",textAlign:"left" as const,padding:"11px 13px",marginBottom:9,background:"#FEE2E2",border:"1px solid #EF444455"}}>
+            <div style={{fontWeight:700,fontSize:13,color:"#B91C1C"}}>A compra inteira</div>
+            <div style={{fontSize:11,marginTop:3,lineHeight:1.5,color:"#7F1D1D"}}>
+              Apaga o lançamento e os {itens.length} item(ns) do histórico
+              {temPdv?", e devolve a quantidade no estoque do PDV":""}.
+            </div>
+          </button>
+
+          <button className="btn" onClick={()=>setContaCompraExcluir(null)}
+            style={{width:"100%",padding:"9px",fontSize:12.5,background:"none",border:"1px solid var(--border2)"}}>Cancelar</button>
+        </div>
+      </div>;
+    })()}
     {verConta&&(()=>{
       const itens=(db.compras||[]).filter((c:any)=>c.grupoId===verConta.grupoId);
       return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
