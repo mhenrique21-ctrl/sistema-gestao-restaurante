@@ -21,7 +21,7 @@
       "runtimeArgs": ["new_server.js"],
       "port": 3000,
       "autoPort": false,
-      "cwd": "."
+      "cwd": "app-gestao-wt"
     },
     {
       "name": "app-gestao-wt",
