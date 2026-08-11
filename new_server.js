@@ -675,53 +675,136 @@ function sefazDistDFe(emp) {
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function sefazSync(emp) {
-  const result = await sefazDistDFe(emp);
-  const resumos = (result.nfes || []).filter(n => n.tipoDoc === 'resumo' && n.chNFe && n.chNFe.length === 44);
-  if (resumos.length > 0) {
-    console.log(`[SEFAZ ${emp}] ${resumos.length} resumo(s) encontrado(s) — manifestando...`);
-    for (const resumo of resumos) {
-      const isNFCe = resumo.chNFe.length >= 22 && resumo.chNFe.substring(20, 22) === '65';
-      const tipoLabel = isNFCe ? 'NFC-e' : 'NF-e';
-      if (!isNFCe) {
-        try {
-          await delay(1000);
-          await sefazManifestar(emp, resumo.chNFe);
-          console.log(`[SEFAZ ${emp}] ✅ Manifestação ${tipoLabel} ${resumo.chNFe.slice(-8)} enviada`);
-        } catch (me) {
-          if ((me.message || '').includes('573')) {
-            console.log(`[SEFAZ ${emp}] ${tipoLabel} ${resumo.chNFe.slice(-8)}: já manifestada (573)`);
-          } else {
-            console.log(`[SEFAZ ${emp}] Manifestação ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${me.message}`);
-          }
-        }
-      }
+// ── Ciclo de vida de uma NF-e recebida ────────────────────────────────
+//
+// O distDFe entrega, pra nota em que somos destinatários, só o `resNFe` — um
+// resumo com fornecedor, valor e chave, SEM os itens. O XML completo (`nfeProc`)
+// só é liberado depois da manifestação do destinatário. E o detalhe que derruba
+// a maioria das integrações: o completo NÃO volta na mesma consulta nem na
+// mesma chave — ele reaparece como um NSU NOVO, numa varredura posterior,
+// minutos ou horas depois.
+//
+// A versão anterior manifestava, esperava 5 SEGUNDOS e consultava por chave.
+// A SEFAZ processa a manifestação de forma assíncrona, então a consulta caía
+// em cStat 137 (nada localizado) e nada voltava pra tentar de novo — por isso
+// 17 de 17 notas ficaram eternamente em resumo.
+//
+// Agora cada nota tem estado persistido e o trabalho é dividido entre ciclos:
+//   novo            → resumo recém-chegado, ainda não manifestado
+//   aguardando_xml  → manifestação aceita; o completo chega numa varredura futura
+//   completo        → XML com itens em mãos
+//   sem_manifestacao→ NFC-e (modelo 65), que não tem manifestação nem distribuição
+//   erro_manifestacao → a SEFAZ recusou; o cStat fica gravado pra diagnóstico
+// Teto por ciclo: a cota da SEFAZ é limitada e estourá-la (cStat 656) bloqueia
+// a varredura inteira por uma hora. O que sobrar vai no ciclo seguinte.
+const MANIFESTACOES_POR_CICLO = 10;
+
+function ehNFCe(chNFe) {
+  return String(chNFe || '').length >= 22 && String(chNFe).substring(20, 22) === '65';
+}
+
+function estadoInicial(nota) {
+  if (nota.tipoDoc === 'completo') return 'completo';
+  return ehNFCe(nota.chNFe) ? 'sem_manifestacao' : 'novo';
+}
+
+// Funde o que chegou da varredura com o que já estava no cache, casando por
+// CHAVE — não por NSU. É isso que permite o completo, que chega num NSU novo,
+// substituir o resumo antigo em vez de virar uma segunda linha da mesma nota.
+function fundirNotas(existentes, chegando) {
+  const porChave = new Map();
+  for (const n of existentes) porChave.set(n.chNFe || `nsu:${n.nsu}`, n);
+
+  for (const nova of chegando) {
+    const chave = nova.chNFe || `nsu:${nova.nsu}`;
+    const atual = porChave.get(chave);
+    if (!atual) {
+      porChave.set(chave, { ...nova, estado: estadoInicial(nova), manifestacao: null });
+      continue;
     }
-    console.log(`[SEFAZ ${emp}] Aguardando 5s para buscar NF-es completas...`);
-    await delay(5000);
-    for (const resumo of resumos) {
-      const isNFCe = resumo.chNFe.substring(20, 22) === '65';
-      const tipoLabel = isNFCe ? 'NFC-e' : 'NF-e';
-      try {
-        const completa = await sefazFetchByChave(emp, resumo.chNFe);
-        if ((completa.itens || []).length > 0) {
-          const idx = result.nfes.findIndex(n => n.nsu === resumo.nsu);
-          if (idx >= 0) {
-            result.nfes[idx] = { ...completa, nsu: resumo.nsu, tipoDoc: 'completo', modelo: isNFCe ? '65' : (completa.modelo || '55') };
-            console.log(`[SEFAZ ${emp}] ✅ ${tipoLabel} ${resumo.chNFe.slice(-8)} completada (${completa.itens.length} itens)`);
-          }
-        }
-      } catch (e2) {
-        console.log(`[SEFAZ ${emp}] ${tipoLabel} ${resumo.chNFe.slice(-8)}: ${e2.message}`);
-      }
-      await delay(1000);
-    }
-    const aindaResumo = result.nfes.filter(n => n.tipoDoc === 'resumo').length;
-    if (aindaResumo > 0) {
-      console.log(`[SEFAZ ${emp}] ⚠️ ${aindaResumo} NF-e(s) ainda em resumo. Use "Buscar produtos" individualmente.`);
+    // Promoção resumo → completo: preserva o histórico de manifestação e o NSU
+    // original, que é por onde o usuário reconhece a nota na tela.
+    if (nova.tipoDoc === 'completo' && atual.tipoDoc !== 'completo') {
+      porChave.set(chave, {
+        ...nova,
+        nsu: atual.nsu,
+        estado: 'completo',
+        manifestacao: atual.manifestacao || null,
+        nsuCompleto: nova.nsu,
+      });
     }
   }
-  return result;
+  return [...porChave.values()].sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+}
+
+// Manifesta o que ainda não foi manifestado e GRAVA o resultado por nota.
+// Gravar o cStat é o que tira essa etapa da invisibilidade: sem isso, uma
+// assinatura recusada some no log e a nota fica em resumo pra sempre sem
+// ninguém saber por quê.
+async function manifestarPendentes(emp, notas) {
+  const pendentes = notas.filter(n => n.estado === 'novo' && n.chNFe && n.chNFe.length === 44);
+  if (!pendentes.length) return { enviadas: 0, aceitas: 0, recusadas: 0 };
+
+  const alvo = pendentes.slice(0, MANIFESTACOES_POR_CICLO);
+  let aceitas = 0, recusadas = 0;
+  console.log(`[SEFAZ ${emp}] ${pendentes.length} nota(s) a manifestar; processando ${alvo.length} neste ciclo.`);
+
+  for (const nota of alvo) {
+    const fim = nota.chNFe.slice(-8);
+    try {
+      await delay(1200);
+      const r = await sefazManifestar(emp, nota.chNFe);
+      const cStat = String(r?.cStat || '');
+      nota.manifestacao = { cStat, xMotivo: r?.xMotivo || '', em: new Date().toISOString() };
+      // 135 = evento registrado · 573 = já manifestada antes (idempotente, e o
+      // efeito prático é o mesmo: o XML já está liberado)
+      if (cStat === '135' || cStat === '573') {
+        nota.estado = 'aguardando_xml';
+        aceitas++;
+        console.log(`[SEFAZ ${emp}] ✅ manifestada ...${fim} (cStat ${cStat})`);
+      } else {
+        nota.estado = 'erro_manifestacao';
+        recusadas++;
+        console.log(`[SEFAZ ${emp}] ⚠️ manifestação recusada ...${fim}: cStat ${cStat} ${r?.xMotivo || ''}`);
+      }
+    } catch (e) {
+      // A rejeição vem como "Manifestação cStat 573: ...". Extrair o código é o
+      // que transforma "deu erro" em diagnóstico: 573 é benigno (já manifestada),
+      // enquanto uma recusa de assinatura aparece com código próprio — ou sem
+      // código nenhum, que é o sintoma de envelope rejeitado antes do processamento.
+      const msg = e.message || String(e);
+      const cStat = (msg.match(/cStat\s*(\d{3})/) || [])[1] || '';
+      nota.manifestacao = { cStat, xMotivo: msg, em: new Date().toISOString() };
+      if (cStat === '573') { nota.estado = 'aguardando_xml'; aceitas++; }
+      else { nota.estado = 'erro_manifestacao'; recusadas++; }
+      console.log(`[SEFAZ ${emp}] manifestação ...${fim}: ${msg}`);
+    }
+  }
+  return { enviadas: alvo.length, aceitas, recusadas };
+}
+
+// Uma varredura só traz até 50 documentos. Com fila acumulada, parar na
+// primeira chamada deixaria o resto pra daqui a uma hora. Enquanto a SEFAZ
+// responde 138 (há documentos) as chamadas seguidas são permitidas — o que
+// consome cota indevidamente é insistir quando não há nada novo.
+const MAX_VARREDURAS_POR_CICLO = 8;
+
+async function sefazVarrerTudo(emp) {
+  const todas = [];
+  let ultimo = null;
+  for (let i = 0; i < MAX_VARREDURAS_POR_CICLO; i++) {
+    const r = await sefazDistDFe(emp);
+    ultimo = r;
+    const qtd = (r.nfes || []).length;
+    todas.push(...(r.nfes || []));
+    if (!qtd) break;                 // cStat 137 ou lote vazio: acabou a fila
+    await delay(1500);
+  }
+  return { nfes: todas, total: todas.length, ultNSU: ultimo?.ultNSU || 0 };
+}
+
+async function sefazSync(emp) {
+  return sefazVarrerTudo(emp);
 }
 
 // Obtém (e cacheia) um JWT admin do delivery-backend, via segredo compartilhado
@@ -2222,33 +2305,32 @@ async function autoSyncSEFAZ() {
     if (isRateLimited(emp)) continue;
     console.log(`[AutoSync] Iniciando sync SEFAZ para ${emp} (CNPJ key: ${key})...`);
     try {
+      // FASE A — varrer tudo que a SEFAZ tem pra entregar neste ciclo.
       const result = await sefazSync(emp);
       const cache = loadCache();
       const existing = cache[key]?.nfes || [];
-      const existingNsus = new Set(existing.map(n => n.nsu));
-      const novas = (result.nfes||[]).filter(n => !existingNsus.has(n.nsu));
-      // Upgrade existing resumos to completo if the new sync brought the full version
-      const upgradedExisting = existing.map(ex => {
-        if (ex.tipoDoc === 'resumo' && ex.chNFe) {
-          const full = (result.nfes||[]).find(n => n.chNFe === ex.chNFe && n.tipoDoc === 'completo');
-          if (full) return { ...full, nsu: ex.nsu };
-        }
-        return ex;
-      });
-      const merged = [...novas, ...upgradedExisting]
-        .sort((a,b) => (b.data||'').localeCompare(a.data||''))
-        .slice(0, 50);
+
+      // FASE C (do ciclo anterior) — o `nfeProc` completo chega num NSU novo e
+      // aqui promove o resumo correspondente, casando pela chave.
+      const antesCompletas = existing.filter(n => n.estado === 'completo').length;
+      const notas = fundirNotas(existing, result.nfes || []);
+      const promovidas = notas.filter(n => n.estado === 'completo').length - antesCompletas;
+
+      // FASE B — manifestar o que chegou novo. Sem espera de 5s e sem consulta
+      // por chave: o completo virá sozinho numa varredura seguinte.
+      const manif = await manifestarPendentes(emp, notas);
+
+      // Guarda mais que as 50 antigas: nota aguardando XML precisa sobreviver
+      // até a varredura que traz o completo, que pode ser horas depois.
+      const merged = notas.slice(0, 200);
       cache[key] = { nfes: merged, timestamp: new Date().toISOString(), ultNSU: result.ultNSU, empresa: emp };
-      // NOTA: a resolucao automatica de resumos antigos (manifestar + buscar de novo) foi
-      // desativada -- a manifestacao automatica esta com um bug de assinatura XML-DSig que
-      // sempre falha (SEFAZ responde com erro interno), e repetir isso pra cada resumo a
-      // cada 65min so gastava a cota de 20 consultas/hora a toa, ate bloquear o sync todo.
-      // O botao manual "Baixar" (⚡) continua disponivel pra tentar nota por nota.
       saveCache(cache);
-      if (novas.length > 0) {
-        console.log(`[AutoSync] ${emp}: ${novas.length} nova(s) NF-e(s) adicionada(s) ao cache. Total: ${merged.length}.`);
-      } else {
-        console.log(`[AutoSync] ${emp}: nenhuma NF-e nova (ultNSU=${result.ultNSU}).`);
+
+      const porEstado = merged.reduce((a, n) => { a[n.estado || '?'] = (a[n.estado || '?'] || 0) + 1; return a; }, {});
+      console.log(`[AutoSync] ${emp}: varredura ultNSU=${result.ultNSU} · ${promovidas} promovida(s) a completa · `
+        + `manifestações: ${manif.aceitas} aceita(s), ${manif.recusadas} recusada(s) · estados: ${JSON.stringify(porEstado)}`);
+      if (manif.recusadas > 0) {
+        console.log(`[AutoSync] ${emp}: ⚠️ manifestação sendo recusada pela SEFAZ — o XML completo não será liberado enquanto isso. Veja o cStat em /api/nfe-cache.`);
       }
     } catch (e) {
       if (e.message && e.message.includes('656')) {
