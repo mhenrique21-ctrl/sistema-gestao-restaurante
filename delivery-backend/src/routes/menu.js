@@ -175,8 +175,17 @@ router.get('/', async (req, res) => {
         };
       }
       if (row.product_id) {
+        // Produto em promoção CONTINUA na categoria dele. Antes havia um
+        // `continue` aqui pulando quem tinha promo fora da categoria "Ofertas",
+        // na intenção de não duplicar o item. Só que "Ofertas" não é uma
+        // categoria de verdade pros clientes: tanto o app quanto o totem montam
+        // essa aba sozinhos, agregando quem tem promo_price de QUALQUER
+        // categoria (kiosk.html:534, MenuPage.jsx:135) e escondendo a categoria
+        // literal. O resultado é que o item era descartado aqui e não chegava a
+        // lugar nenhum — sumia do cardápio inteiro. Foi assim que 9 bolos e
+        // tortas ficaram invisíveis pro cliente, e por isso "produto em
+        // destaque" não surtia efeito: featured vinha junto no registro pulado.
         const activePromo = row.promo_price !== null && (row.promo_days === null || row.promo_days.includes(todayJs));
-        if (activePromo && row.category_name !== 'Ofertas') continue;
         menu[row.category_id].products.push({
           id: row.product_id,
           name: row.product_name,
