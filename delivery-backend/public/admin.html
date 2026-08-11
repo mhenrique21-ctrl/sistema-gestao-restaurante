@@ -4155,10 +4155,31 @@ function cfgImageHtml(idPrefix, label, url, folder, previewStyle) {
       <div style="display:flex;align-items:center;gap:10px">
         <img id="${idPrefix}-preview" src="${url || ''}" style="${previewStyle};object-fit:cover;border-radius:8px;background:#0f172a;${url ? '' : 'display:none'}" />
         <input type="file" accept="image/*" id="${idPrefix}-file" onchange="handleCfgImageUpload(this,'${idPrefix}','${folder}')" style="flex:1" />
+        <button type="button" id="${idPrefix}-remover" onclick="removerCfgImagem('${idPrefix}')" title="Remover imagem"
+          style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:.78rem;color:#f87171;cursor:pointer;white-space:nowrap;${url ? '' : 'display:none'}">🗑️ Remover</button>
         <span id="${idPrefix}-status" style="font-size:.75rem;color:#64748b"></span>
       </div>
       <input type="hidden" id="${idPrefix}" value="${url || ''}" />
     </div>`;
+}
+
+// Tira a imagem do campo. Remove só a REFERÊNCIA — o arquivo continua no
+// Storage de propósito: a mesma URL pode estar em uso em outro lugar (um banner
+// reaproveitado em dois dias, por exemplo), e apagar o arquivo quebraria o outro
+// sem aviso. Só vale de fato depois de Salvar, igual a trocar a imagem.
+function removerCfgImagem(idPrefix) {
+  const hidden = document.getElementById(idPrefix);
+  if (hidden) hidden.value = '';
+  const preview = document.getElementById(`${idPrefix}-preview`);
+  if (preview) { preview.src = ''; preview.style.display = 'none'; }
+  const btn = document.getElementById(`${idPrefix}-remover`);
+  if (btn) btn.style.display = 'none';
+  // Sem isso, reescolher o MESMO arquivo depois de remover não dispara o
+  // change e a imagem não voltaria.
+  const fileEl = document.getElementById(`${idPrefix}-file`);
+  if (fileEl) fileEl.value = '';
+  const statusEl = document.getElementById(`${idPrefix}-status`);
+  if (statusEl) statusEl.textContent = 'Removida — salve para confirmar';
 }
 
 async function handleCfgImageUpload(inputEl, idPrefix, folder) {
@@ -4177,6 +4198,8 @@ async function handleCfgImageUpload(inputEl, idPrefix, folder) {
     const preview = document.getElementById(`${idPrefix}-preview`);
     preview.src = data.url;
     preview.style.display = '';
+    const btnRem = document.getElementById(`${idPrefix}-remover`);
+    if (btnRem) btnRem.style.display = '';
     statusEl.textContent = '✓ Enviada';
   } catch (err) {
     statusEl.textContent = '';
@@ -4200,6 +4223,8 @@ async function handleBannerDayUpload(inputEl, idPrefix) {
     const preview = document.getElementById(`${idPrefix}-preview`);
     preview.src = data.url;
     preview.style.display = '';
+    const btnRem = document.getElementById(`${idPrefix}-remover`);
+    if (btnRem) btnRem.style.display = '';
     statusEl.textContent = '✓';
   } catch (err) {
     statusEl.textContent = '';
@@ -4257,6 +4282,8 @@ async function pageConfiguracoes() {
                   📂 Escolher
                   <input type="file" accept="image/*" style="display:none" onchange="handleBannerDayUpload(this,'${key}_banner')">
                 </label>
+                <button type="button" id="${key}_banner-remover" onclick="removerCfgImagem('${key}_banner')" title="Remover banner deste dia"
+                  style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 9px;font-size:.78rem;color:#f87171;cursor:pointer;${h.banner_url ? '' : 'display:none'}">🗑️</button>
                 <span id="${key}_banner-status" style="font-size:.72rem;color:var(--muted)"></span>
                 <input type="hidden" id="${key}_banner" value="${h.banner_url||''}" />
               </div>
