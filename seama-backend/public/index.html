@@ -4075,6 +4075,18 @@ function openProductModal(productId) {
         <div class="field-group"><label>Código</label><input id="prod-code" value="${prod?.code || ''}"></div>
       </div>
       <div class="field-group">
+        <label>Categoria</label>
+        <select id="prod-category">
+          ${categories.map(c => {
+            // Produto novo entra na categoria que está aberta na tela; produto
+            // existente mostra a dele. Antes a categoria só era gravada na
+            // criação, então item cadastrado no lugar errado ficava preso ali.
+            const atual = prod ? prod.category_id : configActiveCategory;
+            return `<option value="${c.id}" ${c.id === atual ? 'selected' : ''}>${c.icon || ''} ${c.name}${c.active === false ? ' (desativada)' : ''}</option>`;
+          }).join('')}
+        </select>
+      </div>
+      <div class="field-group">
         <label>Foto do produto</label>
         <div style="display:flex;align-items:center;gap:10px">
           <div id="prod-image-preview" style="width:56px;height:56px;border-radius:10px;background:var(--bg);flex-shrink:0;${prod?.image_url ? `background-image:url('${prod.image_url}');background-size:cover;background-position:center` : ''}"></div>
@@ -4142,7 +4154,9 @@ function openProductModal(productId) {
       track_stock: backdrop.querySelector('#prod-track-stock').checked,
       stock_min: parseFloat(backdrop.querySelector('#prod-stock-min').value) || 0,
     };
-    if (!prod) payload.category_id = configActiveCategory;
+    // Vai nos dois casos agora (criar e editar): o valor sai do seletor, que
+    // já nasce apontando pra categoria certa em cada situação.
+    payload.category_id = backdrop.querySelector('#prod-category').value || null;
     if (prod) {
       payload.active = backdrop.querySelector('#prod-active').checked;
       payload.available = backdrop.querySelector('#prod-available').checked;
@@ -4154,9 +4168,15 @@ function openProductModal(productId) {
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
       backdrop.remove();
+      // Mudou de categoria: o produto sai da lista aberta. Sem dizer pra onde
+      // foi, some da tela e parece que a edição apagou o item.
+      const mudouCategoria = prod && prod.category_id !== payload.category_id;
+      const destino = categories.find(c => c.id === payload.category_id);
       await loadCatalog();
       renderConfigProducts();
-      showToast('Produto salvo!');
+      showToast(mudouCategoria && destino
+        ? `Produto movido para ${destino.name}`
+        : 'Produto salvo!');
     } catch (e) { errEl.textContent = 'Erro de conexão'; }
   });
 }
