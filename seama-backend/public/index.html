@@ -90,7 +90,7 @@
      palavras ("Café Gelado") quebra em duas linhas — com altura fixa o texto
      seria cortado. flex-shrink:0 impede que os 12 botões se espremam em vez
      de rolar. */
-  .cat-btn { min-height: 56px; flex-shrink: 0; border-radius: 12px; border: none; background: rgba(255,255,255,.05); color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; gap: 3px; line-height: 1.12; padding: 7px 3px; text-align: center; word-break: break-word; }
+  .cat-btn { min-height: 56px; flex-shrink: 0; border-radius: 12px; border: none; background: rgba(255,255,255,.05); color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; gap: 3px; line-height: 1.12; padding: 7px 3px; text-align: center; word-break: break-word; }
   .cat-btn .ic { font-size: 20px; letter-spacing: 0; }
   .cat-btn.active { background: var(--primary); color: #fff; }
 
@@ -130,7 +130,7 @@
   #pay-hint { font-size: 10px; color: var(--text2); text-align: center; margin-top: 2px; }
 
   #footer-nav { height: 60px; flex-shrink: 0; background: var(--sidebar); display: flex; align-items: center; justify-content: center; gap: 32px; }
-  .nav-btn { background: none; border: none; color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 500; }
+  .nav-btn { background: none; border: none; color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
   .nav-btn .ic { font-size: 18px; }
   .nav-btn.active { color: #fff; }
 
@@ -174,7 +174,7 @@
   .cx-diff .total { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; margin-top: 4px; }
   .cx-hist { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 9px 0; border-bottom: 1px solid var(--bg); }
   .cx-hist:last-child { border-bottom: none; }
-  #config-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
+  #config-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; }
   .addon-group { margin: 14px 0 4px; }
   .addon-group-title { font-size: 12.5px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
   .addon-opt { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 11px; margin-bottom: 6px; background: var(--bg); border: 2px solid var(--border); border-radius: 10px; }
@@ -194,7 +194,10 @@
   .adc-prods { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; margin-top: 8px; }
   .adc-prod { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
   .adc-cat { font-size: 11.5px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 2px; }
-  .cfg-tab { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: 12.5px; font-weight: 500; color: var(--text2); }
+  /* flex-shrink:0 + white-space:nowrap junto com o overflow-x do contêiner:
+     sem isso, a 15px em caixa alta as abas se espremem até o texto quebrar no
+     meio da palavra, ou a última sai da tela sem jeito de alcançar. */
+  .cfg-tab { flex-shrink: 0; white-space: nowrap; border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text2); }
   .cfg-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
   #config-body { flex: 1; min-height: 0; display: flex; }
   /* O scroll precisa ficar DENTRO da aba. Sem isso, uma aba mais alta que a
@@ -238,7 +241,7 @@
   /* ── Relatórios ── */
   #rel-screen { flex: 1; display: none; min-height: 0; flex-direction: column; }
   #rel-screen.active { display: flex; }
-  #rel-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); }
+  #rel-tabs { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; }
   #rel-periodo { flex-shrink: 0; display: flex; gap: 6px; padding: 10px 14px 4px; }
   .per-btn { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 6px 14px; font-size: 11.5px; color: var(--text2); }
   .per-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
