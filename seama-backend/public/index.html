@@ -39,6 +39,17 @@
     --fs-menu: 15px;      /* categorias, abas e barra inferior */
     --fs-produto: 15px;   /* nome no card de produto */
     --fs-carrinho: 14px;  /* carrinho: nome, quantidade e sinais */
+
+    /* Layout da tela de venda, também ajustável em Config → Aparência.
+       Menos colunas = card e foto maiores; mais colunas = mais produto por
+       tela, com menos rolagem. Não existe valor certo: depende do tamanho do
+       tablet e de quantos itens a loja tem por categoria. */
+    --grid-cols: 4;         /* produtos por linha */
+    --card-aspect: 1 / 1;   /* proporção da foto no card */
+    --card-img: block;      /* 'none' esconde a foto e deixa a lista compacta */
+    --grid-gap: 10px;       /* respiro entre os cards */
+    --card-pad: 8px;
+    --cart-w: 25%;          /* largura do carrinho; a grade absorve o resto */
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; }
@@ -106,14 +117,17 @@
      verde escolhido; quem já tiver outra opção gravada sobrescreve no load. */
   .cat-btn.active { background: var(--cat-ativa-bg, #5F8B64); color: var(--cat-ativa-fg, #fff); box-shadow: var(--cat-ativa-barra, none); }
 
-  #products-wrap { width: 60%; padding: 14px; overflow-y: auto; }
+  /* flex:1 em vez de 60% fixo: as tres colunas somavam 100% na mao, entao
+     mudar a largura do carrinho estouraria a conta. Agora a grade absorve o
+     que sobra sozinha. */
+  #products-wrap { flex: 1; min-width: 0; padding: 14px; overflow-y: auto; }
   #products-title { font-size: 13px; font-weight: 600; color: var(--text2); margin: 0 0 10px; }
-  #products-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  #products-grid { display: grid; grid-template-columns: repeat(var(--grid-cols, 4), 1fr); gap: var(--grid-gap, 10px); }
   /* Card vira quase só foto: a imagem ocupa a largura toda em 1:1, com nome
      e preço compactos embaixo. Mesmo com 4 colunas (em vez de 3), a área da
      foto fica bem maior que os 52px fixos de antes. */
-  .prod-card { position: relative; background: var(--card); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); padding: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; border: none; overflow: hidden; }
-  .prod-card .img { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; background: var(--bg) center/cover no-repeat; }
+  .prod-card { position: relative; background: var(--card); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); padding: var(--card-pad, 8px); display: flex; flex-direction: column; align-items: stretch; gap: 6px; border: none; overflow: hidden; }
+  .prod-card .img { display: var(--card-img, block); width: 100%; aspect-ratio: var(--card-aspect, 1 / 1); border-radius: 12px; background: var(--bg) center/cover no-repeat; }
   /* min-height acompanha a fonte: a 15px duas linhas pedem ~35px, e o valor
      antigo (28px, calibrado pros 12px) deixaria a segunda linha encostando no
      preço. É mínimo, não fixo — nome de três linhas faz o card crescer em vez
@@ -124,7 +138,7 @@
   .prod-card .badge { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 999px; background: var(--primary); color: #fff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
   #products-empty { color: var(--text2); font-size: 13px; padding: 20px; text-align: center; }
 
-  #cart { width: 25%; min-width: 220px; background: var(--card); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+  #cart { width: var(--cart-w, 25%); min-width: 220px; flex-shrink: 0; background: var(--card); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
   #cart-items { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
   #cart-empty { color: var(--text2); font-size: 13px; text-align: center; padding: 30px 10px; }
   .cart-item { display: flex; gap: 8px; align-items: flex-start; }
@@ -254,6 +268,16 @@
   .cor-opt .cnt { font-size: 10.5px; color: var(--text2); margin-top: 2px; }
 
   /* Ajuste de tamanho por camada */
+  /* Opções de layout: botões em linha, o escolhido marcado */
+  #lay-grid { display: flex; flex-direction: column; gap: 12px; }
+  .lay-row { border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; background: var(--card); }
+  .lay-row .lbl b { display: block; font-size: 13px; font-weight: 700; }
+  .lay-row .lbl small { font-size: 11px; color: var(--text2); }
+  .lay-opts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+  .lay-opts button { border: 1.5px solid var(--border); background: var(--card); color: var(--text);
+                     border-radius: 9px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; }
+  .lay-opts button.on { border-color: var(--primary); background: var(--primary); color: #fff; }
+
   #fs-grid { display: flex; flex-direction: column; gap: 10px; }
   .fs-row { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--card); }
   .fs-row .lbl { flex: 1; min-width: 0; }
@@ -702,6 +726,15 @@
           <div id="cor-cat-erro" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:10px"></div>
           <div class="modal-actions" style="max-width:460px">
             <button class="primary" id="cor-cat-salvar">Salvar</button>
+          </div>
+
+          <h3 style="margin-top:26px">Grade de produtos</h3>
+          <p class="cfg-hint">Como os produtos aparecem na tela de venda. Menos colunas deixa a foto maior e o toque mais fácil; mais colunas mostra mais produto sem rolar. Muda na hora — só vale para os outros aparelhos depois de salvar.</p>
+          <div id="lay-grid"></div>
+          <div id="lay-erro" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:10px"></div>
+          <div class="modal-actions" style="max-width:460px">
+            <button id="lay-restaurar">Restaurar padrão</button>
+            <button class="primary" id="lay-salvar">Salvar grade</button>
           </div>
 
           <h3 style="margin-top:26px">Tamanho das letras</h3>
@@ -2673,7 +2706,7 @@ document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click
   if (tab.dataset.tab === 'usuarios') loadUsuarios();
   if (tab.dataset.tab === 'vinculos') loadVinculos();
   if (tab.dataset.tab === 'adicionais') loadAdicionais();
-  if (tab.dataset.tab === 'aparencia') { renderCoresCategoria(); renderFontes(); }
+  if (tab.dataset.tab === 'aparencia') { renderCoresCategoria(); renderLayout(); renderFontes(); }
 }));
 
 // ── Configurações: grupos de adicionais ──────────────
@@ -3389,6 +3422,10 @@ async function loadPrinterSettings() {
     try { fs = JSON.parse(data.ui_font_sizes || '{}'); } catch (e) { fs = {}; }
     aplicarFontes(fs);
     renderFontes();
+    let lay = {};
+    try { lay = JSON.parse(data.ui_layout || '{}'); } catch (e) { lay = {}; }
+    aplicarLayout(lay);
+    renderLayout();
   } catch (e) { if (e.message !== 'unauthorized') showToast('Erro ao carregar configurações'); }
 }
 
@@ -3448,6 +3485,81 @@ document.getElementById('cor-cat-salvar').addEventListener('click', async () => 
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
     showToast('Cor salva!');
+  } catch (e) { errEl.textContent = 'Erro de conexão'; }
+});
+
+// ── Layout da tela de venda ──────────────────────────────
+// Opções fechadas em vez de campo livre: cada valor aqui foi conferido em tela
+// e não quebra o layout. Um input de "colunas" aceitando 12, ou de largura
+// aceitando 80%, deixaria o PDV inutilizável no meio do expediente sem que
+// desse pra voltar atrás com facilidade.
+const OPCOES_LAYOUT = [
+  { chave: 'cols', rot: 'Produtos por linha', desc: 'Menos colunas = foto maior e alvo de toque maior', padrao: '4',
+    opcoes: [ { v: '3', r: '3' }, { v: '4', r: '4' }, { v: '5', r: '5' }, { v: '6', r: '6' } ] },
+  { chave: 'foto', rot: 'Foto do produto', desc: 'Sem foto cabe muito mais item por tela', padrao: 'quadrada',
+    opcoes: [ { v: 'quadrada', r: 'Quadrada' }, { v: 'paisagem', r: 'Retangular' }, { v: 'oculta', r: 'Sem foto' } ] },
+  { chave: 'densidade', rot: 'Espaçamento', desc: 'Respiro entre os cards', padrao: 'normal',
+    opcoes: [ { v: 'compacto', r: 'Compacto' }, { v: 'normal', r: 'Normal' }, { v: 'espacoso', r: 'Espaçoso' } ] },
+  { chave: 'carrinho', rot: 'Largura do carrinho', desc: 'O que sobra fica para a grade de produtos', padrao: 'normal',
+    opcoes: [ { v: 'estreito', r: 'Estreito' }, { v: 'normal', r: 'Normal' }, { v: 'largo', r: 'Largo' } ] },
+];
+
+const MAPA_LAYOUT = {
+  foto:      { quadrada: { '--card-aspect': '1 / 1', '--card-img': 'block' },
+               paisagem: { '--card-aspect': '4 / 3', '--card-img': 'block' },
+               oculta:   { '--card-aspect': '1 / 1', '--card-img': 'none'  } },
+  densidade: { compacto: { '--grid-gap': '6px',  '--card-pad': '6px'  },
+               normal:   { '--grid-gap': '10px', '--card-pad': '8px'  },
+               espacoso: { '--grid-gap': '16px', '--card-pad': '12px' } },
+  carrinho:  { estreito: { '--cart-w': '20%' }, normal: { '--cart-w': '25%' }, largo: { '--cart-w': '32%' } },
+};
+
+let layoutAtual = Object.fromEntries(OPCOES_LAYOUT.map(o => [o.chave, o.padrao]));
+
+function aplicarLayout(mapa) {
+  const raiz = document.documentElement;
+  OPCOES_LAYOUT.forEach(o => {
+    // Valor desconhecido (versão antiga, edição manual) cai no padrão em vez
+    // de virar uma variável CSS inválida que zera a grade.
+    const v = o.opcoes.some(x => x.v === mapa?.[o.chave]) ? mapa[o.chave] : o.padrao;
+    layoutAtual[o.chave] = v;
+    if (o.chave === 'cols') raiz.style.setProperty('--grid-cols', v);
+    else Object.entries(MAPA_LAYOUT[o.chave][v]).forEach(([k, val]) => raiz.style.setProperty(k, val));
+  });
+}
+
+function renderLayout() {
+  const el = document.getElementById('lay-grid');
+  if (!el) return;
+  el.innerHTML = OPCOES_LAYOUT.map(o => `
+    <div class="lay-row">
+      <div class="lbl"><b>${o.rot}</b><small>${o.desc}</small></div>
+      <div class="lay-opts">
+        ${o.opcoes.map(x => `<button data-lay="${o.chave}" data-v="${x.v}" class="${layoutAtual[o.chave] === x.v ? 'on' : ''}">${x.r}</button>`).join('')}
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('button[data-lay]').forEach(b => b.addEventListener('click', () => {
+    aplicarLayout({ ...layoutAtual, [b.dataset.lay]: b.dataset.v });
+    renderLayout();
+  }));
+}
+
+document.getElementById('lay-restaurar').addEventListener('click', () => {
+  aplicarLayout(Object.fromEntries(OPCOES_LAYOUT.map(o => [o.chave, o.padrao])));
+  renderLayout();
+});
+
+document.getElementById('lay-salvar').addEventListener('click', async () => {
+  const errEl = document.getElementById('lay-erro');
+  errEl.textContent = '';
+  try {
+    const res = await apiFetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ui_layout: JSON.stringify(layoutAtual) }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+    showToast('Grade salva!');
   } catch (e) { errEl.textContent = 'Erro de conexão'; }
 });
 

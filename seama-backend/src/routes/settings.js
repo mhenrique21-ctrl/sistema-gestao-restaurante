@@ -18,6 +18,8 @@ const ALLOWED_KEYS = [
   // camada geraria uma linha nova no banco a cada camada futura; assim o
   // conjunto inteiro é gravado e lido de uma vez.
   'ui_font_sizes',
+  // Layout da tela de venda (colunas, foto, espacamento, carrinho).
+  'ui_layout',
 ];
 
 // GET /api/settings — todas as configurações (chave/valor)
