@@ -996,6 +996,9 @@ export default function App() {
   const saveSeqRef = useRef(0);
   const directSaveRef = useRef(false);
   const directSaveEndRef = useRef(0);
+  // Última versão vista de cada empresa (data+tamanho do arquivo no servidor).
+  // É o que permite ao polling decidir se precisa baixar o documento.
+  const versaoRef = useRef<Record<string,string>>({});
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -1012,11 +1015,30 @@ export default function App() {
   useEffect(()=>{
     if(!login)return;
     const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
-    const poll=()=>{
+    const poll=async()=>{
       if(syncTimer.current||directSaveRef.current||Date.now()-directSaveEndRef.current<300)return;
       const seq=saveSeqRef.current;
       const ts=Date.now();
-      Promise.all(emps.map(emp=>
+      // Pergunta a versão antes de baixar. Antes buscava os documentos inteiros
+      // (3 MB + 1 MB) a cada 300ms; como cada busca leva ~2s, empilhava e
+      // estourava o timeout, e a lista parava de atualizar. Agora ~40 bytes por
+      // empresa, e o download só acontece quando algo realmente mudou.
+      const mudou=await Promise.all(emps.map(async emp=>{
+        try{
+          const r=await fetchSync(`/api/dados/${emp}/versao?_=${ts}`,{},5000);
+          const {v}=await r.json();
+          if(v&&versaoRef.current[emp]===v)return null;
+          versaoRef.current[emp]=v;
+          return emp;
+        }catch{
+          // Falhou a checagem: baixa mesmo assim, pra uma instabilidade de rede
+          // não deixar a lista congelada.
+          return emp;
+        }
+      }));
+      const alvos=mudou.filter(Boolean) as string[];
+      if(!alvos.length)return;
+      Promise.all(alvos.map(emp=>
         fetchSync(`/api/dados/${emp}?_=${ts}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
       )).then(results=>{
         if(syncTimer.current||directSaveRef.current||saveSeqRef.current!==seq||Date.now()-directSaveEndRef.current<300)return;
@@ -1026,7 +1048,9 @@ export default function App() {
       });
     };
     poll();
-    const interval=(tab==="lista"||tab==="producao")?300:3000;
+    // 800ms agora que o ciclo custa ~40 bytes por empresa em vez de 4 MB. Os
+    // 300ms de antes nem chegavam a acontecer: cada volta levava ~2s.
+    const interval=(tab==="lista"||tab==="producao")?800:3000;
     const t=setInterval(poll,interval);
     // No mobile (PWA instalado), o navegador pausa os timers quando o app vai
     // pra segundo plano (tela bloqueia, troca de app). Sem isso, ao voltar o
@@ -2882,6 +2906,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [imgPreview,setImgPreview]=useState(null);
   const [imgBase64,setImgBase64]=useState(null);
   const fileRef=useRef();
+  const fileGalRef=useRef();
   const xmlIaRef=useRef<HTMLInputElement>(null);
 
   const handleXmlIA=(e:React.ChangeEvent<HTMLInputElement>)=>{
@@ -3664,12 +3689,24 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       <div className="section-title">Importar Cupom / Nota Fiscal com IA</div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
-        <div className="camera-zone" onClick={()=>fileRef.current.click()} style={{flex:1,marginBottom:0}}>
+        <div className="camera-zone" style={{flex:1,marginBottom:0,cursor:imgPreview?"default":"auto"}}>
           {imgPreview
             ?<img src={imgPreview} alt="preview" style={{maxWidth:"100%",borderRadius:10,maxHeight:200,objectFit:"contain"}}/>
-            :<div><div style={{fontSize:36,marginBottom:8}}>📷</div>
-              <div style={{fontWeight:600,marginBottom:4}}>Foto / PDF</div>
-              <div className="muted" style={{fontSize:12}}>Toque para escolher</div></div>}
+            :<div>
+              <div style={{fontSize:36,marginBottom:8}}>📷</div>
+              <div style={{fontWeight:600,marginBottom:8}}>Foto / PDF</div>
+              <div style={{display:"flex",gap:6,justifyContent:"center"}}>
+                <button className="btn" type="button" onClick={()=>fileGalRef.current.click()}
+                  style={{background:"var(--bg4)",border:"1.5px dashed #6366F166",color:"#6366F1",fontSize:12,padding:"8px 9px",borderRadius:8,display:"flex",alignItems:"center",gap:4}}>
+                  🖼️ Galeria
+                </button>
+                <button className="btn" type="button" onClick={()=>fileRef.current.click()}
+                  style={{background:"var(--bg4)",border:"1.5px dashed #6366F166",color:"#6366F1",fontSize:12,padding:"8px 9px",borderRadius:8,display:"flex",alignItems:"center",gap:4}}>
+                  📷 Câmera
+                </button>
+              </div>
+            </div>}
+          <input ref={fileGalRef} type="file" accept="image/*,application/pdf" onChange={handleFile} style={{display:"none"}}/>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{display:"none"}}/>
         </div>
         <div className="camera-zone" onClick={()=>xmlIaRef.current?.click()} style={{flex:1,marginBottom:0,background:"#DCFCE7",borderColor:"#14532d"}}>
@@ -4728,9 +4765,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const qtdNova=parseFloat(form.qtd)||1;
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
       const nl=nome.toLowerCase();
-      // Evita duplicar linha: se já existe item pendente com o mesmo nome na lista
-      // atual, soma a quantidade em vez de criar um segundo item igual.
-      const pendenteExistente=pendentes.find((i:any)=>i.nome.trim().toLowerCase()===nl);
+      // Só funde com um item do MESMO usuário. Antes fundia por nome apenas, de
+      // quem quer que fosse: se a Patricia pedia 2 e o Mario pedia 3, virava uma
+      // linha de 5 assinada pela Patricia, e o pedido do Mario desaparecia como
+      // registro próprio. Agora cada pessoa tem a sua linha — dá pra ver quem
+      // pediu o quê e cobrar/conferir individualmente. Repetir o mesmo produto
+      // continua somando na linha da própria pessoa, pra não encher a lista.
+      const quem=(login?.label||"").trim().toLowerCase();
+      const pendenteExistente=pendentes.find((i:any)=>
+        i.nome.trim().toLowerCase()===nl &&
+        (i.adicionadoPor||"").trim().toLowerCase()===quem);
       if(pendenteExistente){
         const ts=Date.now();
         setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)}));

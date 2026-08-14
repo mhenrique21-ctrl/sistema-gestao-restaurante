@@ -1405,6 +1405,88 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // Caminho inverso da ponte de compras: o PDV fecha o caixa e manda o
   // resultado do dia, para a DRE deixar de depender de alguém lembrar de
   // digitar o faturamento de ontem.
+  // Consumação de colaborador vinda do PDV: o fiado que ele levou no mês vira
+  // desconto na folha. A tela de RH já somava consumações no holerite — isso
+  // aqui só para de exigir que alguém digite uma a uma.
+  if (req.method === 'POST' && urlPath === '/api/consumacao-pdv') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const secret = process.env.SEAMA_SERVICE_SECRET;
+        if (!secret) { res.writeHead(503); res.end(JSON.stringify({ error: 'Integração não configurada' })); return; }
+        if (req.headers['x-service-secret'] !== secret) {
+          res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
+        }
+
+        const { empresa, funcionarioId, nome, mes, valor, descricao } = JSON.parse(body);
+        const emp = String(empresa || '').toUpperCase();
+        if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
+        if (!/^\d{4}-\d{2}$/.test(String(mes || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'mes inválido (use AAAA-MM)' })); return; }
+        const v = parseFloat(valor);
+        if (!Number.isFinite(v) || v <= 0) { res.writeHead(400); res.end(JSON.stringify({ error: 'valor inválido' })); return; }
+
+        const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+        const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+        const funcs = Array.isArray(doc.funcionarios) ? doc.funcionarios : [];
+
+        // Resolve por id primeiro; sem id, casa pelo nome ignorando acento e
+        // caixa. Recusar em vez de criar funcionário: gente cadastrada por
+        // engano vira linha em folha de pagamento.
+        const limpar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+        let func = funcionarioId ? funcs.find(f => f && f.id === funcionarioId) : null;
+        if (!func && nome) {
+          const iguais = funcs.filter(f => f && limpar(f.nome) === limpar(nome));
+          if (iguais.length > 1) {
+            res.writeHead(409);
+            res.end(JSON.stringify({ error: `Há ${iguais.length} funcionários chamados "${nome}" na Gestão. Vincule pelo cadastro para o desconto ir na pessoa certa.` }));
+            return;
+          }
+          func = iguais[0];
+        }
+        if (!func) {
+          res.writeHead(404);
+          res.end(JSON.stringify({
+            error: `Funcionário "${nome || funcionarioId}" não encontrado na Gestão`,
+            disponiveis: funcs.map(f => f && f.nome).filter(Boolean),
+          }));
+          return;
+        }
+
+        // Id estável por funcionário e mês: reenviar ATUALIZA em vez de somar.
+        // O merge do documento é por id, então isso vale também quando a tela
+        // do Gestão estiver aberta em outra máquina.
+        const cons = Array.isArray(doc.consumacoes) ? doc.consumacoes : [];
+        const id = `pdv-cons-${func.id}-${mes}`;
+        const agora = new Date().toISOString();
+        const i = cons.findIndex(c => c && c.id === id);
+        const reg = {
+          id,
+          funcionarioId: func.id,
+          data: `${mes}-01`,
+          mes,
+          valor: v,
+          descricao: descricao || `Fiado do PDV — ${mes}`,
+          origem: 'pdv',
+          criadoEm: i >= 0 ? (cons[i].criadoEm || agora) : agora,
+          atualizadoEm: agora,
+        };
+        if (i >= 0) cons[i] = reg; else cons.unshift(reg);
+
+        doc.consumacoes = cons;
+        fs.writeFileSync(file, JSON.stringify(doc));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, acao: i >= 0 ? 'atualizado' : 'criado', funcionario: func.nome, mes, valor: v }));
+      } catch (e) {
+        console.error('[consumacao-pdv]', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Erro ao registrar consumação: ' + e.message }));
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && urlPath === '/api/venda-pdv') {
     let body = '';
     req.on('data', c => body += c);
@@ -1785,6 +1867,35 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   }
 
   // Dados da empresa — GET
+  // Versão do documento — usada pelo polling da Lista de Compras pra saber SE
+  // vale a pena baixar, antes de baixar.
+  //
+  // O polling buscava os documentos inteiros (CONFRARIA tem 3 MB, SEAMA 1 MB) a
+  // cada 300ms. Como cada busca leva ~2s, as requisições se empilhavam e
+  // estouravam o timeout — a lista simplesmente parava de atualizar entre os
+  // usuários. Aqui só se olha data e tamanho do arquivo (statSync, sem ler o
+  // conteúdo e sem fazer parse), o que devolve ~40 bytes e não bloqueia o
+  // event loop como o readFileSync de 3 MB fazia várias vezes por segundo.
+  //
+  // Precisa vir ANTES do handler de /api/dados/ abaixo: aquele usa startsWith e
+  // capturaria esta rota, devolvendo o documento inteiro.
+  if (req.method === 'GET' && /^\/api\/dados\/[^/]+\/versao$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    try {
+      const st = fs.statSync(path.join(DADOS_DIR, `${emp.toLowerCase()}.json`));
+      res.writeHead(200);
+      res.end(JSON.stringify({ v: `${st.mtimeMs}-${st.size}` }));
+    } catch {
+      // Arquivo ainda não existe: versão fixa, pra não disparar download em loop.
+      res.writeHead(200);
+      res.end(JSON.stringify({ v: '0-0' }));
+    }
+    return;
+  }
+
   if (req.method === 'GET' && urlPath.startsWith('/api/dados/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('null'); return; }
