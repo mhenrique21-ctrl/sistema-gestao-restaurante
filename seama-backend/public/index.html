@@ -497,9 +497,34 @@
   .modal-sheet { background: var(--card); border-radius: 18px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; padding: 20px; }
   .modal-sheet h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
   .modal-sheet .sub { font-size: 12.5px; color: var(--text2); margin: 0 0 16px; }
-  .pay-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-  .pay-method-btn { border: 2px solid var(--border); border-radius: 12px; padding: 12px 8px; text-align: center; background: var(--card); font-size: 12.5px; font-weight: 500; }
+  /* ── Pagamento em duas colunas (totem/balcão) ──
+     Empilhado numa coluna de 420px, o pagamento em dinheiro tinha sete blocos
+     verticais e não cabia em 90vh — daí a barra de rolagem no meio da venda.
+     Distribuir na horizontal resolve sem tirar nada da tela. Abaixo de 900px
+     (celular) volta a empilhar: duas colunas ali seriam ilegíveis. */
+  .modal-sheet.pay-sheet { max-width: 940px; }
+  .pay-cols { display: flex; gap: 18px; align-items: stretch; }
+  .pay-cols > .esq { flex: 1 1 56%; min-width: 0; }
+  .pay-cols > .dir { flex: 1 1 44%; min-width: 0; display: flex; flex-direction: column; }
+  .pay-secao { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 7px; }
+  @media (max-width: 900px) { .pay-cols { flex-direction: column; } }
+
+  .pay-methods { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .pay-method-btn { border: 2px solid var(--border); border-radius: 12px; padding: 13px 6px; text-align: center; background: var(--card); font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.25; }
+  .pay-method-btn .i { display: block; font-size: 20px; margin-bottom: 4px; }
   .pay-method-btn.selected { border-color: var(--primary); background: #F1EAE3; }
+  @media (max-width: 900px) { .pay-methods { grid-template-columns: 1fr 1fr; } }
+
+  /* Teclado próprio: o teclado do sistema cobria metade da tela e trazia a
+     rolagem de volta justamente na hora de conferir o troco. */
+  .pay-kb { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .pay-kb button { border: 1px solid var(--border); background: var(--card); border-radius: 11px; padding: 14px 0;
+                   font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .pay-kb button:active { background: var(--bg); }
+  .pay-kb button.aux { background: var(--bg); font-size: 13px; font-weight: 600; color: var(--text2); }
+  .pay-visor { border: 1px solid var(--border); border-radius: 12px; padding: 10px 15px; margin-bottom: 9px; text-align: right; }
+  .pay-visor small { display: block; font-size: 10.5px; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+  .pay-visor b { font-size: 27px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .pay-amount-row { display: flex; gap: 8px; margin-bottom: 10px; }
   .pay-amount-row input { flex: 1; height: 40px; border-radius: 10px; border: 1px solid var(--border); padding: 0 10px; font-size: 14px; }
   .pay-amount-row button { height: 40px; padding: 0 14px; border-radius: 10px; border: none; background: var(--primary); color: #fff; font-size: 13px; font-weight: 600; }
@@ -527,6 +552,14 @@
   .pay-troco.falta span, .pay-troco.falta b { color: #A32D2D; }
   .pay-troco-linha span { color: #854F0B !important; font-weight: 700; }
   .pay-summary { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
+  /* Empurra as ações pro rodapé da coluna: com pouco conteúdo elas ficariam
+     soltas no meio, longe de onde a mão espera. */
+  .pay-cols .dir .modal-actions { margin-top: auto; }
+  .pay-cols .dir .modal-actions button { height: 54px; font-size: 14.5px; }
+  /* Confirmar maior que Cancelar de propósito: são os dois botões vizinhos
+     mais perigosos do sistema, e cancelar uma venda já cobrada por erro de
+     alvo é pior que confirmar. */
+  .pay-cols .dir .modal-actions button.primary { flex: 1.6; }
   .modal-actions { display: flex; gap: 10px; }
   .modal-actions button { flex: 1; height: 42px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); font-size: 13.5px; font-weight: 600; }
   .modal-actions button.primary { border: none; background: var(--success); color: #fff; }
@@ -1316,58 +1349,111 @@ function renderPayModal() {
   const emDinheiro = payMethodSelected === 'dinheiro';
   const troco = payTrocoCents();
   backdrop.innerHTML = `
-    <div class="modal-sheet">
+    <div class="modal-sheet pay-sheet">
       <h2>Receber pagamento</h2>
-      <div class="sub">Total: ${fmt(cartTotalCents() / 100)} · Restante: ${fmt(remaining / 100)}</div>
-      <div class="pay-methods">
-        ${Object.entries(PAY_METHOD_LABELS).map(([m, label]) => `
-          <button class="pay-method-btn ${payMethodSelected === m ? 'selected' : ''}" data-m="${m}">${label}</button>
-        `).join('')}
-      </div>
-      ${emDinheiro ? `
-        <label class="pay-cash-label">Quanto o cliente entregou?</label>
-        <div class="pay-amount-row">
-          <input type="number" step="0.01" id="pay-amount-input" class="pay-cash-input"
-                 placeholder="0,00" value="${(remaining / 100).toFixed(2)}">
-          <button id="pay-add-btn">Adicionar</button>
-        </div>
-        <div class="pay-quick">
-          ${sugestoesDeNota(remaining).map(v => `
-            <button class="pay-quick-btn" data-v="${v}">${v === remaining / 100 ? 'Exato' : fmt(v)}</button>
-          `).join('')}
-        </div>
-        <div class="pay-troco" id="pay-troco-box">
-          <span id="pay-troco-label">Troco</span>
-          <b id="pay-troco-valor">—</b>
-        </div>
-      ` : `
-        <div class="pay-amount-row">
-          <input type="number" step="0.01" id="pay-amount-input" placeholder="0,00" value="${remaining > 0 ? (remaining / 100).toFixed(2) : ''}">
-          <button id="pay-add-btn">Adicionar</button>
-        </div>
-      `}
-      <div class="pay-list">
-        ${payPayments.map((p, i) => `
-          <div class="pay-list-item">
-            <span>${PAY_METHOD_LABELS[p.method]} — ${fmt(p.amount)}${
-              p.received && p.received > p.amount ? ` <i style="color:var(--text2);font-style:normal">(entregou ${fmt(p.received)})</i>` : ''
-            }</span>
-            <button data-i="${i}">✕</button>
+      <div class="sub">Comanda de ${fmt(cartTotalCents() / 100)}</div>
+      <div class="pay-cols">
+        <div class="esq">
+          <p class="pay-secao">Forma de pagamento</p>
+          <div class="pay-methods">
+            ${Object.entries(PAY_METHOD_LABELS).map(([m, label]) => {
+              // O rótulo já vem como "💵 Dinheiro"; separa pra empilhar o
+              // ícone acima do nome e ganhar altura de toque sem esticar o card.
+              const [ic, ...resto] = label.split(' ');
+              return `<button class="pay-method-btn ${payMethodSelected === m ? 'selected' : ''}" data-m="${m}">
+                        <span class="i">${ic}</span>${resto.join(' ')}
+                      </button>`;
+            }).join('')}
           </div>
-        `).join('')}
-      </div>
-      <div class="pay-summary">
-        <div class="cart-line"><span>Recebido</span><span>${fmt(payPaidCents() / 100)}</span></div>
-        <div class="cart-line"><span>Restante</span><span>${fmt(remaining / 100)}</span></div>
-        ${troco > 0 ? `<div class="cart-line pay-troco-linha"><span>Troco a devolver</span><span>${fmt(troco / 100)}</span></div>` : ''}
-      </div>
-      <div id="pay-error"></div>
-      <div class="modal-actions">
-        <button id="pay-cancel-btn">Cancelar</button>
-        <button class="primary" id="pay-confirm-btn" ${remaining > 0 ? 'disabled' : ''}>Confirmar e imprimir</button>
+          ${emDinheiro ? `
+            <p class="pay-secao">Quanto o cliente entregou</p>
+            <div class="pay-kb">
+              ${[1,2,3,4,5,6,7,8,9].map(n => `<button data-k="${n}">${n}</button>`).join('')}
+              <button class="aux" data-k="C">C</button>
+              <button data-k="0">0</button>
+              <button class="aux" data-k="apagar">⌫</button>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="dir">
+          ${emDinheiro ? `
+            <div class="pay-visor">
+              <small>Valor entregue</small>
+              <b id="pay-visor-valor">${(remaining / 100).toFixed(2).replace('.', ',')}</b>
+            </div>
+            <input type="hidden" id="pay-amount-input" value="${(remaining / 100).toFixed(2)}">
+            <div class="pay-quick">
+              ${sugestoesDeNota(remaining).map(v => `
+                <button class="pay-quick-btn" data-v="${v}">${v === remaining / 100 ? 'Exato' : fmt(v)}</button>
+              `).join('')}
+            </div>
+            <div class="pay-amount-row">
+              <button id="pay-add-btn" style="flex:1">Adicionar pagamento</button>
+            </div>
+            <div class="pay-troco" id="pay-troco-box">
+              <span id="pay-troco-label">Troco</span>
+              <b id="pay-troco-valor">—</b>
+            </div>
+          ` : `
+            <p class="pay-secao">Valor</p>
+            <div class="pay-amount-row">
+              <input type="number" step="0.01" id="pay-amount-input" placeholder="0,00" value="${remaining > 0 ? (remaining / 100).toFixed(2) : ''}">
+              <button id="pay-add-btn">Adicionar</button>
+            </div>
+          `}
+          <div class="pay-summary">
+            <div class="cart-line"><span>Recebido</span><span>${fmt(payPaidCents() / 100)}</span></div>
+            <div class="cart-line"><span>Restante</span><span>${fmt(remaining / 100)}</span></div>
+            ${troco > 0 ? `<div class="cart-line pay-troco-linha"><span>Troco a devolver</span><span>${fmt(troco / 100)}</span></div>` : ''}
+          </div>
+          <div class="pay-list">
+            ${payPayments.map((p, i) => `
+              <div class="pay-list-item">
+                <span>${PAY_METHOD_LABELS[p.method]} — ${fmt(p.amount)}${
+                  p.received && p.received > p.amount ? ` <i style="color:var(--text2);font-style:normal">(entregou ${fmt(p.received)})</i>` : ''
+                }</span>
+                <button data-i="${i}">✕</button>
+              </div>
+            `).join('')}
+          </div>
+          <div id="pay-error"></div>
+          <div class="modal-actions">
+            <button id="pay-cancel-btn">Cancelar</button>
+            <button class="primary" id="pay-confirm-btn" ${remaining > 0 ? 'disabled' : ''}>Confirmar e imprimir</button>
+          </div>
+        </div>
       </div>
     </div>
   `;
+
+  // Teclado próprio: escreve no MESMO #pay-amount-input de antes e dispara o
+  // evento 'input', então o cálculo de troco ao vivo e o "Adicionar" seguem
+  // funcionando sem saber que a origem mudou.
+  const kb = backdrop.querySelector('.pay-kb');
+  if (kb) {
+    const campo = backdrop.querySelector('#pay-amount-input');
+    // Lê o valor do próprio campo a cada tecla em vez de manter um contador à
+    // parte: os botões de valor rápido também escrevem ali, e dois estados
+    // paralelos sairiam do ar assim que um deles fosse usado.
+    let limpo = false;   // a primeira tecla substitui o valor já sugerido
+    kb.querySelectorAll('button[data-k]').forEach(b => b.addEventListener('click', () => {
+      // Centavos, como maquininha: cada tecla empurra pra esquerda, então
+      // "5000" vira 50,00 sem precisar achar a vírgula.
+      let cent = Math.round((parseFloat(campo.value) || 0) * 100);
+      const k = b.dataset.k;
+      if (k === 'C') { cent = 0; limpo = true; }
+      else if (k === 'apagar') { cent = Math.floor(cent / 10); limpo = true; }
+      else {
+        if (!limpo) { cent = 0; limpo = true; }
+        // Teto de R$ 99.999,99: sem isso, tecla presa gera número absurdo e
+        // estoura o visor.
+        if (cent < 1000000) cent = cent * 10 + parseInt(k, 10);
+      }
+      campo.value = (cent / 100).toFixed(2);
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+    }));
+  }
   backdrop.querySelectorAll('.pay-method-btn').forEach(btn => btn.addEventListener('click', () => {
     payMethodSelected = btn.dataset.m;
     renderPayModal();
@@ -1377,6 +1463,10 @@ function renderPayModal() {
   if (emDinheiro) {
     const atualizarTroco = () => {
       const cents = Math.round((parseFloat(inputEl.value) || 0) * 100);
+      // Visor sincronizado aqui, e não em cada origem: teclado, valor rápido e
+      // recarga do modal passam todos por esta função, então basta um ponto.
+      const visorEl = backdrop.querySelector('#pay-visor-valor');
+      if (visorEl) visorEl.textContent = (cents / 100).toFixed(2).replace('.', ',');
       const box = backdrop.querySelector('#pay-troco-box');
       const lbl = backdrop.querySelector('#pay-troco-label');
       const val = backdrop.querySelector('#pay-troco-valor');
