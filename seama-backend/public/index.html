@@ -81,12 +81,20 @@
 
   #main { flex: 1; display: flex; min-height: 0; }
 
-  #categories { width: 12%; min-width: 92px; background: var(--sidebar); padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
-  .cat-btn { height: 54px; border-radius: 12px; border: none; background: transparent; color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 500; gap: 2px; line-height: 1.15; padding: 4px 2px; text-align: center; }
-  .cat-btn .ic { font-size: 16px; }
+  /* Lateral alargada de 12% pra 15% (os 3% saem do grid de produtos, que tem
+     folga) porque a caixa alta é mais larga que o texto normal: "SANDUICHE",
+     o maior nome, não caberia numa linha nos 92px de antes. */
+  #categories { width: 15%; min-width: 116px; background: var(--sidebar); padding: 6px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+  /* Caixa alta e peso 800: no balcão o operador acha a categoria de relance,
+     não lê com calma. min-height em vez de height fixo porque nome de duas
+     palavras ("Café Gelado") quebra em duas linhas — com altura fixa o texto
+     seria cortado. flex-shrink:0 impede que os 12 botões se espremam em vez
+     de rolar. */
+  .cat-btn { min-height: 56px; flex-shrink: 0; border-radius: 12px; border: none; background: rgba(255,255,255,.05); color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; gap: 3px; line-height: 1.12; padding: 7px 3px; text-align: center; word-break: break-word; }
+  .cat-btn .ic { font-size: 20px; letter-spacing: 0; }
   .cat-btn.active { background: var(--primary); color: #fff; }
 
-  #products-wrap { width: 63%; padding: 14px; overflow-y: auto; }
+  #products-wrap { width: 60%; padding: 14px; overflow-y: auto; }
   #products-title { font-size: 13px; font-weight: 600; color: var(--text2); margin: 0 0 10px; }
   #products-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   /* Card vira quase só foto: a imagem ocupa a largura toda em 1:1, com nome
