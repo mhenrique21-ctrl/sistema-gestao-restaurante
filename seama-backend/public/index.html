@@ -92,7 +92,10 @@
      de rolar. */
   .cat-btn { min-height: 56px; flex-shrink: 0; border-radius: 12px; border: none; background: rgba(255,255,255,.05); color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; gap: 3px; line-height: 1.12; padding: 7px 3px; text-align: center; word-break: break-word; }
   .cat-btn .ic { font-size: 20px; letter-spacing: 0; }
-  .cat-btn.active { background: var(--primary); color: #fff; }
+  /* Cor da categoria selecionada: vem de variável pra trocar em tempo real
+     pelo seletor em Config → Aparência, sem recarregar a tela. O padrão é o
+     verde escolhido; quem já tiver outra opção gravada sobrescreve no load. */
+  .cat-btn.active { background: var(--cat-ativa-bg, #5F8B64); color: var(--cat-ativa-fg, #fff); box-shadow: var(--cat-ativa-barra, none); }
 
   #products-wrap { width: 60%; padding: 14px; overflow-y: auto; }
   #products-title { font-size: 13px; font-weight: 600; color: var(--text2); margin: 0 0 10px; }
@@ -220,6 +223,17 @@
   .cfg-form { max-width: 460px; }
   .cfg-form h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
   .cfg-hint { font-size: 12.5px; color: var(--text2); margin: 0 0 16px; }
+
+  /* Seletor de cor da categoria ativa. Cada opção mostra uma prévia da própria
+     barra lateral em vez de só um quadrado colorido: a cor sozinha engana,
+     porque o que importa é como ela se separa do marrom escuro do fundo. */
+  #cor-cat-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+  .cor-opt { border: 2px solid var(--border); border-radius: 14px; padding: 10px; background: var(--card); cursor: pointer; width: 128px; text-align: center; }
+  .cor-opt.sel { border-color: var(--primary); }
+  .cor-prev { background: #2C2522; border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .cor-prev i { height: 20px; border-radius: 7px; background: rgba(255,255,255,.06); display: block; }
+  .cor-opt .rot { font-size: 12px; font-weight: 700; margin-top: 9px; text-transform: uppercase; letter-spacing: .3px; }
+  .cor-opt .cnt { font-size: 10.5px; color: var(--text2); margin-top: 2px; }
   #config-cats { width: 26%; min-width: 200px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   #config-cats-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
   .cfg-cat-row { display: flex; align-items: center; gap: 8px; border-radius: 12px; border: 1px solid var(--border); padding: 10px 12px; background: var(--card); }
@@ -561,6 +575,7 @@
       <button class="cfg-tab" data-tab="adicionais">➕ Adicionais</button>
       <button class="cfg-tab" data-tab="usuarios">👥 Usuários</button>
       <button class="cfg-tab" data-tab="vinculos">🔗 Compras</button>
+      <button class="cfg-tab" data-tab="aparencia">🎨 Aparência</button>
     </div>
 
     <div id="config-body">
@@ -647,6 +662,18 @@
           <h3>Compras vindas do App Gestão</h3>
           <p class="cfg-hint">Quando você lança uma compra no Gestão para a SEAMA, os itens chegam aqui. O vínculo diz qual produto do cardápio cada item da nota alimenta, e quantas unidades saem de cada embalagem — 1 multipack de 6 vira 6 latas. Feito uma vez, as próximas compras entram sozinhas.</p>
           <div id="vinc-body"></div>
+        </div>
+      </div>
+
+      <div id="config-tab-aparencia" class="cfg-pane">
+        <div class="cfg-form" style="max-width:620px">
+          <h3>Cor da categoria selecionada</h3>
+          <p class="cfg-hint">Marca qual categoria está aberta no menu lateral da venda. A prévia mostra como fica sobre o fundo escuro da barra — a porcentagem é o contraste medido: quanto maior, mais fácil de identificar de relance.</p>
+          <div id="cor-cat-grid"></div>
+          <div id="cor-cat-erro" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:10px"></div>
+          <div class="modal-actions" style="max-width:460px">
+            <button class="primary" id="cor-cat-salvar">Salvar</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2580,6 +2607,7 @@ document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click
   if (tab.dataset.tab === 'usuarios') loadUsuarios();
   if (tab.dataset.tab === 'vinculos') loadVinculos();
   if (tab.dataset.tab === 'adicionais') loadAdicionais();
+  if (tab.dataset.tab === 'aparencia') renderCoresCategoria();
 }));
 
 // ── Configurações: grupos de adicionais ──────────────
@@ -3283,8 +3311,73 @@ async function loadPrinterSettings() {
     document.getElementById('set-kitchen-enabled').checked = data.printer_kitchen_enabled === 'true';
     document.getElementById('set-kitchen-ip').value = data.printer_kitchen_ip || '';
     document.getElementById('set-kitchen-port').value = data.printer_kitchen_port || '9100';
+    // Esta função é a única que busca /api/settings no início da sessão, então
+    // a cor da categoria entra junto — assim a barra já abre pintada, sem
+    // esperar alguém entrar em Configurações.
+    corCategoriaSel = data.cat_active_color || COR_CATEGORIA_PADRAO;
+    aplicarCorCategoria(corCategoriaSel);
+    renderCoresCategoria();
   } catch (e) { if (e.message !== 'unauthorized') showToast('Erro ao carregar configurações'); }
 }
+
+// ── Cor da categoria selecionada no menu lateral ─────────
+// O banco guarda só a chave ('verde', 'ambar'...). O hex mora aqui: ajustar um
+// tom depois vira uma edição nesta tabela, sem mexer no que já foi gravado.
+// O contraste é medido contra o fundo da barra (#2C2522) — é o número que
+// decide se o operador identifica a categoria de relance ou não.
+const CORES_CATEGORIA = {
+  verde:  { rot: 'Verde',    bg: '#5F8B64', fg: '#ffffff', barra: '',        cnt: 'contraste 3,9:1' },
+  ambar:  { rot: 'Âmbar',    bg: '#B88433', fg: '#2C2522', barra: '',        cnt: 'contraste 4,6:1' },
+  creme:  { rot: 'Creme',    bg: '#F6F4F1', fg: '#2C2522', barra: '',        cnt: 'contraste 13,7:1' },
+  marrom: { rot: 'Marrom',   bg: '#5A4638', fg: '#ffffff', barra: '',        cnt: 'contraste 1,7:1' },
+  barra:  { rot: 'C/ barra', bg: '#5A4638', fg: '#ffffff', barra: '#E8A33D', cnt: 'cor da marca' },
+};
+const COR_CATEGORIA_PADRAO = 'verde';
+let corCategoriaSel = COR_CATEGORIA_PADRAO;
+
+function aplicarCorCategoria(chave) {
+  const c = CORES_CATEGORIA[chave] || CORES_CATEGORIA[COR_CATEGORIA_PADRAO];
+  const r = document.documentElement.style;
+  r.setProperty('--cat-ativa-bg', c.bg);
+  r.setProperty('--cat-ativa-fg', c.fg);
+  r.setProperty('--cat-ativa-barra', c.barra ? `inset 5px 0 0 ${c.barra}` : 'none');
+}
+
+function renderCoresCategoria() {
+  const el = document.getElementById('cor-cat-grid');
+  if (!el) return;
+  el.innerHTML = Object.entries(CORES_CATEGORIA).map(([k, c]) => `
+    <div class="cor-opt ${k === corCategoriaSel ? 'sel' : ''}" data-cor="${k}">
+      <div class="cor-prev">
+        <i></i>
+        <i style="background:${c.bg}${c.barra ? `;box-shadow:inset 5px 0 0 ${c.barra}` : ''}"></i>
+        <i></i>
+      </div>
+      <div class="rot">${c.rot}</div>
+      <div class="cnt">${c.cnt}</div>
+    </div>`).join('');
+  el.querySelectorAll('.cor-opt').forEach(o => o.addEventListener('click', () => {
+    corCategoriaSel = o.dataset.cor;
+    // Aplica na hora: a tela de venda atrás já aparece com a cor nova, então
+    // dá pra decidir olhando o resultado real em vez da miniatura.
+    aplicarCorCategoria(corCategoriaSel);
+    renderCoresCategoria();
+  }));
+}
+
+document.getElementById('cor-cat-salvar').addEventListener('click', async () => {
+  const errEl = document.getElementById('cor-cat-erro');
+  errEl.textContent = '';
+  try {
+    const res = await apiFetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cat_active_color: corCategoriaSel }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+    showToast('Cor salva!');
+  } catch (e) { errEl.textContent = 'Erro de conexão'; }
+});
 
 function validIp(ip) {
   return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && !ip.split('.').some(n => parseInt(n, 10) > 255);

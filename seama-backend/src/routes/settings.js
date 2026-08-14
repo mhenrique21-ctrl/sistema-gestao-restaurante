@@ -9,6 +9,11 @@ router.use(authMiddleware);
 const ALLOWED_KEYS = [
   'printer_ip', 'printer_port', 'printer_model', 'printer_copies',
   'printer_kitchen_ip', 'printer_kitchen_port', 'printer_kitchen_enabled',
+  // Cor que marca a categoria selecionada no menu lateral da venda. Guarda a
+  // CHAVE da opção ('verde', 'ambar'...), não o hex: assim o ajuste fino de
+  // tom fica no front, num lugar só, sem precisar reescrever o que já está
+  // gravado no banco.
+  'cat_active_color',
 ];
 
 // GET /api/settings — todas as configurações (chave/valor)
