@@ -14,6 +14,10 @@ const ALLOWED_KEYS = [
   // tom fica no front, num lugar só, sem precisar reescrever o que já está
   // gravado no banco.
   'cat_active_color',
+  // Tamanho de letra por camada, num JSON só ({"menu":15,...}). Uma chave por
+  // camada geraria uma linha nova no banco a cada camada futura; assim o
+  // conjunto inteiro é gravado e lido de uma vez.
+  'ui_font_sizes',
 ];
 
 // GET /api/settings — todas as configurações (chave/valor)

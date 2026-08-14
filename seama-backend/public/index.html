@@ -30,6 +30,15 @@
     --success: #5F8B64;
     --warning: #B88433;
     --danger: #A34B42;
+
+    /* Tamanho de letra por CAMADA, não por elemento. Cada camada agrupa os
+       textos que o operador lê no mesmo momento e pela mesma distância, então
+       mexer numa não desequilibra as outras. Ajustável em Config → Aparência.
+       Os limites (11–20px) existem porque abaixo de 11 fica ilegível no balcão
+       e acima de 20 o nome do produto estoura o card. */
+    --fs-menu: 15px;      /* categorias, abas e barra inferior */
+    --fs-produto: 15px;   /* nome no card de produto */
+    --fs-carrinho: 14px;  /* carrinho: nome, quantidade e sinais */
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; }
@@ -90,7 +99,7 @@
      palavras ("Café Gelado") quebra em duas linhas — com altura fixa o texto
      seria cortado. flex-shrink:0 impede que os 12 botões se espremam em vez
      de rolar. */
-  .cat-btn { min-height: 56px; flex-shrink: 0; border-radius: 12px; border: none; background: rgba(255,255,255,.05); color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; gap: 3px; line-height: 1.12; padding: 7px 3px; text-align: center; word-break: break-word; }
+  .cat-btn { min-height: 56px; flex-shrink: 0; border-radius: 12px; border: none; background: rgba(255,255,255,.05); color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: var(--fs-menu, 15px); font-weight: 800; text-transform: uppercase; letter-spacing: .4px; gap: 3px; line-height: 1.12; padding: 7px 3px; text-align: center; word-break: break-word; }
   .cat-btn .ic { font-size: 20px; letter-spacing: 0; }
   /* Cor da categoria selecionada: vem de variável pra trocar em tempo real
      pelo seletor em Config → Aparência, sem recarregar a tela. O padrão é o
@@ -109,7 +118,7 @@
      antigo (28px, calibrado pros 12px) deixaria a segunda linha encostando no
      preço. É mínimo, não fixo — nome de três linhas faz o card crescer em vez
      de cortar. */
-  .prod-card .nm { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: .2px; text-align: center; line-height: 1.15; min-height: 35px; display: flex; align-items: center; justify-content: center; overflow-wrap: anywhere; }
+  .prod-card .nm { font-size: var(--fs-produto, 15px); font-weight: 600; text-transform: uppercase; letter-spacing: .2px; text-align: center; line-height: 1.15; min-height: 35px; display: flex; align-items: center; justify-content: center; overflow-wrap: anywhere; }
   .prod-card .pr { font-size: 14px; font-weight: 700; text-align: center; }
   .prod-card.unavailable { opacity: .4; pointer-events: none; }
   .prod-card .badge { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 999px; background: var(--primary); color: #fff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
@@ -119,17 +128,26 @@
   #cart-items { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
   #cart-empty { color: var(--text2); font-size: 13px; text-align: center; padding: 30px 10px; }
   .cart-item { display: flex; gap: 8px; align-items: flex-start; }
-  .cart-item .img { width: 34px; height: 34px; border-radius: 8px; background: var(--bg); flex-shrink: 0; }
+  /* 46px em vez de 34: abaixo disso a foto do produto vira borrão e não
+     cumpre o papel de confirmar visualmente o que foi lançado. */
+  .cart-item .img { width: 46px; height: 46px; border-radius: 10px; background: var(--bg) center/cover no-repeat; flex-shrink: 0; }
+  .cart-item .img.sem-foto { background: var(--primary); color: #fff; font-size: 17px; font-weight: 800;
+                             display: flex; align-items: center; justify-content: center; letter-spacing: .5px; }
   .cart-item .info { flex: 1; min-width: 0; }
   /* Era uma linha só com reticências. A 15px em caixa alta "TAPIOCA C/ QUEIJO
      E PRESUNTO" seria cortado no meio, e no carrinho o operador precisa
      conferir o que está vendendo. Deixa quebrar em até duas linhas: nada some
      e a altura do item continua limitada. */
-  .cart-item .nm { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: .2px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .cart-item .nm { font-size: var(--fs-carrinho, 14px); font-weight: 700; text-transform: uppercase; letter-spacing: .2px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .cart-item .un { font-size: 10.5px; color: var(--text2); }
-  .cart-item .stepper { display: flex; align-items: center; gap: 5px; margin-top: 3px; }
-  .cart-item .stepper button { width: 19px; height: 19px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 10.5px; line-height: 1; }
-  .cart-item .stepper span { font-size: 12px; font-weight: 600; min-width: 12px; text-align: center; }
+  .cart-item .stepper { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  /* 30px é o menor alvo confortável pra dedo no balcão; os 19px de antes
+     exigiam mira. O sinal acompanha o tamanho do carrinho. */
+  .cart-item .stepper button { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border); background: var(--card); font-size: var(--fs-carrinho, 14px); font-weight: 700; line-height: 1; color: var(--text); flex-shrink: 0; }
+  .cart-item .stepper span { font-size: var(--fs-carrinho, 14px); font-weight: 700; min-width: 20px; text-align: center; }
+  /* Afastado do − de propósito: colado, errar o alvo apagaria o item inteiro
+     em vez de tirar uma unidade. */
+  .cart-item .stepper button.excluir { margin-left: 6px; border-color: #E9D2CF; background: #FBF0EF; color: var(--danger); }
   .cart-item .sub { font-size: 12px; font-weight: 600; flex-shrink: 0; }
   #cart-footer { border-top: 1px solid var(--border); padding: 12px; display: flex; flex-direction: column; gap: 3px; }
   .cart-line { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
@@ -141,7 +159,7 @@
   #pay-hint { font-size: 10px; color: var(--text2); text-align: center; margin-top: 2px; }
 
   #footer-nav { height: 60px; flex-shrink: 0; background: var(--sidebar); display: flex; align-items: center; justify-content: center; gap: 32px; }
-  .nav-btn { background: none; border: none; color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+  .nav-btn { background: none; border: none; color: var(--sidebar-text); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: var(--fs-menu, 15px); font-weight: 800; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
   .nav-btn .ic { font-size: 18px; }
   .nav-btn.active { color: #fff; }
 
@@ -208,7 +226,7 @@
   /* flex-shrink:0 + white-space:nowrap junto com o overflow-x do contêiner:
      sem isso, a 15px em caixa alta as abas se espremem até o texto quebrar no
      meio da palavra, ou a última sai da tela sem jeito de alcançar. */
-  .cfg-tab { flex-shrink: 0; white-space: nowrap; border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text2); }
+  .cfg-tab { flex-shrink: 0; white-space: nowrap; border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 8px 16px; font-size: var(--fs-menu, 15px); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text2); }
   .cfg-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
   #config-body { flex: 1; min-height: 0; display: flex; }
   /* O scroll precisa ficar DENTRO da aba. Sem isso, uma aba mais alta que a
@@ -234,6 +252,17 @@
   .cor-prev i { height: 20px; border-radius: 7px; background: rgba(255,255,255,.06); display: block; }
   .cor-opt .rot { font-size: 12px; font-weight: 700; margin-top: 9px; text-transform: uppercase; letter-spacing: .3px; }
   .cor-opt .cnt { font-size: 10.5px; color: var(--text2); margin-top: 2px; }
+
+  /* Ajuste de tamanho por camada */
+  #fs-grid { display: flex; flex-direction: column; gap: 10px; }
+  .fs-row { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--card); }
+  .fs-row .lbl { flex: 1; min-width: 0; }
+  .fs-row .lbl b { display: block; font-size: 13px; font-weight: 700; }
+  .fs-row .lbl small { font-size: 11px; color: var(--text2); }
+  .fs-row .ctrl { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .fs-row .ctrl button { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); background: var(--card); font-size: 15px; font-weight: 700; line-height: 1; color: var(--text); }
+  .fs-row .ctrl button:disabled { opacity: .35; }
+  .fs-row .ctrl .val { min-width: 52px; text-align: center; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
   #config-cats { width: 26%; min-width: 200px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   #config-cats-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
   .cfg-cat-row { display: flex; align-items: center; gap: 8px; border-radius: 12px; border: 1px solid var(--border); padding: 10px 12px; background: var(--card); }
@@ -674,6 +703,15 @@
           <div class="modal-actions" style="max-width:460px">
             <button class="primary" id="cor-cat-salvar">Salvar</button>
           </div>
+
+          <h3 style="margin-top:26px">Tamanho das letras</h3>
+          <p class="cfg-hint">Cada linha é uma camada do sistema — os textos que você lê no mesmo momento e da mesma distância. Ajustar uma não mexe nas outras. A mudança aparece na hora; só vale para todos os aparelhos depois de salvar.</p>
+          <div id="fs-grid"></div>
+          <div id="fs-erro" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:10px"></div>
+          <div class="modal-actions" style="max-width:460px">
+            <button id="fs-restaurar">Restaurar padrão</button>
+            <button class="primary" id="fs-salvar">Salvar tamanhos</button>
+          </div>
         </div>
       </div>
     </div>
@@ -998,12 +1036,36 @@ function pushToCart(prod, addons) {
       line_id: `L${++lineSeq}`,
       product_id: prod.id,
       name: prod.name,
+      // A foto viaja junto com a linha: o carrinho é montado a partir do
+      // próprio array, sem voltar na lista de produtos, então sem isso o
+      // espaço da imagem ficava vazio (era o quadrado cinza).
+      image_url: prod.image_url || '',
       base_price: base,
       price: base + extra,
       quantity: 1,
       addons,
     });
   }
+  renderCart();
+  renderProducts();
+}
+
+// Substituto pra quem não tem foto cadastrada (18 dos 76 produtos hoje): duas
+// letras sobre o marrom da marca. Melhor que o quadrado cinza vazio, que
+// parecia imagem quebrada.
+function iniciaisProduto(nome) {
+  const palavras = String(nome || '').trim().split(/\s+/).filter(Boolean);
+  if (!palavras.length) return '?';
+  const duas = palavras.length > 1
+    ? palavras[0][0] + palavras[1][0]
+    : palavras[0].slice(0, 2);
+  return duas.toUpperCase();
+}
+
+// Remove a linha inteira, independente da quantidade. O − tira de um em um;
+// com 12 unidades no carrinho, zerar pelo − exigiria 12 toques.
+function removerDoCarrinho(lineId) {
+  cart = cart.filter(i => i.line_id !== lineId);
   renderCart();
   renderProducts();
 }
@@ -1128,7 +1190,9 @@ function renderCart() {
   } else {
     el.innerHTML = cart.map(i => `
       <div class="cart-item">
-        <div class="img"></div>
+        ${i.image_url
+          ? `<div class="img" style="background-image:url('${i.image_url}')"></div>`
+          : `<div class="img sem-foto">${iniciaisProduto(i.name)}</div>`}
         <div class="info">
           <div class="nm">${i.name}</div>
           ${(i.addons || []).length ? `<div class="cart-addons">${i.addons.map(a =>
@@ -1138,12 +1202,14 @@ function renderCart() {
             <button data-id="${i.line_id}" data-d="-1">−</button>
             <span>${i.quantity}</span>
             <button data-id="${i.line_id}" data-d="1">+</button>
+            <button class="excluir" data-rm="${i.line_id}" title="Remover do carrinho">🗑</button>
           </div>
         </div>
         <div class="sub">${fmt(i.price * i.quantity)}</div>
       </div>
     `).join('');
-    el.querySelectorAll('.stepper button').forEach(btn => btn.addEventListener('click', () => changeCartQty(btn.dataset.id, parseInt(btn.dataset.d, 10))));
+    el.querySelectorAll('.stepper button[data-d]').forEach(btn => btn.addEventListener('click', () => changeCartQty(btn.dataset.id, parseInt(btn.dataset.d, 10))));
+    el.querySelectorAll('.stepper button[data-rm]').forEach(btn => btn.addEventListener('click', () => removerDoCarrinho(btn.dataset.rm)));
   }
   const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const total = Math.max(0, subtotal - discount);
@@ -2607,7 +2673,7 @@ document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click
   if (tab.dataset.tab === 'usuarios') loadUsuarios();
   if (tab.dataset.tab === 'vinculos') loadVinculos();
   if (tab.dataset.tab === 'adicionais') loadAdicionais();
-  if (tab.dataset.tab === 'aparencia') renderCoresCategoria();
+  if (tab.dataset.tab === 'aparencia') { renderCoresCategoria(); renderFontes(); }
 }));
 
 // ── Configurações: grupos de adicionais ──────────────
@@ -3317,6 +3383,12 @@ async function loadPrinterSettings() {
     corCategoriaSel = data.cat_active_color || COR_CATEGORIA_PADRAO;
     aplicarCorCategoria(corCategoriaSel);
     renderCoresCategoria();
+    // JSON quebrado (edição manual no banco, versão antiga) não pode derrubar
+    // a tela: cai no padrão e segue.
+    let fs = {};
+    try { fs = JSON.parse(data.ui_font_sizes || '{}'); } catch (e) { fs = {}; }
+    aplicarFontes(fs);
+    renderFontes();
   } catch (e) { if (e.message !== 'unauthorized') showToast('Erro ao carregar configurações'); }
 }
 
@@ -3376,6 +3448,73 @@ document.getElementById('cor-cat-salvar').addEventListener('click', async () => 
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
     showToast('Cor salva!');
+  } catch (e) { errEl.textContent = 'Erro de conexão'; }
+});
+
+// ── Tamanho das letras por camada ────────────────────────
+// Camada = textos lidos no mesmo momento e da mesma distância. Agrupar assim
+// evita o que aconteceria com um controle por elemento: dezenas de botões e
+// nenhuma garantia de proporção entre eles.
+const CAMADAS_FONTE = [
+  { chave: 'menu',     varCss: '--fs-menu',     rot: 'Menu e navegação', desc: 'Categorias, abas e barra inferior', padrao: 15 },
+  { chave: 'produto',  varCss: '--fs-produto',  rot: 'Nome do produto',  desc: 'Card na grade de venda',            padrao: 15 },
+  { chave: 'carrinho', varCss: '--fs-carrinho', rot: 'Carrinho',         desc: 'Nome, quantidade e sinais + −',     padrao: 14 },
+];
+// Abaixo de 11 fica ilegível no balcão; acima de 20 o nome estoura o card do
+// produto. Os limites são o que impede a ferramenta de quebrar a tela.
+const FONTE_MIN = 11, FONTE_MAX = 20;
+// Já nasce com os padrões. Vazio, o primeiro clique no + calculava a partir de
+// zero e saltava direto pro mínimo — o controle parecia quebrado se a carga
+// das configurações tivesse falhado antes.
+let fontesAtuais = Object.fromEntries(CAMADAS_FONTE.map(c => [c.chave, c.padrao]));
+
+function aplicarFontes(mapa) {
+  CAMADAS_FONTE.forEach(c => {
+    const v = Math.min(FONTE_MAX, Math.max(FONTE_MIN, parseInt(mapa?.[c.chave], 10) || c.padrao));
+    fontesAtuais[c.chave] = v;
+    document.documentElement.style.setProperty(c.varCss, v + 'px');
+  });
+}
+
+function renderFontes() {
+  const el = document.getElementById('fs-grid');
+  if (!el) return;
+  el.innerHTML = CAMADAS_FONTE.map(c => {
+    const v = fontesAtuais[c.chave] ?? c.padrao;
+    return `
+      <div class="fs-row">
+        <div class="lbl"><b>${c.rot}</b><small>${c.desc}</small></div>
+        <div class="ctrl">
+          <button data-fs="${c.chave}" data-d="-1" ${v <= FONTE_MIN ? 'disabled' : ''}>−</button>
+          <span class="val">${v} px</span>
+          <button data-fs="${c.chave}" data-d="1" ${v >= FONTE_MAX ? 'disabled' : ''}>+</button>
+        </div>
+      </div>`;
+  }).join('');
+  el.querySelectorAll('button[data-fs]').forEach(b => b.addEventListener('click', () => {
+    const alvo = { ...fontesAtuais };
+    alvo[b.dataset.fs] = (fontesAtuais[b.dataset.fs] || 0) + parseInt(b.dataset.d, 10);
+    aplicarFontes(alvo);   // efeito imediato: a tela de venda atrás já muda
+    renderFontes();
+  }));
+}
+
+document.getElementById('fs-restaurar').addEventListener('click', () => {
+  aplicarFontes(Object.fromEntries(CAMADAS_FONTE.map(c => [c.chave, c.padrao])));
+  renderFontes();
+});
+
+document.getElementById('fs-salvar').addEventListener('click', async () => {
+  const errEl = document.getElementById('fs-erro');
+  errEl.textContent = '';
+  try {
+    const res = await apiFetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ui_font_sizes: JSON.stringify(fontesAtuais) }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar'; return; }
+    showToast('Tamanhos salvos!');
   } catch (e) { errEl.textContent = 'Erro de conexão'; }
 });
 
