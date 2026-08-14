@@ -289,10 +289,27 @@
   .fs-row .ctrl .val { min-width: 52px; text-align: center; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
   #config-cats { width: 26%; min-width: 200px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   #config-cats-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-  .cfg-cat-row { display: flex; align-items: center; gap: 8px; border-radius: 12px; border: 1px solid var(--border); padding: 10px 12px; background: var(--card); }
+  .cfg-cat-row { display: flex; align-items: center; gap: 8px; border-radius: 12px; border: 1px solid var(--border); padding: 8px 10px; background: var(--card); }
   .cfg-cat-row.active { border-color: var(--primary); background: #F1EAE3; }
-  .cfg-cat-row .nm { flex: 1; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .cfg-cat-row .nm { flex: 1; min-width: 0; cursor: pointer; }
+  .cfg-cat-row .nm b { display: block; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+  .cfg-cat-row .nm small { font-size: 10.5px; color: var(--text2); }
   .cfg-cat-row button { background: none; border: none; color: var(--text2); font-size: 13px; padding: 2px 4px; }
+  /* Setas de ordem: empilhadas e estreitas pra não roubar espaço do nome. */
+  .cfg-cat-row .ord { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+  .cfg-cat-row .ord button { width: 22px; height: 16px; border: 1px solid var(--border); background: var(--bg);
+                             border-radius: 5px; font-size: 9px; line-height: 1; padding: 0; color: var(--text2); }
+  .cfg-cat-row .ord button:disabled { opacity: .3; }
+  /* Faixa da cor: mesma leitura da barra lateral de venda. */
+  .cfg-cat-row .faixa { width: 5px; align-self: stretch; border-radius: 3px; min-height: 32px; flex-shrink: 0; background: var(--border); }
+  .cfg-cat-row.inativa { opacity: .5; }
+  .cfg-cat-row .selo { display: inline-block; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 999px;
+                       background: var(--bg); color: var(--text2); margin-left: 5px; vertical-align: middle; letter-spacing: .3px; }
+  /* Seletor de cor no modal */
+  .cor-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cor-picker button { width: 34px; height: 34px; border-radius: 9px; border: 2px solid transparent; padding: 0; }
+  .cor-picker button.selected { border-color: var(--text); }
+  .cor-picker button.nenhuma { border: 1px dashed var(--border); background: var(--card); font-size: 15px; color: var(--text2); }
   #config-cats-add { margin: 10px; height: 40px; border-radius: 12px; border: none; background: var(--primary); color: #fff; font-size: 13px; font-weight: 600; }
   #config-products { flex: 1; padding: 14px; overflow-y: auto; }
   #config-products-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -1042,7 +1059,8 @@ async function loadCatalog() {
 function renderCategories() {
   const el = document.getElementById('categories');
   el.innerHTML = categories.filter(c => c.active !== false).map(c => `
-    <button class="cat-btn ${c.id === activeCategory ? 'active' : ''}" data-id="${c.id}">
+    <button class="cat-btn ${c.id === activeCategory ? 'active' : ''}" data-id="${c.id}"
+            ${c.color ? `style="box-shadow: inset 4px 0 0 ${c.color}"` : ''}>
       <span class="ic">${c.icon || '🏷️'}</span>${c.name}
     </button>
   `).join('');
@@ -3815,6 +3833,19 @@ let configActiveCategory = null;
 
 // Ícones prontos pro seletor de categoria — cobre o cardápio típico de
 // cafeteria/lanchonete, evitando o operador ter que digitar emoji no tablet.
+// Paleta fechada em vez de seletor livre: a cor é lida sobre o fundo marrom
+// escuro da barra lateral, e tom claro demais (ou quase igual ao fundo) some.
+// Todos estes foram conferidos contra o #2C2522 da barra.
+const PALETA_CATEGORIA = [
+  '#B8683A', // terracota
+  '#B88433', // âmbar
+  '#5F8B64', // verde
+  '#3F7DA8', // azul
+  '#8E7CC3', // lilás
+  '#A34B42', // vermelho
+  '#5A4638', // marrom da marca
+];
+
 const CATEGORY_ICONS = [
   '☕', '🥤', '🧊', '🧃', '🍹', '🥛', '🍺',
   '🥐', '🍞', '🥖', '🥯', '🧇', '🥞', '🍩',
@@ -3829,9 +3860,24 @@ function renderConfigCategories() {
   const el = document.getElementById('config-cats-list');
   if (!categories.length) { el.innerHTML = '<div style="color:var(--text2);font-size:12.5px;text-align:center;padding:16px">Nenhuma categoria ainda</div>'; }
   else {
-    el.innerHTML = categories.map(c => `
-      <div class="cfg-cat-row ${c.id === configActiveCategory ? 'active' : ''}">
-        <span class="nm" data-id="${c.id}">${c.icon || ''} ${c.name}${c.active === false ? ' (inativa)' : ''}</span>
+    // Conta pela lista de produtos que já está em memória — evita uma rota
+    // nova só pra isso. Saber que a categoria tem 12 produtos muda a decisão
+    // de desativar ou excluir, que antes era tomada às cegas.
+    const porCategoria = {};
+    (products || []).forEach(p => { porCategoria[p.category_id] = (porCategoria[p.category_id] || 0) + 1; });
+
+    el.innerHTML = categories.map((c, i) => `
+      <div class="cfg-cat-row ${c.id === configActiveCategory ? 'active' : ''} ${c.active === false ? 'inativa' : ''}">
+        <div class="ord">
+          <button data-sobe="${c.id}" ${i === 0 ? 'disabled' : ''} title="Mover pra cima">▲</button>
+          <button data-desce="${c.id}" ${i === categories.length - 1 ? 'disabled' : ''} title="Mover pra baixo">▼</button>
+        </div>
+        <div class="faixa" ${c.color ? `style="background:${c.color}"` : ''}></div>
+        <span style="font-size:19px">${c.icon || ''}</span>
+        <div class="nm" data-id="${c.id}">
+          <b>${c.name}${c.active === false ? '<span class="selo">DESATIVADA</span>' : ''}</b>
+          <small>${porCategoria[c.id] || 0} produto${(porCategoria[c.id] || 0) === 1 ? '' : 's'}${c.active === false ? ' · some da venda' : ''}</small>
+        </div>
         <button data-edit="${c.id}">✎</button>
         <button data-del="${c.id}">🗑</button>
       </div>
@@ -3839,6 +3885,8 @@ function renderConfigCategories() {
     el.querySelectorAll('.nm').forEach(nmEl => nmEl.addEventListener('click', () => selectConfigCategory(nmEl.dataset.id)));
     el.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openCategoryModal(btn.dataset.edit)));
     el.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => deleteCategory(btn.dataset.del)));
+    el.querySelectorAll('[data-sobe]').forEach(btn => btn.addEventListener('click', () => moverCategoria(btn.dataset.sobe, -1)));
+    el.querySelectorAll('[data-desce]').forEach(btn => btn.addEventListener('click', () => moverCategoria(btn.dataset.desce, 1)));
   }
   if (!configActiveCategory && categories.length) configActiveCategory = categories[0].id;
   renderConfigProducts();
@@ -3868,7 +3916,15 @@ function openCategoryModal(categoryId) {
           `).join('')}
         </div>
       </div>
-      <div class="field-group"><label>Ordem</label><input id="cat-sort" type="number" value="${cat?.sort_order ?? 0}"></div>
+      <div class="field-group">
+        <label>Cor</label>
+        <div class="cor-picker" id="cat-cor-picker">
+          <button type="button" class="nenhuma ${!cat?.color ? 'selected' : ''}" data-cor="" title="Sem cor">✕</button>
+          ${PALETA_CATEGORIA.map(cor => `
+            <button type="button" class="${cat?.color === cor ? 'selected' : ''}" data-cor="${cor}" style="background:${cor}"></button>
+          `).join('')}
+        </div>
+      </div>
       ${cat ? `<label class="toggle-row"><input type="checkbox" id="cat-active" ${cat.active !== false ? 'checked' : ''}> Categoria ativa</label>` : ''}
       <div id="cat-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
       <div class="modal-actions">
@@ -3879,6 +3935,12 @@ function openCategoryModal(categoryId) {
   `;
   document.body.appendChild(backdrop);
   let catIcon = cat?.icon || null;
+  let catCor = cat?.color || null;
+  backdrop.querySelectorAll('#cat-cor-picker button').forEach(btn => btn.addEventListener('click', () => {
+    catCor = btn.dataset.cor || null;
+    backdrop.querySelectorAll('#cat-cor-picker button')
+      .forEach(b => b.classList.toggle('selected', (b.dataset.cor || null) === catCor));
+  }));
   backdrop.querySelectorAll('.icon-opt').forEach(btn => btn.addEventListener('click', () => {
     // Clicar de novo no ícone já escolhido desmarca (categoria sem ícone).
     catIcon = catIcon === btn.dataset.icon ? null : btn.dataset.icon;
@@ -3892,7 +3954,10 @@ function openCategoryModal(categoryId) {
     const payload = {
       name,
       icon: catIcon,
-      sort_order: parseInt(backdrop.querySelector('#cat-sort').value, 10) || 0,
+      color: catCor,
+      // Categoria nova entra no fim da lista; a posição se ajusta pelas setas,
+      // não por um número digitado — que era como nasciam os empates.
+      ...(cat ? {} : { sort_order: categories.length }),
     };
     if (cat) payload.active = backdrop.querySelector('#cat-active').checked;
     try {
@@ -3908,6 +3973,55 @@ function openCategoryModal(categoryId) {
       showToast('Categoria salva!');
     } catch (e) { errEl.textContent = 'Erro de conexão'; }
   });
+}
+
+// Move uma posição e RENUMERA todas em sequência (0,1,2...). O campo numérico
+// que existia antes deixava criar empate sem avisar — hoje há sort_order 3 em
+// três categorias e 4 em duas, e nesses casos quem decide a ordem é o
+// desempate alfabético, não o dono. Renumerar a lista inteira a cada movimento
+// elimina o empate de vez, inclusive os que já estão gravados.
+let timerOrdemCategorias = null;
+function moverCategoria(id, direcao) {
+  const de = categories.findIndex(c => c.id === id);
+  const para = de + direcao;
+  if (de < 0 || para < 0 || para >= categories.length) return;
+
+  const ordenada = [...categories];
+  [ordenada[de], ordenada[para]] = [ordenada[para], ordenada[de]];
+
+  // Reordena e pinta na hora, sem esperar a rede: mover três posições são três
+  // cliques seguidos, e travar durante a gravação faria os cliques do meio
+  // sumirem sem aviso.
+  categories = ordenada;
+  renderConfigCategories();
+
+  // Grava só depois que a pessoa parar de clicar. Antes cada clique disparava
+  // até 12 PATCHes; numa sequência rápida isso é uma enxurrada de requisições
+  // pra chegar no mesmo resultado final.
+  clearTimeout(timerOrdemCategorias);
+  timerOrdemCategorias = setTimeout(salvarOrdemCategorias, 600);
+}
+
+async function salvarOrdemCategorias() {
+  const alvo = [...categories];
+  try {
+    // Só grava quem realmente mudou de número.
+    const mudaram = alvo.map((c, i) => ({ c, i })).filter(({ c, i }) => c.sort_order !== i);
+    for (const { c, i } of mudaram) {
+      const res = await apiFetch(`/api/categories/${c.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sort_order: i }),
+      });
+      if (!res.ok) throw new Error('falha ao gravar ordem');
+      c.sort_order = i;
+    }
+  } catch (e) {
+    if (e.message !== 'unauthorized') {
+      showToast('Não consegui salvar a ordem');
+      await loadCatalog();          // volta pro que está no banco
+      renderConfigCategories();
+    }
+  }
 }
 
 async function deleteCategory(id) {
