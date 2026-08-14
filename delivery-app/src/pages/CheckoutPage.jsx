@@ -314,7 +314,17 @@ export default function CheckoutPage() {
         discount: res.discount,
       })
     } catch (err) {
-      setCouponError(err.message)
+      // O cupom vale só sobre a parte do carrinho que NÃO está em promoção, pra
+      // não dar desconto em cima de desconto. Só que quem tem o carrinho cheio
+      // de itens da aba Ofertas recebia "pedido mínimo de R$ 30,00" olhando pra
+      // um carrinho de R$ 46 — a mensagem contradizia a tela e não havia como
+      // adivinhar a regra. Aqui ela é dita por extenso.
+      const temPromo = subtotalSemPromo < subtotal
+      setCouponError(
+        temPromo && /mínimo/i.test(err.message)
+          ? `${err.message}. Itens que já estão em promoção não entram nessa conta — hoje R$ ${subtotalSemPromo.toFixed(2).replace('.', ',')} do seu carrinho valem para o cupom.`
+          : err.message
+      )
     }
   }
 
@@ -754,6 +764,16 @@ export default function CheckoutPage() {
             </div>
           )}
           {couponError && <p style={{ color: 'var(--danger)', fontSize: 11, marginTop: 4 }}>{couponError}</p>}
+          {/* Dito antes de tentar, não só depois de dar erro: com o carrinho
+              cheio de itens da aba Ofertas, a base do cupom pode ser zero e o
+              cliente não tem como adivinhar isso olhando o total. */}
+          {!couponApplied && subtotalSemPromo < subtotal && (
+            <p style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6, lineHeight: 1.4 }}>
+              ℹ️ Cupons valem sobre os itens sem promoção. Do seu carrinho,{' '}
+              <b style={{ color: 'var(--gold)' }}>R$ {subtotalSemPromo.toFixed(2).replace('.', ',')}</b>{' '}
+              contam para o cupom.
+            </p>
+          )}
         </Section>
 
         {/* Banner promoções disponíveis hoje */}
