@@ -102,7 +102,11 @@
      foto fica bem maior que os 52px fixos de antes. */
   .prod-card { position: relative; background: var(--card); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); padding: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; border: none; overflow: hidden; }
   .prod-card .img { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; background: var(--bg) center/cover no-repeat; }
-  .prod-card .nm { font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; min-height: 28px; display: flex; align-items: center; justify-content: center; }
+  /* min-height acompanha a fonte: a 15px duas linhas pedem ~35px, e o valor
+     antigo (28px, calibrado pros 12px) deixaria a segunda linha encostando no
+     preço. É mínimo, não fixo — nome de três linhas faz o card crescer em vez
+     de cortar. */
+  .prod-card .nm { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: .2px; text-align: center; line-height: 1.15; min-height: 35px; display: flex; align-items: center; justify-content: center; overflow-wrap: anywhere; }
   .prod-card .pr { font-size: 14px; font-weight: 700; text-align: center; }
   .prod-card.unavailable { opacity: .4; pointer-events: none; }
   .prod-card .badge { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 999px; background: var(--primary); color: #fff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
@@ -114,7 +118,11 @@
   .cart-item { display: flex; gap: 8px; align-items: flex-start; }
   .cart-item .img { width: 34px; height: 34px; border-radius: 8px; background: var(--bg); flex-shrink: 0; }
   .cart-item .info { flex: 1; min-width: 0; }
-  .cart-item .nm { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Era uma linha só com reticências. A 15px em caixa alta "TAPIOCA C/ QUEIJO
+     E PRESUNTO" seria cortado no meio, e no carrinho o operador precisa
+     conferir o que está vendendo. Deixa quebrar em até duas linhas: nada some
+     e a altura do item continua limitada. */
+  .cart-item .nm { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: .2px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .cart-item .un { font-size: 10.5px; color: var(--text2); }
   .cart-item .stepper { display: flex; align-items: center; gap: 5px; margin-top: 3px; }
   .cart-item .stepper button { width: 19px; height: 19px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 10.5px; line-height: 1; }
