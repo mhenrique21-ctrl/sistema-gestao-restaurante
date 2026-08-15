@@ -551,6 +551,9 @@ const IMPRESSAO_DEFAULTS={
   listaMostrarObs:true,
   listaMostrarSolicitante:true, // quem pediu + horário (adicionadoPor/criadoEm)
   listaMostrarPreco:true,        // último preço pago (getMpByName)
+  listaFonteProduto:11,          // px — nome do produto (independente do "fonte" geral)
+  listaFonteCategoria:10,        // px — cabeçalho de categoria/rua
+  listaFonteSolicitante:9,       // px — "👤 Nome · horário"
   producaoColunas:2,
   producaoMostrarQtdAtual:true,
   relatorioCards:true,
@@ -5268,10 +5271,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
         .print-columns{column-count:${cfg.listaColunas};column-gap:22px;column-rule:1px solid #e2e2de}
         .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
-        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
+        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${cfg.listaFonteCategoria}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
         .row{display:flex;align-items:baseline;gap:6px;padding:2.5px 2px;border-bottom:1px solid #ececec}
         .row.urgent{border-left:2px solid #a6412a;padding-left:4px;margin-left:-6px}
-        .row .name{flex:1;font-size:${Math.max(fpx-2,10)}px;line-height:1.3;color:#1a1a1a}
+        .row .name{flex:1;font-size:${cfg.listaFonteProduto}px;line-height:1.3;color:#1a1a1a}
         .row.urgent .name{font-weight:700;color:#a6412a}
         .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:${Math.max(fpx-3,9)}px;font-weight:700;color:#1a1a1a;white-space:nowrap}
         .meta{font-size:${Math.max(fpx-4,8)}px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
@@ -5349,16 +5352,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
         .print-columns{column-count:${cfg.listaColunas};column-gap:22px;column-rule:1px solid #e2e2de}
         .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
-        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
+        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${cfg.listaFonteCategoria}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
         .row{display:flex;align-items:baseline;gap:6px;padding:2.5px 2px;border-bottom:1px solid #ececec}
         .row.urgent{border-left:2px solid #a6412a;padding-left:4px;margin-left:-6px}
-        .row .name{flex:1;font-size:${Math.max(fpx-2,10)}px;line-height:1.3;color:#1a1a1a}
+        .row .name{flex:1;font-size:${cfg.listaFonteProduto}px;line-height:1.3;color:#1a1a1a}
         .row.urgent .name{font-weight:700;color:#a6412a}
         .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:${Math.max(fpx-3,9)}px;font-weight:700;color:#1a1a1a;white-space:nowrap}
         .meta{font-size:${Math.max(fpx-4,8)}px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
         .meta .tem{color:#5b7a63;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .meta .tag-urgent{color:#a6412a;font-weight:700}
-        .meta .who{color:${cfg.cor};font-weight:600}
+        .meta .who{color:${cfg.cor};font-weight:600;font-size:${cfg.listaFonteSolicitante}px}
         .meta .price{color:#166534;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
       </style>
     </head><body>
@@ -11142,6 +11145,13 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           {children}
         </div>
       );
+      const numStepper=(val:number,onPick:(v:number)=>void,min=7,max=20)=>(
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={()=>onPick(Math.max(min,val-1))} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"var(--bg4)",color:"#8B5CF6",cursor:"pointer",fontSize:14,fontWeight:700,lineHeight:1}}>−</button>
+          <span style={{fontSize:13,fontWeight:700,color:"var(--text)",minWidth:44,textAlign:"center" as const}}>{val}px</span>
+          <button onClick={()=>onPick(Math.min(max,val+1))} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"var(--bg4)",color:"#8B5CF6",cursor:"pointer",fontSize:14,fontWeight:700,lineHeight:1}}>+</button>
+        </div>
+      );
       return <div>
         <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
           <div style={{fontSize:13,fontWeight:700,color:"#8B5CF6",marginBottom:4}}>🖨️ Identidade nas impressões</div>
@@ -11185,6 +11195,9 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           {field("Mostrar observações","lista atual e histórico",toggle(impCfg.listaMostrarObs,v=>setImpCfg("listaMostrarObs",v)))}
           {field("Mostrar quem pediu e horário","lista atual · adicionadoPor/criadoEm",toggle(impCfg.listaMostrarSolicitante,v=>setImpCfg("listaMostrarSolicitante",v)))}
           {field("Mostrar último preço pago","lista atual",toggle(impCfg.listaMostrarPreco,v=>setImpCfg("listaMostrarPreco",v)))}
+          {field("Tamanho da letra do produto","nome do item",numStepper(impCfg.listaFonteProduto,v=>setImpCfg("listaFonteProduto",v)))}
+          {field("Tamanho da letra da categoria/rua","cabeçalho do grupo",numStepper(impCfg.listaFonteCategoria,v=>setImpCfg("listaFonteCategoria",v)))}
+          {field("Tamanho da letra de quem pediu","\"👤 Nome · horário\"",numStepper(impCfg.listaFonteSolicitante,v=>setImpCfg("listaFonteSolicitante",v)))}
         </div>
 
         <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
