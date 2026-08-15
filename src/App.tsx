@@ -974,6 +974,19 @@ const mergeFromServer=(prev:any,updates:any)=>{
     next[emp].listaRuas=[...new Set([...(s.listaRuas||[]),...(p.listaRuas||[])])];
     const mergedRuaCatMap={...(s.ruaCatMap||{}),...(p.ruaCatMap||{})};
     next[emp].ruaCatMap=mergedRuaCatMap;
+    // config (nome da empresa, WhatsApp, aliquota, config.impressao/sortPrefs...) vinha
+    // cru do spread {...s} lá em cima — igual o bug do iconesProducao, qualquer edição
+    // local (ex.: subir uma logo em Configurações > Impressão) que ainda não tivesse
+    // sido confirmada no servidor era revertida pelo poll seguinte. União com local
+    // vencendo em conflito; impressao/sortPrefs (sub-objetos) fundidos à parte pra uma
+    // mudança num campo não apagar outro campo do mesmo sub-objeto trocado em outro
+    // dispositivo.
+    next[emp].config={
+      ...(s.config||{}),
+      ...(p.config||{}),
+      impressao:{...(s.config?.impressao||{}),...(p.config?.impressao||{})},
+      sortPrefs:{...(s.config?.sortPrefs||{}),...(p.config?.sortPrefs||{})},
+    };
   });
   return migrateDb(next);
 };
@@ -1467,7 +1480,7 @@ export default function App() {
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder}/>}
+              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder}/>}
             </>
         }
       </div>
@@ -10519,21 +10532,21 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
 }
 
 // ===================== CONFIGURAÇÕES =====================
-function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder}:
-  {db:any,setDb:any,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void}){
+function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder}:
+  {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
   const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"]];
 
   // Shared helpers
-  const setConfig=(key:string,val:any)=>setDb((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
+  const setConfig=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
 
   // ---- Empresa/Geral ----
   const [nomeEmpresa,setNomeEmpresa]=useState(db.config?.nomeEmpresa||empresa);
 
   // ---- Impressão ----
   const impCfg=getImpressaoCfg(db);
-  const setImpCfg=(key:string,val:any)=>setDb((d:any)=>({...d,config:{...(d.config||{}),impressao:{...(d.config?.impressao||{}),[key]:val}}}));
+  const setImpCfg=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),impressao:{...(d.config?.impressao||{}),[key]:val}}}));
   const [impNome,setImpNome]=useState(impCfg.nome);
   const [impRodape,setImpRodape]=useState(impCfg.rodape);
   const logoInputRef=useRef<HTMLInputElement>(null);
