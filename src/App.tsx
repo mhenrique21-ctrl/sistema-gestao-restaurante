@@ -5234,46 +5234,63 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!lista.length)return alert("A lista está vazia.");
     const w=window.open("","_blank","width=900,height=700");
     if(!w)return;
-    const porCatImp:Record<string,any[]>={};
-    pendentes.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCatImp[c])porCatImp[c]=[];porCatImp[c].push(i);});
-    const ordemCat=[...cats.filter(c=>porCatImp[c]),...Object.keys(porCatImp).filter(c=>!cats.includes(c))];
-    const rows=ordemCat.map(cat=>`
-      <tr><td colspan="6" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}</td></tr>
-      ${(porCatImp[cat]||[]).sort((a:any,b:any)=>(a.urgente?-1:b.urgente?1:0)).map((i:any)=>`<tr>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;font-weight:${i.urgente?"700":"400"};color:${i.urgente?"#cc0000":"#222"}">${i.nome}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.quantidade||1}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.unidade||"un"}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#555">${i.urgente?"⚠ URGENTE":""}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#777">${i.estoqueQtd!=null&&i.estoqueQtd!==""?i.estoqueQtd+" "+(i.estoqueUn||i.unidade||"un"):""}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
-      </tr>`).join("")}`).join("");
+    // Impressão segue a mesma visualização escolhida na tela (Por Categoria / Por Rua)
+    // em vez de sempre agrupar por categoria — pra bater com a ordem que quem tá indo
+    // ao mercado já tá vendo (e usando) no app.
+    const usarRua=isAdmin&&vistaRua&&ruas.length>0;
+    const porGrupoImp:Record<string,any[]>={};
+    if(usarRua){
+      pendentes.forEach((i:any)=>{const r=i.rua||getRuaProd(i.nome,i.categoria)||getRuaDaCat(i.categoria||"outros")||"Sem rua";if(!porGrupoImp[r])porGrupoImp[r]=[];porGrupoImp[r].push(i);});
+    }else{
+      pendentes.forEach((i:any)=>{const c=i.categoria||"outros";if(!porGrupoImp[c])porGrupoImp[c]=[];porGrupoImp[c].push(i);});
+    }
+    const ordemBase=usarRua?ruas:cats;
+    const ordemGrupo=[...ordemBase.filter(g=>porGrupoImp[g]),...Object.keys(porGrupoImp).filter(g=>!ordemBase.includes(g))];
+    const rowHtml=(i:any)=>{
+      const meta:string[]=[];
+      if(i.urgente)meta.push(`<span class="tag-urgent">⚠ URGENTE</span>`);
+      if(i.estoqueQtd!=null&&i.estoqueQtd!=="")meta.push(`<span class="tem">TEM ${i.estoqueQtd} ${i.estoqueUn||i.unidade||"un"}</span>`);
+      if(i.obs)meta.push(`<span>${i.obs}</span>`);
+      return `<div class="row${i.urgente?" urgent":""}"><span class="name">${i.nome}</span><span class="qty">${i.quantidade||1} ${i.unidade||"un"}</span></div>${meta.length?`<div class="meta">${meta.join("")}</div>`:""}`;
+    };
+    const blocks=ordemGrupo.map(g=>`
+      <div class="cat-block">
+        <div class="cat-header">${g}</div>
+        ${(porGrupoImp[g]||[]).sort((a:any,b:any)=>(a.urgente?-1:b.urgente?1:0)).map(rowHtml).join("")}
+      </div>`).join("");
     const dataHoje=new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
+    const rotuloGrupo=usarRua?"rua(s)":"categoria(s)";
     w.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8"/>
       <title>Lista de Compras — ${dataHoje}</title>
       <style>
-        body{font-family:Arial,sans-serif;margin:30px;color:#222}
-        h1{font-size:22px;margin:0 0 4px}
-        .sub{font-size:13px;color:#666;margin-bottom:18px}
-        table{width:100%;border-collapse:collapse;margin-top:8px}
-        th{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
-        td{font-size:13px}
+        body{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a}
+        h1{font-size:22px;margin:0 0 3px}
+        .sub{font-size:12px;color:#666;margin-bottom:16px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
         .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
-        .footer{margin-top:20px;font-size:11px;color:#aaa}
-        @media print{.no-print-bar{display:none}}
+        .footer{margin-top:16px;font-size:10px;color:#a8a8a8;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+        @media print{.no-print-bar{display:none} @page{size:A4;margin:14mm}}
+        .print-columns{column-count:2;column-gap:22px;column-rule:1px solid #e2e2de}
+        .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
+        .cat-header{background:#1a1a1a;color:#fff;padding:4px 7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
+        .row{display:flex;align-items:baseline;gap:6px;padding:2.5px 2px;border-bottom:1px solid #ececec}
+        .row.urgent{border-left:2px solid #a6412a;padding-left:4px;margin-left:-6px}
+        .row .name{flex:1;font-size:10.3px;line-height:1.3;color:#1a1a1a}
+        .row.urgent .name{font-weight:700;color:#a6412a}
+        .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:9.5px;font-weight:700;color:#1a1a1a;white-space:nowrap}
+        .meta{font-size:8.6px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
+        .meta .tem{color:#5b7a63;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+        .meta .tag-urgent{color:#a6412a;font-weight:700}
       </style>
     </head><body>
       <div class="no-print-bar">
         <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
-        <button onclick="window.print()" style="background:#222;color:#fff">🖨️ Imprimir / Salvar PDF</button>
+        <button onclick="window.print()" style="background:#1a1a1a;color:#fff">🖨️ Imprimir / Salvar PDF</button>
       </div>
       <h1>🛒 Lista de Compras</h1>
-      <div class="sub">Data: ${dataHoje} · ${pendentes.length} pendente(s) · ${ordemCat.length} categoria(s)</div>
-      <table>
-        <tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>TEM</th><th>Observação</th></tr>
-        ${rows}
-      </table>
+      <div class="sub">Data: ${dataHoje} · ${pendentes.length} pendente(s) · ${ordemGrupo.length} ${rotuloGrupo} · agrupado por ${usarRua?"rua":"categoria"}</div>
+      <div class="print-columns">${blocks}</div>
       <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
     </body></html>`);
     w.document.close();
