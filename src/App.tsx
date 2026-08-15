@@ -549,6 +549,8 @@ const IMPRESSAO_DEFAULTS={
   listaAgrupamento:"tela",    // tela | categoria | rua
   listaMostrarTem:true,
   listaMostrarObs:true,
+  listaMostrarSolicitante:true, // quem pediu + horário (adicionadoPor/criadoEm)
+  listaMostrarPreco:true,        // último preço pago (getMpByName)
   producaoColunas:2,
   producaoMostrarQtdAtual:true,
   relatorioCards:true,
@@ -5316,6 +5318,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       if(i.urgente)meta.push(`<span class="tag-urgent">⚠ URGENTE</span>`);
       if(cfg.listaMostrarTem&&i.estoqueQtd!=null&&i.estoqueQtd!=="")meta.push(`<span class="tem">TEM ${i.estoqueQtd} ${i.estoqueUn||i.unidade||"un"}</span>`);
       if(cfg.listaMostrarObs&&i.obs)meta.push(`<span>${i.obs}</span>`);
+      if(cfg.listaMostrarSolicitante&&i.adicionadoPor){
+        const hora=i.criadoEm?new Date(i.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ}):"";
+        meta.push(`<span class="who">👤 ${i.adicionadoPor}${hora?` · ${hora}`:""}</span>`);
+      }
+      if(cfg.listaMostrarPreco){
+        const mpPreco=getMpByName(i.nome)?.ultimoValor||0;
+        if(mpPreco>0)meta.push(`<span class="price">${fmtMoney(mpPreco)}${i.unidade?`/${i.unidade}`:""}</span>`);
+      }
       return `<div class="row${i.urgente?" urgent":""}"><span class="name">${i.nome}</span><span class="qty">${i.quantidade||1} ${i.unidade||"un"}</span></div>${meta.length?`<div class="meta">${meta.join("")}</div>`:""}`;
     };
     const blocks=ordemGrupo.map(g=>`
@@ -5348,6 +5358,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         .meta{font-size:${Math.max(fpx-4,8)}px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
         .meta .tem{color:#5b7a63;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .meta .tag-urgent{color:#a6412a;font-weight:700}
+        .meta .who{color:${cfg.cor};font-weight:600}
+        .meta .price{color:#166534;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
       </style>
     </head><body>
       <div class="no-print-bar">
@@ -11171,6 +11183,8 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           {field("Agrupamento na impressão","categoria x rua",seg([["tela","Seguir a tela"],["categoria","Sempre Categoria"],["rua","Sempre Rua"]],impCfg.listaAgrupamento,v=>setImpCfg("listaAgrupamento",v)))}
           {field("Mostrar coluna \"TEM\" (estoque)","lista atual",toggle(impCfg.listaMostrarTem,v=>setImpCfg("listaMostrarTem",v)))}
           {field("Mostrar observações","lista atual e histórico",toggle(impCfg.listaMostrarObs,v=>setImpCfg("listaMostrarObs",v)))}
+          {field("Mostrar quem pediu e horário","lista atual · adicionadoPor/criadoEm",toggle(impCfg.listaMostrarSolicitante,v=>setImpCfg("listaMostrarSolicitante",v)))}
+          {field("Mostrar último preço pago","lista atual",toggle(impCfg.listaMostrarPreco,v=>setImpCfg("listaMostrarPreco",v)))}
         </div>
 
         <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
