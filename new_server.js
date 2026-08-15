@@ -713,7 +713,16 @@ function estadoInicial(nota) {
 // substituir o resumo antigo em vez de virar uma segunda linha da mesma nota.
 function fundirNotas(existentes, chegando) {
   const porChave = new Map();
-  for (const n of existentes) porChave.set(n.chNFe || `nsu:${n.nsu}`, n);
+  for (const n of existentes) {
+    // Nota que entrou no cache ANTES da máquina de estados existir não tem
+    // `estado`. Sem carimbar aqui, ela não casa com 'novo' nem com nada, então
+    // manifestarPendentes nunca a enxerga e ela fica em resumo pra sempre — foi
+    // exatamente o que prendeu as 25 notas (log: estados {"?":25}, 0
+    // manifestações, ciclo após ciclo). Só o ramo de nota NOVA aplicava
+    // estadoInicial; o de nota já conhecida passava direto.
+    const comEstado = n.estado ? n : { ...n, estado: estadoInicial(n), manifestacao: n.manifestacao || null };
+    porChave.set(n.chNFe || `nsu:${n.nsu}`, comEstado);
+  }
 
   for (const nova of chegando) {
     const chave = nova.chNFe || `nsu:${nova.nsu}`;
