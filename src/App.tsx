@@ -532,35 +532,72 @@ function MoneyInput({value,onChange,placeholder,className,style}) {
     placeholder={placeholder||"0,00"} className={className} style={style}/>;
 }
 
+// ===================== IMPRESSÃO (config global, sem precisar de deploy) =====================
+// Editável em Configurações > Impressão (db.config.impressao). _impressaoCfg é atualizado a
+// cada render do App() a partir do db da empresa ativa (mesmo padrão já usado por
+// _dbIconesProd em Produção), então funções de impressão que ficam fora de um componente
+// com "db" no escopo (gerarRelatorioHTML, imprimirNFe, imprimirEncomenda) sempre enxergam a
+// config atual sem precisar receber "db" como parâmetro em cada chamada.
+const IMPRESSAO_DEFAULTS={
+  nome:"",                    // vazio = usa o nome da empresa (CONFRARIA/SEAMA)
+  logo:"",                    // data URL, opcional
+  cor:"#8B5CF6",
+  fonte:"padrao",             // compacta | padrao | grande
+  orientacao:"retrato",       // retrato | paisagem
+  rodape:"",                  // vazio = "Gerado em ..." padrão
+  listaColunas:2,
+  listaAgrupamento:"tela",    // tela | categoria | rua
+  listaMostrarTem:true,
+  listaMostrarObs:true,
+  producaoColunas:2,
+  producaoMostrarQtdAtual:true,
+  relatorioCards:true,
+  relatorioCabecalho:"cartao", // cartao | linha
+  nfeMostrarCategoria:true,
+  encomendaAssinatura:true,
+  estimativaMostrarPrecos:true,
+};
+const getImpressaoCfg=(db:any)=>({...IMPRESSAO_DEFAULTS,...(db?.config?.impressao||{})});
+let _impressaoCfg:any=IMPRESSAO_DEFAULTS;
+const FONTE_PX:{[k:string]:number}={compacta:12,padrao:13,grande:15};
+const impressaoPageCss=(cfg:any)=>`@page{size:A4 ${cfg.orientacao==="paisagem"?"landscape":"portrait"};margin:14mm}`;
+const impressaoNome=(cfg:any,fallback:string)=>cfg.nome||fallback;
+const impressaoLogoHtml=(cfg:any,style?:string)=>cfg.logo?`<img src="${cfg.logo}" style="${style||"height:36px;max-width:150px;object-fit:contain;display:block;margin-bottom:6px"}"/>`:"";
+const impressaoRodapeTxt=(cfg:any)=>cfg.rodape||`Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}`;
+
 // ===================== PDF =====================
 function gerarRelatorioHTML(titulo,empresa,conteudo) {
+  const cfg=_impressaoCfg;
+  const fpx=FONTE_PX[cfg.fonte]||13;
+  const nome=impressaoNome(cfg,empresa);
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${titulo} - ${empresa}</title>
-  <style>body{font-family:'Segoe UI',sans-serif;margin:0;padding:20px;color:#1a1a2e;background:#f8f9fc}
-  .header{background:#DBEAFE;color:#fff;padding:24px;border-radius:12px;margin-bottom:24px}
-  .header h1{margin:0;font-size:22px;font-weight:700}.header p{margin:4px 0 0;opacity:.7;font-size:13px}
+  <style>body{font-family:'Segoe UI',sans-serif;margin:0;padding:20px;color:#1a1a2e;background:#f8f9fc;font-size:${fpx}px}
+  .header{background:${cfg.relatorioCabecalho==="linha"?"transparent":"#DBEAFE"};color:${cfg.relatorioCabecalho==="linha"?"#1a1a2e":"#fff"};padding:${cfg.relatorioCabecalho==="linha"?"0 0 14px":"24px"};border-radius:${cfg.relatorioCabecalho==="linha"?"0":"12px"};border-bottom:${cfg.relatorioCabecalho==="linha"?`3px solid ${cfg.cor}`:"none"};margin-bottom:24px}
+  .header h1{margin:0;font-size:22px;font-weight:700;color:${cfg.relatorioCabecalho==="linha"?cfg.cor:"inherit"}}.header p{margin:4px 0 0;opacity:.7;font-size:${Math.max(fpx-1,11)}px}
+  .header .logo-wrap{margin-bottom:8px}
   .section{background:#fff;border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-  .section h2{font-size:14px;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px}
-  table{width:100%;border-collapse:collapse;font-size:13px}
+  .section h2{font-size:${Math.max(fpx+1,14)}px;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px}
+  table{width:100%;border-collapse:collapse;font-size:${fpx}px}
   th{background:#f1f4f9;padding:8px 12px;text-align:left;font-weight:600;color:#4a5568;border-bottom:2px solid #e2e8f0}
   td{padding:8px 12px;border-bottom:1px solid #f0f0f0}tr:last-child td{border-bottom:none}
   .total-row td{font-weight:700;background:#f8faff;color:#2d3a6b}
   .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700}
   .green{color:#166534;background:#dcfce7}.red{color:#B91C1C;background:#fee2e2}.yellow{color:#92400e;background:#fef3c7}
-  .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+  .summary-grid{display:${cfg.relatorioCards?"grid":"none"};grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
   .summary-card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06);text-align:center}
   .summary-card .val{font-size:20px;font-weight:700;color:#2d3a6b}.summary-card .lbl{font-size:12px;color:#888;margin-top:4px}
   .footer{text-align:center;margin-top:24px;font-size:12px;color:#aaa}
   .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
   .no-print-bar button{padding:10px 22px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
-  @media print{body{padding:0}.section{box-shadow:none}.no-print-bar{display:none!important}}</style></head><body>
+  @media print{body{padding:0}.section{box-shadow:none}.no-print-bar{display:none!important}${impressaoPageCss(cfg)}}</style></head><body>
   <div class="no-print-bar">
     <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
-    <button onclick="window.print()" style="background:#2d3a6b;color:#fff">🖨️ Imprimir / Salvar PDF</button>
+    <button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar PDF</button>
   </div>
-  <div class="header"><h1>${titulo} — ${empresa}</h1>
+  <div class="header">${cfg.logo?`<div class="logo-wrap">${impressaoLogoHtml(cfg,`height:36px;max-width:150px;object-fit:contain;${cfg.relatorioCabecalho==="linha"?"":"filter:brightness(0) invert(1)"}`)}</div>`:""}<h1>${titulo} — ${nome}</h1>
   <p>Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} | ${new Date().toLocaleDateString("pt-BR",{timeZone:TZ,month:"long",year:"numeric"})}</p></div>
   ${conteudo}
-  <div class="footer">App Gestão • ${empresa}</div>
+  <div class="footer">${impressaoRodapeTxt(cfg)}</div>
   </body></html>`;
 }
 function abrirRelatorio(html){const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();}}
@@ -1094,6 +1131,7 @@ export default function App() {
 
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
+  _impressaoCfg=getImpressaoCfg(db);
 
   // Busca o estado mais recente do servidor e funde com o local (mesma lógica do poll,
   // incluindo o filtro de itens excluídos/arquivados) ANTES de sobrescrever o servidor.
@@ -5184,48 +5222,56 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const imprimirPedido=(pedido:any)=>{
     const w=window.open("","_blank","width=800,height=700");
     if(!w)return;
+    const cfg=getImpressaoCfg(db);
+    const fpx=FONTE_PX[cfg.fonte]||13;
     const itens:any[]=pedido.itens||[];
     const porCatImp:Record<string,any[]>={};
     itens.forEach((i:any)=>{const c=i.categoria||"outros";if(!porCatImp[c])porCatImp[c]=[];porCatImp[c].push(i);});
-    const rows=Object.entries(porCatImp).map(([cat,its])=>`
-      <tr><td colspan="5" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}</td></tr>
-      ${(its as any[]).map(i=>`<tr>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;font-weight:${i.urgente?"700":"400"};color:${i.urgente?"#cc0000":"#222"}">${i.nome}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.quantidade||1}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${i.unidade||"un"}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center;color:#555">${i.urgente?"⚠ URGENTE":""}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #eee;color:#777">${i.obs||""}</td>
-      </tr>`).join("")}`).join("");
+    const rowHtml=(i:any)=>{
+      const meta:string[]=[];
+      if(i.urgente)meta.push(`<span class="tag-urgent">⚠ URGENTE</span>`);
+      if(cfg.listaMostrarObs&&i.obs)meta.push(`<span>${i.obs}</span>`);
+      return `<div class="row${i.urgente?" urgent":""}"><span class="name">${i.nome}</span><span class="qty">${i.quantidade||1} ${i.unidade||"un"}</span></div>${meta.length?`<div class="meta">${meta.join("")}</div>`:""}`;
+    };
+    const blocks=Object.entries(porCatImp).map(([cat,its])=>`
+      <div class="cat-block">
+        <div class="cat-header">${cat}</div>
+        ${(its as any[]).sort((a:any,b:any)=>(a.urgente?-1:b.urgente?1:0)).map(rowHtml).join("")}
+      </div>`).join("");
     const dataFmt=pedido.data?pedido.data.split("-").reverse().join("/"):"-";
     w.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8"/>
       <title>Lista de Compras — ${dataFmt}</title>
       <style>
-        body{font-family:Arial,sans-serif;margin:30px;color:#222}
-        h1{font-size:22px;margin:0 0 4px}
-        .sub{font-size:13px;color:#666;margin-bottom:18px}
-        table{width:100%;border-collapse:collapse;margin-top:8px}
-        th{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
-        td{font-size:13px}
+        body{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a;font-size:${fpx}px}
+        h1{font-size:22px;margin:0 0 3px}
+        .brand{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:${Math.max(fpx-1,12)}px;color:#666}
+        .sub{font-size:12px;color:#666;margin-bottom:16px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
         .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
-        .footer{margin-top:20px;font-size:11px;color:#aaa}
-        @media print{.no-print-bar{display:none}}
+        .footer{margin-top:16px;font-size:10px;color:#a8a8a8;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+        @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
+        .print-columns{column-count:${cfg.listaColunas};column-gap:22px;column-rule:1px solid #e2e2de}
+        .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
+        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
+        .row{display:flex;align-items:baseline;gap:6px;padding:2.5px 2px;border-bottom:1px solid #ececec}
+        .row.urgent{border-left:2px solid #a6412a;padding-left:4px;margin-left:-6px}
+        .row .name{flex:1;font-size:${Math.max(fpx-2,10)}px;line-height:1.3;color:#1a1a1a}
+        .row.urgent .name{font-weight:700;color:#a6412a}
+        .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:${Math.max(fpx-3,9)}px;font-weight:700;color:#1a1a1a;white-space:nowrap}
+        .meta{font-size:${Math.max(fpx-4,8)}px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
+        .meta .tag-urgent{color:#a6412a;font-weight:700}
       </style>
     </head><body>
       <div class="no-print-bar">
         <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
-        <button onclick="window.print()" style="background:#222;color:#fff">🖨️ Imprimir / Salvar PDF</button>
+        <button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar PDF</button>
       </div>
+      ${cfg.logo||cfg.nome?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"")}</div>`:""}
       <h1>🛒 Lista de Compras</h1>
       <div class="sub">Data: ${dataFmt} · ${itens.length} item(ns) · ${Object.keys(porCatImp).length} categoria(s)</div>
-      <table>
-        <tr>
-          <th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Un</th><th>Urgente</th><th>Observação</th>
-        </tr>
-        ${rows}
-      </table>
-      <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
+      <div class="print-columns">${blocks}</div>
+      <div class="footer">${impressaoRodapeTxt(cfg)}</div>
     </body></html>`);
     w.document.close();
   };
@@ -5234,10 +5280,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!lista.length)return alert("A lista está vazia.");
     const w=window.open("","_blank","width=900,height=700");
     if(!w)return;
-    // Impressão segue a mesma visualização escolhida na tela (Por Categoria / Por Rua)
-    // em vez de sempre agrupar por categoria — pra bater com a ordem que quem tá indo
-    // ao mercado já tá vendo (e usando) no app.
-    const usarRua=isAdmin&&vistaRua&&ruas.length>0;
+    const cfg=getImpressaoCfg(db);
+    const fpx=FONTE_PX[cfg.fonte]||13;
+    // Agrupamento: "tela" segue o toggle Por Categoria/Por Rua igual à visualização
+    // atual; "categoria"/"rua" (Configurações > Impressão) força um dos dois sempre,
+    // independente do que estiver selecionado na tela.
+    const usarRua=cfg.listaAgrupamento==="rua"
+      ?ruas.length>0
+      :cfg.listaAgrupamento==="categoria"
+        ?false
+        :isAdmin&&vistaRua&&ruas.length>0;
     const porGrupoImp:Record<string,any[]>={};
     if(usarRua){
       pendentes.forEach((i:any)=>{const r=i.rua||getRuaProd(i.nome,i.categoria)||getRuaDaCat(i.categoria||"outros")||"Sem rua";if(!porGrupoImp[r])porGrupoImp[r]=[];porGrupoImp[r].push(i);});
@@ -5249,8 +5301,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     const rowHtml=(i:any)=>{
       const meta:string[]=[];
       if(i.urgente)meta.push(`<span class="tag-urgent">⚠ URGENTE</span>`);
-      if(i.estoqueQtd!=null&&i.estoqueQtd!=="")meta.push(`<span class="tem">TEM ${i.estoqueQtd} ${i.estoqueUn||i.unidade||"un"}</span>`);
-      if(i.obs)meta.push(`<span>${i.obs}</span>`);
+      if(cfg.listaMostrarTem&&i.estoqueQtd!=null&&i.estoqueQtd!=="")meta.push(`<span class="tem">TEM ${i.estoqueQtd} ${i.estoqueUn||i.unidade||"un"}</span>`);
+      if(cfg.listaMostrarObs&&i.obs)meta.push(`<span>${i.obs}</span>`);
       return `<div class="row${i.urgente?" urgent":""}"><span class="name">${i.nome}</span><span class="qty">${i.quantidade||1} ${i.unidade||"un"}</span></div>${meta.length?`<div class="meta">${meta.join("")}</div>`:""}`;
     };
     const blocks=ordemGrupo.map(g=>`
@@ -5264,34 +5316,36 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <meta charset="utf-8"/>
       <title>Lista de Compras — ${dataHoje}</title>
       <style>
-        body{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a}
+        body{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a;font-size:${fpx}px}
         h1{font-size:22px;margin:0 0 3px}
+        .brand{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:${Math.max(fpx-1,12)}px;color:#666}
         .sub{font-size:12px;color:#666;margin-bottom:16px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
         .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
         .footer{margin-top:16px;font-size:10px;color:#a8a8a8;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
-        @media print{.no-print-bar{display:none} @page{size:A4;margin:14mm}}
-        .print-columns{column-count:2;column-gap:22px;column-rule:1px solid #e2e2de}
+        @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
+        .print-columns{column-count:${cfg.listaColunas};column-gap:22px;column-rule:1px solid #e2e2de}
         .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
-        .cat-header{background:#1a1a1a;color:#fff;padding:4px 7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
+        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
         .row{display:flex;align-items:baseline;gap:6px;padding:2.5px 2px;border-bottom:1px solid #ececec}
         .row.urgent{border-left:2px solid #a6412a;padding-left:4px;margin-left:-6px}
-        .row .name{flex:1;font-size:10.3px;line-height:1.3;color:#1a1a1a}
+        .row .name{flex:1;font-size:${Math.max(fpx-2,10)}px;line-height:1.3;color:#1a1a1a}
         .row.urgent .name{font-weight:700;color:#a6412a}
-        .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:9.5px;font-weight:700;color:#1a1a1a;white-space:nowrap}
-        .meta{font-size:8.6px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
+        .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:${Math.max(fpx-3,9)}px;font-weight:700;color:#1a1a1a;white-space:nowrap}
+        .meta{font-size:${Math.max(fpx-4,8)}px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
         .meta .tem{color:#5b7a63;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .meta .tag-urgent{color:#a6412a;font-weight:700}
       </style>
     </head><body>
       <div class="no-print-bar">
         <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
-        <button onclick="window.print()" style="background:#1a1a1a;color:#fff">🖨️ Imprimir / Salvar PDF</button>
+        <button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar PDF</button>
       </div>
+      ${cfg.logo||cfg.nome?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"")}</div>`:""}
       <h1>🛒 Lista de Compras</h1>
       <div class="sub">Data: ${dataHoje} · ${pendentes.length} pendente(s) · ${ordemGrupo.length} ${rotuloGrupo} · agrupado por ${usarRua?"rua":"categoria"}</div>
       <div class="print-columns">${blocks}</div>
-      <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
+      <div class="footer">${impressaoRodapeTxt(cfg)}</div>
     </body></html>`);
     w.document.close();
   };
@@ -5399,28 +5453,33 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const cats=[...new Set(linhas.map(l=>l.categoria||"outros"))].sort();
       const imprimirEstimativa=()=>{
         const w=window.open("","_blank","width=900,height=700");if(!w)return;
+        const cfg=getImpressaoCfg(db);
+        const fpx=FONTE_PX[cfg.fonte]||13;
+        const mostrarPrecos=cfg.estimativaMostrarPrecos;
+        const nCols=mostrarPrecos?4:2;
         const dataHoje=new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
         const rows=cats.map(cat=>{
           const cl=linhas.filter(l=>(l.categoria||"outros")===cat);
           const ct=cl.filter(l=>l.temPreco).reduce((s,l)=>s+l.subtotal,0);
-          return `<tr><td colspan="5" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat} ${ct>0?`— ${fmtMoney(ct)}`:""}</td></tr>`+
+          return `<tr><td colspan="${nCols}" style="padding:8px 10px 4px;background:#f5f5f5;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#555">${cat}${mostrarPrecos&&ct>0?` — ${fmtMoney(ct)}`:""}</td></tr>`+
             cl.map(l=>`<tr>
               <td style="padding:5px 10px;border-bottom:1px solid #eee">${l.nome}</td>
               <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:center">${l.qtd} ${l.unidade}</td>
-              <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right">${l.temPreco?fmtMoney(l.unitario):"—"}</td>
-              <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600;color:${l.temPreco?"#16a34a":"#999"}">${l.temPreco?fmtMoney(l.subtotal):"sem preço"}</td>
+              ${mostrarPrecos?`<td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right">${l.temPreco?fmtMoney(l.unitario):"—"}</td>
+              <td style="padding:5px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600;color:${l.temPreco?"#16a34a":"#999"}">${l.temPreco?fmtMoney(l.subtotal):"sem preço"}</td>`:""}
             </tr>`).join("");
         }).join("");
         w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Estimativa de Custo</title>
-          <style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.total{margin-top:16px;text-align:right;font-size:20px;font-weight:700}.no-print-bar{display:flex;gap:8px;margin-bottom:16px}.no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}@media print{.no-print-bar{display:none}}</style>
+          <style>body{font-family:Arial,sans-serif;margin:30px;color:#222;font-size:${fpx}px}h1{font-size:22px;margin:0 0 4px}.brand{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:${Math.max(fpx-1,12)}px;color:#666}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:${cfg.cor};color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:${fpx}px}.total{margin-top:16px;text-align:right;font-size:20px;font-weight:700}.no-print-bar{display:flex;gap:8px;margin-bottom:16px}.no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}@media print{.no-print-bar{display:none}${impressaoPageCss(cfg)}}</style>
           </head><body>
-          <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:#222;color:#fff">🖨️ Imprimir / Salvar PDF</button></div>
+          <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar PDF</button></div>
+          ${cfg.logo||cfg.nome?`<div class="brand">${impressaoLogoHtml(cfg,"height:26px;max-width:120px;object-fit:contain")}${impressaoNome(cfg,"")}</div>`:""}
           <h1>💰 Estimativa de Custo — Lista de Compras</h1>
-          <div class="sub">Data: ${dataHoje} · ${itensPend.length} item(ns) · ${comPreco.length} com preço · ${semPreco.length} sem preço</div>
-          <table><tr><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:right">Preço Un.</th><th style="text-align:right">Subtotal</th></tr>${rows}
-          <tr><td colspan="3" style="padding:12px 10px;text-align:right;font-weight:700;font-size:15px;border-top:2px solid #222">TOTAL ESTIMADO</td><td style="padding:12px 10px;text-align:right;font-weight:700;font-size:17px;color:#16a34a;border-top:2px solid #222">${fmtMoney(totalEstimado)}</td></tr></table>
-          ${semPreco.length>0?`<div style="margin-top:12px;font-size:11px;color:#999">* Itens sem preço cadastrado: ${semPreco.map(l=>l.nome).join(", ")}</div>`:""}
-          <div style="margin-top:20px;font-size:11px;color:#aaa">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div>
+          <div class="sub">Data: ${dataHoje} · ${itensPend.length} item(ns)${mostrarPrecos?` · ${comPreco.length} com preço · ${semPreco.length} sem preço`:""}</div>
+          <table><tr><th>Produto</th><th style="text-align:center">Qtd</th>${mostrarPrecos?`<th style="text-align:right">Preço Un.</th><th style="text-align:right">Subtotal</th>`:""}</tr>${rows}
+          ${mostrarPrecos?`<tr><td colspan="3" style="padding:12px 10px;text-align:right;font-weight:700;font-size:15px;border-top:2px solid #222">TOTAL ESTIMADO</td><td style="padding:12px 10px;text-align:right;font-weight:700;font-size:17px;color:#16a34a;border-top:2px solid #222">${fmtMoney(totalEstimado)}</td></tr>`:""}</table>
+          ${mostrarPrecos&&semPreco.length>0?`<div style="margin-top:12px;font-size:11px;color:#999">* Itens sem preço cadastrado: ${semPreco.map(l=>l.nome).join(", ")}</div>`:""}
+          <div style="margin-top:20px;font-size:11px;color:#aaa">${impressaoRodapeTxt(cfg)}</div>
         </body></html>`);
         w.document.close();
       };
@@ -6357,16 +6416,51 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const imprimirPedido=(pedido?:any)=>{
     const lista=pedido?pedido.itens:itensMarcados;
     if(!lista.length)return alert(pedido?"Nenhum produto no pedido.":"Marque pelo menos 1 produto.");
+    const cfg=getImpressaoCfg(db);
+    const fpx=FONTE_PX[cfg.fonte]||13;
     const pc:Record<string,any[]>={};
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
-    const sections=Object.entries(pc).map(([cat,its])=>`
-      <tr><td colspan="4" style="padding:8px 10px 4px;background:#f3e8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6">${catIconChar(prodCatIcon(cat))} ${cat}</td></tr>
-      ${its.map((it:any)=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.nome}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${it.qtdAtual||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:#5b21b6">${it.quantidade?`${it.quantidade} ${it.unidade||"un"}`:"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${it.obs||"—"}</td></tr>`).join("")}
-    `).join("");
+    const rowHtml=(it:any)=>{
+      const meta:string[]=[];
+      if(cfg.producaoMostrarQtdAtual&&it.qtdAtual)meta.push(`<span class="qtd-atual">Atual: ${it.qtdAtual}</span>`);
+      if(it.obs)meta.push(`<span>${it.obs}</span>`);
+      return `<div class="row"><span class="name">${it.nome}</span><span class="qty">${it.quantidade?`${it.quantidade} ${it.unidade||"un"}`:"—"}</span></div>${meta.length?`<div class="meta">${meta.join("")}</div>`:""}`;
+    };
+    const blocks=Object.entries(pc).map(([cat,its])=>`
+      <div class="cat-block">
+        <div class="cat-header">${catIconChar(prodCatIcon(cat))} ${cat}</div>
+        ${(its as any[]).map(rowHtml).join("")}
+      </div>`).join("");
     const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
     const solicitante=pedido?.solicitante||login?.label||"—";
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{font-size:22px;margin:0 0 4px}.sub{font-size:13px;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th{background:#8B5CF6;color:#fff;padding:8px 10px;text-align:left;font-size:12px}td{font-size:13px}.no-print-bar{display:flex;gap:8px;margin-bottom:16px}.no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}.footer{margin-top:20px;font-size:11px;color:#aaa}@media print{.no-print-bar{display:none}}</style></head><body><div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:#8B5CF6;color:#fff">🖨️ Imprimir</button></div><h1>🏭 Pedido de Produção</h1><div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div><table><tr><th>Produto</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Quantidade</th><th>Observações</th></tr>${sections}</table><div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}</div></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a;font-size:${fpx}px}
+        h1{font-size:22px;margin:0 0 3px}
+        .brand{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:${Math.max(fpx-1,12)}px;color:#666}
+        .sub{font-size:12px;color:#666;margin-bottom:16px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+        .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
+        .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+        .footer{margin-top:16px;font-size:10px;color:#a8a8a8;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+        @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
+        .print-columns{column-count:${cfg.producaoColunas};column-gap:22px;column-rule:1px solid #e2e2de}
+        .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
+        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
+        .row{display:flex;align-items:baseline;gap:6px;padding:2.5px 2px;border-bottom:1px solid #ececec}
+        .row .name{flex:1;font-size:${Math.max(fpx-2,10)}px;line-height:1.3;color:#1a1a1a}
+        .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:${Math.max(fpx-3,9)}px;font-weight:700;color:${cfg.cor};white-space:nowrap}
+        .meta{font-size:${Math.max(fpx-4,8)}px;color:#8a8a8a;padding:0 2px 3px;line-height:1.3;display:flex;gap:8px;flex-wrap:wrap}
+        .meta .qtd-atual{color:#5b7a63;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+      </style>
+    </head><body>
+      <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir</button></div>
+      ${cfg.logo||cfg.nome?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"")}</div>`:""}
+      <h1>🏭 Pedido de Produção</h1>
+      <div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div>
+      <div class="print-columns">${blocks}</div>
+      <div class="footer">${impressaoRodapeTxt(cfg)}</div>
+    </body></html>`);
     w.document.close();
   };
 
@@ -7530,38 +7624,44 @@ function urlBase64ToUint8Array(base64:string){
 // ===================== NF-e PRINT / DOWNLOAD =====================
 function imprimirNFe(conta:any,itens:any[]){
   const win=window.open("","_blank");if(!win)return;
+  const cfg=_impressaoCfg;
+  const fpx=FONTE_PX[cfg.fonte]||14;
+  const mostrarCat=cfg.nfeMostrarCategoria;
   const fmt=(v:number)=>`R$ ${v.toFixed(2).replace(".",",")}`;
   const total=itens.reduce((s:number,it:any)=>s+parseMoney(it.valor),0);
+  const nCols=mostrarCat?5:4;
   const rows=itens.map((it:any,i:number)=>`
     <tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
       <td style="padding:7px 10px">${it.nomeProduto||it.nome||"—"}</td>
-      <td style="padding:7px 10px;color:#555;font-size:12px">${it.categoria||"—"}</td>
+      ${mostrarCat?`<td style="padding:7px 10px;color:#555;font-size:${Math.max(fpx-2,11)}px">${it.categoria||"—"}</td>`:""}
       <td style="padding:7px 10px;text-align:center">${(it.quantidade||0).toFixed(2)} ${it.unidade||""}</td>
       <td style="padding:7px 10px;text-align:right">${fmt(it.valorUnitario||0)}</td>
       <td style="padding:7px 10px;text-align:right;font-weight:700">${fmt(parseMoney(it.valor))}</td>
     </tr>`).join("");
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>
     <title>NF-e ${conta.nNF?`#${conta.nNF}`:""}${conta.fornecedorNome?` – ${conta.fornecedorNome}`:""}</title>
-    <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:24px;max-width:960px;margin:0 auto;color:#111;font-size:14px}
+    <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:24px;max-width:960px;margin:0 auto;color:#111;font-size:${fpx}px}
+      .brand{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:${Math.max(fpx-1,12)}px;color:#555;font-weight:600}
       .hdr{border:2px solid #E5E7EB40;border-radius:8px;padding:16px 20px;margin-bottom:20px;background:#fafafa}
       h2{margin:0 0 6px;font-size:22px}
-      .nf-num{font-size:28px;font-weight:900;color:#333;letter-spacing:1px}
+      .nf-num{font-size:28px;font-weight:900;color:${cfg.cor};letter-spacing:1px}
       .row{display:flex;gap:32px;flex-wrap:wrap;margin-top:12px}
       .field .lbl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
-      .field .val{font-weight:700;font-size:14px}
+      .field .val{font-weight:700;font-size:${fpx}px}
       table{width:100%;border-collapse:collapse;margin-top:4px}
-      th{background:#333;color:#fff;padding:9px 10px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-      th:last-child,th:nth-child(4){text-align:right}th:nth-child(3){text-align:center}
-      tfoot td{border-top:2px solid #333;padding:12px 10px;font-size:18px;font-weight:900;text-align:right}
+      th{background:${cfg.cor};color:#fff;padding:9px 10px;text-align:left;font-size:${Math.max(fpx-2,11)}px;text-transform:uppercase;letter-spacing:.5px}
+      th.right,td.right{text-align:right}th.center,td.center{text-align:center}
+      tfoot td{border-top:2px solid ${cfg.cor};padding:12px 10px;font-size:18px;font-weight:900;text-align:right}
       .no-print-bar{display:flex;gap:8px;margin-bottom:18px}
       .no-print-bar button{padding:10px 22px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
       .footer{margin-top:24px;font-size:11px;color:#aaa;text-align:center}
-      @media print{.no-print-bar{display:none!important}body{padding:12px}}</style></head>
+      @media print{.no-print-bar{display:none!important}body{padding:12px}${impressaoPageCss(cfg)}}</style></head>
   <body>
     <div class="no-print-bar">
       <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
-      <button onclick="window.print()" style="background:#333;color:#fff">🖨️ Imprimir / Salvar como PDF</button>
+      <button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar como PDF</button>
     </div>
+    ${cfg.logo||cfg.nome?`<div class="brand">${impressaoLogoHtml(cfg,"height:26px;max-width:120px;object-fit:contain")}${impressaoNome(cfg,"")}</div>`:""}
     <div class="hdr">
       <h2>🧾 Nota Fiscal Eletrônica (NF-e)</h2>
       ${conta.nNF?`<div class="nf-num">Nº ${conta.nNF}</div>`:""}
@@ -7574,11 +7674,11 @@ function imprimirNFe(conta:any,itens:any[]){
       </div>
     </div>
     <table>
-      <thead><tr><th>Produto</th><th>Categoria</th><th style="text-align:center">Qtd / Und</th><th style="text-align:right">Valor Unit.</th><th style="text-align:right">Total</th></tr></thead>
-      <tbody>${rows||"<tr><td colspan='5' style='text-align:center;padding:20px;color:#888'>Nenhum item registrado</td></tr>"}</tbody>
-      <tfoot><tr><td colspan="4">Total Geral:</td><td>${fmt(total)}</td></tr></tfoot>
+      <thead><tr><th>Produto</th>${mostrarCat?"<th>Categoria</th>":""}<th class="center">Qtd / Und</th><th class="right">Valor Unit.</th><th class="right">Total</th></tr></thead>
+      <tbody>${rows||`<tr><td colspan='${nCols}' style='text-align:center;padding:20px;color:#888'>Nenhum item registrado</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="${nCols-1}">Total Geral:</td><td>${fmt(total)}</td></tr></tfoot>
     </table>
-    <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} · Sistema de Gestão</div>
+    <div class="footer">${impressaoRodapeTxt(cfg)} · Sistema de Gestão</div>
   </body></html>`;
   win.document.write(html);win.document.close();
 }
@@ -10423,13 +10523,27 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
   {db:any,setDb:any,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
-  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"]];
+  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"]];
 
   // Shared helpers
   const setConfig=(key:string,val:any)=>setDb((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
 
   // ---- Empresa/Geral ----
   const [nomeEmpresa,setNomeEmpresa]=useState(db.config?.nomeEmpresa||empresa);
+
+  // ---- Impressão ----
+  const impCfg=getImpressaoCfg(db);
+  const setImpCfg=(key:string,val:any)=>setDb((d:any)=>({...d,config:{...(d.config||{}),impressao:{...(d.config?.impressao||{}),[key]:val}}}));
+  const [impNome,setImpNome]=useState(impCfg.nome);
+  const [impRodape,setImpRodape]=useState(impCfg.rodape);
+  const logoInputRef=useRef<HTMLInputElement>(null);
+  const handleLogoUpload=(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    if(file.size>1.5*1024*1024)return alert("Imagem muito grande. Máximo 1,5 MB.");
+    const reader=new FileReader();
+    reader.onload=ev=>setImpCfg("logo",ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
 
   // ---- Financeiro ----
   const [novaCatFin,setNovaCatFin]=useState("");
@@ -10980,6 +11094,93 @@ function ConfiguracoesPanel({db,setDb,empresa,state,setState,theme,toggleTheme,m
         </div>
       </div>
     </div>}
+
+    {/* ===== IMPRESSÃO ===== */}
+    {subTab==="impressao"&&(()=>{
+      const seg=(opts:[string,string][],val:string,onPick:(v:string)=>void)=>(
+        <div style={{display:"flex",border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",width:"fit-content"}}>
+          {opts.map(([k,label],i)=>(
+            <button key={k} onClick={()=>onPick(k)}
+              style={{padding:"7px 14px",fontSize:12,fontWeight:600,border:"none",borderLeft:i>0?"1px solid var(--border)":"none",
+                background:val===k?"#8B5CF6":"var(--bg4)",color:val===k?"#fff":"var(--text2)",cursor:"pointer"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+      );
+      const toggle=(val:boolean,onPick:(v:boolean)=>void)=>seg([["1","Sim"],["0","Não"]],val?"1":"0",(v)=>onPick(v==="1"));
+      const field=(label:string,scope:string,children:React.ReactNode)=>(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.4,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+            {label}<span style={{fontSize:9,fontWeight:400,color:"#666",textTransform:"none" as const,letterSpacing:0}}>· {scope}</span>
+          </div>
+          {children}
+        </div>
+      );
+      return <div>
+        <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#8B5CF6",marginBottom:4}}>🖨️ Identidade nas impressões</div>
+          <div className="muted" style={{fontSize:11,marginBottom:14}}>Aplica no cabeçalho de todos os relatórios, NF-e, Encomenda, Lista de Compras e Pedido de Produção — sem precisar de deploy.</div>
+
+          {field("Nome para impressão","cabeçalho de tudo",
+            <div style={{display:"flex",gap:6}}>
+              <input value={impNome} onChange={e=>setImpNome(e.target.value)} placeholder={empresa} className="inp" style={{flex:1,marginBottom:0}}/>
+              <button className="btn" onClick={()=>{setImpCfg("nome",impNome.trim());alert("✅ Salvo!");}} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
+
+          {field("Logo no cabeçalho","cabeçalho de tudo",
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {impCfg.logo&&<img src={impCfg.logo} style={{height:34,maxWidth:120,objectFit:"contain" as const,background:"#fff",borderRadius:4,padding:2}}/>}
+              <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} style={{display:"none"}}/>
+              <button className="btn" onClick={()=>logoInputRef.current?.click()} style={{background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",padding:"7px 12px",fontSize:12}}>{impCfg.logo?"Trocar":"Enviar imagem"}</button>
+              {impCfg.logo&&<button className="btn" onClick={()=>setImpCfg("logo","")} style={{background:"none",border:"none",color:"#EF4444",fontSize:11,padding:"4px 6px"}}>Remover</button>}
+            </div>)}
+
+          {field("Cor de destaque","cabeçalhos, categorias, botões",
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <input type="color" value={impCfg.cor} onChange={e=>setImpCfg("cor",e.target.value)} style={{width:36,height:32,border:"1px solid var(--border)",borderRadius:6,background:"none",cursor:"pointer",padding:0}}/>
+              <input value={impCfg.cor} onChange={e=>setImpCfg("cor",e.target.value)} className="inp" style={{width:100,marginBottom:0,fontFamily:"monospace",fontSize:12}}/>
+            </div>)}
+
+          {field("Tamanho da fonte","corpo do texto",seg([["compacta","Compacta"],["padrao","Padrão"],["grande","Grande"]],impCfg.fonte,v=>setImpCfg("fonte",v)))}
+          {field("Orientação do papel","@page",seg([["retrato","Retrato"],["paisagem","Paisagem"]],impCfg.orientacao,v=>setImpCfg("orientacao",v)))}
+
+          {field("Rodapé personalizado","substitui o \"Gerado em...\"",
+            <div style={{display:"flex",gap:6}}>
+              <input value={impRodape} onChange={e=>setImpRodape(e.target.value)} placeholder="Ex.: Confraria Café · CNPJ 00.000.000/0001-00 · (92) 90000-0000" className="inp" style={{flex:1,marginBottom:0}}/>
+              <button className="btn" onClick={()=>{setImpCfg("rodape",impRodape.trim());alert("✅ Salvo!");}} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
+        </div>
+
+        <div className="card" style={{marginBottom:12,border:"1px solid #22C55E40"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#22C55E",marginBottom:12}}>🛒 Lista de Compras</div>
+          {field("Colunas por página","imprimirListaAtual / histórico",seg([["1","1"],["2","2"],["3","3"]],String(impCfg.listaColunas),v=>setImpCfg("listaColunas",parseInt(v,10))))}
+          {field("Agrupamento na impressão","categoria x rua",seg([["tela","Seguir a tela"],["categoria","Sempre Categoria"],["rua","Sempre Rua"]],impCfg.listaAgrupamento,v=>setImpCfg("listaAgrupamento",v)))}
+          {field("Mostrar coluna \"TEM\" (estoque)","lista atual",toggle(impCfg.listaMostrarTem,v=>setImpCfg("listaMostrarTem",v)))}
+          {field("Mostrar observações","lista atual e histórico",toggle(impCfg.listaMostrarObs,v=>setImpCfg("listaMostrarObs",v)))}
+        </div>
+
+        <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#8B5CF6",marginBottom:12}}>🏭 Pedido de Produção</div>
+          {field("Colunas por página","imprimirPedido (Produção)",seg([["1","1"],["2","2"]],String(impCfg.producaoColunas),v=>setImpCfg("producaoColunas",parseInt(v,10))))}
+          {field("Mostrar \"Qtd Atual\"","imprimirPedido (Produção)",toggle(impCfg.producaoMostrarQtdAtual,v=>setImpCfg("producaoMostrarQtdAtual",v)))}
+        </div>
+
+        <div className="card" style={{marginBottom:12,border:"1px solid #0EA5E940"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#0EA5E9",marginBottom:4}}>📊 Relatórios</div>
+          <div className="muted" style={{fontSize:11,marginBottom:12}}>DRE, Vendas, Fluxo de Caixa, Compras, Financeiro, RH, Comparativo e Pedido de Compra usam o mesmo modelo — muda todos de uma vez.</div>
+          {field("Cartões de resumo no topo","totais em destaque",toggle(impCfg.relatorioCards,v=>setImpCfg("relatorioCards",v)))}
+          {field("Estilo do cabeçalho","título do relatório",seg([["cartao","Cartão colorido"],["linha","Linha simples"]],impCfg.relatorioCabecalho,v=>setImpCfg("relatorioCabecalho",v)))}
+        </div>
+
+        <div className="card" style={{marginBottom:12,border:"1px solid #F59E0B40"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#F59E0B",marginBottom:12}}>🧾 NF-e, Encomenda e Estimativa</div>
+          {field("Mostrar coluna \"Categoria\" na NF-e","imprimirNFe",toggle(impCfg.nfeMostrarCategoria,v=>setImpCfg("nfeMostrarCategoria",v)))}
+          {field("Linha de assinatura na Encomenda","\"Ciente: ___\"",toggle(impCfg.encomendaAssinatura,v=>setImpCfg("encomendaAssinatura",v)))}
+          {field("Mostrar preços na Estimativa de Custo","útil ocultar se for pra quem não deve ver valores",toggle(impCfg.estimativaMostrarPrecos,v=>setImpCfg("estimativaMostrarPrecos",v)))}
+        </div>
+      </div>;
+    })()}
   </div>;
 }
 
@@ -11044,17 +11245,21 @@ function abrirWhatsApp(e:any,empresa:string){
 }
 
 function imprimirEncomenda(e:any,empresa:string){
+  const cfg=_impressaoCfg;
+  const fpx=FONTE_PX[cfg.fonte]||14;
   const st=ENC_STATUS[e.status]||ENC_STATUS.pendente;
   const prodsHtml=(e.produtos||[]).map((p:any)=>{const rawP=(p.preco||"").replace(/[^\d,]/g,"").replace(",",".");const vP=rawP&&parseFloat(rawP)>0?fmtMoney(parseFloat(rawP)):"—";return `<tr><td style="padding:5px 8px;border:1px solid #ddd;">${p.qtd}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.nome}</td><td style="padding:5px 8px;border:1px solid #ddd;">${p.unidade||"un"}</td><td style="padding:5px 8px;border:1px solid #ddd;">${vP}</td></tr>`;}).join("");
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Encomenda - ${e.cliente}</title>
-<style>*{box-sizing:border-box;}body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;color:#111;font-size:14px;padding:0 16px;}
-.header{border-bottom:3px solid #333;padding-bottom:12px;margin-bottom:16px;}.header h1{margin:0;font-size:22px;}.header p{margin:4px 0 0;color:#555;font-size:13px;}
+<style>*{box-sizing:border-box;}body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;color:#111;font-size:${fpx}px;padding:0 16px;}
+.brand{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:${Math.max(fpx-1,12)}px;color:#555;font-weight:600}
+.header{border-bottom:3px solid ${cfg.cor};padding-bottom:12px;margin-bottom:16px;}.header h1{margin:0;font-size:22px;}.header p{margin:4px 0 0;color:#555;font-size:13px;}
 .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid #aaa;margin-left:8px;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}.field .lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px;}.field .val{font-size:14px;font-weight:600;}
-table{width:100%;border-collapse:collapse;margin:12px 0;}th{background:#f5f5f5;padding:6px 8px;text-align:left;border:1px solid #ddd;font-size:12px;font-weight:700;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}.field .lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px;}.field .val{font-size:${fpx}px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin:12px 0;}th{background:${cfg.cor}18;padding:6px 8px;text-align:left;border:1px solid #ddd;font-size:12px;font-weight:700;}
 .footer{margin-top:24px;padding-top:12px;border-top:1px solid #ccc;font-size:11px;color:#888;}
 .assinatura{margin-top:32px;padding-top:40px;border-top:1px dashed #ccc;text-align:center;font-size:11px;color:#666;}
-@media print{body{margin:0;}.no-print{display:none;}}</style></head><body>
+@media print{body{margin:0;}.no-print{display:none;}${impressaoPageCss(cfg)}}</style></head><body>
+${cfg.logo||cfg.nome?`<div class="brand">${impressaoLogoHtml(cfg,"height:24px;max-width:110px;object-fit:contain")}${impressaoNome(cfg,"")}</div>`:""}
 <div class="header"><h1>ENCOMENDA <span class="badge">${st.label}</span></h1><p>${empresa}</p></div>
 <div class="grid">
   <div class="field"><div class="lbl">Cliente</div><div class="val">${e.cliente}</div></div>
@@ -11066,8 +11271,8 @@ ${prodsHtml?`<div class="field" style="margin-bottom:8px;"><div class="lbl">Prod
 ${e.itens?`<div class="field" style="margin:12px 0;"><div class="lbl">Descricao</div><div class="val" style="font-style:italic;">${e.itens}</div></div>`:""}
 ${e.obs?`<div class="field"><div class="lbl">Observacoes</div><div class="val" style="font-style:italic;">${e.obs}</div></div>`:""}
 <button class="no-print" onclick="window.print()" style="margin:16px 0;padding:8px 24px;font-size:14px;cursor:pointer;">Imprimir</button>
-<div class="footer">Pedido em: ${e.criadoEm?new Date(e.criadoEm).toLocaleDateString("pt-BR",{timeZone:TZ}):""}</div>
-<div class="assinatura">Ciente: ___________________________ &nbsp;&nbsp; Data: ___/___/______</div>
+<div class="footer">${impressaoRodapeTxt(cfg)}</div>
+${cfg.encomendaAssinatura?`<div class="assinatura">Ciente: ___________________________ &nbsp;&nbsp; Data: ___/___/______</div>`:""}
 </body></html>`;
   const w=window.open("","_blank");
   if(w){w.document.write(html);w.document.close();w.focus();w.print();}
