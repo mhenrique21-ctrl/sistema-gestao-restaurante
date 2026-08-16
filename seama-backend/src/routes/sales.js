@@ -161,6 +161,7 @@ router.post('/', async (req, res) => {
       logAction(req.user.id, 'desconto_aplicado', { sale_id: sale.id, discount: discountCents / 100 });
     }
     logAction(req.user.id, 'venda_criada', { sale_id: sale.id, total: totalCents / 100 });
+    require('../services/gestaoSync').avisarVenda();
 
     res.status(201).json({
       ...sale,

@@ -133,6 +133,17 @@ async function enviarPendentes() {
   };
 }
 
+// Chamado a cada venda concluída (ver routes/sales.js) — dispara em segundo
+// plano, de propósito sem await no caminho da venda: o operador não pode
+// esperar a chamada ao Gestão pra ver a confirmação na tela. Erro aqui nunca
+// chega ao operador, só no log; a sincronização periódica e o fechamento de
+// caixa continuam como rede de segurança se esta tentativa falhar.
+function avisarVenda() {
+  enfileirar(hojeBelem())
+    .then(() => enviarPendentes())
+    .catch((e) => console.error('[gestaoSync] erro ao avisar venda:', e.message));
+}
+
 // Chamado ao fechar o caixa. Envolvido em try/catch de propósito: qualquer
 // erro aqui é registrado e engolido, para o fechamento seguir normalmente.
 async function aoFecharCaixa(data) {
@@ -178,4 +189,4 @@ function iniciarSincronizacaoPeriodica() {
   return timer;
 }
 
-module.exports = { aoFecharCaixa, enviarPendentes, enfileirar, totaisDoDia, hojeBelem, iniciarSincronizacaoPeriodica };
+module.exports = { aoFecharCaixa, avisarVenda, enviarPendentes, enfileirar, totaisDoDia, hojeBelem, iniciarSincronizacaoPeriodica };
