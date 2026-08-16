@@ -45,6 +45,23 @@ async function totaisDoDia(data) {
   };
 }
 
+// Mesma agregação por hora que /api/reports/patterns já expõe pro gerente,
+// só que pra um dia só e sem o `vendas` (contagem) — o Gestão só usa o valor.
+// Calculado na hora do envio (não fica guardado na fila gestao_sync) porque é
+// barato de recalcular e assim não precisa de coluna nova nessa tabela.
+async function porHoraDoDia(data) {
+  const r = await pool.query(
+    `SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'America/Belem')::int AS hora,
+            COALESCE(SUM(total), 0) AS valor
+       FROM sales
+      WHERE status = 'concluida'
+        AND DATE(created_at AT TIME ZONE 'America/Belem') = $1
+      GROUP BY hora ORDER BY hora`,
+    [data]
+  );
+  return r.rows.map((row) => ({ hora: row.hora, valor: Math.round(parseFloat(row.valor) * 100) / 100 }));
+}
+
 // Recalcula e marca o dia como pendente de envio.
 async function enfileirar(data) {
   const t = await totaisDoDia(data);
@@ -64,6 +81,9 @@ async function enviarUm(linha) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
+    // Falha aqui não pode derrubar o envio do total do dia — sem hora vira
+    // array vazio, e o Gestão simplesmente não tem o detalhamento por hora.
+    const porHora = await porHoraDoDia(linha.sale_date).catch(() => []);
     const res = await fetch(`${GESTAO_URL}/api/venda-pdv`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-service-secret': process.env.SERVICE_SECRET || '' },
@@ -73,6 +93,7 @@ async function enviarUm(linha) {
         dinheiro: parseFloat(linha.dinheiro),
         maquininha: parseFloat(linha.maquininha),
         total: parseFloat(linha.total),
+        porHora,
       }),
       signal: ctrl.signal,
     });
