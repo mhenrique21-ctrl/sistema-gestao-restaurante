@@ -570,6 +570,61 @@ const impressaoNome=(cfg:any,fallback:string)=>cfg.nome||fallback;
 const impressaoLogoHtml=(cfg:any,style?:string)=>cfg.logo?`<img src="${cfg.logo}" style="${style||"height:36px;max-width:150px;object-fit:contain;display:block;margin-bottom:6px"}"/>`:"";
 const impressaoRodapeTxt=(cfg:any)=>cfg.rodape||`Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}`;
 
+// ===================== DASHBOARD PDV (config) =====================
+// Editável em Configurações > Dashboard PDV (db.config.dashboardPdv) — quais indicadores
+// aparecem, em que ordem e em que ordem as seções aparecem. "vendasHoraBloqueado" e
+// "mesasComandasBloqueado" são avisos fixos (não indicadores de verdade): o PDV externo
+// ainda não expõe hora da venda nem comandas em tempo real, então não tem indicador real
+// pra mostrar ali — só o aviso do que falta.
+const DASHBOARD_SECOES_DEFAULT=["destaque","desempenho","canais","supervisao","vendashora","mesas"];
+const DASHBOARD_ITENS_DEFAULT:{[k:string]:string[]}={
+  destaque:["faturamento"],
+  desempenho:["fatMedioDia","tendencia","melhorDia","piorDia"],
+  canais:["mixPagamento","participacaoDelivery","custoMarketplaces","cmv","margemContrib"],
+  supervisao:["diasSemRegistro","anomalia","origemLancamentos"],
+  vendashora:["vendasHoraBloqueado"],
+  mesas:["mesasComandasBloqueado"],
+};
+const DASHBOARD_SECAO_LABEL:{[k:string]:{icon:string,label:string,cadencia:"diario"|"porhora"|"vivo"}}={
+  destaque:{icon:"⭐",label:"Destaque",cadencia:"diario"},
+  desempenho:{icon:"📈",label:"Desempenho",cadencia:"diario"},
+  canais:{icon:"💳",label:"Canais & Custos",cadencia:"diario"},
+  supervisao:{icon:"🛡️",label:"Supervisão do PDV",cadencia:"diario"},
+  vendashora:{icon:"🕐",label:"Vendas por Hora",cadencia:"porhora"},
+  mesas:{icon:"🪑",label:"Mesas & Comandas",cadencia:"vivo"},
+};
+const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
+  faturamento:"Faturamento do período (número principal)",
+  fatMedioDia:"Faturamento médio/dia",
+  tendencia:"Tendência (média móvel 7d)",
+  melhorDia:"Melhor dia da semana",
+  piorDia:"Dia mais fraco da semana",
+  mixPagamento:"Mix de pagamento",
+  participacaoDelivery:"Participação do Delivery",
+  custoMarketplaces:"Custo com marketplaces",
+  cmv:"CMV do período",
+  margemContrib:"Margem de contribuição",
+  diasSemRegistro:"Dias sem registro de venda",
+  anomalia:"Anomalia de faturamento",
+  origemLancamentos:"Origem dos lançamentos (PDV × manual)",
+  vendasHoraBloqueado:"Ritmo do dia / horário de pico / altas e quedas por hora",
+  mesasComandasBloqueado:"Mapa de mesas e lista de comandas abertas",
+};
+const DASHBOARD_ITEM_TRAVADO:{[k:string]:boolean}={vendasHoraBloqueado:true,mesasComandasBloqueado:true};
+const getDashboardCfg=(db:any)=>{
+  const c=db?.config?.dashboardPdv||{};
+  const secoes=(c.secoes&&c.secoes.length?c.secoes:DASHBOARD_SECOES_DEFAULT).filter((s:string)=>DASHBOARD_SECAO_LABEL[s]);
+  const secoesFinal=[...secoes,...DASHBOARD_SECOES_DEFAULT.filter(s=>!secoes.includes(s))];
+  const itens:{[k:string]:string[]}={};
+  DASHBOARD_SECOES_DEFAULT.forEach(s=>{
+    const custom=(c.itens&&c.itens[s])||[];
+    const base=DASHBOARD_ITENS_DEFAULT[s];
+    const ordenado=custom.filter((i:string)=>base.includes(i));
+    itens[s]=[...ordenado,...base.filter(i=>!ordenado.includes(i))];
+  });
+  return{secoes:secoesFinal,itens,desabilitados:(c.desabilitados||[]) as string[]};
+};
+
 // ===================== PDF =====================
 function gerarRelatorioHTML(titulo,empresa,conteudo) {
   const cfg=_impressaoCfg;
@@ -1733,90 +1788,57 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       </div>}
     </div>
 
-    {/* KPIs do período */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-      <StatCard label="Vendas" value={fmtMoney(totalVendas)} color="#22C55E" icon="💰"/>
-      <StatCard label="Compras" value={fmtMoney(totalCompras)} color="#1D4ED8" icon="🛒"/>
-      <StatCard label="Contas Pagas" value={fmtMoney(pagasPeriodo)} color="#8B5CF6" icon="✅"/>
-      <StatCard label="A Pagar" value={fmtMoney(pendentesPeriodo)} color="#EF4444" icon="⏰"/>
-    </div>
-
-    {/* CMV Gauge */}
-    <div className="card" style={{background:"#DBEAFE",border:"1px solid #0EA5E940",marginBottom:14}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div>
-          <div className="muted" style={{marginBottom:4}}>CMV no Período</div>
-          <div style={{fontSize:40,fontFamily:"'Syne',sans-serif",fontWeight:800,color:cmvColor,lineHeight:1}}>{fmtPct(cmv)}</div>
-          <div className="muted" style={{marginTop:4}}>Meta: ≤30%</div>
-        </div>
-        <GaugeSVG value={cmv} color={cmvColor}/>
-      </div>
-    </div>
-
-    {/* Gráfico de Vendas Diárias */}
-    <div className="card" style={{marginBottom:14}}>
-      <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
-        <span>Vendas Diárias</span>
-        <span style={{fontSize:12,fontWeight:700,color:"#22C55E"}}>{fmtMoney(totalVendas)}</span>
-      </div>
-      {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
-      {vendasDiarias.length>0&&(()=>{
-        const W=360,H=140,pT=12,pB=22,pL=4,pR=4,cW=W-pL-pR,cH=H-pT-pB;
-        const pts=vendasDiarias.map((d,i)=>{
-          const x=pL+(vendasDiarias.length===1?cW/2:i*(cW/(vendasDiarias.length-1)));
-          const y=pT+cH*(1-d.total/maxDia);
-          return {x,y,d};
-        });
-        const linePath=pts.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(" ");
-        const areaPath=linePath+` L${pts[pts.length-1].x},${pT+cH} L${pts[0].x},${pT+cH} Z`;
-        const step=Math.max(1,Math.ceil(vendasDiarias.length/12));
-        return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",marginTop:6}}>
-          {[0.25,0.5,0.75,1].map(f=>{
-            const y=pT+cH*(1-f);
-            return <g key={f}><line x1={pL} y1={y} x2={W-pR} y2={y} stroke="#E5E7EB" strokeWidth={0.5}/>
-              <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
-          })}
-          <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#E5E7EB" strokeWidth={0.5}/>
-          <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22C55E" stopOpacity={0.3}/><stop offset="100%" stopColor="#22C55E" stopOpacity={0.02}/></linearGradient></defs>
-          <path d={areaPath} fill="url(#dashVgr)"/>
-          <path d={linePath} fill="none" stroke="#22C55E" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
-          {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
-            {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?"#6366F1":"#22C55E"} stroke="#fff" strokeWidth={1}/>}
-            {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
-            {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?"#6366F1":"#555"} fontSize={7} fontWeight={isH?700:400}>
-              {dt.getDate()}/{dt.getMonth()+1}
-            </text>}
-          </g>;})}
-        </svg>;
-      })()}
-    </div>
-
-    {/* Vendas por Modalidade */}
-    <div className="card" style={{marginBottom:14}}>
-      <div className="section-title">Vendas por Modalidade</div>
-      {vendasMod.map(({label,v})=>(
-        <div key={label} style={{marginBottom:8}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3,fontSize:13}}>
-            <span style={{textTransform:"capitalize"}}>{label}</span>
-            <span style={{fontWeight:600}}>{fmtMoney(v)}</span>
-          </div>
-          <div style={{background:"var(--border)",borderRadius:4,height:5}}>
-            <div style={{background:"#6366F1",borderRadius:4,height:5,width:`${(v/maxV)*100}%`,transition:"width .4s"}}/>
-          </div>
-        </div>
-      ))}
-    </div>
-
-    {/* Resultado */}
-    <div className="card" style={{marginBottom:14}}>
-      <div className="section-title">Resultado</div>
-      <IRow label="Vendas - Compras" value={fmtMoney(totalVendas-totalCompras)} positive={totalVendas>=totalCompras}/>
-      <IRow label="Despesas Pendentes" value={fmtMoney(pendentesPeriodo)} positive={false}/>
-      <IRow label="Funcionários" value={`${(db.funcionarios||[]).length}`} neutral/>
-    </div>
-
-    {/* Indicadores */}
+    {/* ============ Indicadores do Painel PDV (Configurações > Dashboard PDV) ============ */}
     {(()=>{
+      const dashCfg=getDashboardCfg(db);
+      const on=(id:string)=>!dashCfg.desabilitados.includes(id);
+
+      // --- Desempenho ---
+      const diasComVenda=vendasDiarias.filter(d=>d.total>0).length;
+      const fatMedioDia=diasComVenda>0?totalVendas/diasComVenda:0;
+      const ultimos7=vendasDiarias.slice(-7);
+      const anteriores7=vendasDiarias.slice(-14,-7);
+      const avgUlt7=ultimos7.length?ultimos7.reduce((s,d)=>s+d.total,0)/ultimos7.length:0;
+      const avgAnt7=anteriores7.length?anteriores7.reduce((s,d)=>s+d.total,0)/anteriores7.length:0;
+      const tendenciaPct=avgAnt7>0?((avgUlt7-avgAnt7)/avgAnt7)*100:0;
+      const DIAS_SEMANA=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+      const porDiaSemana:{[k:number]:{soma:number,count:number}}={};
+      vendasDiarias.forEach(d=>{
+        if(d.total<=0)return;
+        const dow=new Date(d.data+"T12:00:00").getDay();
+        if(!porDiaSemana[dow])porDiaSemana[dow]={soma:0,count:0};
+        porDiaSemana[dow].soma+=d.total;porDiaSemana[dow].count++;
+      });
+      const mediasPorDia=Object.keys(porDiaSemana).map(k=>{const dow=+k;const v=porDiaSemana[dow];return{dow,media:v.soma/v.count};});
+      const melhorDia=mediasPorDia.length?mediasPorDia.reduce((a,b)=>b.media>a.media?b:a):null;
+      const piorDia=mediasPorDia.length?mediasPorDia.reduce((a,b)=>b.media<a.media?b:a):null;
+      const maxMediaDia=Math.max(...mediasPorDia.map(d=>d.media),1);
+      const WeekdayBars=({destaque}:{destaque:"melhor"|"pior"})=>(
+        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:44,marginTop:6}}>
+          {DIAS_SEMANA.map((lbl,dow)=>{
+            const info=mediasPorDia.find(m=>m.dow===dow);
+            const h=info?Math.max((info.media/maxMediaDia)*100,6):3;
+            const isMelhor=melhorDia&&melhorDia.dow===dow;
+            const isPior=piorDia&&piorDia.dow===dow;
+            const cor=(destaque==="melhor"&&isMelhor)?"#22C55E":(destaque==="pior"&&isPior)?"#EF4444":"var(--border2)";
+            return <div key={dow} style={{flex:1,display:"flex",flexDirection:"column" as const,alignItems:"center",gap:3,height:"100%",justifyContent:"flex-end"}}>
+              <div style={{width:"100%",height:`${h}%`,background:cor,borderRadius:"3px 3px 1px 1px"}}/>
+              <span style={{fontSize:8,color:"var(--text2)",fontWeight:700}}>{lbl[0]}</span>
+            </div>;
+          })}
+        </div>
+      );
+
+      // --- Canais & Custos ---
+      const totalCanais=vendasMod.reduce((s,x)=>s+x.v,0);
+      const deliverySum=vendasPeriodo.reduce((s,v)=>s+(v.ifoodLiq||0)+(v.nfoodLiq||0)+(v.delivery||0),0);
+      const participacaoDelivery=totalVendas>0?(deliverySum/totalVendas)*100:0;
+      const custoMarketplaces=vendasPeriodo.reduce((s,v)=>{
+        const ifoodBruto=v.ifood||0,ifoodTx=v.ifoodTaxa||0;
+        const nfoodBruto=v["99food"]||0,nfoodTx=v.nfoodTaxa||0;
+        return s+ifoodBruto*(ifoodTx/100)+nfoodBruto*(nfoodTx/100);
+      },0);
+      const custoMarketplacesPct=totalVendas>0?(custoMarketplaces/totalVendas)*100:0;
       const sn=(db.config?.snAliquota||6)/100;
       const imposto=totalVendas*sn;
       const despFixas=pagasPeriodo;
@@ -1824,35 +1846,192 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const mcPct=totalVendas>0?(mcVal/totalVendas)*100:0;
       const pe=mcPct>0?(despFixas)/(mcPct/100):0;
       const colMC=mcVal>=0?"#22C55E":"#EF4444";
-      return <>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-          <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:colMC}}>{mcPct.toFixed(1)}%</div>
-            <div className="muted" style={{fontSize:10,marginTop:2}}>Margem Contrib.</div>
+
+      // --- Supervisão do PDV ---
+      const diasSemRegistro=vendasDiarias.filter(d=>d.total===0&&d.data<=hj);
+      const anomalias=vendasDiarias.filter(d=>d.total>0&&fatMedioDia>0&&d.total<fatMedioDia*0.5).sort((a,b)=>a.total-b.total);
+      const comOrigemPdv=vendasPeriodo.filter(v=>v.origem==="pdv").length;
+      const totalRegistrosVendas=vendasPeriodo.length;
+      const pctOrigemPdv=totalRegistrosVendas>0?(comOrigemPdv/totalRegistrosVendas)*100:0;
+
+      const ITEM_RENDER:{[k:string]:()=>any}={
+        faturamento:()=><>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <StatCard label="Vendas" value={fmtMoney(totalVendas)} color="#22C55E" icon="💰"/>
+            <StatCard label="Compras" value={fmtMoney(totalCompras)} color="#1D4ED8" icon="🛒"/>
+            <StatCard label="Contas Pagas" value={fmtMoney(pagasPeriodo)} color="#8B5CF6" icon="✅"/>
+            <StatCard label="A Pagar" value={fmtMoney(pendentesPeriodo)} color="#EF4444" icon="⏰"/>
           </div>
-          <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#F59E0B"}}>{fmtMoney(pe)}</div>
-            <div className="muted" style={{fontSize:10,marginTop:2}}>Ponto Equilíbrio</div>
+          <div className="card">
+            <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
+              <span>Vendas Diárias</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#22C55E"}}>{fmtMoney(totalVendas)}</span>
+            </div>
+            {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
+            {vendasDiarias.length>0&&(()=>{
+              const W=360,H=140,pT=12,pB=22,pL=4,pR=4,cW=W-pL-pR,cH=H-pT-pB;
+              const pts=vendasDiarias.map((d,i)=>{
+                const x=pL+(vendasDiarias.length===1?cW/2:i*(cW/(vendasDiarias.length-1)));
+                const y=pT+cH*(1-d.total/maxDia);
+                return {x,y,d};
+              });
+              const linePath=pts.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(" ");
+              const areaPath=linePath+` L${pts[pts.length-1].x},${pT+cH} L${pts[0].x},${pT+cH} Z`;
+              const step=Math.max(1,Math.ceil(vendasDiarias.length/12));
+              return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",marginTop:6}}>
+                {[0.25,0.5,0.75,1].map(f=>{
+                  const y=pT+cH*(1-f);
+                  return <g key={f}><line x1={pL} y1={y} x2={W-pR} y2={y} stroke="#E5E7EB" strokeWidth={0.5}/>
+                    <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
+                })}
+                <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#E5E7EB" strokeWidth={0.5}/>
+                <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22C55E" stopOpacity={0.3}/><stop offset="100%" stopColor="#22C55E" stopOpacity={0.02}/></linearGradient></defs>
+                <path d={areaPath} fill="url(#dashVgr)"/>
+                <path d={linePath} fill="none" stroke="#22C55E" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
+                {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
+                  {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?"#6366F1":"#22C55E"} stroke="#fff" strokeWidth={1}/>}
+                  {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
+                  {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?"#6366F1":"#555"} fontSize={7} fontWeight={isH?700:400}>
+                    {dt.getDate()}/{dt.getMonth()+1}
+                  </text>}
+                </g>;})}
+              </svg>;
+            })()}
           </div>
-          <div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:mcVal>=0?"#22C55E":"#EF4444"}}>{fmtMoney(mcVal)}</div>
-            <div className="muted" style={{fontSize:10,marginTop:2}}>Sobra p/ Fixas</div>
-          </div>
-        </div>
-        {totalVendas>0&&<div className="card">
-          <div className="section-title">Por R$ 100 vendidos</div>
-          {[
-            {label:"CMV",val:(totalCompras/totalVendas)*100,color:"#EF4444"},
-            {label:`Simples Nacional (${db.config?.snAliquota||6}%)`,val:sn*100,color:"#f59e0b"},
-            {label:"Despesas Pagas",val:(pagasPeriodo/totalVendas)*100,color:"#8B5CF6"},
-            {label:"Margem",val:mcPct-(pagasPeriodo/totalVendas)*100,color:mcPct-(pagasPeriodo/totalVendas)*100>=0?"#22C55E":"#EF4444"},
-          ].map(({label,val,color})=>(
-            <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
-              <span className="muted" style={{fontSize:12}}>{label}</span>
-              <span style={{fontWeight:700,color,fontSize:13}}>R$ {Math.abs(val).toFixed(2)}</span>
+        </>,
+        fatMedioDia:()=><div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
+          <div style={{fontSize:16,fontWeight:800,color:"#22C55E"}}>{fmtMoney(fatMedioDia)}</div>
+          <div className="muted" style={{fontSize:10,marginTop:2}}>Faturamento médio/dia</div>
+          <div className="muted" style={{fontSize:9,marginTop:1}}>{diasComVenda} dia(s) com venda</div>
+        </div>,
+        tendencia:()=><div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
+          <div style={{fontSize:16,fontWeight:800,color:tendenciaPct>=0?"#22C55E":"#EF4444"}}>{tendenciaPct>=0?"↗ +":"↘ "}{tendenciaPct.toFixed(1)}%</div>
+          <div className="muted" style={{fontSize:10,marginTop:2}}>Tendência (méd. móvel 7d)</div>
+          <div className="muted" style={{fontSize:9,marginTop:1}}>últimos 7 dias vs. 7 anteriores</div>
+        </div>,
+        melhorDia:()=><div className="card" style={{padding:"12px 10px"}}>
+          <div className="muted" style={{fontSize:10}}>Melhor dia da semana</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#22C55E"}}>{melhorDia?DIAS_SEMANA[melhorDia.dow]:"—"}</div>
+          {melhorDia&&<div className="muted" style={{fontSize:9}}>média {fmtMoney(melhorDia.media)}</div>}
+          <WeekdayBars destaque="melhor"/>
+        </div>,
+        piorDia:()=><div className="card" style={{padding:"12px 10px"}}>
+          <div className="muted" style={{fontSize:10}}>Dia mais fraco da semana</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#EF4444"}}>{piorDia?DIAS_SEMANA[piorDia.dow]:"—"}</div>
+          {piorDia&&<div className="muted" style={{fontSize:9}}>média {fmtMoney(piorDia.media)}</div>}
+          <WeekdayBars destaque="pior"/>
+        </div>,
+        mixPagamento:()=><div className="card">
+          <div className="section-title">Mix de pagamento</div>
+          {vendasMod.map(({label,v})=>(
+            <div key={label} style={{marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3,fontSize:13}}>
+                <span style={{textTransform:"capitalize"}}>{label}</span>
+                <span style={{fontWeight:600}}>{fmtMoney(v)} <span className="muted" style={{fontWeight:400}}>({totalCanais>0?((v/totalCanais)*100).toFixed(0):0}%)</span></span>
+              </div>
+              <div style={{background:"var(--border)",borderRadius:4,height:5}}>
+                <div style={{background:"#6366F1",borderRadius:4,height:5,width:`${(v/maxV)*100}%`,transition:"width .4s"}}/>
+              </div>
             </div>
           ))}
-        </div>}
+        </div>,
+        participacaoDelivery:()=><div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
+          <div style={{fontSize:20,fontWeight:800,color:"#6366F1"}}>{participacaoDelivery.toFixed(0)}%</div>
+          <div className="muted" style={{fontSize:10,marginTop:2}}>Participação do Delivery</div>
+          <div className="muted" style={{fontSize:9,marginTop:1}}>iFood + 99Food + Delivery próprio ({fmtMoney(deliverySum)})</div>
+        </div>,
+        custoMarketplaces:()=><div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
+          <div style={{fontSize:16,fontWeight:800,color:"#F59E0B"}}>{fmtMoney(custoMarketplaces)}</div>
+          <div className="muted" style={{fontSize:10,marginTop:2}}>Custo com marketplaces</div>
+          <div className="muted" style={{fontSize:9,marginTop:1}}>{custoMarketplacesPct.toFixed(1)}% do faturamento — comissão iFood + 99Food</div>
+        </div>,
+        cmv:()=><div className="card" style={{background:"#DBEAFE",border:"1px solid #0EA5E940"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div className="muted" style={{marginBottom:4}}>CMV no Período</div>
+              <div style={{fontSize:40,fontFamily:"'Syne',sans-serif",fontWeight:800,color:cmvColor,lineHeight:1}}>{fmtPct(cmv)}</div>
+              <div className="muted" style={{marginTop:4}}>Meta: ≤30%</div>
+            </div>
+            <GaugeSVG value={cmv} color={cmvColor}/>
+          </div>
+        </div>,
+        margemContrib:()=><div className="card">
+          <div className="section-title">Margem de contribuição</div>
+          <div style={{fontSize:22,fontWeight:800,color:colMC}}>{fmtMoney(mcVal)}</div>
+          <div className="muted" style={{fontSize:11,marginBottom:8}}>{mcPct.toFixed(1)}% do faturamento · ponto de equilíbrio: {fmtMoney(pe)}/{periodo==="semana"?"semana":"mês"}</div>
+          {totalVendas>0&&<>
+            {[
+              {label:"CMV",val:(totalCompras/totalVendas)*100,color:"#EF4444"},
+              {label:`Simples Nacional (${db.config?.snAliquota||6}%)`,val:sn*100,color:"#f59e0b"},
+              {label:"Despesas Pagas",val:(pagasPeriodo/totalVendas)*100,color:"#8B5CF6"},
+              {label:"Margem",val:mcPct-(pagasPeriodo/totalVendas)*100,color:mcPct-(pagasPeriodo/totalVendas)*100>=0?"#22C55E":"#EF4444"},
+            ].map(({label,val,color})=>(
+              <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+                <span className="muted" style={{fontSize:11}}>{label}</span>
+                <span style={{fontWeight:700,color,fontSize:12}}>R$ {Math.abs(val).toFixed(2)}/100</span>
+              </div>
+            ))}
+          </>}
+        </div>,
+        diasSemRegistro:()=><div className="card" style={diasSemRegistro.length>0?{border:"1px solid #F59E0B",background:"#F59E0B0F"}:undefined}>
+          <div className="muted" style={{fontSize:10}}>⚠️ Dias sem registro de venda</div>
+          <div style={{fontSize:20,fontWeight:800,color:diasSemRegistro.length>0?"#F59E0B":"#22C55E"}}>{diasSemRegistro.length} <span style={{fontSize:12,fontWeight:600,color:"var(--text2)"}}>de {vendasDiarias.filter(d=>d.data<=hj).length}</span></div>
+          {diasSemRegistro.length>0&&<div className="muted" style={{fontSize:10,marginTop:2}}>{diasSemRegistro.slice(0,4).map(d=>fmtDate(d.data)).join(", ")}{diasSemRegistro.length>4?"...":""} — loja fechada ou falha no envio do PDV</div>}
+        </div>,
+        anomalia:()=><div className="card" style={anomalias.length>0?{border:"1px solid #EF4444",background:"#EF44440F"}:undefined}>
+          <div className="muted" style={{fontSize:10}}>🔻 Anomalia de faturamento</div>
+          {anomalias.length===0&&<div style={{fontSize:14,fontWeight:700,color:"#22C55E"}}>Nenhuma no período</div>}
+          {anomalias.length>0&&<>
+            <div style={{fontSize:18,fontWeight:800,color:"#EF4444"}}>{fmtMoney(anomalias[0].total)}</div>
+            <div className="muted" style={{fontSize:10,marginTop:2}}>{fmtDate(anomalias[0].data)} — {(((anomalias[0].total-fatMedioDia)/fatMedioDia)*100).toFixed(0)}% vs. a média do período ({fmtMoney(fatMedioDia)})</div>
+          </>}
+        </div>,
+        origemLancamentos:()=><div className="card">
+          <div className="section-title">Origem dos lançamentos</div>
+          <div style={{display:"flex",height:9,borderRadius:6,overflow:"hidden",marginTop:4}}>
+            <div style={{width:`${pctOrigemPdv}%`,background:"#22C55E"}}/>
+            <div style={{width:`${100-pctOrigemPdv}%`,background:"var(--border2)"}}/>
+          </div>
+          <div style={{display:"flex",gap:12,fontSize:11,marginTop:6}} className="muted">
+            <span><b style={{color:"var(--text)"}}>{pctOrigemPdv.toFixed(0)}%</b> automático (PDV)</span>
+            <span><b style={{color:"var(--text)"}}>{(100-pctOrigemPdv).toFixed(0)}%</b> digitado</span>
+          </div>
+          {totalRegistrosVendas===0&&<div className="muted" style={{fontSize:10,marginTop:4}}>Sem lançamentos no período</div>}
+        </div>,
+        vendasHoraBloqueado:()=><div className="card" style={{border:"1px dashed var(--border2)"}}>
+          <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
+            🔒 <b style={{color:"var(--text)"}}>Aguardando o PDV</b> — pra mostrar ritmo do dia, horário de pico e altas/quedas por hora, o PDV externo precisa passar a enviar vendas por hora em <code>/api/venda-pdv</code> (hoje manda só um total por dia). Ligue/desligue essa seção em Configurações &gt; Dashboard PDV.
+          </div>
+        </div>,
+        mesasComandasBloqueado:()=><div className="card" style={{border:"1px dashed var(--border2)"}}>
+          <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
+            🔒 <b style={{color:"var(--text)"}}>Aguardando o PDV</b> — mapa de mesas e comandas abertas (tempo + valor) precisam de uma leitura em tempo real do PDV externo, que hoje não existe. Ligue/desligue essa seção em Configurações &gt; Dashboard PDV.
+          </div>
+        </div>,
+      };
+
+      return <>
+        {dashCfg.secoes.map((secaoId:string)=>{
+          const info=DASHBOARD_SECAO_LABEL[secaoId];
+          const ids=(dashCfg.itens[secaoId]||[]).filter((id:string)=>on(id));
+          if(ids.length===0)return null;
+          return <div key={secaoId} style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.6,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+              <span>{info.icon}</span><span>{info.label}</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:ids.length>1&&secaoId!=="destaque"&&secaoId!=="canais"&&secaoId!=="supervisao"?"1fr 1fr":"1fr",gap:10}}>
+              {ids.map((id:string)=><div key={id}>{ITEM_RENDER[id]?.()}</div>)}
+            </div>
+          </div>;
+        })}
+
+        {/* Resultado — fixo, fora do sistema de indicadores configuráveis */}
+        <div className="card" style={{marginBottom:14}}>
+          <div className="section-title">Resultado</div>
+          <IRow label="Vendas - Compras" value={fmtMoney(totalVendas-totalCompras)} positive={totalVendas>=totalCompras}/>
+          <IRow label="Despesas Pendentes" value={fmtMoney(pendentesPeriodo)} positive={false}/>
+          <IRow label="Funcionários" value={`${(db.funcionarios||[]).length}`} neutral/>
+        </div>
       </>;
     })()}
   </div>;
@@ -10551,7 +10730,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
-  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"]];
+  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
 
   // Shared helpers
   const setConfig=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
@@ -10572,6 +10751,28 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
     reader.onload=ev=>setImpCfg("logo",ev.target?.result as string);
     reader.readAsDataURL(file);
   };
+
+  // ---- Dashboard PDV ----
+  const dashCfg=getDashboardCfg(db);
+  const setDashCfg=(fn:(c:any)=>any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),dashboardPdv:fn(getDashboardCfg(d))}}));
+  const moveSecao=(id:string,dir:-1|1)=>setDashCfg(c=>{
+    const arr=[...c.secoes];const i=arr.indexOf(id);const j=i+dir;
+    if(i<0||j<0||j>=arr.length)return c;
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+    return{...c,secoes:arr};
+  });
+  const moveItem=(secao:string,id:string,dir:-1|1)=>setDashCfg(c=>{
+    const arr=[...(c.itens[secao]||[])];const i=arr.indexOf(id);const j=i+dir;
+    if(i<0||j<0||j>=arr.length)return c;
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+    return{...c,itens:{...c.itens,[secao]:arr}};
+  });
+  const toggleItem=(id:string,on:boolean)=>setDashCfg(c=>({...c,desabilitados:on?c.desabilitados.filter(x=>x!==id):[...new Set([...c.desabilitados,id])]}));
+  const toggleSecaoTodos=(secao:string,on:boolean)=>setDashCfg(c=>{
+    const ids=c.itens[secao]||[];
+    return{...c,desabilitados:on?c.desabilitados.filter(x=>!ids.includes(x)):[...new Set([...c.desabilitados,...ids])]};
+  });
+  const restaurarOrdemDashboard=()=>setDashCfg(()=>({secoes:DASHBOARD_SECOES_DEFAULT,itens:DASHBOARD_ITENS_DEFAULT,desabilitados:[]}));
 
   // ---- Financeiro ----
   const [novaCatFin,setNovaCatFin]=useState("");
@@ -11219,6 +11420,89 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           {field("Linha de assinatura na Encomenda","\"Ciente: ___\"",toggle(impCfg.encomendaAssinatura,v=>setImpCfg("encomendaAssinatura",v)))}
           {field("Mostrar preços na Estimativa de Custo","útil ocultar se for pra quem não deve ver valores",toggle(impCfg.estimativaMostrarPrecos,v=>setImpCfg("estimativaMostrarPrecos",v)))}
         </div>
+      </div>;
+    })()}
+
+    {/* ===== DASHBOARD PDV ===== */}
+    {subTab==="dashboardpdv"&&(()=>{
+      const CAD_LABEL:{[k:string]:{txt:string,bg:string,color:string}}={
+        diario:{txt:"📅 diário",bg:"var(--bg4)",color:"var(--text2)"},
+        porhora:{txt:"📅 por hora",bg:"var(--bg4)",color:"var(--text2)"},
+        vivo:{txt:"🔴 ao vivo",bg:"#EF444422",color:"#EF4444"},
+      };
+      const cadBadge=(k:string)=>{const c=CAD_LABEL[k];return <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:c.bg,color:c.color,flexShrink:0}}>{c.txt}</span>;};
+      const moveBtn=(disabled:boolean,dir:string,onClick:()=>void)=>(
+        <button onClick={onClick} disabled={disabled} style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:disabled?"#333":"var(--text2)",cursor:disabled?"default":"pointer",fontSize:9,padding:"2px 5px",lineHeight:1,opacity:disabled?0.3:1}}>{dir}</button>
+      );
+      const simNao=(val:boolean,onPick:(v:boolean)=>void)=>(
+        <div style={{display:"flex",border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",flexShrink:0}}>
+          {[["1","Sim"],["0","Não"]].map(([k,label],i)=>(
+            <button key={k} onClick={()=>onPick(k==="1")}
+              style={{padding:"5px 11px",fontSize:11,fontWeight:600,border:"none",borderLeft:i>0?"1px solid var(--border)":"none",
+                background:(val?"1":"0")===k?"#8B5CF6":"var(--bg4)",color:(val?"1":"0")===k?"#fff":"var(--text2)",cursor:"pointer"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+      );
+      return <div>
+        <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#8B5CF6",marginBottom:4}}>📊 Indicadores do Dashboard</div>
+          <div className="muted" style={{fontSize:11,marginBottom:0}}>Liga, desliga e reordena o que aparece no Dashboard — sem deploy. Indicadores com 🔒 dependem do PDV externo passar a enviar um dado que hoje não existe (veja detalhes na tela do Dashboard).</div>
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:4}}>🔢 Ordem das seções</div>
+          <div className="muted" style={{fontSize:11,marginBottom:8}}>Mesmas setas ▲▼ de "Empresa → Sequência das Abas" — ordem de cima pra baixo no Dashboard.</div>
+          {dashCfg.secoes.map((s:string,i:number)=>{
+            const info=DASHBOARD_SECAO_LABEL[s];
+            return <div key={s} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"var(--bg4)",borderRadius:8,marginBottom:4,border:"1px solid var(--border)"}}>
+              <span style={{fontSize:14}}>{info.icon}</span>
+              <span style={{flex:1,fontSize:13,color:"var(--text)"}}>{info.label}</span>
+              {cadBadge(info.cadencia)}
+              <div style={{display:"flex",gap:2}}>
+                {moveBtn(i===0,"▲",()=>moveSecao(s,-1))}
+                {moveBtn(i===dashCfg.secoes.length-1,"▼",()=>moveSecao(s,1))}
+              </div>
+            </div>;
+          })}
+          <button onClick={restaurarOrdemDashboard} className="btn"
+            style={{marginTop:6,background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:11,padding:"8px"}}>
+            🔄 Restaurar ordem padrão
+          </button>
+        </div>
+
+        {dashCfg.secoes.map((secao:string)=>{
+          const info=DASHBOARD_SECAO_LABEL[secao];
+          const ids:string[]=dashCfg.itens[secao]||[];
+          return <div key={secao} className="card" style={{marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap" as const,gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:13,fontWeight:700,color:"var(--acc)",textTransform:"uppercase" as const,letterSpacing:.4}}>{info.icon} {info.label}</span>
+                {cadBadge(info.cadencia)}
+              </div>
+              {ids.length>1&&<div style={{display:"flex",gap:6}}>
+                <button onClick={()=>toggleSecaoTodos(secao,true)} style={{fontSize:10,fontWeight:700,background:"none",border:"1px solid var(--border2)",color:"var(--text2)",borderRadius:14,padding:"3px 9px",cursor:"pointer"}}>Ativar todos</button>
+                <button onClick={()=>toggleSecaoTodos(secao,false)} style={{fontSize:10,fontWeight:700,background:"none",border:"1px solid var(--border2)",color:"var(--text2)",borderRadius:14,padding:"3px 9px",cursor:"pointer"}}>Desativar todos</button>
+              </div>}
+            </div>
+            {ids.map((id,i)=>{
+              const travado=!!DASHBOARD_ITEM_TRAVADO[id];
+              const on=!dashCfg.desabilitados.includes(id);
+              return <div key={id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 2px",borderTop:"1px solid var(--border)"}}>
+                <span style={{width:16,fontFamily:"monospace",fontSize:10,color:"var(--text2)",textAlign:"center" as const,flexShrink:0}}>{i+1}</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600}}>{DASHBOARD_ITEM_LABEL[id]}
+                  {travado&&<span style={{fontSize:10,fontWeight:400,color:"var(--text2)",marginLeft:6}}>🔒 aguardando o PDV expor esse dado</span>}
+                </span>
+                <div style={{display:"flex",gap:2}}>
+                  {moveBtn(i===0,"▲",()=>moveItem(secao,id,-1))}
+                  {moveBtn(i===ids.length-1,"▼",()=>moveItem(secao,id,1))}
+                </div>
+                {simNao(on,v=>toggleItem(id,v))}
+              </div>;
+            })}
+          </div>;
+        })}
       </div>;
     })()}
   </div>;
