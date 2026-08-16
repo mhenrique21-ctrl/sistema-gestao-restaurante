@@ -7,6 +7,19 @@ const STORAGE_KEY = "gestao_app_v4";
 const loadData = () => { try { const r=localStorage.getItem(STORAGE_KEY); return r?JSON.parse(r):null; } catch{return null;} };
 const saveData = (d) => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}catch{} };
 
+// Login em localStorage (sobrevive a fechar aba, matar o app em segundo plano
+// no celular, reiniciar o aparelho) em vez de sessionStorage — com validade,
+// pra não virar "logado pra sempre" sem controle.
+const SESSAO_HORAS = 24;
+const lerLoginSalvo = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem("app_login") || "null");
+    if (s && s.exp > Date.now()) return s;
+    if (s) localStorage.removeItem("app_login");
+  } catch {}
+  return null;
+};
+
 const PRODS_SEED=[
   // laticínios
   {nome:"Leite Integral",          cat:"laticínios", unidade:"L"},
@@ -1105,15 +1118,11 @@ export default function App() {
     const loaded=loadData();
     return migrateDb(loaded?{...loaded}:{...initialState});
   });
-  const [login,setLogin]   = useState<{role:string,label:string,empresa?:string}|null>(()=>{
-    try{return JSON.parse(sessionStorage.getItem("app_login")||"null");}catch{return null;}
-  });
+  const [login,setLogin]   = useState<{role:string,label:string,empresa?:string}|null>(()=>lerLoginSalvo());
   const [tab,setTab]       = useState("dashboard");
   const [pendingSub,setPendingSub]=useState<string|null>(null);
   const [expandedMenu,setExpandedMenu]=useState<string|null>(null);
-  const [empresa,setEmpresa] = useState(()=>{
-    try{const l=JSON.parse(sessionStorage.getItem("app_login")||"null");return l?.empresa||"CONFRARIA";}catch{return "CONFRARIA";}
-  });
+  const [empresa,setEmpresa] = useState(()=>lerLoginSalvo()?.empresa||"CONFRARIA");
   const [theme,setTheme]   = useState<"dark"|"light">(()=>(localStorage.getItem("app_theme")||"light") as "dark"|"light");
   const [menuLayout,setMenuLayout]=useState<"bottom"|"top"|"fab">(()=>(localStorage.getItem("app_menu_layout")||"bottom") as "bottom"|"top"|"fab");
   const [menuPickerOpen,setMenuPickerOpen]=useState(false);
@@ -1206,6 +1215,28 @@ export default function App() {
     };
   },[login,tab]);
 
+  // Botão "Atualizar" do cabeçalho — mesma busca do polling automático, mas
+  // disparada na hora do clique e sem o passo de checar versão primeiro (o
+  // usuário já pediu explicitamente, então busca os dados de qualquer jeito).
+  const [atualizando,setAtualizando]=useState(false);
+  const forcarAtualizacao=async()=>{
+    if(!login||atualizando)return;
+    if(syncTimer.current||directSaveRef.current||Date.now()-directSaveEndRef.current<300)return;
+    setAtualizando(true);
+    const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
+    const ts=Date.now();
+    try{
+      const results=await Promise.all(emps.map(emp=>
+        fetchSync(`/api/dados/${emp}?_=${ts}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
+      ));
+      const updates:any={};
+      results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
+      if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
+    }finally{
+      setAtualizando(false);
+    }
+  };
+
   // On state change: save to localStorage + debounced save to server (only changed companies)
   useEffect(()=>{
     saveData(state);
@@ -1297,7 +1328,7 @@ export default function App() {
   const loginCorTexto=(()=>{if(!login?.label)return"#e8eaf0";const u=(state.CONFRARIA?.usuarios||[]).find((u:any)=>u.nome===login.label);return u?.corTexto||login?.corTexto||"#e8eaf0";})();
 
   const doLogin=(info:any)=>{
-    sessionStorage.setItem("app_login",JSON.stringify(info));
+    localStorage.setItem("app_login",JSON.stringify({...info,exp:Date.now()+SESSAO_HORAS*3600*1000}));
     setLogin(info);
     if(info.empresa)setEmpresa(info.empresa);
     if(info.role==="op"||info.role==="op_lista")setTab("lista");
@@ -1305,7 +1336,7 @@ export default function App() {
     if(info.role==="op_enc")setTab("agenda");
   };
   const doLogout=()=>{
-    sessionStorage.removeItem("app_login");
+    localStorage.removeItem("app_login");
     _listaDeletados.clear();
     setLogin(null);
     setTab("dashboard");
@@ -1478,6 +1509,10 @@ export default function App() {
           <LogoEmpresa empresa={empresa}/>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             {syncStatus==="sync"&&<span style={{fontSize:11,color:"var(--acc)"}}>⟳</span>}
+            <button onClick={forcarAtualizacao} disabled={atualizando} title="Atualizar"
+              style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:atualizando?"default":"pointer",color:"var(--text2)",fontSize:14,padding:"4px 8px",lineHeight:1,opacity:atualizando?0.5:1}}>
+              {atualizando?"⟳":"🔄"}
+            </button>
             <button onClick={toggleTheme} title={theme==="dark"?"Modo claro":"Modo escuro"}
               style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",color:"var(--text2)",fontSize:14,padding:"4px 8px",lineHeight:1}}>
               {theme==="dark"?"☀️":"🌙"}
