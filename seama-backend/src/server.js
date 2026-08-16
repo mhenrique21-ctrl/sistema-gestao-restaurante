@@ -75,6 +75,7 @@ server.listen(PORT, () => {
   console.log(`\n🚀 Backend PDV - Seama`);
   console.log(`   HTTP → http://localhost:${PORT}`);
   console.log(`   Env  → ${process.env.NODE_ENV || 'development'}\n`);
+  require('./services/gestaoSync').iniciarSincronizacaoPeriodica();
 });
 
 module.exports = { app, server };

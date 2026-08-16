@@ -124,4 +124,28 @@ async function aoFecharCaixa(data) {
   }
 }
 
-module.exports = { aoFecharCaixa, enviarPendentes, enfileirar, totaisDoDia, hojeBelem };
+// Antes deste job, o Gestão só recebia o faturamento do dia quando o caixa
+// fechava (normalmente à noite) — "Faturamento diário — hoje" no Dashboard
+// ficava em R$ 0,00 o dia inteiro até lá. Isso recalcula e reenvia o dia
+// corrente em intervalos, então o Dashboard passa a refletir o movimento de
+// hoje quase em tempo real, sem esperar o fechamento. O fechamento de caixa
+// continua sendo a fonte definitiva (mesmo UPSERT idempotente por sale_date,
+// então não duplica nem conflita com esta sincronização periódica).
+function iniciarSincronizacaoPeriodica() {
+  const minutos = parseInt(process.env.GESTAO_SYNC_INTERVAL_MIN, 10) || 15;
+  const intervaloMs = minutos * 60 * 1000;
+  const rodar = async () => {
+    try {
+      await enfileirar(hojeBelem());
+      await enviarPendentes();
+    } catch (e) {
+      console.error('[gestaoSync] erro na sincronização periódica:', e.message);
+    }
+  };
+  rodar(); // primeira rodada já na subida do processo, não espera o 1º intervalo
+  const timer = setInterval(rodar, intervaloMs);
+  console.log(`[gestaoSync] sincronização periódica com o Gestão a cada ${minutos} min`);
+  return timer;
+}
+
+module.exports = { aoFecharCaixa, enviarPendentes, enfileirar, totaisDoDia, hojeBelem, iniciarSincronizacaoPeriodica };
