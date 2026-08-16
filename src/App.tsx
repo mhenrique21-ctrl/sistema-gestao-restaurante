@@ -576,27 +576,32 @@ const impressaoRodapeTxt=(cfg:any)=>cfg.rodape||`Gerado em ${new Date().toLocale
 // "mesasComandasBloqueado" são avisos fixos (não indicadores de verdade): o PDV externo
 // ainda não expõe hora da venda nem comandas em tempo real, então não tem indicador real
 // pra mostrar ali — só o aviso do que falta.
-const DASHBOARD_SECOES_DEFAULT=["destaque","desempenho","canais","supervisao","vendashora","mesas"];
+const DASHBOARD_SECOES_DEFAULT=["destaque","desempenho","canais","supervisao","operacional","vendashora","mesas","vendaaovivo"];
 const DASHBOARD_ITENS_DEFAULT:{[k:string]:string[]}={
   destaque:["faturamento","faturamentoHoje"],
-  desempenho:["fatMedioDia","tendencia","melhorDia","piorDia"],
+  desempenho:["fatMedioDia","vendasDiariasChart","tendencia","melhorDia","piorDia"],
   canais:["mixPagamento","participacaoDelivery","custoMarketplaces","cmv","margemContrib"],
   supervisao:["diasSemRegistro","anomalia","origemLancamentos"],
+  operacional:["contasPagar","lembretes","resultado"],
   vendashora:["vendasHoraBloqueado"],
   mesas:["mesasComandasBloqueado"],
+  vendaaovivo:["vendaInstantaneaBloqueado"],
 };
 const DASHBOARD_SECAO_LABEL:{[k:string]:{icon:string,label:string,cadencia:"diario"|"porhora"|"vivo"}}={
   destaque:{icon:"⭐",label:"Destaque",cadencia:"diario"},
   desempenho:{icon:"📈",label:"Desempenho",cadencia:"diario"},
   canais:{icon:"💳",label:"Canais & Custos",cadencia:"diario"},
   supervisao:{icon:"🛡️",label:"Supervisão do PDV",cadencia:"diario"},
+  operacional:{icon:"📋",label:"Operacional",cadencia:"diario"},
   vendashora:{icon:"🕐",label:"Vendas por Hora",cadencia:"porhora"},
   mesas:{icon:"🪑",label:"Mesas & Comandas",cadencia:"vivo"},
+  vendaaovivo:{icon:"🛎️",label:"Venda ao Vivo",cadencia:"vivo"},
 };
 const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
   faturamento:"Faturamento do período (número principal)",
   faturamentoHoje:"Faturamento diário (hoje vs. ontem)",
   fatMedioDia:"Faturamento médio/dia",
+  vendasDiariasChart:"Gráfico de vendas diárias",
   tendencia:"Tendência (média móvel 7d)",
   melhorDia:"Melhor dia da semana",
   piorDia:"Dia mais fraco da semana",
@@ -608,10 +613,14 @@ const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
   diasSemRegistro:"Dias sem registro de venda",
   anomalia:"Anomalia de faturamento",
   origemLancamentos:"Origem dos lançamentos (PDV × manual)",
+  contasPagar:"Contas a Pagar (hoje/vencidas)",
+  lembretes:"Lembretes",
+  resultado:"Resultado (vendas − compras, funcionários)",
   vendasHoraBloqueado:"Ritmo do dia / horário de pico / altas e quedas por hora",
   mesasComandasBloqueado:"Mapa de mesas e lista de comandas abertas",
+  vendaInstantaneaBloqueado:"Venda instantânea (ticker ao vivo)",
 };
-const DASHBOARD_ITEM_TRAVADO:{[k:string]:boolean}={vendasHoraBloqueado:true,mesasComandasBloqueado:true};
+const DASHBOARD_ITEM_TRAVADO:{[k:string]:boolean}={vendasHoraBloqueado:true,mesasComandasBloqueado:true,vendaInstantaneaBloqueado:true};
 // Aparência (fontes e cores) — vale pra todos os indicadores do painel de uma vez, igual
 // a config de Impressão faz com os documentos impressos.
 const DASHBOARD_APARENCIA_DEFAULTS={
@@ -1704,16 +1713,18 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
   const contasPagarView:"full"|"min"|"off"=db.config?.contasPagarView||"min";
   const setContasPagarView=(v:"full"|"min"|"off")=>setDb((d:any)=>({...d,config:{...(d.config||{}),contasPagarView:v}}));
 
-  return <div>
-    {/* Contas a Pagar — Hoje / Vencidas */}
-    {contasPagarView==="off"?(
-      <button onClick={()=>setContasPagarView("full")} className="card"
-        style={{marginBottom:14,width:"100%",textAlign:"left" as const,cursor:"pointer",border:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span className="section-title" style={{margin:0}}>Contas a Pagar {contasDash.length>0?`(${contasDash.length})`:""}</span>
-        <span style={{fontSize:11,color:"var(--text2)"}}>⊕ Mostrar</span>
-      </button>
-    ):(
-    <div className="card" style={{marginBottom:14}}>
+  // Renderiza o card de Contas a Pagar (hoje/vencidas) — vira o item "contasPagar" da
+  // seção Operacional, mas mantém seu próprio controle de exibição (min/full/off) por
+  // fora do sistema de indicadores: uma coisa é o card aparecer ou não no Dashboard
+  // (config), outra é ele estar expandido/resumido no momento (uso do dia a dia).
+  const renderContasPagar=()=>contasPagarView==="off"?(
+    <button onClick={()=>setContasPagarView("full")} className="card"
+      style={{width:"100%",textAlign:"left" as const,cursor:"pointer",border:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <span className="section-title" style={{margin:0}}>Contas a Pagar {contasDash.length>0?`(${contasDash.length})`:""}</span>
+      <span style={{fontSize:11,color:"var(--text2)"}}>⊕ Mostrar</span>
+    </button>
+  ):(
+    <div className="card">
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:contasPagarView==="min"?0:8}}>
         <div className="section-title" style={{margin:0}}>Contas a Pagar</div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -1721,7 +1732,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             style={{background:"none",border:"1px solid var(--border)",borderRadius:8,color:"var(--text2)",fontSize:11,padding:"4px 8px",cursor:"pointer"}}>
             {contasPagarView==="min"?"▾":"▴"}
           </button>
-          <button onClick={()=>setContasPagarView("off")} title="Desativar este card"
+          <button onClick={()=>setContasPagarView("off")} title="Minimizar"
             style={{background:"none",border:"1px solid var(--border)",borderRadius:8,color:"var(--text2)",fontSize:11,padding:"4px 8px",cursor:"pointer"}}>✕</button>
           <button onClick={irParaFinanceiro} style={{background:"none",border:"1px solid #0EA5E940",borderRadius:8,color:"#6366F1",
             fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todas</button>
@@ -1766,28 +1777,28 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       ))}
       </>)}
     </div>
-    )}
+  );
+  const renderLembretes=()=>anotLembrete.length===0?null:<div className="card" style={{border:"1px solid #22C55E40",background:"var(--bg3)"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div className="section-title" style={{margin:0}}>Lembretes</div>
+      <button onClick={irParaAgenda} style={{background:"none",border:"1px solid #0EA5E940",borderRadius:8,color:"#6366F1",fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todos</button>
+    </div>
+    {anotLembrete.map((a:any)=>{
+      const venceu=a.dataLembrete&&a.dataLembrete<hj;
+      const hjNote=a.dataLembrete===hj;
+      return <div key={a.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)",fontSize:12,display:"flex",gap:8,alignItems:"flex-start"}}>
+        {a.urgente&&<span style={{fontSize:9,background:"#EF4444",color:"#fff",borderRadius:6,padding:"1px 5px",fontWeight:800,flexShrink:0,marginTop:2}}>!</span>}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{a.texto}</div>
+          {a.dataLembrete&&<div style={{fontSize:10,color:venceu?"#EF4444":hjNote?"#F59E0B":"#555",marginTop:1}}>{venceu?"Venceu em":hjNote?"Hoje —":""} {fmtDate(a.dataLembrete)}</div>}
+        </div>
+      </div>;
+    })}
+  </div>;
 
-    {/* Seletor de Período */}
-    {/* Lembretes (Agenda > Anotacoes) */}
-    {anotLembrete.length>0&&<div className="card" style={{marginBottom:14,border:"1px solid #22C55E40",background:"var(--bg3)"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <div className="section-title" style={{margin:0}}>Lembretes</div>
-        <button onClick={irParaAgenda} style={{background:"none",border:"1px solid #0EA5E940",borderRadius:8,color:"#6366F1",fontSize:11,padding:"4px 10px",cursor:"pointer"}}>Ver todos</button>
-      </div>
-      {anotLembrete.map((a:any)=>{
-        const venceu=a.dataLembrete&&a.dataLembrete<hj;
-        const hjNote=a.dataLembrete===hj;
-        return <div key={a.id} style={{padding:"6px 0",borderBottom:"1px solid var(--border)",fontSize:12,display:"flex",gap:8,alignItems:"flex-start"}}>
-          {a.urgente&&<span style={{fontSize:9,background:"#EF4444",color:"#fff",borderRadius:6,padding:"1px 5px",fontWeight:800,flexShrink:0,marginTop:2}}>!</span>}
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{a.texto}</div>
-            {a.dataLembrete&&<div style={{fontSize:10,color:venceu?"#EF4444":hjNote?"#F59E0B":"#555",marginTop:1}}>{venceu?"Venceu em":hjNote?"Hoje —":""} {fmtDate(a.dataLembrete)}</div>}
-          </div>
-        </div>;
-      })}
-    </div>}
-
+  return <div>
+    {/* Seletor de Período — fixo, fora do sistema de indicadores: todo o resto do
+        painel depende dele pra saber qual intervalo de datas usar. */}
     <div className="card" style={{marginBottom:14}}>
       <div style={{display:"flex",gap:6,marginBottom:periodo==="custom"?10:0,flexWrap:"wrap" as const}}>
         <button onClick={()=>setPeriodo("semana")} style={btnStyle("semana")}>Semana</button>
@@ -1899,50 +1910,49 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const pctOrigemPdv=totalRegistrosVendas>0?(comOrigemPdv/totalRegistrosVendas)*100:0;
 
       const ITEM_RENDER:{[k:string]:()=>any}={
-        faturamento:()=><>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:cardGap,marginBottom:cardGap}}>
+        faturamento:()=>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:cardGap}}>
             <StatCard label="Vendas" value={fmtMoney(totalVendas)} color={corOk} icon="💰"/>
             <StatCard label="Compras" value={fmtMoney(totalCompras)} color="#1D4ED8" icon="🛒"/>
             <StatCard label="Contas Pagas" value={fmtMoney(pagasPeriodo)} color={corAcc} icon="✅"/>
             <StatCard label="A Pagar" value={fmtMoney(pendentesPeriodo)} color={corCrit} icon="⏰"/>
+          </div>,
+        vendasDiariasChart:()=><div className="card">
+          <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
+            <span>Vendas Diárias</span>
+            <span style={{fontSize:flbl(12),fontWeight:700,color:corOk}}>{fmtMoney(totalVendas)}</span>
           </div>
-          <div className="card">
-            <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
-              <span>Vendas Diárias</span>
-              <span style={{fontSize:flbl(12),fontWeight:700,color:corOk}}>{fmtMoney(totalVendas)}</span>
-            </div>
-            {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
-            {vendasDiarias.length>0&&(()=>{
-              const W=360,H=140,pT=12,pB=22,pL=4,pR=4,cW=W-pL-pR,cH=H-pT-pB;
-              const pts=vendasDiarias.map((d,i)=>{
-                const x=pL+(vendasDiarias.length===1?cW/2:i*(cW/(vendasDiarias.length-1)));
-                const y=pT+cH*(1-d.total/maxDia);
-                return {x,y,d};
-              });
-              const linePath=pts.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(" ");
-              const areaPath=linePath+` L${pts[pts.length-1].x},${pT+cH} L${pts[0].x},${pT+cH} Z`;
-              const step=Math.max(1,Math.ceil(vendasDiarias.length/12));
-              return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",marginTop:6}}>
-                {[0.25,0.5,0.75,1].map(f=>{
-                  const y=pT+cH*(1-f);
-                  return <g key={f}><line x1={pL} y1={y} x2={W-pR} y2={y} stroke="#E5E7EB" strokeWidth={0.5}/>
-                    <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
-                })}
-                <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#E5E7EB" strokeWidth={0.5}/>
-                <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={corOk} stopOpacity={0.3}/><stop offset="100%" stopColor={corOk} stopOpacity={0.02}/></linearGradient></defs>
-                <path d={areaPath} fill="url(#dashVgr)"/>
-                <path d={linePath} fill="none" stroke={corOk} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
-                {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
-                  {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?corAcc:corOk} stroke="#fff" strokeWidth={1}/>}
-                  {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
-                  {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?corAcc:"#555"} fontSize={7} fontWeight={isH?700:400}>
-                    {dt.getDate()}/{dt.getMonth()+1}
-                  </text>}
-                </g>;})}
-              </svg>;
-            })()}
-          </div>
-        </>,
+          {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
+          {vendasDiarias.length>0&&(()=>{
+            const W=360,H=140,pT=12,pB=22,pL=4,pR=4,cW=W-pL-pR,cH=H-pT-pB;
+            const pts=vendasDiarias.map((d,i)=>{
+              const x=pL+(vendasDiarias.length===1?cW/2:i*(cW/(vendasDiarias.length-1)));
+              const y=pT+cH*(1-d.total/maxDia);
+              return {x,y,d};
+            });
+            const linePath=pts.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(" ");
+            const areaPath=linePath+` L${pts[pts.length-1].x},${pT+cH} L${pts[0].x},${pT+cH} Z`;
+            const step=Math.max(1,Math.ceil(vendasDiarias.length/12));
+            return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",marginTop:6}}>
+              {[0.25,0.5,0.75,1].map(f=>{
+                const y=pT+cH*(1-f);
+                return <g key={f}><line x1={pL} y1={y} x2={W-pR} y2={y} stroke="#E5E7EB" strokeWidth={0.5}/>
+                  <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
+              })}
+              <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#E5E7EB" strokeWidth={0.5}/>
+              <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={corOk} stopOpacity={0.3}/><stop offset="100%" stopColor={corOk} stopOpacity={0.02}/></linearGradient></defs>
+              <path d={areaPath} fill="url(#dashVgr)"/>
+              <path d={linePath} fill="none" stroke={corOk} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
+              {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
+                {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?corAcc:corOk} stroke="#fff" strokeWidth={1}/>}
+                {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
+                {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?corAcc:"#555"} fontSize={7} fontWeight={isH?700:400}>
+                  {dt.getDate()}/{dt.getMonth()+1}
+                </text>}
+              </g>;})}
+            </svg>;
+          })()}
+        </div>,
         faturamentoHoje:()=><div className="card">
           <div className="muted" style={{fontSize:flbl(10)}}>📅 Faturamento diário — hoje</div>
           <div style={{fontSize:fnum(24),fontWeight:800,color:corOk}}>{fmtMoney(faturamentoHoje)}</div>
@@ -2060,6 +2070,19 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             🔒 <b style={{color:"var(--text)"}}>Aguardando o PDV</b> — mapa de mesas e comandas abertas (tempo + valor) precisam de uma leitura em tempo real do PDV externo, que hoje não existe. Ligue/desligue essa seção em Configurações &gt; Dashboard PDV.
           </div>
         </div>,
+        contasPagar:renderContasPagar,
+        lembretes:renderLembretes,
+        resultado:()=><div className="card">
+          <div className="section-title">Resultado</div>
+          <IRow label="Vendas - Compras" value={fmtMoney(totalVendas-totalCompras)} positive={totalVendas>=totalCompras}/>
+          <IRow label="Despesas Pendentes" value={fmtMoney(pendentesPeriodo)} positive={false}/>
+          <IRow label="Funcionários" value={`${(db.funcionarios||[]).length}`} neutral/>
+        </div>,
+        vendaInstantaneaBloqueado:()=><div className="card" style={{border:"1px dashed var(--border2)"}}>
+          <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
+            🔒 <b style={{color:"var(--text)"}}>Aguardando o PDV</b> — um ticker de venda instantânea precisa que o PDV externo <b>avise</b> a Gestão a cada venda/pagamento concluído (webhook), não que a Gestão fique perguntando de tempos em tempos. É diferente de "Mesas &amp; Comandas" (que já funcionaria por consulta periódica) — esse aqui só fica de verdade "ao vivo" com um aviso automático do lado do PDV. Ligue/desligue essa seção em Configurações &gt; Dashboard PDV.
+          </div>
+        </div>,
       };
 
       return <>
@@ -2067,23 +2090,16 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           const info=DASHBOARD_SECAO_LABEL[secaoId];
           const ids=(dashCfg.itens[secaoId]||[]).filter((id:string)=>on(id));
           if(ids.length===0)return null;
+          const doisCol=ids.length>1&&!["destaque","canais","supervisao","operacional"].includes(secaoId);
           return <div key={secaoId} style={{marginBottom:secaoGap}}>
             <div style={{fontSize:flbl(11),fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.6,marginBottom:compacta?4:8,display:"flex",alignItems:"center",gap:6}}>
               <span>{info.icon}</span><span>{info.label}</span>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:ids.length>1&&secaoId!=="destaque"&&secaoId!=="canais"&&secaoId!=="supervisao"?"1fr 1fr":"1fr",gap:cardGap}}>
+            <div style={{display:"grid",gridTemplateColumns:doisCol?"1fr 1fr":"1fr",gap:cardGap}}>
               {ids.map((id:string)=><div key={id}>{ITEM_RENDER[id]?.()}</div>)}
             </div>
           </div>;
         })}
-
-        {/* Resultado — fixo, fora do sistema de indicadores configuráveis */}
-        <div className="card" style={{marginBottom:secaoGap}}>
-          <div className="section-title">Resultado</div>
-          <IRow label="Vendas - Compras" value={fmtMoney(totalVendas-totalCompras)} positive={totalVendas>=totalCompras}/>
-          <IRow label="Despesas Pendentes" value={fmtMoney(pendentesPeriodo)} positive={false}/>
-          <IRow label="Funcionários" value={`${(db.funcionarios||[]).length}`} neutral/>
-        </div>
       </>;
     })()}
   </div>;
