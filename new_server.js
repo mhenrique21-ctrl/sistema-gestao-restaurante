@@ -1501,9 +1501,15 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
+        // Log de toda chamada recebida — antes disso, um 401/503 (segredo errado/
+        // ausente) não deixava rastro nenhum, então não dava pra saber se o PDV
+        // sequer estava tentando chamar este endpoint ou se as tentativas
+        // falhavam silenciosamente na autenticação.
+        console.log(`[venda-pdv] recebido de ${req.socket.remoteAddress} — secret ${req.headers['x-service-secret'] ? 'presente' : 'AUSENTE'}`);
         const secret = process.env.SEAMA_SERVICE_SECRET;
-        if (!secret) { res.writeHead(503); res.end(JSON.stringify({ error: 'Integração não configurada' })); return; }
+        if (!secret) { console.error('[venda-pdv] 503 — SEAMA_SERVICE_SECRET não configurado no .env do servidor'); res.writeHead(503); res.end(JSON.stringify({ error: 'Integração não configurada' })); return; }
         if (req.headers['x-service-secret'] !== secret) {
+          console.error('[venda-pdv] 401 — credencial enviada pelo PDV não bate com SEAMA_SERVICE_SECRET');
           res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
         }
 
@@ -1541,6 +1547,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
 
         doc.vendas = vendas;
         fs.writeFileSync(file, JSON.stringify(doc));
+        console.log(`[venda-pdv] OK — ${emp} ${data}: total=${reg.total} (${i >= 0 ? 'atualizado' : 'criado'})`);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end(JSON.stringify({ ok: true, acao: i >= 0 ? 'atualizado' : 'criado', data, total: reg.total }));
