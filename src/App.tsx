@@ -268,7 +268,7 @@ const mkDb = () => ({
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
-  config:{snAliquota:6,budgetCmv:30},
+  config:{snAliquota:6},
 });
 const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
 
@@ -2286,11 +2286,7 @@ function Vendas({db,setDb,setDbAndSave,state}){
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
   const formRef=useRef<HTMLDivElement>(null);
-  const [budgetRef,setBudgetRef]=useState(today());
   const [busca,setBusca]=useState("");
-  const [periodoTipo,setPeriodoTipo]=useState<"semana"|"mes"|"trimestre"|"personalizado">("mes");
-  const [periodoIni,setPeriodoIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
-  const [periodoFim,setPeriodoFim]=useState(today());
   const ifoodBruto=parseMoney(form.ifood||0);
   const nfoodBruto=parseMoney(form["99food"]||0);
   const ifoodTaxaPct=parseFloat(form.ifoodTaxa)||0;
@@ -2300,73 +2296,6 @@ function Vendas({db,setDb,setDbAndSave,state}){
   const outros=["maquininha","dinheiro","delivery"].reduce((s,m)=>s+parseMoney(form[m]||0),0);
   const total=outros+ifoodLiq+nfoodLiq;
 
-  const budgetCmv=parseFloat(db.config?.budgetCmv??30)||30;
-  const setBudgetCmv=(v)=>setDb(d=>({...d,config:{...(d.config||{}),budgetCmv:parseFloat(v)||30}}));
-
-  // Período selecionado para budget acumulado
-  const getPeriodRange=():[string,string]=>{
-    const now=new Date();
-    if(periodoTipo==="semana"){
-      const dow=now.getDay()||7;
-      const mon=new Date(now);mon.setDate(now.getDate()-(dow-1));
-      const sun=new Date(mon);sun.setDate(mon.getDate()+6);
-      return[mon.toISOString().slice(0,10),sun.toISOString().slice(0,10)];
-    }
-    if(periodoTipo==="trimestre"){
-      const q=Math.floor(now.getMonth()/3);
-      return[new Date(now.getFullYear(),q*3,1).toISOString().slice(0,10),today()];
-    }
-    if(periodoTipo==="personalizado")return[periodoIni,periodoFim];
-    // mes (default)
-    return[`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`,today()];
-  };
-  const [pIni,pFim]=getPeriodRange();
-  const periodoLabel=(()=>{
-    if(periodoTipo==="semana")return`Semana (${fmtDate(pIni)} – ${fmtDate(pFim)})`;
-    if(periodoTipo==="trimestre"){const meses=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];const q=Math.floor(new Date().getMonth()/3);return`${q+1}º Trimestre (${meses[q*3]} – ${meses[q*3+2]})/${new Date().getFullYear()}`;}
-    if(periodoTipo==="personalizado")return`${fmtDate(pIni)} – ${fmtDate(pFim)}`;
-    const d=new Date();return`${d.toLocaleString("pt-BR",{timeZone:TZ,month:"long"})}/${d.getFullYear()}`;
-  })();
-
-  const vendasMes=(db.vendas||[]).filter(v=>v.data>=pIni&&v.data<=pFim).reduce((s,v)=>s+v.total,0);
-  const comprasMes=(db.compras||[]).filter(c=>c.data>=pIni&&c.data<=pFim).reduce((s,c)=>s+parseMoney(c.valor),0);
-  const budgetMes=vendasMes*(budgetCmv/100);
-  const saldoMes=budgetMes-comprasMes;
-
-  // Budget do dia selecionado no formulário
-  const vendasDia=(db.vendas||[]).filter(v=>v.data===form.data&&v.id!==editId).reduce((s,v)=>s+v.total,0)+total;
-  const comprasDia=(db.compras||[]).filter(c=>c.data===form.data).reduce((s,c)=>s+parseMoney(c.valor),0);
-  const budgetDia=vendasDia*(budgetCmv/100);
-  const saldoDia=budgetDia-comprasDia;
-
-  // Budget: vendas do dia de referência → budget de compras do DIA SEGUINTE
-  const diaRef=budgetRef;
-  const diaSeguinte=(()=>{const d=new Date(diaRef+"T12:00:00");d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);})();
-  const vendasHoje=(db.vendas||[]).filter(v=>v.data===diaRef).reduce((s,v)=>s+v.total,0);
-  const comprasHoje=(db.compras||[]).filter(c=>c.data===diaSeguinte).reduce((s,c)=>s+parseMoney(c.valor),0);
-  const budgetHoje=vendasHoje*(budgetCmv/100);
-  const disponivelHoje=budgetHoje-comprasHoje;
-
-  // Budget combinado das duas empresas (período selecionado)
-  const empresas=["CONFRARIA","SEAMA"];
-  const totalDual=(emp:string,key:"vendas"|"compras",tipo:"periodo"|"vendas-dia"|"compras-dia"="periodo")=>{
-    const d=state?.[emp]||{};
-    if(tipo==="periodo"){
-      if(key==="vendas") return (d.vendas||[]).filter((v:any)=>v.data>=pIni&&v.data<=pFim).reduce((s:number,v:any)=>s+(v.total||0),0);
-      return (d.compras||[]).filter((c:any)=>c.data>=pIni&&c.data<=pFim).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
-    }
-    if(tipo==="vendas-dia") return (d.vendas||[]).filter((v:any)=>v.data===diaRef).reduce((s:number,v:any)=>s+(v.total||0),0);
-    return (d.compras||[]).filter((c:any)=>c.data===diaSeguinte).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
-  };
-  const vendasTotal=empresas.reduce((s,e)=>s+totalDual(e,"vendas","periodo"),0);
-  const comprasTotal=empresas.reduce((s,e)=>s+totalDual(e,"compras","periodo"),0);
-  const budgetTotal=vendasTotal*(budgetCmv/100);
-  const saldoTotal=budgetTotal-comprasTotal;
-  // Dual: vendas do diaRef → budget p/ diaSeguinte
-  const vendasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"vendas","vendas-dia"),0);
-  const comprasTotalHoje=empresas.reduce((s,e)=>s+totalDual(e,"compras","compras-dia"),0);
-  const budgetTotalHoje=vendasTotalHoje*(budgetCmv/100);
-  const saldoTotalHoje=budgetTotalHoje-comprasTotalHoje;
   const save=()=>{
     const now=new Date().toISOString();
     const reg={id:editId||uid(),data:form.data,total,
@@ -2606,164 +2535,6 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(emptyForm());}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>
 
-    {/* ---- BUDGET DE COMPRAS ---- */}
-    <div className="card" style={{marginBottom:14,border:"1px solid #0EA5E940"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <span style={{fontWeight:700,fontSize:13,color:"var(--acc)"}}>🛒 Budget de Compras</span>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:11,color:"#888"}}>CMV alvo:</span>
-          <input type="number" min="1" max="100" step="0.5" value={budgetCmv}
-            onChange={e=>setBudgetCmv(e.target.value)}
-            style={{width:58,textAlign:"center",background:"var(--bg4)",border:"1px solid #0EA5E940",borderRadius:6,color:"var(--text1)",padding:"4px 6px",fontSize:13}}/>
-          <span style={{fontSize:11,color:"#888"}}>%</span>
-        </div>
-      </div>
-
-      {/* Destaque: budget do próximo dia baseado nas vendas do dia de referência */}
-      <div style={{background:"#DBEAFE",border:"2px solid #3b82f6",borderRadius:12,padding:"14px 16px",marginBottom:12,textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
-          <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>💰 Vendas de</span>
-          <input type="date" value={budgetRef} onChange={e=>setBudgetRef(e.target.value)}
-            style={{background:"#DBEAFE",border:"1px solid #2a4070",borderRadius:6,color:"#1D4ED8",fontSize:11,padding:"2px 6px",cursor:"pointer"}}/>
-          <span style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>→ Budget de compras de <strong style={{color:"#93c5fd"}}>{fmtDate(diaSeguinte)}</strong></span>
-        </div>
-        <div style={{fontSize:11,color:"#555",marginBottom:6}}>CONFRARIA + SEAMA</div>
-        <div style={{fontSize:32,fontWeight:800,color:saldoTotalHoje>=0?"#1D4ED8":"var(--btnDanger)",lineHeight:1.1}}>{fmtMoney(Math.abs(saldoTotalHoje))}</div>
-        {saldoTotalHoje<0&&<div style={{fontSize:11,color:"var(--btnDanger)",marginTop:4}}>⚠️ Budget excedido em {fmtMoney(-saldoTotalHoje)}</div>}
-        <div style={{fontSize:11,color:"#555",marginTop:6}}>
-          {fmtMoney(vendasTotalHoje)} vendidos × {budgetCmv}% = {fmtMoney(budgetTotalHoje)} budget
-          {comprasTotalHoje>0?` − ${fmtMoney(comprasTotalHoje)} já comprado`:""}
-        </div>
-      </div>
-
-      {/* Dual diário CONFRARIA+SEAMA */}
-      {vendasTotalHoje>0&&<div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginBottom:10,border:"1px solid #0EA5E940"}}>
-        <div style={{fontSize:11,color:"var(--acc)",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>🏢 Consolidado hoje — CONFRARIA + SEAMA</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Vendas hoje</div><div style={{fontWeight:700,color:"#22C55E",fontSize:14}}>{fmtMoney(vendasTotalHoje)}</div></div>
-          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Budget ({budgetCmv}%)</div><div style={{fontWeight:700,color:"#1D4ED8",fontSize:14}}>{fmtMoney(budgetTotalHoje)}</div></div>
-          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Compras hoje</div><div style={{fontWeight:700,color:"#F59E0B",fontSize:14}}>{fmtMoney(comprasTotalHoje)}</div></div>
-          <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#888"}}>Saldo consolidado</div><div style={{fontWeight:800,fontSize:16,color:saldoTotalHoje>=0?"#22C55E":"var(--btnDanger)"}}>{fmtMoney(Math.abs(saldoTotalHoje))}{saldoTotalHoje<0?" ⚠️":""}</div></div>
-        </div>
-      </div>}
-
-      {/* Dia */}
-      <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
-        <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>📅 {fmtDate(form.data)}</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Venda do dia</div>
-            <div style={{fontWeight:700,color:"#22C55E"}}>{fmtMoney(vendasDia)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget ({budgetCmv}%)</div>
-            <div style={{fontWeight:700,color:"#1D4ED8"}}>{fmtMoney(budgetDia)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras realizadas</div>
-            <div style={{fontWeight:700,color:"#F59E0B"}}>{fmtMoney(comprasDia)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo disponível</div>
-            <div style={{fontWeight:700,color:saldoDia>=0?"#22C55E":"var(--btnDanger)"}}>{fmtMoney(Math.abs(saldoDia))}{saldoDia<0?" ⚠️":""}</div>
-          </div>
-        </div>
-        {saldoDia<0&&<div style={{fontSize:11,color:"var(--btnDanger)",marginTop:8,textAlign:"center"}}>⚠️ Compras excedem o budget do dia em {fmtMoney(-saldoDia)}</div>}
-      </div>
-
-      {/* Período selecionado */}
-      <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap" as const,gap:6,marginBottom:8}}>
-          <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase" as const,letterSpacing:.5}}>📆 Acumulado — {periodoLabel}</div>
-          <div style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
-            {(["semana","mes","trimestre","personalizado"] as const).map(t=>(
-              <button key={t} onClick={()=>setPeriodoTipo(t)}
-                style={{background:periodoTipo===t?"var(--btnPrimary)":"#F3F4F6",color:periodoTipo===t?"#fff":"#666",border:`1px solid ${periodoTipo===t?"var(--btnPrimary)":"#E5E7EB"}`,borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",fontWeight:periodoTipo===t?700:400}}>
-                {t==="semana"?"Semana":t==="mes"?"Mês":t==="trimestre"?"Trimestre":"Personalizado"}
-              </button>
-            ))}
-          </div>
-        </div>
-        {periodoTipo==="personalizado"&&<div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
-          <span style={{fontSize:11,color:"#888"}}>De</span>
-          <input type="date" value={periodoIni} onChange={e=>setPeriodoIni(e.target.value)} style={{flex:1,background:"#FFFFFF",border:"1px solid #E5E7EB",borderRadius:6,color:"#1F2937",fontSize:11,padding:"4px 6px"}}/>
-          <span style={{fontSize:11,color:"#888"}}>até</span>
-          <input type="date" value={periodoFim} onChange={e=>setPeriodoFim(e.target.value)} style={{flex:1,background:"#FFFFFF",border:"1px solid #E5E7EB",borderRadius:6,color:"#1F2937",fontSize:11,padding:"4px 6px"}}/>
-        </div>}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas no período</div>
-            <div style={{fontWeight:700,color:"#22C55E"}}>{fmtMoney(vendasMes)}</div>
-          </div>
-          <div style={{fontWeight:700,textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget ({budgetCmv}%)</div>
-            <div style={{color:"#1D4ED8"}}>{fmtMoney(budgetMes)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras no período</div>
-            <div style={{fontWeight:700,color:"#F59E0B"}}>{fmtMoney(comprasMes)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo do período</div>
-            <div style={{fontWeight:700,color:saldoMes>=0?"#22C55E":"var(--btnDanger)"}}>{fmtMoney(Math.abs(saldoMes))}{saldoMes<0?" ⚠️":""}</div>
-          </div>
-        </div>
-        {vendasMes>0&&<div style={{marginTop:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#888",marginBottom:4}}>
-            <span>Utilização do budget</span>
-            <span style={{color:comprasMes/budgetMes>1?"var(--btnDanger)":comprasMes/budgetMes>0.8?"#F59E0B":"#22C55E"}}>{budgetMes>0?((comprasMes/budgetMes)*100).toFixed(1):0}%</span>
-          </div>
-          <div style={{height:6,background:"#DBEAFE",borderRadius:3,overflow:"hidden"}}>
-            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasMes/budgetMes)*100,100)}%`,background:comprasMes/budgetMes>1?"var(--btnDanger)":comprasMes/budgetMes>0.8?"#F59E0B":"#22C55E",transition:"width .3s"}}/>
-          </div>
-        </div>}
-      </div>
-
-      {/* CONFRARIA + SEAMA combinado */}
-      <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginTop:10,border:"1px solid #0EA5E940"}}>
-        <div style={{fontSize:11,color:"var(--acc)",fontWeight:700,marginBottom:8,textTransform:"uppercase" as const,letterSpacing:.5}}>🏢 CONFRARIA + SEAMA — {periodoLabel}</div>
-        {empresas.map(emp=>{
-          const vE=totalDual(emp,"vendas");
-          const cE=totalDual(emp,"compras");
-          const bE=vE*(budgetCmv/100);
-          const sE=bE-cE;
-          return <div key={emp} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #0EA5E940"}}>
-            <span style={{fontSize:12,fontWeight:600,color:"#aaa",minWidth:90}}>{emp}</span>
-            <span style={{fontSize:12,color:"#22C55E"}}>{fmtMoney(vE)}</span>
-            <span style={{fontSize:12,color:"#1D4ED8"}}>budget: {fmtMoney(bE)}</span>
-            <span style={{fontSize:12,fontWeight:700,color:sE>=0?"#86efac":"var(--btnDanger)"}}>{sE>=0?"✓":"-"} {fmtMoney(Math.abs(sE))}</span>
-          </div>;
-        })}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Vendas totais</div>
-            <div style={{fontWeight:700,color:"#22C55E",fontSize:15}}>{fmtMoney(vendasTotal)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Budget total ({budgetCmv}%)</div>
-            <div style={{fontWeight:700,color:"#1D4ED8",fontSize:15}}>{fmtMoney(budgetTotal)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Compras totais</div>
-            <div style={{fontWeight:700,color:"#F59E0B",fontSize:15}}>{fmtMoney(comprasTotal)}</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#888",marginBottom:2}}>Saldo consolidado</div>
-            <div style={{fontWeight:700,fontSize:15,color:saldoTotal>=0?"#22C55E":"var(--btnDanger)"}}>{fmtMoney(Math.abs(saldoTotal))}{saldoTotal<0?" ⚠️":""}</div>
-          </div>
-        </div>
-        {vendasTotal>0&&<div style={{marginTop:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#888",marginBottom:4}}>
-            <span>Utilização consolidada</span>
-            <span style={{color:comprasTotal/budgetTotal>1?"var(--btnDanger)":comprasTotal/budgetTotal>0.8?"#F59E0B":"#22C55E"}}>{budgetTotal>0?((comprasTotal/budgetTotal)*100).toFixed(1):0}%</span>
-          </div>
-          <div style={{height:6,background:"#DBEAFE",borderRadius:3,overflow:"hidden"}}>
-            <div style={{height:"100%",borderRadius:3,width:`${Math.min((comprasTotal/budgetTotal)*100,100)}%`,background:comprasTotal/budgetTotal>1?"var(--btnDanger)":comprasTotal/budgetTotal>0.8?"#F59E0B":"#22C55E",transition:"width .3s"}}/>
-          </div>
-        </div>}
-      </div>
-    </div>
-
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
       <div className="section-title" style={{margin:0}}>Histórico</div>
       <SortCtrl id="vendas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["valor-desc","Maior valor"],["valor-asc","Menor valor"]]}/>
@@ -2788,9 +2559,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       }} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir Vendas</button>
     </div>
     {(()=>{const q=busca.toLowerCase();const sortKey=(db.config?.sortPrefs||{})['vendas']||'data-desc';const vendasFiltradas=sortList((db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))),db,'vendas','data-desc');return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
-      const bDia=v.total*(budgetCmv/100);
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
-      const sDia=bDia-cDia;
       return <div key={v.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <span style={{fontWeight:700}}>{fmtDate(v.data)}</span>
@@ -2807,11 +2576,9 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </span>}
           {v.delivery>0&&<span className="tag" style={{background:"#F3E8DC",color:"#78350F"}}>delivery: {fmtMoney(v.delivery)}</span>}
         </div>
-        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-          <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>budget {budgetCmv}%: {fmtMoney(bDia)}</span>
-          {cDia>0&&<span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>}
-          <span className="tag" style={{background:sDia>=0?"#DCFCE7":"#FEE2E2",color:sDia>=0?"#86efac":"var(--btnDanger)"}}>{sDia>=0?"saldo:":"excedido:"} {fmtMoney(Math.abs(sDia))}</span>
-        </div>
+        {cDia>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+          <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>
+        </div>}
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>del(v.id)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
@@ -11224,18 +10991,6 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
 
     {/* ===== FINANCEIRO ===== */}
     {subTab==="financeiro"&&<div>
-      <div className="card" style={{marginBottom:12}}>
-        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📊 Meta CMV</div>
-        <div style={{fontSize:12,color:"var(--text2)",marginBottom:6}}>Percentual alvo de Custo de Mercadoria Vendida. Usado no cálculo do budget de compras e nos indicadores do Dashboard.</div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <input type="number" min="1" max="100" step="1" value={db.config?.budgetCmv??30}
-            onChange={e=>setConfig("budgetCmv",parseFloat(e.target.value)||30)}
-            className="inp" style={{width:80,textAlign:"center",marginBottom:0}}/>
-          <span style={{fontSize:13,color:"var(--text2)"}}>%</span>
-          <span className="muted" style={{fontSize:11}}>(padrão: 30%)</span>
-        </div>
-      </div>
-
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🏷️ Alíquota Simples Nacional</div>
         <div style={{fontSize:12,color:"var(--text2)",marginBottom:6}}>Usado no cálculo do DRE e Fluxo de Caixa.</div>
