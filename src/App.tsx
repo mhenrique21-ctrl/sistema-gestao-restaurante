@@ -578,7 +578,7 @@ const impressaoRodapeTxt=(cfg:any)=>cfg.rodape||`Gerado em ${new Date().toLocale
 // pra mostrar ali — só o aviso do que falta.
 const DASHBOARD_SECOES_DEFAULT=["destaque","desempenho","canais","supervisao","vendashora","mesas"];
 const DASHBOARD_ITENS_DEFAULT:{[k:string]:string[]}={
-  destaque:["faturamento"],
+  destaque:["faturamento","faturamentoHoje"],
   desempenho:["fatMedioDia","tendencia","melhorDia","piorDia"],
   canais:["mixPagamento","participacaoDelivery","custoMarketplaces","cmv","margemContrib"],
   supervisao:["diasSemRegistro","anomalia","origemLancamentos"],
@@ -595,6 +595,7 @@ const DASHBOARD_SECAO_LABEL:{[k:string]:{icon:string,label:string,cadencia:"diar
 };
 const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
   faturamento:"Faturamento do período (número principal)",
+  faturamentoHoje:"Faturamento diário (hoje vs. ontem)",
   fatMedioDia:"Faturamento médio/dia",
   tendencia:"Tendência (média móvel 7d)",
   melhorDia:"Melhor dia da semana",
@@ -1793,6 +1794,15 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const dashCfg=getDashboardCfg(db);
       const on=(id:string)=>!dashCfg.desabilitados.includes(id);
 
+      // --- Faturamento diário (hoje x ontem) — independe do período selecionado no topo ---
+      const ontemDate=new Date(hj+"T12:00:00");ontemDate.setDate(ontemDate.getDate()-1);
+      const ontemStr=ontemDate.toISOString().split("T")[0];
+      const vendaHojeRow=todasVendas.find(v=>v.data===hj);
+      const vendaOntemRow=todasVendas.find(v=>v.data===ontemStr);
+      const faturamentoHoje=vendaHojeRow?.total||0;
+      const faturamentoOntem=vendaOntemRow?.total||0;
+      const deltaHojeOntem=faturamentoOntem>0?((faturamentoHoje-faturamentoOntem)/faturamentoOntem)*100:null;
+
       // --- Desempenho ---
       const diasComVenda=vendasDiarias.filter(d=>d.total>0).length;
       const fatMedioDia=diasComVenda>0?totalVendas/diasComVenda:0;
@@ -1899,6 +1909,14 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             })()}
           </div>
         </>,
+        faturamentoHoje:()=><div className="card">
+          <div className="muted" style={{fontSize:10}}>📅 Faturamento diário — hoje</div>
+          <div style={{fontSize:24,fontWeight:800,color:"#22C55E"}}>{fmtMoney(faturamentoHoje)}</div>
+          {deltaHojeOntem!=null
+            ?<div style={{fontSize:12,fontWeight:700,color:deltaHojeOntem>=0?"#22C55E":"#EF4444",marginTop:2}}>{deltaHojeOntem>=0?"▲ +":"▼ "}{deltaHojeOntem.toFixed(1)}% vs. ontem ({fmtMoney(faturamentoOntem)})</div>
+            :<div className="muted" style={{fontSize:11,marginTop:2}}>{faturamentoOntem===0&&!vendaOntemRow?"Sem registro de ontem pra comparar":"—"}</div>}
+          {!vendaHojeRow&&<div className="muted" style={{fontSize:10,marginTop:4}}>Nenhum lançamento de hoje ainda — some assim que o PDV fechar o dia ou alguém lançar em Vendas</div>}
+        </div>,
         fatMedioDia:()=><div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
           <div style={{fontSize:16,fontWeight:800,color:"#22C55E"}}>{fmtMoney(fatMedioDia)}</div>
           <div className="muted" style={{fontSize:10,marginTop:2}}>Faturamento médio/dia</div>
