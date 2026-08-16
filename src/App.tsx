@@ -585,7 +585,7 @@ const DASHBOARD_ITENS_DEFAULT:{[k:string]:string[]}={
   canais:["mixPagamento","participacaoDelivery","custoMarketplaces","cmv","margemContrib"],
   supervisao:["diasSemRegistro","anomalia","origemLancamentos"],
   operacional:["contasPagar","lembretes","resultado"],
-  vendashora:["ritmoDia","horarioPico","altaHora","quedaHora"],
+  vendashora:["graficoHora","ritmoDia","horarioPico","altaHora","quedaHora"],
   mesas:["mesasComandasBloqueado"],
   vendaaovivo:["vendaInstantaneaBloqueado"],
 };
@@ -618,6 +618,7 @@ const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
   contasPagar:"Contas a Pagar (hoje/vencidas)",
   lembretes:"Lembretes",
   resultado:"Resultado (vendas − compras, funcionários)",
+  graficoHora:"Gráfico de movimento por hora (mesmo padrão do PDV)",
   ritmoDia:"Ritmo do dia vs. ontem (acumulado até a hora atual)",
   horarioPico:"Horário de pico",
   altaHora:"Maior alta hora-a-hora",
@@ -2085,6 +2086,27 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           </div>
           {totalRegistrosVendas===0&&<div className="muted" style={{fontSize:flbl(10),marginTop:4}}>Sem lançamentos no período</div>}
         </div>,
+        graficoHora:()=><div className="card">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
+            <div style={{fontWeight:700,fontSize:flbl(14),color:"var(--text)"}}>Movimento por hora — hoje</div>
+            <span className="muted" style={{fontSize:flbl(11)}}>até {fmtHora(horaAtual)}</span>
+          </div>
+          {!temDadoHora
+            ?<div className="muted" style={{fontSize:flbl(11)}}>Sem dado por hora (só o PDV Seama envia)</div>
+            :<>
+              <div style={{display:"flex",alignItems:"flex-end",gap:3,height:100,padding:"0 2px"}}>
+                {porHoraHoje.map(p=>{
+                  const alturaPct=Math.max(6,(p.valor/(horarioPicoRow?.valor||1))*100);
+                  const ehPico=!!horarioPicoRow&&p.hora===horarioPicoRow.hora;
+                  return <div key={p.hora} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+                    <div style={{width:"100%",borderRadius:"3px 3px 0 0",background:ehPico?corAcc:"var(--border2)",height:`${alturaPct}%`}}/>
+                    <div className="muted" style={{fontSize:8.5,marginTop:4}}>{fmtHora(p.hora)}</div>
+                  </div>;
+                })}
+              </div>
+              {horarioPicoRow&&<div className="muted" style={{fontSize:flbl(11),marginTop:8,paddingTop:8,borderTop:"1px solid var(--border2)"}}>📍 Pico às <b style={{color:"var(--text)"}}>{fmtHora(horarioPicoRow.hora)}</b> ({fmtMoney(horarioPicoRow.valor)}) — use pra dimensionar produção e equipe.</div>}
+            </>}
+        </div>,
         ritmoDia:()=><div className="card">
           <div className="muted" style={{fontSize:flbl(10)}}>🕐 Ritmo do dia vs. ontem (até {fmtHora(horaAtual)})</div>
           {!temDadoHora
@@ -2154,7 +2176,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
               <span>{info.icon}</span><span>{info.label}</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:doisCol?"1fr 1fr":"1fr",gap:cardGap}}>
-              {ids.map((id:string)=><div key={id}>{ITEM_RENDER[id]?.()}</div>)}
+              {ids.map((id:string)=><div key={id} style={id==="graficoHora"?{gridColumn:"1 / -1"}:undefined}>{ITEM_RENDER[id]?.()}</div>)}
             </div>
           </div>;
         })}
