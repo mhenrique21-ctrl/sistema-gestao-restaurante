@@ -1699,6 +1699,8 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
   const [periodo,setPeriodo]=useState<"semana"|"mes"|"custom">("mes");
   const [customIni,setCustomIni]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return d.toISOString().split("T")[0];});
   const [customFim,setCustomFim]=useState(today());
+  // Toque num gráfico (no celular) abre ele ampliado num modal — mesmo desenho, só maior.
+  const [chartAmpliado,setChartAmpliado]=useState<string|null>(null);
 
   const getRange=()=>{
     const hj=new Date();
@@ -1937,8 +1939,8 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const melhorDia=mediasPorDia.length?mediasPorDia.reduce((a,b)=>b.media>a.media?b:a):null;
       const piorDia=mediasPorDia.length?mediasPorDia.reduce((a,b)=>b.media<a.media?b:a):null;
       const maxMediaDia=Math.max(...mediasPorDia.map(d=>d.media),1);
-      const WeekdayBars=({destaque}:{destaque:"melhor"|"pior"})=>(
-        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:isMobile?68:44,marginTop:6}}>
+      const WeekdayBars=({destaque,alturaPx,fontPx}:{destaque:"melhor"|"pior",alturaPx?:number,fontPx?:number})=>(
+        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:alturaPx??(isMobile?92:44),marginTop:6}}>
           {DIAS_SEMANA.map((lbl,dow)=>{
             const info=mediasPorDia.find(m=>m.dow===dow);
             const h=info?Math.max((info.media/maxMediaDia)*100,6):3;
@@ -1947,7 +1949,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             const cor=(destaque==="melhor"&&isMelhor)?corOk:(destaque==="pior"&&isPior)?corCrit:"var(--border2)";
             return <div key={dow} style={{flex:1,display:"flex",flexDirection:"column" as const,alignItems:"center",gap:3,height:"100%",justifyContent:"flex-end"}}>
               <div style={{width:"100%",height:`${h}%`,background:cor,borderRadius:"3px 3px 1px 1px"}}/>
-              <span style={{fontSize:isMobile?10:8,color:"var(--text2)",fontWeight:700}}>{lbl[0]}</span>
+              <span style={{fontSize:fontPx??(isMobile?10:8),color:"var(--text2)",fontWeight:700}}>{lbl[0]}</span>
             </div>;
           })}
         </div>
@@ -1978,6 +1980,55 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const totalRegistrosVendas=vendasPeriodo.length;
       const pctOrigemPdv=totalRegistrosVendas>0?(comOrigemPdv/totalRegistrosVendas)*100:0;
 
+      // Desenho do gráfico de Vendas Diárias, parametrizado por altura — usado tanto
+      // no card normal (menor) quanto no modal de "toque para ampliar" (maior).
+      const vendasDiariasSvg=(H:number)=>{
+        if(vendasDiarias.length===0)return <div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>;
+        const W=360,pT=12,pB=22,pL=4,pR=4,cW=W-pL-pR,cH=H-pT-pB;
+        const pts=vendasDiarias.map((d,i)=>{
+          const x=pL+(vendasDiarias.length===1?cW/2:i*(cW/(vendasDiarias.length-1)));
+          const y=pT+cH*(1-d.total/maxDia);
+          return {x,y,d};
+        });
+        const linePath=pts.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(" ");
+        const areaPath=linePath+` L${pts[pts.length-1].x},${pT+cH} L${pts[0].x},${pT+cH} Z`;
+        const step=Math.max(1,Math.ceil(vendasDiarias.length/12));
+        return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",marginTop:6}}>
+          {[0.25,0.5,0.75,1].map(f=>{
+            const y=pT+cH*(1-f);
+            return <g key={f}><line x1={pL} y1={y} x2={W-pR} y2={y} stroke="#E5E7EB" strokeWidth={0.5}/>
+              <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
+          })}
+          <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#E5E7EB" strokeWidth={0.5}/>
+          <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={corOk} stopOpacity={0.3}/><stop offset="100%" stopColor={corOk} stopOpacity={0.02}/></linearGradient></defs>
+          <path d={areaPath} fill="url(#dashVgr)"/>
+          <path d={linePath} fill="none" stroke={corOk} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
+          {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
+            {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?corAcc:corOk} stroke="#fff" strokeWidth={1}/>}
+            {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
+            {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?corAcc:"#555"} fontSize={7} fontWeight={isH?700:400}>
+              {dt.getDate()}/{dt.getMonth()+1}
+            </text>}
+          </g>;})}
+        </svg>;
+      };
+      // Barras do "Movimento por hora", parametrizadas por altura — mesma ideia do gráfico acima.
+      const horaBars=(alturaPx:number,fontHora:number)=>
+        <div style={{display:"flex",alignItems:"flex-end",gap:isMobile?4:3,height:alturaPx,padding:"0 2px"}}>
+          {porHoraHoje.map(p=>{
+            const alturaPct=Math.max(6,(p.valor/(horarioPicoRow?.valor||1))*100);
+            const ehPico=!!horarioPicoRow&&p.hora===horarioPicoRow.hora;
+            return <div key={p.hora} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+              <div style={{width:"100%",borderRadius:"3px 3px 0 0",background:ehPico?corAcc:"var(--border2)",height:`${alturaPct}%`}}/>
+              <div className="muted" style={{fontSize:fontHora,marginTop:4}}>{fmtHora(p.hora)}</div>
+            </div>;
+          })}
+        </div>;
+      // Pequeno "⤢" ao lado do título dos gráficos tocáveis — só aparece no celular,
+      // já que no desktop não há modal (tela já é grande o bastante).
+      const expandHint=isMobile&&<span style={{fontSize:11,color:"var(--text2)",marginLeft:6}}>⤢</span>;
+      const expandProps=(id:string)=>isMobile?{onClick:()=>setChartAmpliado(id),style:{cursor:"pointer"}}:{};
+
       const ITEM_RENDER:{[k:string]:()=>any}={
         faturamento:()=>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:cardGap}}>
@@ -1986,41 +2037,12 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             <StatCard label="Contas Pagas" value={fmtMoney(pagasPeriodo)} color={corAcc} icon="✅"/>
             <StatCard label="A Pagar" value={fmtMoney(pendentesPeriodo)} color={corCrit} icon="⏰"/>
           </div>,
-        vendasDiariasChart:()=><div className="card">
+        vendasDiariasChart:()=><div className="card" {...expandProps("vendasDiariasChart")}>
           <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
-            <span>Vendas Diárias</span>
+            <span>Vendas Diárias{expandHint}</span>
             <span style={{fontSize:flbl(12),fontWeight:700,color:corOk}}>{fmtMoney(totalVendas)}</span>
           </div>
-          {vendasDiarias.length===0&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma venda no período</div>}
-          {vendasDiarias.length>0&&(()=>{
-            const W=360,H=isMobile?220:140,pT=12,pB=22,pL=4,pR=4,cW=W-pL-pR,cH=H-pT-pB;
-            const pts=vendasDiarias.map((d,i)=>{
-              const x=pL+(vendasDiarias.length===1?cW/2:i*(cW/(vendasDiarias.length-1)));
-              const y=pT+cH*(1-d.total/maxDia);
-              return {x,y,d};
-            });
-            const linePath=pts.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(" ");
-            const areaPath=linePath+` L${pts[pts.length-1].x},${pT+cH} L${pts[0].x},${pT+cH} Z`;
-            const step=Math.max(1,Math.ceil(vendasDiarias.length/12));
-            return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",marginTop:6}}>
-              {[0.25,0.5,0.75,1].map(f=>{
-                const y=pT+cH*(1-f);
-                return <g key={f}><line x1={pL} y1={y} x2={W-pR} y2={y} stroke="#E5E7EB" strokeWidth={0.5}/>
-                  <text x={pL+2} y={y-3} fill="#555" fontSize={6.5}>{fmtMoney(maxDia*f).replace("R$ ","")}</text></g>;
-              })}
-              <line x1={pL} y1={pT+cH} x2={W-pR} y2={pT+cH} stroke="#E5E7EB" strokeWidth={0.5}/>
-              <defs><linearGradient id="dashVgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={corOk} stopOpacity={0.3}/><stop offset="100%" stopColor={corOk} stopOpacity={0.02}/></linearGradient></defs>
-              <path d={areaPath} fill="url(#dashVgr)"/>
-              <path d={linePath} fill="none" stroke={corOk} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
-              {pts.map((p,i)=>{const dt=new Date(p.d.data+"T12:00:00");const isH=p.d.data===hj;return <g key={i}>
-                {p.d.total>0&&<circle cx={p.x} cy={p.y} r={vendasDiarias.length>20?1.5:2.5} fill={isH?corAcc:corOk} stroke="#fff" strokeWidth={1}/>}
-                {p.d.total>0&&vendasDiarias.length<=14&&<text x={p.x} y={p.y-7} textAnchor="middle" fill="#999" fontSize={6}>{fmtMoney(p.d.total).replace("R$ ","")}</text>}
-                {i%step===0&&<text x={p.x} y={H-3} textAnchor="middle" fill={isH?corAcc:"#555"} fontSize={7} fontWeight={isH?700:400}>
-                  {dt.getDate()}/{dt.getMonth()+1}
-                </text>}
-              </g>;})}
-            </svg>;
-          })()}
+          {vendasDiariasSvg(isMobile?260:140)}
         </div>,
         faturamentoHoje:()=><div className="card">
           <div className="muted" style={{fontSize:flbl(10)}}>📅 Faturamento diário — hoje</div>
@@ -2040,14 +2062,14 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           <div className="muted" style={{fontSize:flbl(10),marginTop:2}}>Tendência (méd. móvel 7d)</div>
           <div className="muted" style={{fontSize:flbl(9),marginTop:1}}>últimos 7 dias vs. 7 anteriores</div>
         </div>,
-        melhorDia:()=><div className="card" style={{padding:"12px 10px"}}>
-          <div className="muted" style={{fontSize:flbl(10)}}>Melhor dia da semana</div>
+        melhorDia:()=><div className="card" style={{padding:"12px 10px",cursor:isMobile?"pointer":undefined}} onClick={isMobile?()=>setChartAmpliado("melhorDia"):undefined}>
+          <div className="muted" style={{fontSize:flbl(10)}}>Melhor dia da semana{expandHint}</div>
           <div style={{fontSize:fnum(16),fontWeight:800,color:corOk}}>{melhorDia?DIAS_SEMANA[melhorDia.dow]:"—"}</div>
           {melhorDia&&<div className="muted" style={{fontSize:flbl(9)}}>média {fmtMoney(melhorDia.media)}</div>}
           <WeekdayBars destaque="melhor"/>
         </div>,
-        piorDia:()=><div className="card" style={{padding:"12px 10px"}}>
-          <div className="muted" style={{fontSize:flbl(10)}}>Dia mais fraco da semana</div>
+        piorDia:()=><div className="card" style={{padding:"12px 10px",cursor:isMobile?"pointer":undefined}} onClick={isMobile?()=>setChartAmpliado("piorDia"):undefined}>
+          <div className="muted" style={{fontSize:flbl(10)}}>Dia mais fraco da semana{expandHint}</div>
           <div style={{fontSize:fnum(16),fontWeight:800,color:corCrit}}>{piorDia?DIAS_SEMANA[piorDia.dow]:"—"}</div>
           {piorDia&&<div className="muted" style={{fontSize:flbl(9)}}>média {fmtMoney(piorDia.media)}</div>}
           <WeekdayBars destaque="pior"/>
@@ -2076,14 +2098,14 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           <div className="muted" style={{fontSize:flbl(10),marginTop:2}}>Custo com marketplaces</div>
           <div className="muted" style={{fontSize:flbl(9),marginTop:1}}>{custoMarketplacesPct.toFixed(1)}% do faturamento — comissão iFood + 99Food</div>
         </div>,
-        cmv:()=><div className="card" style={{background:"#DBEAFE",border:"1px solid #0EA5E940"}}>
+        cmv:()=><div className="card" style={{background:"#DBEAFE",border:"1px solid #0EA5E940",cursor:isMobile?"pointer":undefined}} onClick={isMobile?()=>setChartAmpliado("cmv"):undefined}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div className="muted" style={{marginBottom:4}}>CMV no Período</div>
+              <div className="muted" style={{marginBottom:4}}>CMV no Período{expandHint}</div>
               <div style={{fontSize:fnum(40),fontFamily:"'Syne',sans-serif",fontWeight:800,color:cmvColor,lineHeight:1}}>{fmtPct(cmv)}</div>
               <div className="muted" style={{marginTop:4}}>Meta: ≤30%</div>
             </div>
-            <GaugeSVG value={cmv} color={cmvColor} size={isMobile?1.4:1}/>
+            <GaugeSVG value={cmv} color={cmvColor} size={isMobile?1.7:1}/>
           </div>
         </div>,
         margemContrib:()=><div className="card">
@@ -2129,24 +2151,15 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           </div>
           {totalRegistrosVendas===0&&<div className="muted" style={{fontSize:flbl(10),marginTop:4}}>Sem lançamentos no período</div>}
         </div>,
-        graficoHora:()=><div className="card">
+        graficoHora:()=><div className="card" {...(temDadoHora?expandProps("graficoHora"):{})}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
-            <div style={{fontWeight:700,fontSize:flbl(14),color:"var(--text)"}}>Movimento por hora — hoje</div>
+            <div style={{fontWeight:700,fontSize:flbl(14),color:"var(--text)"}}>Movimento por hora — hoje{temDadoHora&&expandHint}</div>
             <span className="muted" style={{fontSize:flbl(11)}}>até {fmtHora(horaAtual)}</span>
           </div>
           {!temDadoHora
             ?<div className="muted" style={{fontSize:flbl(11)}}>Sem dado por hora (só o PDV Seama envia)</div>
             :<>
-              <div style={{display:"flex",alignItems:"flex-end",gap:isMobile?4:3,height:isMobile?160:100,padding:"0 2px"}}>
-                {porHoraHoje.map(p=>{
-                  const alturaPct=Math.max(6,(p.valor/(horarioPicoRow?.valor||1))*100);
-                  const ehPico=!!horarioPicoRow&&p.hora===horarioPicoRow.hora;
-                  return <div key={p.hora} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
-                    <div style={{width:"100%",borderRadius:"3px 3px 0 0",background:ehPico?corAcc:"var(--border2)",height:`${alturaPct}%`}}/>
-                    <div className="muted" style={{fontSize:isMobile?10:8.5,marginTop:4}}>{fmtHora(p.hora)}</div>
-                  </div>;
-                })}
-              </div>
+              {horaBars(isMobile?190:100,isMobile?10:8.5)}
               {horarioPicoRow&&<div className="muted" style={{fontSize:flbl(11),marginTop:8,paddingTop:8,borderTop:"1px solid var(--border2)"}}>📍 Pico às <b style={{color:"var(--text)"}}>{fmtHora(horarioPicoRow.hora)}</b> ({fmtMoney(horarioPicoRow.valor)}) — use pra dimensionar produção e equipe.</div>}
             </>}
         </div>,
@@ -2223,6 +2236,42 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
             </div>
           </div>;
         })}
+
+        {/* Modal de gráfico ampliado — só existe no celular (tap no card acima). */}
+        {chartAmpliado&&isMobile&&<div onClick={()=>setChartAmpliado(null)}
+          style={{position:"fixed",inset:0,zIndex:500,background:"rgba(15,17,23,0.55)",display:"flex",alignItems:"flex-end"}}>
+          <div onClick={(e:any)=>e.stopPropagation()}
+            style={{background:"var(--bg3)",width:"100%",borderRadius:"18px 18px 0 0",padding:"16px 16px 26px",boxShadow:"0 -8px 30px rgba(0,0,0,.25)",maxHeight:"85vh",overflowY:"auto" as const}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontWeight:800,fontSize:16,color:"var(--text)"}}>
+                {chartAmpliado==="vendasDiariasChart"&&"Vendas Diárias"}
+                {chartAmpliado==="graficoHora"&&"Movimento por hora — hoje"}
+                {chartAmpliado==="melhorDia"&&"Melhor dia da semana"}
+                {chartAmpliado==="piorDia"&&"Dia mais fraco da semana"}
+                {chartAmpliado==="cmv"&&"CMV no Período"}
+              </div>
+              <button onClick={()=>setChartAmpliado(null)} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"50%",width:32,height:32,fontSize:15,color:"var(--text2)",cursor:"pointer"}}>✕</button>
+            </div>
+            {chartAmpliado==="vendasDiariasChart"&&vendasDiariasSvg(380)}
+            {chartAmpliado==="graficoHora"&&<>
+              {horaBars(320,13)}
+              {horarioPicoRow&&<div className="muted" style={{fontSize:13,marginTop:10,paddingTop:10,borderTop:"1px solid var(--border2)"}}>📍 Pico às <b style={{color:"var(--text)"}}>{fmtHora(horarioPicoRow.hora)}</b> ({fmtMoney(horarioPicoRow.valor)}) — use pra dimensionar produção e equipe.</div>}
+            </>}
+            {chartAmpliado==="melhorDia"&&<>
+              {melhorDia&&<div className="muted" style={{fontSize:13,marginBottom:6}}><b style={{color:corOk,fontSize:20}}>{DIAS_SEMANA[melhorDia.dow]}</b> — média {fmtMoney(melhorDia.media)}</div>}
+              <WeekdayBars destaque="melhor" alturaPx={240} fontPx={15}/>
+            </>}
+            {chartAmpliado==="piorDia"&&<>
+              {piorDia&&<div className="muted" style={{fontSize:13,marginBottom:6}}><b style={{color:corCrit,fontSize:20}}>{DIAS_SEMANA[piorDia.dow]}</b> — média {fmtMoney(piorDia.media)}</div>}
+              <WeekdayBars destaque="pior" alturaPx={240} fontPx={15}/>
+            </>}
+            {chartAmpliado==="cmv"&&<div style={{textAlign:"center" as const}}>
+              <GaugeSVG value={cmv} color={cmvColor} size={3.5}/>
+              <div style={{fontSize:28,fontFamily:"'Syne',sans-serif",fontWeight:800,color:cmvColor,marginTop:8}}>{fmtPct(cmv)}</div>
+              <div className="muted" style={{marginTop:2}}>Meta: ≤30%</div>
+            </div>}
+          </div>
+        </div>}
       </>;
     })()}
   </div>;
