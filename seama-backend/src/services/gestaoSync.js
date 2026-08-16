@@ -145,6 +145,14 @@ async function aoFecharCaixa(data) {
   }
 }
 
+// Só faz sentido gastar ciclo com isso enquanto alguém pode estar vendendo —
+// com o caixa fechado o faturamento do dia não muda mais até a próxima
+// abertura, então rodar a cada minuto seria consulta e request vazios.
+async function caixaAberto() {
+  const r = await pool.query(`SELECT 1 FROM cash_sessions WHERE status = 'aberto' LIMIT 1`);
+  return r.rows.length > 0;
+}
+
 // Antes deste job, o Gestão só recebia o faturamento do dia quando o caixa
 // fechava (normalmente à noite) — "Faturamento diário — hoje" no Dashboard
 // ficava em R$ 0,00 o dia inteiro até lá. Isso recalcula e reenvia o dia
@@ -153,10 +161,11 @@ async function aoFecharCaixa(data) {
 // continua sendo a fonte definitiva (mesmo UPSERT idempotente por sale_date,
 // então não duplica nem conflita com esta sincronização periódica).
 function iniciarSincronizacaoPeriodica() {
-  const minutos = parseInt(process.env.GESTAO_SYNC_INTERVAL_MIN, 10) || 15;
+  const minutos = parseFloat(process.env.GESTAO_SYNC_INTERVAL_MIN) || 1;
   const intervaloMs = minutos * 60 * 1000;
   const rodar = async () => {
     try {
+      if (!(await caixaAberto())) return;
       await enfileirar(hojeBelem());
       await enviarPendentes();
     } catch (e) {
@@ -165,7 +174,7 @@ function iniciarSincronizacaoPeriodica() {
   };
   rodar(); // primeira rodada já na subida do processo, não espera o 1º intervalo
   const timer = setInterval(rodar, intervaloMs);
-  console.log(`[gestaoSync] sincronização periódica com o Gestão a cada ${minutos} min`);
+  console.log(`[gestaoSync] sincronização periódica com o Gestão a cada ${minutos} min (só com caixa aberto)`);
   return timer;
 }
 
