@@ -1513,12 +1513,20 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
         }
 
-        const { empresa, data, dinheiro, maquininha, total } = JSON.parse(body);
+        const { empresa, data, dinheiro, maquininha, total, porHora } = JSON.parse(body);
         const emp = String(empresa || '').toUpperCase();
         if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
 
         const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
+        // Opcional — só o PDV Seama manda isso por enquanto. Item fora do
+        // formato esperado (hora 0-23, valor numérico) é descartado em vez
+        // de derrubar a requisição inteira.
+        const porHoraLimpo = Array.isArray(porHora)
+          ? porHora
+              .filter(h => h && Number.isInteger(h.hora) && h.hora >= 0 && h.hora <= 23)
+              .map(h => ({ hora: h.hora, valor: num(h.valor) }))
+          : [];
         const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
         const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
         const vendas = Array.isArray(doc.vendas) ? doc.vendas : [];
@@ -1539,6 +1547,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           ifood: 0, ifoodTaxa: 0, ifoodLiq: 0,
           '99food': 0, nfoodTaxa: 0, nfoodLiq: 0,
           delivery: 0,
+          porHora: porHoraLimpo,
           origem: 'pdv',
           criadoEm: i >= 0 ? (vendas[i].criadoEm || agora) : agora,
           atualizadoEm: agora,

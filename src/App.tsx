@@ -572,10 +572,12 @@ const impressaoRodapeTxt=(cfg:any)=>cfg.rodape||`Gerado em ${new Date().toLocale
 
 // ===================== DASHBOARD PDV (config) =====================
 // Editável em Configurações > Dashboard PDV (db.config.dashboardPdv) — quais indicadores
-// aparecem, em que ordem e em que ordem as seções aparecem. "vendasHoraBloqueado" e
-// "mesasComandasBloqueado" são avisos fixos (não indicadores de verdade): o PDV externo
-// ainda não expõe hora da venda nem comandas em tempo real, então não tem indicador real
-// pra mostrar ali — só o aviso do que falta.
+// aparecem, em que ordem e em que ordem as seções aparecem. "mesasComandasBloqueado" e
+// "vendaInstantaneaBloqueado" são avisos fixos (não indicadores de verdade): o PDV externo
+// ainda não expõe comandas nem eventos de venda em tempo real, então não tem indicador
+// real pra mostrar ali — só o aviso do que falta. "Vendas por Hora" já é real (vem do
+// campo `porHora` que o PDV Seama manda em /api/venda-pdv), mas só a Seama tem essa
+// integração — os itens da seção degradam pra "sem dado" quando `porHora` não vem.
 const DASHBOARD_SECOES_DEFAULT=["destaque","desempenho","canais","supervisao","operacional","vendashora","mesas","vendaaovivo"];
 const DASHBOARD_ITENS_DEFAULT:{[k:string]:string[]}={
   destaque:["faturamento","faturamentoHoje"],
@@ -583,7 +585,7 @@ const DASHBOARD_ITENS_DEFAULT:{[k:string]:string[]}={
   canais:["mixPagamento","participacaoDelivery","custoMarketplaces","cmv","margemContrib"],
   supervisao:["diasSemRegistro","anomalia","origemLancamentos"],
   operacional:["contasPagar","lembretes","resultado"],
-  vendashora:["vendasHoraBloqueado"],
+  vendashora:["ritmoDia","horarioPico","altaHora","quedaHora"],
   mesas:["mesasComandasBloqueado"],
   vendaaovivo:["vendaInstantaneaBloqueado"],
 };
@@ -616,11 +618,14 @@ const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
   contasPagar:"Contas a Pagar (hoje/vencidas)",
   lembretes:"Lembretes",
   resultado:"Resultado (vendas − compras, funcionários)",
-  vendasHoraBloqueado:"Ritmo do dia / horário de pico / altas e quedas por hora",
+  ritmoDia:"Ritmo do dia vs. ontem (acumulado até a hora atual)",
+  horarioPico:"Horário de pico",
+  altaHora:"Maior alta hora-a-hora",
+  quedaHora:"Maior queda hora-a-hora",
   mesasComandasBloqueado:"Mapa de mesas e lista de comandas abertas",
   vendaInstantaneaBloqueado:"Venda instantânea (ticker ao vivo)",
 };
-const DASHBOARD_ITEM_TRAVADO:{[k:string]:boolean}={vendasHoraBloqueado:true,mesasComandasBloqueado:true,vendaInstantaneaBloqueado:true};
+const DASHBOARD_ITEM_TRAVADO:{[k:string]:boolean}={mesasComandasBloqueado:true,vendaInstantaneaBloqueado:true};
 // Aparência (fontes e cores) — vale pra todos os indicadores do painel de uma vez, igual
 // a config de Impressão faz com os documentos impressos.
 const DASHBOARD_APARENCIA_DEFAULTS={
@@ -1847,6 +1852,26 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const deltaHojeOntem=faturamentoOntem>0?((faturamentoHoje-faturamentoOntem)/faturamentoOntem)*100:null;
       const deltaHojeOntemRs=faturamentoHoje-faturamentoOntem;
 
+      // --- Vendas por Hora — só a Seama manda `porHora` (ver /api/venda-pdv); degrada
+      // pra "sem dado" quando o campo não vem (ex.: lançamento manual, outra empresa) ---
+      const porHoraHoje:{hora:number,valor:number}[]=vendaHojeRow?.porHora||[];
+      const porHoraOntem:{hora:number,valor:number}[]=vendaOntemRow?.porHora||[];
+      const temDadoHora=porHoraHoje.length>0;
+      const horaAtual=parseInt(new Date().toLocaleString("en-US",{timeZone:TZ,hour:"2-digit",hour12:false}),10);
+      const acumuladoAte=(arr:{hora:number,valor:number}[],h:number)=>arr.filter(x=>x.hora<=h).reduce((s,x)=>s+x.valor,0);
+      const ritmoHojeAcum=acumuladoAte(porHoraHoje,horaAtual);
+      const ritmoOntemAcum=acumuladoAte(porHoraOntem,horaAtual);
+      const ritmoDiaPct=ritmoOntemAcum>0?((ritmoHojeAcum-ritmoOntemAcum)/ritmoOntemAcum)*100:null;
+      const ritmoDiaRs=ritmoHojeAcum-ritmoOntemAcum;
+      const horarioPicoRow=porHoraHoje.length?porHoraHoje.reduce((m,x)=>x.valor>m.valor?x:m,porHoraHoje[0]):null;
+      let altaHoraRow:{hora:number,delta:number}|null=null,quedaHoraRow:{hora:number,delta:number}|null=null;
+      for(let k=1;k<porHoraHoje.length;k++){
+        const delta=porHoraHoje[k].valor-porHoraHoje[k-1].valor;
+        if(!altaHoraRow||delta>altaHoraRow.delta)altaHoraRow={hora:porHoraHoje[k].hora,delta};
+        if(!quedaHoraRow||delta<quedaHoraRow.delta)quedaHoraRow={hora:porHoraHoje[k].hora,delta};
+      }
+      const fmtHora=(h:number)=>`${String(h).padStart(2,"0")}h`;
+
       // --- Desempenho ---
       const diasComVenda=vendasDiarias.filter(d=>d.total>0).length;
       const fatMedioDia=diasComVenda>0?totalVendas/diasComVenda:0;
@@ -2060,10 +2085,43 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           </div>
           {totalRegistrosVendas===0&&<div className="muted" style={{fontSize:flbl(10),marginTop:4}}>Sem lançamentos no período</div>}
         </div>,
-        vendasHoraBloqueado:()=><div className="card" style={{border:"1px dashed var(--border2)"}}>
-          <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
-            🔒 <b style={{color:"var(--text)"}}>Aguardando o PDV</b> — pra mostrar ritmo do dia, horário de pico e altas/quedas por hora, o PDV externo precisa passar a enviar vendas por hora em <code>/api/venda-pdv</code> (hoje manda só um total por dia). Ligue/desligue essa seção em Configurações &gt; Dashboard PDV.
-          </div>
+        ritmoDia:()=><div className="card">
+          <div className="muted" style={{fontSize:flbl(10)}}>🕐 Ritmo do dia vs. ontem (até {fmtHora(horaAtual)})</div>
+          {!temDadoHora
+            ?<div className="muted" style={{fontSize:flbl(11),marginTop:2}}>Sem dado por hora (só o PDV Seama envia)</div>
+            :<>
+              <div style={{fontSize:fnum(20),fontWeight:800,color:corOk}}>{fmtMoney(ritmoHojeAcum)}</div>
+              {ritmoDiaPct!==null
+                ?<div style={{fontSize:flbl(12),fontWeight:700,color:ritmoDiaPct>=0?corOk:corCrit,marginTop:2}}>{fmtDelta(ritmoDiaPct,ritmoDiaRs)} vs. ontem ({fmtMoney(ritmoOntemAcum)})</div>
+                :<div className="muted" style={{fontSize:flbl(11),marginTop:2}}>Sem dado de ontem pra comparar</div>}
+            </>}
+        </div>,
+        horarioPico:()=><div className="card">
+          <div className="muted" style={{fontSize:flbl(10)}}>📈 Horário de pico (hoje)</div>
+          {!temDadoHora||!horarioPicoRow
+            ?<div className="muted" style={{fontSize:flbl(11),marginTop:2}}>Sem dado por hora</div>
+            :<>
+              <div style={{fontSize:fnum(20),fontWeight:800,color:corAcc}}>{fmtHora(horarioPicoRow.hora)}</div>
+              <div className="muted" style={{fontSize:flbl(11),marginTop:2}}>{fmtMoney(horarioPicoRow.valor)} nessa hora</div>
+            </>}
+        </div>,
+        altaHora:()=><div className="card">
+          <div className="muted" style={{fontSize:flbl(10)}}>⬆️ Maior alta hora-a-hora</div>
+          {!temDadoHora||!altaHoraRow
+            ?<div className="muted" style={{fontSize:flbl(11),marginTop:2}}>Sem dado por hora</div>
+            :<>
+              <div style={{fontSize:fnum(18),fontWeight:800,color:corOk}}>{fmtHora(altaHoraRow.hora)}</div>
+              <div className="muted" style={{fontSize:flbl(11),marginTop:2}}>+{fmtMoney(altaHoraRow.delta)} vs. hora anterior</div>
+            </>}
+        </div>,
+        quedaHora:()=><div className="card">
+          <div className="muted" style={{fontSize:flbl(10)}}>⬇️ Maior queda hora-a-hora</div>
+          {!temDadoHora||!quedaHoraRow
+            ?<div className="muted" style={{fontSize:flbl(11),marginTop:2}}>Sem dado por hora</div>
+            :<>
+              <div style={{fontSize:fnum(18),fontWeight:800,color:corCrit}}>{fmtHora(quedaHoraRow.hora)}</div>
+              <div className="muted" style={{fontSize:flbl(11),marginTop:2}}>{fmtMoney(quedaHoraRow.delta)} vs. hora anterior</div>
+            </>}
         </div>,
         mesasComandasBloqueado:()=><div className="card" style={{border:"1px dashed var(--border2)"}}>
           <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
