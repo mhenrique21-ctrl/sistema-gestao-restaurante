@@ -6805,11 +6805,14 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     });
   };
   const [reciboGerado,setReciboGerado]=useState<any|null>(null);
-  // Gerado a partir do pedido JÁ ARQUIVADO (produzido/entregue), não da tela de
-  // pedir — assim reflete o que corrigido com o ✏️ do Arquivo, não o que foi
-  // pedido originalmente. Fica como "a receber": a venda só entra quando o
-  // Extrato confirmar o recebimento (fim de semana), não no dia da entrega.
-  const gerarReciboDePedido=(ped:any,categoria:string)=>{
+  // Prévia do recibo — igual ao que vai ser gerado (mesmos itens, valores),
+  // mas AINDA NÃO salvo. Só vira recibo de verdade quando confirmado, no
+  // botão "✅ Confirmar e Gerar" do modal de prévia.
+  const [reciboPrevia,setReciboPrevia]=useState<{ped:any,categoria:string,itens:any[],total:number}|null>(null);
+  // Calculado a partir do pedido JÁ ARQUIVADO (produzido/entregue), não da
+  // tela de pedir — assim reflete o que foi corrigido com o ✏️ do Arquivo,
+  // não o que foi pedido originalmente.
+  const abrirPreviaRecibo=(ped:any,categoria:string)=>{
     const itensCat=(ped.itens||[]).filter((it:any)=>(it.categoria||"")===categoria&&it.quantidade>0);
     const itens=itensCat.map((it:any)=>{
       const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
@@ -6818,9 +6821,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     }).filter((it:any)=>it.precoUnit>0);
     if(!itens.length)return alert("Nenhum item dessa categoria tem preço fixo cadastrado (edite em Produtos).");
     const total=Math.round(itens.reduce((s:number,it:any)=>s+it.subtotal,0)*100)/100;
-    if(!confirm(`Gerar recibo de entrega pra ${categoria} no valor de ${fmtMoney(total)}?\n\nFica registrado como "a receber" — a venda só entra na SEAMA quando você confirmar o recebimento no Extrato.`))return;
+    setReciboPrevia({ped,categoria,itens,total});
+  };
+  // Fica como "a receber": a venda só entra quando o Extrato confirmar o
+  // recebimento (fim de semana), não no dia da entrega.
+  const confirmarGeracaoRecibo=()=>{
+    if(!reciboPrevia)return;
+    const{ped,categoria,itens,total}=reciboPrevia;
     const recibo={id:uid(),pedidoId:ped.id,categoria,data:ped.data,itens,total,recebido:false,solicitante:ped.solicitante||login?.label||"",criadoEm:new Date().toISOString()};
     (setDbAndSave||setDb)((d:any)=>({...d,recibosEntrega:[recibo,...(d.recibosEntrega||[])]}));
+    setReciboPrevia(null);
     setReciboGerado(recibo);
   };
   const montarTextoWhatsRecibo=(recibo:any)=>{
@@ -7203,9 +7213,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 ?<div style={{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>
                     ✅ Recibo de {cat} já gerado — {fmtMoney(jaGerado.total)} {jaGerado.recebido?"(recebido)":"(a receber)"}
                   </div>
-                :<button onClick={()=>gerarReciboDePedido(ped,cat)} className="btn"
+                :<button onClick={()=>abrirPreviaRecibo(ped,cat)} className="btn"
                     style={{width:"100%",background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"10px",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                    🧾 Gerar Recibo de Entrega — {cat} — {fmtMoney(totalPrevisto)}
+                    👁️ Ver Recibo de Entrega — {cat} — {fmtMoney(totalPrevisto)}
                   </button>}
             </div>;
           })}
@@ -7461,6 +7471,42 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       }
     </div>}
 
+    {/* Prévia do recibo — mostra os itens/valor ANTES de salvar/gerar */}
+    {reciboPrevia&&(()=>{
+      const cfg=getImpressaoCfg(db);
+      return <div onClick={()=>setReciboPrevia(null)}
+        style={{position:"fixed",inset:0,zIndex:500,background:"rgba(15,17,23,0.55)",display:"flex",alignItems:"flex-end"}}>
+        <div onClick={(e:any)=>e.stopPropagation()}
+          style={{background:"var(--bg3)",width:"100%",borderRadius:"18px 18px 0 0",padding:"18px 16px 26px",boxShadow:"0 -8px 30px rgba(0,0,0,.25)",maxHeight:"85vh",overflowY:"auto" as const}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+            <div style={{fontWeight:800,fontSize:15,color:"var(--text)"}}>👁️ {cfg.reciboTitulo||"Recibo de Entrega"}</div>
+            <div className="muted" style={{fontSize:11}}>prévia</div>
+          </div>
+          <div className="muted" style={{fontSize:12,marginBottom:10}}>{reciboPrevia.categoria} · {fmtDate(reciboPrevia.ped.data)}</div>
+          <div style={{background:"var(--bg4)",borderRadius:8,overflow:"hidden",marginBottom:10}}>
+            {reciboPrevia.itens.map((it:any,i:number)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",borderBottom:i<reciboPrevia.itens.length-1?"1px solid var(--border)":"none"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600}}>{it.nome}</div>
+                  <div className="muted" style={{fontSize:11}}>{it.quantidade} {it.unidade} × {fmtMoney(it.precoUnit)}</div>
+                </div>
+                <span style={{fontWeight:700,fontSize:13,color:"#15803D",flexShrink:0}}>{fmtMoney(it.subtotal)}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",background:"#DCFCE7",border:"1px solid #22C55E44",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#166534"}}>TOTAL</span>
+            <span style={{fontSize:20,fontWeight:800,color:"#15803D"}}>{fmtMoney(reciboPrevia.total)}</span>
+          </div>
+          <div className="muted" style={{fontSize:11,marginBottom:12,textAlign:"center" as const}}>Ainda não foi salvo — fica como "a receber" até confirmar.</div>
+          <button onClick={confirmarGeracaoRecibo} className="btn"
+            style={{width:"100%",background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"13px",fontSize:14,fontWeight:700}}>✅ Confirmar e Gerar Recibo</button>
+          <button onClick={()=>setReciboPrevia(null)} className="btn"
+            style={{width:"100%",marginTop:8,background:"none",border:"1px solid var(--border)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>
+        </div>
+      </div>;
+    })()}
+
     {/* Recibo recém-gerado — imprimir ou enviar por WhatsApp */}
     {reciboGerado&&<div onClick={()=>setReciboGerado(null)}
       style={{position:"fixed",inset:0,zIndex:500,background:"rgba(15,17,23,0.55)",display:"flex",alignItems:"flex-end"}}>
@@ -7469,7 +7515,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         <div style={{textAlign:"center" as const,marginBottom:14}}>
           <div style={{fontSize:28,marginBottom:4}}>✅</div>
           <div style={{fontWeight:800,fontSize:15,color:"var(--text)"}}>Recibo gerado — {reciboGerado.categoria}</div>
-          <div className="muted" style={{fontSize:12,marginTop:2}}>{fmtMoney(reciboGerado.total)} lançado na venda de hoje (SEAMA)</div>
+          <div className="muted" style={{fontSize:12,marginTop:2}}>{fmtMoney(reciboGerado.total)} registrado como "a receber" — entra na venda quando você confirmar o recebimento em Recibos &gt; Extrato</div>
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado))}`,"_blank")} className="btn"
