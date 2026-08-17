@@ -278,6 +278,15 @@ const fmtPct    = (v) => `${(parseFloat(v)||0).toFixed(1)}%`;
 const TZ        = "America/Sao_Paulo";
 const today     = () => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(new Date());
 const uid       = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
+// Dia cujo faturamento vira base do budget de compras: o último dia com
+// movimento antes de `dataAlvo`, pulando domingo (nem CONFRARIA nem SEAMA
+// abrem nesse dia) — segunda-feira usa o sábado anterior, não o domingo vazio.
+const diaReferenciaBudget=(dataAlvo:string)=>{
+  const d=new Date(dataAlvo+"T12:00:00");
+  d.setDate(d.getDate()-1);
+  while(d.getDay()===0)d.setDate(d.getDate()-1);
+  return d.toISOString().slice(0,10);
+};
 // Cria/atualiza o login real do PDV (delivery-backend) a partir de um usuário
 // cadastrado aqui — proxied pelo new_server.js, que guarda a credencial de
 // serviço; o browser nunca vê o segredo. Retorna {ok, message}.
@@ -1913,11 +1922,16 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const deltaHojeOntem=faturamentoOntem>0?((faturamentoHoje-faturamentoOntem)/faturamentoOntem)*100:null;
       const deltaHojeOntemRs=faturamentoHoje-faturamentoOntem;
 
-      // --- Budget de Compras — teto de hoje = vendas de ontem × % configurado.
+      // --- Budget de Compras — teto de hoje = vendas do último dia com movimento
+      // (pulando domingo, dia em que nem CONFRARIA nem SEAMA abrem) × % configurado.
+      // Diferente do "faturamentoOntem" acima (que é sempre o dia anterior literal,
+      // usado só pra comparação): segunda-feira usa o sábado, não o domingo vazio.
       // "Comprado hoje" olha a DATA da compra (não quando foi lançada no sistema),
       // então uma nota lançada com atraso ainda conta no dia certo.
       const budgetCompraPct=apar.budgetCompraPct??30;
-      const budgetCompraHoje=faturamentoOntem*(budgetCompraPct/100);
+      const diaRefBudgetHoje=diaReferenciaBudget(hj);
+      const vendasRefBudgetHoje=todasVendas.find(v=>v.data===diaRefBudgetHoje)?.total||0;
+      const budgetCompraHoje=vendasRefBudgetHoje*(budgetCompraPct/100);
       const compradoHoje=(db.compras||[]).filter((c:any)=>c.data===hj).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
       const saldoBudgetHoje=budgetCompraHoje-compradoHoje;
       const pctBudgetUsado=budgetCompraHoje>0?(compradoHoje/budgetCompraHoje)*100:0;
@@ -2242,10 +2256,10 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
         budgetCompras:()=><div className="card">
           <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
             <span>🛒 Budget de Compras — hoje</span>
-            <span className="muted" style={{fontSize:flbl(10)}}>{budgetCompraPct}% de ontem</span>
+            <span className="muted" style={{fontSize:flbl(10)}}>{budgetCompraPct}% de {fmtDate(diaRefBudgetHoje)}</span>
           </div>
-          {faturamentoOntem===0
-            ?<div className="muted" style={{fontSize:flbl(11)}}>Sem venda registrada ontem — sem base pra calcular o budget de hoje</div>
+          {vendasRefBudgetHoje===0
+            ?<div className="muted" style={{fontSize:flbl(11)}}>Sem venda registrada em {fmtDate(diaRefBudgetHoje)} — sem base pra calcular o budget de hoje</div>
             :<>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:6}}>
                 <div style={{textAlign:"center"}}>
@@ -3102,11 +3116,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
   const totalCarrinho=carrinho.reduce((s,i)=>s+parseMoney(i.valorTotal),0);
 
-  // Budget de Compras — mesmo teto do Dashboard (vendas do dia anterior a
-  // dataCom × % configurado), projetando o carrinho atual + o que já foi
-  // lançado nesse mesmo dia, pra avisar ANTES de confirmar a entrada.
+  // Budget de Compras — mesmo teto do Dashboard (vendas do último dia com
+  // movimento antes de dataCom, pulando domingo, × % configurado), projetando
+  // o carrinho atual + o que já foi lançado nesse mesmo dia, pra avisar ANTES
+  // de confirmar a entrada.
   const budgetCompraPct=getDashboardCfg(db).aparencia.budgetCompraPct??30;
-  const diaAnteriorCompra=(()=>{const d=new Date(dataCom+"T12:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+  const diaAnteriorCompra=diaReferenciaBudget(dataCom);
   const vendasDiaAnteriorCompra=(db.vendas||[]).find((v:any)=>v.data===diaAnteriorCompra)?.total||0;
   const budgetDoDiaCompra=vendasDiaAnteriorCompra*(budgetCompraPct/100);
   const jaCompradoNoDia=(db.compras||[]).filter((c:any)=>c.data===dataCom).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
@@ -3969,7 +3984,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             <span style={{fontWeight:700,color:pctProjetadoNoDia>100?"var(--btnDanger)":pctProjetadoNoDia>80?"#F59E0B":"#22C55E"}}>{pctProjetadoNoDia.toFixed(0)}%</span>
           </div>
           <div className="muted" style={{fontSize:11,marginBottom:6}}>
-            {fmtMoney(jaCompradoNoDia)} já lançado{totalCarrinho>0?` + ${fmtMoney(totalCarrinho)} deste carrinho`:""} de {fmtMoney(budgetDoDiaCompra)} de budget ({budgetCompraPct}% de {fmtMoney(vendasDiaAnteriorCompra)} vendidos no dia anterior)
+            {fmtMoney(jaCompradoNoDia)} já lançado{totalCarrinho>0?` + ${fmtMoney(totalCarrinho)} deste carrinho`:""} de {fmtMoney(budgetDoDiaCompra)} de budget ({budgetCompraPct}% de {fmtMoney(vendasDiaAnteriorCompra)} vendidos em {fmtDate(diaAnteriorCompra)})
           </div>
           <div style={{height:6,background:"var(--border2)",borderRadius:3,overflow:"hidden"}}>
             <div style={{height:"100%",borderRadius:3,width:`${Math.min(pctProjetadoNoDia,100)}%`,background:pctProjetadoNoDia>100?"var(--btnDanger)":pctProjetadoNoDia>80?"#F59E0B":"#22C55E",transition:"width .3s"}}/>
@@ -5644,6 +5659,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     w.document.close();
   };
 
+  // Budget de Compras — referência pra QUANDO essa lista for comprada (amanhã),
+  // não pra hoje: o colaborador monta a lista hoje, mas a compra em si só
+  // acontece no dia seguinte. Mesma regra do Dashboard/Compras (pula domingo).
+  const budgetCompraPct=getDashboardCfg(db).aparencia.budgetCompraPct??30;
+  const amanhaLista=(()=>{const d=new Date(today()+"T12:00:00");d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);})();
+  const diaRefListaBudget=diaReferenciaBudget(amanhaLista);
+  const vendasRefListaBudget=(db.vendas||[]).find((v:any)=>v.data===diaRefListaBudget)?.total||0;
+  const budgetListaAmanha=vendasRefListaBudget*(budgetCompraPct/100);
+  const compradoAmanha=(db.compras||[]).filter((c:any)=>c.data===amanhaLista).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
+  const saldoListaAmanha=budgetListaAmanha-compradoAmanha;
+
   return <div>
     {/* Header */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
@@ -5655,6 +5681,29 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
+
+    {/* Budget de Compras — quanto dá pra gastar na compra de amanhã */}
+    {vendasRefListaBudget>0&&<div className="card" style={{marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap" as const,gap:4,marginBottom:6}}>
+        <span style={{fontWeight:700,fontSize:13,color:"var(--acc)"}}>🛒 Budget para a compra de amanhã ({fmtDate(amanhaLista)})</span>
+        <span className="muted" style={{fontSize:10}}>{budgetCompraPct}% de {fmtDate(diaRefListaBudget)}</span>
+      </div>
+      <div style={{display:"flex",gap:20,flexWrap:"wrap" as const}}>
+        <div>
+          <div className="muted" style={{fontSize:10}}>Budget</div>
+          <div style={{fontWeight:700,fontSize:16,color:"var(--acc)"}}>{fmtMoney(budgetListaAmanha)}</div>
+        </div>
+        {compradoAmanha>0&&<div>
+          <div className="muted" style={{fontSize:10}}>Já lançado p/ amanhã</div>
+          <div style={{fontWeight:700,fontSize:16,color:"#F59E0B"}}>{fmtMoney(compradoAmanha)}</div>
+        </div>}
+        <div>
+          <div className="muted" style={{fontSize:10}}>Saldo</div>
+          <div style={{fontWeight:700,fontSize:16,color:saldoListaAmanha>=0?"#22C55E":"var(--btnDanger)"}}>{fmtMoney(Math.abs(saldoListaAmanha))}{saldoListaAmanha<0?" excedido":""}</div>
+        </div>
+      </div>
+      <div className="muted" style={{fontSize:10,marginTop:6}}>Essa lista, quando comprada amanhã, deve caber nesse valor.</div>
+    </div>}
 
     {/* Histórico de pedidos salvos */}
     {showHistorico&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
