@@ -265,7 +265,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
   config:{snAliquota:6},
@@ -583,6 +583,11 @@ const IMPRESSAO_DEFAULTS={
   nfeMostrarCategoria:true,
   encomendaAssinatura:true,
   estimativaMostrarPrecos:true,
+  reciboTitulo:"Recibo de Entrega",
+  reciboTituloExtrato:"Extrato de Entregas",
+  reciboRodape:"",                    // vazio = usa o rodapé geral (impressaoRodapeTxt)
+  reciboMostrarAssinatura:true,
+  reciboTextoAssinatura:"Assinatura de quem recebeu",
 };
 const getImpressaoCfg=(db:any)=>({...IMPRESSAO_DEFAULTS,...(db?.config?.impressao||{})});
 let _impressaoCfg:any=IMPRESSAO_DEFAULTS;
@@ -591,6 +596,7 @@ const impressaoPageCss=(cfg:any)=>`@page{size:A4 ${cfg.orientacao==="paisagem"?"
 const impressaoNome=(cfg:any,fallback:string)=>cfg.nome||fallback;
 const impressaoLogoHtml=(cfg:any,style?:string)=>cfg.logo?`<img src="${cfg.logo}" style="${style||"height:36px;max-width:150px;object-fit:contain;display:block;margin-bottom:6px"}"/>`:"";
 const impressaoRodapeTxt=(cfg:any)=>cfg.rodape||`Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}`;
+const impressaoRodapeRecibo=(cfg:any)=>cfg.reciboRodape||impressaoRodapeTxt(cfg);
 
 // ===================== DASHBOARD PDV (config) =====================
 // Editável em Configurações > Dashboard PDV (db.config.dashboardPdv) — quais indicadores
@@ -800,6 +806,8 @@ const migrateDb=(m:any)=>{
     if(!m[e].clientesEncomenda)m[e].clientesEncomenda=[];
     if(!m[e].normalizacoes)m[e].normalizacoes=[];
     if(!m[e].iconesProducao)m[e].iconesProducao={};
+    if(!m[e].categoriasClientes)m[e].categoriasClientes={};
+    if(!m[e].recibosEntrega)m[e].recibosEntrega=[];
     if(!m[e].movEstoque)m[e].movEstoque=[];
     if(!m[e].listaCategorias)m[e].listaCategorias=[];
     if(!m[e].listaCatOrdem)m[e].listaCatOrdem=[];
@@ -1055,6 +1063,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
       pedidosProducao:  unionById(p.pedidosProducao||[],s.pedidosProducao||[],true),
       itensProducaoPendentes: unionById(p.itensProducaoPendentes||[],s.itensProducaoPendentes||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
+      // Mapa (não array) de propósito — igual iconesProducao: desmarcar "é cliente"
+      // é só gravar `false` na chave, não remover, então local-por-cima já basta
+      // pra preservar o toggle sem precisar de uma lista de "removidos" à parte.
+      categoriasClientes: {...(s.categoriasClientes||{}), ...(p.categoriasClientes||{})},
+      recibosEntrega: unionById(p.recibosEntrega||[],s.recibosEntrega||[],true),
       // iconesProducao não tinha fusão nenhuma — vinha cru do spread {...s} acima,
       // então trocar o ícone de uma categoria era revertido pelo poll seguinte
       // (300ms) sempre que ele chegasse antes do POST confirmar no servidor.
@@ -1407,6 +1420,7 @@ export default function App() {
       {id:"prod-arq",label:"Arquivo",icon:"📂",sub:"pedidos",adminOnly:true},
       {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
       {id:"prod-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
+      {id:"prod-recibos",label:"Recibos",icon:"🧾",sub:"recibos",adminOnly:true},
     ]},
     {id:"contas",label:"Financeiro",icon:"📋",children:[
       {id:"fin-contas",label:"Contas",icon:"📋",sub:"lista"},
@@ -6618,9 +6632,13 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const setShowCatMgmt=(v:boolean)=>setSubTab(v?"categorias":"novo");
   const showHist=subTab==="pedidos";
   const setShowHist=(v:boolean)=>setSubTab(v?"pedidos":"novo");
+  const showRecibos=subTab==="recibos";
+  const [extratoCliente,setExtratoCliente]=useState("");
+  const [extratoIni,setExtratoIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
+  const [extratoFim,setExtratoFim]=useState(today());
 
   // Product catalog management
-  const [prodForm,setProdForm]=useState<{nome:string,cats:string[],unidade:string}>({nome:"",cats:[],unidade:"un"});
+  const [prodForm,setProdForm]=useState<{nome:string,cats:string[],unidade:string,precoFixo:string}>({nome:"",cats:[],unidade:"un",precoFixo:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
   const [prodCatPicker,setProdCatPicker]=useState(false);
   const prodFormRef=useRef<HTMLDivElement>(null);
@@ -6630,15 +6648,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const saveProd=()=>{
     const nome=prodForm.nome.trim();
     if(!nome)return alert("Nome obrigatório.");
+    const precoFixo=parseMoney(prodForm.precoFixo||0)||undefined;
     if(editProdId){
-      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade}:p)}));
+      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo}:p)}));
       setEditProdId(null);
     }else{
-      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade}]}));
+      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo}]}));
     }
-    setProdForm({nome:"",cats:[],unidade:"un"});
+    setProdForm({nome:"",cats:[],unidade:"un",precoFixo:""});
   };
-  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cats:prodCats(p),unidade:p.unidade||"un"});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cats:prodCats(p),unidade:p.unidade||"un",precoFixo:p.precoFixo?String(p.precoFixo).replace(".",","):""});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delProd=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).filter((p:any)=>p.id!==id)}));};
 
   // Category management
@@ -6662,6 +6681,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       return pc.includes(c)?p:{...p,cats:[...pc,c]};
     })}));
   };
+  const categoriasClientes:Record<string,boolean>=db.categoriasClientes||{};
+  const isCategoriaCliente=(c:string)=>!!categoriasClientes[c];
+  const toggleCategoriaCliente=(c:string)=>(setDbAndSave||setDb)((d:any)=>({...d,categoriasClientes:{...(d.categoriasClientes||{}),[c]:!(d.categoriasClientes||{})[c]}}));
 
   // Order form (Lista-style)
   const [form,setForm]=useState({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
@@ -6758,6 +6780,146 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     if(isMobile&&confirm("Pedido gerado! Compartilhar via WhatsApp?"))
       window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(pedido))}`,"_blank");
     else if(!isMobile) alert("✅ Pedido gerado com sucesso!");
+  };
+
+  // ---- Recibo de Entrega (categorias marcadas como cliente) ----
+  // Lança o valor como venda de hoje na SEAMA. Some ao que já existir no dia
+  // (não substitui) — mais de um recibo no mesmo dia acumula certo, igual o
+  // fechamento de caixa do PDV faz pra maquininha/dinheiro.
+  const registrarEntregaComoVenda=(dataEntrega:string,valor:number)=>{
+    (setDbAndSave||setDb)((d:any)=>{
+      const vendas=[...(d.vendas||[])];
+      const i=vendas.findIndex((v:any)=>v.data===dataEntrega);
+      const agora=new Date().toISOString();
+      if(i>=0){
+        const atual=vendas[i];
+        vendas[i]={...atual,entregasClientes:(atual.entregasClientes||0)+valor,total:(atual.total||0)+valor,atualizadoEm:agora};
+      }else{
+        vendas.unshift({id:uid(),data:dataEntrega,total:valor,maquininha:0,dinheiro:0,ifood:0,ifoodTaxa:0,ifoodLiq:0,"99food":0,nfoodTaxa:0,nfoodLiq:0,delivery:0,entregasClientes:valor,origem:"recibo",criadoEm:agora,atualizadoEm:agora});
+      }
+      return{...d,vendas};
+    });
+  };
+  const [reciboGerado,setReciboGerado]=useState<any|null>(null);
+  const gerarRecibo=(categoria:string,itensComPreco:any[])=>{
+    const itens=itensComPreco.map((p:any)=>{
+      const quantidade=parseFloat(qtdsCatalog[qtyKey(p.id,categoria)]);
+      const precoUnit=p.precoFixo;
+      return{nome:p.nome,quantidade,unidade:p.unidade||"un",precoUnit,subtotal:Math.round(quantidade*precoUnit*100)/100};
+    });
+    const total=Math.round(itens.reduce((s:number,it:any)=>s+it.subtotal,0)*100)/100;
+    if(!confirm(`Gerar recibo de entrega pra ${categoria} no valor de ${fmtMoney(total)}?\n\nIsso lança o valor como venda de hoje na SEAMA.`))return;
+    const recibo={id:uid(),categoria,data:today(),itens,total,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    (setDbAndSave||setDb)((d:any)=>({...d,recibosEntrega:[recibo,...(d.recibosEntrega||[])]}));
+    registrarEntregaComoVenda(recibo.data,total);
+    setReciboGerado(recibo);
+  };
+  const montarTextoWhatsRecibo=(recibo:any)=>{
+    const cfg=getImpressaoCfg(db);
+    let txt=`🧾 *${(cfg.reciboTitulo||"Recibo de Entrega").toUpperCase()}*\n🏢 Cliente: *${recibo.categoria}*\n📅 ${fmtDate(recibo.data)}\n\n`;
+    recibo.itens.forEach((it:any)=>{txt+=`• ${it.nome}\n  ${it.quantidade} ${it.unidade} × ${fmtMoney(it.precoUnit)} = *${fmtMoney(it.subtotal)}*\n`;});
+    txt+=`\n💰 *TOTAL: ${fmtMoney(recibo.total)}*\n`;
+    if(cfg.reciboMostrarAssinatura)txt+=`\n_${impressaoNome(cfg,"Seama")}\n${cfg.reciboTextoAssinatura}: _______________`;
+    return txt;
+  };
+  const imprimirRecibo=(recibo:any)=>{
+    const cfg=getImpressaoCfg(db);
+    const fpx=FONTE_PX[cfg.fonte]||13;
+    const w=window.open("","_blank","width=700,height=800");if(!w)return;
+    const rows=recibo.itens.map((it:any)=>`<tr><td>${it.nome}</td><td class="num">${it.quantidade} ${it.unidade}</td><td class="num">${fmtMoney(it.precoUnit)}</td><td class="num">${fmtMoney(it.subtotal)}</td></tr>`).join("");
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${cfg.reciboTitulo} — ${recibo.categoria}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a;font-size:${fpx}px;max-width:480px}
+        .brand{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:16px}
+        h1{font-size:19px;margin:0 0 2px}
+        .meta{display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:4px}
+        .meta b{color:#1a1a1a}
+        table{width:100%;border-collapse:collapse;margin-top:14px;font-size:${Math.max(fpx-1,11)}px}
+        th{text-align:left;font-size:10px;text-transform:uppercase;color:#999;font-weight:700;padding:0 0 6px;border-bottom:2px solid #1a1a1a}
+        th.num,td.num{text-align:right}
+        td{padding:7px 0;border-bottom:1px solid #eee}
+        .total-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;padding-top:10px;border-top:2px solid #1a1a1a}
+        .total-row .label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+        .total-row .value{font-size:24px;font-weight:800;color:#15803D}
+        .sign{margin-top:34px;padding-top:8px;border-top:1px solid #ccc;font-size:11px;color:#666;text-align:center}
+        .footer{margin-top:18px;font-size:9px;color:#bbb;font-family:monospace}
+        .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
+        .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+        @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
+      </style>
+    </head><body>
+      <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir</button></div>
+      ${cfg.logo?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"Seama")}</div>`:`<div class="brand">${impressaoNome(cfg,"Seama")}</div>`}
+      <h1>${cfg.reciboTitulo}</h1>
+      <div class="meta"><span>Cliente</span><b>${recibo.categoria}</b></div>
+      <div class="meta"><span>Data</span><b>${fmtDate(recibo.data)}</b></div>
+      <table>
+        <thead><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Preço</th><th class="num">Subtotal</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="total-row"><span class="label">Total</span><span class="value">${fmtMoney(recibo.total)}</span></div>
+      ${cfg.reciboMostrarAssinatura?`<div class="sign">${cfg.reciboTextoAssinatura}</div>`:""}
+      <div class="footer">${impressaoRodapeRecibo(cfg)}</div>
+    </body></html>`);
+    w.document.close();
+  };
+
+  // ---- Extrato de Entregas — soma vários recibos diários já gerados num
+  // período, pra fechamento/cobrança. Não recalcula nada: só soma o que cada
+  // recibo diário já registrou. ----
+  const recibosDoExtrato=(cliente:string,ini:string,fim:string)=>
+    (db.recibosEntrega||[]).filter((r:any)=>r.categoria===cliente&&r.data>=ini&&r.data<=fim).sort((a:any,b:any)=>a.data<b.data?-1:1);
+  const montarTextoWhatsExtrato=(cliente:string,ini:string,fim:string)=>{
+    const cfg=getImpressaoCfg(db);
+    const recibos=recibosDoExtrato(cliente,ini,fim);
+    const total=recibos.reduce((s:number,r:any)=>s+r.total,0);
+    let txt=`📋 *${(cfg.reciboTituloExtrato||"Extrato de Entregas").toUpperCase()}*\n🏢 Cliente: *${cliente}*\n📅 Período: ${fmtDate(ini)} a ${fmtDate(fim)}\n\n`;
+    recibos.forEach((r:any)=>{txt+=`${fmtDate(r.data).slice(0,5)} — ${fmtMoney(r.total)}\n`;});
+    txt+=`\n📦 ${recibos.length} entrega(s) no período\n`;
+    txt+=`\n💰 *TOTAL A RECEBER: ${fmtMoney(total)}*\n`;
+    if(cfg.reciboMostrarAssinatura)txt+=`\n_${impressaoNome(cfg,"Seama")}\nReferente às entregas acima — recibo gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}_`;
+    return txt;
+  };
+  const imprimirExtrato=(cliente:string,ini:string,fim:string)=>{
+    const cfg=getImpressaoCfg(db);
+    const fpx=FONTE_PX[cfg.fonte]||13;
+    const recibos=recibosDoExtrato(cliente,ini,fim);
+    const total=recibos.reduce((s:number,r:any)=>s+r.total,0);
+    const w=window.open("","_blank","width=700,height=800");if(!w)return;
+    const rows=recibos.map((r:any)=>`<tr><td>${fmtDate(r.data)}</td><td class="num">${r.itens.length} item(ns)</td><td class="num">${fmtMoney(r.total)}</td></tr>`).join("");
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${cfg.reciboTituloExtrato} — ${cliente}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:30px;color:#1a1a1a;font-size:${fpx}px;max-width:480px}
+        .brand{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:16px}
+        h1{font-size:19px;margin:0 0 2px}
+        .meta{display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:4px}
+        .meta b{color:#1a1a1a}
+        table{width:100%;border-collapse:collapse;margin-top:14px;font-size:${Math.max(fpx-1,11)}px}
+        th{text-align:left;font-size:10px;text-transform:uppercase;color:#999;font-weight:700;padding:0 0 6px;border-bottom:2px solid #1a1a1a}
+        th.num,td.num{text-align:right}
+        td{padding:7px 0;border-bottom:1px solid #eee}
+        .total-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;padding-top:10px;border-top:2px solid #1a1a1a}
+        .total-row .label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+        .total-row .value{font-size:24px;font-weight:800;color:#15803D}
+        .footer{margin-top:18px;font-size:9px;color:#bbb;font-family:monospace}
+        .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
+        .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+        @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
+      </style>
+    </head><body>
+      <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir</button></div>
+      <div class="brand">${impressaoNome(cfg,"Seama")}</div>
+      <h1>${cfg.reciboTituloExtrato}</h1>
+      <div class="meta"><span>Cliente</span><b>${cliente}</b></div>
+      <div class="meta"><span>Período</span><b>${fmtDate(ini)} a ${fmtDate(fim)}</b></div>
+      <table>
+        <thead><tr><th>Data</th><th class="num">Itens</th><th class="num">Valor</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="total-row"><span class="label">Total a receber</span><span class="value">${fmtMoney(total)}</span></div>
+      <div class="footer">${impressaoRodapeRecibo(cfg)}</div>
+    </body></html>`);
+    w.document.close();
   };
 
   const montarTextoWhats=(ped:any)=>{
@@ -6907,6 +7069,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   </div>
                   <button onClick={()=>marcarTodosNaCategoria(c)} title="Marcar todos os produtos nesta categoria (soma, não substitui)"
                     style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"#8B5CF6",cursor:"pointer",fontSize:10,padding:"2px 6px",lineHeight:1,whiteSpace:"nowrap" as const}}>🏷️ Marcar todos</button>
+                  <button onClick={()=>toggleCategoriaCliente(c)} title="Categoria é cliente — recebe recibo de entrega com preço fixo"
+                    style={{background:isCategoriaCliente(c)?"#22C55E22":"none",border:`1px solid ${isCategoriaCliente(c)?"#22C55E":"var(--border2)"}`,borderRadius:5,color:isCategoriaCliente(c)?"#22C55E":"#888",cursor:"pointer",fontSize:10,padding:"2px 6px",lineHeight:1,whiteSpace:"nowrap" as const,fontWeight:isCategoriaCliente(c)?700:400}}>🏢 {isCategoriaCliente(c)?"Cliente":"É cliente?"}</button>
                   <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
                 </>
             }
@@ -6940,9 +7104,11 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
           {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
         </select>
+        <MoneyInput value={prodForm.precoFixo} onChange={(v:string)=>setProdForm(f=>({...f,precoFixo:v}))} placeholder="Preço fixo (opcional)" className="inp" style={{flex:"1 1 130px",marginBottom:0}}/>
         <button className="btn" onClick={saveProd} style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
-        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cats:[],unidade:"un"});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
+        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cats:[],unidade:"un",precoFixo:""});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
+      <div className="muted" style={{fontSize:10,marginTop:-4,marginBottom:10}}>💡 Preço fixo é usado no Recibo de Entrega, pra categorias marcadas como cliente.</div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><SortCtrl id="prodCatalog" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/></div>
       <div style={{maxHeight:260,overflowY:"auto" as const}}>
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
@@ -6951,6 +7117,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             <CatIconBadge icon={prodCatIcon(prodCats(p)[0]||"")} size={14}/>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
             {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
+            {p.precoFixo>0&&<span style={{fontSize:10,color:"#15803D",background:"#22C55E18",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{fmtMoney(p.precoFixo)}</span>}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
             <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnPrimary)",fontSize:13,padding:"0 3px"}}>✏️</button>
             <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnDanger)",fontSize:13,padding:"0 3px"}}>🗑️</button>
@@ -7052,6 +7219,69 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       })}
     </div>}
 
+    {/* Recibos de Entrega — histórico + extrato de período por cliente */}
+    {showRecibos&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
+    {showRecibos&&(()=>{
+      const clientesDisponiveis=Object.keys(categoriasClientes).filter(c=>categoriasClientes[c]);
+      const recibos=sortList(db.recibosEntrega||[],db,'recibos','data-desc');
+      return <>
+        <div className="card" style={{marginBottom:12,border:"1px solid #22C55E40"}}>
+          <div className="section-title" style={{color:"#15803D",margin:0,marginBottom:10}}>📋 Extrato de Entregas</div>
+          {!clientesDisponiveis.length&&<div className="muted" style={{fontSize:12}}>Nenhuma categoria marcada como cliente ainda — marque em Categorias.</div>}
+          {clientesDisponiveis.length>0&&<>
+            <select value={extratoCliente} onChange={e=>setExtratoCliente(e.target.value)} className="inp" style={{marginBottom:8}}>
+              <option value="">Selecione o cliente...</option>
+              {clientesDisponiveis.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+            <div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center"}}>
+              <input type="date" value={extratoIni} onChange={e=>setExtratoIni(e.target.value)} className="inp" style={{flex:1,marginBottom:0}}/>
+              <span className="muted" style={{fontSize:12}}>até</span>
+              <input type="date" value={extratoFim} onChange={e=>setExtratoFim(e.target.value)} className="inp" style={{flex:1,marginBottom:0}}/>
+            </div>
+            {extratoCliente&&(()=>{
+              const doExtrato=recibosDoExtrato(extratoCliente,extratoIni,extratoFim);
+              const totalExtrato=doExtrato.reduce((s:number,r:any)=>s+r.total,0);
+              return <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}>
+                  <span className="muted">{doExtrato.length} entrega(s) no período</span>
+                  <span style={{fontWeight:800,color:"#15803D"}}>{fmtMoney(totalExtrato)}</span>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsExtrato(extratoCliente,extratoIni,extratoFim))}`,"_blank")} disabled={!doExtrato.length} className="btn"
+                    style={{flex:1,background:doExtrato.length?"#DCFCE7":"var(--border2)",color:doExtrato.length?"#128C4A":"#555",border:doExtrato.length?"1px solid #25d36644":"1px solid var(--border2)",padding:"11px",fontSize:13,fontWeight:700}}>📲 WhatsApp</button>
+                  <button onClick={()=>imprimirExtrato(extratoCliente,extratoIni,extratoFim)} disabled={!doExtrato.length} className="btn"
+                    style={{flex:1,background:doExtrato.length?"#F3E8FF":"var(--border2)",color:doExtrato.length?"#8B5CF6":"#555",border:doExtrato.length?"1px solid #8B5CF6":"1px solid var(--border2)",padding:"11px",fontSize:13,fontWeight:700}}>🖨️ Imprimir</button>
+                </div>
+              </div>;
+            })()}
+          </>}
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div className="section-title" style={{margin:0}}>🧾 Recibos Diários <span style={{fontSize:11,color:"#555"}}>({recibos.length})</span></div>
+            <SortCtrl id="recibos" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
+          </div>
+          {!recibos.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:16}}>Nenhum recibo gerado ainda.</div>}
+          {recibos.slice(0,30).map((r:any)=>(
+            <div key={r.id} style={{background:"var(--bg4)",borderRadius:8,padding:"10px",marginBottom:8,border:"1px solid var(--border)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:13}}>{r.categoria}</div>
+                  <div className="muted" style={{fontSize:11}}>{fmtDate(r.data)} · {r.itens.length} item(ns)</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontWeight:700,color:"#15803D"}}>{fmtMoney(r.total)}</span>
+                  <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>
+                  <button onClick={()=>imprimirRecibo(r)} style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"#8B5CF6",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>;
+    })()}
+
     {/* Form — add item to order (Lista-style) */}
     {subTab==="novo"&&<div ref={formRef}>
       {prodsCatalog.length===0
@@ -7116,9 +7346,19 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 {cats.filter(cat=>prodsCatalog.some((p:any)=>prodCats(p).includes(cat))).map(cat=>{
                   const itensCat=prodsCatalog.filter((p:any)=>prodCats(p).includes(cat));
                   const {ped,atual}=somaCategoria(itensCat,cat);
+                  const ehCliente=isCategoriaCliente(cat);
+                  const itensComPreco=ehCliente?itensCat.filter((p:any)=>{
+                    const q=parseFloat(qtdsCatalog[qtyKey(p.id,cat)]);
+                    return !isNaN(q)&&q>0&&p.precoFixo>0;
+                  }):[];
+                  const totalRecibo=itensComPreco.reduce((s:number,p:any)=>s+parseFloat(qtdsCatalog[qtyKey(p.id,cat)])*p.precoFixo,0);
                   return <div key={cat} style={{marginBottom:10}}>
                     {catHeader(cat,prodCatIcon(cat),"#7C3AED14","#7C3AED",ped,atual)}
                     {itensCat.sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,cat))}
+                    {ehCliente&&itensComPreco.length>0&&<button onClick={()=>gerarRecibo(cat,itensComPreco)} className="btn"
+                      style={{width:"100%",marginTop:6,background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"12px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                      🧾 Gerar Recibo de Entrega — {fmtMoney(totalRecibo)}
+                    </button>}
                   </div>;
                 })}
                 {(()=>{
@@ -7154,6 +7394,27 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             </div>
           </>
       }
+    </div>}
+
+    {/* Recibo recém-gerado — imprimir ou enviar por WhatsApp */}
+    {reciboGerado&&<div onClick={()=>setReciboGerado(null)}
+      style={{position:"fixed",inset:0,zIndex:500,background:"rgba(15,17,23,0.55)",display:"flex",alignItems:"flex-end"}}>
+      <div onClick={(e:any)=>e.stopPropagation()}
+        style={{background:"var(--bg3)",width:"100%",borderRadius:"18px 18px 0 0",padding:"18px 16px 26px",boxShadow:"0 -8px 30px rgba(0,0,0,.25)"}}>
+        <div style={{textAlign:"center" as const,marginBottom:14}}>
+          <div style={{fontSize:28,marginBottom:4}}>✅</div>
+          <div style={{fontWeight:800,fontSize:15,color:"var(--text)"}}>Recibo gerado — {reciboGerado.categoria}</div>
+          <div className="muted" style={{fontSize:12,marginTop:2}}>{fmtMoney(reciboGerado.total)} lançado na venda de hoje (SEAMA)</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado))}`,"_blank")} className="btn"
+            style={{flex:1,background:"#DCFCE7",color:"#128C4A",border:"1px solid #25d36644",padding:"13px",fontSize:14,fontWeight:700}}>📲 WhatsApp</button>
+          <button onClick={()=>imprimirRecibo(reciboGerado)} className="btn"
+            style={{flex:1,background:"#F3E8FF",color:"#8B5CF6",border:"1px solid #8B5CF6",padding:"13px",fontSize:14,fontWeight:700}}>🖨️ Imprimir</button>
+        </div>
+        <button onClick={()=>setReciboGerado(null)} className="btn"
+          style={{width:"100%",marginTop:8,background:"none",border:"1px solid var(--border)",color:"var(--text2)",padding:"11px",fontSize:13}}>Fechar</button>
+      </div>
     </div>}
   </div>;
 }
@@ -10933,6 +11194,10 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   const setImpCfg=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),impressao:{...(d.config?.impressao||{}),[key]:val}}}));
   const [impNome,setImpNome]=useState(impCfg.nome);
   const [impRodape,setImpRodape]=useState(impCfg.rodape);
+  const [reciboTitulo,setReciboTitulo]=useState(impCfg.reciboTitulo);
+  const [reciboTituloExtrato,setReciboTituloExtrato]=useState(impCfg.reciboTituloExtrato);
+  const [reciboRodape,setReciboRodape]=useState(impCfg.reciboRodape);
+  const [reciboTextoAssinatura,setReciboTextoAssinatura]=useState(impCfg.reciboTextoAssinatura);
   const logoInputRef=useRef<HTMLInputElement>(null);
   const handleLogoUpload=(e:React.ChangeEvent<HTMLInputElement>)=>{
     const file=e.target.files?.[0];if(!file)return;
@@ -11602,6 +11867,32 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           {field("Mostrar coluna \"Categoria\" na NF-e","imprimirNFe",toggle(impCfg.nfeMostrarCategoria,v=>setImpCfg("nfeMostrarCategoria",v)))}
           {field("Linha de assinatura na Encomenda","\"Ciente: ___\"",toggle(impCfg.encomendaAssinatura,v=>setImpCfg("encomendaAssinatura",v)))}
           {field("Mostrar preços na Estimativa de Custo","útil ocultar se for pra quem não deve ver valores",toggle(impCfg.estimativaMostrarPrecos,v=>setImpCfg("estimativaMostrarPrecos",v)))}
+        </div>
+
+        <div className="card" style={{marginBottom:12,border:"1px solid #16A34A40"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#16A34A",marginBottom:4}}>🧾 Recibo de Entrega</div>
+          <div className="muted" style={{fontSize:11,marginBottom:12}}>Recibo diário (por entrega) e Extrato (soma de vários recibos num período), gerados em Produção &gt; categorias marcadas como cliente. Valem tanto pro impresso quanto pro texto enviado por WhatsApp.</div>
+          {field("Título do recibo diário","topo do documento e da mensagem",
+            <div style={{display:"flex",gap:6}}>
+              <input value={reciboTitulo} onChange={e=>setReciboTitulo(e.target.value)} placeholder="Recibo de Entrega" className="inp" style={{flex:1,marginBottom:0}}/>
+              <button className="btn" onClick={()=>{setImpCfg("reciboTitulo",reciboTitulo.trim()||"Recibo de Entrega");alert("✅ Salvo!");}} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
+          {field("Título do extrato","topo do extrato de período",
+            <div style={{display:"flex",gap:6}}>
+              <input value={reciboTituloExtrato} onChange={e=>setReciboTituloExtrato(e.target.value)} placeholder="Extrato de Entregas" className="inp" style={{flex:1,marginBottom:0}}/>
+              <button className="btn" onClick={()=>{setImpCfg("reciboTituloExtrato",reciboTituloExtrato.trim()||"Extrato de Entregas");alert("✅ Salvo!");}} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
+          {field("Rodapé do recibo","vazio = usa o rodapé geral (acima)",
+            <div style={{display:"flex",gap:6}}>
+              <input value={reciboRodape} onChange={e=>setReciboRodape(e.target.value)} placeholder="Ex.: Confraria Café · Seama · CNPJ 00.000.000/0001-00" className="inp" style={{flex:1,marginBottom:0}}/>
+              <button className="btn" onClick={()=>{setImpCfg("reciboRodape",reciboRodape.trim());alert("✅ Salvo!");}} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
+          {field("Mostrar linha de assinatura","recibo diário",toggle(impCfg.reciboMostrarAssinatura,v=>setImpCfg("reciboMostrarAssinatura",v)))}
+          {impCfg.reciboMostrarAssinatura&&field("Texto da assinatura","",
+            <div style={{display:"flex",gap:6}}>
+              <input value={reciboTextoAssinatura} onChange={e=>setReciboTextoAssinatura(e.target.value)} placeholder="Assinatura de quem recebeu" className="inp" style={{flex:1,marginBottom:0}}/>
+              <button className="btn" onClick={()=>{setImpCfg("reciboTextoAssinatura",reciboTextoAssinatura.trim()||"Assinatura de quem recebeu");alert("✅ Salvo!");}} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
         </div>
       </div>;
     })()}
