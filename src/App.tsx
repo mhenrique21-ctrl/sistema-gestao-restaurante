@@ -979,11 +979,17 @@ const mergeFromServer=(prev:any,updates:any)=>{
       const seen=new Set<string>();
       return merged.filter((p:any)=>{const k=(p.nome||"").trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
     };
-    // Union por ID entre local (p) e servidor (s): preserva edições locais que ainda não chegaram ao servidor.
+    // Union por ID entre local (p) e servidor (s): preserva edições locais que ainda não
+    // chegaram ao servidor. server primeiro, local por cima — Map.set com a mesma chave
+    // sobrescreve, então quem entra por último "ganha"; era o contrário (local entrando
+    // primeiro), o que fazia o servidor sempre vencer pra um id que já existia dos dois
+    // lados — uma edição em item existente (ex.: trocar a categoria de um produto de
+    // produção) otimisticamente aplicada localmente era revertida por esse merge antes
+    // mesmo do POST que devia salvá-la.
     const unionById=(localArr:any[],serverArr:any[],sortByCriadoEmDesc?:boolean)=>{
       const m=new Map<string,any>();
-      (localArr||[]).forEach((x:any)=>m.set(x.id,x));
       (serverArr||[]).forEach((x:any)=>m.set(x.id,x));
+      (localArr||[]).forEach((x:any)=>m.set(x.id,x));
       let out=[...m.values()].filter((x:any)=>!_listaDeletados.has(x.id));
       if(sortByCriadoEmDesc)out=out.sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
       return out;
@@ -6646,6 +6652,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   };
   const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>{const icons={...(d.iconesProducao||{})};if(icons[old]&&v!==old){icons[v]=icons[old];delete icons[old];}return{...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(old)?{...p,cats:pc.map((x:string)=>x===old?v:x),cat:pc.map((x:string)=>x===old?v:x)[0]||""}:p;}),iconesProducao:icons};});setEditCat(null);};
   const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
+  // Soma a categoria a TODOS os produtos de uma vez — sem tirar as categorias
+  // que já tinham. Útil quando uma categoria nova (ex.: um ponto de venda) deve
+  // valer pra todo o catálogo, em vez de marcar produto por produto.
+  const marcarTodosNaCategoria=(c:string)=>{
+    if(!confirm(`Marcar TODOS os produtos de produção também em "${c}"?\n\nAs categorias que já tinham continuam, essa só é somada.`))return;
+    (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>{
+      const pc=prodCats(p);
+      return pc.includes(c)?p:{...p,cats:[...pc,c]};
+    })}));
+  };
 
   // Order form (Lista-style)
   const [form,setForm]=useState({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
@@ -6856,7 +6872,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div className="section-title" style={{color:"#8B5CF6"}}>🏷️ Categorias de Produção</div>
       <div style={{marginBottom:10}}>
         {cats.map((c,idx)=>(
-          <div key={c} style={{position:"relative" as const,display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
+          <div key={c} style={{position:"relative" as const,display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)",flexWrap:"wrap" as const}}>
             <button onClick={()=>setIconPicker(iconPicker===c?null:c)} title="Alterar ícone" style={{background:"none",border:"1px solid #5b21b644",borderRadius:6,cursor:"pointer",padding:"2px 4px",lineHeight:1}}><CatIconBadge icon={prodCatIcon(c)} size={16}/></button>
             {iconPicker===c&&<IconPickerPopup value={prodCatIcon(c)} onPick={(icon)=>setCatIcon(c,icon)} style={{top:36,left:0}}/>}
             {editCat?.name===c
@@ -6878,6 +6894,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                     <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
                       style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                   </div>
+                  <button onClick={()=>marcarTodosNaCategoria(c)} title="Marcar todos os produtos nesta categoria (soma, não substitui)"
+                    style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"#8B5CF6",cursor:"pointer",fontSize:10,padding:"2px 6px",lineHeight:1,whiteSpace:"nowrap" as const}}>🏷️ Marcar todos</button>
                   <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
                 </>
             }
