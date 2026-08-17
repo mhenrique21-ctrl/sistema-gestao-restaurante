@@ -6636,6 +6636,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const [extratoCliente,setExtratoCliente]=useState("");
   const [extratoIni,setExtratoIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [extratoFim,setExtratoFim]=useState(today());
+  // Guarda quem foi DESMARCADO (não quem foi marcado) — assim tudo já vem
+  // selecionado por padrão sem precisar sincronizar estado toda vez que o
+  // cliente/período muda ou um recibo novo é gerado.
+  const [extratoDesmarcados,setExtratoDesmarcados]=useState<Set<string>>(new Set());
 
   // Product catalog management
   const [prodForm,setProdForm]=useState<{nome:string,cats:string[],unidade:string,precoFixo:string}>({nome:"",cats:[],unidade:"un",precoFixo:""});
@@ -6801,17 +6805,22 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     });
   };
   const [reciboGerado,setReciboGerado]=useState<any|null>(null);
-  const gerarRecibo=(categoria:string,itensComPreco:any[])=>{
-    const itens=itensComPreco.map((p:any)=>{
-      const quantidade=parseFloat(qtdsCatalog[qtyKey(p.id,categoria)]);
-      const precoUnit=p.precoFixo;
-      return{nome:p.nome,quantidade,unidade:p.unidade||"un",precoUnit,subtotal:Math.round(quantidade*precoUnit*100)/100};
-    });
+  // Gerado a partir do pedido JÁ ARQUIVADO (produzido/entregue), não da tela de
+  // pedir — assim reflete o que corrigido com o ✏️ do Arquivo, não o que foi
+  // pedido originalmente. Fica como "a receber": a venda só entra quando o
+  // Extrato confirmar o recebimento (fim de semana), não no dia da entrega.
+  const gerarReciboDePedido=(ped:any,categoria:string)=>{
+    const itensCat=(ped.itens||[]).filter((it:any)=>(it.categoria||"")===categoria&&it.quantidade>0);
+    const itens=itensCat.map((it:any)=>{
+      const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
+      const precoUnit=prod?.precoFixo||0;
+      return{nome:it.nome,quantidade:it.quantidade,unidade:it.unidade||"un",precoUnit,subtotal:Math.round(it.quantidade*precoUnit*100)/100};
+    }).filter((it:any)=>it.precoUnit>0);
+    if(!itens.length)return alert("Nenhum item dessa categoria tem preço fixo cadastrado (edite em Produtos).");
     const total=Math.round(itens.reduce((s:number,it:any)=>s+it.subtotal,0)*100)/100;
-    if(!confirm(`Gerar recibo de entrega pra ${categoria} no valor de ${fmtMoney(total)}?\n\nIsso lança o valor como venda de hoje na SEAMA.`))return;
-    const recibo={id:uid(),categoria,data:today(),itens,total,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    if(!confirm(`Gerar recibo de entrega pra ${categoria} no valor de ${fmtMoney(total)}?\n\nFica registrado como "a receber" — a venda só entra na SEAMA quando você confirmar o recebimento no Extrato.`))return;
+    const recibo={id:uid(),pedidoId:ped.id,categoria,data:ped.data,itens,total,recebido:false,solicitante:ped.solicitante||login?.label||"",criadoEm:new Date().toISOString()};
     (setDbAndSave||setDb)((d:any)=>({...d,recibosEntrega:[recibo,...(d.recibosEntrega||[])]}));
-    registrarEntregaComoVenda(recibo.data,total);
     setReciboGerado(recibo);
   };
   const montarTextoWhatsRecibo=(recibo:any)=>{
@@ -6864,26 +6873,25 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     w.document.close();
   };
 
-  // ---- Extrato de Entregas — soma vários recibos diários já gerados num
-  // período, pra fechamento/cobrança. Não recalcula nada: só soma o que cada
-  // recibo diário já registrou. ----
+  // ---- Extrato de Entregas — soma os recibos AINDA NÃO RECEBIDOS de um
+  // cliente. O período é só um filtro de visualização; quem decide o que
+  // entra no fechamento é a seleção (checkbox) de cada recibo — dá pra tirar
+  // uma entrega com problema sem perder o resto. ----
   const recibosDoExtrato=(cliente:string,ini:string,fim:string)=>
-    (db.recibosEntrega||[]).filter((r:any)=>r.categoria===cliente&&r.data>=ini&&r.data<=fim).sort((a:any,b:any)=>a.data<b.data?-1:1);
-  const montarTextoWhatsExtrato=(cliente:string,ini:string,fim:string)=>{
+    (db.recibosEntrega||[]).filter((r:any)=>r.categoria===cliente&&!r.recebido&&r.data>=ini&&r.data<=fim).sort((a:any,b:any)=>a.data<b.data?-1:1);
+  const montarTextoWhatsExtrato=(cliente:string,recibos:any[],ini:string,fim:string)=>{
     const cfg=getImpressaoCfg(db);
-    const recibos=recibosDoExtrato(cliente,ini,fim);
     const total=recibos.reduce((s:number,r:any)=>s+r.total,0);
     let txt=`📋 *${(cfg.reciboTituloExtrato||"Extrato de Entregas").toUpperCase()}*\n🏢 Cliente: *${cliente}*\n📅 Período: ${fmtDate(ini)} a ${fmtDate(fim)}\n\n`;
     recibos.forEach((r:any)=>{txt+=`${fmtDate(r.data).slice(0,5)} — ${fmtMoney(r.total)}\n`;});
-    txt+=`\n📦 ${recibos.length} entrega(s) no período\n`;
+    txt+=`\n📦 ${recibos.length} entrega(s) neste fechamento\n`;
     txt+=`\n💰 *TOTAL A RECEBER: ${fmtMoney(total)}*\n`;
     if(cfg.reciboMostrarAssinatura)txt+=`\n_${impressaoNome(cfg,"Seama")}\nReferente às entregas acima — recibo gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}_`;
     return txt;
   };
-  const imprimirExtrato=(cliente:string,ini:string,fim:string)=>{
+  const imprimirExtrato=(cliente:string,recibos:any[],ini:string,fim:string)=>{
     const cfg=getImpressaoCfg(db);
     const fpx=FONTE_PX[cfg.fonte]||13;
-    const recibos=recibosDoExtrato(cliente,ini,fim);
     const total=recibos.reduce((s:number,r:any)=>s+r.total,0);
     const w=window.open("","_blank","width=700,height=800");if(!w)return;
     const rows=recibos.map((r:any)=>`<tr><td>${fmtDate(r.data)}</td><td class="num">${r.itens.length} item(ns)</td><td class="num">${fmtMoney(r.total)}</td></tr>`).join("");
@@ -6920,6 +6928,17 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div class="footer">${impressaoRodapeRecibo(cfg)}</div>
     </body></html>`);
     w.document.close();
+  };
+  // Marca os selecionados como recebidos (não somem do histórico, só saem do
+  // Extrato) e lança a soma como venda de HOJE — dia do recebimento de
+  // verdade, não da entrega original.
+  const confirmarRecebimento=(idsSelecionados:Set<string>)=>{
+    const recibos=(db.recibosEntrega||[]).filter((r:any)=>idsSelecionados.has(r.id));
+    if(!recibos.length)return;
+    const total=recibos.reduce((s:number,r:any)=>s+r.total,0);
+    const hoje=today();
+    (setDbAndSave||setDb)((d:any)=>({...d,recibosEntrega:(d.recibosEntrega||[]).map((r:any)=>idsSelecionados.has(r.id)?{...r,recebido:true,recebidoEm:hoje}:r)}));
+    registrarEntregaComoVenda(hoje,total);
   };
 
   const montarTextoWhats=(ped:any)=>{
@@ -7173,6 +7192,23 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               {isEdit&&<button onClick={()=>delItemFromPedido(ped.id,j)} title="Remover item" style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnDanger)",fontSize:12,padding:"0 2px",flexShrink:0}}>🗑️</button>}
             </div>;
           })}
+          {/* Recibo de Entrega — uma categoria-cliente por vez, a partir do que
+              está gravado agora nesse pedido (já refletindo correções do ✏️). */}
+          {!isEdit&&[...new Set((ped.itens||[]).map((it:any)=>it.categoria).filter((c:string)=>c&&isCategoriaCliente(c)))].map((cat:string)=>{
+            const jaGerado=(db.recibosEntrega||[]).find((r:any)=>r.pedidoId===ped.id&&r.categoria===cat);
+            const itensCat=(ped.itens||[]).filter((it:any)=>it.categoria===cat&&it.quantidade>0);
+            const totalPrevisto=itensCat.reduce((s:number,it:any)=>{const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);return s+it.quantidade*(prod?.precoFixo||0);},0);
+            return <div key={cat} style={{marginTop:8}}>
+              {jaGerado
+                ?<div style={{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>
+                    ✅ Recibo de {cat} já gerado — {fmtMoney(jaGerado.total)} {jaGerado.recebido?"(recebido)":"(a receber)"}
+                  </div>
+                :<button onClick={()=>gerarReciboDePedido(ped,cat)} className="btn"
+                    style={{width:"100%",background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"10px",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    🧾 Gerar Recibo de Entrega — {cat} — {fmtMoney(totalPrevisto)}
+                  </button>}
+            </div>;
+          })}
           {addToPedId===ped.id&&<div style={{marginTop:8,padding:"10px",background:"#DCFCE7",borderRadius:8,border:"1px solid #22C55E40"}}>
             <div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginBottom:8}}>➕ Adicionar Produto ao Pedido</div>
             <div style={{position:"relative",marginBottom:6}}>
@@ -7239,19 +7275,55 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               <input type="date" value={extratoFim} onChange={e=>setExtratoFim(e.target.value)} className="inp" style={{flex:1,marginBottom:0}}/>
             </div>
             {extratoCliente&&(()=>{
-              const doExtrato=recibosDoExtrato(extratoCliente,extratoIni,extratoFim);
-              const totalExtrato=doExtrato.reduce((s:number,r:any)=>s+r.total,0);
+              const pendentes=recibosDoExtrato(extratoCliente,extratoIni,extratoFim);
+              const selecionados=pendentes.filter((r:any)=>!extratoDesmarcados.has(r.id));
+              const totalSelecionado=selecionados.reduce((s:number,r:any)=>s+r.total,0);
+              const todasMarcadas=pendentes.length>0&&selecionados.length===pendentes.length;
+              const toggleUm=(id:string)=>setExtratoDesmarcados(prev=>{const n=new Set(prev);if(n.has(id))n.delete(id);else n.add(id);return n;});
+              const toggleTodos=()=>setExtratoDesmarcados(todasMarcadas?new Set(pendentes.map((r:any)=>r.id)):new Set());
               return <div style={{background:"var(--bg4)",borderRadius:8,padding:"10px 12px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:8}}>
-                  <span className="muted">{doExtrato.length} entrega(s) no período</span>
-                  <span style={{fontWeight:800,color:"#15803D"}}>{fmtMoney(totalExtrato)}</span>
-                </div>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsExtrato(extratoCliente,extratoIni,extratoFim))}`,"_blank")} disabled={!doExtrato.length} className="btn"
-                    style={{flex:1,background:doExtrato.length?"#DCFCE7":"var(--border2)",color:doExtrato.length?"#128C4A":"#555",border:doExtrato.length?"1px solid #25d36644":"1px solid var(--border2)",padding:"11px",fontSize:13,fontWeight:700}}>📲 WhatsApp</button>
-                  <button onClick={()=>imprimirExtrato(extratoCliente,extratoIni,extratoFim)} disabled={!doExtrato.length} className="btn"
-                    style={{flex:1,background:doExtrato.length?"#F3E8FF":"var(--border2)",color:doExtrato.length?"#8B5CF6":"#555",border:doExtrato.length?"1px solid #8B5CF6":"1px solid var(--border2)",padding:"11px",fontSize:13,fontWeight:700}}>🖨️ Imprimir</button>
-                </div>
+                {!pendentes.length
+                  ? <div className="muted" style={{fontSize:12,textAlign:"center" as const,padding:"8px 0"}}>Nada pendente de recebimento nesse período.</div>
+                  : <>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 2px 8px",borderBottom:"1px solid var(--border)",marginBottom:6}}>
+                        <span style={{fontSize:10,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>{pendentes.length} pendente{pendentes.length>1?"s":""} de recebimento</span>
+                        <span onClick={toggleTodos} style={{fontSize:11,color:"#15803D",fontWeight:700,cursor:"pointer"}}>{todasMarcadas?"Desmarcar todos":"Selecionar todos"}</span>
+                      </div>
+                      {pendentes.map((r:any)=>{
+                        const marcado=!extratoDesmarcados.has(r.id);
+                        return <div key={r.id} onClick={()=>toggleUm(r.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 2px",borderBottom:"1px solid var(--border)",cursor:"pointer",opacity:marcado?1:0.45}}>
+                          <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${marcado?"#15803D":"#ccc"}`,background:marcado?"#15803D":"none",color:"#fff",fontSize:11,fontWeight:800,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{marcado?"✓":""}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:600}}>{fmtDate(r.data)}</div>
+                            <div className="muted" style={{fontSize:10}}>{r.itens.length} item(ns)</div>
+                          </div>
+                          <span style={{fontWeight:700,fontSize:12,color:"#15803D"}}>{fmtMoney(r.total)}</span>
+                        </div>;
+                      })}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#DCFCE7",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",marginTop:8}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"#166534"}}>{selecionados.length} selecionada{selecionados.length!==1?"s":""}</span>
+                        <span style={{fontSize:16,fontWeight:800,color:"#15803D"}}>{fmtMoney(totalSelecionado)}</span>
+                      </div>
+                      <button onClick={()=>{
+                        if(!selecionados.length)return;
+                        if(!confirm(`Confirmar recebimento de ${selecionados.length} entrega(s) — ${fmtMoney(totalSelecionado)}?\n\nIsso lança o valor na venda de hoje da SEAMA.`))return;
+                        const ids=new Set(selecionados.map((r:any)=>r.id));
+                        confirmarRecebimento(ids);
+                        const idsArr=[...ids];
+                        setTimeout(()=>{
+                          const doc=(db.recibosEntrega||[]).filter((r:any)=>idsArr.includes(r.id));
+                          window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsExtrato(extratoCliente,doc,extratoIni,extratoFim))}`,"_blank");
+                        },200);
+                        setExtratoDesmarcados(new Set());
+                      }} disabled={!selecionados.length} className="btn"
+                        style={{width:"100%",marginTop:8,background:selecionados.length?"linear-gradient(135deg,#16A34A,#15803D)":"var(--border2)",color:selecionados.length?"#fff":"#555",padding:"12px",fontSize:13,fontWeight:700}}>
+                        ✅ Confirmar Recebimento — {fmtMoney(totalSelecionado)}
+                      </button>
+                      <button onClick={()=>imprimirExtrato(extratoCliente,selecionados,extratoIni,extratoFim)} disabled={!selecionados.length} className="btn"
+                        style={{width:"100%",marginTop:6,background:selecionados.length?"#F3E8FF":"var(--border2)",color:selecionados.length?"#8B5CF6":"#555",border:selecionados.length?"1px solid #8B5CF6":"1px solid var(--border2)",padding:"10px",fontSize:12,fontWeight:700}}>
+                        🖨️ Imprimir (sem confirmar)
+                      </button>
+                    </>}
               </div>;
             })()}
           </>}
@@ -7267,7 +7339,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             <div key={r.id} style={{background:"var(--bg4)",borderRadius:8,padding:"10px",marginBottom:8,border:"1px solid var(--border)"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontWeight:700,fontSize:13}}>{r.categoria}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontWeight:700,fontSize:13}}>{r.categoria}</span>
+                    <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:8,background:r.recebido?"#DCFCE7":"#FEF3C7",color:r.recebido?"#15803D":"#B45309"}}>{r.recebido?"✅ recebido":"⏳ a receber"}</span>
+                  </div>
                   <div className="muted" style={{fontSize:11}}>{fmtDate(r.data)} · {r.itens.length} item(ns)</div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -7346,19 +7421,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 {cats.filter(cat=>prodsCatalog.some((p:any)=>prodCats(p).includes(cat))).map(cat=>{
                   const itensCat=prodsCatalog.filter((p:any)=>prodCats(p).includes(cat));
                   const {ped,atual}=somaCategoria(itensCat,cat);
-                  const ehCliente=isCategoriaCliente(cat);
-                  const itensComPreco=ehCliente?itensCat.filter((p:any)=>{
-                    const q=parseFloat(qtdsCatalog[qtyKey(p.id,cat)]);
-                    return !isNaN(q)&&q>0&&p.precoFixo>0;
-                  }):[];
-                  const totalRecibo=itensComPreco.reduce((s:number,p:any)=>s+parseFloat(qtdsCatalog[qtyKey(p.id,cat)])*p.precoFixo,0);
                   return <div key={cat} style={{marginBottom:10}}>
                     {catHeader(cat,prodCatIcon(cat),"#7C3AED14","#7C3AED",ped,atual)}
                     {itensCat.sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,cat))}
-                    {ehCliente&&itensComPreco.length>0&&<button onClick={()=>gerarRecibo(cat,itensComPreco)} className="btn"
-                      style={{width:"100%",marginTop:6,background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"12px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                      🧾 Gerar Recibo de Entrega — {fmtMoney(totalRecibo)}
-                    </button>}
                   </div>;
                 })}
                 {(()=>{
