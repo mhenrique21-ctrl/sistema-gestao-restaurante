@@ -7186,22 +7186,39 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               }} style={{background:"none",border:"1px solid #EF444433",borderRadius:5,color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
             </div>
           </div>
-          {!isCollapsed&&<>{(ped.itens||[]).map((it:any,j:number)=>{
-            const key=`${ped.id}_${it.nome}`;
-            return <div key={j} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:j<(ped.itens||[]).length-1?"1px solid var(--border)":"none"}}>
-              <span style={{fontSize:12,flex:1,display:"flex",alignItems:"center",gap:4}}><CatIconBadge icon={prodCatIcon(it.categoria)} size={12}/>{it.nome}</span>
-              <span style={{fontSize:10,color:"#8B5CF6"}}>{it.categoria||""}</span>
-              {it.qtdAtual&&<span style={{fontSize:10,color:"#888"}}>atual: {it.qtdAtual}</span>}
-              {isEdit?<input type="number" inputMode="decimal" min="0" step="any"
-                value={editQtds[key]||""} onChange={e=>setEditQtds(q=>({...q,[key]:e.target.value}))}
-                className="inp" style={{width:55,marginBottom:0,textAlign:"center" as const,fontSize:12,padding:"4px"}}/>
-              :<span style={{fontSize:12,fontWeight:700,color:"#7C3AED"}}>{it.quantidade} {it.unidade||"un"}</span>}
-              {it.obs&&!isEdit&&<span style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>({it.obs})</span>}
-              {isEdit&&<input placeholder="Obs" value={editObs[key]||""} onChange={e=>setEditObs(o=>({...o,[key]:e.target.value}))}
-                className="inp" style={{width:80,marginBottom:0,fontSize:10,padding:"3px 5px"}}/>}
-              {isEdit&&<button onClick={()=>delItemFromPedido(ped.id,j)} title="Remover item" style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnDanger)",fontSize:12,padding:"0 2px",flexShrink:0}}>🗑️</button>}
-            </div>;
-          })}
+          {!isCollapsed&&<>{(()=>{
+            const grupos:{cat:string;items:{it:any;idx:number}[]}[]=[];
+            (ped.itens||[]).forEach((it:any,j:number)=>{
+              const cat=it.categoria||"";
+              let g=grupos.find(g=>g.cat===cat);
+              if(!g){g={cat,items:[]};grupos.push(g);}
+              g.items.push({it,idx:j});
+            });
+            return grupos.map((g,gi)=>{
+              const ehCliente=g.cat&&isCategoriaCliente(g.cat);
+              return <div key={g.cat||`_${gi}`} style={{background:"var(--bg4)",borderRadius:8,padding:"2px 10px 6px",marginBottom:8,border:ehCliente?"1.5px solid #16A34A55":"none"}}>
+                <div style={{fontSize:10,fontWeight:800,color:"#7C3AED",textTransform:"uppercase" as const,letterSpacing:.4,padding:"7px 0 5px",display:"flex",alignItems:"center",gap:5}}>
+                  <CatIconBadge icon={prodCatIcon(g.cat)} size={12}/>{g.cat||"Sem categoria"}
+                  {ehCliente&&<span style={{background:"#7C3AED",color:"#fff",borderRadius:8,padding:"0px 6px",fontSize:8,fontWeight:800}}>CLIENTE</span>}
+                </div>
+                {g.items.map(({it,idx},ii)=>{
+                  const key=`${ped.id}_${it.nome}`;
+                  return <div key={ii} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderTop:ii>0?"1px solid var(--border)":"none"}}>
+                    <span style={{fontSize:12,flex:1}}>{it.nome}</span>
+                    {it.qtdAtual&&<span style={{fontSize:10,color:"#888"}}>atual: {it.qtdAtual}</span>}
+                    {isEdit?<input type="number" inputMode="decimal" min="0" step="any"
+                      value={editQtds[key]||""} onChange={e=>setEditQtds(q=>({...q,[key]:e.target.value}))}
+                      className="inp" style={{width:55,marginBottom:0,textAlign:"center" as const,fontSize:12,padding:"4px"}}/>
+                    :<span style={{fontSize:12,fontWeight:700,color:"#7C3AED"}}>{it.quantidade} {it.unidade||"un"}</span>}
+                    {it.obs&&!isEdit&&<span style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>({it.obs})</span>}
+                    {isEdit&&<input placeholder="Obs" value={editObs[key]||""} onChange={e=>setEditObs(o=>({...o,[key]:e.target.value}))}
+                      className="inp" style={{width:80,marginBottom:0,fontSize:10,padding:"3px 5px"}}/>}
+                    {isEdit&&<button onClick={()=>delItemFromPedido(ped.id,idx)} title="Remover item" style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnDanger)",fontSize:12,padding:"0 2px",flexShrink:0}}>🗑️</button>}
+                  </div>;
+                })}
+              </div>;
+            });
+          })()}
           {/* Recibo de Entrega — uma categoria-cliente por vez, a partir do que
               está gravado agora nesse pedido (já refletindo correções do ✏️). */}
           {!isEdit&&[...new Set((ped.itens||[]).map((it:any)=>it.categoria).filter((c:string)=>c&&isCategoriaCliente(c)))].map((cat:string)=>{
