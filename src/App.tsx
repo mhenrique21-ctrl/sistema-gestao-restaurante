@@ -597,7 +597,7 @@ const DASHBOARD_ITENS_DEFAULT:{[k:string]:string[]}={
   desempenho:["fatMedioDia","vendasDiariasChart","tendencia","melhorDia","piorDia"],
   canais:["mixPagamento","participacaoDelivery","custoMarketplaces","cmv","margemContrib"],
   supervisao:["diasSemRegistro","anomalia","origemLancamentos"],
-  operacional:["contasPagar","lembretes","resultado"],
+  operacional:["contasPagar","lembretes","resultado","budgetCompras"],
   vendashora:["graficoHora","ritmoDia","horarioPico","altaHora","quedaHora"],
   mesas:["mesasComandasBloqueado"],
   vendaaovivo:["vendaInstantaneaBloqueado"],
@@ -631,6 +631,7 @@ const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
   contasPagar:"Contas a Pagar (hoje/vencidas)",
   lembretes:"Lembretes",
   resultado:"Resultado (vendas − compras, funcionários)",
+  budgetCompras:"Budget de Compras (vendas de ontem × % configurado)",
   graficoHora:"Gráfico de movimento por hora (mesmo padrão do PDV)",
   ritmoDia:"Ritmo do dia vs. ontem (acumulado até a hora atual)",
   horarioPico:"Horário de pico",
@@ -650,7 +651,8 @@ const DASHBOARD_APARENCIA_DEFAULTS={
   corDestaque:"#8B5CF6",
   corSucesso:"#22C55E",
   corAtencao:"#F59E0B",
-  corCritica:"var(--btnDanger)",
+  corCritica:"#EF4444",
+  budgetCompraPct:30, // % das vendas de ontem que vira o teto de compras de hoje
 };
 const DASHBOARD_FONTE_ESCALA:{[k:string]:number}={pequena:0.85,media:1,grande:1.2};
 const getDashboardCfg=(db:any)=>{
@@ -1911,6 +1913,16 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
       const deltaHojeOntem=faturamentoOntem>0?((faturamentoHoje-faturamentoOntem)/faturamentoOntem)*100:null;
       const deltaHojeOntemRs=faturamentoHoje-faturamentoOntem;
 
+      // --- Budget de Compras — teto de hoje = vendas de ontem × % configurado.
+      // "Comprado hoje" olha a DATA da compra (não quando foi lançada no sistema),
+      // então uma nota lançada com atraso ainda conta no dia certo.
+      const budgetCompraPct=apar.budgetCompraPct??30;
+      const budgetCompraHoje=faturamentoOntem*(budgetCompraPct/100);
+      const compradoHoje=(db.compras||[]).filter((c:any)=>c.data===hj).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
+      const saldoBudgetHoje=budgetCompraHoje-compradoHoje;
+      const pctBudgetUsado=budgetCompraHoje>0?(compradoHoje/budgetCompraHoje)*100:0;
+      const corBudget=pctBudgetUsado>100?corCrit:pctBudgetUsado>80?corAtn:corOk;
+
       // --- Vendas por Hora — só a Seama manda `porHora` (ver /api/venda-pdv); degrada
       // pra "sem dado" quando o campo não vem (ex.: lançamento manual, outra empresa) ---
       const porHoraHoje:{hora:number,valor:number}[]=vendaHojeRow?.porHora||[];
@@ -2226,6 +2238,36 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           <IRow label="Vendas - Compras" value={fmtMoney(totalVendas-totalCompras)} positive={totalVendas>=totalCompras}/>
           <IRow label="Despesas Pendentes" value={fmtMoney(pendentesPeriodo)} positive={false}/>
           <IRow label="Funcionários" value={`${(db.funcionarios||[]).length}`} neutral/>
+        </div>,
+        budgetCompras:()=><div className="card">
+          <div className="section-title" style={{display:"flex",justifyContent:"space-between"}}>
+            <span>🛒 Budget de Compras — hoje</span>
+            <span className="muted" style={{fontSize:flbl(10)}}>{budgetCompraPct}% de ontem</span>
+          </div>
+          {faturamentoOntem===0
+            ?<div className="muted" style={{fontSize:flbl(11)}}>Sem venda registrada ontem — sem base pra calcular o budget de hoje</div>
+            :<>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:6}}>
+                <div style={{textAlign:"center"}}>
+                  <div className="muted" style={{fontSize:flbl(10)}}>Budget do dia</div>
+                  <div style={{fontWeight:700,color:corAcc,fontSize:fnum(15)}}>{fmtMoney(budgetCompraHoje)}</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div className="muted" style={{fontSize:flbl(10)}}>Comprado hoje</div>
+                  <div style={{fontWeight:700,color:corAtn,fontSize:fnum(15)}}>{fmtMoney(compradoHoje)}</div>
+                </div>
+              </div>
+              <div style={{marginTop:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:flbl(11),marginBottom:4}}>
+                  <span className="muted">Saldo: {fmtMoney(Math.abs(saldoBudgetHoje))}{saldoBudgetHoje<0?" excedido":" disponível"}</span>
+                  <span style={{color:corBudget,fontWeight:700}}>{pctBudgetUsado.toFixed(0)}%</span>
+                </div>
+                <div style={{height:6,background:"var(--border2)",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",borderRadius:3,width:`${Math.min(pctBudgetUsado,100)}%`,background:corBudget,transition:"width .3s"}}/>
+                </div>
+              </div>
+              {saldoBudgetHoje<0&&<div style={{fontSize:flbl(11),color:corCrit,marginTop:8,fontWeight:600}}>⚠️ Budget de hoje excedido em {fmtMoney(-saldoBudgetHoje)} — não deveria ultrapassar {fmtMoney(budgetCompraHoje)} em compras hoje.</div>}
+            </>}
         </div>,
         vendaInstantaneaBloqueado:()=><div className="card" style={{border:"1px dashed var(--border2)"}}>
           <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
@@ -3059,6 +3101,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const formasPag=["dinheiro","cartão débito","cartão crédito","pix","boleto","fiado"];
 
   const totalCarrinho=carrinho.reduce((s,i)=>s+parseMoney(i.valorTotal),0);
+
+  // Budget de Compras — mesmo teto do Dashboard (vendas do dia anterior a
+  // dataCom × % configurado), projetando o carrinho atual + o que já foi
+  // lançado nesse mesmo dia, pra avisar ANTES de confirmar a entrada.
+  const budgetCompraPct=getDashboardCfg(db).aparencia.budgetCompraPct??30;
+  const diaAnteriorCompra=(()=>{const d=new Date(dataCom+"T12:00:00");d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+  const vendasDiaAnteriorCompra=(db.vendas||[]).find((v:any)=>v.data===diaAnteriorCompra)?.total||0;
+  const budgetDoDiaCompra=vendasDiaAnteriorCompra*(budgetCompraPct/100);
+  const jaCompradoNoDia=(db.compras||[]).filter((c:any)=>c.data===dataCom).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
+  const projetadoNoDia=jaCompradoNoDia+totalCarrinho;
+  const pctProjetadoNoDia=budgetDoDiaCompra>0?(projetadoNoDia/budgetDoDiaCompra)*100:0;
 
   // autocomplete matérias primas
   const buscarMP=(nome)=>{
@@ -3909,6 +3962,20 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <span>Total da Compra</span>
           <span style={{color:"#22C55E"}}>{fmtMoney(totalCarrinho)}</span>
         </div>
+        {/* Budget de Compras — avisa ANTES de confirmar, não só depois no Dashboard */}
+        {vendasDiaAnteriorCompra>0&&<div style={{background:"var(--bg4)",borderRadius:10,padding:"12px",marginBottom:12,border:`1px solid ${pctProjetadoNoDia>100?"var(--btnDanger)66":"var(--border)"}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+            <span style={{fontWeight:700,color:"var(--acc)"}}>🛒 Budget de Compras — {fmtDate(dataCom)}</span>
+            <span style={{fontWeight:700,color:pctProjetadoNoDia>100?"var(--btnDanger)":pctProjetadoNoDia>80?"#F59E0B":"#22C55E"}}>{pctProjetadoNoDia.toFixed(0)}%</span>
+          </div>
+          <div className="muted" style={{fontSize:11,marginBottom:6}}>
+            {fmtMoney(jaCompradoNoDia)} já lançado{totalCarrinho>0?` + ${fmtMoney(totalCarrinho)} deste carrinho`:""} de {fmtMoney(budgetDoDiaCompra)} de budget ({budgetCompraPct}% de {fmtMoney(vendasDiaAnteriorCompra)} vendidos no dia anterior)
+          </div>
+          <div style={{height:6,background:"var(--border2)",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",borderRadius:3,width:`${Math.min(pctProjetadoNoDia,100)}%`,background:pctProjetadoNoDia>100?"var(--btnDanger)":pctProjetadoNoDia>80?"#F59E0B":"#22C55E",transition:"width .3s"}}/>
+          </div>
+          {pctProjetadoNoDia>100&&<div style={{fontSize:11,color:"var(--btnDanger)",marginTop:6,fontWeight:600}}>⚠️ Essa entrada leva o dia a {fmtMoney(projetadoNoDia-budgetDoDiaCompra)} acima do budget — não deveria ultrapassar {fmtMoney(budgetDoDiaCompra)}.</div>}
+        </div>}
         {/* resumo financeiro */}
         <div style={{background:"#DBEAFE",borderRadius:10,padding:"12px",marginBottom:12,border:"1px solid #0EA5E940"}}>
           <div style={{fontSize:12,color:"var(--btnPrimary)",fontWeight:700,marginBottom:6}}>📋 LANÇAMENTO NO FINANCEIRO</div>
@@ -11517,6 +11584,18 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
             style={{background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:11,padding:"8px"}}>
             🔄 Restaurar padrão
           </button>
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:4}}>🛒 Budget de Compras</div>
+          <div className="muted" style={{fontSize:11,marginBottom:12}}>O teto de compras de hoje é calculado como este % das vendas de ontem. Aparece no indicador "Budget de Compras" do Dashboard e no aviso ao lançar uma compra.</div>
+          {aparField("% do budget de compras","aplicado sobre as vendas de ontem",
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <input type="number" min="1" max="100" step="1" value={apar.budgetCompraPct}
+                onChange={e=>setDashApar("budgetCompraPct",parseFloat(e.target.value)||30)}
+                className="inp" style={{width:80,textAlign:"center",marginBottom:0}}/>
+              <span style={{fontSize:13,color:"var(--text2)"}}>%</span>
+            </div>)}
         </div>
 
         <div className="card" style={{marginBottom:12}}>
