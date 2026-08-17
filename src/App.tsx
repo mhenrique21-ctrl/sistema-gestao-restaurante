@@ -7053,9 +7053,27 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         : <>
             {/* Lista por categoria */}
             {(()=>{
-              const catHeader=(label:string,icon:string,bg:string,color:string)=>(
-                <div style={{fontSize:12,fontWeight:700,color,textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:bg,borderRadius:8,marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
-                  <CatIconBadge icon={icon} size={12}/><span style={{flex:1}}>{label}</span>
+              // Soma Atual/Pedido de uma categoria — por unidade, pra não somar
+              // "un" com "kg" como se fosse a mesma coisa (ex.: 12 un + 3 kg).
+              const somaCategoria=(itensCat:any[],cat:string)=>{
+                const porUnid=(campo:Record<string,string>)=>{
+                  const somas:Record<string,number>={};
+                  itensCat.forEach((p:any)=>{
+                    const v=parseFloat(campo[qtyKey(p.id,cat)]);
+                    if(!isNaN(v))somas[p.unidade||"un"]=(somas[p.unidade||"un"]||0)+v;
+                  });
+                  return Object.entries(somas).map(([u,v])=>`${v} ${u}`).join(" + ");
+                };
+                return{ped:porUnid(qtdsCatalog),atual:porUnid(qtdsAtual)};
+              };
+              const catHeader=(label:string,icon:string,bg:string,color:string,totalPed?:string,totalAtual?:string)=>(
+                <div style={{fontSize:12,fontWeight:700,color,textTransform:"uppercase" as const,letterSpacing:.5,padding:"7px 10px",background:bg,borderRadius:8,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
+                  <CatIconBadge icon={icon} size={12}/>
+                  <span style={{flex:1}}>{label}</span>
+                  {(totalPed||totalAtual)&&<span style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
+                    {totalAtual&&<span style={{fontSize:10,fontWeight:800,color:"#f59e0b",background:"#f59e0b18",padding:"2px 7px",borderRadius:10,textTransform:"none" as const,letterSpacing:0}}>Atual: {totalAtual}</span>}
+                    {totalPed&&<span style={{fontSize:10,fontWeight:800,color:"#7C3AED",background:"#7C3AED18",padding:"2px 7px",borderRadius:10,textTransform:"none" as const,letterSpacing:0}}>Total: {totalPed}</span>}
+                  </span>}
                   <span style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginRight:4,width:64,textAlign:"center" as const}}>Atual</span>
                   <span style={{fontSize:10,color:"#7C3AED",fontWeight:700,width:64,textAlign:"center" as const}}>Pedido</span>
                   <span style={{width:26}}/>
@@ -7084,16 +7102,23 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               // BARTOLOMEIA pede 5 do mesmo item) — vira uma linha de pedido por
               // categoria preenchida.
               return <>
-                {cats.filter(cat=>prodsCatalog.some((p:any)=>prodCats(p).includes(cat))).map(cat=>(
-                  <div key={cat} style={{marginBottom:10}}>
-                    {catHeader(cat,prodCatIcon(cat),"#7C3AED14","#7C3AED")}
-                    {prodsCatalog.filter((p:any)=>prodCats(p).includes(cat)).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,cat))}
-                  </div>
-                ))}
-                {prodsCatalog.filter((p:any)=>!prodCats(p).length).length>0&&<div style={{marginBottom:10}}>
-                  {catHeader("OUTROS","📦","#88888814","#888")}
-                  {prodsCatalog.filter((p:any)=>!prodCats(p).length).sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,""))}
-                </div>}
+                {cats.filter(cat=>prodsCatalog.some((p:any)=>prodCats(p).includes(cat))).map(cat=>{
+                  const itensCat=prodsCatalog.filter((p:any)=>prodCats(p).includes(cat));
+                  const {ped,atual}=somaCategoria(itensCat,cat);
+                  return <div key={cat} style={{marginBottom:10}}>
+                    {catHeader(cat,prodCatIcon(cat),"#7C3AED14","#7C3AED",ped,atual)}
+                    {itensCat.sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,cat))}
+                  </div>;
+                })}
+                {(()=>{
+                  const itensOutros=prodsCatalog.filter((p:any)=>!prodCats(p).length);
+                  if(!itensOutros.length)return null;
+                  const {ped,atual}=somaCategoria(itensOutros,"");
+                  return <div style={{marginBottom:10}}>
+                    {catHeader("OUTROS","📦","#88888814","#888",ped,atual)}
+                    {itensOutros.sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((p:any)=>renderItem(p,""))}
+                  </div>;
+                })()}
               </>;
             })()}
 
