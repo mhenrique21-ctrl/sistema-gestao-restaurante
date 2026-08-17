@@ -1224,11 +1224,18 @@ export default function App() {
   // Botão "Atualizar" do cabeçalho — mesma busca do polling automático, mas
   // disparada na hora do clique e sem o passo de checar versão primeiro (o
   // usuário já pediu explicitamente, então busca os dados de qualquer jeito).
+  // Sem o guard silencioso do poll (syncTimer/directSaveRef): aquele existe pra
+  // um ciclo automático desistir sem incomodar ninguém, mas um clique explícito
+  // não pode virar nada — o merge por ID do mergeFromServer já preserva edição
+  // local em andamento, então é seguro buscar sempre. Tempo mínimo de spinner +
+  // ✓/⚠️ no final garantem feedback visível mesmo numa rede rápida.
   const [atualizando,setAtualizando]=useState(false);
+  const [atualizarStatus,setAtualizarStatus]=useState<null|"ok"|"erro">(null);
   const forcarAtualizacao=async()=>{
     if(!login||atualizando)return;
-    if(syncTimer.current||directSaveRef.current||Date.now()-directSaveEndRef.current<300)return;
     setAtualizando(true);
+    setAtualizarStatus(null);
+    const inicio=Date.now();
     const emps=login.empresa?[login.empresa]:["CONFRARIA","SEAMA"];
     const ts=Date.now();
     try{
@@ -1238,8 +1245,14 @@ export default function App() {
       const updates:any={};
       results.forEach(r=>{if(r?.d)updates[r.emp]=r.d;});
       if(Object.keys(updates).length>0){fromPollRef.current=true;setState(prev=>mergeFromServer(prev,updates));}
+      setAtualizarStatus(Object.keys(updates).length>0?"ok":"erro");
+    }catch{
+      setAtualizarStatus("erro");
     }finally{
+      const decorrido=Date.now()-inicio;
+      if(decorrido<400)await new Promise(r=>setTimeout(r,400-decorrido));
       setAtualizando(false);
+      setTimeout(()=>setAtualizarStatus(null),1500);
     }
   };
 
@@ -1587,8 +1600,8 @@ export default function App() {
           Atualizar aparece pra todo mundo; o sino só pra admin. */}
       <div style={{position:"fixed",right:16,top:70,zIndex:400,display:"flex",gap:8,alignItems:"center"}}>
         <button onClick={forcarAtualizacao} disabled={atualizando} title="Atualizar"
-          style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,cursor:atualizando?"default":"pointer",color:"var(--text2)",fontSize:16,padding:"5px 9px",lineHeight:1,opacity:atualizando?0.5:1,boxShadow:"0 2px 6px rgba(0,0,0,.08)"}}>
-          {atualizando?"⟳":"🔄"}
+          style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,cursor:atualizando?"default":"pointer",color:atualizarStatus==="erro"?"var(--btnDanger)":atualizarStatus==="ok"?"#22C55E":"var(--text2)",fontSize:16,padding:"5px 9px",lineHeight:1,opacity:atualizando?0.5:1,boxShadow:"0 2px 6px rgba(0,0,0,.08)"}}>
+          {atualizando?"⟳":atualizarStatus==="ok"?"✓":atualizarStatus==="erro"?"⚠️":"🔄"}
         </button>
         {isAdmin&&<NotifBell db={db} onNavigate={setTab} setPendingSub={setPendingSub}/>}
       </div>
