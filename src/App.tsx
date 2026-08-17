@@ -6786,11 +6786,21 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       if(it.obs)meta.push(`<span>${it.obs}</span>`);
       return `<div class="row"><span class="name">${it.nome}</span><span class="qty">${it.quantidade?`${it.quantidade} ${it.unidade||"un"}`:"—"}</span></div>${meta.length?`<div class="meta">${meta.join("")}</div>`:""}`;
     };
-    const blocks=Object.entries(pc).map(([cat,its])=>`
+    // Soma geral da categoria — mesma ideia da tela de Novo Pedido: por unidade
+    // (não mistura "un" com "kg"), só dos itens que têm quantidade.
+    const somaCategoriaImpressao=(its:any[])=>{
+      const s:Record<string,number>={};
+      its.forEach((it:any)=>{const q=parseFloat(it.quantidade);if(!isNaN(q))s[it.unidade||"un"]=(s[it.unidade||"un"]||0)+q;});
+      return Object.entries(s).map(([u,v])=>`${v} ${u}`).join(" + ");
+    };
+    const blocks=Object.entries(pc).map(([cat,its])=>{
+      const total=somaCategoriaImpressao(its as any[]);
+      return `
       <div class="cat-block">
-        <div class="cat-header">${catIconChar(prodCatIcon(cat))} ${cat}</div>
+        <div class="cat-header"><span class="cat-name">${catIconChar(prodCatIcon(cat))} ${cat}</span>${total?`<span class="cat-total">Total: ${total}</span>`:""}</div>
         ${(its as any[]).map(rowHtml).join("")}
-      </div>`).join("");
+      </div>`;
+    }).join("");
     const dataLabel=pedido?fmtDate(pedido.data):new Date().toLocaleDateString("pt-BR",{timeZone:TZ});
     const solicitante=pedido?.solicitante||login?.label||"—";
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Produção — ${dataLabel}</title>
@@ -6805,7 +6815,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
         .print-columns{column-count:${cfg.producaoColunas};column-gap:22px;column-rule:1px solid #e2e2de}
         .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
-        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px}
+        .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+        .cat-header .cat-total{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-weight:800;text-transform:none;letter-spacing:0;white-space:nowrap;opacity:.92}
         .row{display:flex;align-items:baseline;gap:6px;padding:2.5px 2px;border-bottom:1px solid #ececec}
         .row .name{flex:1;font-size:${Math.max(fpx-2,10)}px;line-height:1.3;color:#1a1a1a}
         .row .qty{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:${Math.max(fpx-3,9)}px;font-weight:700;color:${cfg.cor};white-space:nowrap}
