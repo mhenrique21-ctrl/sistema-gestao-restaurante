@@ -81,6 +81,7 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/neighborhoods', require('./routes/neighborhoods'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/whatsapp', require('./routes/whatsapp'));
 app.use('/api/payment-methods', require('./routes/paymentMethods'));
 app.use('/api/delivery', require('./routes/delivery'));
 app.use('/api/promotions', require('./routes/promotions'));

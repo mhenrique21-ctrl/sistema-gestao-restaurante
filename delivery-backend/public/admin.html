@@ -201,6 +201,7 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="produtos" onclick="showPage('produtos',this)">🍽 Produtos</button>
     <button class="nav-btn" data-page="categorias" onclick="showPage('categorias',this)">📂 Categorias</button>
     <button class="nav-btn" data-page="clientes" onclick="showPage('clientes',this)">👥 Clientes</button>
+    <button class="nav-btn" data-page="campanhas" onclick="showPage('campanhas',this)">📣 Campanhas</button>
     <button class="nav-btn" data-page="usuarios" onclick="showPage('usuarios',this)">🔐 Usuários</button>
     <button class="nav-btn" data-page="bairros" onclick="showPage('bairros',this)">📍 Bairros</button>
     <button class="nav-btn" data-page="configuracoes" onclick="showPage('configuracoes',this)">⚙️ Configurações</button>
@@ -564,9 +565,9 @@ function showPage(page, btn) {
   closeSidebar();
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', estoque:'Estoque', grupos:'Adicionais e preparo', comandas:'Comandas', arquivo:'Arquivo' };
+  const titles = { dashboard:'Dashboard', produtos:'Produtos', categorias:'Categorias', clientes:'Clientes', usuarios:'Usuários', pedidos:'Pedidos', bairros:'Bairros', configuracoes:'Configurações', pagamentos:'Formas de Pagamento', adicionais:'Adicionais', promocoes:'Promoções', impressoras:'Impressoras', templates:'Templates', financeiro:'Financeiro', estoque:'Estoque', grupos:'Adicionais e preparo', comandas:'Comandas', arquivo:'Arquivo', campanhas:'Campanhas WhatsApp' };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, estoque: pageEstoque, grupos: pageGrupos, comandas: pageComandas, arquivo: pageArquivo };
+  const pages = { dashboard: pageDashboard, produtos: pageProdutos, categorias: pageCategorias, clientes: pageClientes, usuarios: pageUsuarios, pedidos: pagePedidos, bairros: pageBairros, configuracoes: pageConfiguracoes, pagamentos: pagePagamentos, adicionais: pageAdicionais, promocoes: pagePromocoes, impressoras: pageImpressoras, templates: pageTemplates, financeiro: pageFinanceiro, estoque: pageEstoque, grupos: pageGrupos, comandas: pageComandas, arquivo: pageArquivo, campanhas: pageCampanhas };
   pages[page]?.();
 }
 
@@ -4232,9 +4233,25 @@ async function handleBannerDayUpload(inputEl, idPrefix) {
   }
 }
 
+const WA_STATUS_LABELS = { open: ['🟢 Conectado', '#22c55e'], connecting: ['🟡 Conectando…', '#f59e0b'] };
+const WA_TEMPLATE_LABELS = {
+  confirmado: '✅ Confirmado',
+  em_preparo: '👨‍🍳 Em preparo',
+  pronto: '🎉 Pronto',
+  saiu_para_entrega: '🛵 Saiu p/ entrega',
+  cancelado: '❌ Cancelado',
+};
+
 async function pageConfiguracoes() {
-  const s = await api('GET', '/settings');
+  const [s, waStatus, waTemplates] = await Promise.all([
+    api('GET', '/settings'),
+    api('GET', '/whatsapp/status').catch(() => ({ state: 'close' })),
+    api('GET', '/whatsapp/templates').catch(() => ({ templates: {} })),
+  ]);
   document.getElementById('content').innerHTML = `
+    <div class="card" id="wa-card">
+      ${whatsappCardHtml(waStatus.state, waTemplates.templates)}
+    </div>
     <div class="card">
       <h3>Dados da loja</h3>
       <div class="form-grid">
@@ -4321,6 +4338,189 @@ async function pageConfiguracoes() {
       <button class="btn btn-primary" onclick="salvarConfiguracoes()">💾 Salvar configurações</button>
     </div>`;
   document.getElementById('cfg-color').addEventListener('input', (e) => document.getElementById('cfg-color-hex').value = e.target.value);
+}
+
+// ── WhatsApp (conexão + mensagens automáticas por status) ──────────
+function whatsappCardHtml(state, templates) {
+  const isOpen = state === 'open';
+  const [label, color] = isOpen ? ['🟢 Conectado', '#22c55e'] : (WA_STATUS_LABELS[state] || ['🔴 Desconectado', '#ef4444']);
+  return `
+    <h3>📶 Conexão do WhatsApp</h3>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Usada pra avisar o cliente automaticamente a cada mudança de status do pedido.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--input-bg);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <span style="font-weight:700;font-size:.85rem;color:${color}">${label}</span>
+      <div style="display:flex;gap:8px">
+        ${isOpen ? `<button class="btn btn-secondary btn-sm" onclick="whatsappDesconectar()">🔌 Desconectar</button>`
+                 : `<button class="btn btn-primary btn-sm" onclick="whatsappConectar()">🔄 Gerar QR Code</button>`}
+      </div>
+    </div>
+    <div id="wa-qr-area"></div>
+    <div style="font-weight:700;font-size:.85rem;margin:18px 0 4px">💬 Mensagens automáticas por status do pedido</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">Use <code>{{numero}}</code> e <code>{{nome}}</code> no texto. "Pronto"/"Saiu p/ entrega" na retirada usam texto fixo (não editável aqui).</div>
+    ${Object.entries(WA_TEMPLATE_LABELS).map(([key, label]) => {
+      const t = templates?.[key] || { text: '', enabled: false };
+      return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)">
+        <span style="width:150px;flex-shrink:0;font-size:.82rem;font-weight:600">${label}</span>
+        <input id="wa-tmpl-${key}" value="${(t.text || '').replace(/"/g, '&quot;')}" style="flex:1;font-size:.8rem" />
+        <button type="button" class="toggle ${t.enabled ? 'on' : ''}" id="wa-tmpl-${key}-enabled" onclick="this.classList.toggle('on')" title="Enviar automaticamente"></button>
+      </div>`;
+    }).join('')}
+    <div style="margin-top:14px">
+      <button class="btn btn-primary btn-sm" onclick="salvarTemplatesWhatsApp()">💾 Salvar mensagens</button>
+    </div>`;
+}
+
+let _waPollTries = 0;
+async function whatsappConectar() {
+  const area = document.getElementById('wa-qr-area');
+  area.innerHTML = '<p style="color:var(--muted);font-size:.82rem">Gerando QR Code...</p>';
+  try {
+    const { base64 } = await api('POST', '/whatsapp/connect');
+    if (!base64) { area.innerHTML = '<p style="color:#ef4444;font-size:.82rem">Não foi possível gerar o QR Code. O serviço do WhatsApp pode estar fora do ar.</p>'; return; }
+    area.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--input-bg);border:1px dashed var(--border);border-radius:10px;padding:18px;margin-bottom:8px">
+        <img src="${base64}" style="width:200px;height:200px" />
+        <p style="color:var(--muted);font-size:.75rem;text-align:center;max-width:320px">Escaneie com <b>WhatsApp → Aparelhos conectados → Conectar um aparelho</b>. Expira em segundos — gere outro se passar do tempo.</p>
+      </div>`;
+    _waPollTries = 0;
+    whatsappPollStatus();
+  } catch (e) {
+    area.innerHTML = `<p style="color:#ef4444;font-size:.82rem">Erro: ${e.message}</p>`;
+  }
+}
+
+async function whatsappPollStatus() {
+  if (currentPage !== 'configuracoes' || _waPollTries++ > 24) return; // ~2min de tentativas, e só enquanto a tela estiver aberta
+  try {
+    const { state } = await api('GET', '/whatsapp/status');
+    if (state === 'open') { toast('✅ WhatsApp conectado!'); pageConfiguracoes(); return; }
+  } catch (e) { /* tenta de novo no próximo ciclo */ }
+  setTimeout(whatsappPollStatus, 5000);
+}
+
+async function whatsappDesconectar() {
+  if (!confirm('Desconectar o WhatsApp? Os avisos automáticos de pedido param até escanear o QR Code de novo.')) return;
+  try {
+    await api('POST', '/whatsapp/logout');
+    toast('WhatsApp desconectado.');
+    pageConfiguracoes();
+  } catch (e) { toast('Erro: ' + e.message, true); }
+}
+
+async function salvarTemplatesWhatsApp() {
+  const templates = {};
+  for (const key of Object.keys(WA_TEMPLATE_LABELS)) {
+    templates[key] = {
+      text: v(`wa-tmpl-${key}`),
+      enabled: document.getElementById(`wa-tmpl-${key}-enabled`)?.classList.contains('on') || false,
+    };
+  }
+  try {
+    await api('PUT', '/whatsapp/templates', { templates });
+    toast('Mensagens salvas!');
+  } catch (e) { toast('Erro: ' + e.message, true); }
+}
+
+// ── Campanhas de WhatsApp (disparo em massa) ────────────────────────
+const WA_AUDIENCE_LABELS = {
+  all: 'Todos os clientes',
+  '30d': 'Pediram nos últimos 30 dias',
+  '60d_inactive': 'Não pedem há mais de 60 dias (reativação)',
+};
+const WA_CAMPAIGN_STATUS_LABELS = {
+  em_andamento: ['⏳ Enviando…', '#f59e0b'],
+  concluida: ['✅ Concluída', '#22c55e'],
+  erro: ['❌ Erro', '#ef4444'],
+};
+
+async function pageCampanhas() {
+  document.getElementById('content').innerHTML = '<p style="color:#64748b">Carregando...</p>';
+  const [audienceCount, campaigns] = await Promise.all([
+    api('GET', '/whatsapp/audience?filter=all').catch(() => ({ count: 0 })),
+    api('GET', '/whatsapp/campaigns').catch(() => []),
+  ]);
+  document.getElementById('content').innerHTML = `
+    <div class="card">
+      <h3>📣 Disparo em massa</h3>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Envia promoção/aviso pra clientes que já pediram e têm WhatsApp cadastrado.</div>
+      <div class="form-grid">
+        <div><label>Nome da campanha</label><input id="camp-name" placeholder="Ex: Promo Dia dos Pais" /></div>
+        <div>
+          <label>Público-alvo</label>
+          <select id="camp-filter" onchange="atualizarAudienciaCampanha()">
+            ${Object.entries(WA_AUDIENCE_LABELS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="camp-audience" style="background:rgba(124,58,237,.12);color:#a78bfa;border-radius:8px;padding:10px 12px;margin:10px 0;font-size:.82rem;font-weight:700">
+        👥 ${audienceCount.count} clientes vão receber
+      </div>
+      <label>Mensagem</label>
+      <textarea id="camp-message" rows="4" placeholder="Oi {{nome}}! Hoje até 22h: 20% OFF em qualquer combo 🎉"></textarea>
+      <div style="font-size:.72rem;color:var(--muted);margin:4px 0 10px">Use <code>{{nome}}</code> pra personalizar com o primeiro nome do cliente.</div>
+      <div style="background:rgba(245,158,11,.12);color:#fbbf24;border-radius:8px;padding:10px 12px;font-size:.78rem;margin-bottom:14px">⚠️ Envio espaçado automaticamente (5–10s entre cada mensagem) pra não bloquear o número.</div>
+      <button class="btn btn-primary" onclick="dispararCampanha()">🚀 Disparar campanha</button>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3>🕓 Histórico de campanhas</h3>
+      <div id="camp-history">${campanhasHistoricoHtml(campaigns)}</div>
+    </div>`;
+  if (campaigns.some(c => c.status === 'em_andamento')) { _campPollTries = 0; campanhasPollHistorico(); }
+}
+
+function campanhasHistoricoHtml(campaigns) {
+  if (!campaigns.length) return '<p style="color:var(--muted);font-size:.82rem">Nenhuma campanha enviada ainda.</p>';
+  return campaigns.map(c => {
+    const [label, color] = WA_CAMPAIGN_STATUS_LABELS[c.status] || ['', ''];
+    const data = new Date(c.created_at).toLocaleDateString('pt-BR');
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid var(--border)">
+      <div>
+        <div style="font-weight:600;font-size:.85rem">${c.name}</div>
+        <div style="font-size:.72rem;color:var(--muted)">${data} · ${c.total} cliente(s) · <span style="color:${color}">${label}</span></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:#22c55e;font-size:.85rem">${c.sent_count} enviada(s)</div>
+        ${c.failed_count > 0 ? `<div style="font-size:.72rem;color:#ef4444">${c.failed_count} falharam</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function atualizarAudienciaCampanha() {
+  const filter = v('camp-filter');
+  const el = document.getElementById('camp-audience');
+  el.textContent = '...';
+  try {
+    const { count } = await api('GET', '/whatsapp/audience?filter=' + filter);
+    el.textContent = `👥 ${count} clientes vão receber`;
+  } catch (e) { el.textContent = 'Erro ao calcular público'; }
+}
+
+async function dispararCampanha() {
+  const name = v('camp-name');
+  const message = v('camp-message');
+  const filter = v('camp-filter');
+  if (!name.trim() || !message.trim()) return toast('Preencha o nome e a mensagem', true);
+  if (!confirm(`Disparar "${name}" pro público selecionado? Isso envia mensagens reais pelo WhatsApp da loja.`)) return;
+  try {
+    await api('POST', '/whatsapp/campaigns', { name, message, filter });
+    toast('Campanha iniciada! Acompanhe o progresso no histórico abaixo.');
+    pageCampanhas();
+  } catch (e) { toast('Erro: ' + e.message, true); }
+}
+
+let _campPollTries = 0;
+async function campanhasPollHistorico() {
+  if (currentPage !== 'campanhas' || _campPollTries++ > 60) return; // ~5min de acompanhamento
+  try {
+    const campaigns = await api('GET', '/whatsapp/campaigns');
+    const el = document.getElementById('camp-history');
+    if (el) el.innerHTML = campanhasHistoricoHtml(campaigns);
+    if (!campaigns.some(c => c.status === 'em_andamento')) return;
+  } catch (e) { /* tenta de novo no próximo ciclo */ }
+  setTimeout(campanhasPollHistorico, 5000);
 }
 
 let _sdCount = 0;

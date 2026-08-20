@@ -14,8 +14,8 @@ const stripeService = require('../services/stripe');
 const asaasService = require('../services/asaas');
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
+const whatsappService = require('../services/whatsapp');
 const https = require('https');
-const http = require('http');
 
 // CPF fixo usado em todas as cobranças PIX da Asaas — a Asaas exige um CPF/CNPJ
 // pra criar o cliente vinculado à cobrança, mas não pedimos isso do cliente final.
@@ -42,25 +42,6 @@ async function applyPromotion(subtotal, deliveryFee, neighborhoodName) {
     if (d > discount) { discount = d; appliedPromo = promo; }
   }
   return { discount: Math.round(discount * 100) / 100, promo: appliedPromo };
-}
-
-async function sendWhatsApp(phone, message) {
-  return new Promise((resolve) => {
-    const body = JSON.stringify({ number: `55${phone}`, text: message });
-    const req = http.request({
-      hostname: 'localhost',
-      port: 8081,
-      path: '/message/sendText/confraria',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': 'confraria2024', 'Content-Length': Buffer.byteLength(body) },
-    }, (res) => {
-      res.resume();
-      resolve(res.statusCode);
-    });
-    req.on('error', (e) => { console.error('[whatsapp]', e.message); resolve(null); });
-    req.write(body);
-    req.end();
-  });
 }
 
 // Valida e resolve os adicionais escolhidos para um item, recalculando o preço no servidor
@@ -365,7 +346,7 @@ router.post('/guest', idempotent, async (req, res) => {
             `💰 *Total: R$ ${total.toFixed(2).replace('.', ',')}*\n` +
             `💳 Pagamento: ${payment_method}\n\n` +
             `Em breve ficará pronto! 🎉`;
-          sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/confirm_cliente] status:', code));
+          whatsappService.sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/confirm_cliente] status:', code));
         }
       } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
 
@@ -550,7 +531,7 @@ router.post('/webhook/asaas', async (req, res) => {
               `💰 *Total: R$ ${parseFloat(order.total).toFixed(2).replace('.', ',')}*\n` +
               `💳 Pagamento: PIX Online\n\n` +
               `Em breve ficará pronto! 🎉`;
-            sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/asaas_confirm] status:', code));
+            whatsappService.sendWhatsApp(customerPhone, msgCliente).then(code => console.log('[whatsapp/asaas_confirm] status:', code));
           }
         } catch (e) { console.error('[whatsapp/asaas_confirm]', e.message); }
       }
@@ -1049,7 +1030,7 @@ router.post('/from-admin', async (req, res) => {
         const deliveryLine = isRetirada ? '\n🏪 Retirada no local' : `\n🛵 Entrega${feeText}`;
         const trocoLine = troco && parseFloat(troco) > 0 ? `\n💵 Troco para: R$ ${parseFloat(troco).toFixed(2)}` : '';
         const msg = `✅ *Pedido #${order.order_number} confirmado!*\n\nOlá ${firstName}! Recebemos seu pedido:\n\n${itemsList}${deliveryLine}\n\n💰 *Total: R$ ${total.toFixed(2)}* (${payment_method || 'dinheiro'})${trocoLine}\n\nObrigado pela preferência! ☕`;
-        sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/from-admin] status:', code));
+        whatsappService.sendWhatsApp(phone, msg).then(code => console.log('[whatsapp/from-admin] status:', code));
       }
     }
     const customerName = cust.rows[0]?.name || '';
@@ -1161,25 +1142,17 @@ router.patch('/:id/status', async (req, res) => {
       const firstName = order.customer_name?.split(' ')[0] || '';
 
       if (customerPhone) {
+        const templates = await whatsappService.getTemplates();
+        const tmpl = templates[status];
         let msg = '';
-        if (status === 'confirmado') {
-          msg = `✅ *Pedido #${orderNum} confirmado!*\n\nOlá ${firstName}! Recebemos seu pedido e já estamos cuidando de tudo. Logo logo estará pronto! ☕🎉`;
-        } else if (status === 'em_preparo') {
-          msg = `👨‍🍳 *Pedido #${orderNum} em preparo!*\n\nOlá ${firstName}! Seu pedido está sendo preparado com carinho. Em breve estará pronto! ☕`;
-        } else if (status === 'pronto') {
-          const isRetirada = order.delivery_type === 'retirada';
-          if (isRetirada) {
-            msg = `🎉 *Pedido #${orderNum} pronto!*\n\nOlá ${firstName}! Seu pedido está pronto para retirada. Pode vir buscar! 🏪☕`;
-          } else {
-            msg = `🎉 *Pedido #${orderNum} pronto!*\n\nOlá ${firstName}! Seu pedido está pronto e logo sairá para entrega. Aguarde! ☕`;
-          }
-        } else if (status === 'saiu_para_entrega') {
-          const isRetirada = order.delivery_type === 'retirada';
-          if (isRetirada) {
-            msg = `✅ *Pedido #${orderNum} pronto para retirada!*\n\nOlá ${firstName}! Seu pedido está pronto, pode vir buscar! 🏪`;
-          } else {
-            msg = `🛵 *Pedido #${orderNum} saiu para entrega!*\n\nOlá ${firstName}! Seu pedido saiu e está a caminho. Logo chegará aí! 🎉`;
-          }
+        const isRetirada = order.delivery_type === 'retirada';
+        // "pronto"/"saiu_para_entrega" na retirada usam texto fixo (não editável em
+        // Configurações) — evita alguém editar o template de entrega e a loja mandar
+        // "saiu pra entrega" pra quem vai retirar no balcão.
+        if (status === 'pronto' && isRetirada) {
+          msg = `🎉 *Pedido #${orderNum} pronto!*\n\nOlá ${firstName}! Seu pedido está pronto para retirada. Pode vir buscar! 🏪☕`;
+        } else if (status === 'saiu_para_entrega' && isRetirada) {
+          msg = `✅ *Pedido #${orderNum} pronto para retirada!*\n\nOlá ${firstName}! Seu pedido está pronto, pode vir buscar! 🏪`;
         } else if (status === 'cancelado') {
           const faltantesList = Array.isArray(faltantes) ? faltantes.filter(f => f.product_id) : [];
           let extra = '';
@@ -1187,17 +1160,20 @@ router.patch('/:id/status', async (req, res) => {
             extra += '\n\n🚫 *Itens indisponíveis:*\n' + faltantesList.map(f => `• ${f.quantity || 1}× ${f.name}`).join('\n');
           }
           if (reason) extra += `\n\n📝 *Motivo:* ${reason}`;
-          msg = `❌ *Pedido #${orderNum} cancelado*\n\nOlá ${firstName}! Infelizmente precisamos cancelar seu pedido.${extra}\n\nEntre em contato conosco para mais informações. 😔`;
+          msg = whatsappService.renderTemplate(tmpl.text, { numero: orderNum, nome: firstName }) + extra;
           // Desabilita produtos faltantes
           for (const f of faltantesList) {
             await pool.query(`UPDATE products SET available = false WHERE id = $1 RETURNING id`, [f.product_id]);
           }
+        } else {
+          msg = whatsappService.renderTemplate(tmpl.text, { numero: orderNum, nome: firstName });
         }
         if (msg) {
           whatsapp_link = `https://wa.me/55${customerPhone}?text=${encodeURIComponent(msg)}`;
-          // Envio automático para pronto, saiu_para_entrega e cancelado
-          if (status === 'pronto' || status === 'saiu_para_entrega' || status === 'cancelado') {
-            sendWhatsApp(customerPhone, msg).then(code => console.log(`[whatsapp/${status}] status:`, code));
+          // Envio automático só quando o template do status está ligado em
+          // Configurações → WhatsApp (senão fica só o link manual acima).
+          if (tmpl.enabled) {
+            whatsappService.sendWhatsApp(customerPhone, msg).then(code => console.log(`[whatsapp/${status}] status:`, code));
           }
         }
       }

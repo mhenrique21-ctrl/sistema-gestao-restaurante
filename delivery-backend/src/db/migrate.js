@@ -262,6 +262,28 @@ CREATE INDEX IF NOT EXISTS idx_comanda_item_addons_item ON comanda_item_addons(c
 
 DROP TRIGGER IF EXISTS trg_comandas_updated ON comandas;
 CREATE TRIGGER trg_comandas_updated BEFORE UPDATE ON comandas FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ── Campanhas de WhatsApp (disparo em massa pra clientes cadastrados) ──
+DO $$ BEGIN
+  CREATE TYPE whatsapp_campaign_status_enum AS ENUM ('em_andamento', 'concluida', 'erro');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS whatsapp_campaigns (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(150) NOT NULL,
+  message TEXT NOT NULL,
+  audience_filter VARCHAR(30) NOT NULL,
+  total INT NOT NULL DEFAULT 0,
+  sent_count INT NOT NULL DEFAULT 0,
+  failed_count INT NOT NULL DEFAULT 0,
+  status whatsapp_campaign_status_enum NOT NULL DEFAULT 'em_andamento',
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  finished_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_campaigns_created ON whatsapp_campaigns(created_at DESC);
 `;
 
 async function migrate() {
