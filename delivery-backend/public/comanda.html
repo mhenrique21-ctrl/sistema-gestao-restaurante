@@ -96,16 +96,41 @@
   }
   .tab-tile .icon { font-size: 1.3rem; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .tab-tile .icon svg { width: 22px; height: 22px; }
-  .tab-tile.active { background: #F5EFE3; color: #7E5F2C; box-shadow: inset 3px 0 0 var(--gold-dim); }
+  .tab-tile.active { background: var(--menu-accent-soft, #F5EFE3); color: var(--menu-accent-text, #7E5F2C); box-shadow: inset 3px 0 0 var(--menu-accent, var(--gold-dim)); }
   /* Rótulo de grupo: é o que dá resposta pra "onde fica X?" — a pessoa procura
      pela intenção (vender, dinheiro, estoque), não pelo nome da tela. */
   .nav-group { font-size: .68rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
     color: #7A7164; padding: 14px 14px 4px; }
   .nav-group:first-child { padding-top: 2px; }
-  .tab-tile .nav-badge { margin-left: auto; background: var(--gold); color: #1d1d1b;
+  .tab-tile .nav-badge { margin-left: auto; background: var(--menu-accent, var(--gold)); color: #1d1d1b;
     border-radius: 999px; min-width: 20px; padding: 1px 7px; font-size: .72rem; font-weight: 800; text-align: center; }
   .tab-tile .nav-badge-alerta { background: var(--danger); color: #fff; }
   .tab-tile .nav-badge-quiet { background: transparent; color: var(--muted); font-weight: 600; padding: 0; }
+
+  /* ── Configurações → Menu: aparência do menu lateral ── */
+  #tab-bar.menu-font-pequena .tab-tile { font-size: .8rem; padding: 10px 14px; }
+  #tab-bar.menu-font-pequena .tab-tile .icon svg { width: 18px; height: 18px; }
+  #tab-bar.menu-font-grande .tab-tile { font-size: 1.02rem; padding: 16px 14px; }
+  #tab-bar.menu-font-grande .tab-tile .icon svg { width: 26px; height: 26px; }
+  #app-layout.menu-right { flex-direction: row-reverse; }
+  #app-layout.menu-right #tab-bar { border-right: none; border-left: 1px solid var(--c-border); }
+  #tab-bar.menu-compact { width: 76px; min-width: 76px; }
+  #tab-bar.menu-compact .tab-tile { justify-content: center; padding: 13px 6px; }
+  #tab-bar.menu-compact .tab-tile-label,
+  #tab-bar.menu-compact .nav-group,
+  #tab-bar.menu-compact .nav-badge { display: none; }
+  .tab-tile[data-menu-hidden] { display: none; }
+  .cfg-menu-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; max-width: 640px; }
+  .cfg-menu-card h4 { font-size: .92rem; font-weight: 800; color: var(--c-text); margin-bottom: 3px; }
+  .cfg-menu-card .desc { font-size: .78rem; color: var(--c-muted); margin-bottom: 14px; }
+  .cfg-menu-swatches { display: flex; gap: 10px; }
+  .cfg-menu-swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; position: relative; }
+  .cfg-menu-swatch.on { border-color: var(--c-text); }
+  .cfg-menu-swatch.on::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; font-weight: 800; }
+  .cfg-menu-item-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--c-bg); }
+  .cfg-menu-item-row:last-child { border-bottom: none; }
+  .cfg-menu-item-row .nm { flex: 1; font-size: .86rem; font-weight: 600; color: var(--c-text); }
+  .cfg-menu-item-row .grp { font-size: .68rem; font-weight: 700; color: var(--c-muted); background: var(--c-bg); border-radius: 5px; padding: 2px 7px; }
   /* Barra de situação no topo: turno e operador sempre à vista. */
   /* Chips ficam sobre o cabeçalho ESCURO: cor de texto tem que vir da paleta
      das faixas escuras (--cream), não da área clara. E o verde aqui é --green;
@@ -121,6 +146,14 @@
   #status-turno.fechado { color: var(--danger); border-color: var(--danger); background: #E0525218; }
   #status-turno.fechado .dot { background: var(--danger); }
   @media (max-width: 720px) { #status-operador { display: none; } }
+  .fab-balcao {
+    width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; border: none;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%);
+    color: var(--surface); display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,.35);
+  }
+  .fab-balcao:active { filter: brightness(1.08); }
+  .fab-balcao svg { width: 20px; height: 20px; }
   .tab-tile:active { background: var(--card); }
   #tab-bar-footer { border-top: 1px solid var(--c-border); padding-top: 14px; margin-top: 10px; }
   #tab-bar-logout {
@@ -231,6 +264,10 @@
   .board-card-foot > span { display: flex; align-items: center; gap: 5px; font-size: .8rem; color: var(--c-muted); }
   .board-card-foot strong { font-size: 1.1rem; color: var(--c-text); }
   #board-empty-code-btn { margin-top: 4px; }
+  .board-header { display: flex; align-items: baseline; justify-content: space-between; }
+  .board-header-sub { font-size: .85rem; color: var(--c-muted); margin-top: 2px; }
+  .dia-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 999px; padding: 8px 16px; font-size: .84rem; font-weight: 700; color: var(--c-muted); margin: 14px 0 18px; }
+  .balcao-pay-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--c-bg); border-radius: 6px; padding: 2px 9px; font-size: .74rem; font-weight: 700; color: var(--c-text); }
 
   /* ── Tela da comanda ─────────────────────────────── */
   #comanda-screen { display: flex; flex-direction: column; height: 100%; }
@@ -376,29 +413,35 @@
   .close2-backdrop { align-items: center; }
   .close2-sheet {
     background: var(--c-surface); width: 100%; max-width: 900px; border-radius: 18px; padding: 0;
-    max-height: 92vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.35); text-align: left;
+    max-height: 92vh; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.35); text-align: left;
+    display: flex; flex-direction: column;
   }
-  .close2-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 22px 26px 0; }
+  .close2-head { flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; padding: 22px 26px 0; }
   .close2-head h3 { font-size: 1.3rem; font-weight: 800; color: var(--c-text); letter-spacing: .01em; }
   .close2-head button { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 8px; width: 32px; height: 32px; color: var(--c-muted); font-size: 1rem; }
-  .close2-sub { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 26px 18px; border-bottom: 1px solid var(--c-border); }
+  .close2-sub { flex-shrink: 0; display: flex; justify-content: space-between; align-items: baseline; padding: 4px 26px 18px; border-bottom: 1px solid var(--c-border); }
   .close2-sub .code { color: var(--gold-dim); font-weight: 800; font-size: 1.02rem; }
   .close2-sub .mesa { color: var(--c-muted); font-weight: 700; font-size: .92rem; }
 
-  .close2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; padding: 20px 26px; }
-  @media (max-width: 720px) { .close2-grid { grid-template-columns: 1fr; } }
-  .close2-section-title { font-size: .76rem; font-weight: 800; letter-spacing: .06em; color: var(--c-muted); text-transform: uppercase; margin-bottom: 10px; }
-  .close2-items-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  /* Rolagem fica só na lista de itens (.close2-items-list): o resto do
+     fechamento (total, pagamento, botões) precisa estar sempre visível sem
+     precisar rolar a tela — é o que o operador usa pra finalizar. */
+  .close2-grid { flex: 1 1 auto; min-height: 0; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; padding: 20px 26px; }
+  @media (max-width: 720px) { .close2-grid { grid-template-columns: 1fr; overflow-y: auto; } }
+  .close2-col { display: flex; flex-direction: column; min-height: 0; }
+  .close2-col-pay { overflow-y: auto; }
+  .close2-section-title { flex-shrink: 0; font-size: .76rem; font-weight: 800; letter-spacing: .06em; color: var(--c-muted); text-transform: uppercase; margin-bottom: 10px; }
+  .close2-items-list { flex: 1 1 auto; min-height: 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding-right: 4px; }
   .close2-item-row { display: flex; justify-content: space-between; font-size: .9rem; color: var(--c-text); }
   .close2-item-row .qty { font-weight: 700; margin-right: 6px; color: var(--c-muted); }
-  .close2-divider { border-top: 1px solid var(--c-border); margin: 10px 0; }
-  .close2-line { display: flex; justify-content: space-between; font-size: .9rem; color: var(--c-text); padding: 3px 0; }
+  .close2-divider { flex-shrink: 0; border-top: 1px solid var(--c-border); margin: 10px 0; }
+  .close2-line { flex-shrink: 0; display: flex; justify-content: space-between; font-size: .9rem; color: var(--c-text); padding: 3px 0; }
   .close2-line.muted { color: var(--c-muted); }
-  .close2-total-row { margin-top: 10px; }
+  .close2-total-row { flex-shrink: 0; margin-top: 10px; }
   .close2-total-row .label { font-size: .8rem; font-weight: 800; letter-spacing: .04em; color: var(--c-muted); text-transform: uppercase; }
   .close2-total-row .value { font-size: 1.9rem; font-weight: 800; color: var(--gold-dim); }
 
-  .close2-info-card { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 12px; padding: 14px 16px; margin-top: 16px; }
+  .close2-info-card { flex-shrink: 0; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 12px; padding: 14px 16px; margin-top: 16px; }
   .close2-info-card .close2-section-title { margin-bottom: 8px; }
   .close2-info-row { display: flex; gap: 8px; font-size: .84rem; color: var(--c-text); padding: 3px 0; align-items: flex-start; }
   .close2-info-row .ic { flex-shrink: 0; opacity: .7; }
@@ -434,19 +477,19 @@
   .close2-detail-row button { background: transparent; border: none; color: var(--c-muted); font-size: .95rem; padding: 4px; flex-shrink: 0; }
   .close2-add-btn { width: 100%; padding: 12px; border-radius: 10px; border: 2px dashed var(--c-border); background: transparent; color: var(--c-muted); font-weight: 700; font-size: .84rem; margin-top: 4px; }
 
-  .close2-footer { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; background: var(--c-bg); border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border); padding: 16px 26px; }
+  .close2-footer { flex-shrink: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; background: var(--c-bg); border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border); padding: 16px 26px; }
   .close2-footer-col { text-align: center; }
   .close2-footer-col .label { font-size: .7rem; font-weight: 800; letter-spacing: .06em; color: var(--c-muted); text-transform: uppercase; margin-bottom: 4px; }
   .close2-footer-col .value { font-size: 1.25rem; font-weight: 800; color: var(--c-text); }
   .close2-footer-col .value.ok { color: #2f8f63; }
   .close2-footer-col .value.pending { color: var(--danger); }
 
-  .close2-actions { display: flex; gap: 12px; padding: 18px 26px; }
+  .close2-actions { flex-shrink: 0; display: flex; gap: 12px; padding: 18px 26px; }
   .close2-actions button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 10px; font-weight: 800; font-size: .92rem; border: none; }
   .close2-cancel { background: var(--c-surface); border: 1px solid var(--c-border) !important; color: var(--c-text); }
   .close2-confirm { background: linear-gradient(135deg, #7A3E12 0%, #5C2E0D 100%); color: #fff; }
   .close2-confirm:disabled { background: var(--c-border); color: var(--c-muted); }
-  .close2-note { display: flex; align-items: center; gap: 8px; background: rgba(76,175,128,.1); color: #2f8f63; font-size: .82rem; font-weight: 600; padding: 12px 26px; }
+  .close2-note { flex-shrink: 0; display: flex; align-items: center; gap: 8px; background: rgba(76,175,128,.1); color: #2f8f63; font-size: .82rem; font-weight: 600; padding: 12px 26px; }
 
   /* ── Modal: Abertura de caixa ──────────────────────── */
   .ab-sheet { max-width: 900px; }
@@ -919,6 +962,9 @@
       <span class="dot"></span><span id="status-turno-txt">Caixa fechado</span>
     </div>
     <div class="status-chip" id="status-operador"></div>
+    <button class="fab-balcao" id="fab-balcao-btn" onclick="openBalcaoSale()" title="Nova venda de balcão">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
   </div>
   <button class="btn btn-secondary hidden" id="switch-comanda-btn" onclick="resetToScan()">🔁 Trocar</button>
 </div>
@@ -929,28 +975,28 @@
   <!-- Agrupado por INTENÇÃO. Antes "onde fica Mesas?" não tinha resposta
        lógica: estava no lateral, e Comandas em cima, sendo a mesma atividade. -->
   <div class="nav-group">Vender</div>
-  <button class="tab-tile" id="fazer-pedido-btn" onclick="openBalcaoSale()"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.4"/><circle cx="19" cy="21" r="1.4"/><path d="M1 1h3l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L22 6H6"/></svg></span>Fazer pedido</button>
-  <button class="tab-tile" data-tab="comandas" onclick="showTab('comandas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg></span>Comandas<span class="nav-badge hidden" id="comanda-notif">0</span></button>
-  <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9" rx="7" ry="2.6"/><line x1="12" y1="9" x2="12" y2="18"/><line x1="7" y1="19" x2="17" y2="19"/><path d="M9.3 4.8c.7-.9.7-1.4 0-2.3M12.7 4.8c.7-.9.7-1.4 0-2.3"/></svg></span>Mesas<span class="nav-badge nav-badge-quiet hidden" id="mesas-badge"></span></button>
-  <button class="tab-tile" data-tab="delivery" onclick="showTab('delivery')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span>Delivery<span class="nav-badge hidden" id="delivery-notif">0</span></button>
+  <button class="tab-tile" data-tab="balcao" onclick="showTab('balcao')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span><span class="tab-tile-label">Vendas de balcão</span></button>
+  <button class="tab-tile" data-tab="comandas" onclick="showTab('comandas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M15 2v3h3"/><line x1="7" y1="12" x2="13" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg></span><span class="tab-tile-label">Comandas</span><span class="nav-badge hidden" id="comanda-notif">0</span></button>
+  <button class="tab-tile" data-tab="delivery" onclick="showTab('delivery')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span><span class="tab-tile-label">Delivery</span><span class="nav-badge hidden" id="delivery-notif">0</span></button>
+  <button class="tab-tile" data-tab="mesas" onclick="showTab('mesas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9" rx="7" ry="2.6"/><line x1="12" y1="9" x2="12" y2="18"/><line x1="7" y1="19" x2="17" y2="19"/><path d="M9.3 4.8c.7-.9.7-1.4 0-2.3M12.7 4.8c.7-.9.7-1.4 0-2.3"/></svg></span><span class="tab-tile-label">Mesas</span><span class="nav-badge nav-badge-quiet hidden" id="mesas-badge"></span></button>
 
   <div class="nav-group">Dinheiro</div>
-  <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="18" y1="15" x2="18" y2="15"/></svg></span>Caixa</button>
+  <button class="tab-tile" data-tab="financeiro" onclick="showTab('financeiro')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="18" y1="15" x2="18" y2="15"/></svg></span><span class="tab-tile-label">Caixa</span></button>
 
   <div class="nav-group">Estoque</div>
-  <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4 8 4 8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg></span>Produtos<span class="nav-badge nav-badge-alerta hidden" id="estoque-badge"></span></button>
+  <button class="tab-tile" data-tab="estoque" onclick="showTab('estoque')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4 8 4 8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg></span><span class="tab-tile-label">Produtos</span><span class="nav-badge nav-badge-alerta hidden" id="estoque-badge"></span></button>
 
-  <button class="tab-tile" data-tab="entradas" onclick="showTab('entradas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg></span>Entradas</button>
-  <button class="tab-tile" data-tab="insumos" onclick="showTab('insumos')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 8V5.5A2.5 2.5 0 0 1 11.5 3h1A2.5 2.5 0 0 1 15 5.5V8"/></svg></span>Insumos<span class="nav-badge nav-badge-alerta hidden" id="insumos-badge"></span></button>
-  <button class="tab-tile" data-tab="fichas" onclick="showTab('fichas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></span>Fichas técnicas</button>
-  <button class="tab-tile" data-tab="margem" onclick="showTab('margem')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg></span>Margem<span class="nav-badge nav-badge-alerta hidden" id="margem-badge"></span></button>
-  <button class="tab-tile" data-tab="compras" onclick="showTab('compras')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span>Compras<span class="nav-badge nav-badge-alerta hidden" id="compras-badge"></span></button>
+  <button class="tab-tile" data-tab="entradas" onclick="showTab('entradas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg></span><span class="tab-tile-label">Entradas</span></button>
+  <button class="tab-tile" data-tab="insumos" onclick="showTab('insumos')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 8V5.5A2.5 2.5 0 0 1 11.5 3h1A2.5 2.5 0 0 1 15 5.5V8"/></svg></span><span class="tab-tile-label">Insumos</span><span class="nav-badge nav-badge-alerta hidden" id="insumos-badge"></span></button>
+  <button class="tab-tile" data-tab="fichas" onclick="showTab('fichas')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></span><span class="tab-tile-label">Fichas técnicas</span></button>
+  <button class="tab-tile" data-tab="margem" onclick="showTab('margem')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3" height="8"/><rect x="11" y="8" width="3" height="12"/><rect x="16" y="4" width="3" height="16"/></svg></span><span class="tab-tile-label">Margem</span><span class="nav-badge nav-badge-alerta hidden" id="margem-badge"></span></button>
+  <button class="tab-tile" data-tab="compras" onclick="showTab('compras')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="15" height="11" rx="1"/><path d="M16 10h3.5a1 1 0 0 1 .9.55L22 14v3h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg></span><span class="tab-tile-label">Compras</span><span class="nav-badge nav-badge-alerta hidden" id="compras-badge"></span></button>
 
   <div class="nav-group">Ajustes</div>
-  <button class="tab-tile" data-tab="destaques" onclick="showTab('destaques')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.1 8.6 22 9.6 17 14.5 18.2 21.5 12 18.2 5.8 21.5 7 14.5 2 9.6 8.9 8.6 12 2"/></svg></span>Destaques</button>
-  <button class="tab-tile" data-tab="adicionais" onclick="showTab('adicionais')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>Adicionais</button>
-  <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/><circle cx="12" cy="12" r="6"/><path d="M9 11h5v2a2.5 2.5 0 0 1-2.5 2.5A2.5 2.5 0 0 1 9 13v-2z"/><path d="M14 11.6h.8a1 1 0 1 1 0 2h-.5"/></svg></span>Configurações</button>
-  <button class="tab-tile" data-tab="impressora" onclick="showTab('impressora')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 12.5h1.2"/><path d="M6 17h12v4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4z"/></svg></span>Impressoras</button>
+  <button class="tab-tile" data-tab="destaques" onclick="showTab('destaques')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.1 8.6 22 9.6 17 14.5 18.2 21.5 12 18.2 5.8 21.5 7 14.5 2 9.6 8.9 8.6 12 2"/></svg></span><span class="tab-tile-label">Destaques</span></button>
+  <button class="tab-tile" data-tab="adicionais" onclick="showTab('adicionais')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span><span class="tab-tile-label">Adicionais</span></button>
+  <button class="tab-tile" data-tab="configuracoes" onclick="showTab('configuracoes')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/><circle cx="12" cy="12" r="6"/><path d="M9 11h5v2a2.5 2.5 0 0 1-2.5 2.5A2.5 2.5 0 0 1 9 13v-2z"/><path d="M14 11.6h.8a1 1 0 1 1 0 2h-.5"/></svg></span><span class="tab-tile-label">Configurações</span></button>
+  <button class="tab-tile" data-tab="impressora" onclick="showTab('impressora')"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 12.5h1.2"/><path d="M6 17h12v4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4z"/></svg></span><span class="tab-tile-label">Impressoras</span></button>
   </div>
   <div id="tab-bar-footer">
     <button id="tab-bar-logout" onclick="doLogout()">
@@ -1050,6 +1096,18 @@
     <div style="text-align:center;margin-top:20px">
       <button class="btn btn-secondary" onclick="loadBoard()">🔄 Atualizar</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Aba: Vendas de balcão (arquivo do dia) ── -->
+<div id="balcao-vendas-screen" class="hidden">
+  <div id="board-screen">
+    <div class="board-header">
+      <h2>VENDAS DE BALCÃO</h2>
+      <div class="board-header-sub">Vendas fechadas no balcão hoje</div>
+    </div>
+    <div class="dia-pill" id="balcao-dia-pill">📅 Hoje</div>
+    <div id="balcao-vendas-grid" class="board-grid"><div class="cart-empty">Carregando...</div></div>
   </div>
 </div>
 
@@ -1294,6 +1352,7 @@
     <button class="fin-subtab" data-cfgtab="fiado" onclick="showCfgSubtab('fiado')">📒 Fiado</button>
     <button class="fin-subtab" data-cfgtab="categorias" onclick="showCfgSubtab('categorias')">🗂 Categorias</button>
     <button class="fin-subtab" data-cfgtab="tablets" onclick="showCfgSubtab('tablets')">📱 Tablets</button>
+    <button class="fin-subtab hidden" id="cfg-tab-menu-btn" data-cfgtab="menu" onclick="showCfgSubtab('menu')">🧭 Menu</button>
   </div>
 
   <div id="cfg-subtab-comandas">
@@ -1381,6 +1440,11 @@
         <div id="tab-qr-legenda" class="tab-qr-legenda"></div>
       </div>
     </div>
+  </div>
+
+  <!-- ── Menu: aparência do menu lateral (só admin vê a aba) ── -->
+  <div id="cfg-subtab-menu" class="hidden">
+    <div id="cfg-menu-body"></div>
   </div>
 </div>
 <div id="impressora-screen" class="hidden placeholder-screen"><span class="icon">🖨️</span><h2>Impressora</h2><p>Em construção — em breve por aqui.</p></div>
@@ -1798,6 +1862,8 @@ function entrarNoPdv() {
   localStorage.setItem(NAME_KEY, USER_NAME);
   localStorage.setItem('pdv_staff', JSON.stringify({ name: USER_NAME }));
   document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('cfg-tab-menu-btn')?.classList.toggle('hidden', ROLE !== 'admin');
+  loadMenuConfigAndApply();
   startTabBarClock();
   connectWS();
   checkAberturaCaixa();
@@ -1950,6 +2016,7 @@ function resetToScan() {
 
 // ── Abas do menu superior ─────────────────────────────
 const TAB_SCREENS = {
+  balcao: 'balcao-vendas-screen',
   comandas: 'scan-screen',
   estoque: 'estoque-screen',
   financeiro: 'financeiro-screen',
@@ -1995,6 +2062,40 @@ function showTab(tab) {
   if (tab === 'adicionais') loadAdicionais();
   if (tab === 'comandas') { clearNotif('comanda'); loadBoard(); }
   if (tab === 'delivery') clearNotif('delivery');
+  if (tab === 'balcao') loadBalcaoVendas();
+}
+
+// ── Aba "Vendas de balcão": arquivo das vendas de balcão fechadas hoje ──
+function fmtHora(iso) {
+  return iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+}
+const PAY_LABELS_CURTO = { dinheiro: '💵 Dinheiro', cartao_debito: '💳 Débito', cartao_credito: '💳 Crédito', pix: '📱 Pix', fiado: '📒 Fiado' };
+
+async function loadBalcaoVendas() {
+  const el = document.getElementById('balcao-vendas-grid');
+  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  try {
+    const res = await fetch(`${API}/api/comandas/balcao-vendas`, { headers: authHeaders() });
+    if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar vendas de balcão</div>'; return; }
+    const vendas = await res.json();
+    if (!vendas.length) { el.innerHTML = '<div class="cart-empty">Nenhuma venda de balcão fechada hoje ainda</div>'; return; }
+    el.innerHTML = vendas.map((v) => `
+      <div class="board-card">
+        <div class="board-card-head">
+          <strong>${fmt(v.total)}</strong>
+          <span>${fmtHora(v.closed_at)}</span>
+        </div>
+        <div class="board-items">
+          ${(v.payments || []).map((p) => `<span class="balcao-pay-pill">${PAY_LABELS_CURTO[p.method] || p.method}</span>`).join(' ')}
+        </div>
+        <div class="board-card-foot">
+          <span>👤 ${v.closed_by_name || '—'}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+  }
 }
 
 // ── Barra de situação e contadores do menu ────────────
@@ -2066,6 +2167,7 @@ const CFG_SUBTAB_SCREENS = {
   fiado: 'cfg-subtab-fiado',
   tablets: 'cfg-subtab-tablets',
   categorias: 'cfg-subtab-categorias',
+  menu: 'cfg-subtab-menu',
 };
 
 function showCfgSubtab(tab) {
@@ -2078,6 +2180,155 @@ function showCfgSubtab(tab) {
   if (tab === 'fiado') loadFiado();
   if (tab === 'tablets') iniciarQrTablet();
   if (tab === 'categorias') loadCategorias();
+  if (tab === 'menu') renderMenuConfigForm();
+}
+
+// ── Configurações → Menu: aparência do menu lateral ──────────────────
+// Vale pra todos os tablets da loja (chave compartilhada no banco), não só
+// pra quem está editando. Só admin edita — GET é aberto pra qualquer PDV
+// logado carregar a própria barra lateral.
+let MENU_CFG = { fontSize: 'media', accentColor: '#C9A25E', position: 'esquerda', displayMode: 'completo', hiddenItems: [] };
+const MENU_ACCENTS = [
+  { hex: '#C9A25E', soft: '#F5EFE3', text: '#7E5F2C', nome: 'Dourado' },
+  { hex: '#2f8f63', soft: '#E3F3EA', text: '#1F6B49', nome: 'Verde' },
+  { hex: '#2563a8', soft: '#E3EEF7', text: '#1C4C7C', nome: 'Azul' },
+  { hex: '#7C3AED', soft: '#EFE7FC', text: '#5B22B8', nome: 'Roxo' },
+  { hex: '#B4463F', soft: '#F7E6E5', text: '#8A342E', nome: 'Vinho' },
+];
+// Itens que aparecem na lista de ativar/desativar — 'configuracoes' fica de
+// fora de propósito: escondê-lo tiraria o único caminho de volta pra essa aba.
+const MENU_ITEMS_CATALOGO = [
+  { tab: 'balcao', label: 'Vendas de balcão', grupo: 'Vender' },
+  { tab: 'comandas', label: 'Comandas', grupo: 'Vender' },
+  { tab: 'delivery', label: 'Delivery', grupo: 'Vender' },
+  { tab: 'mesas', label: 'Mesas', grupo: 'Vender' },
+  { tab: 'financeiro', label: 'Caixa', grupo: 'Dinheiro' },
+  { tab: 'estoque', label: 'Produtos', grupo: 'Estoque' },
+  { tab: 'entradas', label: 'Entradas', grupo: 'Estoque' },
+  { tab: 'insumos', label: 'Insumos', grupo: 'Estoque' },
+  { tab: 'fichas', label: 'Fichas técnicas', grupo: 'Estoque' },
+  { tab: 'margem', label: 'Margem', grupo: 'Estoque' },
+  { tab: 'compras', label: 'Compras', grupo: 'Estoque' },
+  { tab: 'destaques', label: 'Destaques', grupo: 'Ajustes' },
+  { tab: 'adicionais', label: 'Adicionais', grupo: 'Ajustes' },
+  { tab: 'impressora', label: 'Impressoras', grupo: 'Ajustes' },
+];
+
+async function loadMenuConfigAndApply() {
+  try {
+    const res = await fetch(`${API}/api/settings/pdv-menu`, { headers: authHeaders() });
+    if (res.ok) MENU_CFG = await res.json();
+  } catch (e) { /* fica no padrão se der erro */ }
+  applyMenuConfig();
+}
+
+function applyMenuConfig() {
+  const bar = document.getElementById('tab-bar');
+  const layout = document.getElementById('app-layout');
+  if (!bar || !layout) return;
+
+  bar.classList.remove('menu-font-pequena', 'menu-font-grande');
+  if (MENU_CFG.fontSize === 'pequena' || MENU_CFG.fontSize === 'grande') bar.classList.add('menu-font-' + MENU_CFG.fontSize);
+
+  layout.classList.toggle('menu-right', MENU_CFG.position === 'direita');
+  bar.classList.toggle('menu-compact', MENU_CFG.displayMode === 'compacto');
+
+  const accent = MENU_ACCENTS.find(a => a.hex.toLowerCase() === (MENU_CFG.accentColor || '').toLowerCase()) || MENU_ACCENTS[0];
+  bar.style.setProperty('--menu-accent', accent.hex);
+  bar.style.setProperty('--menu-accent-soft', accent.soft);
+  bar.style.setProperty('--menu-accent-text', accent.text);
+
+  const hidden = new Set(MENU_CFG.hiddenItems || []);
+  document.querySelectorAll('.tab-tile[data-tab]').forEach(btn => {
+    if (hidden.has(btn.dataset.tab)) btn.setAttribute('data-menu-hidden', ''); else btn.removeAttribute('data-menu-hidden');
+  });
+}
+
+function renderMenuConfigForm() {
+  const el = document.getElementById('cfg-menu-body');
+  if (ROLE !== 'admin') { el.innerHTML = '<div class="cart-empty">Só administradores editam a aparência do menu.</div>'; return; }
+  const cfg = MENU_CFG;
+  const hidden = new Set(cfg.hiddenItems || []);
+
+  el.innerHTML = `
+    <div class="cfg-menu-card">
+      <h4>🔤 Tamanho da fonte</h4>
+      <div class="desc">Tamanho do texto e dos ícones dos itens do menu lateral.</div>
+      <div class="board-pills">
+        ${[['pequena', 'Pequena'], ['media', 'Média'], ['grande', 'Grande']].map(([v, l]) => `
+          <button class="board-pill ${cfg.fontSize === v ? 'active' : ''}" onclick="saveMenuConfig({fontSize:'${v}'})">${l}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="cfg-menu-card">
+      <h4>🎨 Cor de destaque</h4>
+      <div class="desc">Cor usada no item selecionado e nos detalhes do menu.</div>
+      <div class="cfg-menu-swatches">
+        ${MENU_ACCENTS.map(a => `
+          <div class="cfg-menu-swatch ${cfg.accentColor?.toLowerCase() === a.hex.toLowerCase() ? 'on' : ''}" style="background:${a.hex}" title="${a.nome}" onclick="saveMenuConfig({accentColor:'${a.hex}'})"></div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="cfg-menu-card">
+      <h4>↔️ Posicionamento</h4>
+      <div class="desc">De que lado da tela o menu fica.</div>
+      <div class="board-pills">
+        ${[['esquerda', 'Esquerda'], ['direita', 'Direita']].map(([v, l]) => `
+          <button class="board-pill ${cfg.position === v ? 'active' : ''}" onclick="saveMenuConfig({position:'${v}'})">${l}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="cfg-menu-card">
+      <h4>🗜️ Modo de exibição</h4>
+      <div class="desc">Completo mostra ícone e texto. Compacto mostra só o ícone — cabe mais itens na tela.</div>
+      <div class="board-pills">
+        ${[['completo', 'Completo'], ['compacto', 'Compacto (só ícone)']].map(([v, l]) => `
+          <button class="board-pill ${cfg.displayMode === v ? 'active' : ''}" onclick="saveMenuConfig({displayMode:'${v}'})">${l}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="cfg-menu-card">
+      <h4>👁️ Ativar / desativar itens</h4>
+      <div class="desc">Esconde do menu o que essa loja não usa — continua tudo funcionando por trás.</div>
+      ${MENU_ITEMS_CATALOGO.map(it => `
+        <div class="cfg-menu-item-row">
+          <span class="nm">${it.label}</span>
+          <span class="grp">${it.grupo}</span>
+          <label class="switch">
+            <input type="checkbox" ${hidden.has(it.tab) ? '' : 'checked'} onchange="toggleMenuItem('${it.tab}', this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function toggleMenuItem(tab, ligado) {
+  const hidden = new Set(MENU_CFG.hiddenItems || []);
+  if (ligado) hidden.delete(tab); else hidden.add(tab);
+  saveMenuConfig({ hiddenItems: [...hidden] });
+}
+
+async function saveMenuConfig(partial) {
+  const novo = { ...MENU_CFG, ...partial };
+  try {
+    const res = await fetch(`${API}/api/settings/pdv-menu`, {
+      method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(novo),
+    });
+    if (!res.ok) { showToast('Erro ao salvar configuração do menu'); return; }
+    MENU_CFG = await res.json();
+  } catch (e) {
+    showToast('Erro de conexão ao salvar');
+    return;
+  }
+  applyMenuConfig();
+  renderMenuConfigForm();
 }
 
 // ── Configurações → Categorias ───────────────────────
@@ -7299,7 +7550,7 @@ function openCloseModal() {
       </div>
 
       <div class="close2-grid">
-        <div>
+        <div class="close2-col">
           <div class="close2-section-title">Itens consumidos</div>
           <div class="close2-items-list">
             ${(comanda.items || []).map(i => `
@@ -7330,7 +7581,7 @@ function openCloseModal() {
           </div>
         </div>
 
-        <div>
+        <div class="close2-col close2-col-pay">
           <div class="close2-section-title">Formas de pagamento</div>
           <div class="close2-hint">Selecione uma ou mais formas de pagamento.</div>
           <input type="number" step="0.01" min="0" class="pay-value-input" id="pay-value-input" value="${(closeRestanteCents() / 100).toFixed(2)}">
@@ -7619,6 +7870,8 @@ document.addEventListener('keydown', (e) => {
 if (!TOKEN) {
   showLoginScreen();
 } else {
+  document.getElementById('cfg-tab-menu-btn')?.classList.toggle('hidden', ROLE !== 'admin');
+  loadMenuConfigAndApply();
   startTabBarClock();
   connectWS();
   checkAberturaCaixa();

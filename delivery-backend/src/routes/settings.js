@@ -91,4 +91,47 @@ router.put('/sangria-categories', authMiddleware, requireRole('admin'), async (r
   }
 });
 
+// GET /api/settings/pdv-menu — aparência do menu lateral do PDV. Qualquer usuário
+// autenticado lê (é ele quem carrega o próprio tablet), só admin edita.
+router.get('/pdv-menu', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT value FROM settings WHERE key = 'pdv_menu_config'`);
+    let config = {};
+    try { config = JSON.parse(result.rows[0]?.value || '{}'); } catch { config = {}; }
+    res.json({
+      fontSize: config.fontSize || 'media',
+      accentColor: config.accentColor || '#C9A25E',
+      position: config.position || 'esquerda',
+      displayMode: config.displayMode || 'completo',
+      hiddenItems: Array.isArray(config.hiddenItems) ? config.hiddenItems : [],
+    });
+  } catch (err) {
+    console.error('[settings/pdv-menu/GET]', err.message);
+    res.status(500).json({ error: 'Erro ao buscar configuração do menu' });
+  }
+});
+
+// PUT /api/settings/pdv-menu — só admin
+router.put('/pdv-menu', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { fontSize, accentColor, position, displayMode, hiddenItems } = req.body;
+  if (!['pequena', 'media', 'grande'].includes(fontSize)) return res.status(400).json({ error: 'fontSize inválido' });
+  if (!/^#[0-9a-fA-F]{6}$/.test(accentColor || '')) return res.status(400).json({ error: 'accentColor inválido' });
+  if (!['esquerda', 'direita'].includes(position)) return res.status(400).json({ error: 'position inválido' });
+  if (!['completo', 'compacto'].includes(displayMode)) return res.status(400).json({ error: 'displayMode inválido' });
+  if (!Array.isArray(hiddenItems)) return res.status(400).json({ error: 'hiddenItems deve ser uma lista' });
+
+  try {
+    const config = { fontSize, accentColor, position, displayMode, hiddenItems };
+    await pool.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('pdv_menu_config', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [JSON.stringify(config)]
+    );
+    res.json({ ok: true, ...config });
+  } catch (err) {
+    console.error('[settings/pdv-menu/PUT]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

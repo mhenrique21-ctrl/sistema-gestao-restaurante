@@ -157,6 +157,31 @@ router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (r
   }
 });
 
+// GET /api/comandas/balcao-vendas — vendas de balcão já fechadas HOJE, pra aba
+// "Vendas de balcão" do PDV. Ao fechar, o código original (balcao_xxxx) é arquivado
+// com sufixo __closed_<ts> (ver POST /:id/close) — por isso o filtro usa prefixo,
+// não igualdade exata.
+router.get('/balcao-vendas', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT c.id, c.code, c.label, c.total, c.closed_at, u.name AS closed_by_name,
+              COALESCE((
+                SELECT json_agg(json_build_object('method', cp.method, 'amount', cp.amount) ORDER BY cp.id ASC)
+                FROM comanda_payments cp WHERE cp.comanda_id = c.id
+              ), '[]') AS payments
+       FROM comandas c
+       LEFT JOIN users u ON u.id = c.closed_by
+       WHERE c.code LIKE 'balcao_%' AND c.status = 'fechada' AND c.closed_at >= CURRENT_DATE
+       ORDER BY c.closed_at DESC
+       LIMIT 200`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[comandas/balcao-vendas]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // POST /api/comandas/balcao — abre uma venda avulsa de balcão (equipe), sem cartão físico.
 // Diferente do cadastro de cartão (admin only): qualquer atendente pode abrir, pra vender
 // direto no balcão e fechar na hora, sem passar pela fila de fechamento.
