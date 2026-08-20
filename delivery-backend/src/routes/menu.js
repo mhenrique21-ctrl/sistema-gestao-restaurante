@@ -1,0 +1,667 @@
+const router = require('express').Router();
+const multer = require('multer');
+const pool = require('../db/pool');
+const { supabase } = require('../db/supabase');
+const { authMiddleware, requireRole } = require('../middleware/auth');
+const { internalError } = require('../utils/errors');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Arquivo precisa ser uma imagem'));
+    cb(null, true);
+  },
+});
+
+// POST /api/menu/upload — envia imagem (galeria/câmera) e retorna a URL pública (admin)
+router.post('/upload', authMiddleware, requireRole('admin'), upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+
+  const allowedFolders = ['products', 'banner', 'logo', 'destaques'];
+  const folder = allowedFolders.includes(req.body.folder) ? req.body.folder : 'products';
+  const ext = (req.file.originalname.match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0];
+  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+
+  try {
+    const { error } = await supabase.storage
+      .from('product-images')
+      .upload(path, req.file.buffer, { contentType: req.file.mimetype });
+    if (error) throw error;
+
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    res.status(201).json({ url: data.publicUrl });
+  } catch (err) {
+    console.error('[menu/upload]', err.message);
+    res.status(500).json({ error: 'Erro ao enviar imagem' });
+  }
+});
+
+/**
+ * @openapi
+ * /menu:
+ *   get:
+ *     summary: Cardápio completo agrupado por categoria
+ *     description: >
+ *       Sem o parâmetro `channel` (ex.: PDV fazendo venda de balcão), mostra
+ *       tudo que está disponível, sem restrição de canal.
+ *     tags: [Menu]
+ *     parameters:
+ *       - in: query
+ *         name: channel
+ *         schema: { type: string, enum: [kiosk, delivery] }
+ *         description: Filtra produtos por show_kiosk/show_delivery.
+ *     responses:
+ *       200:
+ *         description: Lista de categorias, cada uma com seus produtos e adicionais.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string, format: uuid }
+ *                   name: { type: string }
+ *                   sort_order: { type: integer }
+ *                   products:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string, format: uuid }
+ *                         name: { type: string }
+ *                         price: { type: number }
+ *                         available: { type: boolean }
+ *                         promo_price: { type: number, nullable: true }
+ */
+// GET /api/menu — cardápio completo agrupado por categoria
+// ?channel=kiosk|delivery filtra por show_kiosk/show_delivery — sem o
+// parâmetro (ex: PDV fazendo venda de balcão), mostra tudo que está
+// disponível, sem restrição de canal.
+router.get('/', async (req, res) => {
+  try {
+    const todayJs = new Date().getDay(); // 0=Dom, 1=Seg … 6=Sáb
+    const channelCol = req.query.channel === 'kiosk' ? 'show_kiosk' : req.query.channel === 'delivery' ? 'show_delivery' : null;
+    const channelSql = channelCol ? `AND p.${channelCol} = true` : '';
+    // Grupo de adicional também respeita canal. "Descartáveis" pode fazer
+    // sentido no balcão e não no delivery (que já vai embalado), e antes o
+    // `active` era tudo-ou-nada.
+    // Sem ?channel, nada é filtrado: quem chama assim é o admin, que precisa
+    // enxergar tudo. O PDV passa ?channel=pdv de propósito.
+    const grupoCanalCol = { kiosk: 'show_kiosk', delivery: 'show_delivery', pdv: 'show_pdv' }[req.query.channel];
+    const grupoCanalSql = grupoCanalCol ? `AND g.${grupoCanalCol} = true` : '';
+    const result = await pool.query(`
+      SELECT
+        c.id AS category_id,
+        c.name AS category_name,
+        c.description AS category_description,
+        c.image_url AS category_image,
+        c.sort_order AS category_sort,
+        c.icon AS category_icon,
+        p.id AS product_id,
+        p.name AS product_name,
+        p.description AS product_description,
+        p.price,
+        p.image_url AS product_image,
+        p.available,
+        p.featured,
+        p.promo_price,
+        p.promo_label,
+        p.promo_days,
+        p.promo_max_qty,
+        p.sort_order AS product_sort
+      FROM categories c
+      LEFT JOIN products p ON p.category_id = c.id AND p.available = true
+        AND (p.active_days IS NULL OR $1 = ANY(p.active_days))
+        ${channelSql}
+      WHERE c.active = true
+      ORDER BY c.sort_order, p.sort_order, p.name
+    `, [todayJs]);
+
+    const addonsResult = await pool.query(`
+      SELECT
+        g.id AS group_id, COALESCE(pa.product_id, g.product_id) AS product_id,
+        g.name AS group_name, g.min_select,
+        g.max_select, g.required, g.sort_order AS group_sort, g.kind,
+        o.id AS option_id, o.name AS option_name, o.price AS option_price,
+        o.sort_order AS option_sort
+      FROM addon_groups g
+      LEFT JOIN product_addons pa ON pa.group_id = g.id
+      LEFT JOIN addon_options o ON o.group_id = g.id AND o.active = true
+      WHERE g.active = true AND (g.active_days IS NULL OR $1 = ANY(g.active_days))
+        AND COALESCE(pa.product_id, g.product_id) IS NOT NULL
+        ${grupoCanalSql}
+      ORDER BY g.sort_order, o.sort_order, o.name
+    `, [todayJs]);
+
+    const addonsByProduct = {};
+    for (const row of addonsResult.rows) {
+      if (!addonsByProduct[row.product_id]) addonsByProduct[row.product_id] = {};
+      const groups = addonsByProduct[row.product_id];
+      if (!groups[row.group_id]) {
+        groups[row.group_id] = {
+          id: row.group_id,
+          name: row.group_name,
+          min_select: row.min_select,
+          max_select: row.max_select,
+          required: row.required,
+          // adicional = soma no preço · preparo = só instrução (açúcar, molho,
+          // sabor do combo). A tela usa isso pra separar as duas seções.
+          kind: row.kind || 'adicional',
+          options: [],
+        };
+      }
+      if (row.option_id) {
+        groups[row.group_id].options.push({
+          id: row.option_id,
+          name: row.option_name,
+          price: parseFloat(row.option_price),
+        });
+      }
+    }
+
+    const menu = {};
+    for (const row of result.rows) {
+      if (!menu[row.category_id]) {
+        menu[row.category_id] = {
+          id: row.category_id,
+          name: row.category_name,
+          description: row.category_description,
+          image_url: row.category_image,
+          sort_order: row.category_sort,
+          icon: row.category_icon,
+          products: [],
+        };
+      }
+      if (row.product_id) {
+        // Produto em promoção CONTINUA na categoria dele. Antes havia um
+        // `continue` aqui pulando quem tinha promo fora da categoria "Ofertas",
+        // na intenção de não duplicar o item. Só que "Ofertas" não é uma
+        // categoria de verdade pros clientes: tanto o app quanto o totem montam
+        // essa aba sozinhos, agregando quem tem promo_price de QUALQUER
+        // categoria (kiosk.html:534, MenuPage.jsx:135) e escondendo a categoria
+        // literal. O resultado é que o item era descartado aqui e não chegava a
+        // lugar nenhum — sumia do cardápio inteiro. Foi assim que 9 bolos e
+        // tortas ficaram invisíveis pro cliente, e por isso "produto em
+        // destaque" não surtia efeito: featured vinha junto no registro pulado.
+        const activePromo = row.promo_price !== null && (row.promo_days === null || row.promo_days.includes(todayJs));
+        menu[row.category_id].products.push({
+          id: row.product_id,
+          name: row.product_name,
+          description: row.product_description,
+          price: parseFloat(row.price),
+          image_url: row.product_image,
+          available: row.available,
+          featured: row.featured,
+          promo_price: activePromo ? parseFloat(row.promo_price) : null,
+          promo_label: row.promo_label,
+          promo_max_qty: activePromo ? row.promo_max_qty : null,
+          addon_groups: Object.values(addonsByProduct[row.product_id] || {}),
+        });
+      }
+    }
+
+    // Cardápio muda pouco (só quando o admin edita produtos) e é lido por
+    // todo cliente/kiosk/PDV que abre a tela — vale um cache curto.
+    res.set('Cache-Control', 'public, max-age=20');
+    res.json(Object.values(menu).sort((a, b) => a.sort_order - b.sort_order));
+  } catch (err) {
+    console.error('[menu/GET]', err.message);
+    res.status(500).json({ error: 'Erro ao buscar cardápio' });
+  }
+});
+
+// GET /api/menu/populares — ids mais vendidos nos últimos 30 dias.
+// Público (o totem não tem login) e só devolve id + quantidade: serve pro selo
+// "mais pedido", não é relatório de faturamento.
+router.get('/populares', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT product_id, SUM(quantity)::int AS qtd FROM (
+        SELECT product_id, quantity FROM comanda_items WHERE created_at >= now() - interval '30 days'
+        UNION ALL
+        SELECT product_id, quantity FROM order_items WHERE created_at >= now() - interval '30 days'
+      ) x
+      WHERE product_id IS NOT NULL
+      GROUP BY product_id
+      ORDER BY qtd DESC
+      LIMIT 8
+    `);
+    res.set('Cache-Control', 'public, max-age=600');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[menu/populares]', err.message);
+    // Selo é enfeite: falhar aqui não pode derrubar o cardápio do totem.
+    res.json([]);
+  }
+});
+
+// GET /api/menu/admin — todos os produtos incluindo indisponíveis (admin)
+router.get('/admin', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.id AS category_id, c.name AS category_name, c.sort_order AS category_sort,
+        p.id AS product_id, p.name AS product_name, p.description, p.price,
+        p.image_url AS product_image, p.available, p.featured, p.promo_price,
+        p.promo_label, p.promo_max_qty, p.sort_order AS product_sort, p.active_days, p.print_target,
+        p.show_kiosk, p.show_delivery,
+        p.track_stock, p.stock_qty, p.stock_min
+      FROM categories c
+      LEFT JOIN products p ON p.category_id = c.id
+      WHERE c.active = true
+      ORDER BY c.sort_order, p.sort_order, p.name
+    `);
+    const cats = {};
+    for (const row of result.rows) {
+      if (!cats[row.category_id]) cats[row.category_id] = { id: row.category_id, name: row.category_name, products: [] };
+      if (row.product_id) cats[row.category_id].products.push({
+        id: row.product_id, name: row.product_name, description: row.description,
+        price: row.price, image_url: row.product_image, available: row.available,
+        featured: row.featured, promo_price: row.promo_price, promo_label: row.promo_label,
+        promo_max_qty: row.promo_max_qty,
+        sort_order: row.product_sort, category_id: row.category_id, category_name: row.category_name,
+        active_days: row.active_days,
+        print_target: row.print_target,
+        show_kiosk: row.show_kiosk,
+        show_delivery: row.show_delivery,
+        track_stock: row.track_stock,
+        stock_qty: row.stock_qty != null ? parseFloat(row.stock_qty) : 0,
+        stock_min: row.stock_min != null ? parseFloat(row.stock_min) : 0,
+      });
+    }
+    res.json(Object.values(cats));
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar produtos' });
+  }
+});
+
+/**
+ * @openapi
+ * /menu/products/{id}:
+ *   get:
+ *     summary: Detalhe de um produto
+ *     tags: [Menu]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Produto encontrado }
+ *       404: { description: Produto não encontrado }
+ */
+// GET /api/menu/products/:id — produto específico
+router.get('/products/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT p.*, c.name AS category_name
+       FROM products p JOIN categories c ON c.id = p.category_id
+       WHERE p.id = $1`,
+      [req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+/**
+ * @openapi
+ * /menu/products:
+ *   post:
+ *     summary: Criar produto
+ *     tags: [Menu]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [category_id, name, price]
+ *             properties:
+ *               category_id: { type: string, format: uuid }
+ *               name: { type: string }
+ *               description: { type: string }
+ *               price: { type: number }
+ *               image_url: { type: string }
+ *               featured: { type: boolean }
+ *               promo_price: { type: number, nullable: true }
+ *     responses:
+ *       201: { description: Produto criado }
+ *       400: { description: Categoria não encontrada }
+ *       403: { description: Só admin }
+ */
+// POST /api/menu/products — criar produto (admin)
+router.post('/products', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery, promo_max_qty } = req.body;
+  if (!category_id || !name || price === undefined) {
+    return res.status(400).json({ error: 'category_id, name e price são obrigatórios' });
+  }
+  const target = ['cozinha','balcao'].includes(print_target) ? print_target : null;
+  const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
+  const promoArr = Array.isArray(promo_days) && promo_days.length > 0 ? promo_days.map(Number) : null;
+  const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
+  const targetSql = target ? `'${target}'` : 'NULL';
+  const promoDaysSql = promoArr ? `'{${promoArr.join(',')}}'::int[]` : 'NULL';
+  // show_kiosk/show_delivery/promo_max_qty entram como literal SQL (não como $N) de propósito —
+  // este projeto tem um bug conhecido de driver no VPS com parâmetros $10+
+  // (a substituição de string do wrapper corrompe o "$1" embutido em "$10").
+  const showKioskSql = show_kiosk === false ? 'FALSE' : 'TRUE';
+  const showDeliverySql = show_delivery === false ? 'FALSE' : 'TRUE';
+  const maxQtyNum = parseInt(promo_max_qty, 10);
+  const promoMaxQtySql = Number.isInteger(maxQtyNum) && maxQtyNum > 0 ? maxQtyNum : 'NULL';
+  try {
+    const result = await pool.query(
+      `INSERT INTO products (category_id, name, description, price, image_url, sort_order, featured, promo_price, promo_label, active_days, print_target, promo_days, show_kiosk, show_delivery, promo_max_qty)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${daysSql}, ${targetSql}, ${promoDaysSql}, ${showKioskSql}, ${showDeliverySql}, ${promoMaxQtySql}) RETURNING *`,
+      [category_id, name, description, price, image_url, sort_order || 0, featured || false, promo_price || null, promo_label || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23503') return res.status(400).json({ error: 'Categoria não encontrada' });
+    return internalError(res, err, '[menu/POST product]');
+  }
+});
+
+// PATCH /api/menu/products/:id/available — pausar/ativar produto por falta de estoque
+// (admin ou atendente — ação rápida de operação, não é edição de cadastro)
+router.patch('/products/:id/available', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  if (typeof req.body.available !== 'boolean') {
+    return res.status(400).json({ error: 'Campo "available" (boolean) é obrigatório' });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE products SET available = $1 WHERE id = $2 RETURNING *`,
+      [req.body.available, req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[menu/products/available]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+/**
+ * @openapi
+ * /menu/products/{id}:
+ *   patch:
+ *     summary: Atualizar produto (parcial)
+ *     tags: [Menu]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema: { type: object, description: "Qualquer subconjunto dos campos de produto." }
+ *     responses:
+ *       200: { description: Produto atualizado }
+ *       404: { description: Produto não encontrado }
+ *   delete:
+ *     summary: Remover produto
+ *     tags: [Menu]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Produto removido }
+ *       404: { description: Produto não encontrado }
+ */
+// PATCH /api/menu/products/:id — atualizar produto (admin)
+router.patch('/products/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  const fields = ['name', 'description', 'price', 'image_url', 'available', 'sort_order', 'category_id', 'featured', 'promo_price', 'promo_label', 'print_target'];
+  const updates = [];
+  const values = [];
+  let idx = 1;
+
+  for (const field of fields) {
+    if (req.body[field] !== undefined) {
+      updates.push(`${field} = $${idx++}`);
+      values.push(req.body[field]);
+    }
+  }
+
+  // Estoque entra como literal SQL, não como parâmetro: o wrapper do pool faz
+  // substituição de string e, acima de $9, o "$1" casa dentro de "$10". A lista
+  // de campos acima já usa 11 posições, então qualquer parâmetro novo aqui
+  // cairia justamente nessa faixa.
+  if (req.body.track_stock !== undefined) updates.push(`track_stock = ${req.body.track_stock ? 'TRUE' : 'FALSE'}`);
+  if (req.body.stock_qty !== undefined) {
+    const v = parseFloat(req.body.stock_qty);
+    if (Number.isFinite(v)) updates.push(`stock_qty = ${v}`);
+  }
+  if (req.body.stock_min !== undefined) {
+    const v = parseFloat(req.body.stock_min);
+    if (Number.isFinite(v) && v >= 0) updates.push(`stock_min = ${v}`);
+  }
+
+  if (req.body.active_days !== undefined) {
+    const days = Array.isArray(req.body.active_days) && req.body.active_days.length > 0
+      ? req.body.active_days.map(Number)
+      : null;
+    const sql = days ? `'{${days.join(',')}}'::int[]` : 'NULL';
+    updates.push(`active_days = ${sql}`);
+  }
+
+  if (req.body.promo_days !== undefined) {
+    const pdays = Array.isArray(req.body.promo_days) && req.body.promo_days.length > 0
+      ? req.body.promo_days.map(Number)
+      : null;
+    const sql = pdays ? `'{${pdays.join(',')}}'::int[]` : 'NULL';
+    updates.push(`promo_days = ${sql}`);
+  }
+
+  // Literal SQL (não $N) de propósito — mesmo motivo do active_days/promo_days
+  // acima: evitar estourar $9 parâmetros (bug do driver no VPS com $10+).
+  if (req.body.show_kiosk !== undefined) updates.push(`show_kiosk = ${req.body.show_kiosk ? 'TRUE' : 'FALSE'}`);
+  if (req.body.show_delivery !== undefined) updates.push(`show_delivery = ${req.body.show_delivery ? 'TRUE' : 'FALSE'}`);
+
+  if (req.body.promo_max_qty !== undefined) {
+    const n = parseInt(req.body.promo_max_qty, 10);
+    updates.push(`promo_max_qty = ${Number.isInteger(n) && n > 0 ? n : 'NULL'}`);
+  }
+
+  if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+
+  values.push(req.params.id);
+  try {
+    const result = await pool.query(
+      `UPDATE products SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// POST /api/menu/destino-lote — define o destino de impressão de uma categoria
+// inteira. Hoje 61 produtos estão sem destino e "Bebidas" está dividida em três
+// destinos diferentes; corrigir um a um é o que faz alguém desistir no décimo.
+//
+// destino aceita 'cozinha', 'balcao' ou null (sem ficha de preparo).
+router.post('/destino-lote', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { category_id } = req.body;
+  const destino = req.body.destino ?? null;
+  if (!category_id) return res.status(400).json({ error: 'Informe a categoria' });
+  if (destino !== null && !['cozinha', 'balcao'].includes(destino)) {
+    return res.status(400).json({ error: 'Destino inválido' });
+  }
+  // Literal em vez de $N: o wrapper do pool substitui string, e um valor nulo
+  // como parâmetro viraria a palavra NULL entre aspas.
+  const valor = destino === null ? 'NULL' : `'${destino}'`;
+  const comparacao = destino === null ? 'print_target IS NOT NULL' : `print_target IS DISTINCT FROM ${valor}`;
+  try {
+    const r = await pool.query(
+      `UPDATE products SET print_target = ${valor}
+        WHERE category_id = $1 AND ${comparacao}
+        RETURNING id, name`,
+      [category_id]
+    );
+    res.json({ ok: true, alterados: r.rows.length, produtos: r.rows.map((p) => p.name) });
+  } catch (err) {
+    return internalError(res, err, '[menu/destino-lote]');
+  }
+});
+
+// DELETE /api/menu/products/:id — remover produto (admin)
+router.delete('/products/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(`DELETE FROM products WHERE id = $1 RETURNING id`, [req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
+    res.json({ deleted: true });
+  } catch (err) {
+    if (err.code === '23503') {
+      return res.status(409).json({ error: 'Este produto já tem pedidos registrados e não pode ser excluído. Desative-o em vez disso.' });
+    }
+    console.error('[menu/products DELETE]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ── Adicionais (grupos e opções) ────────────────────────────────────
+
+// GET /api/menu/products/:id/addon-groups — grupos de um produto (admin)
+router.get('/products/:id/addon-groups', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const groups = await pool.query(
+      `SELECT * FROM addon_groups WHERE product_id = $1 ORDER BY sort_order, name`,
+      [req.params.id]
+    );
+    const options = await pool.query(
+      `SELECT o.* FROM addon_options o
+       JOIN addon_groups g ON g.id = o.group_id
+       WHERE g.product_id = $1 ORDER BY o.sort_order, o.name`,
+      [req.params.id]
+    );
+    const result = groups.rows.map((g) => ({
+      ...g,
+      options: options.rows.filter((o) => o.group_id === g.id),
+    }));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// POST /api/menu/products/:id/addon-groups — criar grupo (admin)
+router.post('/products/:id/addon-groups', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { name, min_select = 0, max_select = 1, required = false, sort_order = 0, active_days, template_id } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+  const daysArr = Array.isArray(active_days) && active_days.length > 0 ? active_days.map(Number) : null;
+  const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
+  const params = [req.params.id, name, min_select, max_select, required, sort_order];
+  const templateIdSql = template_id ? `$${params.push(template_id)}` : 'NULL';
+  try {
+    const result = await pool.query(
+      `INSERT INTO addon_groups (product_id, name, min_select, max_select, required, sort_order, active_days, template_id)
+       VALUES ($1,$2,$3,$4,$5,$6,${daysSql},${templateIdSql}) RETURNING *`,
+      params
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23503') return res.status(400).json({ error: 'Produto não encontrado' });
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// PATCH /api/menu/addon-groups/:id — editar grupo (admin)
+router.patch('/addon-groups/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  const fields = ['name', 'min_select', 'max_select', 'required', 'sort_order'];
+  const updates = [], values = [];
+  let idx = 1;
+  for (const f of fields) {
+    if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
+  }
+  if (req.body.active_days !== undefined) {
+    const daysArr = Array.isArray(req.body.active_days) && req.body.active_days.length > 0 ? req.body.active_days.map(Number) : null;
+    const daysSql = daysArr ? `'{${daysArr.join(',')}}'::int[]` : 'NULL';
+    updates.push(`active_days = ${daysSql}`);
+  }
+  if (!updates.length) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+  values.push(req.params.id);
+  try {
+    const result = await pool.query(
+      `UPDATE addon_groups SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Grupo não encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// DELETE /api/menu/addon-groups/:id — remover grupo (admin)
+router.delete('/addon-groups/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(`DELETE FROM addon_groups WHERE id = $1 RETURNING id`, [req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Grupo não encontrado' });
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// POST /api/menu/addon-groups/:id/options — criar opção (admin)
+router.post('/addon-groups/:id/options', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { name, price = 0, sort_order = 0 } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+  try {
+    const result = await pool.query(
+      `INSERT INTO addon_options (group_id, name, price, sort_order) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.params.id, name, price, sort_order]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23503') return res.status(400).json({ error: 'Grupo não encontrado' });
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// PATCH /api/menu/addon-options/:id — editar opção (admin)
+router.patch('/addon-options/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  const fields = ['name', 'price', 'sort_order', 'active'];
+  const updates = [], values = [];
+  let idx = 1;
+  for (const f of fields) {
+    if (req.body[f] !== undefined) { updates.push(`${f} = $${idx++}`); values.push(req.body[f]); }
+  }
+  if (!updates.length) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+  values.push(req.params.id);
+  try {
+    const result = await pool.query(
+      `UPDATE addon_options SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Opção não encontrada' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// DELETE /api/menu/addon-options/:id — remover opção (admin)
+router.delete('/addon-options/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await pool.query(`DELETE FROM addon_options WHERE id = $1 RETURNING id`, [req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Opção não encontrada' });
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+module.exports = router;

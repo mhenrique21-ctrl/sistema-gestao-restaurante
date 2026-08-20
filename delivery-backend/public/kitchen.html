@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estação de Cozinha</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #111827; color: #f9fafb; min-height: 100vh; }
+  #header { padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; }
+  #header h1 { font-size: 1.4rem; font-weight: 800; }
+  #header .badge { background: #10b981; color: white; border-radius: 999px; padding: 2px 10px; font-size: .8rem; font-weight: 700; }
+  #header .badge.offline { background: #ef4444; }
+  #clock { font-size: .9rem; color: #6b7280; }
+  #orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; padding: 20px; }
+  .order-card { background: #1f2937; border-radius: 16px; padding: 16px; border: 2px solid #374151; position: relative; animation: slideIn .3s ease; }
+  .order-card.urgent { border-color: #ef4444; }
+  @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .order-num { font-size: 1.1rem; font-weight: 800; color: #fff; }
+  .order-time { font-size: .78rem; color: #6b7280; margin-bottom: 8px; }
+  .order-type { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-bottom: 10px; }
+  .order-type.retirada { background: #fef3c7; color: #92400e; }
+  .order-type.delivery { background: #ede9fe; color: #5b21b6; }
+  .items { list-style: none; }
+  .items li { padding: 6px 0; border-bottom: 1px solid #374151; font-size: .9rem; }
+  .items li:last-child { border: none; }
+  .items li strong { color: #f3f4f6; }
+  .items li small { display: block; color: #9ca3af; font-size: .78rem; }
+  .obs { margin-top: 8px; background: #374151; border-radius: 8px; padding: 6px 10px; font-size: .8rem; color: #d1fae5; }
+  .btn-done { width: 100%; margin-top: 12px; padding: 10px; background: #10b981; color: white; border: none; border-radius: 10px; font-size: .9rem; font-weight: 700; cursor: pointer; transition: background .2s; }
+  .btn-done:hover { background: #059669; }
+  .timer { position: absolute; top: 12px; right: 12px; font-size: .75rem; font-weight: 700; padding: 2px 8px; background: #374151; border-radius: 999px; }
+  .timer.warn { background: #dc2626; }
+  #empty { text-align: center; padding: 80px 20px; color: #4b5563; }
+  #empty .icon { font-size: 4rem; margin-bottom: 12px; }
+  #beep { display: none; }
+  #station-select { background: #1f2937; border: 1px solid #374151; color: #f9fafb; border-radius: 8px; padding: 6px 12px; font-size: .9rem; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1 id="station-title">🔥 Estação</h1>
+    <div id="clock"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <select id="station-select" onchange="changeStation(this.value)">
+      <option value="bebidas">☕ Bebidas</option>
+      <option value="comida_quente">🔥 Comida Quente</option>
+      <option value="montagem">🎂 Montagem</option>
+    </select>
+    <span id="ws-badge" class="badge offline">⚡ Offline</span>
+  </div>
+</div>
+
+<div id="orders">
+  <div id="empty">
+    <div class="icon">✅</div>
+    <p>Sem pedidos pendentes</p>
+    <p style="font-size:.8rem;margin-top:4px">Aguardando novos pedidos...</p>
+  </div>
+</div>
+
+<audio id="beep-audio" preload="auto">
+  <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAA..." type="audio/wav">
+</audio>
+
+<script>
+const TOKEN = localStorage.getItem('kitchen_token') || prompt('Token JWT da cozinha:');
+if (TOKEN) localStorage.setItem('kitchen_token', TOKEN);
+
+let station = localStorage.getItem('kitchen_station') || 'comida_quente';
+let ws = null;
+let orders = {}; // id -> { order, items, arrivedAt }
+let timers = {};
+
+const STATIONS = {
+  bebidas:      { name: '☕ Bebidas',       color: '#2563eb' },
+  comida_quente:{ name: '🔥 Comida Quente', color: '#dc2626' },
+  montagem:     { name: '🎂 Montagem',      color: '#7c3aed' },
+};
+
+document.getElementById('station-select').value = station;
+updateStationUI();
+connect();
+setInterval(updateClockAndTimers, 1000);
+
+function changeStation(val) {
+  station = val;
+  localStorage.setItem('kitchen_station', val);
+  orders = {};
+  updateStationUI();
+  renderOrders();
+  if (ws) ws.close();
+  connect();
+}
+
+function updateStationUI() {
+  const s = STATIONS[station];
+  document.getElementById('station-title').textContent = s.name;
+  document.getElementById('header').style.borderBottomColor = s.color;
+}
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws?token=${TOKEN}&station=${station}`);
+
+  ws.onopen = () => {
+    document.getElementById('ws-badge').textContent = '⚡ Online';
+    document.getElementById('ws-badge').classList.remove('offline');
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-badge').textContent = '⚡ Offline';
+    document.getElementById('ws-badge').classList.add('offline');
+    setTimeout(connect, 3000);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'station_order' && msg.station === station && msg.event === 'new_order') {
+      addOrder(msg.order, msg.items);
+      playBeep();
+    }
+    if (msg.type === 'order_update' && msg.event === 'status_update') {
+      if (['cancelado','entregue'].includes(msg.status)) {
+        removeOrder(msg.order_id);
+      }
+    }
+  };
+}
+
+function addOrder(order, items) {
+  orders[order.id] = { order, items, arrivedAt: Date.now() };
+  renderOrders();
+}
+
+function removeOrder(id) {
+  delete orders[id];
+  renderOrders();
+}
+
+function markDone(id) {
+  fetch(`/api/orders/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+    body: JSON.stringify({ status: 'pronto' }),
+  });
+  removeOrder(id);
+}
+
+function renderOrders() {
+  const container = document.getElementById('orders');
+  const entries = Object.values(orders);
+
+  if (entries.length === 0) {
+    container.innerHTML = `<div id="empty"><div class="icon">✅</div><p>Sem pedidos pendentes</p><p style="font-size:.8rem;margin-top:4px">Aguardando novos pedidos...</p></div>`;
+    return;
+  }
+
+  container.innerHTML = entries.map(({ order, items, arrivedAt }) => {
+    const elapsed = Math.floor((Date.now() - arrivedAt) / 60000);
+    const urgent = elapsed >= 10;
+    const num = (order.id || '').slice(-6).toUpperCase();
+    return `
+    <div class="order-card ${urgent ? 'urgent' : ''}" id="card-${order.id}">
+      <div class="timer ${urgent ? 'warn' : ''}" id="timer-${order.id}">${elapsed}min</div>
+      <div class="order-num">Pedido #${num}</div>
+      <div class="order-time">${new Date(arrivedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+      <span class="order-type ${order.delivery_type}">${order.delivery_type === 'retirada' ? '🏪 Retirada' : '🛵 Delivery'}</span>
+      <ul class="items">
+        ${items.map((i) => `
+          <li>
+            <strong>${i.quantity}× ${i.product_name}</strong>
+            ${i.notes ? `<small>↳ ${i.notes}</small>` : ''}
+          </li>
+        `).join('')}
+      </ul>
+      ${order.notes ? `<div class="obs">📝 ${order.notes}</div>` : ''}
+      <button class="btn-done" onclick="markDone('${order.id}')">✅ Pronto</button>
+    </div>`;
+  }).join('');
+}
+
+function updateClockAndTimers() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('pt-BR');
+  Object.values(orders).forEach(({ order, arrivedAt }) => {
+    const el = document.getElementById(`timer-${order.id}`);
+    if (!el) return;
+    const m = Math.floor((Date.now() - arrivedAt) / 60000);
+    el.textContent = `${m}min`;
+    el.className = `timer ${m >= 10 ? 'warn' : ''}`;
+    const card = document.getElementById(`card-${order.id}`);
+    if (card) card.className = `order-card ${m >= 10 ? 'urgent' : ''}`;
+  });
+}
+
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start(); osc.stop(ctx.currentTime + 0.4);
+  } catch {}
+}
+</script>
+</body>
+</html>

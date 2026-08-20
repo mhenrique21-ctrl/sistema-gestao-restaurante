@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Endereços">
+<title>Endereços dos sistemas — Confraria / Seama / Gestão</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --subtle: #64748b; --accent: #7c3aed;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 20px 16px 60px; }
+  h1 { font-size: 1.15rem; font-weight: 800; margin: 0 0 2px; text-align: center; }
+  p.sub { color: var(--subtle); font-size: .8rem; text-align: center; margin: 0 0 20px; }
+  #topbar { max-width: 900px; margin: 0 auto 20px; display: flex; justify-content: center; }
+  #topbar button { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 12px 20px; font-size: .9rem; font-weight: 700; cursor: pointer; }
+
+  .grupo { max-width: 900px; margin: 0 auto 28px; }
+  .grupo h2 { font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 10px; padding-left: 2px; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; text-align: center; }
+  .card .icone { font-size: 1.6rem; margin-bottom: 4px; }
+  .card .nome { font-weight: 700; font-size: .92rem; margin-bottom: 10px; }
+  .card .qr { display: flex; justify-content: center; margin-bottom: 10px; background: #fff; border-radius: 8px; padding: 8px; width: fit-content; margin-left: auto; margin-right: auto; }
+  .card .url { font-family: ui-monospace, monospace; font-size: .68rem; color: var(--subtle); word-break: break-all; margin-bottom: 10px; }
+  .card button { width: 100%; background: none; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px; font-size: .78rem; font-weight: 600; cursor: pointer; }
+  .card button:active { background: var(--border); }
+
+  .toast { position: fixed; bottom: 20px; left: 16px; right: 16px; max-width: 400px; margin: 0 auto; background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 16px; font-size: .85rem; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.4); z-index: 20; }
+
+  @media print {
+    body { background: #fff; color: #000; padding: 10px; }
+    #topbar { display: none; }
+    .card { background: #fff; border: 1px solid #ccc; break-inside: avoid; }
+    .card .url { color: #555; }
+    .card button { display: none; }
+    .grupo { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🗺️ Endereços dos sistemas</h1>
+<p class="sub">Confraria Café · Seama · Gestão — todos os pontos de acesso, com QR code</p>
+
+<div id="topbar">
+  <button onclick="window.print()">🖨️ Imprimir todos</button>
+</div>
+
+<div id="grupos"></div>
+
+<script>
+const SISTEMAS = [
+  {
+    grupo: 'Confraria Café',
+    itens: [
+      { icone: '🛍️', nome: 'Loja (cardápio do cliente)', url: 'https://pedidos.confrariacafe.com/' },
+      { icone: '💳', nome: 'PDV / Comandas', url: 'https://pedidos.confrariacafe.com/comanda.html' },
+      { icone: '⚙️', nome: 'Admin', url: 'https://pedidos.confrariacafe.com/admin.html' },
+      { icone: '👨‍🍳', nome: 'Cozinha', url: 'https://pedidos.confrariacafe.com/kitchen.html' },
+      { icone: '📋', nome: 'Retaguarda', url: 'https://pedidos.confrariacafe.com/retaguarda.html' },
+      { icone: '🍽️', nome: 'Autoatendimento (mesa)', url: 'https://pedidos.confrariacafe.com/kiosk.html' },
+      { icone: '🚨', nome: 'Emergência (mobile)', url: 'https://pedidos.confrariacafe.com/emergencia.html' },
+    ],
+  },
+  {
+    grupo: 'Seama',
+    itens: [
+      { icone: '💳', nome: 'PDV Seama', url: 'https://seama.confrariacafe.com/' },
+    ],
+  },
+  {
+    grupo: 'App Gestão',
+    itens: [
+      { icone: '📊', nome: 'Gestão (financeiro, compras, RH)', url: 'https://gestao.confrariacafe.com/' },
+    ],
+  },
+];
+
+function montarPagina() {
+  const raiz = document.getElementById('grupos');
+  raiz.innerHTML = SISTEMAS.map(g => `
+    <div class="grupo">
+      <h2>${g.grupo}</h2>
+      <div class="grade">
+        ${g.itens.map((item, i) => `
+          <div class="card">
+            <div class="icone">${item.icone}</div>
+            <div class="nome">${item.nome}</div>
+            <div class="qr" id="qr-${g.grupo}-${i}"></div>
+            <div class="url">${item.url}</div>
+            <button onclick="copiarUrl('${item.url}')">Copiar endereço</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  for (const g of SISTEMAS) {
+    g.itens.forEach((item, i) => {
+      const box = document.getElementById(`qr-${g.grupo}-${i}`);
+      if (window.QRCode) new QRCode(box, { text: item.url, width: 160, height: 160 });
+      else box.textContent = 'QR indisponível';
+    });
+  }
+}
+
+let toastTimer = null;
+function copiarUrl(url) {
+  navigator.clipboard?.writeText(url).then(() => mostrarToast('Endereço copiado')).catch(() => mostrarToast(url));
+}
+
+function mostrarToast(msg) {
+  clearTimeout(toastTimer);
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  toastTimer = setTimeout(() => el.remove(), 2500);
+}
+
+montarPagina();
+</script>
+</body>
+</html>
