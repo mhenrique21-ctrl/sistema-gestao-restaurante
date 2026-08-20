@@ -48,7 +48,16 @@ async function printCaixaTicket(interfaceStr, { order, items }) {
     }
 
     if (order.customer_name) p.println(`Cliente: ${order.customer_name}`);
-    if (order.customer_phone) p.println(`Fone: ${order.customer_phone}`);
+    // Telefone em destaque (invertido + negrito + fonte maior) — o resto do
+    // cupom é texto corrido, então o número passava batido no meio da leitura.
+    if (order.customer_phone) {
+      // Texto puro (sem emoji): o codepage PC858_EURO da impressora não tem o
+      // glifo de telefone e imprimiria "??" bem no trecho que devia chamar
+      // mais atenção.
+      p.bold(true); p.setTextSize(1, 1); p.invert(true);
+      p.println(` TEL ${order.customer_phone} `);
+      p.invert(false); p.setTextSize(0, 0); p.bold(false);
+    }
 
     if (order.delivery_type === 'retirada') {
       p.bold(true); p.println('** RETIRADA NO LOCAL **'); p.bold(false);
