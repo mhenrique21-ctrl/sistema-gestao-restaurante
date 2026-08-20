@@ -2874,18 +2874,29 @@ async function loadSangriaCategorias() {
   }
 }
 
+let sangriaCatEditando = null; // índice da categoria com o nome em edição
+
 function renderSangriaCategorias() {
   const el = document.getElementById('sangria-cat-list');
-  el.innerHTML = sangriaCategorias.map((c, i) => `
+  el.innerHTML = sangriaCategorias.map((c, i) => {
+    const editando = sangriaCatEditando === i;
+    return `
     <div class="cat-row" style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;${c.ativo ? '' : 'opacity:.5'}">
-      <span style="font-size:13px;font-weight:600">${c.nome}</span>
+      ${editando
+        ? `<input data-edit-input="${i}" value="${c.nome.replace(/"/g, '&quot;')}" style="flex:1;margin-right:10px;padding:6px 8px;border-radius:8px;border:1px solid var(--primary);font-size:13px">`
+        : `<span style="font-size:13px;font-weight:600">${c.nome}</span>`}
       <div style="display:flex;align-items:center;gap:10px">
-        <button class="sw ${c.ativo ? '' : 'off'}" data-i="${i}" title="Ativar/desativar" style="width:38px;height:22px;border-radius:20px;background:${c.ativo ? 'var(--success)' : '#cfc7bf'};position:relative;flex-shrink:0;border:none;cursor:pointer">
-          <span style="position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:2px;${c.ativo ? 'right:2px' : 'left:2px'}"></span>
-        </button>
-        <button data-del="${i}" title="Remover categoria" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px">🗑️</button>
+        ${editando
+          ? `<button data-save="${i}" title="Salvar" style="background:none;border:none;color:var(--success);cursor:pointer;font-size:15px">✓</button>
+             <button data-cancel title="Cancelar" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:14px">✕</button>`
+          : `<button class="sw ${c.ativo ? '' : 'off'}" data-i="${i}" title="Ativar/desativar" style="width:38px;height:22px;border-radius:20px;background:${c.ativo ? 'var(--success)' : '#cfc7bf'};position:relative;flex-shrink:0;border:none;cursor:pointer">
+               <span style="position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:2px;${c.ativo ? 'right:2px' : 'left:2px'}"></span>
+             </button>
+             <button data-edit="${i}" title="Editar nome" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:14px">✏️</button>
+             <button data-del="${i}" title="Remover categoria" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px">🗑️</button>`}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   el.querySelectorAll('button.sw').forEach((btn) => btn.addEventListener('click', () => {
     const i = parseInt(btn.dataset.i, 10);
     sangriaCategorias[i].ativo = !sangriaCategorias[i].ativo;
@@ -2896,6 +2907,31 @@ function renderSangriaCategorias() {
     if (!confirm(`Remover "${sangriaCategorias[i].nome}"?`)) return;
     sangriaCategorias.splice(i, 1);
     salvarSangriaCategorias();
+  }));
+  el.querySelectorAll('button[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
+    sangriaCatEditando = parseInt(btn.dataset.edit, 10);
+    renderSangriaCategorias();
+    el.querySelector(`[data-edit-input]`)?.focus();
+  }));
+  el.querySelectorAll('button[data-cancel]').forEach((btn) => btn.addEventListener('click', () => {
+    sangriaCatEditando = null;
+    renderSangriaCategorias();
+  }));
+  el.querySelectorAll('button[data-save]').forEach((btn) => btn.addEventListener('click', () => {
+    const i = parseInt(btn.dataset.save, 10);
+    const input = el.querySelector(`[data-edit-input="${i}"]`);
+    const novoNome = input.value.trim();
+    if (!novoNome) { showToast('Informe um nome'); return; }
+    if (sangriaCategorias.some((c, j) => j !== i && c.nome.toLowerCase() === novoNome.toLowerCase())) {
+      showToast('Já existe uma categoria com esse nome'); return;
+    }
+    sangriaCategorias[i].nome = novoNome;
+    sangriaCatEditando = null;
+    salvarSangriaCategorias();
+  }));
+  el.querySelectorAll('[data-edit-input]').forEach((input) => input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') el.querySelector(`[data-save="${input.dataset.editInput}"]`)?.click();
+    if (e.key === 'Escape') { sangriaCatEditando = null; renderSangriaCategorias(); }
   }));
 }
 
