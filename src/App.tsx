@@ -1421,6 +1421,7 @@ export default function App() {
       {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
       {id:"prod-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
       {id:"prod-recibos",label:"Recibos",icon:"🧾",sub:"recibos",adminOnly:true},
+      {id:"prod-relatorio",label:"Relatório",icon:"📊",sub:"relatorio",adminOnly:true},
     ]},
     {id:"contas",label:"Financeiro",icon:"📋",children:[
       {id:"fin-contas",label:"Contas",icon:"📋",sub:"lista"},
@@ -6641,6 +6642,11 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   // cliente/período muda ou um recibo novo é gerado.
   const [extratoDesmarcados,setExtratoDesmarcados]=useState<Set<string>>(new Set());
 
+  const showRelatorio=subTab==="relatorio";
+  const [relIni,setRelIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
+  const [relFim,setRelFim]=useState(today());
+  const [relCliente,setRelCliente]=useState("");
+
   // Product catalog management
   const [prodForm,setProdForm]=useState<{nome:string,cats:string[],unidade:string,precoFixo:string}>({nome:"",cats:[],unidade:"un",precoFixo:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
@@ -7382,6 +7388,82 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
           ))}
         </div>
       </>;
+    })()}
+
+    {showRelatorio&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
+    {showRelatorio&&(()=>{
+      const clientesDisponiveis=Object.keys(categoriasClientes).filter(c=>categoriasClientes[c]);
+      const pedidosNoPeriodo=(db.pedidosProducao||[]).filter((p:any)=>p.data>=relIni&&p.data<=relFim);
+      const porCliente:Record<string,{produtos:Record<string,number>;pedidos:Set<string>;total:number}>={};
+      pedidosNoPeriodo.forEach((ped:any)=>{
+        (ped.itens||[]).forEach((it:any)=>{
+          const cat=it.categoria||"";
+          if(!cat||!isCategoriaCliente(cat))return;
+          if(relCliente&&cat!==relCliente)return;
+          if(!porCliente[cat])porCliente[cat]={produtos:{},pedidos:new Set(),total:0};
+          porCliente[cat].produtos[it.nome]=(porCliente[cat].produtos[it.nome]||0)+(it.quantidade||0);
+          porCliente[cat].pedidos.add(ped.id);
+          porCliente[cat].total+=(it.quantidade||0);
+        });
+      });
+      const clientesComDados=Object.keys(porCliente).sort();
+      const totalGeral=clientesComDados.reduce((s,c)=>s+porCliente[c].total,0);
+      const todosPedidosIds=new Set<string>();
+      clientesComDados.forEach(c=>porCliente[c].pedidos.forEach(id=>todosPedidosIds.add(id)));
+      return <div className="card" style={{marginBottom:12,border:"1px solid #7C3AED40"}}>
+        <div className="section-title" style={{color:"#7C3AED",margin:0,marginBottom:10}}>📊 Relatório de Itens por Cliente</div>
+        {!clientesDisponiveis.length&&<div className="muted" style={{fontSize:12}}>Nenhuma categoria marcada como cliente ainda — marque em Categorias.</div>}
+        {clientesDisponiveis.length>0&&<>
+          <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
+            <input type="date" value={relIni} onChange={e=>setRelIni(e.target.value)} className="inp" style={{flex:1,marginBottom:0}}/>
+            <span className="muted" style={{fontSize:12}}>até</span>
+            <input type="date" value={relFim} onChange={e=>setRelFim(e.target.value)} className="inp" style={{flex:1,marginBottom:0}}/>
+          </div>
+          <select value={relCliente} onChange={e=>setRelCliente(e.target.value)} className="inp" style={{marginBottom:10}}>
+            <option value="">Todos os clientes</option>
+            {clientesDisponiveis.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+
+          <div style={{background:"linear-gradient(135deg,#7C3AED,#5b21b6)",borderRadius:10,padding:"12px 14px",marginBottom:12,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,opacity:.85,textTransform:"uppercase" as const,letterSpacing:.4}}>{relCliente?`Total ${relCliente} no período`:"Total de itens no período"}</div>
+              <div style={{fontSize:22,fontWeight:800}}>{totalGeral} un</div>
+            </div>
+            <div style={{textAlign:"right" as const}}>
+              <div style={{fontSize:10,opacity:.85,textTransform:"uppercase" as const,letterSpacing:.4}}>Pedidos</div>
+              <div style={{fontSize:16,fontWeight:800}}>{todosPedidosIds.size}</div>
+            </div>
+          </div>
+
+          {!clientesComDados.length&&<div className="muted" style={{fontSize:12,textAlign:"center" as const,padding:"8px 0"}}>Nenhum item de cliente arquivado nesse período.</div>}
+
+          {clientesComDados.map(c=>{
+            const info=porCliente[c];
+            const produtosOrdenados=Object.entries(info.produtos).sort((a,b)=>b[1]-a[1]);
+            const mostrarTodos=!!relCliente;
+            const visiveis=mostrarTodos?produtosOrdenados:produtosOrdenados.slice(0,5);
+            const restantes=produtosOrdenados.length-visiveis.length;
+            return <div key={c} style={{background:"var(--bg4)",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <span style={{fontSize:12,fontWeight:800,color:"#7C3AED",textTransform:"uppercase" as const,letterSpacing:.3,display:"flex",alignItems:"center",gap:6}}>
+                  <CatIconBadge icon={prodCatIcon(c)} size={13}/>{c}
+                </span>
+                <span style={{background:"#7C3AED",color:"#fff",borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:800}}>{info.total} un</span>
+              </div>
+              {visiveis.map(([nome,qtd])=>(
+                <div key={nome} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderTop:"1px solid var(--border)"}}>
+                  <span>{nome}</span><span style={{color:"#7C3AED",fontWeight:700}}>{qtd} un</span>
+                </div>
+              ))}
+              {restantes>0&&<div style={{fontSize:11,color:"var(--text2)",fontStyle:"italic" as const,padding:"4px 0"}}>+ {restantes} produto(s)...</div>}
+              {mostrarTodos&&<div style={{display:"flex",justifyContent:"space-between",fontWeight:800,color:"#7C3AED",borderTop:"2px solid #7C3AED",marginTop:4,paddingTop:8,fontSize:12}}>
+                <span>TOTAL</span><span>{info.total} un</span>
+              </div>}
+              {!mostrarTodos&&<div className="muted" style={{fontSize:10,marginTop:6}}>Em {info.pedidos.size} pedido(s) arquivado(s)</div>}
+            </div>;
+          })}
+        </>}
+      </div>;
     })()}
 
     {/* Form — add item to order (Lista-style) */}
