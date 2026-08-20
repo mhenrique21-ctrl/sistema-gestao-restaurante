@@ -23,7 +23,7 @@ async function loadSessionSummary(sessionId) {
     [sessionId]
   );
   const movements = await pool.query(
-    `SELECT cm.id, cm.type, cm.amount, cm.reason, cm.created_at, u.username AS created_by_name
+    `SELECT cm.id, cm.type, cm.amount, cm.reason, cm.category, cm.created_at, u.username AS created_by_name
      FROM cash_movements cm
      LEFT JOIN users u ON u.id = cm.created_by
      WHERE cm.session_id = $1
@@ -188,10 +188,25 @@ router.post('/movement', async (req, res) => {
   }
 });
 
-// POST /api/cash-sessions/close — fecha conferindo o dinheiro contado
+// POST /api/cash-sessions/close — fecha conferindo o dinheiro contado e,
+// opcionalmente, as duas maquininhas de cartão (pelo menos uma das duas).
 router.post('/close', async (req, res) => {
   const counted = parseFloat(req.body.counted_amount);
   if (!(counted >= 0)) return res.status(400).json({ error: 'Informe o valor contado' });
+
+  // "Preenchido" é o campo ter vindo no corpo, não o valor ser > 0 — a
+  // máquina pode legitimamente ter batido zero no turno.
+  const m1raw = req.body.machine1_amount;
+  const m2raw = req.body.machine2_amount;
+  const hasM1 = m1raw !== undefined && m1raw !== null && m1raw !== '';
+  const hasM2 = m2raw !== undefined && m2raw !== null && m2raw !== '';
+  if (!hasM1 && !hasM2) return res.status(400).json({ error: 'Informe o total de pelo menos uma das duas máquinas' });
+  const machine1Amount = hasM1 ? parseFloat(m1raw) : null;
+  const machine2Amount = hasM2 ? parseFloat(m2raw) : null;
+  if ((hasM1 && !(machine1Amount >= 0)) || (hasM2 && !(machine2Amount >= 0))) {
+    return res.status(400).json({ error: 'Valor de máquina inválido' });
+  }
+
   try {
     const s = await pool.query(`SELECT * FROM cash_sessions WHERE status = 'aberto' LIMIT 1`);
     const session = s.rows[0];
@@ -201,15 +216,22 @@ router.post('/close', async (req, res) => {
     const expected = expectedInDrawer(session, summary);
     const difference = counted - expected;
 
+    // Cartão + PIX: as duas maquininhas costumam passar PIX também, então
+    // entram juntas na mesma conferência (nada disso passa pela gaveta).
+    const cardExpected = summary.sales.cartao_debito.total + summary.sales.cartao_credito.total + summary.sales.pix.total;
+    const cardInformed = (machine1Amount || 0) + (machine2Amount || 0);
+    const cardDifference = cardInformed - cardExpected;
+
     const r = await pool.query(
       `UPDATE cash_sessions
        SET status = 'fechado', closed_at = NOW(), closed_by = $1,
-           counted_amount = $2, expected_amount = $3, difference = $4, notes = $5
-       WHERE id = $6 RETURNING *`,
-      [req.user.id, counted, expected, difference, req.body.notes || null, session.id]
+           counted_amount = $2, expected_amount = $3, difference = $4, notes = $5,
+           machine1_amount = $6, machine2_amount = $7
+       WHERE id = $8 RETURNING *`,
+      [req.user.id, counted, expected, difference, req.body.notes || null, machine1Amount, machine2Amount, session.id]
     );
     logAction(req.user.id, 'caixa_fechado', {
-      session_id: session.id, expected, counted, difference,
+      session_id: session.id, expected, counted, difference, cardExpected, cardInformed, cardDifference,
     });
 
     // Faturamento do dia sobe pro App Gestão, que é onde vive a DRE. Depois de
@@ -220,7 +242,12 @@ router.post('/close', async (req, res) => {
     const gestaoSync = require('../services/gestaoSync');
     const sync = await gestaoSync.aoFecharCaixa(gestaoSync.hojeBelem());
 
-    res.json({ session: r.rows[0], ...summary, expected, counted, difference, gestao: sync });
+    res.json({
+      session: r.rows[0], ...summary, expected, counted, difference,
+      machine1Amount, machine2Amount, cardExpected, cardInformed, cardDifference,
+      totalGeral: summary.totalVendido,
+      gestao: sync,
+    });
   } catch (err) {
     return internalError(res, err, '[cash-sessions/close]');
   }

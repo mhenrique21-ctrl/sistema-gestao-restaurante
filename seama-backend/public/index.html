@@ -2721,8 +2721,11 @@ function openFechamentoModal() {
   backdrop.innerHTML = `
     <div class="modal-sheet" style="max-width:360px">
       <h2>🔒 Fechar caixa</h2>
-      <div class="sub">Conte o dinheiro da gaveta e informe o valor. A conferência aparece depois.</div>
+      <div class="sub">Conte o dinheiro da gaveta e informe pelo menos uma máquina de cartão.</div>
       <div class="field-group"><label>Dinheiro contado</label><input id="fech-amount" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      <div class="field-group"><label>Máquina 1 — total (cartão + PIX)</label><input id="fech-m1" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      <div class="field-group"><label>Máquina 2 — total (cartão + PIX)</label><input id="fech-m2" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      <div style="font-size:10.5px;color:var(--text2);margin-top:-6px;margin-bottom:12px;line-height:1.4">Preencha ao menos uma das duas.</div>
       <div class="field-group"><label>Observação (opcional)</label><input id="fech-notes" placeholder="Ex: falta de troco no fim do dia"></div>
       <div id="fech-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
       <div class="modal-actions">
@@ -2737,14 +2740,22 @@ function openFechamentoModal() {
   backdrop.querySelector('#fech-save').addEventListener('click', async () => {
     const errEl = backdrop.querySelector('#fech-error');
     const counted = parseFloat(backdrop.querySelector('#fech-amount').value);
+    const m1raw = backdrop.querySelector('#fech-m1').value.trim();
+    const m2raw = backdrop.querySelector('#fech-m2').value.trim();
     errEl.textContent = '';
     if (!(counted >= 0)) { errEl.textContent = 'Informe o valor contado'; return; }
+    if (!m1raw && !m2raw) { errEl.textContent = 'Informe o total de pelo menos uma das duas máquinas'; return; }
     const btn = backdrop.querySelector('#fech-save');
     btn.disabled = true;
     try {
       const res = await apiFetch('/api/cash-sessions/close', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ counted_amount: counted, notes: backdrop.querySelector('#fech-notes').value.trim() || null }),
+        body: JSON.stringify({
+          counted_amount: counted,
+          machine1_amount: m1raw ? parseFloat(m1raw) : null,
+          machine2_amount: m2raw ? parseFloat(m2raw) : null,
+          notes: backdrop.querySelector('#fech-notes').value.trim() || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error || 'Erro ao fechar'; btn.disabled = false; return; }
@@ -2760,25 +2771,49 @@ function openFechamentoModal() {
 function showResultadoFechamento(data) {
   const dif = parseFloat(data.difference);
   const ok = Math.abs(dif) < 0.005;
+  const temCartao = data.cardExpected != null;
+  const difCartao = temCartao ? parseFloat(data.cardDifference) : 0;
+  const cartaoOk = !temCartao || Math.abs(difCartao) < 0.005;
+  const maquinasLabel = data.machine1Amount != null && data.machine2Amount != null ? ' (máquinas 1 + 2)'
+    : data.machine1Amount != null ? ' (máquina 1)' : ' (máquina 2)';
+  const alertas = montarAlertasOperador(data);
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'result-modal-backdrop';
   backdrop.innerHTML = `
     <div class="modal-sheet" style="max-width:360px">
       <h2>Caixa fechado</h2>
-      <div class="sub">Turno encerrado às ${new Date(data.session.closed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
-      <div class="cx-diff ${ok ? 'ok' : 'bad'}" style="margin-bottom:14px">
+      <div class="sub">Turno encerrado às ${new Date(data.session.closed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${CURRENT_USER?.username || ''}</div>
+      <div class="cx-diff ${ok ? 'ok' : 'bad'}" style="margin-bottom:10px">
+        <div class="lbl">💵 Dinheiro</div>
         <div class="row"><span>Esperado</span><span>${fmt(data.expected)}</span></div>
         <div class="row"><span>Contado</span><span>${fmt(data.counted)}</span></div>
         <div class="total" style="color:${ok ? 'var(--success)' : 'var(--danger)'}">
           <span>${ok ? 'Conferido' : dif < 0 ? 'Falta' : 'Sobra'}</span><span>${ok ? '✓' : fmt(Math.abs(dif))}</span>
         </div>
       </div>
+      ${temCartao ? `
+      <div class="cx-diff ${cartaoOk ? 'ok' : 'bad'}" style="margin-bottom:14px">
+        <div class="lbl">💳 Cartão + PIX${maquinasLabel}</div>
+        <div class="row"><span>Sistema registrou</span><span>${fmt(data.cardExpected)}</span></div>
+        <div class="row"><span>${data.machine1Amount != null && data.machine2Amount != null ? 'Máquinas informaram' : 'Máquina informou'}</span><span>${fmt(data.cardInformed)}</span></div>
+        <div class="total" style="color:${cartaoOk ? 'var(--success)' : 'var(--danger)'}">
+          <span>${cartaoOk ? 'Conferido' : difCartao < 0 ? 'Falta' : 'Sobra'}</span><span>${cartaoOk ? '✓' : fmt(Math.abs(difCartao))}</span>
+        </div>
+      </div>` : ''}
       <div class="cx-section-title">VENDAS DO TURNO</div>
       ${['dinheiro', 'cartao_debito', 'cartao_credito', 'pix'].map(m => `
         <div class="cx-mov"><span>${CX_METHOD_LABELS[m]}</span><b>${fmt(data.sales[m].total)}</b></div>
       `).join('')}
-      <div class="cx-mov" style="border-top:1px solid var(--border);margin-top:4px"><span><b>Total vendido</b></span><b>${fmt(data.totalVendido)}</b></div>
+      <div class="cx-mov" style="border-top:1px solid var(--border);margin-top:4px"><span><b>Total geral do caixa</b></span><b>${fmt(data.totalGeral)}</b></div>
+      ${alertas.length ? `
+      <div style="background:#3a2420;border:1px solid #A34B4266;border-radius:11px;padding:12px 14px;margin-top:14px">
+        <div style="font-size:11.5px;font-weight:800;color:#f3a99f;display:flex;align-items:center;gap:5px;margin-bottom:6px">⚠️ ATENÇÃO, ${(CURRENT_USER?.username || '').toUpperCase()}</div>
+        <ul style="margin:0;padding-left:16px;font-size:11.5px;color:#eee;line-height:1.6">
+          ${alertas.map(a => `<li>${a}</li>`).join('')}
+        </ul>
+        <div style="font-size:11px;color:#f3a99f;margin-top:8px;font-style:italic">Confira os valores com mais cuidado no próximo fechamento.</div>
+      </div>` : ''}
       <div class="modal-actions" style="margin-top:14px">
         <button id="result-print">🖨 Imprimir</button>
         <button class="primary" id="result-ok">Fechar</button>
@@ -2791,28 +2826,61 @@ function showResultadoFechamento(data) {
   printFechamento(data);
 }
 
+// Textos curtos e diretos pro operador — só aparecem quando há diferença de
+// verdade (dinheiro ou cartão). Nada de explicação longa: só o fato e o
+// pedido de mais cuidado da próxima vez.
+function montarAlertasOperador(data) {
+  const alertas = [];
+  const difCaixa = parseFloat(data.difference);
+  if (Math.abs(difCaixa) >= 0.005) alertas.push(`Dinheiro: ${difCaixa < 0 ? 'faltou' : 'sobrou'} ${fmt(Math.abs(difCaixa))}`);
+  if (data.cardExpected != null) {
+    const difCartao = parseFloat(data.cardDifference);
+    if (Math.abs(difCartao) >= 0.005) alertas.push(`Cartão/PIX: ${difCartao < 0 ? 'faltou' : 'sobrou'} ${fmt(Math.abs(difCartao))}`);
+  }
+  return alertas;
+}
+
 // Reaproveita o cupom do balcão: cada linha vira um "item" do relatório, com
-// o total no rodapé. Evita um método novo no plugin (e APK novo).
+// o total no rodapé. Evita um método novo no plugin (e APK novo) — por isso
+// as movimentações vão uma por linha (com categoria/motivo no nome) em vez de
+// texto livre, e o aviso ao operador também vira linha (valor não se aplica).
 function printFechamento(data) {
   const printer = getPrinter();
   if (!printer?.printCupom) return;
   const dif = parseFloat(data.difference);
+  const temCartao = data.cardExpected != null;
+  const difCartao = temCartao ? parseFloat(data.cardDifference) : 0;
+  const alertas = montarAlertasOperador(data);
+  const movLinhas = (data.movements || [])
+    .filter(m => m.type === 'sangria' || m.type === 'suprimento')
+    .map(m => {
+      const label = m.type === 'sangria' ? `Sangria${m.category ? ' - ' + m.category : ''}` : 'Suprimento';
+      return { name: `${label}${m.reason ? ' (' + m.reason + ')' : ''}`, quantity: 1, total: m.type === 'sangria' ? -parseFloat(m.amount) : parseFloat(m.amount) };
+    });
   const linhas = [
     ...['dinheiro', 'cartao_debito', 'cartao_credito', 'pix']
       .filter(m => data.sales[m].total > 0)
       .map(m => ({ name: CX_METHOD_LABELS[m].replace(/[^\w\sÀ-ú.]/g, '').trim(), quantity: data.sales[m].vendas, total: data.sales[m].total })),
+    { name: 'TOTAL GERAL DO CAIXA', quantity: 1, total: data.totalGeral },
+    ...movLinhas,
     { name: 'Fundo de troco', quantity: 1, total: parseFloat(data.session.opening_amount) },
-    { name: 'Suprimentos', quantity: 1, total: data.suprimentos },
-    { name: 'Sangrias', quantity: 1, total: -data.sangrias },
-    { name: 'ESPERADO NA GAVETA', quantity: 1, total: data.expected },
-    { name: 'CONTADO', quantity: 1, total: data.counted },
-    { name: dif < 0 ? 'FALTA' : dif > 0 ? 'SOBRA' : 'CONFERIDO', quantity: 1, total: Math.abs(dif) },
+    { name: 'DINHEIRO ESPERADO', quantity: 1, total: data.expected },
+    { name: 'DINHEIRO CONTADO', quantity: 1, total: data.counted },
+    { name: dif < 0 ? 'DINHEIRO - FALTA' : dif > 0 ? 'DINHEIRO - SOBRA' : 'DINHEIRO - CONFERIDO', quantity: 1, total: Math.abs(dif) },
   ];
+  if (temCartao) {
+    linhas.push(
+      { name: 'CARTAO+PIX SISTEMA', quantity: 1, total: data.cardExpected },
+      { name: 'CARTAO+PIX MAQUINAS', quantity: 1, total: data.cardInformed },
+      { name: Math.abs(difCartao) < 0.005 ? 'CARTAO - CONFERIDO' : difCartao < 0 ? 'CARTAO - FALTA' : 'CARTAO - SOBRA', quantity: 1, total: Math.abs(difCartao) },
+    );
+  }
+  alertas.forEach(a => linhas.push({ name: `ATENCAO: ${a}`, quantity: 0, total: 0 }));
   printer.printCupom({
     ip: SETTINGS.printer_ip || '', port: parseInt(SETTINGS.printer_port, 10) || 9100,
     kitchen: false, saleNumber: 0,
     operator: CURRENT_USER?.username || '',
-    total: data.totalVendido,
+    total: data.totalGeral,
     payment: 'FECHAMENTO DE CAIXA',
     items: linhas,
   }).catch(err => showToast('Erro ao imprimir: ' + (err?.message || err)));
