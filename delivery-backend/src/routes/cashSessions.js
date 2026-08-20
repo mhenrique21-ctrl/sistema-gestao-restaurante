@@ -10,6 +10,32 @@ function erro(res, err, tag) {
   return res.status(500).json({ error: 'Erro interno do servidor' });
 }
 
+// Sangria categorizada vira conta paga na Gestão (Financeiro > Contas). Nunca
+// deixa a sangria falhar por causa da Gestão fora do ar — só loga e segue.
+// movimentoId dá idempotência: reenviar a mesma sangria atualiza em vez de
+// duplicar a conta.
+async function enviarSangriaParaGestao({ movimentoId, categoria, valor, motivo, data }) {
+  const base = process.env.GESTAO_URL;
+  const secret = process.env.SEAMA_SERVICE_SECRET;
+  if (!base || !secret) { console.error('[cash-sessions/sangria] Integração com a Gestão não configurada'); return; }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(`${base.replace(/\/$/, '')}/api/sangria-pdv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
+      body: JSON.stringify({ empresa: 'CONFRARIA', categoria, valor, motivo, data, movimentoId }),
+      signal: ctrl.signal,
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) console.error('[cash-sessions/sangria] falha ao enviar pra Gestão:', d.error || r.status);
+  } catch (e) {
+    console.error('[cash-sessions/sangria] erro ao enviar pra Gestão:', e.message);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 // GET /api/cash-sessions/current — turno aberto + conferência parcial.
 router.get('/current', async (req, res) => {
   try {
@@ -56,6 +82,9 @@ router.post('/open', async (req, res) => {
 router.post('/movement', async (req, res) => {
   const { type, reason } = req.body;
   const amount = parseFloat(req.body.amount);
+  // Opcional: sangria pra cofre/troco não é despesa e não deve virar conta na
+  // Gestão. Só sincroniza quando o operador escolhe uma categoria real.
+  const category = (req.body.category || '').trim();
   if (!['sangria', 'suprimento'].includes(type)) return res.status(400).json({ error: 'Tipo inválido' });
   if (!(amount > 0)) return res.status(400).json({ error: 'Valor inválido' });
   try {
@@ -69,11 +98,17 @@ router.post('/movement', async (req, res) => {
       }
     }
     const r = await pool.query(
-      `INSERT INTO cash_movements (type, amount, reason, created_by, session_id)
-       VALUES ($1, ${amount}, $2, $3, $4) RETURNING *`,
-      [type, reason || null, req.user.id, session.id]
+      `INSERT INTO cash_movements (type, amount, reason, created_by, session_id, category)
+       VALUES ($1, ${amount}, $2, $3, $4, $5) RETURNING *`,
+      [type, reason || null, req.user.id, session.id, type === 'sangria' ? (category || null) : null]
     );
     res.status(201).json(r.rows[0]);
+    if (type === 'sangria' && category) {
+      enviarSangriaParaGestao({
+        movimentoId: r.rows[0].id, categoria: category, valor: amount, motivo: reason || null,
+        data: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Belem' }),
+      });
+    }
   } catch (err) {
     return erro(res, err, '[cash-sessions/movement]');
   }

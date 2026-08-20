@@ -678,6 +678,7 @@
       <button class="cfg-tab" data-tab="adicionais">➕ Adicionais</button>
       <button class="cfg-tab" data-tab="usuarios">👥 Usuários</button>
       <button class="cfg-tab" data-tab="vinculos">🔗 Compras</button>
+      <button class="cfg-tab" data-tab="sangria">💸 Sangria</button>
       <button class="cfg-tab" data-tab="aparencia">🎨 Aparência</button>
     </div>
 
@@ -765,6 +766,18 @@
           <h3>Compras vindas do App Gestão</h3>
           <p class="cfg-hint">Quando você lança uma compra no Gestão para a SEAMA, os itens chegam aqui. O vínculo diz qual produto do cardápio cada item da nota alimenta, e quantas unidades saem de cada embalagem — 1 multipack de 6 vira 6 latas. Feito uma vez, as próximas compras entram sozinhas.</p>
           <div id="vinc-body"></div>
+        </div>
+      </div>
+
+      <div id="config-tab-sangria" class="cfg-pane">
+        <div class="cfg-form" style="max-width:620px">
+          <h3>Categorias visíveis na sangria</h3>
+          <p class="cfg-hint">Ative só as categorias que fazem sentido pra pagamento em dinheiro no balcão. Ao escolher uma categoria numa sangria, ela vira automaticamente uma conta paga no Financeiro do Gestão. Sangria sem categoria (ex: depósito no cofre) continua funcionando normal, sem virar conta.</p>
+          <div id="sangria-cat-list"></div>
+          <div class="field-group" style="display:flex;gap:8px;align-items:flex-end;margin-top:10px">
+            <div style="flex:1"><label>Nova categoria</label><input id="sangria-cat-new" placeholder="Ex: Fornecedor / Insumos"></div>
+            <button id="sangria-cat-add" class="btn btn-secondary" style="width:auto;padding:10px 16px">+ Adicionar</button>
+          </div>
         </div>
       </div>
 
@@ -2614,13 +2627,27 @@ async function abrirCaixa() {
   }
 }
 
-function openMovimentoModal(tipo) {
+async function openMovimentoModal(tipo) {
   const isSangria = tipo === 'sangria';
   // Gerente e admin não têm teto; o limite só vale pra quem opera com
   // permissão delegada.
   const delegado = !['admin', 'gerente'].includes(CURRENT_USER?.role);
   const limiteSangria = delegado && CURRENT_USER?.sangria_limit != null
     ? parseFloat(CURRENT_USER.sangria_limit) : null;
+
+  // Categorias ativas pra sangria — busca na hora (o operador pode nunca ter
+  // aberto a aba Config nesta sessão). Sem categoria nenhuma cadastrada/ativa,
+  // o campo some e a sangria segue sem virar conta na Gestão.
+  let categoriasAtivas = [];
+  if (isSangria) {
+    try {
+      const res = await apiFetch('/api/settings');
+      const cfg = await res.json();
+      const lista = JSON.parse(cfg.sangria_categories || '[]');
+      categoriasAtivas = (Array.isArray(lista) ? lista : []).filter((c) => c.ativo).map((c) => c.nome);
+    } catch (e) { /* segue sem categoria se a busca falhar */ }
+  }
+
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'mov-modal-backdrop';
@@ -2629,6 +2656,14 @@ function openMovimentoModal(tipo) {
       <h2>${isSangria ? '🔻 Sangria' : '🔺 Suprimento'}</h2>
       <div class="sub">${isSangria ? 'Retirada de dinheiro da gaveta' : 'Entrada de dinheiro na gaveta'}</div>
       <div class="field-group"><label>Valor</label><input id="mov-amount" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      ${isSangria && categoriasAtivas.length ? `
+      <div class="field-group">
+        <label>Categoria (opcional — pra pagamento real, não pra cofre/troco)</label>
+        <select id="mov-categoria">
+          <option value="">— Não é uma despesa —</option>
+          ${categoriasAtivas.map((c) => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="field-group">
         <label>Motivo${isSangria ? '' : ' (opcional)'}</label>
         <input id="mov-reason" placeholder="${isSangria ? 'Ex: depósito no cofre' : 'Ex: reforço de troco'}">
@@ -2649,6 +2684,7 @@ function openMovimentoModal(tipo) {
     const errEl = backdrop.querySelector('#mov-error');
     const amount = parseFloat(backdrop.querySelector('#mov-amount').value);
     const motivo = backdrop.querySelector('#mov-reason').value.trim();
+    const categoria = backdrop.querySelector('#mov-categoria')?.value || '';
     errEl.textContent = '';
     if (!(amount > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
     // As mesmas regras existem no servidor; aqui é só pra não fazer a pessoa
@@ -2663,7 +2699,7 @@ function openMovimentoModal(tipo) {
     try {
       const res = await apiFetch('/api/cash-sessions/movement', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: tipo, amount, reason: motivo || null }),
+        body: JSON.stringify({ type: tipo, amount, reason: motivo || null, category: categoria || null }),
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar'; btn.disabled = false; return; }
@@ -2814,8 +2850,74 @@ document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click
   if (tab.dataset.tab === 'usuarios') loadUsuarios();
   if (tab.dataset.tab === 'vinculos') loadVinculos();
   if (tab.dataset.tab === 'adicionais') loadAdicionais();
+  if (tab.dataset.tab === 'sangria') loadSangriaCategorias();
   if (tab.dataset.tab === 'aparencia') { renderCoresCategoria(); renderLayout(); renderFontes(); }
 }));
+
+// ── Configurações: categorias de sangria ─────────────
+let sangriaCategorias = [];
+
+async function loadSangriaCategorias() {
+  const el = document.getElementById('sangria-cat-list');
+  el.innerHTML = '<p style="font-size:12.5px;color:var(--text2)">Carregando...</p>';
+  try {
+    const res = await apiFetch('/api/settings');
+    const cfg = await res.json();
+    try { sangriaCategorias = JSON.parse(cfg.sangria_categories || '[]'); } catch { sangriaCategorias = []; }
+    if (!Array.isArray(sangriaCategorias) || !sangriaCategorias.length) {
+      sangriaCategorias = ['Alimentação', 'Fornecedor / Insumos', 'Transporte', 'Manutenção', 'Outros']
+        .map((nome) => ({ nome, ativo: true }));
+    }
+    renderSangriaCategorias();
+  } catch (e) {
+    if (e.message !== 'unauthorized') el.innerHTML = '<p style="font-size:12.5px;color:var(--danger)">Erro de conexão</p>';
+  }
+}
+
+function renderSangriaCategorias() {
+  const el = document.getElementById('sangria-cat-list');
+  el.innerHTML = sangriaCategorias.map((c, i) => `
+    <div class="cat-row" style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;${c.ativo ? '' : 'opacity:.5'}">
+      <span style="font-size:13px;font-weight:600">${c.nome}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="sw ${c.ativo ? '' : 'off'}" data-i="${i}" title="Ativar/desativar" style="width:38px;height:22px;border-radius:20px;background:${c.ativo ? 'var(--success)' : '#cfc7bf'};position:relative;flex-shrink:0;border:none;cursor:pointer">
+          <span style="position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:2px;${c.ativo ? 'right:2px' : 'left:2px'}"></span>
+        </button>
+        <button data-del="${i}" title="Remover categoria" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px">🗑️</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('button.sw').forEach((btn) => btn.addEventListener('click', () => {
+    const i = parseInt(btn.dataset.i, 10);
+    sangriaCategorias[i].ativo = !sangriaCategorias[i].ativo;
+    salvarSangriaCategorias();
+  }));
+  el.querySelectorAll('button[data-del]').forEach((btn) => btn.addEventListener('click', () => {
+    const i = parseInt(btn.dataset.del, 10);
+    if (!confirm(`Remover "${sangriaCategorias[i].nome}"?`)) return;
+    sangriaCategorias.splice(i, 1);
+    salvarSangriaCategorias();
+  }));
+}
+
+async function salvarSangriaCategorias() {
+  renderSangriaCategorias();
+  try {
+    await apiFetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sangria_categories: JSON.stringify(sangriaCategorias) }),
+    });
+  } catch (e) { if (e.message !== 'unauthorized') showToast('Erro ao salvar'); }
+}
+
+document.getElementById('sangria-cat-add').addEventListener('click', () => {
+  const input = document.getElementById('sangria-cat-new');
+  const nome = input.value.trim();
+  if (!nome) return;
+  if (sangriaCategorias.some((c) => c.nome.toLowerCase() === nome.toLowerCase())) { showToast('Categoria já existe'); return; }
+  sangriaCategorias.push({ nome, ativo: true });
+  input.value = '';
+  salvarSangriaCategorias();
+});
 
 // ── Configurações: grupos de adicionais ──────────────
 let adcAberto = null; // id do grupo expandido

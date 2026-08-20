@@ -4243,14 +4243,18 @@ const WA_TEMPLATE_LABELS = {
 };
 
 async function pageConfiguracoes() {
-  const [s, waStatus, waTemplates] = await Promise.all([
+  const [s, waStatus, waTemplates, sangriaCfg] = await Promise.all([
     api('GET', '/settings'),
     api('GET', '/whatsapp/status').catch(() => ({ state: 'close' })),
     api('GET', '/whatsapp/templates').catch(() => ({ templates: {} })),
+    api('GET', '/settings/sangria-categories').catch(() => ({ categorias: [] })),
   ]);
   document.getElementById('content').innerHTML = `
     <div class="card" id="wa-card">
       ${whatsappCardHtml(waStatus.state, waTemplates.templates)}
+    </div>
+    <div class="card" id="sangria-card">
+      ${sangriaCardHtml(sangriaCfg.categorias)}
     </div>
     <div class="card">
       <h3>Dados da loja</h3>
@@ -4369,6 +4373,63 @@ function whatsappCardHtml(state, templates) {
     <div style="margin-top:14px">
       <button class="btn btn-primary btn-sm" onclick="salvarTemplatesWhatsApp()">💾 Salvar mensagens</button>
     </div>`;
+}
+
+// ── Sangria: categorias visíveis no PDV (comanda.html) ──────────────
+let sangriaCategorias = [];
+
+function sangriaCardHtml(categorias) {
+  sangriaCategorias = Array.isArray(categorias) && categorias.length
+    ? categorias
+    : ['Alimentação', 'Fornecedor / Insumos', 'Transporte', 'Manutenção', 'Outros'].map(nome => ({ nome, ativo: true }));
+  return `
+    <h3>💸 Categorias visíveis na sangria</h3>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Ative só as categorias que fazem sentido pra pagamento em dinheiro no caixa. Ao escolher uma categoria numa sangria, ela vira automaticamente uma conta paga no Financeiro do Gestão — sangria sem categoria (ex: depósito no cofre) continua funcionando normal.</div>
+    <div id="sangria-cat-list">${sangriaCatListHtml()}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input id="sangria-cat-new" placeholder="Nova categoria (ex: Fornecedor / Insumos)" style="flex:1" />
+      <button class="btn btn-secondary btn-sm" onclick="adicionarSangriaCategoria()">+ Adicionar</button>
+    </div>`;
+}
+
+function sangriaCatListHtml() {
+  if (!sangriaCategorias.length) return '<p style="color:var(--muted);font-size:.82rem">Nenhuma categoria cadastrada.</p>';
+  return sangriaCategorias.map((c, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--border);${c.ativo ? '' : 'opacity:.5'}">
+      <span style="font-size:.85rem;font-weight:600">${c.nome}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" class="toggle ${c.ativo ? 'on' : ''}" onclick="toggleSangriaCategoria(${i})"></button>
+        <button onclick="removerSangriaCategoria(${i})" title="Remover" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:.9rem">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+async function salvarSangriaCategorias() {
+  document.getElementById('sangria-cat-list').innerHTML = sangriaCatListHtml();
+  try {
+    await api('PUT', '/settings/sangria-categories', { categorias: sangriaCategorias });
+  } catch (e) { toast('Erro ao salvar: ' + e.message, true); }
+}
+
+function toggleSangriaCategoria(i) {
+  sangriaCategorias[i].ativo = !sangriaCategorias[i].ativo;
+  salvarSangriaCategorias();
+}
+
+function removerSangriaCategoria(i) {
+  if (!confirm(`Remover "${sangriaCategorias[i].nome}"?`)) return;
+  sangriaCategorias.splice(i, 1);
+  salvarSangriaCategorias();
+}
+
+function adicionarSangriaCategoria() {
+  const input = document.getElementById('sangria-cat-new');
+  const nome = input.value.trim();
+  if (!nome) return;
+  if (sangriaCategorias.some(c => c.nome.toLowerCase() === nome.toLowerCase())) { toast('Categoria já existe', true); return; }
+  sangriaCategorias.push({ nome, ativo: true });
+  input.value = '';
+  salvarSangriaCategorias();
 }
 
 let _waPollTries = 0;

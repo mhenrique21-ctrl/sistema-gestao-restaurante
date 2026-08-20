@@ -3,6 +3,8 @@ const pool = require('../db/pool');
 const { authMiddleware, requireRole, podeMovimentarCaixa } = require('../middleware/auth');
 const { internalError } = require('../utils/errors');
 const { logAction } = require('../utils/audit');
+const { enviarSangria } = require('../services/gestaoSync');
+const { todayBelem } = require('../utils/date');
 
 router.use(authMiddleware);
 
@@ -124,6 +126,11 @@ router.post('/movement', async (req, res) => {
   const { type } = req.body;
   const reason = (req.body.reason || '').trim();
   const amount = parseFloat(req.body.amount);
+  // Categoria é opcional: sangria pra depósito no cofre ou troco não é
+  // despesa nenhuma e não deve virar conta na Gestão. Só quando o operador
+  // escolhe uma categoria (pagamento real feito com o dinheiro da gaveta) é
+  // que a sangria sincroniza pra Financeiro > Contas.
+  const category = (req.body.category || '').trim();
   if (!['sangria', 'suprimento'].includes(type)) return res.status(400).json({ error: 'Tipo inválido' });
   if (!(amount > 0)) return res.status(400).json({ error: 'Valor inválido' });
 
@@ -164,12 +171,18 @@ router.post('/movement', async (req, res) => {
     }
 
     const r = await pool.query(
-      `INSERT INTO cash_movements (type, amount, reason, created_by, session_id)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [type, amount, reason || null, req.user.id, session.id]
+      `INSERT INTO cash_movements (type, amount, reason, created_by, session_id, category)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [type, amount, reason || null, req.user.id, session.id, type === 'sangria' ? (category || null) : null]
     );
-    logAction(req.user.id, type, { session_id: session.id, amount, reason: reason || null });
+    logAction(req.user.id, type, { session_id: session.id, amount, reason: reason || null, category: category || null });
     res.status(201).json(r.rows[0]);
+    // Dispara depois de responder: o operador não espera a viagem até a
+    // Gestão pra ver a sangria confirmada na tela. Erro aqui só vai pro log.
+    if (type === 'sangria' && category) {
+      enviarSangria({ movimentoId: r.rows[0].id, categoria: category, valor: amount, motivo: reason || null, data: todayBelem() })
+        .catch((e) => console.error('[cash-sessions/movement] erro ao sincronizar sangria com a Gestão:', e.message));
+    }
   } catch (err) {
     return internalError(res, err, '[cash-sessions/movement]');
   }

@@ -1496,6 +1496,63 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // Sangria categorizada feita no PDV (Seama ou Confraria) vira conta paga
+  // aqui, direto em Financeiro > Contas — mesmo padrão de /api/consumacao-pdv:
+  // grava direto no arquivo da empresa, id estável (pdv-sangria-<movimentoId>)
+  // pra reenvio atualizar em vez de duplicar.
+  if (req.method === 'POST' && urlPath === '/api/sangria-pdv') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const secret = process.env.SEAMA_SERVICE_SECRET;
+        if (!secret) { res.writeHead(503); res.end(JSON.stringify({ error: 'Integração não configurada' })); return; }
+        if (req.headers['x-service-secret'] !== secret) {
+          res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
+        }
+
+        const { empresa, categoria, valor, motivo, data, movimentoId } = JSON.parse(body);
+        const emp = String(empresa || '').toUpperCase();
+        if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
+        const v = parseFloat(valor);
+        if (!Number.isFinite(v) || v <= 0) { res.writeHead(400); res.end(JSON.stringify({ error: 'valor inválido' })); return; }
+        if (!categoria) { res.writeHead(400); res.end(JSON.stringify({ error: 'categoria é obrigatória' })); return; }
+        if (!movimentoId) { res.writeHead(400); res.end(JSON.stringify({ error: 'movimentoId é obrigatório' })); return; }
+
+        const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+        const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+        const contas = Array.isArray(doc.contas) ? doc.contas : [];
+        const id = `pdv-sangria-${movimentoId}`;
+        const agora = new Date().toISOString();
+        const i = contas.findIndex(c => c && c.id === id);
+        const reg = {
+          id,
+          descricao: motivo || `Sangria PDV — ${categoria}`,
+          categoria,
+          valor: v,
+          vencimento: data || agora.slice(0, 10),
+          status: 'pago',
+          tipo: 'saida',
+          formaPag: 'dinheiro',
+          origem: 'sangria_pdv',
+          criadoEm: i >= 0 ? (contas[i].criadoEm || agora) : agora,
+          atualizadoEm: agora,
+        };
+        if (i >= 0) contas[i] = reg; else contas.unshift(reg);
+        doc.contas = contas;
+        fs.writeFileSync(file, JSON.stringify(doc));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, acao: i >= 0 ? 'atualizado' : 'criado', categoria, valor: v }));
+      } catch (e) {
+        console.error('[sangria-pdv]', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Erro ao registrar sangria: ' + e.message }));
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && urlPath === '/api/venda-pdv') {
     let body = '';
     req.on('data', c => body += c);

@@ -60,4 +60,35 @@ router.patch('/', authMiddleware, requireRole('admin'), async (req, res) => {
   }
 });
 
+// GET /api/settings/sangria-categories — qualquer usuário autenticado (quem
+// faz sangria no caixa precisa ler a lista, não só o admin que a edita).
+router.get('/sangria-categories', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT value FROM settings WHERE key = 'sangria_categories'`);
+    let categorias = [];
+    try { categorias = JSON.parse(result.rows[0]?.value || '[]'); } catch { categorias = []; }
+    res.json({ categorias: Array.isArray(categorias) ? categorias : [] });
+  } catch (err) {
+    console.error('[settings/sangria-categories/GET]', err.message);
+    res.status(500).json({ error: 'Erro ao buscar categorias' });
+  }
+});
+
+// PUT /api/settings/sangria-categories — só admin
+router.put('/sangria-categories', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { categorias } = req.body;
+  if (!Array.isArray(categorias)) return res.status(400).json({ error: 'categorias deve ser uma lista' });
+  try {
+    await pool.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('sangria_categories', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [JSON.stringify(categorias)]
+    );
+    res.json({ ok: true, categorias });
+  } catch (err) {
+    console.error('[settings/sangria-categories/PUT]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

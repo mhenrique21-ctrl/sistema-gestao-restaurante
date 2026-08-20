@@ -20,6 +20,10 @@ const ALLOWED_KEYS = [
   'ui_font_sizes',
   // Layout da tela de venda (colunas, foto, espacamento, carrinho).
   'ui_layout',
+  // Categorias do Financeiro liberadas pra escolher numa sangria, num JSON só
+  // ([{"nome":"...","ativo":true}]) — lista própria do PDV, não sincronizada
+  // ao vivo com a Gestão.
+  'sangria_categories',
 ];
 
 // GET /api/settings — todas as configurações (chave/valor)

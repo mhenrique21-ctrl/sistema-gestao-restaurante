@@ -189,4 +189,31 @@ function iniciarSincronizacaoPeriodica() {
   return timer;
 }
 
-module.exports = { aoFecharCaixa, avisarVenda, enviarPendentes, enfileirar, totaisDoDia, hojeBelem, iniciarSincronizacaoPeriodica };
+// Sangria categorizada vira conta paga na Gestão (Financeiro > Contas). Igual
+// ao resto deste módulo: nunca deixa a sangria falhar por causa da Gestão
+// estar fora do ar — só loga e segue. movimentoId dá idempotência: reenviar
+// a mesma sangria atualiza a conta em vez de duplicar.
+async function enviarSangria({ movimentoId, categoria, valor, motivo, data }) {
+  const secret = process.env.SERVICE_SECRET;
+  if (!secret) { console.error('[gestaoSync/sangria] SERVICE_SECRET não configurado'); return { ok: false }; }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(`${GESTAO_URL}/api/sangria-pdv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
+      body: JSON.stringify({ empresa: EMPRESA, categoria, valor, motivo, data, movimentoId }),
+      signal: ctrl.signal,
+    });
+    const corpo = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(corpo.error || `HTTP ${res.status}`);
+    return { ok: true };
+  } catch (e) {
+    console.error(`[gestaoSync/sangria] falha ao enviar sangria ${movimentoId}: ${e.message}`);
+    return { ok: false, erro: e.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+module.exports = { aoFecharCaixa, avisarVenda, enviarPendentes, enfileirar, totaisDoDia, hojeBelem, iniciarSincronizacaoPeriodica, enviarSangria };

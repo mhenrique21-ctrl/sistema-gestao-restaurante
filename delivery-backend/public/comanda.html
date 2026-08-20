@@ -1218,6 +1218,10 @@
         <label>Valor (R$)</label>
         <input type="number" step="0.01" min="0" id="fin-amount" placeholder="0,00">
       </div>
+      <div class="field-group" id="fin-categoria-group">
+        <label>Categoria (opcional — pra pagamento real, não pra cofre/troco)</label>
+        <select id="fin-categoria"><option value="">— Não é uma despesa —</option></select>
+      </div>
       <div class="field-group">
         <label>Motivo</label>
         <input type="text" id="fin-reason" placeholder="Ex: troco pro entregador, depósito no banco...">
@@ -6107,12 +6111,33 @@ async function saveEditProduct(id) {
 
 // ── Aba: Financeiro (sangrias e suprimentos) ─────────
 let finType = 'sangria';
+let finCategoriasCarregadas = false;
 
 function setFinType(type) {
   finType = type;
   document.querySelectorAll('.fin-form-tab').forEach(b => b.classList.toggle('active', b.dataset.type === type));
   document.getElementById('fin-submit-btn').textContent = type === 'sangria' ? 'Registrar sangria' : 'Registrar suprimento';
   document.getElementById('fin-error').textContent = '';
+  const catGroup = document.getElementById('fin-categoria-group');
+  if (type === 'sangria') {
+    catGroup.style.display = '';
+    if (!finCategoriasCarregadas) carregarFinCategorias();
+  } else {
+    catGroup.style.display = 'none';
+  }
+}
+
+async function carregarFinCategorias() {
+  try {
+    const res = await fetch(`${API}/api/settings/sangria-categories`, { headers: authHeaders() });
+    const data = await res.json();
+    if (!res.ok) return;
+    finCategoriasCarregadas = true;
+    const ativas = (data.categorias || []).filter(c => c.ativo);
+    const sel = document.getElementById('fin-categoria');
+    sel.innerHTML = '<option value="">— Não é uma despesa —</option>' +
+      ativas.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
+  } catch (e) { /* segue sem categoria se a busca falhar */ }
 }
 
 const FIN_TYPE_LABELS = { sangria: '🔻 Sangria', suprimento: '🔺 Suprimento', abertura: '🏦 Abertura de caixa' };
@@ -6120,6 +6145,7 @@ const FIN_TYPE_LABELS = { sangria: '🔻 Sangria', suprimento: '🔺 Suprimento'
 async function loadFinanceiro() {
   const el = document.getElementById('fin-list');
   el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  if (!finCategoriasCarregadas) carregarFinCategorias();
   try {
     const res = await fetch(`${API}/api/cash-sessions/current`, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
@@ -6253,6 +6279,7 @@ function renderFinSales(sales, totals) {
 async function submitCashMovement() {
   const amount = parseFloat(document.getElementById('fin-amount').value);
   const reason = document.getElementById('fin-reason').value.trim();
+  const categoria = finType === 'sangria' ? document.getElementById('fin-categoria').value : '';
   const errEl = document.getElementById('fin-error');
   errEl.textContent = '';
   if (!(amount > 0)) { errEl.textContent = 'Informe um valor válido'; return; }
@@ -6262,12 +6289,13 @@ async function submitCashMovement() {
     const res = await fetch(`${API}/api/cash-sessions/movement`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ type: finType, amount, reason: reason || null }),
+      body: JSON.stringify({ type: finType, amount, reason: reason || null, category: categoria || null }),
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Erro ao registrar'; return; }
     document.getElementById('fin-amount').value = '';
     document.getElementById('fin-reason').value = '';
+    document.getElementById('fin-categoria').value = '';
     loadFinanceiro();
   } catch (e) {
     errEl.textContent = 'Erro de conexão';
