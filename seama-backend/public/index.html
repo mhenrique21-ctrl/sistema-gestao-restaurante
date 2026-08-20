@@ -679,6 +679,7 @@
       <button class="cfg-tab" data-tab="usuarios">👥 Usuários</button>
       <button class="cfg-tab" data-tab="vinculos">🔗 Compras</button>
       <button class="cfg-tab" data-tab="sangria">💸 Sangria</button>
+      <button class="cfg-tab" data-tab="fechamento">🔒 Fechamento</button>
       <button class="cfg-tab" data-tab="aparencia">🎨 Aparência</button>
     </div>
 
@@ -777,6 +778,63 @@
           <div class="field-group" style="display:flex;gap:8px;align-items:flex-end;margin-top:10px">
             <div style="flex:1"><label>Nova categoria</label><input id="sangria-cat-new" placeholder="Ex: Fornecedor / Insumos"></div>
             <button id="sangria-cat-add" class="btn btn-secondary" style="width:auto;padding:10px 16px">+ Adicionar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="config-tab-fechamento" class="cfg-pane">
+        <div class="cfg-form" style="max-width:620px">
+          <h3>Fechamento de Caixa</h3>
+          <p class="cfg-hint">Regras usadas na hora de conferir e fechar o turno.</p>
+
+          <div class="field-group">
+            <label>Tolerância de diferença (R$)</label>
+            <input id="fch-cfg-tolerancia" type="number" step="0.01" min="0" placeholder="0,00">
+            <p class="cfg-hint" style="margin:4px 0 0">Diferença de dinheiro ou cartão até esse valor não gera o aviso "ATENÇÃO" ao operador — cobre troco arredondado, sem virar cobrança por centavos.</p>
+          </div>
+
+          <div class="field-group">
+            <label>Nomes das máquinas</label>
+            <div style="display:flex;gap:8px">
+              <input id="fch-cfg-m1nome" placeholder="Máquina 1" style="flex:1">
+              <input id="fch-cfg-m2nome" placeholder="Máquina 2" style="flex:1">
+            </div>
+            <p class="cfg-hint" style="margin:4px 0 0">Só pra identificar no fechamento — continua um total geral por máquina, sem detalhar bandeira.</p>
+          </div>
+
+          <label class="toggle-row">
+            <input type="checkbox" id="fch-cfg-maq-obrig">
+            <b>Preenchimento das máquinas é obrigatório</b>
+          </label>
+          <p class="cfg-hint" style="margin-top:-8px">Ligado: precisa preencher pelo menos uma das duas pra fechar. Desligado: as duas ficam totalmente opcionais.</p>
+
+          <label class="toggle-row">
+            <input type="checkbox" id="fch-cfg-pix-somado">
+            <b>PIX somado junto com débito/crédito na conferência</b>
+          </label>
+          <p class="cfg-hint" style="margin-top:-8px">Ligado: PIX entra na comparação com as máquinas. Desligado: PIX fica de fora — só débito e crédito são conferidos contra as máquinas.</p>
+
+          <label class="toggle-row">
+            <input type="checkbox" id="fch-cfg-obs-obrig">
+            <b>Observação obrigatória quando há diferença</b>
+          </label>
+          <p class="cfg-hint" style="margin-top:-8px">Acima da tolerância, o operador precisa escrever o motivo antes de conseguir fechar.</p>
+
+          <div class="field-group">
+            <label>Diferença que exige aprovação do gerente (R$)</label>
+            <input id="fch-cfg-limite" type="number" step="0.01" min="0" placeholder="Deixe vazio pra não exigir">
+            <p class="cfg-hint" style="margin:4px 0 0">Acima desse valor, um operador comum não fecha sozinho — precisa de gerente ou admin logado.</p>
+          </div>
+
+          <label class="toggle-row">
+            <input type="checkbox" id="fch-cfg-mostrar-total">
+            <b>Mostrar total geral do turno na tela de Caixa</b>
+          </label>
+          <p class="cfg-hint" style="margin-top:-8px">Exibe o valor total vendido (dinheiro+cartão+PIX) já na tela de "Caixa aberto", antes de fechar — não só no relatório final.</p>
+
+          <div id="fch-cfg-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+          <div class="modal-actions" style="max-width:200px">
+            <button class="primary" id="fch-cfg-save">Salvar</button>
           </div>
         </div>
       </div>
@@ -2569,10 +2627,11 @@ function renderCaixaAberto(el) {
           <div class="cx-method"><div class="m">${CX_METHOD_LABELS[m]}</div><div class="v">${fmt(CAIXA.sales[m].total)}</div></div>
         `).join('')}
       </div>
+      ${SETTINGS.fechamento_mostrar_total_turno !== 'false' ? `
       <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:14px">
         <span style="color:var(--text2)">Total vendido no turno</span>
         <b>${fmt(CAIXA.totalVendido)}</b>
-      </div>
+      </div>` : ''}
 
       <div class="cx-actions">
         ${podeSuprimento ? '<button id="cx-suprimento-btn">🔺 Suprimento</button>' : ''}
@@ -2715,17 +2774,20 @@ async function openMovimentoModal(tipo) {
 // Conferência às cegas: o operador digita o contado sem ver o esperado, pra
 // não "ajustar" a contagem até o número bater e esconder furo de caixa.
 function openFechamentoModal() {
+  const maquinasObrigatorio = SETTINGS.fechamento_maquinas_obrigatorio !== 'false';
+  const m1nome = SETTINGS.fechamento_maquina1_nome || 'Máquina 1';
+  const m2nome = SETTINGS.fechamento_maquina2_nome || 'Máquina 2';
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.id = 'fech-modal-backdrop';
   backdrop.innerHTML = `
     <div class="modal-sheet" style="max-width:360px">
       <h2>🔒 Fechar caixa</h2>
-      <div class="sub">Conte o dinheiro da gaveta e informe pelo menos uma máquina de cartão.</div>
+      <div class="sub">Conte o dinheiro da gaveta${maquinasObrigatorio ? ' e informe pelo menos uma máquina de cartão' : ''}.</div>
       <div class="field-group"><label>Dinheiro contado</label><input id="fech-amount" type="number" step="0.01" min="0" placeholder="0,00"></div>
-      <div class="field-group"><label>Máquina 1 — total (cartão + PIX)</label><input id="fech-m1" type="number" step="0.01" min="0" placeholder="0,00"></div>
-      <div class="field-group"><label>Máquina 2 — total (cartão + PIX)</label><input id="fech-m2" type="number" step="0.01" min="0" placeholder="0,00"></div>
-      <div style="font-size:10.5px;color:var(--text2);margin-top:-6px;margin-bottom:12px;line-height:1.4">Preencha ao menos uma das duas.</div>
+      <div class="field-group"><label>${m1nome} — total (cartão${SETTINGS.fechamento_pix_somado !== 'false' ? ' + PIX' : ''})</label><input id="fech-m1" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      <div class="field-group"><label>${m2nome} — total (cartão${SETTINGS.fechamento_pix_somado !== 'false' ? ' + PIX' : ''})</label><input id="fech-m2" type="number" step="0.01" min="0" placeholder="0,00"></div>
+      ${maquinasObrigatorio ? `<div style="font-size:10.5px;color:var(--text2);margin-top:-6px;margin-bottom:12px;line-height:1.4">Preencha ao menos uma das duas.</div>` : ''}
       <div class="field-group"><label>Observação (opcional)</label><input id="fech-notes" placeholder="Ex: falta de troco no fim do dia"></div>
       <div id="fech-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
       <div class="modal-actions">
@@ -2744,7 +2806,7 @@ function openFechamentoModal() {
     const m2raw = backdrop.querySelector('#fech-m2').value.trim();
     errEl.textContent = '';
     if (!(counted >= 0)) { errEl.textContent = 'Informe o valor contado'; return; }
-    if (!m1raw && !m2raw) { errEl.textContent = 'Informe o total de pelo menos uma das duas máquinas'; return; }
+    if (maquinasObrigatorio && !m1raw && !m2raw) { errEl.textContent = 'Informe o total de pelo menos uma das duas máquinas'; return; }
     const btn = backdrop.querySelector('#fech-save');
     btn.disabled = true;
     try {
@@ -2769,13 +2831,16 @@ function openFechamentoModal() {
 }
 
 function showResultadoFechamento(data) {
+  const tolerancia = data.tolerancia != null ? parseFloat(data.tolerancia) : 0.005;
+  const m1nome = data.maquina1Nome || 'Máquina 1';
+  const m2nome = data.maquina2Nome || 'Máquina 2';
   const dif = parseFloat(data.difference);
-  const ok = Math.abs(dif) < 0.005;
+  const ok = Math.abs(dif) <= tolerancia;
   const temCartao = data.cardExpected != null;
   const difCartao = temCartao ? parseFloat(data.cardDifference) : 0;
-  const cartaoOk = !temCartao || Math.abs(difCartao) < 0.005;
-  const maquinasLabel = data.machine1Amount != null && data.machine2Amount != null ? ' (máquinas 1 + 2)'
-    : data.machine1Amount != null ? ' (máquina 1)' : ' (máquina 2)';
+  const cartaoOk = !temCartao || Math.abs(difCartao) <= tolerancia;
+  const maquinasLabel = data.machine1Amount != null && data.machine2Amount != null ? ` (${m1nome} + ${m2nome})`
+    : data.machine1Amount != null ? ` (${m1nome})` : ` (${m2nome})`;
   const alertas = montarAlertasOperador(data);
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -2796,7 +2861,7 @@ function showResultadoFechamento(data) {
       <div class="cx-diff ${cartaoOk ? 'ok' : 'bad'}" style="margin-bottom:14px">
         <div class="lbl">💳 Cartão + PIX${maquinasLabel}</div>
         <div class="row"><span>Sistema registrou</span><span>${fmt(data.cardExpected)}</span></div>
-        <div class="row"><span>${data.machine1Amount != null && data.machine2Amount != null ? 'Máquinas informaram' : 'Máquina informou'}</span><span>${fmt(data.cardInformed)}</span></div>
+        <div class="row"><span>${data.machine1Amount != null && data.machine2Amount != null ? 'Máquinas informaram' : (data.machine1Amount != null ? m1nome : m2nome) + ' informou'}</span><span>${fmt(data.cardInformed)}</span></div>
         <div class="total" style="color:${cartaoOk ? 'var(--success)' : 'var(--danger)'}">
           <span>${cartaoOk ? 'Conferido' : difCartao < 0 ? 'Falta' : 'Sobra'}</span><span>${cartaoOk ? '✓' : fmt(Math.abs(difCartao))}</span>
         </div>
@@ -2830,12 +2895,13 @@ function showResultadoFechamento(data) {
 // verdade (dinheiro ou cartão). Nada de explicação longa: só o fato e o
 // pedido de mais cuidado da próxima vez.
 function montarAlertasOperador(data) {
+  const tolerancia = data.tolerancia != null ? parseFloat(data.tolerancia) : 0.005;
   const alertas = [];
   const difCaixa = parseFloat(data.difference);
-  if (Math.abs(difCaixa) >= 0.005) alertas.push(`Dinheiro: ${difCaixa < 0 ? 'faltou' : 'sobrou'} ${fmt(Math.abs(difCaixa))}`);
+  if (Math.abs(difCaixa) > tolerancia) alertas.push(`Dinheiro: ${difCaixa < 0 ? 'faltou' : 'sobrou'} ${fmt(Math.abs(difCaixa))}`);
   if (data.cardExpected != null) {
     const difCartao = parseFloat(data.cardDifference);
-    if (Math.abs(difCartao) >= 0.005) alertas.push(`Cartão/PIX: ${difCartao < 0 ? 'faltou' : 'sobrou'} ${fmt(Math.abs(difCartao))}`);
+    if (Math.abs(difCartao) > tolerancia) alertas.push(`Cartão/PIX: ${difCartao < 0 ? 'faltou' : 'sobrou'} ${fmt(Math.abs(difCartao))}`);
   }
   return alertas;
 }
@@ -2847,9 +2913,14 @@ function montarAlertasOperador(data) {
 function printFechamento(data) {
   const printer = getPrinter();
   if (!printer?.printCupom) return;
+  const tolerancia = data.tolerancia != null ? parseFloat(data.tolerancia) : 0.005;
+  const m1nome = (data.maquina1Nome || 'Máquina 1').toUpperCase();
+  const m2nome = (data.maquina2Nome || 'Máquina 2').toUpperCase();
   const dif = parseFloat(data.difference);
   const temCartao = data.cardExpected != null;
   const difCartao = temCartao ? parseFloat(data.cardDifference) : 0;
+  const maquinasNome = data.machine1Amount != null && data.machine2Amount != null ? `${m1nome}+${m2nome}`
+    : data.machine1Amount != null ? m1nome : m2nome;
   const alertas = montarAlertasOperador(data);
   const movLinhas = (data.movements || [])
     .filter(m => m.type === 'sangria' || m.type === 'suprimento')
@@ -2866,13 +2937,13 @@ function printFechamento(data) {
     { name: 'Fundo de troco', quantity: 1, total: parseFloat(data.session.opening_amount) },
     { name: 'DINHEIRO ESPERADO', quantity: 1, total: data.expected },
     { name: 'DINHEIRO CONTADO', quantity: 1, total: data.counted },
-    { name: dif < 0 ? 'DINHEIRO - FALTA' : dif > 0 ? 'DINHEIRO - SOBRA' : 'DINHEIRO - CONFERIDO', quantity: 1, total: Math.abs(dif) },
+    { name: Math.abs(dif) <= tolerancia ? 'DINHEIRO - CONFERIDO' : dif < 0 ? 'DINHEIRO - FALTA' : 'DINHEIRO - SOBRA', quantity: 1, total: Math.abs(dif) },
   ];
   if (temCartao) {
     linhas.push(
-      { name: 'CARTAO+PIX SISTEMA', quantity: 1, total: data.cardExpected },
-      { name: 'CARTAO+PIX MAQUINAS', quantity: 1, total: data.cardInformed },
-      { name: Math.abs(difCartao) < 0.005 ? 'CARTAO - CONFERIDO' : difCartao < 0 ? 'CARTAO - FALTA' : 'CARTAO - SOBRA', quantity: 1, total: Math.abs(difCartao) },
+      { name: 'CARTAO SISTEMA', quantity: 1, total: data.cardExpected },
+      { name: `CARTAO ${maquinasNome}`, quantity: 1, total: data.cardInformed },
+      { name: Math.abs(difCartao) <= tolerancia ? 'CARTAO - CONFERIDO' : difCartao < 0 ? 'CARTAO - FALTA' : 'CARTAO - SOBRA', quantity: 1, total: Math.abs(difCartao) },
     );
   }
   alertas.forEach(a => linhas.push({ name: `ATENCAO: ${a}`, quantity: 0, total: 0 }));
@@ -2919,8 +2990,51 @@ document.querySelectorAll('.cfg-tab').forEach(tab => tab.addEventListener('click
   if (tab.dataset.tab === 'vinculos') loadVinculos();
   if (tab.dataset.tab === 'adicionais') loadAdicionais();
   if (tab.dataset.tab === 'sangria') loadSangriaCategorias();
+  if (tab.dataset.tab === 'fechamento') loadFechamentoConfig();
   if (tab.dataset.tab === 'aparencia') { renderCoresCategoria(); renderLayout(); renderFontes(); }
 }));
+
+// ── Configurações: regras do Fechamento de Caixa ─────
+function loadFechamentoConfig() {
+  document.getElementById('fch-cfg-tolerancia').value = SETTINGS.fechamento_tolerancia || '';
+  document.getElementById('fch-cfg-m1nome').value = SETTINGS.fechamento_maquina1_nome || '';
+  document.getElementById('fch-cfg-m2nome').value = SETTINGS.fechamento_maquina2_nome || '';
+  document.getElementById('fch-cfg-limite').value = SETTINGS.fechamento_limite_aprovacao || '';
+  // Toggles com default LIGADO — só desligam se a chave existir e for 'false'.
+  document.getElementById('fch-cfg-maq-obrig').checked = SETTINGS.fechamento_maquinas_obrigatorio !== 'false';
+  document.getElementById('fch-cfg-pix-somado').checked = SETTINGS.fechamento_pix_somado !== 'false';
+  document.getElementById('fch-cfg-mostrar-total').checked = SETTINGS.fechamento_mostrar_total_turno !== 'false';
+  document.getElementById('fch-cfg-obs-obrig').checked = SETTINGS.fechamento_obs_obrigatoria === 'true';
+}
+
+document.getElementById('fch-cfg-save').addEventListener('click', async () => {
+  const errEl = document.getElementById('fch-cfg-error');
+  errEl.textContent = '';
+  const btn = document.getElementById('fch-cfg-save');
+  btn.disabled = true;
+  try {
+    const body = {
+      fechamento_tolerancia: document.getElementById('fch-cfg-tolerancia').value || '0',
+      fechamento_maquina1_nome: document.getElementById('fch-cfg-m1nome').value.trim(),
+      fechamento_maquina2_nome: document.getElementById('fch-cfg-m2nome').value.trim(),
+      fechamento_limite_aprovacao: document.getElementById('fch-cfg-limite').value || '',
+      fechamento_maquinas_obrigatorio: document.getElementById('fch-cfg-maq-obrig').checked ? 'true' : 'false',
+      fechamento_pix_somado: document.getElementById('fch-cfg-pix-somado').checked ? 'true' : 'false',
+      fechamento_mostrar_total_turno: document.getElementById('fch-cfg-mostrar-total').checked ? 'true' : 'false',
+      fechamento_obs_obrigatoria: document.getElementById('fch-cfg-obs-obrig').checked ? 'true' : 'false',
+    };
+    const res = await apiFetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!res.ok) { const d = await res.json(); errEl.textContent = d.error || 'Erro ao salvar'; return; }
+    Object.assign(SETTINGS, body);
+    showToast('Configurações de fechamento salvas!');
+  } catch (e) {
+    if (e.message !== 'unauthorized') errEl.textContent = 'Erro de conexão';
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ── Configurações: categorias de sangria ─────────────
 let sangriaCategorias = [];

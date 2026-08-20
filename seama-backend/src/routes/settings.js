@@ -24,6 +24,11 @@ const ALLOWED_KEYS = [
   // ([{"nome":"...","ativo":true}]) — lista própria do PDV, não sincronizada
   // ao vivo com a Gestão.
   'sangria_categories',
+  // Regras do fechamento de caixa (todas com default seguro no código, então
+  // não precisam existir na tabela até alguém mexer na aba Fechamento).
+  'fechamento_tolerancia', 'fechamento_maquina1_nome', 'fechamento_maquina2_nome',
+  'fechamento_obs_obrigatoria', 'fechamento_limite_aprovacao',
+  'fechamento_mostrar_total_turno', 'fechamento_maquinas_obrigatorio', 'fechamento_pix_somado',
 ];
 
 // GET /api/settings — todas as configurações (chave/valor)

@@ -188,26 +188,55 @@ router.post('/movement', async (req, res) => {
   }
 });
 
+// Lê as regras de fechamento configuradas em Config → Fechamento, com
+// default seguro pra quem nunca abriu essa aba (nenhuma chave gravada ainda).
+async function loadFechamentoSettings() {
+  const r = await pool.query(
+    `SELECT key, value FROM settings WHERE key IN (
+      'fechamento_tolerancia','fechamento_maquina1_nome','fechamento_maquina2_nome',
+      'fechamento_obs_obrigatoria','fechamento_limite_aprovacao',
+      'fechamento_maquinas_obrigatorio','fechamento_pix_somado'
+    )`
+  );
+  const cfg = {};
+  for (const row of r.rows) cfg[row.key] = row.value;
+  return {
+    tolerancia: Math.max(parseFloat(cfg.fechamento_tolerancia) || 0, 0.005),
+    maquina1Nome: cfg.fechamento_maquina1_nome || 'Máquina 1',
+    maquina2Nome: cfg.fechamento_maquina2_nome || 'Máquina 2',
+    obsObrigatoria: cfg.fechamento_obs_obrigatoria === 'true',
+    limiteAprovacao: cfg.fechamento_limite_aprovacao ? parseFloat(cfg.fechamento_limite_aprovacao) : null,
+    // Ambos com default true — precisam da chave explicitamente 'false' pra
+    // desligar, senão configuração nunca gravada mudaria o comportamento atual.
+    maquinasObrigatorio: cfg.fechamento_maquinas_obrigatorio !== 'false',
+    pixSomado: cfg.fechamento_pix_somado !== 'false',
+  };
+}
+
 // POST /api/cash-sessions/close — fecha conferindo o dinheiro contado e,
-// opcionalmente, as duas maquininhas de cartão (pelo menos uma das duas).
+// conforme configurado em Fechamento, as maquininhas de cartão.
 router.post('/close', async (req, res) => {
   const counted = parseFloat(req.body.counted_amount);
   if (!(counted >= 0)) return res.status(400).json({ error: 'Informe o valor contado' });
 
-  // "Preenchido" é o campo ter vindo no corpo, não o valor ser > 0 — a
-  // máquina pode legitimamente ter batido zero no turno.
-  const m1raw = req.body.machine1_amount;
-  const m2raw = req.body.machine2_amount;
-  const hasM1 = m1raw !== undefined && m1raw !== null && m1raw !== '';
-  const hasM2 = m2raw !== undefined && m2raw !== null && m2raw !== '';
-  if (!hasM1 && !hasM2) return res.status(400).json({ error: 'Informe o total de pelo menos uma das duas máquinas' });
-  const machine1Amount = hasM1 ? parseFloat(m1raw) : null;
-  const machine2Amount = hasM2 ? parseFloat(m2raw) : null;
-  if ((hasM1 && !(machine1Amount >= 0)) || (hasM2 && !(machine2Amount >= 0))) {
-    return res.status(400).json({ error: 'Valor de máquina inválido' });
-  }
-
   try {
+    const cfg = await loadFechamentoSettings();
+
+    // "Preenchido" é o campo ter vindo no corpo, não o valor ser > 0 — a
+    // máquina pode legitimamente ter batido zero no turno.
+    const m1raw = req.body.machine1_amount;
+    const m2raw = req.body.machine2_amount;
+    const hasM1 = m1raw !== undefined && m1raw !== null && m1raw !== '';
+    const hasM2 = m2raw !== undefined && m2raw !== null && m2raw !== '';
+    if (cfg.maquinasObrigatorio && !hasM1 && !hasM2) {
+      return res.status(400).json({ error: 'Informe o total de pelo menos uma das duas máquinas' });
+    }
+    const machine1Amount = hasM1 ? parseFloat(m1raw) : null;
+    const machine2Amount = hasM2 ? parseFloat(m2raw) : null;
+    if ((hasM1 && !(machine1Amount >= 0)) || (hasM2 && !(machine2Amount >= 0))) {
+      return res.status(400).json({ error: 'Valor de máquina inválido' });
+    }
+
     const s = await pool.query(`SELECT * FROM cash_sessions WHERE status = 'aberto' LIMIT 1`);
     const session = s.rows[0];
     if (!session) return res.status(400).json({ error: 'Nenhum caixa aberto' });
@@ -216,11 +245,23 @@ router.post('/close', async (req, res) => {
     const expected = expectedInDrawer(session, summary);
     const difference = counted - expected;
 
-    // Cartão + PIX: as duas maquininhas costumam passar PIX também, então
-    // entram juntas na mesma conferência (nada disso passa pela gaveta).
-    const cardExpected = summary.sales.cartao_debito.total + summary.sales.cartao_credito.total + summary.sales.pix.total;
+    // Cartão (+ PIX, se a configuração mantiver os dois juntos — as duas
+    // maquininhas costumam passar PIX também). Nada disso passa pela gaveta.
+    const temMaquina = hasM1 || hasM2;
+    const cardExpected = summary.sales.cartao_debito.total + summary.sales.cartao_credito.total
+      + (cfg.pixSomado ? summary.sales.pix.total : 0);
     const cardInformed = (machine1Amount || 0) + (machine2Amount || 0);
-    const cardDifference = cardInformed - cardExpected;
+    const cardDifference = temMaquina ? cardInformed - cardExpected : 0;
+
+    const foraDaTolerancia = Math.abs(difference) > cfg.tolerancia || (temMaquina && Math.abs(cardDifference) > cfg.tolerancia);
+    if (cfg.obsObrigatoria && foraDaTolerancia && !(req.body.notes || '').trim()) {
+      return res.status(400).json({ error: 'Há diferença no fechamento — informe uma observação explicando o motivo.' });
+    }
+    const delegado = !['admin', 'gerente'].includes(req.user.role);
+    if (delegado && cfg.limiteAprovacao != null
+      && (Math.abs(difference) > cfg.limiteAprovacao || (temMaquina && Math.abs(cardDifference) > cfg.limiteAprovacao))) {
+      return res.status(403).json({ error: `Diferença acima de ${cfg.limiteAprovacao.toFixed(2)} — peça a um gerente ou admin pra fechar.` });
+    }
 
     const r = await pool.query(
       `UPDATE cash_sessions
@@ -244,8 +285,11 @@ router.post('/close', async (req, res) => {
 
     res.json({
       session: r.rows[0], ...summary, expected, counted, difference,
-      machine1Amount, machine2Amount, cardExpected, cardInformed, cardDifference,
+      machine1Amount, machine2Amount,
+      cardExpected: temMaquina ? cardExpected : null, cardInformed: temMaquina ? cardInformed : null,
+      cardDifference: temMaquina ? cardDifference : null,
       totalGeral: summary.totalVendido,
+      tolerancia: cfg.tolerancia, maquina1Nome: cfg.maquina1Nome, maquina2Nome: cfg.maquina2Nome,
       gestao: sync,
     });
   } catch (err) {
