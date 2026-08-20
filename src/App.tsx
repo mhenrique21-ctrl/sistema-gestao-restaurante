@@ -7202,10 +7202,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             });
             return grupos.map((g,gi)=>{
               const ehCliente=g.cat&&isCategoriaCliente(g.cat);
+              const totalQtd=ehCliente?g.items.reduce((s,{it})=>{
+                const key=`${ped.id}_${it.nome}`;
+                const q=isEdit?(parseFloat(editQtds[key]||"0")||0):(it.quantidade||0);
+                return s+q;
+              },0):0;
               return <div key={g.cat||`_${gi}`} style={{background:"var(--bg4)",borderRadius:8,padding:"2px 10px 6px",marginBottom:8,border:ehCliente?"1.5px solid #16A34A55":"none"}}>
                 <div style={{fontSize:10,fontWeight:800,color:"#7C3AED",textTransform:"uppercase" as const,letterSpacing:.4,padding:"7px 0 5px",display:"flex",alignItems:"center",gap:5}}>
                   <CatIconBadge icon={prodCatIcon(g.cat)} size={12}/>{g.cat||"Sem categoria"}
                   {ehCliente&&<span style={{background:"#7C3AED",color:"#fff",borderRadius:8,padding:"0px 6px",fontSize:8,fontWeight:800}}>CLIENTE</span>}
+                  {ehCliente&&<span style={{marginLeft:"auto",background:isEdit?"#F59E0B":"#16A34A",color:"#fff",borderRadius:8,padding:"1px 7px",fontSize:10,fontWeight:800}}>{totalQtd} un</span>}
                 </div>
                 {g.items.map(({it,idx},ii)=>{
                   const key=`${ped.id}_${it.nome}`;
