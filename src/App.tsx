@@ -7053,8 +7053,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const salvarEdicaoPedido=(pedId:string)=>{
     setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>{
       if(p.id!==pedId)return p;
-      const novosItens=(p.itens||[]).map((it:any)=>{
-        const key=`${pedId}_${it.nome}`;
+      const novosItens=(p.itens||[]).map((it:any,i:number)=>{
+        const key=`${pedId}_${i}`;
         const novaQtd=parseFloat(editQtds[key]);
         const novaObs=editObs[key]!==undefined?editObs[key]:it.obs;
         return!isNaN(novaQtd)&&novaQtd>=0?{...it,quantidade:novaQtd,obs:novaObs}:it;
@@ -7180,7 +7180,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               <button onClick={()=>imprimirPedido(ped)} style={{background:"none",border:"1px solid #1D4ED844",borderRadius:5,color:"#1D4ED8",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
               <button onClick={()=>{
                 if(isEdit){salvarEdicaoPedido(ped.id);}
-                else{const q:Record<string,string>={};const o:Record<string,string>={};(ped.itens||[]).forEach((it:any)=>{const k=`${ped.id}_${it.nome}`;q[k]=String(it.quantidade);o[k]=it.obs||"";});setEditQtds(q);setEditObs(o);setEditPedId(ped.id);}
+                else{const q:Record<string,string>={};const o:Record<string,string>={};(ped.itens||[]).forEach((it:any,i:number)=>{const k=`${ped.id}_${i}`;q[k]=String(it.quantidade);o[k]=it.obs||"";});setEditQtds(q);setEditObs(o);setEditPedId(ped.id);}
               }} style={{background:"none",border:`1px solid ${isEdit?"#22C55E44":"#F59E0B44"}`,borderRadius:5,color:isEdit?"#22C55E":"#F59E0B",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>{isEdit?"💾":"✏️"}</button>
               {isEdit&&<button onClick={()=>{setEditPedId(null);setEditQtds({});setEditObs({});}} style={{background:"none",border:"1px solid #88888844",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>✕</button>}
               <button onClick={()=>setAddToPedId(addToPedId===ped.id?null:ped.id)} title="Adicionar produto"
@@ -7202,8 +7202,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             });
             return grupos.map((g,gi)=>{
               const ehCliente=g.cat&&isCategoriaCliente(g.cat);
-              const totalQtd=ehCliente?g.items.reduce((s,{it})=>{
-                const key=`${ped.id}_${it.nome}`;
+              const totalQtd=ehCliente?g.items.reduce((s,{it,idx})=>{
+                const key=`${ped.id}_${idx}`;
                 const q=isEdit?(parseFloat(editQtds[key]||"0")||0):(it.quantidade||0);
                 return s+q;
               },0):0;
@@ -7214,7 +7214,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   {ehCliente&&<span style={{marginLeft:"auto",background:isEdit?"#F59E0B":"#16A34A",color:"#fff",borderRadius:8,padding:"1px 7px",fontSize:10,fontWeight:800}}>{totalQtd} un</span>}
                 </div>
                 {g.items.map(({it,idx},ii)=>{
-                  const key=`${ped.id}_${it.nome}`;
+                  const key=`${ped.id}_${idx}`;
                   return <div key={ii} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderTop:ii>0?"1px solid var(--border)":"none"}}>
                     <span style={{fontSize:12,flex:1}}>{it.nome}</span>
                     {it.qtdAtual&&<span style={{fontSize:10,color:"#888"}}>atual: {it.qtdAtual}</span>}
