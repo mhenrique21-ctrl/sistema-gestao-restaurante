@@ -2814,6 +2814,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
   const [qtds,setQtds]=useState<Record<string,string>>({});
   const [editingPrecoId,setEditingPrecoId]=useState<string|null>(null);
   const [precoEditVal,setPrecoEditVal]=useState("");
+  const [dataVenda,setDataVenda]=useState(today());
   const [clienteNome,setClienteNome]=useState("");
   const [clienteTelefone,setClienteTelefone]=useState("");
   const [clienteSugg,setClienteSugg]=useState(false);
@@ -2854,8 +2855,9 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     if(!itensSelecionados.length)return alert("Adicione ao menos 1 produto com quantidade.");
     if(temItemSemPreco)return alert("Defina o preço de todos os produtos selecionados (clique no preço pra editar).");
     if(!clienteNome.trim())return alert("Informe o nome do cliente.");
+    if(!dataVenda)return alert("Informe a data da venda.");
     const now=new Date().toISOString();
-    const data=today();
+    const data=dataVenda;
     const numero=Math.max(0,...(db.recibosVenda||[]).map((r:any)=>r.numero||0))+1;
     const recibo={id:uid(),numero,clienteNome:clienteNome.trim(),clienteTelefone:clienteTelefone.trim(),
       itens:itensSelecionados.map(({id,...it})=>it),total:totalVenda,data,criadoEm:now,atualizadoEm:now};
@@ -2872,7 +2874,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
       }
       return{...d,recibosVenda:[recibo,...(d.recibosVenda||[])],clientesEncomenda:upsertCliente(d.clientesEncomenda||[],clienteNome,clienteTelefone,now),vendas};
     });
-    setQtds({});setClienteNome("");setClienteTelefone("");
+    setQtds({});setClienteNome("");setClienteTelefone("");setDataVenda(today());
     setReciboGerado(recibo);
   };
 
@@ -2881,7 +2883,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     return <div style={{maxWidth:480,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:"11px 14px",marginBottom:18}}>
         <span style={{fontSize:22}}>✅</span>
-        <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → Delivery de hoje.</span>
+        <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → Delivery de {fmtDate(reciboGerado.data)}.</span>
       </div>
       <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,color:"var(--text2)",textTransform:"uppercase" as const,marginBottom:2}}>{impressaoNome(cfg,"Seama")}</div>
       <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>Recibo de Venda #{String(reciboGerado.numero).padStart(4,"0")}</div>
@@ -2945,6 +2947,11 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
 
           <div style={{display:"flex",flexDirection:"column" as const,gap:14}}>
             <div className="card">
+              <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Data da venda</div>
+              <input type="date" value={dataVenda} onChange={e=>setDataVenda(e.target.value)} className="inp" style={{marginBottom:0,width:"100%"}}/>
+              {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → Delivery vão pra esta data.</div>}
+            </div>
+            <div className="card">
               <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Cliente</div>
               <div style={{position:"relative" as const,marginBottom:6}}>
                 <input placeholder="Nome do cliente *" value={clienteNome}
@@ -2977,7 +2984,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
                 <span style={{fontSize:22,fontWeight:800}}>{fmtMoney(totalVenda)}</span>
               </div>
               <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"#7C3AED",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
-              <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Delivery</b> do dia.</div>
+              <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Delivery</b> de {fmtDate(dataVenda||today())}.</div>
             </div>
           </div>
         </div>}
