@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
+import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 
 // ===================== STORAGE =====================
 const STORAGE_KEY = "gestao_app_v4";
@@ -1222,6 +1223,8 @@ export default function App() {
   const DEFAULT_MENU_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","config"];
   const [menuOrder,setMenuOrder]=useState<string[]>(()=>{try{const s=localStorage.getItem("app_menu_order");if(s)return JSON.parse(s);}catch{}return DEFAULT_MENU_ORDER;});
   const changeMenuOrder=(order:string[])=>{setMenuOrder(order);localStorage.setItem("app_menu_order",JSON.stringify(order));};
+  const [config,setConfig] = useState<ConfigAppState>(()=>{try{const s=localStorage.getItem("app_config");return s?JSON.parse(s):CONFIG_PADRAO;}catch{return CONFIG_PADRAO;}});
+  const [configPanelOpen,setConfigPanelOpen] = useState(false);
   const [syncStatus,setSyncStatus] = useState<"idle"|"sync"|"ok"|"erro">("idle");
 
   const toggleTheme=()=>{
@@ -1734,7 +1737,7 @@ export default function App() {
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder}/>}
+              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder} setConfigPanelOpen={setConfigPanelOpen}/>}
             </>
         }
       </div>
@@ -1798,6 +1801,7 @@ export default function App() {
           </button>
         </div></div>
       </>}
+      {configPanelOpen && <ConfigPanel onClose={()=>setConfigPanelOpen(false)} config={config} setConfig={setConfig}/>}
     </div>
   );
 }
@@ -11836,8 +11840,8 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
 }
 
 // ===================== CONFIGURAÇÕES =====================
-function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder}:
-  {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void}){
+function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder,setConfigPanelOpen}:
+  {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void,setConfigPanelOpen?:(v:boolean)=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
   const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
@@ -12031,6 +12035,13 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         <input value={nomeEmpresa} onChange={e=>setNomeEmpresa(e.target.value)} className="inp" style={{marginBottom:8}}/>
         <button className="btn" onClick={()=>{setConfig("nomeEmpresa",nomeEmpresa.trim());alert("✅ Nome salvo!");}}
           style={{background:"var(--btnPrimary)",color:"#fff",padding:"10px",width:"100%",fontSize:13}}>💾 Salvar</button>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>⚡ Configurações Avançadas</div>
+        <p style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Personalize botões, fontes, cores, idioma, notificações e mais.</p>
+        <button className="btn" onClick={()=>setConfigPanelOpen(true)}
+          style={{background:"var(--btnPrimary)",color:"#fff",padding:"10px",width:"100%",fontSize:13,fontWeight:700}}>🎨 Abrir Configurações Avançadas</button>
       </div>
 
       <div className="card" style={{marginBottom:12}}>
