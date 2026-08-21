@@ -1552,6 +1552,7 @@ export default function App() {
           .bottom-nav-bar{display:none!important}
           .fab-menu-container{display:none!important}
           .top-tabs-mobile{display:none!important}
+          .sub-tabs-mobile{display:none!important}
           .menu-picker-btn{display:none!important}
           .app-header{padding:14px 32px!important}
           .app-content{padding:24px 32px 24px!important}
@@ -1654,6 +1655,20 @@ export default function App() {
           ))}
         </div>}
 
+        {/* SUBABAS (menuLayout=bottom): fileira embutida no cabeçalho, empurra o
+            conteúdo pra baixo em vez de flutuar por cima — antes era um cartão
+            fixed com um backdrop cobrindo a tela inteira (bloqueava clique em
+            qualquer coisa embaixo até fechar, e não tinha classe pra ser
+            escondido no desktop, então aparecia por cima da sidebar também). */}
+        {!isOp&&menuLayout==="bottom"&&expandedMenu&&menuFiltered.find(m=>m.id===expandedMenu)?.children&&<div className="sub-tabs-mobile" style={{display:"flex",gap:3,marginTop:8,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any}}>
+          {menuFiltered.find(m=>m.id===expandedMenu)!.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
+            <button key={c.id} onClick={()=>navTo(expandedMenu,c.sub)}
+              style={{flexShrink:0,padding:"4px 10px",borderRadius:16,fontSize:10,fontWeight:500,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",whiteSpace:"nowrap"}}>
+              {c.icon} {c.label}
+            </button>
+          ))}
+        </div>}
+
         {/* TOP TABS (when menuLayout=top) */}
         {!isOp&&menuLayout==="top"&&<>
           <div className="top-tabs-mobile" style={{display:"flex",gap:4,marginTop:8,overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any}}>
@@ -1724,24 +1739,11 @@ export default function App() {
         }
       </div>
 
-      {/* BOTTOM NAV (menuLayout=bottom, hidden for operators) */}
+      {/* BOTTOM NAV (menuLayout=bottom, hidden for operators) — o cartão flutuante
+          com backdrop que existia aqui saiu; as subabas de quem tem submenu agora
+          moraram no cabeçalho (ver "SUBABAS" acima), embutidas no fluxo normal
+          da página em vez de flutuar por cima do conteúdo. */}
       {!isOp&&menuLayout==="bottom"&&<>
-        {expandedMenu&&<div onClick={()=>setExpandedMenu(null)} style={{position:"fixed",inset:0,zIndex:89}}/>}
-        {expandedMenu&&menuFiltered.find(m=>m.id===expandedMenu)?.children&&<div style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg3)",borderTop:"1px solid var(--border2)",borderRadius:"16px 16px 0 0",padding:"10px 8px 6px",zIndex:91,boxShadow:"0 -4px 20px #0006"}}>
-          <div style={{fontSize:11,fontWeight:700,color:"var(--btnPrimary)",padding:"0 8px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span>{menuFiltered.find(m=>m.id===expandedMenu)?.icon} {menuFiltered.find(m=>m.id===expandedMenu)?.label}</span>
-            <button onClick={()=>setExpandedMenu(null)} style={{background:"none",border:"none",color:"#666",fontSize:16,cursor:"pointer",padding:"0 4px"}}>✕</button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>
-            {menuFiltered.find(m=>m.id===expandedMenu)!.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
-              <button key={c.id} onClick={()=>{navTo(expandedMenu,c.sub);setExpandedMenu(null);}}
-                style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 6px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,color:"var(--text)"}}>
-                <span style={{fontSize:18}}>{c.icon}</span>
-                <span style={{fontSize:10,fontWeight:600}}>{c.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>}
         <div className="bottom-nav-bar" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"var(--bg2)",borderTop:"1px solid #0EA5E940",display:"flex",padding:"6px 2px",zIndex:90}}>
         {(()=>{
           const estoqueBaixoNav=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
@@ -1764,7 +1766,7 @@ export default function App() {
 
       {/* FAB MENU (menuLayout=fab, hidden for operators) */}
       {!isOp&&menuLayout==="fab"&&<>
-        {fabOpen&&<div onClick={()=>{setFabOpen(false);setExpandedMenu(null);}} style={{position:"fixed",inset:0,background:"#00000066",zIndex:91}}/>}
+        {fabOpen&&<div className="fab-menu-container" onClick={()=>{setFabOpen(false);setExpandedMenu(null);}} style={{position:"fixed",inset:0,background:"#00000066",zIndex:91}}/>}
         <div className="fab-menu-container" style={{position:"fixed",bottom:20,right:16,zIndex:92,maxWidth:480,pointerEvents:"none"}}>
         <div style={{pointerEvents:"auto",marginLeft:"auto",width:"fit-content"}}>
           {fabOpen&&<div style={{position:"absolute",bottom:60,right:0,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:16,padding:6,minWidth:200,maxHeight:"70vh",overflowY:"auto",boxShadow:"0 8px 32px #000a"}}>
@@ -2907,7 +2909,10 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     </div>;
   }
 
-  const renderProduto=(p:any)=><div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderTop:"1px solid var(--border)"}}>
+  // inputMode="numeric" + pattern abrem o teclado numérico no celular sem os
+  // botões de +/- do type="number" (que em tela pequena são pequenos demais
+  // pra tocar e ainda roubam espaço do dedo) — filtra não-dígito na mão.
+  const renderProduto=(p:any)=><div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 0",borderTop:"1px solid var(--border)"}}>
     <span style={{flex:1,fontSize:13,fontWeight:600}}>{p.nome}</span>
     {editingPrecoId===p.id
       ? <input autoFocus value={precoEditVal} onChange={e=>setPrecoEditVal(e.target.value)}
@@ -2916,9 +2921,9 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
       : <span onClick={()=>startEditPreco(p)} title="Clique pra editar o preço" style={{fontSize:12,fontWeight:700,color:p.precoFixo?"#7C3AED":"#EF4444",background:p.precoFixo?"#7C3AED18":"#EF444418",borderRadius:6,padding:"4px 9px",cursor:"pointer",whiteSpace:"nowrap" as const}}>
           {p.precoFixo?fmtMoney(p.precoFixo):"sem preço"} <span style={{fontSize:10,opacity:.7}}>✏️</span>
         </span>}
-    <input type="number" min="0" step="1" placeholder="0" value={qtds[p.id]||""} disabled={!p.precoFixo}
-      onChange={e=>setQtds(q=>({...q,[p.id]:e.target.value}))}
-      className="inp" style={{width:56,marginBottom:0,textAlign:"center" as const,opacity:p.precoFixo?1:.5}}/>
+    <input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={qtds[p.id]||""} disabled={!p.precoFixo}
+      onChange={e=>{const v=e.target.value.replace(/\D/g,"");setQtds(q=>({...q,[p.id]:v}));}}
+      className="inp" style={{width:64,height:52,marginBottom:0,textAlign:"center" as const,opacity:p.precoFixo?1:.5,fontSize:22,fontWeight:800,padding:0,flexShrink:0}}/>
   </div>;
 
   return <div>
@@ -2928,7 +2933,13 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     </div>
     {!prodsCatalog.length
       ? <EmptyState msg="Nenhum produto cadastrado ainda. Cadastre em Produção → Produtos."/>
-      : <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:16,alignItems:"start"}}>
+      : <>
+      {/* Empilha em 1 coluna abaixo de 760px — sem isso o painel de Cliente/
+          Resumo (coluna da direita) ficava espremido/cortado em tela de
+          celular, em vez de descer pra baixo do catálogo. */}
+      <style>{`.recibo-layout{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start}
+        @media(max-width:760px){.recibo-layout{grid-template-columns:1fr}}`}</style>
+      <div className="recibo-layout">
           <div>
             {cats.map(cat=>{
               const itensCat=prodsCatalog.filter((p:any)=>prodCats(p).includes(cat));
@@ -2987,7 +2998,8 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
               <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Delivery</b> de {fmtDate(dataVenda||today())}.</div>
             </div>
           </div>
-        </div>}
+        </div>
+      </>}
   </div>;
 }
 
