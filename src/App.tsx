@@ -265,7 +265,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[],
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
   config:{snAliquota:6},
@@ -867,6 +867,50 @@ const migrateDb=(m:any)=>{
       });
       m[e].produtosDedupV2=true;
     }
+    // Recupera as categorias que sumiram dos produtos de produção. Causa: nenhum
+    // write de produtosProducao carimbava data, então o merge não tinha como
+    // saber quem era mais recente e o documento de um aparelho com cópia velha
+    // desfazia, em silêncio, a marcação feita em outro (ver o carimbo de
+    // atualizadoEm nos writes e o merge por timestamp em produtosProducao).
+    // Os pedidos arquivados guardam a categoria DENTRO de cada item, por isso
+    // sobreviveram — e é deles que a associação é remontada.
+    // Só ACRESCENTA: nunca tira categoria de produto, e ignora categoria que foi
+    // excluída de propósito (categoriasProducaoDeleted).
+    if(!m[e].produtosCatsRepairV1){
+      const excluidas=new Set<string>(m[e].categoriasProducaoDeleted||[]);
+      const catsPorNome=new Map<string,Set<string>>();
+      for(const ped of (m[e].pedidosProducao||[])){
+        for(const it of (ped?.itens||[])){
+          const nome=String(it?.nome||"").trim().toLowerCase();
+          const cat=String(it?.categoria||"").trim();
+          if(!nome||!cat||excluidas.has(cat))continue;
+          if(!catsPorNome.has(nome))catsPorNome.set(nome,new Set<string>());
+          catsPorNome.get(nome)!.add(cat);
+        }
+      }
+      if(catsPorNome.size){
+        const agora=new Date().toISOString();
+        m[e].produtosProducao=(m[e].produtosProducao||[]).map((p:any)=>{
+          const doArquivo=catsPorNome.get(String(p?.nome||"").trim().toLowerCase());
+          if(!doArquivo)return p;
+          const atuais:string[]=Array.isArray(p.cats)&&p.cats.length?p.cats:(p.cat?[p.cat]:[]);
+          const faltando=[...doArquivo].filter(c=>!atuais.includes(c));
+          if(!faltando.length)return p;
+          const cats=[...atuais,...faltando];
+          // Carimba: assim esta versão recuperada vence a cópia velha que ainda
+          // esteja aberta em outro aparelho, em vez de ser desfeita de novo.
+          return {...p,cats,cat:cats[0]||"",atualizadoEm:agora};
+        });
+        // Categoria que voltou pro produto precisa existir na lista, senão ela
+        // não é desenhada na tela de Novo Pedido.
+        const usadas=new Set<string>();
+        (m[e].produtosProducao||[]).forEach((p:any)=>{
+          (Array.isArray(p.cats)?p.cats:(p.cat?[p.cat]:[])).forEach((c:string)=>{if(c)usadas.add(c);});
+        });
+        m[e].categoriasProducao=[...new Set([...(m[e].categoriasProducao||[]),...[...usadas].filter(c=>!excluidas.has(c))])];
+      }
+      m[e].produtosCatsRepairV1=true;
+    }
     // Limpar caracteres corrompidos (�, zero-width) de nomes de produtos/itens
     {
       const RE_LIXO=/[\uFFFD\u200B-\u200D\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
@@ -1059,7 +1103,13 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // que ia pro POST — o cadastro se apagava a caminho de ser salvo.
       // mergeDocument.js já trata 'usuarios' como campo mesclável.
       usuarios:      mergeArrayById(s.usuarios||[],p.usuarios||[],_listaDeletados),
-      produtosProducao: unionById(p.produtosProducao||[],s.produtosProducao||[]),
+      // Mesma fusão de vendas/contas/usuarios, não unionById: unionById dá vitória
+      // incondicional ao local, então um aparelho com o catálogo velho aberto
+      // desfazia a categoria que outro tinha acabado de marcar — e como o servidor
+      // também cai em "incoming vence" quando ninguém carimba data, a marcação
+      // sumia sem deixar rastro. Com atualizadoEm carimbado nos writes, aqui e no
+      // servidor passa a vencer quem editou por último.
+      produtosProducao: mergeArrayById(s.produtosProducao||[],p.produtosProducao||[],_listaDeletados),
       pedidosProducao:  unionById(p.pedidosProducao||[],s.pedidosProducao||[],true),
       itensProducaoPendentes: unionById(p.itensProducaoPendentes||[],s.itensProducaoPendentes||[]),
       categoriasProducao: [...new Set([...(s.categoriasProducao||[]),...(p.categoriasProducao||[])])],
@@ -6660,10 +6710,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     if(!nome)return alert("Nome obrigatório.");
     const precoFixo=parseMoney(prodForm.precoFixo||0)||undefined;
     if(editProdId){
-      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo}:p)}));
+      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo,atualizadoEm:new Date().toISOString()}:p)}));
       setEditProdId(null);
     }else{
-      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo}]}));
+      (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo,atualizadoEm:new Date().toISOString()}]}));
     }
     setProdForm({nome:"",cats:[],unidade:"un",precoFixo:""});
   };
@@ -6677,9 +6727,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c],categoriasProducaoDeleted:(d.categoriasProducaoDeleted||[]).filter((x:string)=>x!==c),iconesProducao:{...(d.iconesProducao||{}),[c]:novaIcone}}));setNovaCat("");setNovaIcone("📦");};
   const delCat=(c:string)=>{
     if(!confirm(`Excluir categoria "${c}"? Produtos ficarão sem essa categoria.`))return;
-    setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),categoriasProducaoDeleted:[...new Set([...(d.categoriasProducaoDeleted||[]),c])],produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(c)?{...p,cats:pc.filter((x:string)=>x!==c),cat:pc.filter((x:string)=>x!==c)[0]||""}:p;}),iconesProducao:icons};});
+    setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),categoriasProducaoDeleted:[...new Set([...(d.categoriasProducaoDeleted||[]),c])],produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(c)?{...p,cats:pc.filter((x:string)=>x!==c),cat:pc.filter((x:string)=>x!==c)[0]||"",atualizadoEm:new Date().toISOString()}:p;}),iconesProducao:icons};});
   };
-  const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>{const icons={...(d.iconesProducao||{})};if(icons[old]&&v!==old){icons[v]=icons[old];delete icons[old];}return{...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(old)?{...p,cats:pc.map((x:string)=>x===old?v:x),cat:pc.map((x:string)=>x===old?v:x)[0]||""}:p;}),iconesProducao:icons};});setEditCat(null);};
+  const renameCat=(old:string,val:string)=>{const v=val.trim().toUpperCase();if(!v||v===old&&false)return;setDb((d:any)=>{const icons={...(d.iconesProducao||{})};if(icons[old]&&v!==old){icons[v]=icons[old];delete icons[old];}return{...d,categoriasProducao:(d.categoriasProducao||[]).map((c:string)=>c===old?v:c),produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(old)?{...p,cats:pc.map((x:string)=>x===old?v:x),cat:pc.map((x:string)=>x===old?v:x)[0]||"",atualizadoEm:new Date().toISOString()}:p;}),iconesProducao:icons};});setEditCat(null);};
   const moverCat=(c:string,dir:number)=>{setDb((d:any)=>{const arr=[...(d.categoriasProducao||[])];const i=arr.indexOf(c);if(i<0||i+dir<0||i+dir>=arr.length)return d;[arr[i],arr[i+dir]]=[arr[i+dir],arr[i]];return{...d,categoriasProducao:arr};});};
   // Soma a categoria a TODOS os produtos de uma vez — sem tirar as categorias
   // que já tinham. Útil quando uma categoria nova (ex.: um ponto de venda) deve
@@ -6688,7 +6738,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     if(!confirm(`Marcar TODOS os produtos de produção também em "${c}"?\n\nAs categorias que já tinham continuam, essa só é somada.`))return;
     (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>{
       const pc=prodCats(p);
-      return pc.includes(c)?p:{...p,cats:[...pc,c]};
+      return pc.includes(c)?p:{...p,cats:[...pc,c],cat:pc[0]||c,atualizadoEm:new Date().toISOString()};
     })}));
   };
   const categoriasClientes:Record<string,boolean>=db.categoriasClientes||{};
@@ -12591,7 +12641,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
   const salvarNovoProd=()=>{
     const nome=novoProdForm.nome.trim();
     if(!nome)return;
-    const newProd={id:uid(),nome,cat:novoProdForm.cat,unidade:novoProdForm.unidade,preco:novoProdForm.preco};
+    const newProd={id:uid(),nome,cat:novoProdForm.cat,cats:novoProdForm.cat?[novoProdForm.cat]:[],unidade:novoProdForm.unidade,preco:novoProdForm.preco,atualizadoEm:new Date().toISOString()};
     sv(d=>({...d,produtosProducao:[...(d.produtosProducao||[]),newProd]}));
     setProdsSel(ps=>[...ps,{id:newProd.id,nome:newProd.nome,unidade:newProd.unidade,qtd:1,preco:newProd.preco||""}]);
     setNovoProdForm({nome:"",cat:"",unidade:"un",preco:""});setShowNovoProd(false);
