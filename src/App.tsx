@@ -1055,7 +1055,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // atualizadoEm) e um poll caindo entre o clique e o POST confirmar no
       // servidor revertia a edição pro valor antigo — era o único campo que
       // tinha ficado de fora quando essa fusão foi aplicada aos outros.
-      vendas:        mergeArrayById(s.vendas||[],p.vendas||[],_listaDeletados),
+      vendas:        mergeArrayById(s.vendas||[],p.vendas||[],_listaDeletados,true),
       // contas usa fusão por id+timestamp (não só byId): sem isso, um poll
       // que chega entre o clique em "marcar como pago" e o POST desse clique
       // ainda não ter sido salvo sobrescrevia o estado otimista local com a

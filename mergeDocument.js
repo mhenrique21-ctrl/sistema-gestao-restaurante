@@ -30,11 +30,52 @@ function itemTimestamp(item) {
 // timestamp mais recente pra decidir quem vence (updatedAt ou atualizadoEm,
 // o que existir); sem timestamp em nenhum dos dois, o incoming vence (é o
 // que o usuário acabou de mexer nesta requisição especificamente).
-export function mergeArrayById(existingArr, incomingArr, deletedIds) {
+// Para vendas (lançamentos): também verifica por data — dois itens com a mesma
+// data devem ser tratados como a mesma entidade, mesmo que tenham IDs diferentes
+// (isso acontece quando dois dispositivos criam entrada pra o mesmo dia antes de sincronizar).
+export function mergeArrayById(existingArr, incomingArr, deletedIds, isVendas = false) {
   const existingMap = new Map((existingArr || []).map((i) => [i.id, i]));
   const incomingMap = new Map((incomingArr || []).map((i) => [i.id, i]));
   const allIds = new Set([...existingMap.keys(), ...incomingMap.keys()]);
+
+  // Para vendas, também rastreia por data pra deduplicar entradas do mesmo dia
+  const vendasByDate = new Map();
+  if (isVendas) {
+    (existingArr || []).forEach((v) => {
+      if (!deletedIds.has(v.id) && v.data) {
+        vendasByDate.set(v.data, { item: v, source: 'existing' });
+      }
+    });
+    (incomingArr || []).forEach((v) => {
+      if (!deletedIds.has(v.id) && v.data) {
+        const existing = vendasByDate.get(v.data);
+        if (existing) {
+          const et = itemTimestamp(existing.item);
+          const it = itemTimestamp(v);
+          const winner = (et != null && it != null)
+            ? (it >= et ? { item: v, source: 'incoming' } : existing)
+            : (it != null ? { item: v, source: 'incoming' } : existing);
+          vendasByDate.set(v.data, winner);
+        } else {
+          vendasByDate.set(v.data, { item: v, source: 'incoming' });
+        }
+      }
+    });
+  }
+
   const merged = [];
+
+  // Se é vendas, usa a deduplicação por data
+  if (isVendas && vendasByDate.size > 0) {
+    vendasByDate.forEach((entry) => {
+      if (!deletedIds.has(entry.item.id)) {
+        merged.push(entry.item);
+      }
+    });
+    return merged;
+  }
+
+  // Lógica padrão por ID para outros tipos
   allIds.forEach((id) => {
     if (deletedIds.has(id)) return;
     const existing = existingMap.get(id);
@@ -76,7 +117,7 @@ export function mergeDocument(existing, incoming) {
 
   const merged = { ...afterLista, deletedIds: [...deletedIds].slice(-5000) };
   for (const field of MERGEABLE_FIELDS) {
-    merged[field] = mergeArrayById(existing[field], afterLista[field], deletedIds);
+    merged[field] = mergeArrayById(existing[field], afterLista[field], deletedIds, field === 'vendas');
   }
   return merged;
 }
