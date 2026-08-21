@@ -270,6 +270,53 @@
   .balcao-pay-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--c-bg); border-radius: 6px; padding: 2px 9px; font-size: .74rem; font-weight: 700; color: var(--c-text); }
   .balcao-continuar { font-size: .82rem; font-weight: 700; color: var(--gold-dim); }
 
+  /* ── Aba Vendas de balcão ─────────────────────────────
+     Venda em andamento e venda paga pedem leituras diferentes: uma exige ação
+     (card grande, itens à vista), a outra é só registro (linha compacta, pra
+     caber o dia inteiro sem rolagem). */
+  .balcao-resumo { display: flex; background: var(--c-surface); border: 1px solid var(--c-border);
+                   border-radius: 12px; margin: 16px 0 22px; overflow: hidden; }
+  .balcao-resumo-bloco { padding: 13px 20px; border-right: 1px solid var(--c-border); }
+  .balcao-resumo-bloco:last-child { border-right: none; }
+  .balcao-resumo-bloco .k { font-size: .68rem; font-weight: 800; letter-spacing: .07em;
+                            text-transform: uppercase; color: var(--c-muted); margin-bottom: 3px; }
+  .balcao-resumo-bloco .v { font-size: 1.15rem; font-weight: 800; color: var(--c-text); }
+  .balcao-resumo-bloco.destaque { background: #FFF8EC; }
+  .balcao-resumo-bloco.destaque .v { color: var(--gold-dim); }
+
+  .sec-head { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; }
+  .sec-head .t { font-size: .76rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--c-text); }
+  .sec-head .n { font-size: .7rem; font-weight: 800; background: var(--c-border); color: var(--c-muted);
+                 border-radius: 999px; padding: 2px 8px; }
+  .sec-head .n.on { background: var(--gold); color: var(--surface); }
+
+  .balcao-andamento-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                           gap: 14px; margin-bottom: 30px; }
+  .balcao-and-card { background: var(--c-surface); border: 2px solid var(--gold); border-radius: 13px;
+                     padding: 15px; text-align: left; display: flex; flex-direction: column; gap: 10px;
+                     box-shadow: 0 3px 10px rgba(201,162,94,.18); cursor: pointer; }
+  .balcao-and-top { display: flex; justify-content: space-between; align-items: center; }
+  .balcao-and-nome { font-size: .95rem; font-weight: 800; color: var(--c-text); }
+  .balcao-and-hora { font-size: .74rem; color: var(--c-muted); font-weight: 600; }
+  .balcao-and-itens { display: flex; flex-direction: column; gap: 3px; padding: 9px 0;
+                      border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border); }
+  .balcao-and-foot { display: flex; justify-content: space-between; align-items: center; }
+  .balcao-and-total { font-size: 1.3rem; font-weight: 800; color: var(--c-text); }
+  .balcao-and-cta { background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%);
+                    color: var(--surface); border-radius: 9px; padding: 9px 15px;
+                    font-size: .82rem; font-weight: 800; }
+
+  .balcao-pagas { background: var(--c-surface); border: 1px solid var(--c-border);
+                  border-radius: 12px; overflow: hidden; }
+  .balcao-paga-row { display: flex; align-items: center; gap: 16px; padding: 12px 18px;
+                     border-bottom: 1px solid var(--c-border); }
+  .balcao-paga-row:last-child { border-bottom: none; }
+  .balcao-paga-hora { font-size: .8rem; font-weight: 700; color: var(--c-muted); width: 46px; flex-shrink: 0; }
+  .balcao-paga-itens { flex: 1; font-size: .84rem; color: var(--c-text); }
+  .balcao-paga-op { font-size: .76rem; color: var(--c-muted); width: 76px; flex-shrink: 0; }
+  .balcao-paga-valor { font-size: .95rem; font-weight: 800; color: var(--c-text); width: 92px;
+                       text-align: right; flex-shrink: 0; }
+
   /* ── Tela da comanda ─────────────────────────────── */
   #comanda-screen { display: flex; flex-direction: column; height: 100%; }
   #comanda-bar { background: var(--c-surface); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--c-border); flex-wrap: wrap; gap: 8px; }
@@ -1105,10 +1152,17 @@
   <div id="board-screen">
     <div class="board-header">
       <h2>VENDAS DE BALCÃO</h2>
-      <div class="board-header-sub">Vendas fechadas no balcão hoje</div>
     </div>
-    <div class="dia-pill" id="balcao-dia-pill">📅 Hoje</div>
-    <div id="balcao-vendas-grid" class="board-grid"><div class="cart-empty">Carregando...</div></div>
+    <div class="balcao-resumo" id="balcao-resumo"></div>
+    <div id="balcao-andamento-sec" class="hidden">
+      <div class="sec-head"><span class="t">Em andamento</span><span class="n on" id="balcao-n-abertas">0</span></div>
+      <div id="balcao-andamento-grid" class="balcao-andamento-grid"></div>
+    </div>
+    <div id="balcao-pagas-sec" class="hidden">
+      <div class="sec-head"><span class="t">Pagas hoje</span><span class="n" id="balcao-n-pagas">0</span></div>
+      <div id="balcao-pagas-lista" class="balcao-pagas"></div>
+    </div>
+    <div id="balcao-vazio" class="cart-empty">Carregando...</div>
   </div>
 </div>
 
@@ -2075,38 +2129,86 @@ function fmtHora(iso) {
 }
 const PAY_LABELS_CURTO = { dinheiro: '💵 Dinheiro', cartao_debito: '💳 Débito', cartao_credito: '💳 Crédito', pix: '📱 Pix', fiado: '📒 Fiado' };
 
+// Resume os itens numa linha só ("2x Cappuccino · 1x Pão de queijo"), pra venda
+// já paga: ali o item é referência de conferência, não lista de trabalho.
+function balcaoResumoItens(items) {
+  const lista = items || [];
+  if (!lista.length) return 'Sem itens';
+  const txt = lista.slice(0, 3).map((i) => `${i.quantity}x ${i.product_name}`).join(' · ');
+  return lista.length > 3 ? `${txt} · +${lista.length - 3}` : txt;
+}
+
 async function loadBalcaoVendas() {
-  const el = document.getElementById('balcao-vendas-grid');
-  el.innerHTML = '<div class="cart-empty">Carregando...</div>';
+  const vazio = document.getElementById('balcao-vazio');
+  const secAnd = document.getElementById('balcao-andamento-sec');
+  const secPagas = document.getElementById('balcao-pagas-sec');
+  const resumo = document.getElementById('balcao-resumo');
+  vazio.textContent = 'Carregando...';
+  vazio.classList.remove('hidden');
+  secAnd.classList.add('hidden');
+  secPagas.classList.add('hidden');
+  resumo.innerHTML = '';
+
   try {
     const res = await fetch(`${API}/api/comandas/balcao-vendas`, { headers: authHeaders() });
-    if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar vendas de balcão</div>'; return; }
+    if (!res.ok) { vazio.textContent = 'Erro ao carregar vendas de balcão'; return; }
     const vendas = await res.json();
-    if (!vendas.length) { el.innerHTML = '<div class="cart-empty">Nenhuma venda de balcão hoje ainda</div>'; return; }
-    // Venda aberta é clicável: leva de volta pra tela de pedido pra continuar ou
-    // fechar. Fechada é só registro do que já foi pago.
-    el.innerHTML = vendas.map((v) => {
-      const aberta = v.status === 'aberta';
-      const itens = (v.items || []).length
-        ? v.items.slice(0, 5).map((i) => `<div class="board-item-row"><span>${i.quantity}x ${i.product_name}</span><span>${fmt(i.unit_price * i.quantity)}</span></div>`).join('')
-        : '<div class="board-item-row" style="color:var(--c-muted)">Sem itens</div>';
-      const rodape = aberta
-        ? `<span>${(v.items || []).length} ${(v.items || []).length === 1 ? 'item' : 'itens'}</span><span class="balcao-continuar">Continuar →</span>`
-        : `<span>👤 ${v.closed_by_name || '—'}</span>${(v.payments || []).map((p) => `<span class="balcao-pay-pill">${PAY_LABELS_CURTO[p.method] || p.method}</span>`).join(' ')}`;
-      const corpo = `
-        <div class="board-card-head">
-          <strong>${fmt(v.total)}</strong>
-          <span>${fmtHora(aberta ? v.opened_at : v.closed_at)}</span>
+
+    const abertas = vendas.filter((v) => v.status === 'aberta');
+    const pagas = vendas.filter((v) => v.status !== 'aberta');
+    const soma = (lista) => lista.reduce((s, v) => s + parseFloat(v.total || 0), 0);
+
+    // Faixa de resumo: o dia inteiro num relance, sem abrir relatório.
+    resumo.innerHTML = `
+      <div class="balcao-resumo-bloco"><div class="k">Hoje</div><div class="v">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</div></div>
+      <div class="balcao-resumo-bloco"><div class="k">Vendas pagas</div><div class="v">${pagas.length}</div></div>
+      <div class="balcao-resumo-bloco"><div class="k">Total recebido</div><div class="v">${fmt(soma(pagas))}</div></div>
+      ${abertas.length ? `<div class="balcao-resumo-bloco destaque"><div class="k">Em andamento</div><div class="v">${abertas.length} · ${fmt(soma(abertas))}</div></div>` : ''}`;
+
+    if (!vendas.length) { vazio.textContent = 'Nenhuma venda de balcão hoje ainda'; return; }
+    vazio.classList.add('hidden');
+
+    // Em andamento: exige ação, então card grande, itens à vista e clicável —
+    // leva pra tela normal de pedido pra continuar ou fechar.
+    if (abertas.length) {
+      document.getElementById('balcao-n-abertas').textContent = abertas.length;
+      document.getElementById('balcao-andamento-grid').innerHTML = abertas.map((v) => `
+        <button class="balcao-and-card" onclick="resolveCode('${v.code}')">
+          <div class="balcao-and-top">
+            <span class="balcao-and-nome">${v.label || 'Balcão'}</span>
+            <span class="balcao-and-hora">aberta ${fmtHora(v.opened_at)}</span>
+          </div>
+          <div class="balcao-and-itens">
+            ${(v.items || []).length
+              ? v.items.slice(0, 5).map((i) => `<div class="board-item-row"><span>${i.quantity}x ${i.product_name}</span><span>${fmt(i.unit_price * i.quantity)}</span></div>`).join('')
+              : '<div class="board-item-row" style="color:var(--c-muted)">Sem itens</div>'}
+          </div>
+          <div class="balcao-and-foot">
+            <span class="balcao-and-total">${fmt(v.total)}</span>
+            <span class="balcao-and-cta">Finalizar →</span>
+          </div>
+        </button>
+      `).join('');
+      secAnd.classList.remove('hidden');
+    }
+
+    // Pagas: só registro, então linha compacta — cabe o dia inteiro sem rolar.
+    if (pagas.length) {
+      document.getElementById('balcao-n-pagas').textContent = pagas.length;
+      document.getElementById('balcao-pagas-lista').innerHTML = pagas.map((v) => `
+        <div class="balcao-paga-row">
+          <span class="balcao-paga-hora">${fmtHora(v.closed_at)}</span>
+          <span class="balcao-paga-itens">${balcaoResumoItens(v.items)}</span>
+          ${(v.payments || []).map((p) => `<span class="balcao-pay-pill">${PAY_LABELS_CURTO[p.method] || p.method}</span>`).join(' ')}
+          <span class="balcao-paga-op">👤 ${v.closed_by_name || '—'}</span>
+          <span class="balcao-paga-valor">${fmt(v.total)}</span>
         </div>
-        <span class="board-status ${v.status}">${aberta ? 'Aberta' : 'Paga'}</span>
-        <div class="board-items">${itens}</div>
-        <div class="board-card-foot">${rodape}</div>`;
-      return aberta
-        ? `<button class="board-card" onclick="resolveCode('${v.code}')">${corpo}</button>`
-        : `<div class="board-card">${corpo}</div>`;
-    }).join('');
+      `).join('');
+      secPagas.classList.remove('hidden');
+    }
   } catch (e) {
-    el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
+    vazio.textContent = 'Erro de conexão';
+    vazio.classList.remove('hidden');
   }
 }
 
@@ -7101,9 +7203,10 @@ function openCodeModal() {
 
 // ── Tela da comanda ─────────────────────────────────
 function showComandaScreen() {
-  document.getElementById('scan-screen').classList.add('hidden');
-  document.getElementById('estoque-screen').classList.add('hidden');
-  document.getElementById('financeiro-screen').classList.add('hidden');
+  // Esconde TODA aba, não uma lista fixa: com lista fixa, cada aba nova nasce
+  // aparecendo atrás do pedido (foi o que aconteceu com "Vendas de balcão", e
+  // Delivery/Mesas tinham o mesmo defeito esperando pra acontecer).
+  Object.values(TAB_SCREENS).forEach((id) => document.getElementById(id)?.classList.add('hidden'));
   document.getElementById('header-actions').classList.add('hidden');
   document.getElementById('comanda-screen').classList.remove('hidden');
   document.getElementById('switch-comanda-btn').classList.remove('hidden');
