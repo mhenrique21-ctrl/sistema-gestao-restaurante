@@ -596,6 +596,10 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
 
     broadcastOrderUpdate({ event: 'comanda_closed', comanda: closedComanda });
 
+    // Atualiza o faturamento do dia na Gestão. Sem await de propósito: o
+    // atendente não pode esperar a Gestão responder pra ver a conta fechada.
+    require('../services/gestaoSync').avisarVenda();
+
     res.json({ ...closedComanda, items, payments });
   } catch (err) {
     console.error('[comandas/close]', err.message);

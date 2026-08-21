@@ -128,6 +128,10 @@ initWebSocket(server);
 // Fecha o fiado dos colaboradores do mês vencido e manda pra folha na Gestão.
 require('./services/fiadoFolha').iniciarFechamentoAutomatico();
 
+// Mantém o faturamento do dia atualizado na Gestão enquanto o caixa está aberto,
+// em vez de só no fechamento (senão o Dashboard fica zerado o dia inteiro).
+require('./services/gestaoSync').iniciarSincronizacaoPeriodica();
+
 const PORT = parseInt(process.env.PORT) || 4000;
 server.listen(PORT, () => {
   console.log(`\n🚀 Delivery Backend - Confraria`);

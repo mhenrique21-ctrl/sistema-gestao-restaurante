@@ -135,6 +135,11 @@ router.post('/close', async (req, res) => {
         WHERE id = $3 RETURNING *`,
       [req.user.id, req.body.notes || null, session.id]
     );
+    // Fechamento é a fonte definitiva do faturamento do dia pra Gestão. Não
+    // deixa o fechamento falhar por causa disso: o próprio aoFecharCaixa engole
+    // o erro e a linha fica na fila pra próxima tentativa.
+    await require('../services/gestaoSync').aoFecharCaixa();
+
     res.json({ session: r.rows[0], ...resumo, expected, counted, difference });
   } catch (err) {
     return erro(res, err, '[cash-sessions/close]');

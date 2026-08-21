@@ -351,6 +351,7 @@ router.post('/guest', idempotent, async (req, res) => {
       } catch(e) { console.error('[whatsapp/confirm_cliente]', e.message); }
 
       broadcastOrderUpdate({ event: 'new_order', order: { ...order, customer_name: customer.name, item_count: resolvedItems.length }, items: resolvedItems });
+      require('../services/gestaoSync').avisarVenda();
 
       // Impressão automática em todas as impressoras
       try {
@@ -949,6 +950,7 @@ router.post('/', idempotent, async (req, res) => {
 
     // Notifica retaguarda (pedido completo)
     broadcastOrderUpdate({ event: 'new_order', order: { ...order, item_count: resolvedItems.length } });
+    require('../services/gestaoSync').avisarVenda();
 
     res.status(201).json({ ...order, items: resolvedItems, pix: pixData });
   } catch (err) {
@@ -1045,6 +1047,7 @@ router.post('/from-admin', async (req, res) => {
       order: { ...order, customer_name: customerName, item_count: items.length },
       items: printItems,
     });
+    require('../services/gestaoSync').avisarVenda();
     res.status(201).json({ id: order.id, order_number: order.order_number });
   } catch (err) {
     return internalError(res, err, '[orders/from-admin]');
@@ -1178,6 +1181,10 @@ router.patch('/:id/status', async (req, res) => {
         }
       }
     }
+
+    // Cancelar (ou tirar do cancelado) muda o faturamento do dia, já que o
+    // total pra Gestão ignora pedido cancelado.
+    require('../services/gestaoSync').avisarVenda();
 
     res.json({ ...order, whatsapp_link });
   } catch (err) {
