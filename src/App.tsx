@@ -636,7 +636,7 @@ const DASHBOARD_ITEM_LABEL:{[k:string]:string}={
   melhorDia:"Melhor dia da semana",
   piorDia:"Dia mais fraco da semana",
   mixPagamento:"Mix de pagamento",
-  participacaoDelivery:"Participação do Delivery",
+  participacaoDelivery:"Participação de Vendas Extras",
   custoMarketplaces:"Custo com marketplaces",
   cmv:"CMV do período",
   margemContrib:"Margem de contribuição",
@@ -2213,8 +2213,8 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
         </div>,
         participacaoDelivery:()=><div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
           <div style={{fontSize:fnum(20),fontWeight:800,color:corAcc}}>{participacaoDelivery.toFixed(0)}%</div>
-          <div className="muted" style={{fontSize:flbl(10),marginTop:2}}>Participação do Delivery</div>
-          <div className="muted" style={{fontSize:flbl(9),marginTop:1}}>iFood + 99Food + Delivery próprio ({fmtMoney(deliverySum)})</div>
+          <div className="muted" style={{fontSize:flbl(10),marginTop:2}}>Participação de Vendas Extras</div>
+          <div className="muted" style={{fontSize:flbl(9),marginTop:1}}>iFood + 99Food + Vendas Extras ({fmtMoney(deliverySum)})</div>
         </div>,
         custoMarketplaces:()=><div className="card" style={{textAlign:"center",padding:"12px 8px"}}>
           <div style={{fontSize:fnum(16),fontWeight:800,color:corAtn}}>{fmtMoney(custoMarketplaces)}</div>
@@ -2632,7 +2632,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
             <span>9️⃣9️⃣ 99Food</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.nfood)}</span>
           </div>}
           {iaCombResultado.deliveryLiquido>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0"}}>
-            <span>🛵 Delivery</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.deliveryLiquido)}</span>
+            <span>🛵 Vendas Extras</span><span style={{fontWeight:700}}>{fmtMoney(iaCombResultado.deliveryLiquido)}</span>
           </div>}
           {iaCombResultado.deliveryLiquido>0&&<div style={{fontSize:10,color:"#888",padding:"2px 0 6px"}}>bruto {fmtMoney(iaCombResultado.deliveryBruto)} − taxa {fmtMoney(iaCombResultado.deliveryTaxa)}</div>}
           {!(iaCombResultado.maquininhaTotal>0||iaCombResultado.dinheiro>0||iaCombResultado.ifood>0||iaCombResultado.nfood>0||iaCombResultado.deliveryLiquido>0)&&<div style={{fontSize:12,color:"#F59E0B",padding:"4px 0"}}>Nenhum valor reconhecido nas fotos enviadas.</div>}
@@ -2677,7 +2677,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         {nfoodTaxaPct>0&&nfoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(nfoodLiq)} (desc. {fmtMoney(nfoodBruto-nfoodLiq)})</div>}
       </div>
       <div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>Delivery</label>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>Vendas Extras</label>
         <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
       </div>
       <hr className="divider"/>
@@ -2705,7 +2705,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         const total=(db.vendas||[]).reduce((s,v)=>s+v.total,0);
         abrirRelatorio(gerarRelatorioHTML("Relatório de Vendas","Vendas",`
           <table>
-            <thead><tr><th>Data</th><th>Maquininha</th><th>Dinheiro</th><th>iFood</th><th>99Food</th><th>Delivery</th><th>Total</th></tr></thead>
+            <thead><tr><th>Data</th><th>Maquininha</th><th>Dinheiro</th><th>iFood</th><th>99Food</th><th>Vendas Extras</th><th>Total</th></tr></thead>
             <tbody>${rows}</tbody>
             <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(total)}</td></tr></tfoot>
           </table>`));
@@ -2727,7 +2727,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           {v["99food"]>0&&<span className="tag" style={{background:"#FEF3C7",color:"#B45309"}}>
             99food: {fmtMoney(v["99food"])}{v.nfoodTaxa>0?` (-${v.nfoodTaxa}%→${fmtMoney(v.nfoodLiq??v["99food"])})`:""}
           </span>}
-          {v.delivery>0&&<span className="tag" style={{background:"#F3E8DC",color:"#78350F"}}>delivery: {fmtMoney(v.delivery)}</span>}
+          {v.delivery>0&&<span className="tag" style={{background:"#F3E8DC",color:"#78350F"}}>vendas extras: {fmtMoney(v.delivery)}</span>}
         </div>
         {cDia>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
           <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>
@@ -2917,7 +2917,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     return <div style={{maxWidth:480,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:"11px 14px",marginBottom:18}}>
         <span style={{fontSize:22}}>✅</span>
-        <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → Delivery de {fmtDate(reciboGerado.data)}.</span>
+        <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → Vendas Extras de {fmtDate(reciboGerado.data)}.</span>
       </div>
       <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,color:"var(--text2)",textTransform:"uppercase" as const,marginBottom:2}}>{impressaoNome(cfg,"Seama")}</div>
       <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>Recibo de Venda #{String(reciboGerado.numero).padStart(4,"0")}</div>
@@ -3023,7 +3023,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
           <div className="card" style={{marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Data da venda</div>
             <input type="date" value={dataVenda} onChange={e=>setDataVenda(e.target.value)} className="inp" style={{marginBottom:0,width:"100%"}}/>
-            {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → Delivery vão pra esta data.</div>}
+            {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → Vendas Extras vão pra esta data.</div>}
           </div>
           <div className="card">
             <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Cliente</div>
@@ -3055,7 +3055,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
             <span style={{fontSize:22,fontWeight:800}}>{fmtMoney(totalVenda)}</span>
           </div>
           <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"#7C3AED",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
-          <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Delivery</b> de {fmtDate(dataVenda||today())}.</div>
+          <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Vendas Extras</b> de {fmtDate(dataVenda||today())}.</div>
         </div>
       </div>
       </>}
