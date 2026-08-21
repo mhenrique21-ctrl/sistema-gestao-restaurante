@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
+import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
 
 // ===================== STORAGE =====================
 const STORAGE_KEY = "gestao_app_v4";
@@ -1225,6 +1226,7 @@ export default function App() {
   const changeMenuOrder=(order:string[])=>{setMenuOrder(order);localStorage.setItem("app_menu_order",JSON.stringify(order));};
   const [config,setConfig] = useState<ConfigAppState>(()=>{try{const s=localStorage.getItem("app_config");return s?JSON.parse(s):CONFIG_PADRAO;}catch{return CONFIG_PADRAO;}});
   const [configPanelOpen,setConfigPanelOpen] = useState(false);
+  const formatters = useApplyConfig(config);
   const [syncStatus,setSyncStatus] = useState<"idle"|"sync"|"ok"|"erro">("idle");
 
   const toggleTheme=()=>{
@@ -1526,7 +1528,9 @@ export default function App() {
   const navTo=(t:string,s?:string)=>{setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
 
   return (
-    <div className="app-root" data-theme={theme} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo}}>
+    <>
+      <ConfigStyleInjector config={config}/>
+      <div className="app-root" data-theme={theme} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
         .app-root{--btnPrimary:#6366F1;--btnDanger:#EF4444;--bg:#F7F8FC;--bg2:#1E293B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F1F5F9;--sidebarHover:#334155;--border:#E6EAF2;--border2:#D5DBE8;--text:#1E2330;--text2:#70798F;--text3:#9AA3B5;--acc:#5B5CEB;--accHover:#4A4BD4;--accLight:#EEF2FF;--success:#16C172;--successBg:#DCFCE7;--successText:#15803D;--danger:#F04438;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F4B400;--warningBg:#FEF3C7;--warningText:#B45309;--info:#3B82F6;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6;--categoryBg:#F3E8FF;--categoryText:#7C3AED;--pink:#EC4899;--radiusCard:18px;--radiusControl:14px;--shadowCard:0 8px 24px rgba(18,38,63,0.08)}
@@ -1803,6 +1807,7 @@ export default function App() {
       </>}
       {configPanelOpen && <ConfigPanel onClose={()=>setConfigPanelOpen(false)} config={config} setConfig={setConfig}/>}
     </div>
+    </>
   );
 }
 
