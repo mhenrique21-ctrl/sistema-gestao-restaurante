@@ -268,6 +268,7 @@
   .board-header-sub { font-size: .85rem; color: var(--c-muted); margin-top: 2px; }
   .dia-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 999px; padding: 8px 16px; font-size: .84rem; font-weight: 700; color: var(--c-muted); margin: 14px 0 18px; }
   .balcao-pay-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--c-bg); border-radius: 6px; padding: 2px 9px; font-size: .74rem; font-weight: 700; color: var(--c-text); }
+  .balcao-continuar { font-size: .82rem; font-weight: 700; color: var(--gold-dim); }
 
   /* ── Tela da comanda ─────────────────────────────── */
   #comanda-screen { display: flex; flex-direction: column; height: 100%; }
@@ -2004,6 +2005,9 @@ async function loadMenuIfNeeded(forcar = false) {
 function invalidarMenu() { menuCarregadoEm = 0; }
 
 function resetToScan() {
+  // Volta pra aba de onde a venda veio: quem estava num atendimento de balcão
+  // continua no balcão, não cai no board de Comandas (onde balcão nem aparece).
+  const eraBalcao = !!comanda && String(comanda.code || '').startsWith('balcao_');
   comanda = null;
   cart = [];
   document.getElementById('comanda-screen').classList.add('hidden');
@@ -2011,7 +2015,7 @@ function resetToScan() {
   document.getElementById('header-actions').classList.remove('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
     iniciarStatusBar();
-  showTab('comandas');
+  showTab(eraBalcao ? 'balcao' : 'comandas');
 }
 
 // ── Abas do menu superior ─────────────────────────────
@@ -2078,21 +2082,29 @@ async function loadBalcaoVendas() {
     const res = await fetch(`${API}/api/comandas/balcao-vendas`, { headers: authHeaders() });
     if (!res.ok) { el.innerHTML = '<div class="cart-empty">Erro ao carregar vendas de balcão</div>'; return; }
     const vendas = await res.json();
-    if (!vendas.length) { el.innerHTML = '<div class="cart-empty">Nenhuma venda de balcão fechada hoje ainda</div>'; return; }
-    el.innerHTML = vendas.map((v) => `
-      <div class="board-card">
+    if (!vendas.length) { el.innerHTML = '<div class="cart-empty">Nenhuma venda de balcão hoje ainda</div>'; return; }
+    // Venda aberta é clicável: leva de volta pra tela de pedido pra continuar ou
+    // fechar. Fechada é só registro do que já foi pago.
+    el.innerHTML = vendas.map((v) => {
+      const aberta = v.status === 'aberta';
+      const itens = (v.items || []).length
+        ? v.items.slice(0, 5).map((i) => `<div class="board-item-row"><span>${i.quantity}x ${i.product_name}</span><span>${fmt(i.unit_price * i.quantity)}</span></div>`).join('')
+        : '<div class="board-item-row" style="color:var(--c-muted)">Sem itens</div>';
+      const rodape = aberta
+        ? `<span>${(v.items || []).length} ${(v.items || []).length === 1 ? 'item' : 'itens'}</span><span class="balcao-continuar">Continuar →</span>`
+        : `<span>👤 ${v.closed_by_name || '—'}</span>${(v.payments || []).map((p) => `<span class="balcao-pay-pill">${PAY_LABELS_CURTO[p.method] || p.method}</span>`).join(' ')}`;
+      const corpo = `
         <div class="board-card-head">
           <strong>${fmt(v.total)}</strong>
-          <span>${fmtHora(v.closed_at)}</span>
+          <span>${fmtHora(aberta ? v.opened_at : v.closed_at)}</span>
         </div>
-        <div class="board-items">
-          ${(v.payments || []).map((p) => `<span class="balcao-pay-pill">${PAY_LABELS_CURTO[p.method] || p.method}</span>`).join(' ')}
-        </div>
-        <div class="board-card-foot">
-          <span>👤 ${v.closed_by_name || '—'}</span>
-        </div>
-      </div>
-    `).join('');
+        <span class="board-status ${v.status}">${aberta ? 'Aberta' : 'Paga'}</span>
+        <div class="board-items">${itens}</div>
+        <div class="board-card-foot">${rodape}</div>`;
+      return aberta
+        ? `<button class="board-card" onclick="resolveCode('${v.code}')">${corpo}</button>`
+        : `<div class="board-card">${corpo}</div>`;
+    }).join('');
   } catch (e) {
     el.innerHTML = '<div class="cart-empty">Erro de conexão</div>';
   }

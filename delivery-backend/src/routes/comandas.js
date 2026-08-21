@@ -14,6 +14,18 @@ const { lancar: lancarFiado } = require('./fiado');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sqlUuid = (v) => (UUID_RE.test(String(v || '')) ? `'${v}'::uuid` : `NULL`);
 
+// Venda de balcão x comanda de mesa/cartão: distinguidas pelo prefixo do código
+// (ver POST /balcao). As duas listagens abaixo se dividem por este critério — o que
+// é balcão só aparece na aba "Vendas de balcão", o resto só no board de Comandas.
+// Usa left() em vez de LIKE 'balcao_%' porque "_" é curinga de um caractere no LIKE:
+// com o prefixo terminando em underscore, o match precisa ser literal.
+const SQL_IS_BALCAO = `left(c.code, 7) = 'balcao_'`;
+
+// Em atividade hoje: aberta com pedido lançado (de qualquer dia — venda aberta é
+// dinheiro a receber, não pode sumir da tela na virada) ou fechada hoje.
+const SQL_ATIVIDADE_HOJE = `((c.status = 'aberta' AND c.total > 0)
+          OR (c.status = 'fechada' AND c.closed_at >= CURRENT_DATE))`;
+
 // Rotas usadas pelo cliente direto (sem login): resolve/orders/close ficam públicas —
 // o code da comanda (aleatório e imprevisível quando gerado automaticamente) é o que
 // protege o acesso. Cadastro, listagem, remoção de item e reabertura continuam exigindo
@@ -131,7 +143,8 @@ router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), 
 // GET /api/comandas/board — comandas com atividade real de hoje (abertas com pedido
 // lançado, ou fechadas hoje), com itens — pra tela "Comandas" do PDV. Não lista os
 // cartões físicos parados/vazios (a maioria dos códigos cadastrados fica "aberta"
-// por padrão até alguém usar, e não deve poluir esse board).
+// por padrão até alguém usar, e não deve poluir esse board), nem vendas de balcão,
+// que têm aba própria (ver GET /balcao-vendas).
 router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
     const result = await pool.query(
@@ -145,8 +158,7 @@ router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (r
                 WHERE ci.comanda_id = c.id
               ), '[]') AS items
        FROM comandas c
-       WHERE (c.status = 'aberta' AND c.total > 0)
-          OR (c.status = 'fechada' AND c.closed_at >= CURRENT_DATE)
+       WHERE NOT (${SQL_IS_BALCAO}) AND ${SQL_ATIVIDADE_HOJE}
        ORDER BY COALESCE(c.closed_at, c.opened_at) DESC
        LIMIT 60`
     );
@@ -157,22 +169,29 @@ router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (r
   }
 });
 
-// GET /api/comandas/balcao-vendas — vendas de balcão já fechadas HOJE, pra aba
-// "Vendas de balcão" do PDV. Ao fechar, o código original (balcao_xxxx) é arquivado
-// com sufixo __closed_<ts> (ver POST /:id/close) — por isso o filtro usa prefixo,
-// não igualdade exata.
+// GET /api/comandas/balcao-vendas — o atendimento de balcão inteiro: as vendas ainda
+// abertas (pra continuar/fechar) e as já fechadas hoje. É a única tela onde balcão
+// aparece — o board de Comandas exclui essas linhas.
+// Ao fechar, o código original (balcao_xxxx) é arquivado com sufixo __closed_<ts>
+// (ver POST /:id/close), que preserva o prefixo e continua batendo no filtro.
 router.get('/balcao-vendas', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT c.id, c.code, c.label, c.total, c.closed_at, u.name AS closed_by_name,
+      `SELECT c.id, c.code, c.label, c.status, c.total, c.opened_at, c.closed_at,
+              u.name AS closed_by_name,
               COALESCE((
                 SELECT json_agg(json_build_object('method', cp.method, 'amount', cp.amount) ORDER BY cp.id ASC)
                 FROM comanda_payments cp WHERE cp.comanda_id = c.id
-              ), '[]') AS payments
+              ), '[]') AS payments,
+              COALESCE((
+                SELECT json_agg(json_build_object('product_name', p.name, 'quantity', ci.quantity, 'unit_price', ci.unit_price) ORDER BY ci.created_at ASC)
+                FROM comanda_items ci JOIN products p ON p.id = ci.product_id
+                WHERE ci.comanda_id = c.id
+              ), '[]') AS items
        FROM comandas c
        LEFT JOIN users u ON u.id = c.closed_by
-       WHERE c.code LIKE 'balcao_%' AND c.status = 'fechada' AND c.closed_at >= CURRENT_DATE
-       ORDER BY c.closed_at DESC
+       WHERE ${SQL_IS_BALCAO} AND ${SQL_ATIVIDADE_HOJE}
+       ORDER BY c.status ASC, COALESCE(c.closed_at, c.opened_at) DESC
        LIMIT 200`
     );
     res.json(result.rows);
@@ -513,10 +532,15 @@ router.post('/:id/close', authMiddleware, requireRole('admin', 'atendente'), asy
     );
     const closedComanda = { ...updateResult.rows[0], code: originalCode };
 
-    await pool.query(
-      `INSERT INTO comandas (code, label, opened_by) VALUES ($1,$2,$3) RETURNING id`,
-      [originalCode, comanda.label, req.user?.id || null]
-    );
+    // Só cartão físico volta pra fila com o mesmo código, pronto pro próximo cliente.
+    // Venda de balcão não tem cartão pra reaproveitar: recriar deixaria uma comanda
+    // vazia órfã no banco a cada venda fechada.
+    if (!isBalcao) {
+      await pool.query(
+        `INSERT INTO comandas (code, label, opened_by) VALUES ($1,$2,$3) RETURNING id`,
+        [originalCode, comanda.label, req.user?.id || null]
+      );
+    }
 
     // Libera a mesa se essa era a última comanda aberta vinculada a ela.
     if (comanda.mesa_id) {
