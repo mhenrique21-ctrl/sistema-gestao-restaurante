@@ -2839,6 +2839,10 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
   const [clienteSugg,setClienteSugg]=useState(false);
   const [reciboGerado,setReciboGerado]=useState<any|null>(null);
 
+  // Edição de recibos
+  const [reciboEditando,setReciboEditando]=useState<any|null>(null);
+  const [tipoEdicao,setTipoEdicao]=useState<"cliente"|"itens"|"valores"|"data"|"devolver"|null>(null);
+
   const clientes:any[]=db.clientesEncomenda||[];
   const clienteSuggestions=clienteNome.trim().length>=1
     ?clientes.filter((c:any)=>(c.nome||"").toLowerCase().includes(clienteNome.toLowerCase())).slice(0,6)
@@ -2893,6 +2897,21 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     const idx=arr.findIndex((c:any)=>(c.nome||"").toLowerCase()===nl);
     if(idx>=0){const upd=[...arr];if(telefone&&!upd[idx].telefone)upd[idx]={...upd[idx],telefone};return upd;}
     return[...arr,{id:uid(),nome:nome.trim(),telefone:telefone||"",obs:"",criadoEm:ts}];
+  };
+
+  const salvarEdicaoRecibo=(atualizacoes:any)=>{
+    if(!reciboEditando)return;
+    const now=new Date().toISOString();
+    setDbAndSave((d:any)=>{
+      const recibosVenda=[...(d.recibosVenda||[])];
+      const idx=recibosVenda.findIndex((r:any)=>r.id===reciboEditando.id);
+      if(idx>=0){
+        recibosVenda[idx]={...recibosVenda[idx],...atualizacoes,atualizadoEm:now};
+      }
+      return{...d,recibosVenda};
+    });
+    setReciboEditando(null);
+    setTipoEdicao(null);
   };
 
   const finalizarVenda=()=>{
@@ -3073,6 +3092,28 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
 
 function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const cfg=getImpressaoCfg(db);
+  const [reciboEditando,setReciboEditando]=useState<any|null>(null);
+  const [tipoEdicao,setTipoEdicao]=useState<"cliente"|"itens"|"valores"|"data"|"devolver"|null>(null);
+
+  const salvarEdicaoRecibo=(atualizacoes:any)=>{
+    if(!reciboEditando)return;
+    const now=new Date().toISOString();
+    setDbAndSave?.((d:any)=>{
+      const recibosVenda=[...(d.recibosVenda||[])];
+      const idx=recibosVenda.findIndex((r:any)=>r.id===reciboEditando.id);
+      if(idx>=0){
+        recibosVenda[idx]={...recibosVenda[idx],...atualizacoes,atualizadoEm:now};
+      }
+      return{...d,recibosVenda};
+    });
+    setReciboEditando(null);
+    setTipoEdicao(null);
+  };
+
+  if(reciboEditando){
+    return <PainelEdicaoRecibo recibo={reciboEditando} tipoEdicao={tipoEdicao} setTipoEdicao={setTipoEdicao} onSalvar={salvarEdicaoRecibo} onFechar={()=>setReciboEditando(null)}/>;
+  }
+
   const recibos=[...(db.recibosVenda||[])].sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
   const [busca,setBusca]=useState("");
   const filtrados=busca.trim()
@@ -3094,9 +3135,130 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
       <div style={{display:"flex",gap:6,marginTop:10}}>
         <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r,cfg))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>📲 WhatsApp</button>
         <button onClick={()=>imprimirReciboVenda(r,cfg)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🖨️ PDF</button>
+        <button onClick={()=>{setReciboEditando(r);setTipoEdicao(null);}} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>✏️ Editar</button>
       </div>
     </div>)}
   </div>;
+}
+
+function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onFechar}:{recibo:any,tipoEdicao:any,setTipoEdicao:any,onSalvar:any,onFechar:()=>void}){
+  const [nomeEdit,setNomeEdit]=useState(recibo.clienteNome||"");
+  const [telEdit,setTelEdit]=useState(recibo.clienteTelefone||"");
+  const [totalEdit,setTotalEdit]=useState(String(recibo.total||0));
+  const [dataEdit,setDataEdit]=useState(recibo.data||"");
+  const [motivo,setMotivo]=useState("");
+
+  if(!tipoEdicao){
+    return <div>
+      <BackBar label={`Editar Recibo #${String(recibo.numero).padStart(4,"0")}`} onClick={onFechar}/>
+      <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>Escolha o tipo de edição:</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <button onClick={()=>setTipoEdicao("cliente")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
+          👤 Editar Cliente
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>{nomeEdit}</div>
+        </button>
+        <button onClick={()=>setTipoEdicao("itens")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
+          📦 Editar Itens
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>{(recibo.itens||[]).length} itens</div>
+        </button>
+        <button onClick={()=>setTipoEdicao("valores")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
+          💰 Editar Valores
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>Total: R$ {(parseFloat(totalEdit)||0).toFixed(2).replace(".",",")}</div>
+        </button>
+        <button onClick={()=>setTipoEdicao("data")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
+          📅 Editar Data
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>{dataEdit}</div>
+        </button>
+        <button onClick={()=>setTipoEdicao("devolver")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600,color:"#dc2626"}}>
+          ↩️ Devolver/Cancelar
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>Marcar como devolvido</div>
+        </button>
+      </div>
+    </div>;
+  }
+
+  if(tipoEdicao==="cliente"){
+    return <div>
+      <BackBar label="Editar Cliente" onClick={()=>setTipoEdicao(null)}/>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Nome do Cliente</label>
+        <input className="inp" value={nomeEdit} onChange={e=>setNomeEdit(e.target.value)} placeholder="Nome do cliente" style={{marginBottom:0}}/>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Telefone</label>
+        <input className="inp" value={telEdit} onChange={e=>setTelEdit(e.target.value)} placeholder="Telefone (opcional)" style={{marginBottom:0}}/>
+      </div>
+      <button onClick={()=>{onSalvar({clienteNome:nomeEdit.trim(),clienteTelefone:telEdit});}} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
+    </div>;
+  }
+
+  if(tipoEdicao==="itens"){
+    return <div>
+      <BackBar label="Editar Itens" onClick={()=>setTipoEdicao(null)}/>
+      <div style={{fontSize:13,color:"var(--text2)",marginBottom:16}}>Itens do recibo:</div>
+      <div style={{marginBottom:16}}>
+        {(recibo.itens||[]).map((item:any,idx:number)=>(
+          <div key={idx} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,padding:"10px",marginBottom:8,fontSize:12}}>
+            <div><strong>{item.nome}</strong> × {item.quantidade}</div>
+            <div style={{color:"var(--text2)",marginTop:2}}>R$ {(item.subtotal||0).toFixed(2).replace(".",",")}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:"var(--primary)",color:"white",padding:"10px",borderRadius:6,textAlign:"center",fontSize:13,fontWeight:700}}>
+        Adicionar/remover itens via Emitir Recibo
+      </div>
+    </div>;
+  }
+
+  if(tipoEdicao==="valores"){
+    const desconto=parseFloat(totalEdit);
+    return <div>
+      <BackBar label="Editar Valores" onClick={()=>setTipoEdicao(null)}/>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Total (com desconto se houver)</label>
+        <input className="inp" type="number" step="0.01" value={totalEdit} onChange={e=>setTotalEdit(e.target.value)} placeholder="0.00" style={{marginBottom:0}}/>
+      </div>
+      <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,padding:"12px",marginBottom:16,fontSize:12}}>
+        <div style={{display:"flex",justifyContent:"space-between"}}>
+          <span>Total original:</span>
+          <strong>R$ {recibo.total.toFixed(2).replace(".",",")}</strong>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:6,color:"#dc2626"}}>
+          <span>Desconto:</span>
+          <strong>R$ {Math.max(0,recibo.total-desconto).toFixed(2).replace(".",",")}</strong>
+        </div>
+      </div>
+      <button onClick={()=>{onSalvar({total:Math.round(parseFloat(totalEdit)*100)/100});}} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
+    </div>;
+  }
+
+  if(tipoEdicao==="data"){
+    return <div>
+      <BackBar label="Editar Data" onClick={()=>setTipoEdicao(null)}/>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Data do Recibo</label>
+        <input className="inp" type="date" value={dataEdit} onChange={e=>setDataEdit(e.target.value)} style={{marginBottom:0}}/>
+      </div>
+      <button onClick={()=>{onSalvar({data:dataEdit});}} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
+    </div>;
+  }
+
+  if(tipoEdicao==="devolver"){
+    return <div>
+      <BackBar label="Devolver/Cancelar" onClick={()=>setTipoEdicao(null)}/>
+      <div style={{background:"#fee2e2",border:"1px solid #fecaca",borderRadius:8,padding:"12px",marginBottom:16}}>
+        <div style={{fontWeight:700,color:"#dc2626",marginBottom:4}}>⚠️ Ação irreversível</div>
+        <div style={{fontSize:12,color:"#991b1b"}}>Isso marcará o recibo como devolvido/cancelado.</div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Motivo (opcional)</label>
+        <textarea className="inp" value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ex: Cliente não compareceu, reclamou da qualidade, etc" style={{marginBottom:0,minHeight:"80px"}}/>
+      </div>
+      <button onClick={()=>{onSalvar({status:"devolvido",motivo:motivo.trim()});}} style={{background:"#dc2626",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Confirmar Devolução</button>
+    </div>;
+  }
+
+  return null;
 }
 
 function RecibosVendaRelatorioPanel({db,onVoltar}:{db:any,onVoltar:()=>void}){
