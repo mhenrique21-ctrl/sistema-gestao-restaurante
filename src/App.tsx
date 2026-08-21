@@ -2810,12 +2810,20 @@ function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPe
 function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,login?:any,onVoltar:()=>void}){
   _dbIconesProd=db.iconesProducao||{};
   const prodsCatalog:any[]=db.produtosProducao||[];
-  const cats:string[]=(db.categoriasProducao||[]).filter((c:string)=>prodsCatalog.some((p:any)=>prodCats(p).includes(c)));
-  const semCategoria=prodsCatalog.filter((p:any)=>!prodCats(p).length);
 
-  const [qtds,setQtds]=useState<Record<string,string>>({});
-  const [editingPrecoId,setEditingPrecoId]=useState<string|null>(null);
+  // Busca produto → ajusta quantidade → OK adiciona à lista, em vez do
+  // catálogo inteiro na tela com um campo por produto — rolar procurando
+  // entre categorias não escala quando o catálogo cresce.
+  const [busca,setBusca]=useState("");
+  const [buscaSugg,setBuscaSugg]=useState(false);
+  const [produtoSel,setProdutoSel]=useState<any|null>(null);
+  const [qtdBusca,setQtdBusca]=useState("");
+  const [editandoPrecoBusca,setEditandoPrecoBusca]=useState(false);
   const [precoEditVal,setPrecoEditVal]=useState("");
+  const buscaRef=useRef<HTMLInputElement>(null);
+  const qtdRef=useRef<HTMLInputElement>(null);
+
+  const [itensVenda,setItensVenda]=useState<any[]>([]);
   const [dataVenda,setDataVenda]=useState(today());
   const [clienteNome,setClienteNome]=useState("");
   const [clienteTelefone,setClienteTelefone]=useState("");
@@ -2827,24 +2835,49 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     ?clientes.filter((c:any)=>(c.nome||"").toLowerCase().includes(clienteNome.toLowerCase())).slice(0,6)
     :[];
 
-  const startEditPreco=(p:any)=>{setEditingPrecoId(p.id);setPrecoEditVal(p.precoFixo?String(p.precoFixo).replace(".",","):"");};
-  const salvarPreco=(id:string)=>{
+  const buscaSuggestions=!produtoSel&&busca.trim().length>=1
+    ?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(busca.toLowerCase())).slice(0,8)
+    :[];
+  const selecionarProduto=(p:any)=>{
+    setProdutoSel(p);setBusca(p.nome);setBuscaSugg(false);
+    setTimeout(()=>qtdRef.current?.focus(),0);
+  };
+  const limparSelecao=()=>{setProdutoSel(null);setBusca("");setQtdBusca("");setEditandoPrecoBusca(false);setTimeout(()=>buscaRef.current?.focus(),0);};
+
+  const salvarPrecoBusca=()=>{
+    if(!produtoSel)return;
     const v=parseMoney(precoEditVal||0);
     // Mesmo campo do catálogo de Produção (precoFixo): editar aqui vale lá também.
-    (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===id?{...p,precoFixo:v,atualizadoEm:new Date().toISOString()}:p)}));
-    setEditingPrecoId(null);
+    (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===produtoSel.id?{...p,precoFixo:v,atualizadoEm:new Date().toISOString()}:p)}));
+    setProdutoSel((p:any)=>({...p,precoFixo:v}));
+    setEditandoPrecoBusca(false);
   };
 
-  const itensSelecionados=Object.entries(qtds).map(([id,q])=>{
-    const qtd=parseFloat(q)||0;
-    if(qtd<=0)return null;
-    const p=prodsCatalog.find((x:any)=>x.id===id);
-    if(!p)return null;
-    const precoUnit=p.precoFixo||0;
-    return{id,nome:p.nome,quantidade:qtd,unidade:p.unidade||"un",precoUnit,subtotal:Math.round(qtd*precoUnit*100)/100};
-  }).filter(Boolean) as any[];
-  const totalVenda=Math.round(itensSelecionados.reduce((s,it)=>s+it.subtotal,0)*100)/100;
-  const temItemSemPreco=itensSelecionados.some(it=>!it.precoUnit);
+  const adicionarItem=()=>{
+    if(!produtoSel)return alert("Escolha um produto na busca.");
+    const qtd=parseFloat(qtdBusca)||0;
+    if(qtd<=0)return alert("Informe a quantidade.");
+    if(!produtoSel.precoFixo)return alert("Defina o preço do produto (clique em Preço un.) antes de adicionar.");
+    const precoUnit=produtoSel.precoFixo;
+    const subtotal=Math.round(qtd*precoUnit*100)/100;
+    setItensVenda(prev=>{
+      // Mesmo produto adicionado de novo: soma na linha existente em vez de
+      // duplicar — evita duas linhas "Esfirra frango" na mesma venda.
+      const i=prev.findIndex(it=>it.produtoId===produtoSel.id);
+      if(i>=0){
+        const upd=[...prev];
+        const novaQtd=upd[i].quantidade+qtd;
+        upd[i]={...upd[i],quantidade:novaQtd,precoUnit,subtotal:Math.round(novaQtd*precoUnit*100)/100};
+        return upd;
+      }
+      return[...prev,{id:uid(),produtoId:produtoSel.id,nome:produtoSel.nome,quantidade:qtd,unidade:produtoSel.unidade||"un",precoUnit,subtotal}];
+    });
+    limparSelecao();
+  };
+  const removerItem=(id:string)=>setItensVenda(prev=>prev.filter(it=>it.id!==id));
+
+  const totalVenda=Math.round(itensVenda.reduce((s,it)=>s+it.subtotal,0)*100)/100;
+  const totalUnidades=itensVenda.reduce((s,it)=>s+it.quantidade,0);
 
   const upsertCliente=(arr:any[],nome:string,telefone:string,ts:string):any[]=>{
     const nl=nome.trim().toLowerCase();
@@ -2854,15 +2887,14 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
   };
 
   const finalizarVenda=()=>{
-    if(!itensSelecionados.length)return alert("Adicione ao menos 1 produto com quantidade.");
-    if(temItemSemPreco)return alert("Defina o preço de todos os produtos selecionados (clique no preço pra editar).");
+    if(!itensVenda.length)return alert("Adicione ao menos 1 produto.");
     if(!clienteNome.trim())return alert("Informe o nome do cliente.");
     if(!dataVenda)return alert("Informe a data da venda.");
     const now=new Date().toISOString();
     const data=dataVenda;
     const numero=Math.max(0,...(db.recibosVenda||[]).map((r:any)=>r.numero||0))+1;
     const recibo={id:uid(),numero,clienteNome:clienteNome.trim(),clienteTelefone:clienteTelefone.trim(),
-      itens:itensSelecionados.map(({id,...it})=>it),total:totalVenda,data,criadoEm:now,atualizadoEm:now};
+      itens:itensVenda.map(({id,produtoId,...it})=>it),total:totalVenda,data,criadoEm:now,atualizadoEm:now};
     (setDbAndSave||setDb)((d:any)=>{
       // Mesmo lançamento manual de Vendas (data/maquininha/dinheiro/.../delivery) —
       // só soma no bucket "delivery" do dia, igual o Recibo de Entrega soma em
@@ -2876,7 +2908,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
       }
       return{...d,recibosVenda:[recibo,...(d.recibosVenda||[])],clientesEncomenda:upsertCliente(d.clientesEncomenda||[],clienteNome,clienteTelefone,now),vendas};
     });
-    setQtds({});setClienteNome("");setClienteTelefone("");setDataVenda(today());
+    setItensVenda([]);limparSelecao();setClienteNome("");setClienteTelefone("");setDataVenda(today());
     setReciboGerado(recibo);
   };
 
@@ -2909,23 +2941,6 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     </div>;
   }
 
-  // inputMode="numeric" + pattern abrem o teclado numérico no celular sem os
-  // botões de +/- do type="number" (que em tela pequena são pequenos demais
-  // pra tocar e ainda roubam espaço do dedo) — filtra não-dígito na mão.
-  const renderProduto=(p:any)=><div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 0",borderTop:"1px solid var(--border)"}}>
-    <span style={{flex:1,fontSize:13,fontWeight:600}}>{p.nome}</span>
-    {editingPrecoId===p.id
-      ? <input autoFocus value={precoEditVal} onChange={e=>setPrecoEditVal(e.target.value)}
-          onBlur={()=>salvarPreco(p.id)} onKeyDown={e=>{if(e.key==="Enter")salvarPreco(p.id);if(e.key==="Escape")setEditingPrecoId(null);}}
-          className="inp" style={{width:76,marginBottom:0,textAlign:"center" as const,padding:"4px 6px"}}/>
-      : <span onClick={()=>startEditPreco(p)} title="Clique pra editar o preço" style={{fontSize:12,fontWeight:700,color:p.precoFixo?"#7C3AED":"#EF4444",background:p.precoFixo?"#7C3AED18":"#EF444418",borderRadius:6,padding:"4px 9px",cursor:"pointer",whiteSpace:"nowrap" as const}}>
-          {p.precoFixo?fmtMoney(p.precoFixo):"sem preço"} <span style={{fontSize:10,opacity:.7}}>✏️</span>
-        </span>}
-    <input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={qtds[p.id]||""} disabled={!p.precoFixo}
-      onChange={e=>{const v=e.target.value.replace(/\D/g,"");setQtds(q=>({...q,[p.id]:v}));}}
-      className="inp" style={{width:64,height:52,marginBottom:0,textAlign:"center" as const,opacity:p.precoFixo?1:.5,fontSize:22,fontWeight:800,padding:0,flexShrink:0}}/>
-  </div>;
-
   return <div>
     <BackBar label="Vendas" onClick={onVoltar}/>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -2935,70 +2950,114 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
       ? <EmptyState msg="Nenhum produto cadastrado ainda. Cadastre em Produção → Produtos."/>
       : <>
       {/* Empilha em 1 coluna abaixo de 760px — sem isso o painel de Cliente/
-          Resumo (coluna da direita) ficava espremido/cortado em tela de
-          celular, em vez de descer pra baixo do catálogo. */}
-      <style>{`.recibo-layout{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start}
-        @media(max-width:760px){.recibo-layout{grid-template-columns:1fr}}`}</style>
-      <div className="recibo-layout">
-          <div>
-            {cats.map(cat=>{
-              const itensCat=prodsCatalog.filter((p:any)=>prodCats(p).includes(cat));
-              return <div key={cat} className="card" style={{marginBottom:12,padding:"4px 14px 6px"}}>
-                <div style={{fontSize:11,fontWeight:800,color:"#7C3AED",textTransform:"uppercase" as const,letterSpacing:.5,padding:"8px 0 4px",display:"flex",alignItems:"center",gap:6}}>
-                  <CatIconBadge icon={prodCatIcon(cat)} size={13}/>{cat}
+          Resumo ficava espremido/cortado em tela de celular. */}
+      <style>{`.recibo-linha{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+        .recibo-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+        @media(max-width:640px){.recibo-linha{flex-wrap:wrap}.recibo-grid2{grid-template-columns:1fr}}`}</style>
+
+      {/* Adicionar produto: busca com sugestão (nome + categoria + preço),
+          quantidade e preço unitário (editável) — OK soma na lista abaixo. */}
+      <div className="card" style={{border:"2px solid #7C3AED",marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:800,color:"#C4B5FD",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>🔍 Adicionar produto</div>
+        <div className="recibo-linha">
+          <div style={{position:"relative" as const,flex:"1 1 220px"}}>
+            <label style={{fontSize:10,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const,display:"block",marginBottom:4}}>Produto</label>
+            <input ref={buscaRef} placeholder="Buscar produto..." value={busca}
+              onChange={e=>{setBusca(e.target.value);setBuscaSugg(true);if(produtoSel)setProdutoSel(null);}}
+              onFocus={()=>setBuscaSugg(true)} onBlur={()=>setTimeout(()=>setBuscaSugg(false),150)}
+              onKeyDown={e=>{if(e.key==="Enter"&&produtoSel){e.preventDefault();qtdRef.current?.focus();}}}
+              className="inp" style={{marginBottom:0,width:"100%"}}/>
+            {buscaSugg&&buscaSuggestions.length>0&&<div style={{position:"absolute" as const,top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:8,boxShadow:"0 4px 16px #0006",marginTop:2,maxHeight:220,overflowY:"auto" as const}}>
+              {buscaSuggestions.map((p:any)=>(
+                <div key={p.id} onMouseDown={()=>selecionarProduto(p)}
+                  style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                  <CatIconBadge icon={prodCatIcon(prodCats(p)[0]||"")} size={14}/>
+                  <span style={{flex:1,fontSize:13,fontWeight:600}}>{p.nome}</span>
+                  {prodCats(p)[0]&&<span style={{fontSize:10,color:"#C4B5FD",background:"#7C3AED22",borderRadius:5,padding:"2px 6px"}}>{prodCats(p)[0]}</span>}
+                  <span style={{fontSize:11,fontWeight:700,color:p.precoFixo?"#22C55E":"#EF4444"}}>{p.precoFixo?fmtMoney(p.precoFixo):"sem preço"}</span>
                 </div>
-                {itensCat.map(renderProduto)}
-              </div>;
-            })}
-            {!!semCategoria.length&&<div className="card" style={{marginBottom:12,padding:"4px 14px 6px"}}>
-              <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,padding:"8px 0 4px"}}>Sem categoria</div>
-              {semCategoria.map(renderProduto)}
+              ))}
             </div>}
           </div>
-
-          <div style={{display:"flex",flexDirection:"column" as const,gap:14}}>
-            <div className="card">
-              <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Data da venda</div>
-              <input type="date" value={dataVenda} onChange={e=>setDataVenda(e.target.value)} className="inp" style={{marginBottom:0,width:"100%"}}/>
-              {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → Delivery vão pra esta data.</div>}
-            </div>
-            <div className="card">
-              <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Cliente</div>
-              <div style={{position:"relative" as const,marginBottom:6}}>
-                <input placeholder="Nome do cliente *" value={clienteNome}
-                  onChange={e=>{setClienteNome(e.target.value);setClienteSugg(true);}}
-                  onFocus={()=>setClienteSugg(true)} onBlur={()=>setTimeout(()=>setClienteSugg(false),150)}
-                  className="inp" style={{marginBottom:0,width:"100%"}}/>
-                {clienteSugg&&clienteSuggestions.length>0&&<div style={{position:"absolute" as const,top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:8,boxShadow:"0 4px 16px #0004",marginTop:2,maxHeight:180,overflowY:"auto" as const}}>
-                  {clienteSuggestions.map((c:any)=>(
-                    <div key={c.id} onMouseDown={()=>{setClienteNome(c.nome);setClienteTelefone(c.telefone||"");setClienteSugg(false);}}
-                      style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
-                      <div style={{fontSize:12,fontWeight:700}}>{c.nome}</div>
-                      {c.telefone&&<div style={{fontSize:10,color:"var(--text2)"}}>{c.telefone}</div>}
-                    </div>
-                  ))}
+          <div style={{width:78}}>
+            <label style={{fontSize:10,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const,display:"block",marginBottom:4}}>Qtd</label>
+            <input ref={qtdRef} type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={qtdBusca} disabled={!produtoSel}
+              onChange={e=>setQtdBusca(e.target.value.replace(/\D/g,""))}
+              onKeyDown={e=>{if(e.key==="Enter")adicionarItem();}}
+              className="inp" style={{width:"100%",marginBottom:0,textAlign:"center" as const,fontSize:18,fontWeight:800,padding:"11px 4px",opacity:produtoSel?1:.5}}/>
+          </div>
+          <div style={{width:100}}>
+            <label style={{fontSize:10,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const,display:"block",marginBottom:4}}>Preço un.</label>
+            {editandoPrecoBusca
+              ? <input autoFocus value={precoEditVal} onChange={e=>setPrecoEditVal(e.target.value)}
+                  onBlur={salvarPrecoBusca} onKeyDown={e=>{if(e.key==="Enter")salvarPrecoBusca();if(e.key==="Escape")setEditandoPrecoBusca(false);}}
+                  className="inp" style={{width:"100%",marginBottom:0,textAlign:"center" as const,padding:"11px 4px"}}/>
+              : <div onClick={()=>{if(!produtoSel)return;setEditandoPrecoBusca(true);setPrecoEditVal(produtoSel.precoFixo?String(produtoSel.precoFixo).replace(".",","):"");}}
+                  title={produtoSel?"Clique pra editar o preço":""}
+                  style={{background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:9,padding:"11px 8px",textAlign:"center" as const,fontSize:13,fontWeight:700,color:!produtoSel?"var(--text3)":produtoSel.precoFixo?"#C4B5FD":"#EF4444",cursor:produtoSel?"pointer":"default",opacity:produtoSel?1:.5}}>
+                  {produtoSel?(produtoSel.precoFixo?fmtMoney(produtoSel.precoFixo):"sem preço"):"—"}
                 </div>}
-              </div>
-              <input placeholder="Telefone (opcional)" value={clienteTelefone} onChange={e=>setClienteTelefone(e.target.value)} className="inp" style={{marginBottom:0}}/>
-              <div style={{fontSize:10,color:"var(--text2)",marginTop:6}}>Cliente novo é cadastrado automaticamente ao finalizar.</div>
-            </div>
+          </div>
+          <button onClick={adicionarItem} className="btn" style={{background:"linear-gradient(135deg,#7C3AED,#5B21B6)",color:"#fff",padding:"11px 22px",fontSize:14,fontWeight:800,whiteSpace:"nowrap" as const}}>✓ OK</button>
+        </div>
+      </div>
 
-            <div className="card">
-              <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Resumo da venda</div>
-              {!itensSelecionados.length&&<div style={{fontSize:12,color:"var(--text2)"}}>Nenhum produto selecionado.</div>}
-              {itensSelecionados.map(it=><div key={it.id} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
-                <span>{it.nome} <span style={{color:"var(--text2)"}}>×{it.quantidade}</span></span>
-                <span style={{fontWeight:600}}>{fmtMoney(it.subtotal)}</span>
-              </div>)}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",paddingTop:10,marginTop:6,borderTop:"2px solid var(--text)"}}>
-                <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>Total</span>
-                <span style={{fontSize:22,fontWeight:800}}>{fmtMoney(totalVenda)}</span>
-              </div>
-              <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"#7C3AED",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
-              <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Delivery</b> de {fmtDate(dataVenda||today())}.</div>
+      {/* Itens da venda */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:12,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5}}>Itens da venda</span>
+        {!!itensVenda.length&&<span style={{fontSize:11,fontWeight:800,background:"#7C3AED",color:"#fff",borderRadius:999,padding:"2px 9px"}}>{itensVenda.length}</span>}
+      </div>
+      <div className="card" style={{marginBottom:18,padding:0}}>
+        {!itensVenda.length
+          ? <div style={{padding:24,textAlign:"center" as const,color:"var(--text3)",fontSize:13}}>Nenhum produto adicionado ainda.</div>
+          : itensVenda.map(it=><div key={it.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
+              <span style={{background:"#7C3AED22",color:"#C4B5FD",fontWeight:800,fontSize:12,borderRadius:7,padding:"4px 9px",flexShrink:0}}>{it.quantidade}×</span>
+              <span style={{flex:1,fontSize:13,fontWeight:600}}>{it.nome} <span style={{color:"var(--text2)",fontWeight:400,fontSize:11}}>— {fmtMoney(it.precoUnit)} un.</span></span>
+              <span style={{fontSize:14,fontWeight:800,width:80,textAlign:"right" as const}}>{fmtMoney(it.subtotal)}</span>
+              <button onClick={()=>removerItem(it.id)} title="Remover" style={{background:"#EF444422",color:"#EF4444",border:"1px solid #EF444444",borderRadius:7,width:28,height:28,fontSize:14,flexShrink:0}}>×</button>
+            </div>)}
+      </div>
+
+      <div className="recibo-grid2">
+        <div>
+          <div className="card" style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Data da venda</div>
+            <input type="date" value={dataVenda} onChange={e=>setDataVenda(e.target.value)} className="inp" style={{marginBottom:0,width:"100%"}}/>
+            {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → Delivery vão pra esta data.</div>}
+          </div>
+          <div className="card">
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Cliente</div>
+            <div style={{position:"relative" as const,marginBottom:6}}>
+              <input placeholder="Nome do cliente *" value={clienteNome}
+                onChange={e=>{setClienteNome(e.target.value);setClienteSugg(true);}}
+                onFocus={()=>setClienteSugg(true)} onBlur={()=>setTimeout(()=>setClienteSugg(false),150)}
+                className="inp" style={{marginBottom:0,width:"100%"}}/>
+              {clienteSugg&&clienteSuggestions.length>0&&<div style={{position:"absolute" as const,top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:8,boxShadow:"0 4px 16px #0004",marginTop:2,maxHeight:180,overflowY:"auto" as const}}>
+                {clienteSuggestions.map((c:any)=>(
+                  <div key={c.id} onMouseDown={()=>{setClienteNome(c.nome);setClienteTelefone(c.telefone||"");setClienteSugg(false);}}
+                    style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                    <div style={{fontSize:12,fontWeight:700}}>{c.nome}</div>
+                    {c.telefone&&<div style={{fontSize:10,color:"var(--text2)"}}>{c.telefone}</div>}
+                  </div>
+                ))}
+              </div>}
             </div>
+            <input placeholder="Telefone (opcional)" value={clienteTelefone} onChange={e=>setClienteTelefone(e.target.value)} className="inp" style={{marginBottom:0}}/>
+            <div style={{fontSize:10,color:"var(--text2)",marginTop:6}}>Cliente novo é cadastrado automaticamente ao finalizar.</div>
           </div>
         </div>
+
+        <div className="card">
+          <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Resumo</div>
+          <div style={{fontSize:12,color:"var(--text2)"}}>{itensVenda.length} {itensVenda.length===1?"item":"itens"} · {totalUnidades} {totalUnidades===1?"unidade":"unidades"}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",paddingTop:10,marginTop:6,borderTop:"2px solid var(--text)"}}>
+            <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>Total</span>
+            <span style={{fontSize:22,fontWeight:800}}>{fmtMoney(totalVenda)}</span>
+          </div>
+          <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"#7C3AED",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
+          <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Delivery</b> de {fmtDate(dataVenda||today())}.</div>
+        </div>
+      </div>
       </>}
   </div>;
 }
