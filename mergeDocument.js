@@ -10,7 +10,7 @@ export const MERGEABLE_FIELDS = [
   'materiasPrimas', 'funcionarios', 'faltas', 'adiantamentos',
   'consumacoes', 'encargos', 'normalizacoes', 'movEstoque', 'usuarios',
   'produtosProducao', 'pedidosProducao', 'encomendas', 'anotacoes',
-  'clientesEncomenda', 'produtosLista', 'itensProducaoPendentes',
+  'clientesEncomenda', 'produtosLista', 'itensProducaoPendentes', 'recibosVenda',
 ];
 
 const TS_FIELDS = ['updatedAt', 'atualizadoEm'];
