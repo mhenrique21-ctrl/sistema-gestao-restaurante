@@ -2904,7 +2904,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     const numero=Math.max(0,...(db.recibosVenda||[]).map((r:any)=>r.numero||0))+1;
     const recibo={id:uid(),numero,clienteNome:clienteNome.trim(),clienteTelefone:clienteTelefone.trim(),
       itens:itensVenda.map(({id,produtoId,...it})=>it),total:totalVenda,data,criadoEm:now,atualizadoEm:now};
-    (setDbAndSave||setDb)((d:any)=>{
+    setDbAndSave((d:any)=>{
       // Mesmo lançamento manual de Vendas (data/maquininha/dinheiro/.../delivery) —
       // só soma no bucket "delivery" do dia, igual o Recibo de Entrega soma em
       // "entregasClientes". Cria a linha do dia se ainda não existir.
