@@ -7611,20 +7611,25 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     const pc:Record<string,any[]>={};
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
 
-    // Resumo diário de produção
-    const hoje=today();
-    const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
-    const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
-    recibosHoje.forEach((r:any)=>{
-      (r.itens||[]).forEach((it:any)=>{
-        if(!totaisPorProduto[it.nome]){
-          const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
-          totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
-        }
-        totaisPorProduto[it.nome].qtd+=it.quantidade||0;
+    // Resumo diário de produção — usa o snapshot salvo no pedido (mesmo dia
+    // em que ele foi gerado); só recalcula na hora quando é impressão avulsa
+    // (sem pedido salvo), pra não misturar o resumo de hoje com um pedido antigo.
+    let produtosOrdenados:{nome:string,qtd:number,unidade:string}[]=pedido?.resumoDiario||[];
+    if(!pedido){
+      const hoje=today();
+      const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
+      const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
+      recibosHoje.forEach((r:any)=>{
+        (r.itens||[]).forEach((it:any)=>{
+          if(!totaisPorProduto[it.nome]){
+            const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
+            totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
+          }
+          totaisPorProduto[it.nome].qtd+=it.quantidade||0;
+        });
       });
-    });
-    const produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
+      produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
+    }
     const resumoDiarioHtml=produtosOrdenados.length?`
       <div class="resumo-diario">
         <div class="resumo-titulo">📊 Produção do dia</div>
