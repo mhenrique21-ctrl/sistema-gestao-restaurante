@@ -543,6 +543,25 @@ function BackBar({label,onClick}:{label:string,onClick:()=>void}){
   return <div style={{marginBottom:10}}><button onClick={onClick} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,color:"var(--btnPrimary)",cursor:"pointer",fontSize:13,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:15}}>←</span> {label}</button></div>;
 }
 
+// Interruptor de toque real: a linha inteira (44px+) é clicável via <label>,
+// não só o quadradinho de 13-16px de um <input type="checkbox"> puro — é o
+// alvo mínimo recomendado pra tela de celular. Usado em toda lista de
+// ativar/desativar (Ajustes de Vendas, Configurações → Aparência).
+function ToggleSwitch({checked,onChange,label,desc,disabled}:{checked:boolean,onChange:(v:boolean)=>void,label:string,desc?:string,disabled?:boolean}){
+  return <label style={{display:"flex",alignItems:"center",gap:12,padding:"11px 2px",borderBottom:"1px solid var(--border)",cursor:disabled?"default":"pointer",minHeight:44,opacity:disabled?.6:1}}>
+    <div style={{flex:1}}>
+      <div style={{fontSize:13,fontWeight:600}}>{label}</div>
+      {desc&&<div style={{fontSize:10.5,color:"var(--text2)",marginTop:2}}>{desc}</div>}
+    </div>
+    <span style={{position:"relative",width:42,height:25,flexShrink:0}}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={e=>onChange(e.target.checked)} style={{opacity:0,width:0,height:0,position:"absolute"}}/>
+      <span style={{position:"absolute",inset:0,background:checked?"#16A34A":"var(--border2)",borderRadius:20,transition:".15s",pointerEvents:"none" as const}}>
+        <span style={{position:"absolute",width:19,height:19,left:checked?20:3,top:3,background:"#fff",borderRadius:"50%",transition:".15s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/>
+      </span>
+    </span>
+  </label>;
+}
+
 function MoneyInput({value,onChange,placeholder,className,style}) {
   // natural decimal input: user types "15,90" and sees "15,90" — no auto-shift
   const handle=(e)=>{
@@ -2963,23 +2982,11 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
     </Grupo>
 
     <Grupo icon="⚡" titulo="Canais ativos em Lançamentos">
-      <label style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
-        <input type="checkbox" checked disabled style={{width:16,height:16,flexShrink:0,opacity:.6}}/>
-        <div style={{flex:1}}>
-          <div style={{fontSize:12,fontWeight:600}}>Maquininha</div>
-          <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Sempre ativo — é o canal principal</div>
-        </div>
-      </label>
+      <ToggleSwitch checked={true} onChange={()=>{}} disabled label="Maquininha" desc="Sempre ativo — é o canal principal"/>
       {([
         ["canalDinheiro","Dinheiro"],["canalIfood","iFood"],["canal99food","99Food"],["canalVendasExtras",aj.legVendasExtras],
       ] as [string,string][]).map(([key,label])=>(
-        <label key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
-          <input type="checkbox" checked={!!(aj as any)[key]} onChange={e=>setAj(key,e.target.checked)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:12,fontWeight:600}}>{label}</div>
-            <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Desligado, o campo some do formulário de Lançamentos</div>
-          </div>
-        </label>
+        <ToggleSwitch key={key} checked={!!(aj as any)[key]} onChange={v=>setAj(key,v)} label={label} desc="Desligado, o campo some do formulário de Lançamentos"/>
       ))}
     </Grupo>
 
@@ -3062,13 +3069,7 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
         ["mostrarChipVendasExtras",`Selo "Em Vendas Extras"`,"O chip colorido no card do recibo"],
         ["paginarLista","Paginar lista de recibos","Mostra 20 por vez com \"carregar mais\" em vez da lista inteira"],
       ] as [string,string,string][]).map(([key,label,desc])=>(
-        <label key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
-          <input type="checkbox" checked={!!(aj as any)[key]} onChange={e=>setAj(key,e.target.checked)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:12,fontWeight:600}}>{label}</div>
-            <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>{desc}</div>
-          </div>
-        </label>
+        <ToggleSwitch key={key} checked={!!(aj as any)[key]} onChange={v=>setAj(key,v)} label={label} desc={desc}/>
       ))}
     </Grupo>
   </div>;
@@ -3626,11 +3627,22 @@ function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,on
   return <div>
     <BackBar label="Editar Itens" onClick={onVoltar}/>
     {itens.map((item:any,idx:number)=>(
-      <div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 52px 74px 26px",gap:6,alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
-        <input className="inp" value={item.nome} onChange={e=>atualizarItem(idx,"nome",e.target.value)} style={{marginBottom:0,padding:"6px 7px",fontSize:12}}/>
-        <input className="inp" value={item.quantidade} onChange={e=>atualizarItem(idx,"quantidade",e.target.value)} style={{marginBottom:0,padding:"6px 7px",fontSize:12,textAlign:"center" as const}}/>
-        <input className="inp" value={item.precoUnit} onChange={e=>atualizarItem(idx,"precoUnit",e.target.value)} style={{marginBottom:0,padding:"6px 7px",fontSize:12,textAlign:"right" as const}}/>
-        <button onClick={()=>removerItem(idx)} style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:15}}>✕</button>
+      <div key={idx} style={{border:"1px solid var(--border)",borderRadius:12,padding:11,marginBottom:8,background:"var(--bg4)"}}>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <input className="inp" value={item.nome} onChange={e=>atualizarItem(idx,"nome",e.target.value)} placeholder="Produto" style={{marginBottom:0,flex:1,fontSize:13}}/>
+          <button onClick={()=>removerItem(idx)} style={{width:36,height:36,flexShrink:0,background:"var(--card)",border:"1px solid #dc262644",borderRadius:8,color:"#dc2626",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <div style={{flex:1}}>
+            <label style={{fontSize:9,color:"var(--text3)",display:"block",marginBottom:3,textTransform:"uppercase" as const,letterSpacing:.4}}>Qtd</label>
+            <input className="inp" value={item.quantidade} onChange={e=>atualizarItem(idx,"quantidade",e.target.value)} style={{marginBottom:0,fontSize:13,fontFamily:"monospace"}}/>
+          </div>
+          <div style={{flex:1}}>
+            <label style={{fontSize:9,color:"var(--text3)",display:"block",marginBottom:3,textTransform:"uppercase" as const,letterSpacing:.4}}>Preço un.</label>
+            <input className="inp" value={item.precoUnit} onChange={e=>atualizarItem(idx,"precoUnit",e.target.value)} style={{marginBottom:0,fontSize:13,fontFamily:"monospace"}}/>
+          </div>
+        </div>
+        <div style={{fontSize:11,fontWeight:700,color:"#15803D",textAlign:"right" as const,marginTop:6}}>Subtotal: {fmtMoney(item.subtotal||0)}</div>
       </div>
     ))}
     {!itens.length&&<div style={{fontSize:12,color:"var(--text2)",textAlign:"center" as const,padding:"12px 0"}}>Nenhum item — adicione abaixo.</div>}
@@ -13004,21 +13016,9 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
             ["numerosTabulares","Números alinhados","Dígitos com largura fixa em tabelas e valores"],
             ["altoContraste","Alto contraste","Bordas e textos secundários mais fortes"],
           ] as [string,string,string][]).map(([key,label,desc])=>(
-            <label key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
-              <input type="checkbox" checked={!!(aparenciaApp as any)[key]} onChange={e=>setAparenciaApp(key,e.target.checked)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:12,fontWeight:600}}>{label}</div>
-                <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>{desc}</div>
-              </div>
-            </label>
+            <ToggleSwitch key={key} checked={!!(aparenciaApp as any)[key]} onChange={v=>setAparenciaApp(key,v)} label={label} desc={desc}/>
           ))}
-          <label style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",cursor:"pointer"}}>
-            <input type="checkbox" checked={modoDiscreto} onChange={toggleModoDiscreto} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:600}}>Modo discreto</div>
-              <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Mascara valores em R$ na tela — só neste dispositivo, não sincroniza com os outros</div>
-            </div>
-          </label>
+          <ToggleSwitch checked={modoDiscreto} onChange={toggleModoDiscreto} label="Modo discreto" desc="Mascara valores em R$ na tela — só neste dispositivo, não sincroniza com os outros"/>
         </div>
       </div>
 
