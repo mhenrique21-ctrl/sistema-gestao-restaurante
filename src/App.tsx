@@ -7611,7 +7611,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div class="resumo-diario">
         <div class="resumo-titulo">📊 Produção do dia</div>
         <div class="resumo-grid">
-          ${produtosOrdenados.map((p:any)=>`<div class="resumo-item"><div class="resumo-nome">${p.nome}</div><div class="resumo-qty">${p.qtd} ${p.unidade}</div></div>`).join("")}
+          ${produtosOrdenados.map((p:any)=>`<span class="resumo-item"><span class="resumo-nome">${p.nome}</span><span class="resumo-qty">${p.qtd} ${p.unidade}</span></span>`).join("")}
         </div>
       </div>
     `:"";
@@ -7650,12 +7650,12 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
         .footer{margin-top:16px;font-size:10px;color:#a8a8a8;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
-        .resumo-diario{background:#ecfdf5;border:2px solid #10b981;border-radius:12px;padding:16px 18px;margin-bottom:16px;break-inside:avoid;-webkit-column-break-inside:avoid}
-        .resumo-titulo{font-size:${Math.max(fpx,14)}px;font-weight:800;margin-bottom:12px;color:#047857}
-        .resumo-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-        .resumo-item{background:#fff;border:1px solid #a7f3d0;border-radius:8px;padding:10px 12px}
-        .resumo-nome{font-size:${Math.max(fpx-2,11)}px;color:#059669;font-weight:600;margin-bottom:5px;line-height:1.2}
-        .resumo-qty{font-size:${Math.max(fpx+2,15)}px;font-weight:800;color:#065f46;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+        .resumo-diario{background:#ecfdf5;border:1.5px solid #10b981;border-radius:8px;padding:8px 10px;margin-bottom:12px;break-inside:avoid;-webkit-column-break-inside:avoid}
+        .resumo-titulo{font-size:${Math.max(fpx-2,11)}px;font-weight:800;margin-bottom:6px;color:#047857}
+        .resumo-grid{display:flex;flex-wrap:wrap;gap:5px}
+        .resumo-item{background:#fff;border:1px solid #a7f3d0;border-radius:5px;padding:3px 8px;display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap}
+        .resumo-nome{font-size:${Math.max(fpx-4,9)}px;color:#059669;font-weight:600}
+        .resumo-qty{font-size:${Math.max(fpx-3,10)}px;font-weight:800;color:#065f46;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .print-columns{column-count:${cfg.producaoColunas};column-gap:22px;column-rule:1px solid #e2e2de}
         .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
         .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
