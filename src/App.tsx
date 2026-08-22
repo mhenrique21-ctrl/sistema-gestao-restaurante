@@ -8096,6 +8096,48 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"#8B5CF6",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
           </div>
         : <>
+            {/* Resumo diário de produtos */}
+            {(()=>{
+              const hoje=today();
+              const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
+              const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string,cats:string[]}>={};
+
+              recibosHoje.forEach((r:any)=>{
+                (r.itens||[]).forEach((it:any)=>{
+                  if(!totaisPorProduto[it.nome]){
+                    const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
+                    totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un",cats:prod?prodCats(prod):[]};
+                  }
+                  totaisPorProduto[it.nome].qtd+=it.quantidade||0;
+                });
+              });
+
+              const produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
+              if(!produtosOrdenados.length)return null;
+
+              const porCategoria:Record<string,typeof produtosOrdenados>={};
+              produtosOrdenados.forEach((p:any)=>{
+                const cat=p.cats[0]||"OUTROS";
+                if(!porCategoria[cat])porCategoria[cat]=[];
+                porCategoria[cat].push(p);
+              });
+
+              return <div style={{background:"linear-gradient(135deg,#10b981,#059669)",borderRadius:12,padding:"16px",marginBottom:16,color:"#fff"}}>
+                <div style={{fontSize:14,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+                  <span>📊 Produção do dia</span>
+                  <span style={{fontSize:11,opacity:.8,fontWeight:600}}>{recibosHoje.length} recibo(s)</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10}}>
+                  {produtosOrdenados.map((p:any)=>(
+                    <div key={p.nome} style={{background:"rgba(255,255,255,0.15)",borderRadius:8,padding:"10px",backdropFilter:"blur(10px)"}}>
+                      <div style={{fontSize:11,opacity:.85,marginBottom:4}}>{p.nome}</div>
+                      <div style={{fontSize:20,fontWeight:800}}>{p.qtd} <span style={{fontSize:11,opacity:.7}}>{p.unidade}</span></div>
+                    </div>
+                  ))}
+                </div>
+              </div>;
+            })()}
+
             {/* Lista por categoria */}
             {(()=>{
               // Soma Atual/Pedido de uma categoria — por unidade, pra não somar
