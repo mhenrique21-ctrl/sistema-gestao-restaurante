@@ -7607,7 +7607,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     const produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
     const resumoDiarioHtml=produtosOrdenados.length?`
       <div class="resumo-diario">
-        <div class="resumo-titulo">📊 Produção do dia (${recibosHoje.length} recibo${recibosHoje.length!==1?"s":""})</div>
+        <div class="resumo-titulo">📊 Produção do dia</div>
         <div class="resumo-grid">
           ${produtosOrdenados.map((p:any)=>`<div class="resumo-item"><div class="resumo-nome">${p.nome}</div><div class="resumo-qty">${p.qtd} ${p.unidade}</div></div>`).join("")}
         </div>
