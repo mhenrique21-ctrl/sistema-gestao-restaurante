@@ -4676,7 +4676,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
       const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoes);
       const grupoId=uid();
-      const novasCompras=(iaResult.itens||[]).map(item=>({
+      const novasCompras=(iaResult.itens||[]).filter((item:any)=>!item.removido).map(item=>({
         id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoes),categoria:item.categoria,
         unidade:item.unidade||"un",quantidade:item.quantidade||0,
         valor:item.valorTotal||0,valorUnitario:item.valorUnitario||0,
@@ -4712,6 +4712,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setConciliacao(null);
     alert("✅ Cupom importado! Estoque e financeiro atualizados.");
   };
+  // Alterna removido/de-volta num item lido pela IA e recalcula o total a
+  // partir só dos itens ativos — é esse total corrigido que vai pro registro
+  // de compra ao confirmar, não o valor original lido do cupom.
+  const toggleItemIA=(idx:number)=>{
+    setIaResult((r:any)=>{
+      if(!r)return r;
+      const itens=(r.itens||[]).map((it:any,i:number)=>i===idx?{...it,removido:!it.removido}:it);
+      const totalCompra=itens.filter((it:any)=>!it.removido).reduce((s:number,it:any)=>s+(it.valorTotal||0),0);
+      return{...r,itens,totalCompra:Math.round(totalCompra*100)/100};
+    });
+  };
   const confirmarIA=()=>{
     if(!iaResult)return;
     const forn=iaResult.fornecedor;
@@ -4719,7 +4730,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(checkDuplicataCompra(db,forn?.nome||"",iaResult.totalCompra||0,dataIA)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataIA)}. Deseja continuar mesmo assim?`))return;
     }
-    const pend=itensNaoConciliados(iaResult.itens,db);
+    const pend=itensNaoConciliados((iaResult.itens||[]).filter((it:any)=>!it.removido),db);
     if(pend.length){setConciliacao({itens:pend,onConfirm:_execConfirmarIA});return;}
     _execConfirmarIA({});
   };
@@ -5361,14 +5372,20 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           {iaResult.fornecedor.endereco&&<div className="muted">{iaResult.fornecedor.endereco}</div>}
         </div>}
         {(iaResult.itens||[]).map((item,i)=>(
-          <div key={i} style={{padding:"8px 0",borderBottom:"1px solid #0EA5E940"}}>
-            <div style={{display:"flex",justifyContent:"space-between"}}>
-              <span style={{fontWeight:600,fontSize:13}}>{item.nome}</span>
-              <span style={{color:"#1D4ED8",fontWeight:700}}>{fmtMoney(item.valorTotal||0)}</span>
+          <div key={i} style={{padding:"8px 0",borderBottom:"1px solid #0EA5E940",display:"flex",alignItems:"center",gap:8,opacity:item.removido?.45:1}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                <span style={{fontWeight:600,fontSize:13,textDecoration:item.removido?"line-through":"none"}}>{item.nome}</span>
+                <span style={{color:"#1D4ED8",fontWeight:700,textDecoration:item.removido?"line-through":"none",whiteSpace:"nowrap" as const}}>{fmtMoney(item.valorTotal||0)}</span>
+              </div>
+              <div className="muted">{item.removido?"removido":<>{item.quantidade} {item.unidade} •
+                <span className="tag" style={{background:"#DCFCE7",color:"#22C55E",marginLeft:6,fontSize:10}}>{item.categoria}</span></>}
+              </div>
             </div>
-            <div className="muted">{item.quantidade} {item.unidade} •
-              <span className="tag" style={{background:"#DCFCE7",color:"#22C55E",marginLeft:6,fontSize:10}}>{item.categoria}</span>
-            </div>
+            <button onClick={()=>toggleItemIA(i)} title={item.removido?"Desfazer":"Remover item"}
+              style={{width:30,height:30,flexShrink:0,background:"var(--card)",border:`1px solid ${item.removido?"var(--border2)":"#dc262644"}`,borderRadius:8,color:item.removido?"var(--text2)":"#dc2626",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {item.removido?"↩":"✕"}
+            </button>
           </div>
         ))}
         <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",fontWeight:700}}>
