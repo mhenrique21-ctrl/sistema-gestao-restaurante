@@ -1570,7 +1570,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
         }
 
-        const { empresa, data, dinheiro, maquininha, total, porHora } = JSON.parse(body);
+        const { empresa, data, dinheiro, maquininha, delivery, total, porHora } = JSON.parse(body);
         const emp = String(empresa || '').toUpperCase();
         if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
@@ -1603,7 +1603,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           dinheiro: num(dinheiro),
           ifood: 0, ifoodTaxa: 0, ifoodLiq: 0,
           '99food': 0, nfoodTaxa: 0, nfoodLiq: 0,
-          delivery: 0,
+          // Só a Confraria manda isso por enquanto (delivery-backend/gestaoSync.js) —
+          // o PDV Seama não separa delivery, então chega undefined e cai no 0.
+          delivery: num(delivery),
           porHora: porHoraLimpo,
           origem: 'pdv',
           criadoEm: i >= 0 ? (vendas[i].criadoEm || agora) : agora,

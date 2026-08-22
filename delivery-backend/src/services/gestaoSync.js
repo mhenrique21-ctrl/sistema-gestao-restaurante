@@ -28,19 +28,34 @@ const FORA_DOS_BALDES = ['fiado'];
 // Soma o dia inteiro (não o turno) reaproveitando o mesmo cálculo que a tela
 // Caixa e o cupom de fechamento usam — assim o número que sobe pra Gestão é,
 // por construção, o mesmo que o operador vê na hora de fechar.
+//
+// byMethod soma por forma de pagamento ATRAVÉS dos três canais (comanda,
+// balcão e delivery) — ou seja, o delivery pago em dinheiro/cartão já vem
+// misturado dentro de "dinheiro"/"maquininha". O Gestão quer delivery como
+// linha própria (mesma ideia do "Vendas Extras" que já existe pra outros
+// canais), então aqui a gente reclassifica: pega o valor de delivery por
+// forma de pagamento e SUBTRAI de dinheiro/maquininha antes de mandar — o
+// total do dia não muda, só a forma como ele é dividido nas colunas.
 async function totaisDoDia(data) {
   const resumo = await getCashSummary(data);
   const porMetodo = resumo.sales.byMethod || {};
+  const porMetodoDelivery = resumo.sales.channels?.delivery?.byMethod || {};
   const val = (m) => Math.round((parseFloat(porMetodo[m]) || 0) * 100) / 100;
+  const valDelivery = (m) => Math.round((parseFloat(porMetodoDelivery[m]?.total) || 0) * 100) / 100;
 
-  const dinheiro = val('dinheiro');
-  const maquininha = NA_MAQUININHA.reduce((s, m) => s + val(m), 0);
+  const deliveryDinheiro = valDelivery('dinheiro');
+  const deliveryMaquininha = NA_MAQUININHA.reduce((s, m) => s + valDelivery(m), 0);
+  const delivery = Math.round((deliveryDinheiro + deliveryMaquininha) * 100) / 100;
+
+  const dinheiro = Math.round((val('dinheiro') - deliveryDinheiro) * 100) / 100;
+  const maquininha = Math.round((NA_MAQUININHA.reduce((s, m) => s + val(m), 0) - deliveryMaquininha) * 100) / 100;
   const fiado = FORA_DOS_BALDES.reduce((s, m) => s + val(m), 0);
 
   return {
-    dinheiro: Math.round(dinheiro * 100) / 100,
-    maquininha: Math.round(maquininha * 100) / 100,
-    total: Math.round((dinheiro + maquininha + fiado) * 100) / 100,
+    dinheiro,
+    maquininha,
+    delivery,
+    total: Math.round((dinheiro + maquininha + delivery + fiado) * 100) / 100,
   };
 }
 
@@ -73,10 +88,10 @@ async function porHoraDoDia(data) {
 async function enfileirar(data) {
   const t = await totaisDoDia(data);
   await pool.query(
-    `INSERT INTO gestao_sync (sale_date, dinheiro, maquininha, total, sent_at, updated_at)
-     VALUES ($1, ${t.dinheiro}, ${t.maquininha}, ${t.total}, NULL, NOW())
+    `INSERT INTO gestao_sync (sale_date, dinheiro, maquininha, delivery, total, sent_at, updated_at)
+     VALUES ($1, ${t.dinheiro}, ${t.maquininha}, ${t.delivery}, ${t.total}, NULL, NOW())
      ON CONFLICT (sale_date) DO UPDATE
-        SET dinheiro = ${t.dinheiro}, maquininha = ${t.maquininha}, total = ${t.total},
+        SET dinheiro = ${t.dinheiro}, maquininha = ${t.maquininha}, delivery = ${t.delivery}, total = ${t.total},
             sent_at = NULL, updated_at = NOW()
      RETURNING sale_date`,
     [data]
@@ -99,6 +114,7 @@ async function enviarUm(linha) {
         data: linha.sale_date,
         dinheiro: parseFloat(linha.dinheiro),
         maquininha: parseFloat(linha.maquininha),
+        delivery: parseFloat(linha.delivery) || 0,
         total: parseFloat(linha.total),
         porHora,
       }),
@@ -132,7 +148,7 @@ async function enviarPendentes() {
     return { enviados: 0, falhas: 0, motivo: 'SEAMA_SERVICE_SECRET não configurado' };
   }
   const r = await pool.query(
-    `SELECT sale_date, dinheiro, maquininha, total FROM gestao_sync
+    `SELECT sale_date, dinheiro, maquininha, delivery, total FROM gestao_sync
       WHERE sent_at IS NULL ORDER BY sale_date`
   );
   const out = [];

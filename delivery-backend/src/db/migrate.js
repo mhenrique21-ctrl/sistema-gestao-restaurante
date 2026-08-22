@@ -284,6 +284,12 @@ CREATE TABLE IF NOT EXISTS whatsapp_campaigns (
 );
 
 CREATE INDEX IF NOT EXISTS idx_whatsapp_campaigns_created ON whatsapp_campaigns(created_at DESC);
+
+-- ── gestao_sync: coluna de delivery, adicionada depois que o Gestão passou a
+-- aceitar o canal delivery separado de dinheiro/maquininha (ver gestaoSync.js).
+-- A tabela em si não é criada aqui de propósito: já existe em produção fora
+-- deste arquivo — IF EXISTS deixa este ALTER seguro rodar em qualquer ambiente.
+ALTER TABLE IF EXISTS gestao_sync ADD COLUMN IF NOT EXISTS delivery NUMERIC(10,2) NOT NULL DEFAULT 0;
 `;
 
 async function migrate() {

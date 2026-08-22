@@ -2538,7 +2538,17 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   const nfoodTaxaPct=parseFloat(form.nfoodTaxa)||0;
   const ifoodLiq=ifoodBruto*(1-ifoodTaxaPct/100);
   const nfoodLiq=nfoodBruto*(1-nfoodTaxaPct/100);
-  const outros=["maquininha","dinheiro","delivery"].reduce((s,m)=>s+parseMoney(form[m]||0),0);
+
+  // Delivery sincronizado automaticamente (hoje só a Confraria manda isso, via
+  // delivery-backend/gestaoSync.js → /api/venda-pdv) — enquanto não editado à
+  // mão, o valor do dia vem direto do registro origem:"pdv", não do formulário.
+  const [deliveryManual,setDeliveryManual]=useState(false);
+  useEffect(()=>{setDeliveryManual(false);},[form.data]);
+  const vendaSincronizada=!editId?(db.vendas||[]).find((v:any)=>v.data===form.data&&v.origem==="pdv"):null;
+  const deliverySincronizado=!!vendaSincronizada&&!deliveryManual&&(vendaSincronizada.delivery||0)>0;
+  const deliveryValor=deliverySincronizado?(vendaSincronizada.delivery||0):parseMoney(form.delivery||0);
+
+  const outros=["maquininha","dinheiro"].reduce((s,m)=>s+parseMoney(form[m]||0),0)+deliveryValor;
   const total=outros+ifoodLiq+nfoodLiq;
 
   const save=()=>{
@@ -2548,7 +2558,7 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
       dinheiro:parseMoney(form.dinheiro||0),
       ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
       "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
-      delivery:parseMoney(form.delivery||0)};
+      delivery:deliveryValor};
     if(editId){setDbAndSave(d=>({...d,vendas:(d.vendas||[]).map(v=>v.id===editId?{...reg,criadoEm:v.criadoEm||now,atualizadoEm:now}:v)}));setEditId(null);}
     else{setDbAndSave(d=>({...d,vendas:[{...reg,criadoEm:now},...(d.vendas||[])]}));}
     setForm(emptyForm());
@@ -2787,7 +2797,17 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       </div>}
       {aj.canalVendasExtras&&<div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legVendasExtras}</label>
-        <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
+        {deliverySincronizado?<>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"7px 10px",marginBottom:6,fontSize:11,color:"#15803D",fontWeight:700}}>
+            🔄 Sincronizado automaticamente do delivery
+            <button onClick={()=>{setDeliveryManual(true);setForm(f=>({...f,delivery:String((vendaSincronizada.delivery||0).toFixed(2)).replace(".",",")}));}} style={{marginLeft:"auto",background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"underline",padding:0}}>editar</button>
+          </div>
+          <input readOnly value={fmtMoney(vendaSincronizada.delivery||0)} className="inp" style={{color:"#15803D",fontWeight:700}}/>
+        </>:<>
+          <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
+          {deliveryManual&&vendaSincronizada&&(vendaSincronizada.delivery||0)>0&&
+            <button onClick={()=>setDeliveryManual(false)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"underline",padding:0,marginTop:4}}>🔄 usar valor sincronizado</button>}
+        </>}
       </div>}
       <hr className="divider"/>
       <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 10px",fontWeight:700,fontSize:16}}>
