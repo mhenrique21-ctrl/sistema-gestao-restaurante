@@ -2922,7 +2922,8 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     const data=dataVenda;
     const numero=Math.max(0,...(db.recibosVenda||[]).map((r:any)=>r.numero||0))+1;
     const recibo={id:uid(),numero,clienteNome:clienteNome.trim(),clienteTelefone:clienteTelefone.trim(),
-      itens:itensVenda.map(({id,produtoId,...it})=>it),total:totalVenda,data,criadoEm:now,atualizadoEm:now};
+      itens:itensVenda.map(({id,produtoId,...it})=>it),total:totalVenda,data,criadoEm:now,atualizadoEm:now,
+      lancadoEmVendas:true,valorLancado:totalVenda};
     setDbAndSave((d:any)=>{
       // Mesmo lançamento manual de Vendas (data/maquininha/dinheiro/.../delivery) —
       // só soma no bucket "delivery" do dia, igual o Recibo de Entrega soma em
@@ -3111,8 +3112,60 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     setTipoEdicao(null);
   };
 
+  // Edita o recibo e, opcionalmente, ajusta Vendas Extras junto — subtrai o
+  // valor antigo (se já tinha sido lançado) e soma o novo, tudo num único
+  // update, pra nunca ficar um valor órfão nem duplicar a soma do dia.
+  const salvarComVendas=(atualizacoesRecibo:any,novoValorVendas:number|null)=>{
+    if(!reciboEditando)return;
+    const now=new Date().toISOString();
+    setDbAndSave?.((d:any)=>{
+      const recibosVenda=[...(d.recibosVenda||[])];
+      const idx=recibosVenda.findIndex((r:any)=>r.id===reciboEditando.id);
+      if(idx<0)return d;
+      const antigo=recibosVenda[idx];
+      let vendas=[...(d.vendas||[])];
+      let extra:any={};
+      if(novoValorVendas!=null){
+        const dataAlvo=atualizacoesRecibo.data||antigo.data;
+        const valorAntigo=antigo.lancadoEmVendas?(antigo.valorLancado||0):0;
+        if(valorAntigo>0){
+          const iOld=vendas.findIndex((v:any)=>v.data===antigo.data);
+          if(iOld>=0)vendas[iOld]={...vendas[iOld],delivery:Math.max(0,(vendas[iOld].delivery||0)-valorAntigo),total:Math.max(0,(vendas[iOld].total||0)-valorAntigo),atualizadoEm:now};
+        }
+        const iNew=vendas.findIndex((v:any)=>v.data===dataAlvo);
+        if(iNew>=0){
+          vendas[iNew]={...vendas[iNew],delivery:(vendas[iNew].delivery||0)+novoValorVendas,total:(vendas[iNew].total||0)+novoValorVendas,atualizadoEm:now};
+        }else{
+          vendas.unshift({id:uid(),data:dataAlvo,total:novoValorVendas,maquininha:0,dinheiro:0,ifood:0,ifoodTaxa:0,ifoodLiq:0,"99food":0,nfoodTaxa:0,nfoodLiq:0,delivery:novoValorVendas,origem:"recibo_venda",criadoEm:now,atualizadoEm:now});
+        }
+        extra={lancadoEmVendas:true,valorLancado:novoValorVendas};
+      }
+      recibosVenda[idx]={...antigo,...atualizacoesRecibo,...extra,atualizadoEm:now};
+      return{...d,recibosVenda,vendas};
+    });
+    setReciboEditando(null);
+    setTipoEdicao(null);
+  };
+
+  const excluirRecibo=(r:any)=>{
+    const jaLancado=r.lancadoEmVendas&&r.valorLancado>0;
+    const msg=jaLancado
+      ?`Excluir recibo #${String(r.numero).padStart(4,"0")}?\n\nEste recibo já está somado em Vendas Extras de ${fmtDate(r.data)}. Excluir também vai subtrair ${fmtMoney(r.valorLancado)} desse dia.`
+      :`Excluir recibo #${String(r.numero).padStart(4,"0")}?`;
+    if(!confirm(msg))return;
+    const now=new Date().toISOString();
+    setDbAndSave?.((d:any)=>{
+      let vendas=[...(d.vendas||[])];
+      if(jaLancado){
+        const i=vendas.findIndex((v:any)=>v.data===r.data);
+        if(i>=0)vendas[i]={...vendas[i],delivery:Math.max(0,(vendas[i].delivery||0)-r.valorLancado),total:Math.max(0,(vendas[i].total||0)-r.valorLancado),atualizadoEm:now};
+      }
+      return{...d,recibosVenda:(d.recibosVenda||[]).filter((x:any)=>x.id!==r.id),vendas};
+    });
+  };
+
   if(reciboEditando){
-    return <PainelEdicaoRecibo recibo={reciboEditando} tipoEdicao={tipoEdicao} setTipoEdicao={setTipoEdicao} onSalvar={salvarEdicaoRecibo} onFechar={()=>setReciboEditando(null)}/>;
+    return <PainelEdicaoRecibo recibo={reciboEditando} tipoEdicao={tipoEdicao} setTipoEdicao={setTipoEdicao} onSalvar={salvarEdicaoRecibo} onSalvarComVendas={salvarComVendas} onFechar={()=>setReciboEditando(null)}/>;
   }
 
   const recibos=[...(db.recibosVenda||[])].sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
@@ -3132,16 +3185,20 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
         </div>
         <div style={{fontSize:16,fontWeight:800,color:"#15803D"}}>{fmtMoney(r.total)}</div>
       </div>
-      <div style={{display:"flex",gap:6,marginTop:10}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E55"}:{background:"#FEF3C7",color:"#B45309",border:"1px solid #FDE68A"})}}>
+        {r.lancadoEmVendas&&r.valorLancado>0?"✓ Em Vendas Extras":"⚠️ Não lançado"}
+      </span>
+      <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap" as const}}>
         <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r,cfg))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>📲 WhatsApp</button>
         <button onClick={()=>imprimirReciboVenda(r,cfg)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🖨️ PDF</button>
         <button onClick={()=>{setReciboEditando(r);setTipoEdicao(null);}} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>✏️ Editar</button>
+        <button onClick={()=>excluirRecibo(r)} style={{background:"none",border:"1px solid #dc262644",borderRadius:5,color:"#dc2626",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🗑️ Excluir</button>
       </div>
     </div>)}
   </div>;
 }
 
-function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onFechar}:{recibo:any,tipoEdicao:any,setTipoEdicao:any,onSalvar:any,onFechar:()=>void}){
+function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarComVendas,onFechar}:{recibo:any,tipoEdicao:any,setTipoEdicao:any,onSalvar:any,onSalvarComVendas:(atualizacoes:any,novoValorVendas:number|null)=>void,onFechar:()=>void}){
   const [nomeEdit,setNomeEdit]=useState(recibo.clienteNome||"");
   const [telEdit,setTelEdit]=useState(recibo.clienteTelefone||"");
   const [totalEdit,setTotalEdit]=useState(String(recibo.total||0));
@@ -3169,6 +3226,10 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onFechar}:
           📅 Editar Data
           <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>{dataEdit}</div>
         </button>
+        <button onClick={()=>setTipoEdicao("vendasExtras")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
+          💵 Vendas Extras
+          <div style={{fontSize:11,color:recibo.lancadoEmVendas&&recibo.valorLancado>0?"#15803D":"#B45309",marginTop:4,fontWeight:700}}>{recibo.lancadoEmVendas&&recibo.valorLancado>0?`✓ Já lançado · R$ ${(recibo.valorLancado||0).toFixed(2).replace(".",",")}`:"⚠️ Ainda não lançado"}</div>
+        </button>
         <button onClick={()=>setTipoEdicao("devolver")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600,color:"#dc2626"}}>
           ↩️ Devolver/Cancelar
           <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>Marcar como devolvido</div>
@@ -3193,20 +3254,23 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onFechar}:
   }
 
   if(tipoEdicao==="itens"){
+    return <EditorItensRecibo recibo={recibo} onSalvarComVendas={onSalvarComVendas} onVoltar={()=>setTipoEdicao(null)}/>;
+  }
+
+  if(tipoEdicao==="vendasExtras"){
+    const lancado=recibo.lancadoEmVendas&&recibo.valorLancado>0;
     return <div>
-      <BackBar label="Editar Itens" onClick={()=>setTipoEdicao(null)}/>
-      <div style={{fontSize:13,color:"var(--text2)",marginBottom:16}}>Itens do recibo:</div>
-      <div style={{marginBottom:16}}>
-        {(recibo.itens||[]).map((item:any,idx:number)=>(
-          <div key={idx} style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,padding:"10px",marginBottom:8,fontSize:12}}>
-            <div><strong>{item.nome}</strong> × {item.quantidade}</div>
-            <div style={{color:"var(--text2)",marginTop:2}}>R$ {(item.subtotal||0).toFixed(2).replace(".",",")}</div>
+      <BackBar label="Vendas Extras" onClick={()=>setTipoEdicao(null)}/>
+      {lancado
+        ? <div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:14,marginBottom:16}}>
+            <div style={{fontWeight:800,fontSize:13,color:"#15803D"}}>✓ Lançado em Vendas Extras</div>
+            <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>{fmtMoney(recibo.valorLancado)} somado em {fmtDate(recibo.data)}. Editou os itens? Use "Editar Itens" pra reenviar o valor certo.</div>
           </div>
-        ))}
-      </div>
-      <div style={{background:"var(--primary)",color:"white",padding:"10px",borderRadius:6,textAlign:"center",fontSize:13,fontWeight:700}}>
-        Adicionar/remover itens via Emitir Recibo
-      </div>
+        : <div style={{background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:10,padding:14,marginBottom:16}}>
+            <div style={{fontWeight:800,fontSize:13,color:"#B45309"}}>⚠️ Ainda não lançado em Vendas Extras</div>
+            <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>Recibos não entram automaticamente aqui — use o botão abaixo pra somar {fmtMoney(recibo.total)} no dia {fmtDate(recibo.data)}.</div>
+          </div>}
+      <button disabled={lancado} onClick={()=>onSalvarComVendas({},recibo.total)} style={{width:"100%",background:lancado?"var(--border2)":"var(--btnPrimary)",color:lancado?"var(--text2)":"white",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:lancado?"default":"pointer",fontSize:14}}>{lancado?"✓ Já lançado":"💵 Lançar em Vendas Extras"}</button>
     </div>;
   }
 
@@ -3221,11 +3285,11 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onFechar}:
       <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,padding:"12px",marginBottom:16,fontSize:12}}>
         <div style={{display:"flex",justifyContent:"space-between"}}>
           <span>Total original:</span>
-          <strong>R$ {recibo.total.toFixed(2).replace(".",",")}</strong>
+          <strong>R$ {(recibo.total||0).toFixed(2).replace(".",",")}</strong>
         </div>
         <div style={{display:"flex",justifyContent:"space-between",marginTop:6,color:"#dc2626"}}>
           <span>Desconto:</span>
-          <strong>R$ {Math.max(0,recibo.total-desconto).toFixed(2).replace(".",",")}</strong>
+          <strong>R$ {Math.max(0,(recibo.total||0)-desconto).toFixed(2).replace(".",",")}</strong>
         </div>
       </div>
       <button onClick={()=>{onSalvar({total:Math.round(parseFloat(totalEdit)*100)/100});}} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
@@ -3259,6 +3323,71 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onFechar}:
   }
 
   return null;
+}
+
+function EditorItensRecibo({recibo,onSalvarComVendas,onVoltar}:{recibo:any,onSalvarComVendas:(atualizacoes:any,novoValorVendas:number|null)=>void,onVoltar:()=>void}){
+  const [itens,setItens]=useState<any[]>(()=>(recibo.itens||[]).map((it:any)=>({...it})));
+  const [novoItem,setNovoItem]=useState({nome:"",quantidade:"",precoUnit:""});
+
+  const atualizarItem=(idx:number,campo:"nome"|"quantidade"|"precoUnit",val:string)=>{
+    setItens(prev=>prev.map((it,i)=>{
+      if(i!==idx)return it;
+      if(campo==="nome")return{...it,nome:val};
+      const num=parseFloat(val.replace(",","."))||0;
+      const next={...it,[campo]:num};
+      next.subtotal=Math.round((next.quantidade||0)*(next.precoUnit||0)*100)/100;
+      return next;
+    }));
+  };
+  const removerItem=(idx:number)=>setItens(prev=>prev.filter((_,i)=>i!==idx));
+  const adicionarItem=()=>{
+    const nome=novoItem.nome.trim();
+    if(!nome)return alert("Informe o nome do produto.");
+    const quantidade=parseFloat(novoItem.quantidade.replace(",","."))||0;
+    if(quantidade<=0)return alert("Informe a quantidade.");
+    const precoUnit=parseFloat(novoItem.precoUnit.replace(",","."))||0;
+    setItens(prev=>[...prev,{nome,quantidade,unidade:"un",precoUnit,subtotal:Math.round(quantidade*precoUnit*100)/100}]);
+    setNovoItem({nome:"",quantidade:"",precoUnit:""});
+  };
+
+  const novoTotal=Math.round(itens.reduce((s,it)=>s+(it.subtotal||0),0)*100)/100;
+  const jaLancado=recibo.lancadoEmVendas&&recibo.valorLancado>0;
+
+  return <div>
+    <BackBar label="Editar Itens" onClick={onVoltar}/>
+    {itens.map((item:any,idx:number)=>(
+      <div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 52px 74px 26px",gap:6,alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+        <input className="inp" value={item.nome} onChange={e=>atualizarItem(idx,"nome",e.target.value)} style={{marginBottom:0,padding:"6px 7px",fontSize:12}}/>
+        <input className="inp" value={item.quantidade} onChange={e=>atualizarItem(idx,"quantidade",e.target.value)} style={{marginBottom:0,padding:"6px 7px",fontSize:12,textAlign:"center" as const}}/>
+        <input className="inp" value={item.precoUnit} onChange={e=>atualizarItem(idx,"precoUnit",e.target.value)} style={{marginBottom:0,padding:"6px 7px",fontSize:12,textAlign:"right" as const}}/>
+        <button onClick={()=>removerItem(idx)} style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:15}}>✕</button>
+      </div>
+    ))}
+    {!itens.length&&<div style={{fontSize:12,color:"var(--text2)",textAlign:"center" as const,padding:"12px 0"}}>Nenhum item — adicione abaixo.</div>}
+    <div style={{display:"flex",gap:6,marginTop:12}}>
+      <input className="inp" placeholder="Produto" value={novoItem.nome} onChange={e=>setNovoItem(f=>({...f,nome:e.target.value}))} style={{marginBottom:0,flex:2}}/>
+      <input className="inp" placeholder="Qtd" value={novoItem.quantidade} onChange={e=>setNovoItem(f=>({...f,quantidade:e.target.value}))} style={{marginBottom:0,flex:1}}/>
+      <input className="inp" placeholder="Preço un." value={novoItem.precoUnit} onChange={e=>setNovoItem(f=>({...f,precoUnit:e.target.value}))} style={{marginBottom:0,flex:1}}/>
+      <button onClick={adicionarItem} style={{background:"var(--btnPrimary)",color:"#fff",border:"none",borderRadius:6,padding:"0 16px",fontWeight:700,cursor:"pointer",fontSize:15}}>+</button>
+    </div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",borderTop:"2px solid var(--text)",paddingTop:10,marginTop:16}}>
+      <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>Novo total</span>
+      <span style={{fontSize:20,fontWeight:800}}>{fmtMoney(novoTotal)}</span>
+    </div>
+    <div style={{background:"#7C3AED14",border:"1px solid #7C3AED",borderRadius:10,padding:14,marginTop:14}}>
+      <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:8}}>🔄 Reenviar para Vendas Extras?</div>
+      {jaLancado&&<div style={{fontSize:12,display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
+        <span style={{color:"var(--text2)"}}>Valor antigo (já lançado)</span>
+        <strong style={{textDecoration:"line-through",color:"var(--text2)",fontWeight:700}}>{fmtMoney(recibo.valorLancado)}</strong>
+      </div>}
+      <div style={{fontSize:12,display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
+        <span style={{color:"var(--text2)"}}>{jaLancado?"Novo valor":"Valor a lançar"}</span>
+        <strong style={{color:"#15803D",fontSize:14}}>{fmtMoney(novoTotal)}</strong>
+      </div>
+      <button disabled={!itens.length} onClick={()=>onSalvarComVendas({itens,total:novoTotal},novoTotal)} style={{width:"100%",background:!itens.length?"var(--border2)":"var(--btnPrimary)",color:!itens.length?"var(--text2)":"#fff",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:!itens.length?"default":"pointer",fontSize:14,marginTop:10}}>{jaLancado?"Salvar e substituir em Vendas Extras":"Salvar e lançar em Vendas Extras"}</button>
+    </div>
+    <button onClick={()=>onSalvarComVendas({itens,total:novoTotal},null)} style={{width:"100%",background:"none",border:"1px solid var(--border2)",borderRadius:6,padding:"10px",color:"var(--text2)",cursor:"pointer",fontSize:12,fontWeight:600,marginTop:10}}>Salvar sem mexer em Vendas Extras</button>
+  </div>;
 }
 
 function RecibosVendaRelatorioPanel({db,onVoltar}:{db:any,onVoltar:()=>void}){
