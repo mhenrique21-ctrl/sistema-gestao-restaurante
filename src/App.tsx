@@ -3193,6 +3193,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
       ?`Excluir recibo #${String(r.numero).padStart(4,"0")}?\n\nEste recibo já está somado em Vendas Extras de ${fmtDate(r.data)}. Excluir também vai subtrair ${fmtMoney(r.valorLancado)} desse dia.`
       :`Excluir recibo #${String(r.numero).padStart(4,"0")}?`;
     if(!confirm(msg))return;
+    _listaDeletados.add(r.id);
     const now=new Date().toISOString();
     setDbAndSave?.((d:any)=>{
       let vendas=[...(d.vendas||[])];
