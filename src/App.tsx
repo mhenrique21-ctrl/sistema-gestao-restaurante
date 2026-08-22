@@ -275,7 +275,12 @@ const mkDb = () => ({
 const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
 
 // ===================== UTILS =====================
-const fmtMoney  = (v) => (parseFloat(v)||0).toLocaleString("pt-BR",{timeZone:TZ,style:"currency",currency:"BRL"});
+// Modo discreto: mascara valores em R$ na tela inteira (útil com gente por
+// perto do caixa). É uma preferência de dispositivo, não do negócio — fica
+// em localStorage, não em db.config — por isso o flag módulo-level, mesmo
+// padrão de _impressaoCfg, atualizado a cada render do App().
+let _modoDiscreto=false;
+const fmtMoney  = (v) => _modoDiscreto?"R$ ••••":(parseFloat(v)||0).toLocaleString("pt-BR",{timeZone:TZ,style:"currency",currency:"BRL"});
 const fmtPct    = (v) => `${(parseFloat(v)||0).toFixed(1)}%`;
 const TZ        = "America/Sao_Paulo";
 const today     = () => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(new Date());
@@ -692,6 +697,32 @@ const getDashboardCfg=(db:any)=>{
 // de antes, e essas variáveis são injetadas no .app-root a partir daqui.
 const CORES_BOTOES_DEFAULT={corPrimaria:"#6366F1",corPerigo:"#EF4444"};
 const getCoresBotoes=(db:any)=>({...CORES_BOTOES_DEFAULT,...(db?.config?.coresBotoes||{})});
+
+// Fonte/tamanho/toggles visuais do app inteiro — mesmo padrão de coresBotoes:
+// gravado em db.config.aparenciaApp, aplicado como atributos/CSS vars no
+// .app-root (ver estilo em App()). Cada fonte tem seu @import já embutido no
+// <style> do app-root, então trocar é instantâneo, sem precisar injetar <link>.
+const FONTES_APP:{[k:string]:{label:string,stack:string}}={
+  padrao:{label:"Padrão",stack:"'DM Sans','Segoe UI',sans-serif"},
+  moderna:{label:"Moderna",stack:"'Inter','Segoe UI',sans-serif"},
+  arredondada:{label:"Arredondada",stack:"'Quicksand','Segoe UI',sans-serif"},
+  tecnica:{label:"Técnica",stack:"'Space Grotesk','Segoe UI',sans-serif"},
+};
+const TAMANHOS_LETRA:{[k:string]:{label:string,zoom:number}}={
+  pequena:{label:"Pequena",zoom:.9},
+  padrao:{label:"Padrão",zoom:1},
+  grande:{label:"Grande",zoom:1.1},
+  extra:{label:"Extra grande",zoom:1.25},
+};
+const APARENCIA_APP_DEFAULT={
+  fonte:"padrao",
+  tamanhoLetra:"padrao",
+  bordasArredondadas:true,
+  animacoesReduzidas:false,
+  numerosTabulares:false,
+  altoContraste:false,
+};
+const getAparenciaApp=(db:any)=>({...APARENCIA_APP_DEFAULT,...(db?.config?.aparenciaApp||{})});
 
 // ===================== PDF =====================
 function gerarRelatorioHTML(titulo,empresa,conteudo) {
@@ -1217,6 +1248,8 @@ export default function App() {
   const [expandedMenu,setExpandedMenu]=useState<string|null>(null);
   const [empresa,setEmpresa] = useState(()=>lerLoginSalvo()?.empresa||"CONFRARIA");
   const [theme,setTheme]   = useState<"dark"|"light">(()=>(localStorage.getItem("app_theme")||"light") as "dark"|"light");
+  const [modoDiscreto,setModoDiscreto]=useState<boolean>(()=>localStorage.getItem("app_modo_discreto")==="1");
+  const toggleModoDiscreto=()=>{const v=!modoDiscreto;setModoDiscreto(v);localStorage.setItem("app_modo_discreto",v?"1":"0");};
   const [menuLayout,setMenuLayout]=useState<"bottom"|"top"|"fab">(()=>(localStorage.getItem("app_menu_layout")||"bottom") as "bottom"|"top"|"fab");
   const [menuPickerOpen,setMenuPickerOpen]=useState(false);
   const [fabOpen,setFabOpen]=useState(false);
@@ -1375,7 +1408,9 @@ export default function App() {
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
   _impressaoCfg=getImpressaoCfg(db);
+  _modoDiscreto=modoDiscreto;
   const coresBotoes=getCoresBotoes(db);
+  const aparenciaApp=getAparenciaApp(db);
 
   // Busca o estado mais recente do servidor e funde com o local (mesma lógica do poll,
   // incluindo o filtro de itens excluídos/arquivados) ANTES de sobrescrever o servidor.
@@ -1530,11 +1565,16 @@ export default function App() {
   return (
     <>
       <ConfigStyleInjector config={config}/>
-      <div className="app-root" data-theme={theme} style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo}}>
+      <div className="app-root" data-theme={theme} data-rounded={aparenciaApp.bordasArredondadas?"on":"off"} data-motion={aparenciaApp.animacoesReduzidas?"reduced":"normal"} data-tabular={aparenciaApp.numerosTabulares?"on":"off"} data-contraste={aparenciaApp.altoContraste?"alto":"normal"} style={{fontFamily:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,zoom:String((TAMANHOS_LETRA[aparenciaApp.tamanhoLetra]||TAMANHOS_LETRA.padrao).zoom),background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&family=Inter:wght@400;500;600;700;800&family=Quicksand:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
         .app-root{--btnPrimary:#6366F1;--btnDanger:#EF4444;--bg:#F7F8FC;--bg2:#1E293B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F1F5F9;--sidebarHover:#334155;--border:#E6EAF2;--border2:#D5DBE8;--text:#1E2330;--text2:#70798F;--text3:#9AA3B5;--acc:#5B5CEB;--accHover:#4A4BD4;--accLight:#EEF2FF;--success:#16C172;--successBg:#DCFCE7;--successText:#15803D;--danger:#F04438;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F4B400;--warningBg:#FEF3C7;--warningText:#B45309;--info:#3B82F6;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6;--categoryBg:#F3E8FF;--categoryText:#7C3AED;--pink:#EC4899;--radiusCard:18px;--radiusControl:14px;--shadowCard:0 8px 24px rgba(18,38,63,0.08)}
         .app-root[data-theme="dark"]{--bg:#0D1117;--bg2:#161B22;--bg3:#161B22;--bg4:#1C2128;--bg5:#161B22;--sidebarHover:#22282F;--border:#2D333B;--border2:#3A414C;--text:#FFFFFF;--text2:#9CA3AF;--text3:#6B7280;--acc:#F6C453;--accHover:#E7B336;--accLight:rgba(246,196,83,0.14);--success:#22C55E;--successBg:#0F2E1C;--successText:#4ADE80;--danger:#FF5A5F;--dangerBg:#3A1518;--dangerText:#FF8A8F;--warning:#F6C453;--warningBg:#3A2E12;--warningText:#F6C453;--info:#3B82F6;--infoBg:#122A47;--infoText:#7DB0FF;--category:#A78BFA;--categoryBg:#2A1F47;--categoryText:#C4B5FD;--pink:#F472B6;--shadowCard:0 12px 30px rgba(0,0,0,0.45)}
+        .app-root[data-contraste="alto"]{--border:#8890A5;--border2:#7B8494;--text2:#3A4152}
+        .app-root[data-theme="dark"][data-contraste="alto"]{--border:#565E6E;--border2:#7B8494;--text2:#C7CCDA}
+        .app-root[data-rounded="off"] *{border-radius:0!important}
+        .app-root[data-motion="reduced"] *{transition:none!important;animation:none!important}
+        .app-root[data-tabular="on"] *{font-variant-numeric:tabular-nums}
         *{box-sizing:border-box;margin:0;padding:0} input,select,textarea{font-family:inherit}
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
         .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:10px;transition:all .15s}
@@ -1741,7 +1781,7 @@ export default function App() {
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder} setConfigPanelOpen={setConfigPanelOpen}/>}
+              {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder} setConfigPanelOpen={setConfigPanelOpen} modoDiscreto={modoDiscreto} toggleModoDiscreto={toggleModoDiscreto}/>}
             </>
         }
       </div>
@@ -12226,8 +12266,8 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
 }
 
 // ===================== CONFIGURAÇÕES =====================
-function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder,setConfigPanelOpen}:
-  {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void,setConfigPanelOpen?:(v:boolean)=>void}){
+function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder,setConfigPanelOpen,modoDiscreto,toggleModoDiscreto}:
+  {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void,setConfigPanelOpen?:(v:boolean)=>void,modoDiscreto:boolean,toggleModoDiscreto:()=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
   const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
@@ -12262,6 +12302,8 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   // ---- Cores dos Botões (app inteiro) ----
   const coresBotoes=getCoresBotoes(db);
   const setCoresBotoes=(key:string,val:string)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),coresBotoes:{...getCoresBotoes(d),[key]:val}}}));
+  const aparenciaApp=getAparenciaApp(db);
+  const setAparenciaApp=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),aparenciaApp:{...getAparenciaApp(d),[key]:val}}}));
   const moveSecao=(id:string,dir:-1|1)=>setDashCfg(c=>{
     const arr=[...c.secoes];const i=arr.indexOf(id);const j=i+dir;
     if(i<0||j<0||j>=arr.length)return c;
@@ -12451,6 +12493,54 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           {menuLayout==="bottom"&&"▼ Inferior — barra de navegação fixa na base da tela (padrão mobile)"}
           {menuLayout==="top"&&"▲ Superior — abas exibidas logo abaixo do cabeçalho"}
           {menuLayout==="fab"&&"⊕ Flutuante — botão redondo no canto abre o menu completo"}
+        </div>
+
+        <div style={{borderTop:"1px solid var(--border)",marginTop:14,paddingTop:14}}>
+          <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>🔤 Fonte do App</div>
+          <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap" as const}}>
+            {Object.entries(FONTES_APP).map(([k,f])=>(
+              <button key={k} onClick={()=>setAparenciaApp("fonte",k)} className="btn"
+                style={{flex:"1 1 100px",background:aparenciaApp.fonte===k?"#6366F122":"var(--bg4)",border:aparenciaApp.fonte===k?"2px solid var(--btnPrimary)":"1px solid var(--border)",color:aparenciaApp.fonte===k?"var(--btnPrimary)":"var(--text2)",padding:"10px 6px",fontSize:12,fontWeight:aparenciaApp.fonte===k?700:400,fontFamily:f.stack}}>{f.label}</button>
+            ))}
+          </div>
+
+          <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>🔠 Tamanho da Letra</div>
+          <div style={{display:"flex",gap:6,marginBottom:14}}>
+            {Object.entries(TAMANHOS_LETRA).map(([k,t])=>(
+              <button key={k} onClick={()=>setAparenciaApp("tamanhoLetra",k)} className="btn"
+                style={{flex:1,background:aparenciaApp.tamanhoLetra===k?"#6366F122":"var(--bg4)",border:aparenciaApp.tamanhoLetra===k?"2px solid var(--btnPrimary)":"1px solid var(--border)",color:aparenciaApp.tamanhoLetra===k?"var(--btnPrimary)":"var(--text2)",padding:"10px 4px",fontSize:11,fontWeight:aparenciaApp.tamanhoLetra===k?700:400}}>{t.label}</button>
+            ))}
+          </div>
+
+          <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>🎨 Cor de Destaque</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
+            <input type="color" value={coresBotoes.corPrimaria} onChange={e=>setCoresBotoes("corPrimaria",e.target.value)} style={{width:36,height:32,border:"1px solid var(--border)",borderRadius:6,background:"none",cursor:"pointer",padding:0}}/>
+            <input value={coresBotoes.corPrimaria} onChange={e=>setCoresBotoes("corPrimaria",e.target.value)} className="inp" style={{width:100,marginBottom:0,fontFamily:"monospace",fontSize:12}}/>
+            <span style={{fontSize:11,color:"var(--text2)"}}>abas ativas, botões de ação, em qualquer tela</span>
+          </div>
+
+          <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>⚙️ Ajustes</div>
+          {([
+            ["bordasArredondadas","Cantos arredondados","Desativado deixa bordas retas em vez de arredondadas"],
+            ["animacoesReduzidas","Reduzir animações","Desliga transições e animações da interface"],
+            ["numerosTabulares","Números alinhados","Dígitos com largura fixa em tabelas e valores"],
+            ["altoContraste","Alto contraste","Bordas e textos secundários mais fortes"],
+          ] as [string,string,string][]).map(([key,label,desc])=>(
+            <label key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
+              <input type="checkbox" checked={!!(aparenciaApp as any)[key]} onChange={e=>setAparenciaApp(key,e.target.checked)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,fontWeight:600}}>{label}</div>
+                <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>{desc}</div>
+              </div>
+            </label>
+          ))}
+          <label style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",cursor:"pointer"}}>
+            <input type="checkbox" checked={modoDiscreto} onChange={toggleModoDiscreto} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:600}}>Modo discreto</div>
+              <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Mascara valores em R$ na tela — só neste dispositivo, não sincroniza com os outros</div>
+            </div>
+          </label>
         </div>
       </div>
 
@@ -13049,22 +13139,15 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         </div>
 
         <div className="card" style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:4}}>🎨 Cores dos Botões (app inteiro)</div>
-          <div className="muted" style={{fontSize:11,marginBottom:12}}>Diferente da aparência acima (só o Dashboard): estas duas valem pra todo o sistema — abas ativas, botões de ação e o botão "Sair", em qualquer tela.</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 18px"}}>
-            {aparField("Cor principal","botões de ação, abas ativas",
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="color" value={coresBotoes.corPrimaria} onChange={e=>setCoresBotoes("corPrimaria",e.target.value)} style={{width:36,height:32,border:"1px solid var(--border)",borderRadius:6,background:"none",cursor:"pointer",padding:0}}/>
-                <input value={coresBotoes.corPrimaria} onChange={e=>setCoresBotoes("corPrimaria",e.target.value)} className="inp" style={{width:100,marginBottom:0,fontFamily:"monospace",fontSize:12}}/>
-              </div>)}
-            {aparField("Cor de perigo","botão Sair, excluir, apagar",
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="color" value={coresBotoes.corPerigo} onChange={e=>setCoresBotoes("corPerigo",e.target.value)} style={{width:36,height:32,border:"1px solid var(--border)",borderRadius:6,background:"none",cursor:"pointer",padding:0}}/>
-                <input value={coresBotoes.corPerigo} onChange={e=>setCoresBotoes("corPerigo",e.target.value)} className="inp" style={{width:100,marginBottom:0,fontFamily:"monospace",fontSize:12}}/>
-              </div>)}
-          </div>
-          <button onClick={()=>{setCoresBotoes("corPrimaria",CORES_BOTOES_DEFAULT.corPrimaria);setCoresBotoes("corPerigo",CORES_BOTOES_DEFAULT.corPerigo);}} className="btn"
-            style={{background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:11,padding:"8px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:4}}>🎨 Cor de Perigo (app inteiro)</div>
+          <div className="muted" style={{fontSize:11,marginBottom:12}}>Vale pra todo o sistema, em qualquer tela — botão "Sair", excluir, apagar. (A cor principal/de destaque mudou pra Configurações → Empresa → Aparência.)</div>
+          {aparField("Cor de perigo","botão Sair, excluir, apagar",
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <input type="color" value={coresBotoes.corPerigo} onChange={e=>setCoresBotoes("corPerigo",e.target.value)} style={{width:36,height:32,border:"1px solid var(--border)",borderRadius:6,background:"none",cursor:"pointer",padding:0}}/>
+              <input value={coresBotoes.corPerigo} onChange={e=>setCoresBotoes("corPerigo",e.target.value)} className="inp" style={{width:100,marginBottom:0,fontFamily:"monospace",fontSize:12}}/>
+            </div>)}
+          <button onClick={()=>setCoresBotoes("corPerigo",CORES_BOTOES_DEFAULT.corPerigo)} className="btn"
+            style={{background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:11,padding:"8px",marginTop:8}}>
             🔄 Restaurar padrão
           </button>
         </div>
