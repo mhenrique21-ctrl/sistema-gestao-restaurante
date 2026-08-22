@@ -7373,10 +7373,30 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const gerarPedidoCatalog=()=>{
     const itensFilled=_itensFilled(prodsCatalog);
     if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade (Atual ou Pedido).");
-    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+
+    // Calcular resumo diário de produção
+    const hoje=today();
+    const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
+    const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
+    recibosHoje.forEach((r:any)=>{
+      (r.itens||[]).forEach((it:any)=>{
+        if(!totaisPorProduto[it.nome]){
+          const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
+          totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
+        }
+        totaisPorProduto[it.nome].qtd+=it.quantidade||0;
+      });
+    });
+    const resumoDiario=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
+
+    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",resumoDiario,criadoEm:new Date().toISOString()};
     (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}
     setQtdsCatalog({});setQtdsAtual({});
+
+    // Abrir impressão automaticamente
+    setTimeout(()=>imprimirPedido(pedido),500);
+
     if(confirm("✅ Pedido gerado! Compartilhar via WhatsApp?"))
       window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(pedido))}`,"_blank");
   };
@@ -7839,7 +7859,22 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               }} style={{background:"none",border:"1px solid #EF444433",borderRadius:5,color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
             </div>
           </div>
-          {!isCollapsed&&<>{(()=>{
+          {!isCollapsed&&<>{/* Resumo diário do pedido */}
+          {ped.resumoDiario&&ped.resumoDiario.length>0&&<div style={{background:"linear-gradient(135deg,#10b981,#059669)",borderRadius:8,padding:"12px",marginBottom:12,color:"#fff"}}>
+            <div style={{fontSize:12,fontWeight:800,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+              <span>📊 Produção do dia</span>
+              <span style={{fontSize:10,opacity:.8,fontWeight:600}}>({ped.resumoDiario.length} produto{ped.resumoDiario.length!==1?"s":""})</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}>
+              {ped.resumoDiario.map((p:any)=>(
+                <div key={p.nome} style={{background:"rgba(255,255,255,0.15)",borderRadius:6,padding:"8px",backdropFilter:"blur(10px)",textAlign:"center" as const}}>
+                  <div style={{fontSize:10,opacity:.85,marginBottom:4,lineHeight:1.2}}>{p.nome}</div>
+                  <div style={{fontSize:16,fontWeight:800}}>{p.qtd} <span style={{fontSize:9,opacity:.7}}>{p.unidade}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>}
+          {(()=>{
             const grupos:{cat:string;items:{it:any;idx:number}[]}[]=[];
             (ped.itens||[]).forEach((it:any,j:number)=>{
               const cat=it.categoria||"";
