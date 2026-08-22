@@ -7590,6 +7590,31 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     const fpx=FONTE_PX[cfg.fonte]||13;
     const pc:Record<string,any[]>={};
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
+
+    // Resumo diário de produção
+    const hoje=today();
+    const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
+    const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
+    recibosHoje.forEach((r:any)=>{
+      (r.itens||[]).forEach((it:any)=>{
+        if(!totaisPorProduto[it.nome]){
+          const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
+          totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
+        }
+        totaisPorProduto[it.nome].qtd+=it.quantidade||0;
+      });
+    });
+    const produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
+    const resumoDiarioHtml=produtosOrdenados.length?`
+      <div class="resumo-diario">
+        <div class="resumo-titulo">📊 Produção do dia (${recibosHoje.length} recibo${recibosHoje.length!==1?"s":""})</div>
+        <div class="resumo-grid">
+          ${produtosOrdenados.map((p:any)=>`<div class="resumo-item"><div class="resumo-nome">${p.nome}</div><div class="resumo-qty">${p.qtd} ${p.unidade}</div></div>`).join("")}
+        </div>
+      </div>
+      <div class="resumo-separator"></div>
+    `:"";
+
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
     const rowHtml=(it:any)=>{
       const meta:string[]=[];
@@ -7624,6 +7649,13 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
         .footer{margin-top:16px;font-size:10px;color:#a8a8a8;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
+        .resumo-diario{background:#10b98122;border:2px solid #10b981;border-radius:6px;padding:12px;margin-bottom:16px;break-inside:avoid;-webkit-column-break-inside:avoid}
+        .resumo-titulo{font-size:${Math.max(fpx-1,12)}px;font-weight:700;margin-bottom:8px;color:#059669}
+        .resumo-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+        .resumo-item{background:#fff;border:1px solid #10b98144;border-radius:4px;padding:6px;text-align:center}
+        .resumo-nome{font-size:${Math.max(fpx-3,9)}px;color:#059669;font-weight:600;margin-bottom:3px;line-height:1.2}
+        .resumo-qty{font-size:${Math.max(fpx-2,11)}px;font-weight:800;color:#059669;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+        .resumo-separator{height:1px;background:#10b98144;margin:12px 0}
         .print-columns{column-count:${cfg.producaoColunas};column-gap:22px;column-rule:1px solid #e2e2de}
         .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
         .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
@@ -7639,6 +7671,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       ${cfg.logo||cfg.nome?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"")}</div>`:""}
       <h1>🏭 Pedido de Produção</h1>
       <div class="sub">Data: ${dataLabel} · ${lista.length} produto(s) · Solicitante: ${solicitante}</div>
+      ${resumoDiarioHtml}
       <div class="print-columns">${blocks}</div>
       <div class="footer">${impressaoRodapeTxt(cfg)}</div>
     </body></html>`);
