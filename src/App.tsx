@@ -7600,7 +7600,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <div style={{padding:"16px 18px 10px",borderBottom:"1px solid var(--border)"}}>
           <div style={{fontSize:15,fontWeight:800,color:"var(--acc)"}}>🔗 Conciliar produtos da lista</div>
           <div className="muted" style={{fontSize:12,marginTop:4,lineHeight:1.5}}>
-            Vincule cada produto a uma matéria-prima já comprada, pra herdar o preço automaticamente. "Manter separado" só marca como revisado — não impede vincular depois.
+            Vincule cada produto a uma matéria-prima já comprada, pra herdar o preço automaticamente. "Não conciliar" marca como revisado e some da fila — não impede vincular depois, se mudar de ideia.
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
@@ -7626,7 +7626,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 <div style={{display:"flex",gap:6,marginTop:8}}>
                   {!isManual&&sug&&<button onClick={()=>aceitarSugestao(item,sug)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Vincular</button>}
                   {!isManual&&<button onClick={()=>{setCtManualId(item.id);setCtBusca("");}} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🔍 {sug?"Escolher outro":"Buscar manualmente"}</button>}
-                  {!isManual&&<button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>{sug?"✋ Manter separado":"✨ Manter como novo"}</button>}
+                  {!isManual&&<button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🚫 Não conciliar</button>}
                 </div>
               </div>
               {isManual&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",padding:"6px 8px"}}>
