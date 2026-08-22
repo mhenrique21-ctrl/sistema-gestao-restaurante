@@ -7374,22 +7374,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     const itensFilled=_itensFilled(prodsCatalog);
     if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade (Atual ou Pedido).");
 
-    // Calcular resumo diário de produção
-    const hoje=today();
-    const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
-    const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
-    recibosHoje.forEach((r:any)=>{
-      (r.itens||[]).forEach((it:any)=>{
-        if(!totaisPorProduto[it.nome]){
-          const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
-          totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
-        }
-        totaisPorProduto[it.nome].qtd+=it.quantidade||0;
-      });
-    });
-    const resumoDiario=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
-
-    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",resumoDiario,criadoEm:new Date().toISOString()};
+    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
     (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}
     setQtdsCatalog({});setQtdsAtual({});
@@ -7611,27 +7596,17 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     const pc:Record<string,any[]>={};
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
 
-    // Resumo diário de produção — usa o snapshot salvo no pedido (mesmo dia
-    // em que ele foi gerado). Se não tiver snapshot (pedido antigo, de antes
-    // deste recurso existir, ou impressão avulsa sem pedido salvo), recalcula
-    // na hora a partir dos recibos de venda do dia do pedido — hoje, no caso
-    // da impressão avulsa.
-    let produtosOrdenados:{nome:string,qtd:number,unidade:string}[]=pedido?.resumoDiario||[];
-    if(!produtosOrdenados.length){
-      const diaAlvo=pedido?.data||today();
-      const recibosDoDia=(db.recibosVenda||[]).filter((r:any)=>r.data===diaAlvo);
-      const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
-      recibosDoDia.forEach((r:any)=>{
-        (r.itens||[]).forEach((it:any)=>{
-          if(!totaisPorProduto[it.nome]){
-            const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
-            totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
-          }
-          totaisPorProduto[it.nome].qtd+=it.quantidade||0;
-        });
-      });
-      produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
-    }
+    // Resumo diário de produção — soma o total de cada produto somando todas
+    // as categorias/clientes da lista impressa, pra sempre bater com os
+    // itens mostrados abaixo (nunca depende de um snapshot que pode ficar
+    // desatualizado se o pedido for editado depois de gerado).
+    const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
+    lista.forEach((it:any)=>{
+      if(it.quantidade==null)return;
+      if(!totaisPorProduto[it.nome])totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:it.unidade||"un"};
+      totaisPorProduto[it.nome].qtd+=it.quantidade||0;
+    });
+    const produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
     const resumoDiarioHtml=produtosOrdenados.length?`
       <div class="resumo-diario">
         <div class="resumo-titulo">📊 Produção do dia</div>
@@ -7866,23 +7841,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
           </div>
           {!isCollapsed&&<>{/* Resumo diário do pedido */}
           {(()=>{
-            // Pedidos gerados antes deste recurso existir não têm o snapshot
-            // salvo — nesse caso recalcula com base nos recibos de venda do
-            // dia do pedido (ped.data), não do dia de hoje.
-            const resumo:{nome:string,qtd:number,unidade:string}[]=ped.resumoDiario&&ped.resumoDiario.length>0?ped.resumoDiario:(()=>{
-              const recibosDoDia=(db.recibosVenda||[]).filter((r:any)=>r.data===ped.data);
-              const totais:Record<string,{nome:string,qtd:number,unidade:string}>={};
-              recibosDoDia.forEach((r:any)=>{
-                (r.itens||[]).forEach((it:any)=>{
-                  if(!totais[it.nome]){
-                    const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
-                    totais[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
-                  }
-                  totais[it.nome].qtd+=it.quantidade||0;
-                });
-              });
-              return Object.values(totais).sort((a:any,b:any)=>b.qtd-a.qtd);
-            })();
+            // Sempre soma os itens atuais do pedido (todas as
+            // categorias/clientes) — nunca depende de um snapshot que
+            // poderia ficar desatualizado se o pedido for editado depois.
+            const totais:Record<string,{nome:string,qtd:number,unidade:string}>={};
+            (ped.itens||[]).forEach((it:any)=>{
+              if(it.quantidade==null)return;
+              if(!totais[it.nome])totais[it.nome]={nome:it.nome,qtd:0,unidade:it.unidade||"un"};
+              totais[it.nome].qtd+=it.quantidade||0;
+            });
+            const resumo=Object.values(totais).sort((a:any,b:any)=>b.qtd-a.qtd);
             if(!resumo.length)return null;
             return <div style={{background:"#ecfdf5",border:"2px solid #10b981",borderRadius:14,padding:"16px 18px",marginBottom:12}}>
               <div style={{fontSize:14,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8,color:"#047857"}}>
@@ -8188,31 +8156,20 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"#8B5CF6",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
           </div>
         : <>
-            {/* Resumo diário de produtos */}
+            {/* Resumo diário de produtos — soma o total pedido de cada
+                produto somando todas as categorias/clientes preenchidos
+                neste pedido (não são vendas, é quanto precisa ser
+                produzido no total do dia). */}
             {(()=>{
-              const hoje=today();
-              const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
-              const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string,cats:string[]}>={};
-
-              recibosHoje.forEach((r:any)=>{
-                (r.itens||[]).forEach((it:any)=>{
-                  if(!totaisPorProduto[it.nome]){
-                    const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
-                    totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un",cats:prod?prodCats(prod):[]};
-                  }
-                  totaisPorProduto[it.nome].qtd+=it.quantidade||0;
-                });
+              const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
+              _itensFilled(prodsCatalog).forEach((it:any)=>{
+                if(it.quantidade==null)return;
+                if(!totaisPorProduto[it.nome])totaisPorProduto[it.nome]={nome:it.nome,qtd:0,unidade:it.unidade||"un"};
+                totaisPorProduto[it.nome].qtd+=it.quantidade||0;
               });
 
               const produtosOrdenados=Object.values(totaisPorProduto).sort((a:any,b:any)=>b.qtd-a.qtd);
               if(!produtosOrdenados.length)return null;
-
-              const porCategoria:Record<string,typeof produtosOrdenados>={};
-              produtosOrdenados.forEach((p:any)=>{
-                const cat=p.cats[0]||"OUTROS";
-                if(!porCategoria[cat])porCategoria[cat]=[];
-                porCategoria[cat].push(p);
-              });
 
               return <div style={{background:"#ecfdf5",border:"2px solid #10b981",borderRadius:14,padding:"18px 20px",marginBottom:16}}>
                 <div style={{fontSize:15,fontWeight:800,marginBottom:14,display:"flex",alignItems:"center",gap:8,color:"#047857"}}>
