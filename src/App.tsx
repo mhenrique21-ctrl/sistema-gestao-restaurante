@@ -735,10 +735,13 @@ const FONTES_VENDAS:{[k:string]:{label:string,stack:string}}={
 };
 const VENDAS_AJUSTES_DEFAULT={
   legNomeAba:"Vendas",legCliente:"Cliente",legBotaoEmitir:"Emitir Recibo",legVendasExtras:"Vendas Extras",
+  legMaquininha:"Maquininha",legDinheiro:"Dinheiro",legIfood:"iFood (bruto)",leg99food:"99Food (bruto)",
+  legTotalLiquido:"Total líquido",legBotaoSalvar:"Salvar Vendas",legHistorico:"Histórico",legBotaoImprimir:"Imprimir Vendas",
   fonte:"padrao",corDestaque:"",
   prefixoRecibo:"",casasRecibo:4,ordenacaoPadrao:"recente",abaRelatorioPadrao:"cliente",
   metaMensal:0,confirmacaoReforcadaAcima:0,diasEsfriando:10,diasSumiu:21,
   mostrarWhatsapp:true,mostrarPdf:true,mostrarTelefone:true,mostrarChipVendasExtras:true,paginarLista:false,
+  canalDinheiro:true,canalIfood:true,canal99food:true,canalVendasExtras:true,
 };
 const getVendasAjustes=(db:any)=>({...VENDAS_AJUSTES_DEFAULT,...(db?.config?.vendasAjustes||{})});
 const formatarNumeroRecibo=(numero:number,aj:any)=>`${aj.prefixoRecibo||""}${String(numero).padStart(aj.casasRecibo||4,"0")}`;
@@ -2729,14 +2732,16 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
         </div>}
       </div>
-      {["maquininha","dinheiro"].map(m=>(
-        <div key={m} style={{marginBottom:8}}>
-          <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block",textTransform:"capitalize"}}>{m}</label>
-          <MoneyInput value={form[m]} onChange={v=>setForm(f=>({...f,[m]:v}))} className="inp"/>
-        </div>
-      ))}
       <div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>iFood (bruto)</label>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legMaquininha}</label>
+        <MoneyInput value={form.maquininha} onChange={v=>setForm(f=>({...f,maquininha:v}))} className="inp"/>
+      </div>
+      {aj.canalDinheiro&&<div style={{marginBottom:8}}>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legDinheiro}</label>
+        <MoneyInput value={form.dinheiro} onChange={v=>setForm(f=>({...f,dinheiro:v}))} className="inp"/>
+      </div>}
+      {aj.canalIfood&&<div style={{marginBottom:8}}>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legIfood}</label>
         <div style={{display:"flex",gap:6}}>
           <MoneyInput value={form.ifood} onChange={v=>setForm(f=>({...f,ifood:v}))} className="inp" style={{flex:1}}/>
           <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
@@ -2747,9 +2752,9 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
         </div>
         {ifoodTaxaPct>0&&ifoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(ifoodLiq)} (desc. {fmtMoney(ifoodBruto-ifoodLiq)})</div>}
-      </div>
-      <div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>99Food (bruto)</label>
+      </div>}
+      {aj.canal99food&&<div style={{marginBottom:8}}>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.leg99food}</label>
         <div style={{display:"flex",gap:6}}>
           <MoneyInput value={form["99food"]} onChange={v=>setForm(f=>({...f,"99food":v}))} className="inp" style={{flex:1}}/>
           <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
@@ -2760,21 +2765,21 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
         </div>
         {nfoodTaxaPct>0&&nfoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(nfoodLiq)} (desc. {fmtMoney(nfoodBruto-nfoodLiq)})</div>}
-      </div>
-      <div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>Vendas Extras</label>
+      </div>}
+      {aj.canalVendasExtras&&<div style={{marginBottom:8}}>
+        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legVendasExtras}</label>
         <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
-      </div>
+      </div>}
       <hr className="divider"/>
       <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 10px",fontWeight:700,fontSize:16}}>
-        <span>Total líquido</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
+        <span>{aj.legTotalLiquido}</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
       </div>
-      <button className="btn" onClick={save} style={{background:"var(--btnPrimary)",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":"💾 Salvar Vendas"}</button>
+      <button className="btn" onClick={save} style={{background:"var(--btnPrimary)",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
       {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(emptyForm());}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>
 
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
-      <div className="section-title" style={{margin:0}}>Histórico</div>
+      <div className="section-title" style={{margin:0}}>{aj.legHistorico}</div>
       <SortCtrl id="vendas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["valor-desc","Maior valor"],["valor-asc","Menor valor"]]}/>
       <button className="btn" onClick={()=>{
         const rows=(db.vendas||[]).sort((a,b)=>a.data<b.data?1:-1).map(v=>`
@@ -2790,11 +2795,11 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         const total=(db.vendas||[]).reduce((s,v)=>s+v.total,0);
         abrirRelatorio(gerarRelatorioHTML("Relatório de Vendas","Vendas",`
           <table>
-            <thead><tr><th>Data</th><th>Maquininha</th><th>Dinheiro</th><th>iFood</th><th>99Food</th><th>Vendas Extras</th><th>Total</th></tr></thead>
+            <thead><tr><th>Data</th><th>${aj.legMaquininha}</th><th>${aj.legDinheiro}</th><th>iFood</th><th>99Food</th><th>${aj.legVendasExtras}</th><th>Total</th></tr></thead>
             <tbody>${rows}</tbody>
             <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(total)}</td></tr></tfoot>
           </table>`));
-      }} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir Vendas</button>
+      }} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🖨️ {aj.legBotaoImprimir}</button>
     </div>
     {(()=>{const q=busca.toLowerCase();const sortKey=(db.config?.sortPrefs||{})['vendas']||'data-desc';const vendasFiltradas=sortList((db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))),db,'vendas','data-desc');return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
@@ -2907,6 +2912,8 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
   const setAj=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),vendasAjustes:{...getVendasAjustes(d),[key]:val}}}));
   const [texto,setTexto]=useState({
     legNomeAba:aj.legNomeAba,legCliente:aj.legCliente,legBotaoEmitir:aj.legBotaoEmitir,legVendasExtras:aj.legVendasExtras,
+    legMaquininha:aj.legMaquininha,legDinheiro:aj.legDinheiro,legIfood:aj.legIfood,leg99food:aj.leg99food,
+    legTotalLiquido:aj.legTotalLiquido,legBotaoSalvar:aj.legBotaoSalvar,legHistorico:aj.legHistorico,legBotaoImprimir:aj.legBotaoImprimir,
     prefixoRecibo:aj.prefixoRecibo,metaMensal:String(aj.metaMensal||""),confirmacaoReforcadaAcima:String(aj.confirmacaoReforcadaAcima||""),
     diasEsfriando:String(aj.diasEsfriando),diasSumiu:String(aj.diasSumiu),corDestaque:aj.corDestaque,
   });
@@ -2942,6 +2949,38 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
       <Campo label={`Rótulo "Cliente"`}><TextoComSalvar field="legCliente" placeholder="Cliente"/></Campo>
       <Campo label={`Botão "Emitir Recibo"`}><TextoComSalvar field="legBotaoEmitir" placeholder="Emitir Recibo"/></Campo>
       <Campo label={`Rótulo "Vendas Extras"`}><TextoComSalvar field="legVendasExtras" placeholder="Vendas Extras"/></Campo>
+    </Grupo>
+
+    <Grupo icon="🏷️" titulo="Legendas dos campos de Lançamentos">
+      <Campo label={`Campo "Maquininha"`}><TextoComSalvar field="legMaquininha" placeholder="Maquininha"/></Campo>
+      <Campo label={`Campo "Dinheiro"`}><TextoComSalvar field="legDinheiro" placeholder="Dinheiro"/></Campo>
+      <Campo label={`Campo "iFood (bruto)"`}><TextoComSalvar field="legIfood" placeholder="iFood (bruto)"/></Campo>
+      <Campo label={`Campo "99Food (bruto)"`}><TextoComSalvar field="leg99food" placeholder="99Food (bruto)"/></Campo>
+      <Campo label={`Rótulo "Total líquido"`}><TextoComSalvar field="legTotalLiquido" placeholder="Total líquido"/></Campo>
+      <Campo label={`Botão "Salvar Vendas"`}><TextoComSalvar field="legBotaoSalvar" placeholder="Salvar Vendas"/></Campo>
+      <Campo label={`Título "Histórico"`}><TextoComSalvar field="legHistorico" placeholder="Histórico"/></Campo>
+      <Campo label={`Botão "Imprimir Vendas"`}><TextoComSalvar field="legBotaoImprimir" placeholder="Imprimir Vendas"/></Campo>
+    </Grupo>
+
+    <Grupo icon="⚡" titulo="Canais ativos em Lançamentos">
+      <label style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+        <input type="checkbox" checked disabled style={{width:16,height:16,flexShrink:0,opacity:.6}}/>
+        <div style={{flex:1}}>
+          <div style={{fontSize:12,fontWeight:600}}>Maquininha</div>
+          <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Sempre ativo — é o canal principal</div>
+        </div>
+      </label>
+      {([
+        ["canalDinheiro","Dinheiro"],["canalIfood","iFood"],["canal99food","99Food"],["canalVendasExtras",aj.legVendasExtras],
+      ] as [string,string][]).map(([key,label])=>(
+        <label key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
+          <input type="checkbox" checked={!!(aj as any)[key]} onChange={e=>setAj(key,e.target.checked)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,fontWeight:600}}>{label}</div>
+            <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Desligado, o campo some do formulário de Lançamentos</div>
+          </div>
+        </label>
+      ))}
     </Grupo>
 
     <Grupo icon="🔤" titulo="Fonte desta aba">
