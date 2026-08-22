@@ -2852,7 +2852,7 @@ function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPe
   if(subTab==="recibo")return <EmitirReciboPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} login={login} onVoltar={voltar}/>;
   if(subTab==="historico")return <RecibosVendaHistPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
   if(subTab==="clientes")return <><BackBar label="Vendas" onClick={voltar}/><ClientesEncPanel db={db} setDb={setDb} empresa={empresa}/></>;
-  if(subTab==="relatorio")return <RecibosVendaRelatorioPanel db={db} onVoltar={voltar}/>;
+  if(subTab==="relatorio")return <RecibosVendaRelatorioPanel db={db} state={state} empresa={empresa} onVoltar={voltar}/>;
   return <Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state}/>;
 }
 
@@ -3431,35 +3431,282 @@ function EditorItensRecibo({recibo,onSalvarComVendas,onVoltar}:{recibo:any,onSal
   </div>;
 }
 
-function RecibosVendaRelatorioPanel({db,onVoltar}:{db:any,onVoltar:()=>void}){
+function RecibosVendaRelatorioPanel({db,state,empresa,onVoltar}:{db:any,state?:any,empresa?:string,onVoltar:()=>void}){
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"empresas">("cliente");
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
-  const porCliente:Record<string,{qtd:number,total:number}>={};
-  recibos.forEach((r:any)=>{
-    const k=r.clienteNome||"—";
-    if(!porCliente[k])porCliente[k]={qtd:0,total:0};
-    porCliente[k].qtd++;porCliente[k].total+=r.total||0;
-  });
-  const linhas=Object.entries(porCliente).sort((a,b)=>b[1].total-a[1].total);
+
+  const TABS:[typeof relTab,string][]=[
+    ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
+    ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
+    ["mensal","Evolução Mensal"],["canal","Por Canal"],["sazonal","Sazonalidade"],
+    ["margem","Margem por Produto"],["empresas","Confraria × Seama"],
+  ];
+
+  const RowBar=({label,sub,qty,val,pct,color}:{label:string,sub?:string,qty?:string,val:number,pct:number,color?:string})=>(
+    <div style={{padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:4}}>
+        <span style={{fontSize:13}}>{label}{sub&&<span style={{color:"var(--text2)",fontSize:11}}> {sub}</span>}</span>
+        <span style={{display:"flex",gap:10,alignItems:"baseline",flexShrink:0}}>
+          {qty&&<span style={{fontSize:11,color:"var(--text2)",fontFamily:"monospace"}}>{qty}</span>}
+          <span style={{fontWeight:700,fontFamily:"monospace"}}>{fmtMoney(val)}</span>
+        </span>
+      </div>
+      <div style={{height:5,background:"var(--border)",borderRadius:3,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${Math.max(2,Math.min(100,pct))}%`,background:color||"var(--btnPrimary)",borderRadius:3}}/>
+      </div>
+    </div>
+  );
+
   return <div>
     <BackBar label="Vendas" onClick={onVoltar}/>
-    <div style={{fontSize:17,fontWeight:800,marginBottom:14}}>📊 Relatório de Recibos de Venda</div>
+    <div style={{fontSize:17,fontWeight:800,marginBottom:14}}>📊 Relatório de Vendas</div>
+
+    <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto" as const,paddingBottom:6}}>
+      {TABS.map(([k,label])=>(
+        <button key={k} onClick={()=>setRelTab(k)} className="pill"
+          style={{flexShrink:0,background:relTab===k?"var(--btnPrimary)":"var(--bg4)",color:relTab===k?"#fff":"var(--text2)",border:relTab===k?"1px solid var(--btnPrimary)":"1px solid var(--border)",fontSize:11,fontWeight:relTab===k?700:400,whiteSpace:"nowrap" as const}}>{label}</button>
+      ))}
+    </div>
+
     <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap" as const}}>
       <div><label style={{fontSize:10,color:"var(--text2)",display:"block",marginBottom:2}}>De</label><input type="date" className="inp" value={ini} onChange={e=>setIni(e.target.value)} style={{marginBottom:0}}/></div>
       <div><label style={{fontSize:10,color:"var(--text2)",display:"block",marginBottom:2}}>Até</label><input type="date" className="inp" value={fim} onChange={e=>setFim(e.target.value)} style={{marginBottom:0}}/></div>
     </div>
+
     <div className="card" style={{marginBottom:16,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
       <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>{recibos.length} recibo(s) no período</span>
       <span style={{fontSize:24,fontWeight:800,color:"#15803D"}}>{fmtMoney(totalPeriodo)}</span>
     </div>
-    <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Por cliente</div>
-    {!linhas.length&&<EmptyState msg="Nenhum recibo no período."/>}
-    {linhas.map(([cliente,d])=><div key={cliente} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
-      <span style={{fontSize:13}}>{cliente} <span style={{color:"var(--text2)",fontSize:11}}>({d.qtd})</span></span>
-      <span style={{fontWeight:700}}>{fmtMoney(d.total)}</span>
-    </div>)}
+
+    {relTab==="cliente"&&(()=>{
+      const porCliente:Record<string,{qtd:number,total:number}>={};
+      recibos.forEach((r:any)=>{
+        const k=r.clienteNome||"—";
+        if(!porCliente[k])porCliente[k]={qtd:0,total:0};
+        porCliente[k].qtd++;porCliente[k].total+=r.total||0;
+      });
+      const linhas=Object.entries(porCliente).sort((a,b)=>b[1].total-a[1].total);
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Por cliente</div>
+        {!linhas.length&&<EmptyState msg="Nenhum recibo no período."/>}
+        {linhas.map(([cliente,d])=><div key={cliente} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:13}}>{cliente} <span style={{color:"var(--text2)",fontSize:11}}>({d.qtd})</span></span>
+          <span style={{fontWeight:700}}>{fmtMoney(d.total)}</span>
+        </div>)}
+      </>;
+    })()}
+
+    {relTab==="produtos"&&(()=>{
+      const porProduto:Record<string,{nome:string,qtd:number,total:number,unidade:string}>={};
+      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>{
+        if(!porProduto[it.nome])porProduto[it.nome]={nome:it.nome,qtd:0,total:0,unidade:it.unidade||"un"};
+        porProduto[it.nome].qtd+=it.quantidade||0;
+        porProduto[it.nome].total+=it.subtotal||0;
+      }));
+      const ranking=Object.values(porProduto).sort((a,b)=>b.total-a.total);
+      const max=ranking[0]?.total||1;
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Ranking de produtos — por receita</div>
+        {!ranking.length&&<EmptyState msg="Nenhum item vendido no período."/>}
+        {ranking.map((p:any)=><RowBar key={p.nome} label={p.nome} qty={`${p.qtd} ${p.unidade}`} val={p.total} pct={p.total/max*100}/>)}
+      </>;
+    })()}
+
+    {relTab==="abc"&&(()=>{
+      const porProduto:Record<string,{nome:string,qtd:number,total:number}>={};
+      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>{
+        if(!porProduto[it.nome])porProduto[it.nome]={nome:it.nome,qtd:0,total:0};
+        porProduto[it.nome].qtd+=it.quantidade||0;
+        porProduto[it.nome].total+=it.subtotal||0;
+      }));
+      const ranking=Object.values(porProduto).sort((a,b)=>b.total-a.total);
+      const totalRank=ranking.reduce((s,p)=>s+p.total,0)||1;
+      let acc=0;
+      const classes={A:"#15803D",B:"#B45309",C:"#6b7085"};
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Curva ABC — quem sustenta a receita</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>A = até 80% acumulado · B = até 95% · C = resto</div>
+        {!ranking.length&&<EmptyState msg="Nenhum item vendido no período."/>}
+        {ranking.map((p:any)=>{
+          acc+=p.total;
+          const pctAcc=acc/totalRank*100;
+          const classe=pctAcc<=80?"A":pctAcc<=95?"B":"C";
+          return <div key={p.nome} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+            <span style={{width:22,height:22,borderRadius:6,background:(classes as any)[classe]+"22",color:(classes as any)[classe],fontWeight:800,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{classe}</span>
+            <span style={{flex:1,fontSize:13}}>{p.nome}</span>
+            <span style={{fontSize:10,color:"var(--text2)",fontFamily:"monospace"}}>{pctAcc.toFixed(0)}% acum.</span>
+            <span style={{fontWeight:700,fontFamily:"monospace",width:88,textAlign:"right" as const}}>{fmtMoney(p.total)}</span>
+          </div>;
+        })}
+      </>;
+    })()}
+
+    {relTab==="ticket"&&(()=>{
+      const ticketGeral=recibos.length?totalPeriodo/recibos.length:0;
+      const porCliente:Record<string,{qtd:number,total:number}>={};
+      recibos.forEach((r:any)=>{
+        const k=r.clienteNome||"—";
+        if(!porCliente[k])porCliente[k]={qtd:0,total:0};
+        porCliente[k].qtd++;porCliente[k].total+=r.total||0;
+      });
+      const linhas=Object.entries(porCliente).map(([nome,d])=>({nome,qtd:d.qtd,ticket:d.total/d.qtd})).sort((a,b)=>b.ticket-a.ticket);
+      return <>
+        <div className="card" style={{marginBottom:16,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>Ticket médio geral</span>
+          <span style={{fontSize:22,fontWeight:800,color:"var(--btnPrimary)"}}>{fmtMoney(ticketGeral)}</span>
+        </div>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Ticket médio por cliente</div>
+        {!linhas.length&&<EmptyState msg="Nenhum recibo no período."/>}
+        {linhas.map(l=><div key={l.nome} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:13}}>{l.nome} <span style={{color:"var(--text2)",fontSize:11}}>({l.qtd} recibo{l.qtd!==1?"s":""})</span></span>
+          <span style={{fontWeight:700}}>{fmtMoney(l.ticket)}</span>
+        </div>)}
+      </>;
+    })()}
+
+    {relTab==="rfm"&&(()=>{
+      const porCliente:Record<string,{ultima:string,freq:number,total:number}>={};
+      recibos.forEach((r:any)=>{
+        const k=r.clienteNome||"—";
+        if(!porCliente[k])porCliente[k]={ultima:r.data,freq:0,total:0};
+        if(r.data>porCliente[k].ultima)porCliente[k].ultima=r.data;
+        porCliente[k].freq++;porCliente[k].total+=r.total||0;
+      });
+      const diasDesde=(d:string)=>Math.max(0,Math.floor((new Date(fim+"T12:00:00").getTime()-new Date(d+"T12:00:00").getTime())/86400000));
+      const linhas=Object.entries(porCliente).map(([nome,d])=>({nome,dias:diasDesde(d.ultima),freq:d.freq,total:d.total})).sort((a,b)=>b.dias-a.dias);
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Recência e frequência por cliente</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Ordenado por quem está há mais tempo sem comprar (dias até {fmtDate(fim)})</div>
+        {!linhas.length&&<EmptyState msg="Nenhum recibo no período."/>}
+        {linhas.map(l=><div key={l.nome} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+          <span style={{flex:1,fontSize:13}}>{l.nome}</span>
+          <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:700,background:l.dias>21?"#FEE2E2":l.dias>10?"#FEF3C7":"#DCFCE7",color:l.dias>21?"#B91C1C":l.dias>10?"#B45309":"#15803D"}}>{l.dias}d</span>
+          <span style={{fontSize:11,color:"var(--text2)",fontFamily:"monospace",width:64,textAlign:"right" as const}}>{l.freq}× no período</span>
+          <span style={{fontWeight:700,fontFamily:"monospace",width:88,textAlign:"right" as const}}>{fmtMoney(l.total)}</span>
+        </div>)}
+      </>;
+    })()}
+
+    {relTab==="pendentes"&&(()=>{
+      const pendentes=recibos.filter((r:any)=>!(r.lancadoEmVendas&&r.valorLancado>0));
+      const totalPendente=pendentes.reduce((s:number,r:any)=>s+(r.total||0),0);
+      return <>
+        <div className="card" style={{marginBottom:16,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"baseline",background:"#FEF3C7",border:"1px solid #FDE68A"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#B45309",textTransform:"uppercase" as const}}>{pendentes.length} recibo(s) pendente(s)</span>
+          <span style={{fontSize:20,fontWeight:800,color:"#B45309"}}>{fmtMoney(totalPendente)}</span>
+        </div>
+        {!pendentes.length&&<EmptyState msg="Nenhum recibo pendente — tudo lançado em Vendas Extras. 🎉"/>}
+        {pendentes.sort((a:any,b:any)=>a.data<b.data?-1:1).map((r:any)=><div key={r.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:13}}>#{String(r.numero).padStart(4,"0")} · {r.clienteNome} <span style={{color:"var(--text2)",fontSize:11}}>({fmtDate(r.data)})</span></span>
+          <span style={{fontWeight:700,color:"#B45309"}}>{fmtMoney(r.total)}</span>
+        </div>)}
+      </>;
+    })()}
+
+    {relTab==="mensal"&&(()=>{
+      const porMes:Record<string,number>={};
+      (db.recibosVenda||[]).forEach((r:any)=>{
+        const mes=(r.data||"").slice(0,7);
+        if(!mes)return;
+        porMes[mes]=(porMes[mes]||0)+(r.total||0);
+      });
+      const meses=Object.keys(porMes).sort().slice(-6);
+      const max=Math.max(1,...meses.map(m=>porMes[m]));
+      const mesLabel=(m:string)=>{const[y,mm]=m.split("-");const nomes=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];return `${nomes[parseInt(mm,10)-1]}/${y.slice(2)}`;};
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Evolução mensal (últimos {meses.length} meses)</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Independe do filtro de data acima — usa o histórico completo de recibos</div>
+        {!meses.length&&<EmptyState msg="Sem histórico suficiente ainda."/>}
+        {meses.map(m=><RowBar key={m} label={mesLabel(m)} val={porMes[m]} pct={porMes[m]/max*100} color="#7C3AED"/>)}
+      </>;
+    })()}
+
+    {relTab==="canal"&&(()=>{
+      const vendasPeriodo=(db.vendas||[]).filter((v:any)=>v.data>=ini&&v.data<=fim);
+      const somaCampo=(k:string)=>vendasPeriodo.reduce((s:number,v:any)=>s+(v[k]||0),0);
+      const canais=[
+        {label:"Recibo B2B / Vendas Extras",val:somaCampo("delivery"),color:"#7C3AED"},
+        {label:"Dinheiro (balcão)",val:somaCampo("dinheiro"),color:"#F59E0B"},
+        {label:"Maquininha",val:somaCampo("maquininha"),color:"#3B82F6"},
+        {label:"iFood",val:somaCampo("ifoodLiq")||somaCampo("ifood"),color:"#EF4444"},
+        {label:"99Food",val:somaCampo("nfoodLiq")||somaCampo("99food"),color:"#F97316"},
+      ];
+      const totalCanais=canais.reduce((s,c)=>s+c.val,0)||1;
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Vendas por canal — período</div>
+        {!vendasPeriodo.length&&<EmptyState msg="Nenhum lançamento de vendas no período."/>}
+        {vendasPeriodo.length>0&&canais.map(c=><div key={c.label} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+          <span style={{width:10,height:10,borderRadius:3,background:c.color,flexShrink:0}}/>
+          <span style={{flex:1,fontSize:13}}>{c.label}</span>
+          <span style={{fontSize:11,color:"var(--text2)",fontFamily:"monospace",width:48,textAlign:"right" as const}}>{(c.val/totalCanais*100).toFixed(0)}%</span>
+          <span style={{fontWeight:700,fontFamily:"monospace",width:96,textAlign:"right" as const}}>{fmtMoney(c.val)}</span>
+        </div>)}
+      </>;
+    })()}
+
+    {relTab==="sazonal"&&(()=>{
+      const nomesDia=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+      const porDia:{qtd:number,total:number}[]=nomesDia.map(()=>({qtd:0,total:0}));
+      recibos.forEach((r:any)=>{
+        const dia=new Date(r.data+"T12:00:00").getDay();
+        porDia[dia].qtd++;porDia[dia].total+=r.total||0;
+      });
+      const ordem=[1,2,3,4,5,6,0];
+      const max=Math.max(1,...porDia.map(d=>d.total));
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Sazonalidade — total por dia da semana</div>
+        {!recibos.length&&<EmptyState msg="Nenhum recibo no período."/>}
+        {recibos.length>0&&ordem.map(i=><RowBar key={i} label={nomesDia[i]} qty={`${porDia[i].qtd} recibo${porDia[i].qtd!==1?"s":""}`} val={porDia[i].total} pct={porDia[i].total/max*100} color="#16A34A"/>)}
+      </>;
+    })()}
+
+    {relTab==="margem"&&(()=>{
+      const fichas=db.fichasTecnicas||[];
+      const porProduto:Record<string,{nome:string,qtd:number,receita:number}>={};
+      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>{
+        if(!porProduto[it.nome])porProduto[it.nome]={nome:it.nome,qtd:0,receita:0};
+        porProduto[it.nome].qtd+=it.quantidade||0;
+        porProduto[it.nome].receita+=it.subtotal||0;
+      }));
+      const linhas=Object.values(porProduto).map((p:any)=>{
+        const ficha=fichas.find((f:any)=>f.nome===p.nome);
+        const custo=ficha?(ficha.custoPorcao||0)*p.qtd:null;
+        const margem=custo!=null?p.receita-custo:null;
+        const margemPct=margem!=null&&p.receita?margem/p.receita*100:null;
+        return{...p,custo,margem,margemPct};
+      }).sort((a:any,b:any)=>(b.margem??-Infinity)-(a.margem??-Infinity));
+      const semFicha=linhas.filter((l:any)=>l.custo==null).length;
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Margem por produto</div>
+        {semFicha>0&&<div style={{fontSize:11,color:"#B45309",marginBottom:10}}>⚠️ {semFicha} produto(s) sem ficha técnica cadastrada — margem não calculada pra eles</div>}
+        {!linhas.length&&<EmptyState msg="Nenhum item vendido no período."/>}
+        {linhas.map((l:any)=><div key={l.nome} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:13}}>{l.nome} <span style={{color:"var(--text2)",fontSize:11}}>({l.qtd})</span></span>
+          {l.margem!=null
+            ?<span style={{fontWeight:700,fontFamily:"monospace",color:l.margem>=0?"#15803D":"#dc2626"}}>{fmtMoney(l.margem)} <span style={{fontSize:10,opacity:.75}}>({l.margemPct.toFixed(0)}%)</span></span>
+            :<span style={{fontSize:11,color:"var(--text2)",fontStyle:"italic" as const}}>sem dado de custo</span>}
+        </div>)}
+      </>;
+    })()}
+
+    {relTab==="empresas"&&(()=>{
+      const empresas=["CONFRARIA","SEAMA"];
+      const dados=empresas.map(e=>{
+        const recibosE=((state?.[e]?.recibosVenda)||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
+        const total=recibosE.reduce((s:number,r:any)=>s+(r.total||0),0);
+        return{nome:e,qtd:recibosE.length,total};
+      });
+      const max=Math.max(1,...dados.map(d=>d.total));
+      const cores:{[k:string]:string}={CONFRARIA:"#8B5CF6",SEAMA:"#16A34A"};
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Confraria × Seama — mesmo período</div>
+        {!state&&<EmptyState msg="Dados das duas empresas não disponíveis nesta tela."/>}
+        {!!state&&dados.map(d=><RowBar key={d.nome} label={d.nome===empresa?`${d.nome} (atual)`:d.nome} qty={`${d.qtd} recibo${d.qtd!==1?"s":""}`} val={d.total} pct={d.total/max*100} color={cores[d.nome]}/>)}
+      </>;
+    })()}
   </div>;
 }
 
