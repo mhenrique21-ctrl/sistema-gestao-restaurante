@@ -6290,6 +6290,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [catConcItem,setCatConcItem]=useState<string|null>(null);
   const [concBusca,setConcBusca]=useState("");
   const [pendingMpLinks,setPendingMpLinks]=useState<string[]|null>(null);
+  const [showConciliarTudo,setShowConciliarTudo]=useState(false);
+  const [ctManualId,setCtManualId]=useState<string|null>(null);
+  const [ctBusca,setCtBusca]=useState("");
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [travandoIds,setTravandoIds]=useState<Set<string>>(new Set());
   const travar=(id:string)=>{
@@ -6664,6 +6667,35 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   };
 
   const prodsCatalog:any[]=db.produtosLista||[];
+
+  // Conciliar Tudo — varre o catálogo inteiro procurando produtos sem preço
+  // vinculado (em vez de exigir abrir cada linha manualmente) e sugere o
+  // vínculo mais provável por nome parecido, ignorando acento/maiúsculas.
+  const semAcento=(s:string)=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+  const ctPendentes=prodsCatalog.filter((p:any)=>!getProdVinculados(p).length&&!p.concRevisado);
+  const sugerirParaProduto=(item:any):{tipo:"produto",produto:any,mpIds:string[]}|{tipo:"mp",mp:any}|null=>{
+    const alvo=semAcento(item.nome);
+    const outroProd=prodsCatalog.find((p:any)=>{
+      if(p.id===item.id)return false;
+      const vids=getProdVinculados(p);
+      if(!vids.length)return false;
+      const pn=semAcento(p.nome);
+      return pn.includes(alvo)||alvo.includes(pn);
+    });
+    if(outroProd)return{tipo:"produto",produto:outroProd,mpIds:getProdVinculados(outroProd)};
+    const mp=(db.materiasPrimas||[]).find((m:any)=>{
+      const mn=semAcento(m.nome);
+      return mn.includes(alvo)||alvo.includes(mn);
+    });
+    if(mp)return{tipo:"mp",mp};
+    return null;
+  };
+  const marcarRevisado=(prod:any)=>syncProdByName(prod.nome,(p:any)=>({...p,concRevisado:true}));
+  const aceitarSugestao=(prod:any,sug:{tipo:"produto",produto:any,mpIds:string[]}|{tipo:"mp",mp:any})=>{
+    if(sug.tipo==="produto")sug.mpIds.forEach(mpId=>vincularMp(prod.id,mpId));
+    else vincularMp(prod.id,sug.mp.id);
+  };
+
   const suggestions:any[]=form.nome.length>=1
     ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.toLowerCase())).slice(0,isAdmin?8:20)
     :(!isAdmin&&showSugg?prodsCatalog.slice(0,20):[]);
@@ -7410,7 +7442,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {isAdmin&&showProdMgmt&&<div ref={prodFormRef} className="card" style={{marginBottom:12,border:"1px solid #22C55E40"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div className="section-title" style={{color:"#22C55E",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
-        <button className="btn" onClick={removerDuplicatas} style={{background:"#F3E8FF",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+          {ctPendentes.length>0&&<button className="btn" onClick={()=>setShowConciliarTudo(true)} style={{background:"#FEF3C7",color:"#B45309",padding:"6px 12px",fontSize:11,fontWeight:700}}>🔗 Conciliar Tudo ({ctPendentes.length} pendente{ctPendentes.length!==1?"s":""})</button>}
+          <button className="btn" onClick={removerDuplicatas} style={{background:"#F3E8FF",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
+        </div>
       </div>
       {/* Form adicionar/editar */}
       <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap" as const}}>
@@ -7556,6 +7591,65 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             })()}
           </div>;
         })}
+      </div>
+    </div>}
+
+    {/* Conciliar Tudo — varre o catálogo procurando produtos sem preço vinculado */}
+    {showConciliarTudo&&<div style={{position:"fixed",inset:0,background:"#000000aa",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>{setShowConciliarTudo(false);setCtManualId(null);setCtBusca("");}}>
+      <div onClick={(e:any)=>e.stopPropagation()} style={{background:"var(--bg2)",width:"100%",maxWidth:520,maxHeight:"85vh",borderRadius:"16px 16px 0 0",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px #000a"}}>
+        <div style={{padding:"16px 18px 10px",borderBottom:"1px solid var(--border)"}}>
+          <div style={{fontSize:15,fontWeight:800,color:"var(--acc)"}}>🔗 Conciliar produtos da lista</div>
+          <div className="muted" style={{fontSize:12,marginTop:4,lineHeight:1.5}}>
+            Vincule cada produto a uma matéria-prima já comprada, pra herdar o preço automaticamente. "Manter separado" só marca como revisado — não impede vincular depois.
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
+          {!ctPendentes.length&&<div className="muted" style={{fontSize:13,textAlign:"center" as const,padding:"24px 0"}}>🎉 Nada pendente — todo o catálogo já tem preço vinculado ou foi revisado.</div>}
+          {ctPendentes.map((item:any)=>{
+            const sug=sugerirParaProduto(item);
+            const isManual=ctManualId===item.id;
+            const cb=ctBusca.trim().toLowerCase();
+            const mpOpts=isManual?(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):true;}).slice(0,20):[];
+            return <div key={item.id} style={{marginBottom:10,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
+              <div style={{padding:"8px 10px",background:"var(--bg3)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+                  <span style={{fontSize:13,fontWeight:700}}>{item.nome}</span>
+                  <span style={{fontSize:10,color:"#888"}}>{item.cat||"—"}{item.unidade?` · ${item.unidade}`:""}</span>
+                </div>
+                {!isManual&&<div style={{marginTop:6,display:"flex",alignItems:"center",gap:8,background:sug?"#0EA5E918":"var(--bg4)",border:`1px solid ${sug?"#0EA5E944":"var(--border2)"}`,borderRadius:8,padding:"7px 9px"}}>
+                  <span style={{fontSize:14}}>🤖</span>
+                  {sug?<>
+                    <span style={{flex:1,fontSize:12}}>Parece com <b style={{color:"#7c8fff"}}>{sug.tipo==="produto"?sug.produto.nome:sug.mp.nome}</b></span>
+                    {sug.tipo==="mp"&&sug.mp.ultimoValor>0&&<span style={{fontSize:11,color:"#22C55E",fontWeight:700}}>{fmtMoney(sug.mp.ultimoValor)}/{sug.mp.unidade||"un"}</span>}
+                  </>:<span style={{flex:1,fontSize:12}}>Nenhum parecido encontrado — <b>criar como novo?</b></span>}
+                </div>}
+                <div style={{display:"flex",gap:6,marginTop:8}}>
+                  {!isManual&&sug&&<button onClick={()=>aceitarSugestao(item,sug)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Vincular</button>}
+                  {!isManual&&<button onClick={()=>{setCtManualId(item.id);setCtBusca("");}} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🔍 {sug?"Escolher outro":"Buscar manualmente"}</button>}
+                  {!isManual&&<button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>{sug?"✋ Manter separado":"✨ Manter como novo"}</button>}
+                </div>
+              </div>
+              {isManual&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",padding:"6px 8px"}}>
+                <input placeholder="🔍 Pesquisar matéria-prima..." value={ctBusca} onChange={e=>setCtBusca(e.target.value)} autoFocus
+                  className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
+                {!mpOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{ctBusca?` para "${ctBusca}"`:""}</div>}
+                <div style={{maxHeight:150,overflowY:"auto" as const}}>
+                  {mpOpts.map((m:any)=>(
+                    <div key={m.id} onClick={()=>{vincularMp(item.id,m.id);setCtManualId(null);setCtBusca("");}}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2}}>
+                      <span style={{flex:1,color:"#ccc"}}>{m.nome}</span>
+                      {m.ultimoValor>0?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>:<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={()=>{setCtManualId(null);setCtBusca("");}} className="btn" style={{width:"100%",background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"6px",fontSize:11,fontWeight:700,marginTop:6}}>✕ Cancelar</button>
+              </div>}
+            </div>;
+          })}
+        </div>
+        <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)"}}>
+          <button onClick={()=>{setShowConciliarTudo(false);setCtManualId(null);setCtBusca("");}} className="btn" style={{width:"100%",background:"var(--btnPrimary)",color:"#fff",padding:"11px",fontSize:13,fontWeight:700}}>Fechar</button>
+        </div>
       </div>
     </div>}
 
