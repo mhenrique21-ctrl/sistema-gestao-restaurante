@@ -6695,23 +6695,38 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(sug.tipo==="produto")sug.mpIds.forEach(mpId=>vincularMp(prod.id,mpId));
     else vincularMp(prod.id,sug.mp.id);
   };
-  // Sem nenhum parecido pra sugerir: cadastra uma matéria-prima nova com o
-  // mesmo nome (preço 0 até a primeira compra atualizar) e já vincula, em vez
-  // de deixar o produto preso esperando alguém cadastrar manualmente depois.
-  const cadastrarNovoInsumo=(prod:any)=>{
+  // Sem nenhum parecido pra sugerir: cadastra uma matéria-prima nova (preço 0
+  // até a primeira compra atualizar) e já vincula, em vez de deixar o produto
+  // preso esperando alguém cadastrar manualmente depois. Nome/categoria/rua
+  // vêm do formulário de confirmação (editáveis, não só o que já estava no
+  // produto original) — e opcionalmente já soma na lista de compras ativa.
+  const [ctNovoId,setCtNovoId]=useState<string|null>(null);
+  const [ctNovoForm,setCtNovoForm]=useState({nome:"",cat:"",rua:"",inserirLista:true,qtd:"1"});
+  const abrirCadastrarNovo=(prod:any)=>{
+    setCtNovoId(prod.id);
+    setCtNovoForm({nome:prod.nome,cat:prod.cat||"",rua:prod.rua||getRuaDaCat(prod.cat||"")||"",inserirLista:true,qtd:"1"});
+  };
+  const cadastrarNovoInsumo=(prod:any,formVals:{nome:string,cat:string,rua:string,inserirLista:boolean,qtd:string})=>{
     const now=new Date().toISOString();
+    const nome=formVals.nome.trim()||prod.nome;
+    const cat=formVals.cat||prod.cat||"outros";
+    const rua=formVals.rua||"";
     applyBothProd((d:any)=>{
       const mps=[...(d.materiasPrimas||[])];
-      let mp=mps.find((m:any)=>m.nome.toLowerCase()===prod.nome.toLowerCase());
-      if(!mp){mp={id:uid(),nome:prod.nome,categoria:"insumos",unidade:prod.unidade||"un",ultimoValor:0,criadoEm:now};mps.push(mp);}
+      let mp=mps.find((m:any)=>m.nome.toLowerCase()===nome.toLowerCase());
+      if(!mp){mp={id:uid(),nome,categoria:"insumos",unidade:prod.unidade||"un",ultimoValor:0,criadoEm:now};mps.push(mp);}
       const produtosLista=(d.produtosLista||[]).map((p:any)=>{
-        if(p.nome.trim().toLowerCase()!==prod.nome.trim().toLowerCase())return p;
+        if(p.id!==prod.id)return p;
         const ids=getProdVinculados(p);
-        if(ids.includes(mp.id))return p;
-        return{...p,mpVinculados:[...ids,mp.id],mpVinculadoId:undefined,atualizadoEm:now};
+        return{...p,nome,cat,rua,mpVinculados:ids.includes(mp.id)?ids:[...ids,mp.id],mpVinculadoId:undefined,atualizadoEm:now};
       });
       return{...d,materiasPrimas:mps,produtosLista};
     });
+    if(formVals.inserirLista){
+      const qtd=parseFloat(formVals.qtd.replace(",","."))||1;
+      const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
+      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),listaId:listaAtualId,nome,quantidade:qtd,unidade:prod.unidade||"un",categoria:cat,rua,estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:now,updatedAt:Date.now()}]}));
+    }
   };
 
   const suggestions:any[]=form.nome.length>=1
@@ -7626,6 +7641,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           {ctPendentes.map((item:any)=>{
             const sug=sugerirParaProduto(item);
             const isManual=ctManualId===item.id;
+            const isNovo=ctNovoId===item.id;
             const cb=ctBusca.trim().toLowerCase();
             const mpOpts=isManual?(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):true;}).slice(0,20):[];
             return <div key={item.id} style={{marginBottom:10,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
@@ -7634,19 +7650,19 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   <span style={{fontSize:13,fontWeight:700}}>{item.nome}</span>
                   <span style={{fontSize:10,color:"#888"}}>{item.cat||"—"}{item.unidade?` · ${item.unidade}`:""}</span>
                 </div>
-                {!isManual&&<div style={{marginTop:6,display:"flex",alignItems:"center",gap:8,background:sug?"#0EA5E918":"var(--bg4)",border:`1px solid ${sug?"#0EA5E944":"var(--border2)"}`,borderRadius:8,padding:"7px 9px"}}>
+                {!isManual&&!isNovo&&<div style={{marginTop:6,display:"flex",alignItems:"center",gap:8,background:sug?"#0EA5E918":"var(--bg4)",border:`1px solid ${sug?"#0EA5E944":"var(--border2)"}`,borderRadius:8,padding:"7px 9px"}}>
                   <span style={{fontSize:14}}>🤖</span>
                   {sug?<>
                     <span style={{flex:1,fontSize:12}}>Parece com <b style={{color:"#7c8fff"}}>{sug.tipo==="produto"?sug.produto.nome:sug.mp.nome}</b></span>
                     {sug.tipo==="mp"&&sug.mp.ultimoValor>0&&<span style={{fontSize:11,color:"#22C55E",fontWeight:700}}>{fmtMoney(sug.mp.ultimoValor)}/{sug.mp.unidade||"un"}</span>}
                   </>:<span style={{flex:1,fontSize:12}}>Nenhum parecido encontrado — <b>criar como novo?</b></span>}
                 </div>}
-                <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap" as const}}>
-                  {!isManual&&sug&&<button onClick={()=>aceitarSugestao(item,sug)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Vincular</button>}
-                  {!isManual&&!sug&&<button onClick={()=>cadastrarNovoInsumo(item)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>➕ Cadastrar novo</button>}
-                  {!isManual&&<button onClick={()=>{setCtManualId(item.id);setCtBusca("");}} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🔍 {sug?"Escolher outro":"Buscar manualmente"}</button>}
-                  {!isManual&&<button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🚫 Não conciliar</button>}
-                </div>
+                {!isManual&&!isNovo&&<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap" as const}}>
+                  {sug&&<button onClick={()=>aceitarSugestao(item,sug)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Vincular</button>}
+                  {!sug&&<button onClick={()=>abrirCadastrarNovo(item)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>➕ Cadastrar novo</button>}
+                  <button onClick={()=>{setCtManualId(item.id);setCtBusca("");}} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🔍 {sug?"Escolher outro":"Buscar manualmente"}</button>
+                  <button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🚫 Não conciliar</button>
+                </div>}
               </div>
               {isManual&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",padding:"6px 8px"}}>
                 <input placeholder="🔍 Pesquisar matéria-prima..." value={ctBusca} onChange={e=>setCtBusca(e.target.value)} autoFocus
@@ -7662,6 +7678,43 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   ))}
                 </div>
                 <button onClick={()=>{setCtManualId(null);setCtBusca("");}} className="btn" style={{width:"100%",background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"6px",fontSize:11,fontWeight:700,marginTop:6}}>✕ Cancelar</button>
+              </div>}
+              {isNovo&&<div style={{background:"#0EA5E918",border:"1px solid #0EA5E944",padding:"9px 10px"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#7c8fff",marginBottom:8}}>🤖 Nenhum parecido encontrado — revise os dados antes de cadastrar</div>
+                <div style={{marginBottom:7}}>
+                  <label style={{fontSize:9,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.4,display:"block",marginBottom:3}}>Nome</label>
+                  <input className="inp" value={ctNovoForm.nome} onChange={e=>setCtNovoForm(f=>({...f,nome:e.target.value}))} style={{marginBottom:0,fontSize:12,padding:"6px 9px"}}/>
+                </div>
+                <div style={{display:"flex",gap:6,marginBottom:7}}>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:9,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.4,display:"block",marginBottom:3}}>Categoria</label>
+                    <select className="inp" value={ctNovoForm.cat} onChange={e=>setCtNovoForm(f=>({...f,cat:e.target.value,rua:f.rua||getRuaDaCat(e.target.value)||""}))} style={{marginBottom:0,fontSize:12,padding:"6px 9px"}}>
+                      <option value="">Categoria</option>
+                      {cats.map((c:string)=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+                    </select>
+                  </div>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:9,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.4,display:"block",marginBottom:3}}>Rua</label>
+                    <select className="inp" value={ctNovoForm.rua} onChange={e=>setCtNovoForm(f=>({...f,rua:e.target.value}))} style={{marginBottom:0,fontSize:12,padding:"6px 9px"}}>
+                      <option value="">—</option>
+                      {ruas.map((r:string)=><option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{border:"1px solid var(--border2)",borderRadius:8,padding:"7px 9px",marginBottom:8}}>
+                  <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    <input type="checkbox" checked={ctNovoForm.inserirLista} onChange={e=>setCtNovoForm(f=>({...f,inserirLista:e.target.checked}))} style={{width:16,height:16,cursor:"pointer"}}/>
+                    Inserir na lista de compras atual
+                  </label>
+                  {ctNovoForm.inserirLista&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:7,paddingLeft:24}}>
+                    <input className="inp" value={ctNovoForm.qtd} onChange={e=>setCtNovoForm(f=>({...f,qtd:e.target.value}))} style={{marginBottom:0,width:70,fontSize:12,padding:"5px 7px",fontFamily:"monospace",textAlign:"center" as const}}/>
+                    <span style={{fontSize:10,color:"#888"}}>{item.unidade||"un"} — soma na lista sendo montada agora</span>
+                  </div>}
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>setCtNovoId(null)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>Cancelar</button>
+                  <button onClick={()=>{cadastrarNovoInsumo(item,ctNovoForm);setCtNovoId(null);}} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Cadastrar</button>
+                </div>
               </div>}
             </div>;
           })}
