@@ -6695,6 +6695,24 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(sug.tipo==="produto")sug.mpIds.forEach(mpId=>vincularMp(prod.id,mpId));
     else vincularMp(prod.id,sug.mp.id);
   };
+  // Sem nenhum parecido pra sugerir: cadastra uma matéria-prima nova com o
+  // mesmo nome (preço 0 até a primeira compra atualizar) e já vincula, em vez
+  // de deixar o produto preso esperando alguém cadastrar manualmente depois.
+  const cadastrarNovoInsumo=(prod:any)=>{
+    const now=new Date().toISOString();
+    applyBothProd((d:any)=>{
+      const mps=[...(d.materiasPrimas||[])];
+      let mp=mps.find((m:any)=>m.nome.toLowerCase()===prod.nome.toLowerCase());
+      if(!mp){mp={id:uid(),nome:prod.nome,categoria:"insumos",unidade:prod.unidade||"un",ultimoValor:0,criadoEm:now};mps.push(mp);}
+      const produtosLista=(d.produtosLista||[]).map((p:any)=>{
+        if(p.nome.trim().toLowerCase()!==prod.nome.trim().toLowerCase())return p;
+        const ids=getProdVinculados(p);
+        if(ids.includes(mp.id))return p;
+        return{...p,mpVinculados:[...ids,mp.id],mpVinculadoId:undefined,atualizadoEm:now};
+      });
+      return{...d,materiasPrimas:mps,produtosLista};
+    });
+  };
 
   const suggestions:any[]=form.nome.length>=1
     ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.toLowerCase())).slice(0,isAdmin?8:20)
@@ -7623,8 +7641,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     {sug.tipo==="mp"&&sug.mp.ultimoValor>0&&<span style={{fontSize:11,color:"#22C55E",fontWeight:700}}>{fmtMoney(sug.mp.ultimoValor)}/{sug.mp.unidade||"un"}</span>}
                   </>:<span style={{flex:1,fontSize:12}}>Nenhum parecido encontrado — <b>criar como novo?</b></span>}
                 </div>}
-                <div style={{display:"flex",gap:6,marginTop:8}}>
+                <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap" as const}}>
                   {!isManual&&sug&&<button onClick={()=>aceitarSugestao(item,sug)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Vincular</button>}
+                  {!isManual&&!sug&&<button onClick={()=>cadastrarNovoInsumo(item)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>➕ Cadastrar novo</button>}
                   {!isManual&&<button onClick={()=>{setCtManualId(item.id);setCtBusca("");}} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🔍 {sug?"Escolher outro":"Buscar manualmente"}</button>}
                   {!isManual&&<button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🚫 Não conciliar</button>}
                 </div>
