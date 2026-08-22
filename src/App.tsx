@@ -323,6 +323,17 @@ const resolverNomeImport=(nomeRaw:string,norms:any[],resolucoes?:Record<string,s
   return (resolucoes&&resolucoes[key])||norm;
 };
 // Itens (de NF-e/cupom) cujo nome normalizado não bate com nenhuma matéria-prima já cadastrada — precisam de conciliação manual.
+// Entre várias marcas vinculadas ao mesmo item da lista (ex.: "Leite condensado"
+// → Moça, Italac, Piracanjuba), o preço de referência é o da compra mais
+// recente, não a média entre todas — uma comprada ontem pesa mais que uma de
+// 2 meses atrás. atualizadoEm é carimbado toda vez que ultimoValor muda (Cupom
+// IA, NF-e, importação em lote, SEFAZ, edição manual); cai pra criadoEm se
+// a matéria-prima nunca foi reprecificada desde o cadastro.
+const mpMaisRecente=(mps:any[]):any|null=>{
+  if(!mps.length)return null;
+  const dataDe=(m:any)=>m.atualizadoEm||m.criadoEm||"";
+  return[...mps].sort((a:any,b:any)=>dataDe(b).localeCompare(dataDe(a)))[0];
+};
 const itensNaoConciliados=(itens:any[],db:any)=>{
   const vistos=new Set<string>();
   const out:{nome:string,categoria?:string,unidade?:string}[]=[];
@@ -4495,10 +4506,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         const vUnit=parseMoney(item.valorUnit);
         const ex=mps.find(m=>m.nome.toLowerCase()===item.nomeProduto.toLowerCase());
         if(ex){
-          if(vUnit>0)ex.ultimoValor=vUnit;
+          if(vUnit>0){ex.ultimoValor=vUnit;ex.atualizadoEm=new Date().toISOString();}
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
-        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1),estoqueAtual:0,estoqueMinimo:0,fornecedores:[fornecedor].filter(Boolean),criadoEm:new Date().toISOString()});
+        else mps.push({id:uid(),nome:item.nomeProduto,categoria:item.categoria,unidade:item.unidade,ultimoValor:vUnit||parseMoney(item.valorTotal)/(parseFloat(item.quantidade)||1),estoqueAtual:0,estoqueMinimo:0,fornecedores:[fornecedor].filter(Boolean),criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString()});
         const qtd=parseFloat(item.quantidade)||0;
         const mp2=mps.find(m=>m.nome.toLowerCase()===item.nomeProduto.toLowerCase());
         if(mp2){
@@ -4708,6 +4719,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
           ex.ultimoValor=c.valorUnitario||c.valor;
+          ex.atualizadoEm=new Date().toISOString();
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
         else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,fornecedores:[forn?.nome].filter(Boolean),criadoEm:new Date().toISOString()});
@@ -4806,7 +4818,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
-          if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;
+          if(c.valorUnitario>0){ex.ultimoValor=c.valorUnitario;ex.atualizadoEm=new Date().toISOString();}
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
         else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,fornecedores:[forn?.nome].filter(Boolean),criadoEm:new Date().toISOString()});
@@ -5089,7 +5101,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       novasCompras.forEach(c=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
-          if(c.valorUnitario>0)ex.ultimoValor=c.valorUnitario;
+          if(c.valorUnitario>0){ex.ultimoValor=c.valorUnitario;ex.atualizadoEm=new Date().toISOString();}
           if(ex.estoqueAtual==null)ex.estoqueAtual=0;
         }
         else mps.push({id:uid(),nome:c.nomeProduto,categoria:c.categoria,unidade:c.unidade,ultimoValor:c.valorUnitario||c.valor,estoqueAtual:0,estoqueMinimo:0,fornecedores:[forn?.nome].filter(Boolean),criadoEm:new Date().toISOString()});
@@ -6338,8 +6350,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       if(!mps.length)return null;
       const vals=mps.filter((m:any)=>m.ultimoValor>0);
       if(!vals.length)return mps[0];
-      const avg=vals.reduce((s:number,m:any)=>s+m.ultimoValor,0)/vals.length;
-      return{...vals[0],ultimoValor:avg,_avgCount:vals.length};
+      // Preço de referência = a compra mais recente entre as marcas vinculadas,
+      // não a média — uma comprada ontem pesa mais que uma de 2 meses atrás.
+      // atualizadoEm pode faltar em matéria-prima nunca reprecificada desde o
+      // cadastro; cai pra criadoEm, e por último fica igual (sem data == mais antiga).
+      const maisRecente=mpMaisRecente(vals)!;
+      return{...maisRecente,_avgCount:vals.length};
     };
     if(prodId){
       const prod=(db.produtosLista||[]).find((p:any)=>p.id===prodId);
@@ -7252,7 +7268,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     <span style={{flex:1}}>{l.isLinked&&<span style={{fontSize:10,marginRight:3}}>🔗{l.avgCount>1?`(${l.avgCount})`:""}</span>}{l.nome}</span>
                     <span style={{color:"#888",whiteSpace:"nowrap" as const}}>{l.qtd} {l.unidade}</span>
                     {l.temPreco?<>
-                      <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>{l.avgCount>1?"média ":""}× {fmtMoney(l.unitario)}</span>
+                      <span style={{color:"#888",whiteSpace:"nowrap" as const,fontSize:10}}>× {fmtMoney(l.unitario)}</span>
                       <span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const,minWidth:75,textAlign:"right" as const}}>{fmtMoney(l.subtotal)}</span>
                     </>:
                       <span style={{color:"#f59e0b",fontSize:10,whiteSpace:"nowrap" as const}}>sem preço</span>
@@ -7263,7 +7279,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} onClick={e=>e.stopPropagation()} autoFocus
                       className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
                     {vinculadosMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
-                      <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinculadosMps.length}):{vinculadosMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinculadosMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinculadosMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+                      <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinculadosMps.length}):{vinculadosMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>usado: {fmtMoney(mpMaisRecente(vinculadosMps.filter((m:any)=>m.ultimoValor>0))?.ultimoValor||0)} ({mpMaisRecente(vinculadosMps.filter((m:any)=>m.ultimoValor>0))?.nome})</span>}</div>
                       {vinculadosMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
                         <span style={{color:"#22C55E"}}>🔗 {m.nome}</span>
                         <span style={{flex:1}}/>
@@ -7513,7 +7529,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
             className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
           {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
-            <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+            <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>usado: {fmtMoney(mpMaisRecente(vinMps.filter((m:any)=>m.ultimoValor>0))?.ultimoValor||0)} ({mpMaisRecente(vinMps.filter((m:any)=>m.ultimoValor>0))?.nome})</span>}</div>
             {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
               <span style={{color:"#22C55E"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
               {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
@@ -7587,7 +7603,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} autoFocus
                   className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
                 {vinMps.length>0&&<div style={{marginBottom:6,padding:"4px 6px",background:"#22C55E10",borderRadius:6,border:"1px solid #22C55E33"}}>
-                  <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>média: {fmtMoney(vinMps.filter((m:any)=>m.ultimoValor>0).reduce((s:number,m:any)=>s+m.ultimoValor,0)/vinMps.filter((m:any)=>m.ultimoValor>0).length)}</span>}</div>
+                  <div style={{fontSize:10,color:"#22C55E",fontWeight:700,marginBottom:3}}>Vinculados ({vinMps.length}):{vinMps.filter((m:any)=>m.ultimoValor>0).length>1&&<span style={{color:"#F59E0B",fontWeight:400,marginLeft:6}}>usado: {fmtMoney(mpMaisRecente(vinMps.filter((m:any)=>m.ultimoValor>0))?.ultimoValor||0)} ({mpMaisRecente(vinMps.filter((m:any)=>m.ultimoValor>0))?.nome})</span>}</div>
                   {vinMps.map((m:any)=><div key={m.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"2px 0"}}>
                     <span style={{color:"#22C55E"}}>🔗 {m.nome}</span><span style={{flex:1}}/>
                     {m.ultimoValor>0&&<span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>}
