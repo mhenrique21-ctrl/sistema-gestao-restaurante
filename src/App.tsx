@@ -7632,7 +7632,6 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
           ${produtosOrdenados.map((p:any)=>`<div class="resumo-item"><div class="resumo-nome">${p.nome}</div><div class="resumo-qty">${p.qtd} ${p.unidade}</div></div>`).join("")}
         </div>
       </div>
-      <div class="resumo-separator"></div>
     `:"";
 
     const w=window.open("","_blank","width=900,height=700");if(!w)return;
@@ -7669,13 +7668,12 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
         .footer{margin-top:16px;font-size:10px;color:#a8a8a8;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         @media print{.no-print-bar{display:none} ${impressaoPageCss(cfg)}}
-        .resumo-diario{background:#10b98122;border:2px solid #10b981;border-radius:6px;padding:12px;margin-bottom:16px;break-inside:avoid;-webkit-column-break-inside:avoid}
-        .resumo-titulo{font-size:${Math.max(fpx-1,12)}px;font-weight:700;margin-bottom:8px;color:#059669}
-        .resumo-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
-        .resumo-item{background:#fff;border:1px solid #10b98144;border-radius:4px;padding:6px;text-align:center}
-        .resumo-nome{font-size:${Math.max(fpx-3,9)}px;color:#059669;font-weight:600;margin-bottom:3px;line-height:1.2}
-        .resumo-qty{font-size:${Math.max(fpx-2,11)}px;font-weight:800;color:#059669;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
-        .resumo-separator{height:1px;background:#10b98144;margin:12px 0}
+        .resumo-diario{background:#ecfdf5;border:2px solid #10b981;border-radius:12px;padding:16px 18px;margin-bottom:16px;break-inside:avoid;-webkit-column-break-inside:avoid}
+        .resumo-titulo{font-size:${Math.max(fpx,14)}px;font-weight:800;margin-bottom:12px;color:#047857}
+        .resumo-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+        .resumo-item{background:#fff;border:1px solid #a7f3d0;border-radius:8px;padding:10px 12px}
+        .resumo-nome{font-size:${Math.max(fpx-2,11)}px;color:#059669;font-weight:600;margin-bottom:5px;line-height:1.2}
+        .resumo-qty{font-size:${Math.max(fpx+2,15)}px;font-weight:800;color:#065f46;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
         .print-columns{column-count:${cfg.producaoColunas};column-gap:22px;column-rule:1px solid #e2e2de}
         .cat-block{break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:9px}
         .cat-header{background:${cfg.cor};color:#fff;padding:4px 7px;font-size:${Math.max(fpx-3,10)}px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;border-radius:2px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
@@ -7860,16 +7858,15 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             </div>
           </div>
           {!isCollapsed&&<>{/* Resumo diário do pedido */}
-          {ped.resumoDiario&&ped.resumoDiario.length>0&&<div style={{background:"linear-gradient(135deg,#10b981,#059669)",borderRadius:8,padding:"12px",marginBottom:12,color:"#fff"}}>
-            <div style={{fontSize:12,fontWeight:800,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+          {ped.resumoDiario&&ped.resumoDiario.length>0&&<div style={{background:"#ecfdf5",border:"2px solid #10b981",borderRadius:14,padding:"16px 18px",marginBottom:12}}>
+            <div style={{fontSize:14,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8,color:"#047857"}}>
               <span>📊 Produção do dia</span>
-              <span style={{fontSize:10,opacity:.8,fontWeight:600}}>({ped.resumoDiario.length} produto{ped.resumoDiario.length!==1?"s":""})</span>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
               {ped.resumoDiario.map((p:any)=>(
-                <div key={p.nome} style={{background:"rgba(255,255,255,0.15)",borderRadius:6,padding:"8px",backdropFilter:"blur(10px)",textAlign:"center" as const}}>
-                  <div style={{fontSize:10,opacity:.85,marginBottom:4,lineHeight:1.2}}>{p.nome}</div>
-                  <div style={{fontSize:16,fontWeight:800}}>{p.qtd} <span style={{fontSize:9,opacity:.7}}>{p.unidade}</span></div>
+                <div key={p.nome} style={{background:"#fff",border:"1px solid #a7f3d0",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:11,color:"#059669",fontWeight:600,marginBottom:5,lineHeight:1.2}}>{p.nome}</div>
+                  <div style={{fontSize:16,fontWeight:800,color:"#065f46"}}>{p.qtd} <span style={{fontSize:10,fontWeight:600,opacity:.75}}>{p.unidade}</span></div>
                 </div>
               ))}
             </div>
@@ -8190,16 +8187,15 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 porCategoria[cat].push(p);
               });
 
-              return <div style={{background:"linear-gradient(135deg,#10b981,#059669)",borderRadius:12,padding:"16px",marginBottom:16,color:"#fff"}}>
-                <div style={{fontSize:14,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+              return <div style={{background:"#ecfdf5",border:"2px solid #10b981",borderRadius:14,padding:"18px 20px",marginBottom:16}}>
+                <div style={{fontSize:15,fontWeight:800,marginBottom:14,display:"flex",alignItems:"center",gap:8,color:"#047857"}}>
                   <span>📊 Produção do dia</span>
-                  <span style={{fontSize:11,opacity:.8,fontWeight:600}}>{recibosHoje.length} recibo(s)</span>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12}}>
                   {produtosOrdenados.map((p:any)=>(
-                    <div key={p.nome} style={{background:"rgba(255,255,255,0.15)",borderRadius:8,padding:"10px",backdropFilter:"blur(10px)"}}>
-                      <div style={{fontSize:11,opacity:.85,marginBottom:4}}>{p.nome}</div>
-                      <div style={{fontSize:20,fontWeight:800}}>{p.qtd} <span style={{fontSize:11,opacity:.7}}>{p.unidade}</span></div>
+                    <div key={p.nome} style={{background:"#fff",border:"1px solid #a7f3d0",borderRadius:10,padding:"14px 16px"}}>
+                      <div style={{fontSize:12,color:"#059669",fontWeight:600,marginBottom:6}}>{p.nome}</div>
+                      <div style={{fontSize:20,fontWeight:800,color:"#065f46"}}>{p.qtd} <span style={{fontSize:12,fontWeight:600,opacity:.75}}>{p.unidade}</span></div>
                     </div>
                   ))}
                 </div>
