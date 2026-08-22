@@ -363,6 +363,28 @@ const mergeResolucoesEmNormalizacoes=(norms:any[],resolucoes?:Record<string,stri
   });
   return out;
 };
+type ConciliacaoVinculo={prodListaId?:string,prodListaNovo?:{nome:string,cat:string,rua:string}};
+// Aplica o vínculo escolhido na conciliação de compra (cupom/NF-e/SEFAZ) ao
+// produto da Lista de Compras: soma a matéria-prima da marca comprada em
+// mpVinculados de um produto já existente, ou cria o produto novo já com essa
+// marca vinculada — mesmo mecanismo do Conciliar Tudo (vincularMp).
+const aplicarVinculoConciliacao=(prodsLista:any[],vinc:ConciliacaoVinculo|undefined,mp:any,compra:any):any[]=>{
+  if(!vinc)return prodsLista;
+  if(vinc.prodListaId){
+    return prodsLista.map((p:any)=>{
+      if(p.id!==vinc.prodListaId)return p;
+      const ids:string[]=p.mpVinculados||(p.mpVinculadoId?[p.mpVinculadoId]:[]);
+      return ids.includes(mp.id)?p:{...p,mpVinculados:[...ids,mp.id],mpVinculadoId:undefined};
+    });
+  }
+  if(vinc.prodListaNovo){
+    const nomeNovo=vinc.prodListaNovo.nome;
+    const jaExiste=prodsLista.some((p:any)=>p.nome.toLowerCase().trim()===nomeNovo.toLowerCase().trim());
+    if(jaExiste)return prodsLista;
+    return[...prodsLista,{id:uid(),nome:nomeNovo,cat:vinc.prodListaNovo.cat,unidade:compra.unidade,rua:vinc.prodListaNovo.rua,mpVinculados:[mp.id]}];
+  }
+  return prodsLista;
+};
 // Mescla N matérias-primas duplicadas (marcas diferentes do mesmo produto) numa só: soma estoque, une fornecedores,
 // reaponta movEstoque/produtosLista/compras pro item canônico, e persiste substituição pra futuras importações já reconhecerem.
 const mesclarProdutosDuplicados=(d:any,{canonicoId,idsRemovidos,nomeFinal}:{canonicoId:string,idsRemovidos:string[],nomeFinal:string})=>{
@@ -4057,13 +4079,35 @@ function parseNFe(xmlString) {
 }
 
 // ===================== CONCILIAÇÃO DE PRODUTOS AO IMPORTAR (NF-e / Cupom) =====================
-function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens:{nome:string,categoria?:string,unidade?:string}[],materiasPrimas:any[],onConfirm:(r:Record<string,string>)=>void,onCancel:()=>void}){
-  const [escolhas,setEscolhas]=useState<Record<string,string>>({});
+// Conciliação no ato da compra (Cupom IA / NF-e / SEFAZ / fechar lista): liga
+// cada marca comprada ao produto da Lista de Compras (produtosLista), não a
+// um nome canônico solto — é o mesmo mpVinculados usado no Conciliar Tudo, só
+// que alimentado automaticamente pela compra. Assim "Moça" hoje e "Italac"
+// semana que vem empilham como marcas do mesmo produto "Leite condensado".
+function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfirm,onCancel}:
+  {itens:{nome:string,categoria?:string,unidade?:string}[],materiasPrimas:any[],produtosLista:any[],ruas?:string[],
+   onConfirm:(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>)=>void,onCancel:()=>void}){
+  const semAcento=(s:string)=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+  const [resolucoesNome,setResolucoesNome]=useState<Record<string,string>>({});
+  const [vinculos,setVinculos]=useState<Record<string,ConciliacaoVinculo>>({});
   const [sugeridosIA,setSugeridosIA]=useState<Set<string>>(new Set());
   const [iaCarregando,setIaCarregando]=useState(false);
   const [iaErro,setIaErro]=useState("");
   const [buscaAberta,setBuscaAberta]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
+  const [cadastrando,setCadastrando]=useState<string|null>(null);
+  const [novoForm,setNovoForm]=useState({nome:"",cat:"",rua:"",marca:""});
+  const cats=[...new Set([...CATS_DEFAULT,...produtosLista.map((p:any)=>p.cat).filter(Boolean)])];
+
+  const sugerirProdLista=(nome:string):any=>{
+    const alvo=semAcento(nome);
+    if(!alvo)return null;
+    return produtosLista.find((p:any)=>{
+      const pn=semAcento(p.nome);
+      return pn.includes(alvo)||alvo.includes(pn);
+    })||null;
+  };
+
   useEffect(()=>{
     let cancelado=false;
     setIaCarregando(true);setIaErro("");
@@ -4072,31 +4116,76 @@ function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens
       .then(r=>r.json()).then(data=>{
         if(cancelado)return;
         const sugestoes=data.sugestoes||[];
-        const novasEscolhas:Record<string,string>={};
+        const novosVinculos:Record<string,ConciliacaoVinculo>={};
         const novosSugeridos=new Set<string>();
         sugestoes.forEach((s:any)=>{
-          if(!s.catalogoId)return;
-          const mp=materiasPrimas.find((m:any)=>m.id===s.catalogoId);
-          if(!mp)return;
           const key=(s.nome||"").toLowerCase().trim();
-          novasEscolhas[key]=mp.nome;
+          if(!key)return;
+          let prod=null;
+          if(s.catalogoId){
+            const mp=materiasPrimas.find((m:any)=>m.id===s.catalogoId);
+            if(mp)prod=produtosLista.find((p:any)=>(p.mpVinculados||[]).includes(mp.id));
+          }
+          if(!prod)prod=sugerirProdLista(s.nome||key);
+          if(!prod)return;
+          novosVinculos[key]={prodListaId:prod.id};
           novosSugeridos.add(key);
         });
-        setEscolhas(e=>({...novasEscolhas,...e}));
+        setVinculos(v=>({...novosVinculos,...v}));
         setSugeridosIA(novosSugeridos);
       }).catch(()=>{if(!cancelado)setIaErro("Não foi possível obter sugestões da IA agora — vincule manualmente se preferir.");})
       .finally(()=>{if(!cancelado)setIaCarregando(false);});
     return()=>{cancelado=true;};
   },[]);
-  const escolher=(key:string,mpNome:string)=>{setEscolhas(e=>({...e,[key]:mpNome}));setSugeridosIA(s=>{const n=new Set(s);n.delete(key);return n;});setBuscaAberta(null);setBusca("");};
-  const manterNovo=(key:string)=>{setEscolhas(e=>{const n={...e};delete n[key];return n;});setSugeridosIA(s=>{const n=new Set(s);n.delete(key);return n;});};
-  const vinculados=Object.keys(escolhas).length;
+
+  // Sem sugestão da IA: procura direto por nome parecido na Lista de Compras.
+  useEffect(()=>{
+    setVinculos(v=>{
+      const novo={...v};
+      let mudou=false;
+      itens.forEach(it=>{
+        const key=it.nome.toLowerCase().trim();
+        if(novo[key])return;
+        const prod=sugerirProdLista(it.nome);
+        if(prod){novo[key]={prodListaId:prod.id};mudou=true;}
+      });
+      return mudou?novo:v;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  const vincularExistente=(key:string,prodId:string)=>{
+    setVinculos(v=>({...v,[key]:{prodListaId:prodId}}));
+    setSugeridosIA(s=>{const n=new Set(s);n.delete(key);return n;});
+    setBuscaAberta(null);setBusca("");
+  };
+  const abrirCadastro=(key:string,nomeSugerido:string)=>{
+    setCadastrando(key);
+    setNovoForm({nome:nomeSugerido,cat:"",rua:"",marca:nomeSugerido});
+  };
+  const confirmarCadastro=(key:string)=>{
+    if(!novoForm.nome.trim()||!novoForm.marca.trim())return;
+    setVinculos(v=>({...v,[key]:{prodListaNovo:{nome:novoForm.nome.trim(),cat:novoForm.cat||"outros",rua:novoForm.rua||""}}}));
+    setResolucoesNome(r=>({...r,[key]:novoForm.marca.trim()}));
+    setSugeridosIA(s=>{const n=new Set(s);n.delete(key);return n;});
+    setCadastrando(null);
+  };
+  const desfazer=(key:string)=>{
+    setVinculos(v=>{const n={...v};delete n[key];return n;});
+    setResolucoesNome(r=>{const n={...r};delete n[key];return n;});
+    setSugeridosIA(s=>{const n=new Set(s);n.delete(key);return n;});
+  };
+
+  const vinculados=Object.keys(vinculos).length;
+  const btnRow:any={display:"flex",gap:6,marginTop:8,flexWrap:"wrap" as const,flexDirection:isMobile?"column":"row"};
+  const btnBase:any={flex:isMobile?"1 1 auto":1,minWidth:isMobile?"100%":100,fontSize:11.5,fontWeight:700,padding:isMobile?"11px":"7px 8px",borderRadius:7,border:"1px solid var(--border2)",background:"var(--bg)",color:"var(--text2)",cursor:"pointer",minHeight:isMobile?44:undefined};
+
   return <div style={{position:"fixed",inset:0,background:"#000000aa",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onCancel}>
-    <div onClick={(e:any)=>e.stopPropagation()} style={{background:"var(--bg2)",width:"100%",maxWidth:520,maxHeight:"85vh",borderRadius:"16px 16px 0 0",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px #000a"}}>
+    <div onClick={(e:any)=>e.stopPropagation()} style={{background:"var(--bg2)",width:"100%",maxWidth:560,maxHeight:"88vh",borderRadius:"16px 16px 0 0",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px #000a"}}>
       <div style={{padding:"16px 18px 10px",borderBottom:"1px solid var(--border)"}}>
-        <div style={{fontSize:15,fontWeight:800,color:"var(--acc)"}}>🔗 Conciliar produtos</div>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--acc)"}}>🔗 Conciliar produtos do cupom</div>
         <div className="muted" style={{fontSize:12,marginTop:4,lineHeight:1.5}}>
-          {itens.length} produto(s) não batem com nada do seu catálogo. Vincule a um produto já existente ou mantenha como novo — quem for vinculado passa a ser reconhecido automaticamente nas próximas importações.
+          {itens.length} produto(s) não bateram com nada do catálogo. Ligue cada marca comprada a um produto da Lista de Compras — pra juntar várias marcas do mesmo produto — ou cadastre um novo.
         </div>
         {iaCarregando&&<div style={{fontSize:11,color:"#7c8fff",marginTop:6}}>🤖 Analisando com IA...</div>}
         {iaErro&&<div style={{fontSize:11,color:"#f59e0b",marginTop:6}}>{iaErro}</div>}
@@ -4104,32 +4193,85 @@ function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens
       <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
         {itens.map(it=>{
           const key=it.nome.toLowerCase().trim();
-          const escolhido=escolhas[key];
+          const vinc=vinculos[key];
           const isOpen=buscaAberta===key;
+          const isCadastrando=cadastrando===key;
           const cb=busca.trim().toLowerCase();
-          const candidatos=isOpen?materiasPrimas.filter((m:any)=>{const mn=m.nome.toLowerCase();return cb?(mn.includes(cb)||cb.includes(mn)):(mn.includes(key)||key.includes(mn));}).slice(0,15):[];
+          const candidatos=isOpen?produtosLista.filter((p:any)=>{const pn=p.nome.toLowerCase();return cb?(pn.includes(cb)||cb.includes(pn)):(pn.includes(key)||key.includes(pn));}).slice(0,15):[];
+          const prodSugerido=vinc?.prodListaId?produtosLista.find((p:any)=>p.id===vinc.prodListaId):null;
+          const marcasLinkadas=prodSugerido?(prodSugerido.mpVinculados||[]).map((id:string)=>materiasPrimas.find((m:any)=>m.id===id)).filter(Boolean):[];
           return <div key={key} style={{marginBottom:10,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
             <div style={{padding:"8px 10px",background:"var(--bg3)"}}>
               <div style={{fontSize:13,fontWeight:700}}>{it.nome}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{it.categoria||"—"}{it.unidade?` · ${it.unidade}`:""}</div>
-              <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
-                {escolhido
-                  ?<span style={{fontSize:11,color:"#4ade80",background:"#4ade8018",border:"1px solid #4ade8044",borderRadius:6,padding:"3px 8px",fontWeight:700}}>{sugeridosIA.has(key)?"🤖":"🔗"} → {escolhido}</span>
-                  :<span style={{fontSize:11,color:"#fbbf24",background:"#fbbf2418",border:"1px solid #fbbf2444",borderRadius:6,padding:"3px 8px",fontWeight:700}}>✨ Novo produto</span>}
-                <button onClick={()=>{setBuscaAberta(isOpen?null:key);setBusca("");}} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#7c8fff",padding:"3px 8px",cursor:"pointer"}}>
-                  {isOpen?"✕ Fechar":"🔍 Vincular a existente"}
+
+              {vinc?.prodListaNovo&&<div style={{marginTop:8,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
+                <span style={{fontSize:11,color:"#fbbf24",background:"#fbbf2418",border:"1px solid #fbbf2444",borderRadius:6,padding:"3px 8px",fontWeight:700}}>✨ Novo produto: {vinc.prodListaNovo.nome}</span>
+                <button onClick={()=>desfazer(key)} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#888",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>
+              </div>}
+
+              {prodSugerido&&<div style={{marginTop:8,background:"#7C3AED14",border:"1px solid var(--btnPrimary)",borderRadius:8,padding:"8px 9px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,marginBottom:marcasLinkadas.length?6:0}}>
+                  <span>{sugeridosIA.has(key)?"🤖":"🔗"}</span>
+                  <span>Produto da Lista: <b style={{color:"var(--btnPrimary)"}}>{prodSugerido.nome}</b></span>
+                </div>
+                {marcasLinkadas.length>0&&<div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginLeft:20}}>
+                  {marcasLinkadas.map((m:any)=><span key={m.id} style={{fontSize:10,background:"var(--card,var(--bg2))",border:"1px solid var(--border2)",borderRadius:20,padding:"2px 8px",color:"#888"}}>{m.nome}</span>)}
+                  <span style={{fontSize:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:20,padding:"2px 8px",color:"#15803D",fontWeight:700}}>+ {it.nome} (esta compra)</span>
+                </div>}
+                <button onClick={()=>desfazer(key)} style={{marginTop:6,fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#888",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>
+              </div>}
+
+              {!vinc&&!isCadastrando&&<div style={{fontSize:11,color:"#888",marginTop:8}}>Nenhum produto da Lista parecido encontrado.</div>}
+
+              {!isCadastrando&&<div style={btnRow}>
+                <button onClick={()=>{setBuscaAberta(isOpen?null:key);setBusca("");}} style={btnBase}>
+                  {isOpen?"✕ Fechar busca":prodSugerido?"🔍 Escolher outro produto":"🔍 Buscar produto da Lista"}
                 </button>
-                {escolhido&&<button onClick={()=>manterNovo(key)} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#888",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>}
-              </div>
+                <button onClick={()=>abrirCadastro(key,it.nome)} style={btnBase}>✏️ Cadastrar novo produto</button>
+              </div>}
             </div>
+
             {isOpen&&<div style={{padding:"8px 10px",borderTop:"1px solid var(--border)"}}>
-              <input autoFocus placeholder="🔍 Buscar produto no catálogo..." value={busca} onChange={(e:any)=>setBusca(e.target.value)} className="inp" style={{marginBottom:6,fontSize:12}}/>
+              <input autoFocus placeholder="🔍 Buscar produto na Lista de Compras..." value={busca} onChange={(e:any)=>setBusca(e.target.value)} className="inp" style={{marginBottom:6,fontSize:12}}/>
               {!candidatos.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum produto encontrado{busca?` para "${busca}"`:""}.</div>}
               <div style={{maxHeight:140,overflowY:"auto" as const}}>
-                {candidatos.map((m:any)=><div key={m.id} onClick={()=>escolher(key,m.nome)}
-                  style={{padding:"6px 8px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,color:"#ccc"}}>
-                  {m.nome} <span style={{color:"#555",fontSize:10}}>({m.categoria||"—"})</span>
+                {candidatos.map((p:any)=><div key={p.id} onClick={()=>vincularExistente(key,p.id)}
+                  style={{padding:"6px 8px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,color:"#334155"}}>
+                  {p.nome} <span style={{color:"#555",fontSize:10}}>({p.cat||"—"})</span>
                 </div>)}
+              </div>
+            </div>}
+
+            {isCadastrando&&<div style={{padding:"10px",borderTop:"1px solid #FDE68A",background:"#FEF3C7"}}>
+              <div style={{fontSize:11,color:"#B45309",fontWeight:700,marginBottom:8}}>✏️ Sem produto parecido — confira os nomes antes de cadastrar</div>
+              <div style={{marginBottom:8}}>
+                <label style={{fontSize:9.5,color:"#92400E",textTransform:"uppercase" as const,fontWeight:700,display:"block",marginBottom:3}}>Produto da Lista (genérico)</label>
+                <input value={novoForm.nome} onChange={(e:any)=>setNovoForm(f=>({...f,nome:e.target.value}))} className="inp" style={{fontSize:12.5}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:8,marginBottom:8}}>
+                <div>
+                  <label style={{fontSize:9.5,color:"#92400E",textTransform:"uppercase" as const,fontWeight:700,display:"block",marginBottom:3}}>Categoria</label>
+                  <select value={novoForm.cat} onChange={(e:any)=>setNovoForm(f=>({...f,cat:e.target.value}))} className="inp" style={{fontSize:12.5}}>
+                    <option value="">—</option>
+                    {cats.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{fontSize:9.5,color:"#92400E",textTransform:"uppercase" as const,fontWeight:700,display:"block",marginBottom:3}}>Rua</label>
+                  <select value={novoForm.rua} onChange={(e:any)=>setNovoForm(f=>({...f,rua:e.target.value}))} className="inp" style={{fontSize:12.5}}>
+                    <option value="">—</option>
+                    {(ruas||[]).map(r=><option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{marginBottom:8}}>
+                <label style={{fontSize:9.5,color:"#92400E",textTransform:"uppercase" as const,fontWeight:700,display:"block",marginBottom:3}}>Marca comprada (matéria-prima)</label>
+                <input value={novoForm.marca} onChange={(e:any)=>setNovoForm(f=>({...f,marca:e.target.value}))} className="inp" style={{fontSize:12.5}}/>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>setCadastrando(null)} style={{...btnBase,flex:isMobile?"1 1 auto":"0 0 90px"}}>Cancelar</button>
+                <button onClick={()=>confirmarCadastro(key)} style={{...btnBase,flex:1,background:"#22C55E",borderColor:"#22C55E",color:"#fff"}}>✅ Cadastrar produto + marca</button>
               </div>
             </div>}
           </div>;
@@ -4137,7 +4279,7 @@ function ConciliacaoImportModal({itens,materiasPrimas,onConfirm,onCancel}:{itens
       </div>
       <div style={{padding:"12px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:8}}>
         <button onClick={onCancel} style={{flex:"0 0 90px",background:"var(--border2)",color:"#aaa",border:"none",borderRadius:8,padding:"12px",fontSize:13,cursor:"pointer"}}>Cancelar</button>
-        <button onClick={()=>onConfirm(escolhas)} style={{flex:1,background:"var(--btnPrimary)",color:"#fff",border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+        <button onClick={()=>onConfirm(resolucoesNome,vinculos)} style={{flex:1,background:"var(--btnPrimary)",color:"#fff",border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
           ✅ Concluir importação{vinculados>0?` (${vinculados} vinculado${vinculados>1?"s":""})`:""}
         </button>
       </div>
@@ -4419,7 +4561,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setGruposSugeridos(gs=>gs?gs.filter((_,j)=>j!==i):gs);
   };
   const [verNota,setVerNota]=useState<string|null>(null);
-  const [conciliacao,setConciliacao]=useState<null|{itens:{nome:string,categoria?:string,unidade?:string}[],onConfirm:(r:Record<string,string>)=>void}>(null);
+  const [conciliacao,setConciliacao]=useState<null|{itens:{nome:string,categoria?:string,unidade?:string}[],onConfirm:(r:Record<string,string>,v?:Record<string,ConciliacaoVinculo>)=>void}>(null);
   const [editItemId,setEditItemId]=useState<string|null>(null);
   const [editItemForm,setEditItemForm]=useState<any>(null);
   const [notaForn,setNotaForn]=useState("");
@@ -4698,24 +4840,29 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [iaFormaPag,setIaFormaPag]=useState("dinheiro");
   const [iaVenc,setIaVenc]=useState(today());
 
-  const _execConfirmarIA=(resolucoes:Record<string,string>)=>{
+  const _execConfirmarIA=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=iaResult.fornecedor;
     const dataIA=iaResult.data||today();
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
-      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoes);
+      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
-      const novasCompras=(iaResult.itens||[]).filter((item:any)=>!item.removido).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoes),categoria:item.categoria,
-        unidade:item.unidade||"un",quantidade:item.quantidade||0,
-        valor:item.valorTotal||0,valorUnitario:item.valorUnitario||0,
-        data:iaResult.data||today(),origem:"ia",grupoId,criadoEm:new Date().toISOString(),
+      const paresCompra=(iaResult.itens||[]).filter((item:any)=>!item.removido).map((item:any)=>({
+        key:normalizarNome(item.nome,d.normalizacoes||[]).toLowerCase().trim(),
+        compra:{
+          id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoesNome),categoria:item.categoria,
+          unidade:item.unidade||"un",quantidade:item.quantidade||0,
+          valor:item.valorTotal||0,valorUnitario:item.valorUnitario||0,
+          data:iaResult.data||today(),origem:"ia",grupoId,criadoEm:new Date().toISOString(),
+        },
       }));
+      const novasCompras=paresCompra.map((p:any)=>p.compra);
       let mps=[...(d.materiasPrimas||[])];
       let movs=[...(d.movEstoque||[])];
-      novasCompras.forEach(c=>{
+      let prodsLista=[...(d.produtosLista||[])];
+      paresCompra.forEach(({key,compra:c}:any)=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
           ex.ultimoValor=c.valorUnitario||c.valor;
@@ -4732,11 +4879,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
             movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataIA,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
           }
+          prodsLista=aplicarVinculoConciliacao(prodsLista,vinculos[key],mp2,c);
         }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
       const contaFin:any={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,...(nfeXml?{xmlNFe:nfeXml,nNF:iaResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||""}:{}),criadoEm:new Date().toISOString()};
-      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas,produtosLista:prodsLista};
       enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
@@ -4797,25 +4945,30 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     reader.readAsText(file,"utf-8");
   };
 
-  const _execConfirmarNFe=(resolucoes:Record<string,string>)=>{
+  const _execConfirmarNFe=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=nfeResult.fornecedor;
     const dataNFe=nfeResult.data||today();
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
-      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoes);
+      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
-      const novasCompras=(nfeResult.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoes),categoria:item.categoria,
-        unidade:item.unidade,quantidade:item.quantidade,
-        valor:item.valorTotal,valorUnitario:item.valorUnitario,
-        data:nfeResult.data||today(),origem:"nfe",
-        nNF:nfeResult.nNF||"",grupoId,criadoEm:new Date().toISOString(),
+      const paresCompra=(nfeResult.itens||[]).map((item:any)=>({
+        key:normalizarNome(item.nome,d.normalizacoes||[]).toLowerCase().trim(),
+        compra:{
+          id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoesNome),categoria:item.categoria,
+          unidade:item.unidade,quantidade:item.quantidade,
+          valor:item.valorTotal,valorUnitario:item.valorUnitario,
+          data:nfeResult.data||today(),origem:"nfe",
+          nNF:nfeResult.nNF||"",grupoId,criadoEm:new Date().toISOString(),
+        },
       }));
+      const novasCompras=paresCompra.map((p:any)=>p.compra);
       let mps=[...(d.materiasPrimas||[])];
       let movs=[...(d.movEstoque||[])];
-      novasCompras.forEach(c=>{
+      let prodsLista=[...(d.produtosLista||[])];
+      paresCompra.forEach(({key,compra:c}:any)=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
           if(c.valorUnitario>0){ex.ultimoValor=c.valorUnitario;ex.atualizadoEm=new Date().toISOString();}
@@ -4831,6 +4984,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
             movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataNFe,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
           }
+          prodsLista=aplicarVinculoConciliacao(prodsLista,vinculos[key],mp2,c);
         }
       });
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
@@ -4840,7 +4994,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         nNF:nfeResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||"",
         chNFe:nfeResult.chNFe||"",
         ...(nfeXml?{xmlNFe:nfeXml}:{}),criadoEm:new Date().toISOString()};
-      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas,produtosLista:prodsLista};
       enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
@@ -5081,24 +5235,29 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setTimeout(()=>nfeManualRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);
   };
 
-  const _execImportarNFeSefaz=(nfe:any,all:boolean,resolucoes:Record<string,string>)=>{
+  const _execImportarNFeSefaz=(nfe:any,all:boolean,resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=nfe.fornecedor;
     const dataSefaz=nfe.data||today();
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
         fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
-      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoes);
+      const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
-      const novasCompras=(nfe.itens||[]).map(item=>({
-        id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoes),categoria:item.categoria,
-        unidade:item.unidade,quantidade:item.quantidade,
-        valor:item.valorTotal,valorUnitario:item.valorUnitario,
-        data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,criadoEm:new Date().toISOString(),
+      const paresCompra=(nfe.itens||[]).map((item:any)=>({
+        key:normalizarNome(item.nome,d.normalizacoes||[]).toLowerCase().trim(),
+        compra:{
+          id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoesNome),categoria:item.categoria,
+          unidade:item.unidade,quantidade:item.quantidade,
+          valor:item.valorTotal,valorUnitario:item.valorUnitario,
+          data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,criadoEm:new Date().toISOString(),
+        },
       }));
+      const novasCompras=paresCompra.map((p:any)=>p.compra);
       let mps=[...(d.materiasPrimas||[])];
       let movs=[...(d.movEstoque||[])];
-      novasCompras.forEach(c=>{
+      let prodsLista=[...(d.produtosLista||[])];
+      paresCompra.forEach(({key,compra:c}:any)=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
           if(c.valorUnitario>0){ex.ultimoValor=c.valorUnitario;ex.atualizadoEm=new Date().toISOString();}
@@ -5114,6 +5273,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
             movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataSefaz,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
           }
+          prodsLista=aplicarVinculoConciliacao(prodsLista,vinculos[key],mp2,c);
         }
       });
       const fpNfe=(nfe.formaPag&&formasPag.includes(nfe.formaPag))?nfe.formaPag:sefazFormaPag;
@@ -5126,7 +5286,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         chNFe:nfe.chNFe||"",
         ...(nfe.rawXml?{xmlNFe:nfe.rawXml}:{}),
         criadoEm:new Date().toISOString()};
-      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas,produtosLista:prodsLista};
       enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
@@ -5142,7 +5302,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataSefaz)}. Deseja continuar mesmo assim?`))return;
     }
     const pend=itensNaoConciliados(nfe.itens,db);
-    if(pend.length){setConciliacao({itens:pend,onConfirm:(res)=>_execImportarNFeSefaz(nfe,all,res)});return;}
+    if(pend.length){setConciliacao({itens:pend,onConfirm:(res,vinc)=>_execImportarNFeSefaz(nfe,all,res,vinc)});return;}
     _execImportarNFeSefaz(nfe,all,{});
   };
 
@@ -5150,8 +5310,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     const nsus=sefazList.map(n=>n.nsu).filter(Boolean);
     const count=sefazList.length;
     const todosItens=sefazList.flatMap(nfe=>nfe.itens||[]);
-    const finalizarTodas=(resolucoes:Record<string,string>)=>{
-      sefazList.forEach(nfe=>_execImportarNFeSefaz(nfe,true,resolucoes));
+    const finalizarTodas=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
+      sefazList.forEach(nfe=>_execImportarNFeSefaz(nfe,true,resolucoesNome,vinculos));
       setSefazList([]);
       removeFromCache(nsus);
       setConciliacao(null);
@@ -6065,8 +6225,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
     {/* ===== LISTA DE COMPRAS ===== */}
 
-    {conciliacao&&<ConciliacaoImportModal itens={conciliacao.itens} materiasPrimas={db.materiasPrimas||[]}
-      onConfirm={(res)=>conciliacao.onConfirm(res)} onCancel={()=>setConciliacao(null)}/>}
+    {conciliacao&&<ConciliacaoImportModal itens={conciliacao.itens} materiasPrimas={db.materiasPrimas||[]} produtosLista={db.produtosLista||[]} ruas={db.listaRuas||[]}
+      onConfirm={(res,vinc)=>conciliacao.onConfirm(res,vinc)} onCancel={()=>setConciliacao(null)}/>}
   </div>;
 }
 
