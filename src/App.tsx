@@ -724,6 +724,25 @@ const APARENCIA_APP_DEFAULT={
 };
 const getAparenciaApp=(db:any)=>({...APARENCIA_APP_DEFAULT,...(db?.config?.aparenciaApp||{})});
 
+// Ajustes escopados só à aba Vendas (piloto do padrão "cada aba tem seu
+// Ajustes") — gravado em db.config.vendasAjustes. Fonte/cor aqui redeclaram
+// --btnPrimary num wrapper local, que sombreia a variável global só pros
+// descendentes daquele wrapper (mecanismo normal de CSS custom property).
+const FONTES_VENDAS:{[k:string]:{label:string,stack:string}}={
+  padrao:{label:"Padrão",stack:"inherit"},
+  serifada:{label:"Serifada",stack:"Georgia,'Times New Roman',serif"},
+  tecnica:{label:"Técnica",stack:"'SFMono-Regular',Consolas,monospace"},
+};
+const VENDAS_AJUSTES_DEFAULT={
+  legNomeAba:"Vendas",legCliente:"Cliente",legBotaoEmitir:"Emitir Recibo",legVendasExtras:"Vendas Extras",
+  fonte:"padrao",corDestaque:"",
+  prefixoRecibo:"",casasRecibo:4,ordenacaoPadrao:"recente",abaRelatorioPadrao:"cliente",
+  metaMensal:0,confirmacaoReforcadaAcima:0,diasEsfriando:10,diasSumiu:21,
+  mostrarWhatsapp:true,mostrarPdf:true,mostrarTelefone:true,mostrarChipVendasExtras:true,paginarLista:false,
+};
+const getVendasAjustes=(db:any)=>({...VENDAS_AJUSTES_DEFAULT,...(db?.config?.vendasAjustes||{})});
+const formatarNumeroRecibo=(numero:number,aj:any)=>`${aj.prefixoRecibo||""}${String(numero).padStart(aj.casasRecibo||4,"0")}`;
+
 // ===================== PDF =====================
 function gerarRelatorioHTML(titulo,empresa,conteudo) {
   const cfg=_impressaoCfg;
@@ -1492,12 +1511,13 @@ export default function App() {
 
   const menuStructure:{id:string,label:string,icon:string,children?:{id:string,label:string,icon:string,sub?:string}[]}[]=[
     {id:"dashboard",label:"Dashboard",icon:"📊"},
-    {id:"vendas",label:"Vendas",icon:"💰",children:[
+    {id:"vendas",label:getVendasAjustes(db).legNomeAba||"Vendas",icon:"💰",children:[
       {id:"vendas-lanc",label:"Lançamentos",icon:"📋",sub:"lancamentos"},
-      {id:"vendas-recibo",label:"Emitir Recibo",icon:"🧾",sub:"recibo"},
+      {id:"vendas-recibo",label:getVendasAjustes(db).legBotaoEmitir||"Emitir Recibo",icon:"🧾",sub:"recibo"},
       {id:"vendas-hist",label:"Recibos",icon:"📂",sub:"historico",adminOnly:true},
       {id:"vendas-cli",label:"Clientes",icon:"👥",sub:"clientes",adminOnly:true},
       {id:"vendas-rel",label:"Relatório",icon:"📊",sub:"relatorio",adminOnly:true},
+      {id:"vendas-ajustes",label:"Ajustes",icon:"⚙️",sub:"ajustes",adminOnly:true},
     ]},
     {id:"compras",label:"Compras",icon:"🏪",children:[
       {id:"compras-ent",label:"Entradas",icon:"📥",sub:"novo"},
@@ -2483,7 +2503,8 @@ function StatCard({label,value,color,icon}){return <div className="card" style={
 function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #0EA5E940"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"var(--text)":positive?"#22C55E":"var(--btnDanger)"}}>{value}</span></div>;}
 
 // ===================== VENDAS =====================
-function Vendas({db,setDb,setDbAndSave,state}){
+function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,aj?:any}){
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:"",nfoodTaxa:"","99food":"",delivery:""});
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
@@ -2626,6 +2647,21 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
     setIaCombImages([]);setIaCombResultado(null);setIaCombMsg("✅ Formulário preenchido — confira e salve.");
   };
   return <div>
+    {aj.metaMensal>0&&(()=>{
+      const mesAtual=today().slice(0,7);
+      const totalMes=(db.vendas||[]).filter((v:any)=>(v.data||"").startsWith(mesAtual)).reduce((s:number,v:any)=>s+(v.total||0),0);
+      const pct=Math.min(100,totalMes/aj.metaMensal*100);
+      return <div className="card" style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+          <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>🎯 Meta do mês</span>
+          <span style={{fontSize:12,fontWeight:700,color:pct>=100?"#15803D":"var(--text2)"}}>{fmtMoney(totalMes)} / {fmtMoney(aj.metaMensal)}</span>
+        </div>
+        <div style={{height:8,background:"var(--border)",borderRadius:4,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${Math.max(2,pct)}%`,background:pct>=100?"#16A34A":"var(--btnPrimary)",borderRadius:4}}/>
+        </div>
+        <div style={{fontSize:10,color:"var(--text2)",marginTop:5}}>{pct.toFixed(0)}% da meta{pct>=100?" — atingida! 🎉":""}</div>
+      </div>;
+    })()}
     <div className="section-title">Lançar Vendas do Dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
@@ -2796,8 +2832,9 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
 // estabelecimento): mesmo catálogo e mesmo cadastro de cliente que Produção/
 // Encomenda já usam — nada de catálogo ou cadastro de cliente duplicado.
 
-const montarTextoWhatsRecibo=(recibo:any,cfg:any)=>{
-  let txt=`🧾 *RECIBO DE VENDA #${String(recibo.numero).padStart(4,"0")}*\n🏢 ${impressaoNome(cfg,"Seama")}\n👤 Cliente: *${recibo.clienteNome}*\n📅 ${fmtDate(recibo.data)}\n\n`;
+const montarTextoWhatsRecibo=(recibo:any,cfg:any,aj?:any)=>{
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
+  let txt=`🧾 *RECIBO DE VENDA #${formatarNumeroRecibo(recibo.numero,aj)}*\n🏢 ${impressaoNome(cfg,"Seama")}\n👤 ${aj.legCliente}: *${recibo.clienteNome}*\n📅 ${fmtDate(recibo.data)}\n\n`;
   recibo.itens.forEach((it:any)=>{txt+=`• ${it.nome}\n  ${it.quantidade} ${it.unidade} × ${fmtMoney(it.precoUnit)} = *${fmtMoney(it.subtotal)}*\n`;});
   txt+=`\n💰 *TOTAL: ${fmtMoney(recibo.total)}*\n`;
   return txt;
@@ -2805,7 +2842,8 @@ const montarTextoWhatsRecibo=(recibo:any,cfg:any)=>{
 
 // Mesmo padrão de impressão ("Imprimir → Salvar como PDF") usado em todo
 // recibo/relatório deste app — ver imprimirRecibo (Recibo de Entrega).
-const imprimirReciboVenda=(recibo:any,cfg:any)=>{
+const imprimirReciboVenda=(recibo:any,cfg:any,aj?:any)=>{
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   const fpx=FONTE_PX[cfg.fonte]||13;
   const w=window.open("","_blank","width=700,height=800");if(!w)return;
   const rows=recibo.itens.map((it:any)=>`<tr><td>${it.nome}</td><td class="num">${it.quantidade} ${it.unidade}</td><td class="num">${fmtMoney(it.precoUnit)}</td><td class="num">${fmtMoney(it.subtotal)}</td></tr>`).join("");
@@ -2831,8 +2869,8 @@ const imprimirReciboVenda=(recibo:any,cfg:any)=>{
   </head><body>
     <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar como PDF</button></div>
     ${cfg.logo?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"Seama")}</div>`:`<div class="brand">${impressaoNome(cfg,"Seama")}</div>`}
-    <h1>Recibo de Venda #${String(recibo.numero).padStart(4,"0")}</h1>
-    <div class="meta"><span>Cliente</span><b>${recibo.clienteNome}</b></div>
+    <h1>Recibo de Venda #${formatarNumeroRecibo(recibo.numero,aj)}</h1>
+    <div class="meta"><span>${aj.legCliente}</span><b>${recibo.clienteNome}</b></div>
     ${recibo.clienteTelefone?`<div class="meta"><span>Telefone</span><b>${recibo.clienteTelefone}</b></div>`:""}
     <div class="meta"><span>Data</span><b>${fmtDate(recibo.data)}</b></div>
     <table>
@@ -2849,14 +2887,156 @@ function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPe
   const [subTab,setSubTab]=useState(pendingSub||"lancamentos");
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   const voltar=()=>setSubTab("lancamentos");
-  if(subTab==="recibo")return <EmitirReciboPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} login={login} onVoltar={voltar}/>;
-  if(subTab==="historico")return <RecibosVendaHistPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
-  if(subTab==="clientes")return <><BackBar label="Vendas" onClick={voltar}/><ClientesEncPanel db={db} setDb={setDb} empresa={empresa}/></>;
-  if(subTab==="relatorio")return <RecibosVendaRelatorioPanel db={db} state={state} empresa={empresa} onVoltar={voltar}/>;
-  return <Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state}/>;
+  const aj=getVendasAjustes(db);
+  const fonteStack=(FONTES_VENDAS[aj.fonte]||FONTES_VENDAS.padrao).stack;
+  const wrapStyle:any={};
+  if(fonteStack!=="inherit")wrapStyle.fontFamily=fonteStack;
+  if(aj.corDestaque)wrapStyle["--btnPrimary"]=aj.corDestaque;
+  let content:any;
+  if(subTab==="recibo")content=<EmitirReciboPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} login={login} aj={aj} onVoltar={voltar}/>;
+  else if(subTab==="historico")content=<RecibosVendaHistPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} aj={aj} onVoltar={voltar}/>;
+  else if(subTab==="clientes")content=<><BackBar label="Vendas" onClick={voltar}/><ClientesEncPanel db={db} setDb={setDb} empresa={empresa} aj={aj}/></>;
+  else if(subTab==="relatorio")content=<RecibosVendaRelatorioPanel db={db} state={state} empresa={empresa} aj={aj} onVoltar={voltar}/>;
+  else if(subTab==="ajustes")content=<VendasAjustesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
+  else content=<Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} aj={aj}/>;
+  return Object.keys(wrapStyle).length?<div style={wrapStyle}>{content}</div>:content;
 }
 
-function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,login?:any,onVoltar:()=>void}){
+function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
+  const aj=getVendasAjustes(db);
+  const setAj=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),vendasAjustes:{...getVendasAjustes(d),[key]:val}}}));
+  const [texto,setTexto]=useState({
+    legNomeAba:aj.legNomeAba,legCliente:aj.legCliente,legBotaoEmitir:aj.legBotaoEmitir,legVendasExtras:aj.legVendasExtras,
+    prefixoRecibo:aj.prefixoRecibo,metaMensal:String(aj.metaMensal||""),confirmacaoReforcadaAcima:String(aj.confirmacaoReforcadaAcima||""),
+    diasEsfriando:String(aj.diasEsfriando),diasSumiu:String(aj.diasSumiu),corDestaque:aj.corDestaque,
+  });
+  const salvarTexto=(key:string,parse?:(v:string)=>any)=>setAj(key,parse?parse((texto as any)[key]):(texto as any)[key]);
+
+  const Grupo=({icon,titulo,children}:{icon:string,titulo:string,children:any})=>(
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{fontSize:12,fontWeight:800,color:"var(--acc)",textTransform:"uppercase" as const,letterSpacing:.4,marginBottom:12}}>{icon} {titulo}</div>
+      {children}
+    </div>
+  );
+  const Campo=({label,hint,children}:{label:string,hint?:string,children:any})=>(
+    <div style={{marginBottom:12}}>
+      <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:4}}>{label}</label>
+      {children}
+      {hint&&<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>{hint}</div>}
+    </div>
+  );
+  const TextoComSalvar=({field,placeholder}:{field:string,placeholder?:string})=>(
+    <div style={{display:"flex",gap:6}}>
+      <input className="inp" value={(texto as any)[field]} onChange={e=>setTexto(t=>({...t,[field]:e.target.value}))} placeholder={placeholder} style={{marginBottom:0,flex:1}}/>
+      <button className="btn" onClick={()=>salvarTexto(field)} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+    </div>
+  );
+
+  return <div>
+    <BackBar label="Vendas" onClick={onVoltar}/>
+    <div style={{fontSize:17,fontWeight:800,marginBottom:4}}>⚙️ Ajustes de Vendas</div>
+    <div style={{fontSize:12,color:"var(--text2)",marginBottom:16}}>Só vale pras telas desta aba. Aparência geral do app fica em Configurações → Empresa → Aparência.</div>
+
+    <Grupo icon="🏷️" titulo="Legendas">
+      <Campo label="Nome da aba no menu"><TextoComSalvar field="legNomeAba" placeholder="Vendas"/></Campo>
+      <Campo label={`Rótulo "Cliente"`}><TextoComSalvar field="legCliente" placeholder="Cliente"/></Campo>
+      <Campo label={`Botão "Emitir Recibo"`}><TextoComSalvar field="legBotaoEmitir" placeholder="Emitir Recibo"/></Campo>
+      <Campo label={`Rótulo "Vendas Extras"`}><TextoComSalvar field="legVendasExtras" placeholder="Vendas Extras"/></Campo>
+    </Grupo>
+
+    <Grupo icon="🔤" titulo="Fonte desta aba">
+      <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+        {Object.entries(FONTES_VENDAS).map(([k,f])=>(
+          <button key={k} onClick={()=>setAj("fonte",k)} className="btn"
+            style={{flex:"1 1 90px",background:aj.fonte===k?"#6366F122":"var(--bg4)",border:aj.fonte===k?"2px solid var(--btnPrimary)":"1px solid var(--border)",color:aj.fonte===k?"var(--btnPrimary)":"var(--text2)",padding:"9px 6px",fontSize:12,fontWeight:aj.fonte===k?700:400,fontFamily:f.stack}}>{f.label}</button>
+        ))}
+      </div>
+    </Grupo>
+
+    <Grupo icon="🎨" titulo="Cor de destaque desta aba">
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" as const}}>
+        {["#16A34A","#7C3AED","#3B82F6","#F59E0B","#EC4899"].map(c=>(
+          <button key={c} onClick={()=>{setAj("corDestaque",c);setTexto(t=>({...t,corDestaque:c}));}}
+            style={{width:28,height:28,borderRadius:7,background:c,border:aj.corDestaque===c?"2px solid var(--text)":"2px solid transparent",cursor:"pointer",padding:0}}/>
+        ))}
+        <input value={texto.corDestaque} onChange={e=>setTexto(t=>({...t,corDestaque:e.target.value}))} onBlur={()=>salvarTexto("corDestaque")} className="inp" placeholder="vazio = cor global" style={{width:120,marginBottom:0,fontFamily:"monospace",fontSize:12}}/>
+        {aj.corDestaque&&<button onClick={()=>{setAj("corDestaque","");setTexto(t=>({...t,corDestaque:""}));}} className="btn" style={{background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:11,padding:"7px 10px"}}>Limpar</button>}
+      </div>
+    </Grupo>
+
+    <Grupo icon="🔢" titulo="Formato">
+      <Campo label="Prefixo do número do recibo" hint='recibo #1 vira, por exemplo, "REC-0001"'><TextoComSalvar field="prefixoRecibo" placeholder="vazio = sem prefixo"/></Campo>
+      <Campo label="Casas do número">
+        <select className="inp" value={aj.casasRecibo} onChange={e=>setAj("casasRecibo",parseInt(e.target.value,10))} style={{marginBottom:0}}>
+          <option value={3}>3 (001)</option><option value={4}>4 (0001)</option><option value={5}>5 (00001)</option>
+        </select>
+      </Campo>
+      <Campo label="Ordenação padrão da lista de recibos">
+        <select className="inp" value={aj.ordenacaoPadrao} onChange={e=>setAj("ordenacaoPadrao",e.target.value)} style={{marginBottom:0}}>
+          <option value="recente">Mais recente primeiro</option><option value="antigo">Mais antigo primeiro</option>
+        </select>
+      </Campo>
+      <Campo label="Aba padrão ao abrir Relatório">
+        <select className="inp" value={aj.abaRelatorioPadrao} onChange={e=>setAj("abaRelatorioPadrao",e.target.value)} style={{marginBottom:0}}>
+          <option value="cliente">Por Cliente</option><option value="produtos">Ranking de Produtos</option>
+          <option value="pendentes">Pendentes de Lançar</option><option value="canal">Por Canal</option>
+        </select>
+      </Campo>
+    </Grupo>
+
+    <Grupo icon="🎯" titulo="Metas e alertas">
+      <Campo label="Meta de vendas do mês" hint="mostra barra de progresso em Lançamentos · vazio ou 0 = desativado">
+        <div style={{display:"flex",gap:6}}>
+          <input className="inp" type="number" min="0" step="0.01" value={texto.metaMensal} onChange={e=>setTexto(t=>({...t,metaMensal:e.target.value}))} placeholder="0" style={{marginBottom:0,flex:1}}/>
+          <button className="btn" onClick={()=>salvarTexto("metaMensal",v=>parseFloat(v)||0)} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+        </div>
+      </Campo>
+      <Campo label="Confirmação reforçada acima de" hint="pede digitar o nome do cliente pra excluir recibos acima desse valor · vazio ou 0 = desativado">
+        <div style={{display:"flex",gap:6}}>
+          <input className="inp" type="number" min="0" step="0.01" value={texto.confirmacaoReforcadaAcima} onChange={e=>setTexto(t=>({...t,confirmacaoReforcadaAcima:e.target.value}))} placeholder="0" style={{marginBottom:0,flex:1}}/>
+          <button className="btn" onClick={()=>salvarTexto("confirmacaoReforcadaAcima",v=>parseFloat(v)||0)} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+        </div>
+      </Campo>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{flex:1}}>
+          <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:4}}>Cliente "esfriando" após (dias)</label>
+          <div style={{display:"flex",gap:6}}>
+            <input className="inp" type="number" min="1" value={texto.diasEsfriando} onChange={e=>setTexto(t=>({...t,diasEsfriando:e.target.value}))} style={{marginBottom:0,flex:1}}/>
+            <button className="btn" onClick={()=>salvarTexto("diasEsfriando",v=>parseInt(v,10)||10)} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+          </div>
+        </div>
+        <div style={{flex:1}}>
+          <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:4}}>Cliente "sumiu" após (dias)</label>
+          <div style={{display:"flex",gap:6}}>
+            <input className="inp" type="number" min="1" value={texto.diasSumiu} onChange={e=>setTexto(t=>({...t,diasSumiu:e.target.value}))} style={{marginBottom:0,flex:1}}/>
+            <button className="btn" onClick={()=>salvarTexto("diasSumiu",v=>parseInt(v,10)||21)} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+          </div>
+        </div>
+      </div>
+    </Grupo>
+
+    <Grupo icon="⚡" titulo="Ativar / Desativar">
+      {([
+        ["mostrarWhatsapp","Botão WhatsApp nos recibos","Compartilhar recibo direto pelo WhatsApp"],
+        ["mostrarPdf","Botão PDF nos recibos","Gerar impressão/PDF do recibo"],
+        ["mostrarTelefone","Mostrar telefone do cliente","Aparece na tela de Clientes · continua salvo se desativar"],
+        ["mostrarChipVendasExtras",`Selo "Em Vendas Extras"`,"O chip colorido no card do recibo"],
+        ["paginarLista","Paginar lista de recibos","Mostra 20 por vez com \"carregar mais\" em vez da lista inteira"],
+      ] as [string,string,string][]).map(([key,label,desc])=>(
+        <label key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
+          <input type="checkbox" checked={!!(aj as any)[key]} onChange={e=>setAj(key,e.target.checked)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,fontWeight:600}}>{label}</div>
+            <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>{desc}</div>
+          </div>
+        </label>
+      ))}
+    </Grupo>
+  </div>;
+}
+
+function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,login?:any,aj?:any,onVoltar:()=>void}){
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   _dbIconesProd=db.iconesProducao||{};
   const prodsCatalog:any[]=db.produtosProducao||[];
 
@@ -2986,12 +3166,12 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
     return <div style={{maxWidth:480,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:"11px 14px",marginBottom:18}}>
         <span style={{fontSize:22}}>✅</span>
-        <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → Vendas Extras de {fmtDate(reciboGerado.data)}.</span>
+        <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → {aj.legVendasExtras} de {fmtDate(reciboGerado.data)}.</span>
       </div>
       <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,color:"var(--text2)",textTransform:"uppercase" as const,marginBottom:2}}>{impressaoNome(cfg,"Seama")}</div>
-      <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>Recibo de Venda #{String(reciboGerado.numero).padStart(4,"0")}</div>
+      <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>Recibo de Venda #{formatarNumeroRecibo(reciboGerado.numero,aj)}</div>
       <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text2)",marginBottom:14,paddingBottom:14,borderBottom:"1px solid var(--border)"}}>
-        <span>Cliente<br/><b style={{color:"var(--text)"}}>{reciboGerado.clienteNome}</b></span>
+        <span>{aj.legCliente}<br/><b style={{color:"var(--text)"}}>{reciboGerado.clienteNome}</b></span>
         <span style={{textAlign:"right" as const}}>Data<br/><b style={{color:"var(--text)"}}>{fmtDate(reciboGerado.data)}</b></span>
       </div>
       {reciboGerado.itens.map((it:any,i:number)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
@@ -3003,8 +3183,8 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
         <span style={{fontSize:26,fontWeight:800,color:"#15803D"}}>{fmtMoney(reciboGerado.total)}</span>
       </div>
       <div style={{display:"flex",gap:10,marginTop:20}}>
-        <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado,cfg))}`,"_blank")} className="btn" style={{flex:1,background:"#25d366",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>📲 Enviar por WhatsApp</button>
-        <button onClick={()=>imprimirReciboVenda(reciboGerado,cfg)} className="btn" style={{flex:1,background:"#1a1a2e",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>🖨️ Gerar PDF</button>
+        <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado,cfg,aj))}`,"_blank")} className="btn" style={{flex:1,background:"#25d366",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>📲 Enviar por WhatsApp</button>
+        <button onClick={()=>imprimirReciboVenda(reciboGerado,cfg,aj)} className="btn" style={{flex:1,background:"#1a1a2e",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>🖨️ Gerar PDF</button>
       </div>
       <button onClick={()=>setReciboGerado(null)} className="btn-sec" style={{width:"100%",marginTop:10}}>+ Nova venda</button>
     </div>;
@@ -3092,12 +3272,12 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
           <div className="card" style={{marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Data da venda</div>
             <input type="date" value={dataVenda} onChange={e=>setDataVenda(e.target.value)} className="inp" style={{marginBottom:0,width:"100%"}}/>
-            {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → Vendas Extras vão pra esta data.</div>}
+            {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → {aj.legVendasExtras} vão pra esta data.</div>}
           </div>
           <div className="card">
-            <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Cliente</div>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>{aj.legCliente}</div>
             <div style={{position:"relative" as const,marginBottom:6}}>
-              <input placeholder="Nome do cliente *" value={clienteNome}
+              <input placeholder={`Nome do ${aj.legCliente.toLowerCase()} *`} value={clienteNome}
                 onChange={e=>{setClienteNome(e.target.value);setClienteSugg(true);}}
                 onFocus={()=>setClienteSugg(true)} onBlur={()=>setTimeout(()=>setClienteSugg(false),150)}
                 className="inp" style={{marginBottom:0,width:"100%"}}/>
@@ -3124,18 +3304,20 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,onVoltar}:{db:any,setDb:
             <span style={{fontSize:22,fontWeight:800}}>{fmtMoney(totalVenda)}</span>
           </div>
           <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"#7C3AED",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
-          <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → Vendas Extras</b> de {fmtDate(dataVenda||today())}.</div>
+          <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → {aj.legVendasExtras}</b> de {fmtDate(dataVenda||today())}.</div>
         </div>
       </div>
       </>}
   </div>;
 }
 
-function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
+function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,aj?:any,onVoltar:()=>void}){
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   const cfg=getImpressaoCfg(db);
   const [reciboEditando,setReciboEditando]=useState<any|null>(null);
-  const [tipoEdicao,setTipoEdicao]=useState<"cliente"|"itens"|"valores"|"data"|"devolver"|null>(null);
+  const [tipoEdicao,setTipoEdicao]=useState<"cliente"|"itens"|"valores"|"data"|"devolver"|"vendasExtras"|null>(null);
   const [busca,setBusca]=useState("");
+  const [visiveis,setVisiveis]=useState(20);
 
   const salvarEdicaoRecibo=(atualizacoes:any)=>{
     if(!reciboEditando)return;
@@ -3190,9 +3372,13 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
   const excluirRecibo=(r:any)=>{
     const jaLancado=r.lancadoEmVendas&&r.valorLancado>0;
     const msg=jaLancado
-      ?`Excluir recibo #${String(r.numero).padStart(4,"0")}?\n\nEste recibo já está somado em Vendas Extras de ${fmtDate(r.data)}. Excluir também vai subtrair ${fmtMoney(r.valorLancado)} desse dia.`
-      :`Excluir recibo #${String(r.numero).padStart(4,"0")}?`;
+      ?`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?\n\nEste recibo já está somado em ${aj.legVendasExtras} de ${fmtDate(r.data)}. Excluir também vai subtrair ${fmtMoney(r.valorLancado)} desse dia.`
+      :`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?`;
     if(!confirm(msg))return;
+    if(aj.confirmacaoReforcadaAcima>0&&r.total>=aj.confirmacaoReforcadaAcima){
+      const digitado=prompt(`Recibo de ${fmtMoney(r.total)} — pra confirmar, digite o nome do ${aj.legCliente.toLowerCase()} ("${r.clienteNome}"):`);
+      if((digitado||"").trim().toLowerCase()!==(r.clienteNome||"").trim().toLowerCase())return alert("Nome não confere — exclusão cancelada.");
+    }
     _listaDeletados.add(r.id);
     const now=new Date().toISOString();
     setDbAndSave?.((d:any)=>{
@@ -3206,40 +3392,43 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
   };
 
   if(reciboEditando){
-    return <PainelEdicaoRecibo recibo={reciboEditando} tipoEdicao={tipoEdicao} setTipoEdicao={setTipoEdicao} onSalvar={salvarEdicaoRecibo} onSalvarComVendas={salvarComVendas} onFechar={()=>setReciboEditando(null)}/>;
+    return <PainelEdicaoRecibo recibo={reciboEditando} tipoEdicao={tipoEdicao} setTipoEdicao={setTipoEdicao} onSalvar={salvarEdicaoRecibo} onSalvarComVendas={salvarComVendas} aj={aj} onFechar={()=>setReciboEditando(null)}/>;
   }
 
-  const recibos=[...(db.recibosVenda||[])].sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  const recibos=[...(db.recibosVenda||[])].sort((a:any,b:any)=>aj.ordenacaoPadrao==="antigo"?(a.criadoEm||"").localeCompare(b.criadoEm||""):(b.criadoEm||"").localeCompare(a.criadoEm||""));
   const filtrados=busca.trim()
     ?recibos.filter((r:any)=>(r.clienteNome||"").toLowerCase().includes(busca.toLowerCase())||String(r.numero).includes(busca))
     :recibos;
+  const mostrados=aj.paginarLista?filtrados.slice(0,visiveis):filtrados;
   return <div>
     <BackBar label="Vendas" onClick={onVoltar}/>
     <div style={{fontSize:17,fontWeight:800,marginBottom:14}}>📂 Recibos emitidos ({recibos.length})</div>
-    <input className="inp" placeholder="🔍 Buscar cliente ou número..." value={busca} onChange={e=>setBusca(e.target.value)} style={{marginBottom:12}}/>
+    <input className="inp" placeholder={`🔍 Buscar ${aj.legCliente.toLowerCase()} ou número...`} value={busca} onChange={e=>{setBusca(e.target.value);setVisiveis(20);}} style={{marginBottom:12}}/>
     {!filtrados.length&&<EmptyState msg={busca?"Nenhum recibo encontrado.":"Nenhum recibo emitido ainda."}/>}
-    {filtrados.map((r:any)=><div key={r.id} className="card" style={{marginBottom:10,padding:"12px 14px"}}>
+    {mostrados.map((r:any)=><div key={r.id} className="card" style={{marginBottom:10,padding:"12px 14px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
         <div>
-          <div style={{fontWeight:700,fontSize:13}}>#{String(r.numero).padStart(4,"0")} · {r.clienteNome}</div>
+          <div style={{fontWeight:700,fontSize:13}}>#{formatarNumeroRecibo(r.numero,aj)} · {r.clienteNome}</div>
           <div style={{fontSize:11,color:"var(--text2)",marginTop:2}}>{fmtDate(r.data)} · {(r.itens||[]).length} {(r.itens||[]).length===1?"item":"itens"}</div>
         </div>
         <div style={{fontSize:16,fontWeight:800,color:"#15803D"}}>{fmtMoney(r.total)}</div>
       </div>
-      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E55"}:{background:"#FEF3C7",color:"#B45309",border:"1px solid #FDE68A"})}}>
-        {r.lancadoEmVendas&&r.valorLancado>0?"✓ Em Vendas Extras":"⚠️ Não lançado"}
-      </span>
+      {aj.mostrarChipVendasExtras&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E55"}:{background:"#FEF3C7",color:"#B45309",border:"1px solid #FDE68A"})}}>
+        {r.lancadoEmVendas&&r.valorLancado>0?`✓ Em ${aj.legVendasExtras}`:"⚠️ Não lançado"}
+      </span>}
       <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap" as const}}>
-        <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r,cfg))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>📲 WhatsApp</button>
-        <button onClick={()=>imprimirReciboVenda(r,cfg)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🖨️ PDF</button>
+        {aj.mostrarWhatsapp&&<button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r,cfg,aj))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>📲 WhatsApp</button>}
+        {aj.mostrarPdf&&<button onClick={()=>imprimirReciboVenda(r,cfg,aj)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🖨️ PDF</button>}
         <button onClick={()=>{setReciboEditando(r);setTipoEdicao(null);}} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>✏️ Editar</button>
         <button onClick={()=>excluirRecibo(r)} style={{background:"none",border:"1px solid #dc262644",borderRadius:5,color:"#dc2626",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🗑️ Excluir</button>
       </div>
     </div>)}
+    {aj.paginarLista&&filtrados.length>mostrados.length&&<button onClick={()=>setVisiveis(v=>v+20)} className="btn" style={{width:"100%",background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text2)",padding:11,fontSize:12,fontWeight:700}}>Carregar mais ({filtrados.length-mostrados.length} restantes)</button>}
   </div>;
 }
 
-function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarComVendas,onFechar}:{recibo:any,tipoEdicao:any,setTipoEdicao:any,onSalvar:any,onSalvarComVendas:(atualizacoes:any,novoValorVendas:number|null)=>void,onFechar:()=>void}){
+function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarComVendas,aj,onFechar}:{recibo:any,tipoEdicao:any,setTipoEdicao:any,onSalvar:any,onSalvarComVendas:(atualizacoes:any,novoValorVendas:number|null)=>void,aj?:any,onFechar:()=>void}){
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [nomeEdit,setNomeEdit]=useState(recibo.clienteNome||"");
   const [telEdit,setTelEdit]=useState(recibo.clienteTelefone||"");
   const [totalEdit,setTotalEdit]=useState(String(recibo.total||0));
@@ -3248,11 +3437,11 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
 
   if(!tipoEdicao){
     return <div>
-      <BackBar label={`Editar Recibo #${String(recibo.numero).padStart(4,"0")}`} onClick={onFechar}/>
+      <BackBar label={`Editar Recibo #${formatarNumeroRecibo(recibo.numero,aj)}`} onClick={onFechar}/>
       <div style={{fontSize:16,fontWeight:800,marginBottom:16}}>Escolha o tipo de edição:</div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         <button onClick={()=>setTipoEdicao("cliente")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
-          👤 Editar Cliente
+          👤 Editar {aj.legCliente}
           <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>{nomeEdit}</div>
         </button>
         <button onClick={()=>setTipoEdicao("itens")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
@@ -3268,7 +3457,7 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
           <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>{dataEdit}</div>
         </button>
         <button onClick={()=>setTipoEdicao("vendasExtras")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
-          💵 Vendas Extras
+          💵 {aj.legVendasExtras}
           <div style={{fontSize:11,color:recibo.lancadoEmVendas&&recibo.valorLancado>0?"#15803D":"#B45309",marginTop:4,fontWeight:700}}>{recibo.lancadoEmVendas&&recibo.valorLancado>0?`✓ Já lançado · R$ ${(recibo.valorLancado||0).toFixed(2).replace(".",",")}`:"⚠️ Ainda não lançado"}</div>
         </button>
         <button onClick={()=>setTipoEdicao("devolver")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600,color:"#dc2626"}}>
@@ -3281,10 +3470,10 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
 
   if(tipoEdicao==="cliente"){
     return <div>
-      <BackBar label="Editar Cliente" onClick={()=>setTipoEdicao(null)}/>
+      <BackBar label={`Editar ${aj.legCliente}`} onClick={()=>setTipoEdicao(null)}/>
       <div style={{marginBottom:12}}>
-        <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Nome do Cliente</label>
-        <input className="inp" value={nomeEdit} onChange={e=>setNomeEdit(e.target.value)} placeholder="Nome do cliente" style={{marginBottom:0}}/>
+        <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Nome do {aj.legCliente}</label>
+        <input className="inp" value={nomeEdit} onChange={e=>setNomeEdit(e.target.value)} placeholder={`Nome do ${aj.legCliente.toLowerCase()}`} style={{marginBottom:0}}/>
       </div>
       <div style={{marginBottom:12}}>
         <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Telefone</label>
@@ -3295,23 +3484,23 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
   }
 
   if(tipoEdicao==="itens"){
-    return <EditorItensRecibo recibo={recibo} onSalvarComVendas={onSalvarComVendas} onVoltar={()=>setTipoEdicao(null)}/>;
+    return <EditorItensRecibo recibo={recibo} onSalvarComVendas={onSalvarComVendas} aj={aj} onVoltar={()=>setTipoEdicao(null)}/>;
   }
 
   if(tipoEdicao==="vendasExtras"){
     const lancado=recibo.lancadoEmVendas&&recibo.valorLancado>0;
     return <div>
-      <BackBar label="Vendas Extras" onClick={()=>setTipoEdicao(null)}/>
+      <BackBar label={aj.legVendasExtras} onClick={()=>setTipoEdicao(null)}/>
       {lancado
         ? <div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:14,marginBottom:16}}>
-            <div style={{fontWeight:800,fontSize:13,color:"#15803D"}}>✓ Lançado em Vendas Extras</div>
+            <div style={{fontWeight:800,fontSize:13,color:"#15803D"}}>✓ Lançado em {aj.legVendasExtras}</div>
             <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>{fmtMoney(recibo.valorLancado)} somado em {fmtDate(recibo.data)}. Editou os itens? Use "Editar Itens" pra reenviar o valor certo.</div>
           </div>
         : <div style={{background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:10,padding:14,marginBottom:16}}>
-            <div style={{fontWeight:800,fontSize:13,color:"#B45309"}}>⚠️ Ainda não lançado em Vendas Extras</div>
+            <div style={{fontWeight:800,fontSize:13,color:"#B45309"}}>⚠️ Ainda não lançado em {aj.legVendasExtras}</div>
             <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>Recibos não entram automaticamente aqui — use o botão abaixo pra somar {fmtMoney(recibo.total)} no dia {fmtDate(recibo.data)}.</div>
           </div>}
-      <button disabled={lancado} onClick={()=>onSalvarComVendas({},recibo.total)} style={{width:"100%",background:lancado?"var(--border2)":"var(--btnPrimary)",color:lancado?"var(--text2)":"white",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:lancado?"default":"pointer",fontSize:14}}>{lancado?"✓ Já lançado":"💵 Lançar em Vendas Extras"}</button>
+      <button disabled={lancado} onClick={()=>onSalvarComVendas({},recibo.total)} style={{width:"100%",background:lancado?"var(--border2)":"var(--btnPrimary)",color:lancado?"var(--text2)":"white",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:lancado?"default":"pointer",fontSize:14}}>{lancado?"✓ Já lançado":`💵 Lançar em ${aj.legVendasExtras}`}</button>
     </div>;
   }
 
@@ -3366,7 +3555,8 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
   return null;
 }
 
-function EditorItensRecibo({recibo,onSalvarComVendas,onVoltar}:{recibo:any,onSalvarComVendas:(atualizacoes:any,novoValorVendas:number|null)=>void,onVoltar:()=>void}){
+function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,onSalvarComVendas:(atualizacoes:any,novoValorVendas:number|null)=>void,aj?:any,onVoltar:()=>void}){
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [itens,setItens]=useState<any[]>(()=>(recibo.itens||[]).map((it:any)=>({...it})));
   const [novoItem,setNovoItem]=useState({nome:"",quantidade:"",precoUnit:""});
 
@@ -3416,7 +3606,7 @@ function EditorItensRecibo({recibo,onSalvarComVendas,onVoltar}:{recibo:any,onSal
       <span style={{fontSize:20,fontWeight:800}}>{fmtMoney(novoTotal)}</span>
     </div>
     <div style={{background:"#7C3AED14",border:"1px solid #7C3AED",borderRadius:10,padding:14,marginTop:14}}>
-      <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:8}}>🔄 Reenviar para Vendas Extras?</div>
+      <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:8}}>🔄 Reenviar para {aj.legVendasExtras}?</div>
       {jaLancado&&<div style={{fontSize:12,display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
         <span style={{color:"var(--text2)"}}>Valor antigo (já lançado)</span>
         <strong style={{textDecoration:"line-through",color:"var(--text2)",fontWeight:700}}>{fmtMoney(recibo.valorLancado)}</strong>
@@ -3425,16 +3615,17 @@ function EditorItensRecibo({recibo,onSalvarComVendas,onVoltar}:{recibo:any,onSal
         <span style={{color:"var(--text2)"}}>{jaLancado?"Novo valor":"Valor a lançar"}</span>
         <strong style={{color:"#15803D",fontSize:14}}>{fmtMoney(novoTotal)}</strong>
       </div>
-      <button disabled={!itens.length} onClick={()=>onSalvarComVendas({itens,total:novoTotal},novoTotal)} style={{width:"100%",background:!itens.length?"var(--border2)":"var(--btnPrimary)",color:!itens.length?"var(--text2)":"#fff",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:!itens.length?"default":"pointer",fontSize:14,marginTop:10}}>{jaLancado?"Salvar e substituir em Vendas Extras":"Salvar e lançar em Vendas Extras"}</button>
+      <button disabled={!itens.length} onClick={()=>onSalvarComVendas({itens,total:novoTotal},novoTotal)} style={{width:"100%",background:!itens.length?"var(--border2)":"var(--btnPrimary)",color:!itens.length?"var(--text2)":"#fff",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:!itens.length?"default":"pointer",fontSize:14,marginTop:10}}>{jaLancado?`Salvar e substituir em ${aj.legVendasExtras}`:`Salvar e lançar em ${aj.legVendasExtras}`}</button>
     </div>
-    <button onClick={()=>onSalvarComVendas({itens,total:novoTotal},null)} style={{width:"100%",background:"none",border:"1px solid var(--border2)",borderRadius:6,padding:"10px",color:"var(--text2)",cursor:"pointer",fontSize:12,fontWeight:600,marginTop:10}}>Salvar sem mexer em Vendas Extras</button>
+    <button onClick={()=>onSalvarComVendas({itens,total:novoTotal},null)} style={{width:"100%",background:"none",border:"1px solid var(--border2)",borderRadius:6,padding:"10px",color:"var(--text2)",cursor:"pointer",fontSize:12,fontWeight:600,marginTop:10}}>Salvar sem mexer em {aj.legVendasExtras}</button>
   </div>;
 }
 
-function RecibosVendaRelatorioPanel({db,state,empresa,onVoltar}:{db:any,state?:any,empresa?:string,onVoltar:()=>void}){
+function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state?:any,empresa?:string,aj?:any,onVoltar:()=>void}){
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"empresas">("cliente");
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"empresas">(aj.abaRelatorioPadrao||"cliente");
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
 
@@ -3583,7 +3774,7 @@ function RecibosVendaRelatorioPanel({db,state,empresa,onVoltar}:{db:any,state?:a
         {!linhas.length&&<EmptyState msg="Nenhum recibo no período."/>}
         {linhas.map(l=><div key={l.nome} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
           <span style={{flex:1,fontSize:13}}>{l.nome}</span>
-          <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:700,background:l.dias>21?"#FEE2E2":l.dias>10?"#FEF3C7":"#DCFCE7",color:l.dias>21?"#B91C1C":l.dias>10?"#B45309":"#15803D"}}>{l.dias}d</span>
+          <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:700,background:l.dias>aj.diasSumiu?"#FEE2E2":l.dias>aj.diasEsfriando?"#FEF3C7":"#DCFCE7",color:l.dias>aj.diasSumiu?"#B91C1C":l.dias>aj.diasEsfriando?"#B45309":"#15803D"}}>{l.dias}d</span>
           <span style={{fontSize:11,color:"var(--text2)",fontFamily:"monospace",width:64,textAlign:"right" as const}}>{l.freq}× no período</span>
           <span style={{fontWeight:700,fontFamily:"monospace",width:88,textAlign:"right" as const}}>{fmtMoney(l.total)}</span>
         </div>)}
@@ -3598,9 +3789,9 @@ function RecibosVendaRelatorioPanel({db,state,empresa,onVoltar}:{db:any,state?:a
           <span style={{fontSize:12,fontWeight:700,color:"#B45309",textTransform:"uppercase" as const}}>{pendentes.length} recibo(s) pendente(s)</span>
           <span style={{fontSize:20,fontWeight:800,color:"#B45309"}}>{fmtMoney(totalPendente)}</span>
         </div>
-        {!pendentes.length&&<EmptyState msg="Nenhum recibo pendente — tudo lançado em Vendas Extras. 🎉"/>}
+        {!pendentes.length&&<EmptyState msg={`Nenhum recibo pendente — tudo lançado em ${aj.legVendasExtras}. 🎉`}/>}
         {pendentes.sort((a:any,b:any)=>a.data<b.data?-1:1).map((r:any)=><div key={r.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
-          <span style={{fontSize:13}}>#{String(r.numero).padStart(4,"0")} · {r.clienteNome} <span style={{color:"var(--text2)",fontSize:11}}>({fmtDate(r.data)})</span></span>
+          <span style={{fontSize:13}}>#{formatarNumeroRecibo(r.numero,aj)} · {r.clienteNome} <span style={{color:"var(--text2)",fontSize:11}}>({fmtDate(r.data)})</span></span>
           <span style={{fontWeight:700,color:"#B45309"}}>{fmtMoney(r.total)}</span>
         </div>)}
       </>;
@@ -13552,7 +13743,8 @@ ${cfg.encomendaAssinatura?`<div class="assinatura">Ciente: _____________________
 }
 
 
-function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
+function ClientesEncPanel({db,setDb,empresa,aj}:{db:any,setDb:any,empresa:string,aj?:any}){
+  aj=aj||VENDAS_AJUSTES_DEFAULT;
   const sv=(fn:(d:any)=>any)=>setDb(fn);
   const clientes:any[]=db.clientesEncomenda||[];
   const encomendas:any[]=db.encomendas||[];
@@ -13587,7 +13779,7 @@ function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     return <div style={{padding:"12px 14px"}}>
       <button onClick={()=>setViewId(null)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:12,marginBottom:10,padding:0}}>&#8592; Voltar</button>
       <div style={{fontWeight:800,fontSize:15,marginBottom:2}}>{cli.nome}</div>
-      {cli.telefone&&<div style={{fontSize:12,color:"var(--btnPrimary)",marginBottom:6}}>📞 {cli.telefone}</div>}
+      {aj.mostrarTelefone&&cli.telefone&&<div style={{fontSize:12,color:"var(--btnPrimary)",marginBottom:6}}>📞 {cli.telefone}</div>}
       {cli.obs&&<div style={{fontSize:11,color:"var(--text2)",marginBottom:8,fontStyle:"italic" as const}}>{cli.obs}</div>}
       <div style={{fontSize:11,color:"var(--text2)",marginBottom:12,fontWeight:600}}>{pedCli.length} encomenda(s) no histórico</div>
       {pedCli.length===0&&<div style={{color:"var(--text2)",fontSize:12,textAlign:"center" as const,padding:16}}>Nenhuma encomenda para este cliente.</div>}
@@ -13632,7 +13824,7 @@ function ClientesEncPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
           <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>setViewId(cx.id)}>
             <div style={{fontWeight:700,fontSize:13}}>{cx.nome}</div>
-            {cx.telefone&&<div style={{fontSize:11,color:"var(--btnPrimary)",marginTop:2}}>📞 {cx.telefone}</div>}
+            {aj.mostrarTelefone&&cx.telefone&&<div style={{fontSize:11,color:"var(--btnPrimary)",marginTop:2}}>📞 {cx.telefone}</div>}
             {cx.obs&&<div style={{fontSize:11,color:"var(--text2)",marginTop:2,fontStyle:"italic" as const}}>{cx.obs}</div>}
             <div style={{fontSize:10,color:"var(--text2)",marginTop:4}}>{nEnc} encomenda(s)</div>
           </div>
