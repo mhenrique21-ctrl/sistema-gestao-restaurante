@@ -3094,6 +3094,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
   const cfg=getImpressaoCfg(db);
   const [reciboEditando,setReciboEditando]=useState<any|null>(null);
   const [tipoEdicao,setTipoEdicao]=useState<"cliente"|"itens"|"valores"|"data"|"devolver"|null>(null);
+  const [busca,setBusca]=useState("");
 
   const salvarEdicaoRecibo=(atualizacoes:any)=>{
     if(!reciboEditando)return;
@@ -3115,7 +3116,6 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
   }
 
   const recibos=[...(db.recibosVenda||[])].sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
-  const [busca,setBusca]=useState("");
   const filtrados=busca.trim()
     ?recibos.filter((r:any)=>(r.clienteNome||"").toLowerCase().includes(busca.toLowerCase())||String(r.numero).includes(busca))
     :recibos;
