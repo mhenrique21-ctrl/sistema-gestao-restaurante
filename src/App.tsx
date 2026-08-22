@@ -7612,14 +7612,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     lista.forEach((it:any)=>{const c=it.categoria||it.cat||"outros";if(!pc[c])pc[c]=[];pc[c].push(it);});
 
     // Resumo diário de produção — usa o snapshot salvo no pedido (mesmo dia
-    // em que ele foi gerado); só recalcula na hora quando é impressão avulsa
-    // (sem pedido salvo), pra não misturar o resumo de hoje com um pedido antigo.
+    // em que ele foi gerado). Se não tiver snapshot (pedido antigo, de antes
+    // deste recurso existir, ou impressão avulsa sem pedido salvo), recalcula
+    // na hora a partir dos recibos de venda do dia do pedido — hoje, no caso
+    // da impressão avulsa.
     let produtosOrdenados:{nome:string,qtd:number,unidade:string}[]=pedido?.resumoDiario||[];
-    if(!pedido){
-      const hoje=today();
-      const recibosHoje=(db.recibosVenda||[]).filter((r:any)=>r.data===hoje);
+    if(!produtosOrdenados.length){
+      const diaAlvo=pedido?.data||today();
+      const recibosDoDia=(db.recibosVenda||[]).filter((r:any)=>r.data===diaAlvo);
       const totaisPorProduto:Record<string,{nome:string,qtd:number,unidade:string}>={};
-      recibosHoje.forEach((r:any)=>{
+      recibosDoDia.forEach((r:any)=>{
         (r.itens||[]).forEach((it:any)=>{
           if(!totaisPorProduto[it.nome]){
             const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
@@ -7863,19 +7865,39 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             </div>
           </div>
           {!isCollapsed&&<>{/* Resumo diário do pedido */}
-          {ped.resumoDiario&&ped.resumoDiario.length>0&&<div style={{background:"#ecfdf5",border:"2px solid #10b981",borderRadius:14,padding:"16px 18px",marginBottom:12}}>
-            <div style={{fontSize:14,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8,color:"#047857"}}>
-              <span>📊 Produção do dia</span>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
-              {ped.resumoDiario.map((p:any)=>(
-                <div key={p.nome} style={{background:"#fff",border:"1px solid #a7f3d0",borderRadius:10,padding:"12px 14px"}}>
-                  <div style={{fontSize:11,color:"#059669",fontWeight:600,marginBottom:5,lineHeight:1.2}}>{p.nome}</div>
-                  <div style={{fontSize:16,fontWeight:800,color:"#065f46"}}>{p.qtd} <span style={{fontSize:10,fontWeight:600,opacity:.75}}>{p.unidade}</span></div>
-                </div>
-              ))}
-            </div>
-          </div>}
+          {(()=>{
+            // Pedidos gerados antes deste recurso existir não têm o snapshot
+            // salvo — nesse caso recalcula com base nos recibos de venda do
+            // dia do pedido (ped.data), não do dia de hoje.
+            const resumo:{nome:string,qtd:number,unidade:string}[]=ped.resumoDiario&&ped.resumoDiario.length>0?ped.resumoDiario:(()=>{
+              const recibosDoDia=(db.recibosVenda||[]).filter((r:any)=>r.data===ped.data);
+              const totais:Record<string,{nome:string,qtd:number,unidade:string}>={};
+              recibosDoDia.forEach((r:any)=>{
+                (r.itens||[]).forEach((it:any)=>{
+                  if(!totais[it.nome]){
+                    const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
+                    totais[it.nome]={nome:it.nome,qtd:0,unidade:prod?.unidade||"un"};
+                  }
+                  totais[it.nome].qtd+=it.quantidade||0;
+                });
+              });
+              return Object.values(totais).sort((a:any,b:any)=>b.qtd-a.qtd);
+            })();
+            if(!resumo.length)return null;
+            return <div style={{background:"#ecfdf5",border:"2px solid #10b981",borderRadius:14,padding:"16px 18px",marginBottom:12}}>
+              <div style={{fontSize:14,fontWeight:800,marginBottom:12,display:"flex",alignItems:"center",gap:8,color:"#047857"}}>
+                <span>📊 Produção do dia</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
+                {resumo.map((p:any)=>(
+                  <div key={p.nome} style={{background:"#fff",border:"1px solid #a7f3d0",borderRadius:10,padding:"12px 14px"}}>
+                    <div style={{fontSize:11,color:"#059669",fontWeight:600,marginBottom:5,lineHeight:1.2}}>{p.nome}</div>
+                    <div style={{fontSize:16,fontWeight:800,color:"#065f46"}}>{p.qtd} <span style={{fontSize:10,fontWeight:600,opacity:.75}}>{p.unidade}</span></div>
+                  </div>
+                ))}
+              </div>
+            </div>;
+          })()}
           {(()=>{
             const grupos:{cat:string;items:{it:any;idx:number}[]}[]=[];
             (ped.itens||[]).forEach((it:any,j:number)=>{
