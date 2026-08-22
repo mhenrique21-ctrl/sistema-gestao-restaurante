@@ -6251,7 +6251,7 @@ function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca
           style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
             background:linked?"#22C55E15":"transparent",border:linked?"1px solid #22C55E44":"1px solid transparent"}}>
           <span style={{fontSize:13}}>{linked?"☑️":"⬜"}</span>
-          <span style={{flex:1,color:linked?"#22C55E":"var(--text)",fontWeight:linked?700:400}}>{mp.nome}</span>
+          <span style={{flex:1,color:linked?"#22C55E":"#334155",fontWeight:linked?700:400}}>{mp.nome}</span>
           {mp.ultimoValor>0
             ?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
             :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
@@ -7306,7 +7306,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                         style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,
                           background:linked?"#22C55E15":"transparent",border:linked?"1px solid #22C55E44":"1px solid transparent"}}>
                         <span style={{fontSize:13}}>{linked?"☑️":"⬜"}</span>
-                        <span style={{flex:1,color:linked?"#22C55E":"#ccc",fontWeight:linked?700:400}}>{mp.nome}</span>
+                        <span style={{flex:1,color:linked?"#22C55E":"#334155",fontWeight:linked?700:400}}>{mp.nome}</span>
                         {mp.ultimoValor>0
                           ?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                           :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
@@ -7550,7 +7550,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               style={{display:"flex",alignItems:"center",gap:6,padding:"4px 6px",fontSize:12,cursor:editProdId?"pointer":"default",borderRadius:6,marginBottom:2,
                 background:isLinked?"#22C55E15":"transparent",border:isLinked?"1px solid #22C55E44":"1px solid transparent"}}>
               <span style={{fontSize:13}}>{isLinked?"☑️":"⬜"}</span>
-              <span style={{flex:1,color:isLinked?"#22C55E":"#ccc",fontWeight:isLinked?700:400}}>{mp.nome}</span>
+              <span style={{flex:1,color:isLinked?"#22C55E":"#334155",fontWeight:isLinked?700:400}}>{mp.nome}</span>
               {mp.ultimoValor>0
                 ?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}</span>
                 :<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
@@ -7688,7 +7688,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   {mpOpts.map((m:any)=>(
                     <div key={m.id} onClick={()=>{vincularMp(item.id,m.id);setCtManualId(null);setCtBusca("");}}
                       style={{display:"flex",alignItems:"center",gap:6,padding:"5px 6px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2}}>
-                      <span style={{flex:1,color:"#ccc"}}>{m.nome}</span>
+                      <span style={{flex:1,color:"#334155"}}>{m.nome}</span>
                       {m.ultimoValor>0?<span style={{color:"#22C55E",fontWeight:700,whiteSpace:"nowrap" as const}}>{fmtMoney(m.ultimoValor)}/{m.unidade||"un"}</span>:<span style={{color:"#f59e0b",fontSize:10}}>sem preço</span>}
                     </div>
                   ))}
