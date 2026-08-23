@@ -129,6 +129,7 @@
   .card:nth-child(2) { animation-delay: .12s; }
   .card:nth-child(3) { animation-delay: .19s; }
   .card:nth-child(4) { animation-delay: .26s; }
+  .card:nth-child(5) { animation-delay: .33s; }
   @keyframes card-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
 
   /* efeito de iluminação que segue o hover */
@@ -300,6 +301,7 @@
     gestao: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
     delivery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M15 6a1 1 0 0 1 1 1v5h1.5l3 3.5V17a1 1 0 0 1-1 1H18"/><path d="M9 17H7.5"/><path d="M13 17H16"/><path d="M8 6h4l3 5H5l-1.5-2.5"/><path d="M8 6V3H5"/></svg>',
     config: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
+    tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="22" x2="16" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg>',
     arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
   };
 
@@ -307,6 +309,7 @@
     { key: 'pdv',      title: 'PDV',            desc: 'Acesse o ponto de venda e realize pedidos no salão.',                 href: 'https://pedidos.confrariacafe.com/comanda.html' },
     { key: 'gestao',   title: 'GESTÃO',         desc: 'Gerencie vendas, produtos, relatórios e desempenho do negócio.',      href: 'https://gestao.confrariacafe.com/' },
     { key: 'delivery', title: 'DELIVERY',       desc: 'Gerencie pedidos, entregas e integrações de delivery.',               href: 'https://pedidos.confrariacafe.com/admin.html' },
+    { key: 'tv',       title: 'CARDÁPIO TV',    desc: 'Abra o cardápio em loop pra exibir na televisão da loja.',            href: 'https://gestao.confrariacafe.com/tv/confraria' },
     { key: 'config',   title: 'CONFIGURAÇÕES',  desc: 'Ajuste as preferências do sistema e da empresa.',                     href: null },
   ];
 
