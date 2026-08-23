@@ -1019,6 +1019,37 @@ const migrateDb=(m:any)=>{
       }
       m[e].produtosCatsRepairV1=true;
     }
+    // Recupera preço fixo de produção que sumiu (bug: campo de edição em
+    // branco no blur, ou onBlur/Escape, gravava preço zero em silêncio — já
+    // corrigido nos pontos de edição). Só reconstrói produto SEM preço,
+    // usando o precoUnit mais recente entre os recibos já emitidos pra esse
+    // nome (recibosEntrega e recibosVenda guardam preço por item). Produto
+    // que nunca teve recibo gerado não tem de onde recuperar — precisa
+    // recadastrar manualmente.
+    if(!m[e].produtosPrecoRepairV1){
+      const precosPorNome=new Map<string,{preco:number,quando:string}>();
+      const fontesRecibo=[...(m[e].recibosEntrega||[]),...(m[e].recibosVenda||[])];
+      for(const rec of fontesRecibo){
+        const quando=String(rec?.criadoEm||rec?.data||"");
+        for(const it of (rec?.itens||[])){
+          const nome=String(it?.nome||"").trim().toLowerCase();
+          const preco=Number(it?.precoUnit)||0;
+          if(!nome||preco<=0)continue;
+          const atual=precosPorNome.get(nome);
+          if(!atual||quando>atual.quando)precosPorNome.set(nome,{preco,quando});
+        }
+      }
+      if(precosPorNome.size){
+        const agora=new Date().toISOString();
+        m[e].produtosProducao=(m[e].produtosProducao||[]).map((p:any)=>{
+          if(p.precoFixo>0)return p;
+          const rec=precosPorNome.get(String(p?.nome||"").trim().toLowerCase());
+          if(!rec)return p;
+          return{...p,precoFixo:rec.preco,atualizadoEm:agora};
+        });
+      }
+      m[e].produtosPrecoRepairV1=true;
+    }
     // Limpar caracteres corrompidos (�, zero-width) de nomes de produtos/itens
     {
       const RE_LIXO=/[\uFFFD\u200B-\u200D\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
@@ -3196,7 +3227,11 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,onVoltar}:{db:any,set
 
   const salvarPrecoBusca=()=>{
     if(!produtoSel)return;
-    const v=parseMoney(precoEditVal||0);
+    // Campo vazio (ex.: selecionou tudo pra reescrever e saiu do campo antes
+    // de terminar) fechava a edição e gravava preço ZERO em silêncio — bug
+    // real de sumiço de preço. Vazio agora só fecha, sem tocar no preço.
+    if(!precoEditVal.trim()){setEditandoPrecoBusca(false);return;}
+    const v=parseMoney(precoEditVal);
     // Mesmo campo do catálogo de Produção (precoFixo): editar aqui vale lá também.
     (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===produtoSel.id?{...p,precoFixo:v,atualizadoEm:new Date().toISOString()}:p)}));
     setProdutoSel((p:any)=>({...p,precoFixo:v}));
@@ -8344,11 +8379,17 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const saveProd=()=>{
     const nome=prodForm.nome.trim();
     if(!nome)return alert("Nome obrigatório.");
-    const precoFixo=parseMoney(prodForm.precoFixo||0)||undefined;
     if(editProdId){
+      // Campo de preço vazio ao editar preserva o preço que já existia — só
+      // limpa o preço se o campo tiver mesmo um valor (ex.: "0"). Antes,
+      // salvar com o campo vazio apagava o preço fixo em silêncio.
+      const precoDigitado=prodForm.precoFixo.trim();
+      const atual=prodsCatalog.find((p:any)=>p.id===editProdId);
+      const precoFixo=precoDigitado?(parseMoney(precoDigitado)||undefined):atual?.precoFixo;
       (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>p.id===editProdId?{...p,nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo,atualizadoEm:new Date().toISOString()}:p)}));
       setEditProdId(null);
     }else{
+      const precoFixo=parseMoney(prodForm.precoFixo.trim()||0)||undefined;
       (setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:[...d.produtosProducao||[],{id:uid(),nome,cats:prodForm.cats,cat:prodForm.cats[0]||"",unidade:prodForm.unidade,precoFixo,atualizadoEm:new Date().toISOString()}]}));
     }
     setProdForm({nome:"",cats:[],unidade:"un",precoFixo:""});
