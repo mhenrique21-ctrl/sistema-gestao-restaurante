@@ -11078,7 +11078,7 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
   const podeCompartilhar=!!(state&&setState&&empresa);
   const [subTab,setSubTab]=useState("lista");
   const [form,setForm]=useState({nome:"",insumos:[],porcoes:"1",cmv:"30",compartilhada:false});
-  const [novoIns,setNovoIns]=useState({nome:"",mp:"",precoTotal:"",qtdComprada:"",qtdUsada:"",unidade:"kg"});
+  const [novoIns,setNovoIns]=useState({nome:"",prodListaId:"",mpId:"",qtdUsada:"",unidade:"kg",precoManual:""});
   const [editId,setEditId]=useState(null);
   const formRef=useRef<HTMLDivElement>(null);
   const [busca,setBusca]=useState("");
@@ -11089,26 +11089,58 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
   const [showInsSugg,setShowInsSugg]=useState(false);
   const mps=db.materiasPrimas||[];
   const compras=db.compras||[];
-  const insSuggestions=novoIns.nome.length>=1?mps.filter(m=>(m.nome||"").toLowerCase().includes(novoIns.nome.toLowerCase())).slice(0,8):[];
-  const selectInsSugg=(mp:any)=>{
-    const pt=mp.ultimoValor||0;
-    setNovoIns(i=>({...i,nome:mp.nome,mp:mp.id,unidade:mp.unidade||i.unidade,precoTotal:String(pt),qtdComprada:"1"}));
+  const produtosLista=db.produtosLista||[];
+  // Resolve o preço de referência de um insumo pra uma empresa-alvo (dTarget),
+  // na ordem: produto da Lista de Compras (marca mais recente entre as
+  // mpVinculados, igual já funciona em Lista de Compras) → matéria-prima direta
+  // por id/nome → última compra por nome → mantém o valor que já tinha.
+  const resolverPrecoInsumo=(ins:{prodListaId?:string,mpId?:string,nome:string,valorUnd?:number},dTarget:any)=>{
+    const allProdsLista=dTarget?.produtosLista||[];
+    const allMps=dTarget?.materiasPrimas||[];
+    const allCompras=dTarget?.compras||[];
+    let prod=ins.prodListaId?allProdsLista.find((p:any)=>p.id===ins.prodListaId):null;
+    if(!prod)prod=allProdsLista.find((p:any)=>(p.nome||"").toLowerCase()===(ins.nome||"").toLowerCase());
+    if(prod?.mpVinculados?.length){
+      const marcas=prod.mpVinculados.map((id:string)=>allMps.find((m:any)=>m.id===id)).filter(Boolean);
+      const recente=mpMaisRecente(marcas);
+      if(recente)return{valorUnd:recente.ultimoValor||0,mpId:recente.id,prodListaId:prod.id};
+    }
+    let mp=ins.mpId?allMps.find((m:any)=>m.id===ins.mpId):null;
+    if(!mp)mp=allMps.find((m:any)=>(m.nome||"").toLowerCase()===(ins.nome||"").toLowerCase());
+    if(mp)return{valorUnd:mp.ultimoValor||0,mpId:mp.id,prodListaId:prod?.id};
+    const compra=allCompras.filter((c:any)=>{const np=(c.nomeProduto||"").toLowerCase();const nl=(ins.nome||"").toLowerCase();return np.includes(nl)||nl.includes(np);}).sort((a:any,b:any)=>(b.data||"").localeCompare(a.data||""))[0];
+    if(compra)return{valorUnd:compra.valorUnitario??ins.valorUnd??0,mpId:undefined,prodListaId:prod?.id};
+    return{valorUnd:ins.valorUnd??0,mpId:undefined,prodListaId:prod?.id};
+  };
+  const buscaNome=novoIns.nome.trim().toLowerCase();
+  const prodSuggestions=buscaNome.length>=1?produtosLista.filter((p:any)=>(p.nome||"").toLowerCase().includes(buscaNome)).slice(0,8):[];
+  const mpSuggestions=buscaNome.length>=1?mps.filter((m:any)=>(m.nome||"").toLowerCase().includes(buscaNome)&&!produtosLista.some((p:any)=>(p.mpVinculados||[]).includes(m.id))).slice(0,8):[];
+  const prodSelecionado=novoIns.prodListaId?produtosLista.find((p:any)=>p.id===novoIns.prodListaId):null;
+  const marcasDoProd=prodSelecionado?(prodSelecionado.mpVinculados||[]).map((id:string)=>mps.find((m:any)=>m.id===id)).filter(Boolean):[];
+  const marcaMaisRecente=marcasDoProd.length?mpMaisRecente(marcasDoProd):null;
+  const mpDireta=novoIns.mpId?mps.find((m:any)=>m.id===novoIns.mpId):null;
+  const precoResolvido=marcaMaisRecente?(marcaMaisRecente.ultimoValor||0):mpDireta?(mpDireta.ultimoValor||0):0;
+  const temPrecoCatalogado=!!(marcaMaisRecente||mpDireta);
+  const insValorUnd=temPrecoCatalogado?precoResolvido:(parseFloat(novoIns.precoManual)||0);
+  const insQtdUsada=parseFloat(novoIns.qtdUsada)||0;
+  const insCusto=insValorUnd*insQtdUsada;
+  const selecionarProd=(p:any)=>{
+    const marcas=(p.mpVinculados||[]).map((id:string)=>mps.find((m:any)=>m.id===id)).filter(Boolean);
+    const recente=marcas.length?mpMaisRecente(marcas):null;
+    setNovoIns(i=>({...i,nome:p.nome,prodListaId:p.id,mpId:recente?.id||"",unidade:p.unidade||i.unidade,precoManual:""}));
     setShowInsSugg(false);
   };
-  const insPrecoTotal=parseFloat(novoIns.precoTotal)||0;
-  const insQtdComprada=parseFloat(novoIns.qtdComprada)||0;
-  const insQtdUsada=parseFloat(novoIns.qtdUsada)||0;
-  const insValorUnd=insQtdComprada>0?insPrecoTotal/insQtdComprada:0;
-  const insCusto=insValorUnd*insQtdUsada;
+  const selecionarMpDireta=(mp:any)=>{
+    setNovoIns(i=>({...i,nome:mp.nome,prodListaId:"",mpId:mp.id,unidade:mp.unidade||i.unidade,precoManual:""}));
+    setShowInsSugg(false);
+  };
   const addIns=()=>{
     const nome=novoIns.nome.trim();
     if(!nome)return alert("Informe o nome do produto.");
     if(insQtdUsada<=0)return alert("Informe a quantidade usada na ficha.");
-    if(insPrecoTotal<=0)return alert("Informe o preço total do produto.");
-    if(insQtdComprada<=0)return alert("Informe a quantidade comprada.");
-    const mp=novoIns.mp?mps.find(m=>m.id===novoIns.mp):null;
-    setForm(f=>({...f,insumos:[...f.insumos,{id:uid(),mpId:mp?.id||"",nome,quantidade:insQtdUsada,unidade:novoIns.unidade,valorUnd:insValorUnd,custo:insCusto}]}));
-    setNovoIns({nome:"",mp:"",precoTotal:"",qtdComprada:"",qtdUsada:"",unidade:"kg"});
+    if(!temPrecoCatalogado&&insValorUnd<=0)return alert("Informe o preço do produto (não encontrado no catálogo).");
+    setForm(f=>({...f,insumos:[...f.insumos,{id:uid(),mpId:mpDireta?.id||marcaMaisRecente?.id||"",prodListaId:novoIns.prodListaId||undefined,nome,quantidade:insQtdUsada,unidade:novoIns.unidade,valorUnd:insValorUnd,custo:insCusto}]}));
+    setNovoIns({nome:"",prodListaId:"",mpId:"",qtdUsada:"",unidade:"kg",precoManual:""});
   };
   const remIns=(id)=>setForm(f=>({...f,insumos:f.insumos.filter(i=>i.id!==id)}));
   const startEditIns=(ins)=>{setEditInsId(ins.id);setEditInsForm({quantidade:String(ins.quantidade),unidade:ins.unidade,valorUnd:String(ins.valorUnd)});};
@@ -11129,18 +11161,9 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
   // quantidades) é uma só, mas cada lado resolve o preço com sua própria
   // matéria-prima. Mesma lógica de atualizar(), só que parametrizada.
   const recalcularParaEmpresa=(ftBase:any,dTarget:any)=>{
-    const allMps=dTarget?.materiasPrimas||[];
-    const allCompras=dTarget?.compras||[];
     const ins=(ftBase.insumos||[]).map((i:any)=>{
-      let mp=i.mpId?allMps.find((m:any)=>m.id===i.mpId):null;
-      if(!mp)mp=allMps.find((m:any)=>(m.nome||"").toLowerCase()===(i.nome||"").toLowerCase());
-      if(!mp){
-        const compra=allCompras.filter((c:any)=>{const np=(c.nomeProduto||"").toLowerCase();const nl=(i.nome||"").toLowerCase();return np.includes(nl)||nl.includes(np);}).sort((a:any,b:any)=>(b.data||"").localeCompare(a.data||""))[0];
-        const v=compra?.valorUnitario??i.valorUnd??0;
-        return{...i,valorUnd:v,custo:v*i.quantidade,mpId:undefined};
-      }
-      const v=mp.ultimoValor||0;
-      return{...i,valorUnd:v,custo:v*i.quantidade,mpId:mp.id};
+      const r=resolverPrecoInsumo(i,dTarget);
+      return{...i,valorUnd:r.valorUnd,custo:r.valorUnd*i.quantidade,mpId:r.mpId,prodListaId:r.prodListaId};
     });
     const ct=ins.reduce((s:number,i:any)=>s+i.custo,0);
     const por=ftBase.porcoes||1;const cmv=ftBase.cmv||30;
@@ -11204,21 +11227,10 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
   };
   const atualizar=()=>{
     setDb(d=>{
-      const allMps=d.materiasPrimas||[];
-      const allCompras=d.compras||[];
       const fichas=(d.fichasTecnicas||[]).map(f=>{
         const ins=f.insumos.map(i=>{
-          let mp=i.mpId?allMps.find(m=>m.id===i.mpId):null;
-          if(!mp){
-            mp=allMps.find(m=>(m.nome||"").toLowerCase()===(i.nome||"").toLowerCase());
-          }
-          if(!mp){
-            const compra=allCompras.filter(c=>{const np=(c.nomeProduto||"").toLowerCase();const nl=(i.nome||"").toLowerCase();return np.includes(nl)||nl.includes(np);}).sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0];
-            if(compra){const v=compra.valorUnitario||i.valorUnd;return{...i,valorUnd:v,custo:v*i.quantidade};}
-            return i;
-          }
-          const v=mp.ultimoValor||i.valorUnd;
-          return{...i,valorUnd:v,custo:v*i.quantidade,mpId:mp.id};
+          const r=resolverPrecoInsumo(i,d);
+          return{...i,valorUnd:r.valorUnd,custo:r.valorUnd*i.quantidade,mpId:r.mpId,prodListaId:r.prodListaId};
         });
         const ct=ins.reduce((s,i)=>s+i.custo,0);
         const por=f.porcoes||1;const cmv=f.cmv||30;
@@ -11351,54 +11363,71 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
         <div className="section-title">Adicionar Insumo</div>
         <div style={{position:"relative",marginBottom:8}}>
           <input placeholder="Nome do produto (ex: Farinha, Ovo, Açúcar...)" value={novoIns.nome}
-            onChange={e=>{setNovoIns(i=>({...i,nome:e.target.value,mp:""}));setShowInsSugg(true);}}
+            onChange={e=>{setNovoIns(i=>({...i,nome:e.target.value,prodListaId:"",mpId:"",precoManual:""}));setShowInsSugg(true);}}
             onKeyDown={e=>{if(e.key==="Enter"&&!showInsSugg)addIns();if(e.key==="Escape")setShowInsSugg(false);}}
             onFocus={()=>setShowInsSugg(true)}
             onBlur={()=>setTimeout(()=>setShowInsSugg(false),150)}
             className="inp" style={{marginBottom:0}}/>
-          {showInsSugg&&insSuggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:200,overflowY:"auto" as const}}>
-            {insSuggestions.map((m:any)=>(
-              <div key={m.id} onMouseDown={()=>selectInsSugg(m)}
+          {showInsSugg&&(prodSuggestions.length>0||mpSuggestions.length>0)&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:220,overflowY:"auto" as const}}>
+            {prodSuggestions.map((p:any)=>{
+              const marcas=(p.mpVinculados||[]).map((id:string)=>mps.find((m:any)=>m.id===id)).filter(Boolean);
+              const recente=marcas.length?mpMaisRecente(marcas):null;
+              return <div key={p.id} onMouseDown={()=>selecionarProd(p)}
+                style={{padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                <div style={{fontSize:13,fontWeight:600}}>{p.nome}</div>
+                <div style={{fontSize:10.5,color:"var(--text2)",marginTop:2,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
+                  {marcas.length>0?<span className="tag" style={{background:"var(--bg)",border:"1px solid var(--border2)",fontSize:9}}>{marcas.length} marca{marcas.length>1?"s":""} vinculada{marcas.length>1?"s":""}</span>:<span className="tag" style={{background:"var(--bg)",border:"1px solid var(--border2)",fontSize:9}}>sem marca vinculada</span>}
+                  {recente&&<span style={{color:"#22C55E"}}>{fmtMoney(recente.ultimoValor||0)}/{p.unidade||recente.unidade} · mais recente</span>}
+                </div>
+              </div>;
+            })}
+            {mpSuggestions.map((m:any)=>(
+              <div key={m.id} onMouseDown={()=>selecionarMpDireta(m)}
                 style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
                 <span style={{fontSize:13,fontWeight:600}}>{m.nome}</span>
                 <span style={{fontSize:11,color:"#22C55E"}}>{fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
               </div>
             ))}
           </div>}
-          {novoIns.mp&&<div style={{fontSize:10,color:"#22C55E",marginTop:3}}>Vinculado à matéria-prima</div>}
-          {novoIns.nome&&!novoIns.mp&&<div style={{fontSize:10,color:"#F59E0B",marginTop:3}}>Produto manual — concilie com compras depois</div>}
         </div>
-        <div style={{background:"var(--bg4)",borderRadius:8,padding:"8px",marginBottom:8,border:"1px solid var(--border)"}}>
-          <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>Dados do Produto Comprado</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-            <div style={{flex:"1 1 90px"}}>
-              <label style={{fontSize:10,color:"#666"}}>Preço Total (R$)</label>
-              <input type="number" placeholder="0.00" min="0" step="0.01" value={novoIns.precoTotal} onChange={e=>setNovoIns(i=>({...i,precoTotal:e.target.value}))}
-                className="inp" style={{marginBottom:0}}/>
-            </div>
-            <div style={{flex:"1 1 70px"}}>
-              <label style={{fontSize:10,color:"#666"}}>Qtd Comprada</label>
-              <input type="number" placeholder="0" min="0.01" step="0.01" value={novoIns.qtdComprada} onChange={e=>setNovoIns(i=>({...i,qtdComprada:e.target.value}))}
-                className="inp" style={{marginBottom:0}}/>
-            </div>
-            <div style={{flex:"0 0 60px"}}>
-              <label style={{fontSize:10,color:"#666"}}>Unidade</label>
-              <select value={novoIns.unidade} onChange={e=>setNovoIns(i=>({...i,unidade:e.target.value}))} className="inp" style={{marginBottom:0}}>
-                {["kg","un","L","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
-              </select>
-            </div>
+
+        {prodSelecionado&&marcasDoProd.length>0&&<div style={{background:"var(--primary-wash,var(--bg4))",border:"1px solid var(--btnPrimary)",borderRadius:10,padding:12,marginBottom:8}}>
+          <div style={{fontSize:13,fontWeight:800,color:"var(--btnPrimary)",marginBottom:8}}>{prodSelecionado.nome}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {marcasDoProd.map((m:any)=>{
+              const ativa=marcaMaisRecente&&m.id===marcaMaisRecente.id;
+              return <div key={m.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,padding:"5px 8px",borderRadius:7,background:"var(--card,var(--bg))",border:ativa?"1.5px solid #22C55E":"1px solid transparent"}}>
+                <span style={{flex:1}}>{m.nome}{ativa&&<span style={{fontSize:8.5,fontWeight:800,background:"#22C55E",color:"#fff",borderRadius:4,padding:"1px 5px",marginLeft:6}}>USADO NA FICHA</span>}</span>
+                <span style={{fontWeight:700,color:ativa?"#22C55E":"var(--text)"}}>{fmtMoney(m.ultimoValor||0)}</span>
+              </div>;
+            })}
           </div>
-          {insQtdComprada>0&&insPrecoTotal>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:4}}>
-            Valor/und: {fmtMoney(insValorUnd)}/{novoIns.unidade}
-          </div>}
-        </div>
+        </div>}
+
+        {temPrecoCatalogado?<div style={{background:"var(--card,var(--bg))",border:"2px solid #22C55E",borderRadius:9,padding:"10px 11px",marginBottom:8}}>
+          <div style={{fontSize:9.5,color:"#22C55E",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:4}}>{marcaMaisRecente?"Preço travado (marca mais recente)":"Preço travado (cadastro da matéria-prima)"}</div>
+          <div style={{fontSize:17,fontWeight:800,color:"#22C55E"}}>{fmtMoney(precoResolvido)} / {novoIns.unidade}</div>
+          <div style={{fontSize:10.5,color:"var(--text2)",marginTop:2}}>Sempre o preço mais atual do cadastro — se mudar numa próxima compra, atualiza sozinho aqui e em "🔄 Atualizar Fichas".</div>
+        </div>:novoIns.nome.trim()&&<div style={{background:"#F59E0B14",border:"1px solid #F59E0B55",borderRadius:9,padding:"10px 11px",marginBottom:8}}>
+          <div style={{fontSize:11,color:"#B45309",fontWeight:700,marginBottom:6}}>⚠️ Produto não encontrado no catálogo</div>
+          <div style={{fontSize:10.5,color:"var(--text2)",marginBottom:6}}>Informe um preço manual só pra essa ficha, ou cadastre o produto em Compras → Insumos pra ele entrar na conversão automática.</div>
+          <label style={{fontSize:10,color:"#666"}}>Preço manual (R$/{novoIns.unidade})</label>
+          <input type="number" placeholder="0.00" min="0" step="0.01" value={novoIns.precoManual} onChange={e=>setNovoIns(i=>({...i,precoManual:e.target.value}))}
+            className="inp" style={{marginBottom:0}}/>
+        </div>}
+
         <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"flex-end"}}>
           <div style={{flex:1}}>
-            <label style={{fontSize:10,color:"#F59E0B",fontWeight:600}}>Qtd Usada na Ficha</label>
+            <label style={{fontSize:10,color:"#F59E0B",fontWeight:600}}>Quantidade usada na receita</label>
             <input type="number" placeholder="0" min="0.01" step="0.01" value={novoIns.qtdUsada} onChange={e=>setNovoIns(i=>({...i,qtdUsada:e.target.value}))}
               onKeyDown={e=>{if(e.key==="Enter")addIns();}} className="inp" style={{marginBottom:0}}/>
           </div>
-          <div style={{paddingBottom:2,fontSize:12,color:"#888"}}>{novoIns.unidade}</div>
+          <div style={{flex:"0 0 70px"}}>
+            <label style={{fontSize:10,color:"#666"}}>Unidade</label>
+            <select value={novoIns.unidade} onChange={e=>setNovoIns(i=>({...i,unidade:e.target.value}))} className="inp" style={{marginBottom:0}}>
+              {["kg","un","L","g","ml"].map(u=><option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
         </div>
         {insQtdUsada>0&&insValorUnd>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"6px 8px",background:"#1D4ED811",borderRadius:6,marginBottom:8,border:"1px solid #1D4ED822"}}>
           <span style={{color:"#888"}}>Custo na ficha:</span>
