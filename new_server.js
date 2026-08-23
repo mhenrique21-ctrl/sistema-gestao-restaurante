@@ -51,8 +51,21 @@ fs.mkdirSync(BANNERS_DIR, { recursive: true });
 function cardapioTvFile(emp) {
   return path.join(DADOS_DIR, `cardapio_tv_${emp.toLowerCase()}.json`);
 }
+// Formato atual: { telas: [{id,nome,banners}] } — várias TVs por empresa, cada
+// uma com seu próprio conjunto de banners. Documentos salvos antes disso
+// tinham só { banners: [] } direto; migra em memória pra uma tela "TV1" na
+// leitura, sem precisar reescrever o arquivo nem quebrar quem já tinha link
+// salvo na TV.
 function loadCardapioTv(emp) {
-  try { return JSON.parse(fs.readFileSync(cardapioTvFile(emp), 'utf-8')); } catch { return { banners: [] }; }
+  let data;
+  try { data = JSON.parse(fs.readFileSync(cardapioTvFile(emp), 'utf-8')); } catch { data = { telas: [] }; }
+  if (!Array.isArray(data.telas)) {
+    data = { telas: Array.isArray(data.banners) ? [{ id: 'tv1', nome: 'TV1', banners: data.banners }] : [] };
+  }
+  return data;
+}
+function encontrarTela(data, telaId) {
+  return data.telas.find(t => t.id === telaId) || data.telas[0] || null;
 }
 
 // Server-Sent Events: cada TV aberta mantém uma conexão HTTP viva aqui dentro.
@@ -2287,7 +2300,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
-  // Cardápio TV — lista de banners (metadado leve, público: a TV lê sem login)
+  // Cardápio TV — todas as telas da empresa, com seus banners (painel admin usa isto pra gerenciar)
   if (req.method === 'GET' && /^\/api\/cardapio-tv\/[^/]+$/.test(urlPath)) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
@@ -2295,6 +2308,22 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.writeHead(200);
     res.end(JSON.stringify(loadCardapioTv(emp)));
+    return;
+  }
+
+  // Cardápio TV — banners de UMA tela específica (o que a TV em si consome).
+  // telaId que não bate com nenhuma tela cadastrada cai na primeira da lista —
+  // é assim que o link antigo sem tela (/tv/confraria) continua funcionando.
+  if (req.method === 'GET' && /^\/api\/cardapio-tv\/[^/]+\/[^/]+$/.test(urlPath)) {
+    const partes = urlPath.split('/');
+    const emp = (partes[3] || '').toUpperCase();
+    const telaId = partes[4] || '';
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    const tela = encontrarTela(loadCardapioTv(emp), telaId);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.writeHead(200);
+    res.end(JSON.stringify({ banners: tela?.banners || [] }));
     return;
   }
 
@@ -2329,7 +2358,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
-  // Cardápio TV — salvar lista de banners (o painel admin manda o array inteiro)
+  // Cardápio TV — salvar todas as telas (o painel admin manda a lista inteira)
   if (req.method === 'POST' && /^\/api\/cardapio-tv\/[^/]+$/.test(urlPath)) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
@@ -2338,8 +2367,8 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     req.on('end', () => {
       try {
         const incoming = JSON.parse(body);
-        if (!Array.isArray(incoming.banners)) throw new Error('banners deve ser um array');
-        fs.writeFileSync(cardapioTvFile(emp), JSON.stringify({ banners: incoming.banners }));
+        if (!Array.isArray(incoming.telas)) throw new Error('telas deve ser um array');
+        fs.writeFileSync(cardapioTvFile(emp), JSON.stringify({ telas: incoming.telas }));
         broadcastCardapioTv(emp);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);

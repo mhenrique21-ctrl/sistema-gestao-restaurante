@@ -19,7 +19,7 @@ const DURACAO_PADRAO = 15;
 const DURACAO_MAX_VIDEO_SEG = 90; // segurança: se onEnded/onError nunca disparar (vídeo travado), avança mesmo assim
 const POLL_MS = 5 * 60 * 1000; // rede de segurança — o canal ao vivo (SSE) já cobre o caso normal em ~1s
 
-export default function CardapioTV({ empresa }: { empresa: string }) {
+export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: string }) {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [idx, setIdx] = useState(0);
   const [carregado, setCarregado] = useState(false);
@@ -28,10 +28,13 @@ export default function CardapioTV({ empresa }: { empresa: string }) {
 
   const empLower = empresa.toLowerCase();
   const empLabel = empresa.toUpperCase();
+  // "_default" nunca bate com o id de tela nenhuma — o servidor cai pra
+  // primeira tela cadastrada, o que faz o link antigo sem tela continuar valendo.
+  const telaId = tela || "_default";
 
   const buscar = async () => {
     try {
-      const r = await fetch(`/api/cardapio-tv/${empLabel}`, { cache: "no-store" });
+      const r = await fetch(`/api/cardapio-tv/${empLabel}/${telaId}`, { cache: "no-store" });
       const data = await r.json();
       const ativos = ((data?.banners || []) as Banner[])
         .filter(b => b.ativo)
@@ -63,7 +66,7 @@ export default function CardapioTV({ empresa }: { empresa: string }) {
 
     return () => { clearInterval(poll); es?.close(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empLabel]);
+  }, [empLabel, telaId]);
 
   useEffect(() => {
     if (idx >= banners.length) setIdx(0);

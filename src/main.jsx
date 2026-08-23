@@ -3,12 +3,14 @@ import ReactDOM from 'react-dom/client'
 
 const root = ReactDOM.createRoot(document.getElementById('root'))
 
-// /tv/<empresa>: página pública pra TV, sem login e sem carregar o app inteiro
-// — import() dinâmico faz a TV baixar só o bundle da CardapioTV, não o app todo.
-const tvMatch = window.location.pathname.match(/^\/tv\/([a-zA-Z]+)\/?$/)
+// /tv/<empresa> ou /tv/<empresa>/<tela>: página pública pra TV, sem login e
+// sem carregar o app inteiro — import() dinâmico faz a TV baixar só o bundle
+// da CardapioTV, não o app todo. <tela> é opcional: sem ela, mostra a
+// primeira tela cadastrada (link antigo, de antes de existir múltiplas TVs).
+const tvMatch = window.location.pathname.match(/^\/tv\/([a-zA-Z]+)(?:\/([a-zA-Z0-9-]+))?\/?$/)
 if (tvMatch) {
   import('./CardapioTV').then(({ default: CardapioTV }) => {
-    root.render(<CardapioTV empresa={tvMatch[1]} />)
+    root.render(<CardapioTV empresa={tvMatch[1]} tela={tvMatch[2] || ''} />)
   })
 } else {
   import('./App').then(({ default: App }) => {

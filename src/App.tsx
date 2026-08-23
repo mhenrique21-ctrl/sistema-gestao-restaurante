@@ -14191,7 +14191,8 @@ ${cfg.encomendaAssinatura?`<div class="assinatura">Ciente: _____________________
 // dados/banners/), pra não engordar o JSON de 1-3MB que já é lido/gravado a
 // cada sync de qualquer aparelho logado. Ver /api/cardapio-tv* no servidor.
 function CardapioTVPanel({empresa}:{empresa:string}){
-  const [banners,setBanners]=useState<any[]>([]);
+  const [telas,setTelas]=useState<any[]>([]);
+  const [telaAtivaId,setTelaAtivaId]=useState<string|null>(null);
   const [loading,setLoading]=useState(true);
   const [uploading,setUploading]=useState(false);
   const [tvsConectadas,setTvsConectadas]=useState(0);
@@ -14201,7 +14202,11 @@ function CardapioTVPanel({empresa}:{empresa:string}){
     setLoading(true);
     fetch(`/api/cardapio-tv/${empresa}`,{cache:"no-store"})
       .then(r=>r.json())
-      .then(data=>setBanners((data?.banners||[]).slice().sort((a:any,b:any)=>(a.ordem??0)-(b.ordem??0))))
+      .then(data=>{
+        const t=(data?.telas||[]).map((tela:any)=>({...tela,banners:(tela.banners||[]).slice().sort((a:any,b:any)=>(a.ordem??0)-(b.ordem??0))}));
+        setTelas(t);
+        setTelaAtivaId(t[0]?.id||null);
+      })
       .catch(()=>{})
       .finally(()=>setLoading(false));
   },[empresa]);
@@ -14213,11 +14218,34 @@ function CardapioTVPanel({empresa}:{empresa:string}){
     return()=>clearInterval(t);
   },[empresa]);
 
-  const salvar=(novos:any[])=>{
-    setBanners(novos);
-    fetch(`/api/cardapio-tv/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({banners:novos})})
+  const salvarTelas=(novasTelas:any[])=>{
+    setTelas(novasTelas);
+    fetch(`/api/cardapio-tv/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({telas:novasTelas})})
       .catch(()=>alert("Não foi possível salvar — verifique a conexão."));
   };
+  // Toda ação de banner mexe só na tela ativa — as outras telas ficam intactas.
+  const salvar=(novosBanners:any[])=>salvarTelas(telas.map(t=>t.id===telaAtivaId?{...t,banners:novosBanners}:t));
+  // Digitação (nome/duração): atualiza local sem POST a cada tecla; o POST
+  // de verdade só acontece no onBlur, via atualizarBanner→salvar.
+  const setBannersLocal=(fn:(bs:any[])=>any[])=>setTelas(ts=>ts.map(t=>t.id===telaAtivaId?{...t,banners:fn(t.banners)}:t));
+
+  const criarTela=()=>{
+    const nums=telas.map(t=>{const m=/^tv(\d+)$/.exec(t.id);return m?parseInt(m[1]):0;});
+    const n=nums.length?Math.max(...nums)+1:1;
+    const nova={id:`tv${n}`,nome:`TV${n}`,banners:[]};
+    salvarTelas([...telas,nova]);
+    setTelaAtivaId(nova.id);
+  };
+  const renomearTela=(id:string,nome:string)=>salvarTelas(telas.map(t=>t.id===id?{...t,nome}:t));
+  const excluirTela=(id:string)=>{
+    if(!confirm("Excluir esta tela e todos os banners dela? A TV que abrir esse link vai parar de mostrar conteúdo."))return;
+    const restantes=telas.filter(t=>t.id!==id);
+    salvarTelas(restantes);
+    setTelaAtivaId(restantes[0]?.id||null);
+  };
+
+  const telaAtiva=telas.find(t=>t.id===telaAtivaId)||null;
+  const banners:any[]=telaAtiva?.banners||[];
 
   const redimBanner=(dataUrl:string,maxPx=1400,q=0.78):Promise<{dataUrl:string,w:number,h:number}>=>new Promise(res=>{
     const img=new Image();
@@ -14280,7 +14308,7 @@ function CardapioTVPanel({empresa}:{empresa:string}){
     salvar(novos.map((b,idx)=>({...b,ordem:idx})));
   };
 
-  const tvUrl=`${window.location.origin}/tv/${empresa.toLowerCase()}`;
+  const tvUrl=telaAtiva?`${window.location.origin}/tv/${empresa.toLowerCase()}/${telaAtiva.id}`:"";
   const copiarLink=()=>{navigator.clipboard?.writeText(tvUrl).then(()=>alert("Link copiado!")).catch(()=>{});};
 
   if(loading)return <div className="muted" style={{textAlign:"center",padding:24}}>Carregando...</div>;
@@ -14288,17 +14316,39 @@ function CardapioTVPanel({empresa}:{empresa:string}){
   const ativos=banners.filter(b=>b.ativo);
 
   return <div>
+    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" as const,marginBottom:10}}>
+      <div style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>📺 Cardápio TV</div>
+      {tvsConectadas>0
+        ?<span style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,color:"#16A34A",background:"#DCFCE7",borderRadius:20,padding:"3px 9px"}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:"#16A34A"}}/>{tvsConectadas>1?`${tvsConectadas} TVs conectadas`:"TV conectada"}
+        </span>
+        :<span style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,color:"var(--text3)",background:"var(--bg5)",borderRadius:20,padding:"3px 9px"}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:"var(--border2)"}}/>Nenhuma TV conectada
+        </span>}
+    </div>
+
+    <div style={{display:"flex",gap:6,overflowX:"auto" as const,paddingBottom:2,marginBottom:12}}>
+      {telas.map(t=>(
+        <button key={t.id} onClick={()=>setTelaAtivaId(t.id)} className="btn"
+          style={{flexShrink:0,background:t.id===telaAtivaId?"var(--btnPrimary)":"var(--bg4)",color:t.id===telaAtivaId?"#fff":"var(--text2)",border:"1px solid "+(t.id===telaAtivaId?"var(--btnPrimary)":"var(--border2)"),padding:"8px 14px",fontSize:12.5,fontWeight:700}}>
+          🖥️ {t.nome}
+        </button>
+      ))}
+      <button onClick={criarTela} className="btn" style={{flexShrink:0,background:"none",border:"1px dashed var(--border2)",color:"var(--text2)",padding:"8px 14px",fontSize:12.5}}>+ Nova tela</button>
+    </div>
+
+    {!telaAtiva&&<div className="card" style={{textAlign:"center",padding:28}}>
+      <div style={{fontSize:32,marginBottom:8}}>📺</div>
+      <div className="muted" style={{fontSize:13}}>Nenhuma tela ainda — crie a primeira TV pra começar a montar o cardápio.</div>
+    </div>}
+
+    {telaAtiva&&<>
     <div className="card" style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap" as const,gap:10}}>
       <div>
-        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" as const}}>
-          <div style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>📺 Cardápio TV</div>
-          {tvsConectadas>0
-            ?<span style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,color:"#16A34A",background:"#DCFCE7",borderRadius:20,padding:"3px 9px"}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:"#16A34A"}}/>{tvsConectadas>1?`${tvsConectadas} TVs conectadas`:"TV conectada"}
-            </span>
-            :<span style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,color:"var(--text3)",background:"var(--bg5)",borderRadius:20,padding:"3px 9px"}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:"var(--border2)"}}/>Nenhuma TV conectada
-            </span>}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input value={telaAtiva.nome} onChange={e=>setTelas(ts=>ts.map(t=>t.id===telaAtivaId?{...t,nome:e.target.value}:t))} onBlur={e=>renomearTela(telaAtivaId!,e.target.value)}
+            style={{fontSize:15,fontWeight:800,color:"var(--text)",border:"none",background:"none",padding:"2px 4px",borderRadius:6,width:140}}/>
+          <button onClick={()=>excluirTela(telaAtivaId!)} className="btn" style={{background:"none",border:"1px solid #EF444433",color:"var(--btnDanger)",padding:"5px 8px",fontSize:11}}>🗑️ Excluir tela</button>
         </div>
         <div className="muted" style={{fontSize:11.5,marginTop:4}}>{ativos.length} banner(s) ativo(s) · loop de {ativos.reduce((s,b)=>s+(b.duracaoSeg||15),0)}s no total</div>
       </div>
@@ -14325,7 +14375,7 @@ function CardapioTVPanel({empresa}:{empresa:string}){
           ?<video src={`/banners/${empresa.toLowerCase()}/${b.arquivo}`} muted preload="metadata" style={{width:64,height:40,objectFit:"cover",borderRadius:6,flexShrink:0,background:"#000"}}/>
           :<img src={`/banners/${empresa.toLowerCase()}/${b.arquivo}`} alt={b.nome} style={{width:64,height:40,objectFit:"cover",borderRadius:6,flexShrink:0,background:"var(--bg5)"}}/>}
         <div style={{flex:"1 1 140px",minWidth:100}}>
-          <input value={b.nome} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,nome:e.target.value}:x))} onBlur={e=>atualizarBanner(b.id,{nome:e.target.value})}
+          <input value={b.nome} onChange={e=>setBannersLocal(bs=>bs.map(x=>x.id===b.id?{...x,nome:e.target.value}:x))} onBlur={e=>atualizarBanner(b.id,{nome:e.target.value})}
             className="inp" style={{fontSize:13,padding:"6px 8px",fontWeight:600,marginBottom:0}}/>
           {b.tipo==="video"?<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>🎬 vídeo</div>
             :!!b.largura&&<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>{b.largura}×{b.altura}px{b.largura>=b.altura?" · paisagem":" · retrato"}</div>}
@@ -14333,7 +14383,7 @@ function CardapioTVPanel({empresa}:{empresa:string}){
         {b.tipo==="video"
           ?<div style={{fontSize:11,color:"var(--text3)",flexShrink:0,padding:"0 4px"}}>duração do vídeo</div>
           :<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",flexShrink:0}}>
-            ⏱ <input type="number" min={3} value={b.duracaoSeg||15} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,duracaoSeg:parseInt(e.target.value)||15}:x))} onBlur={e=>atualizarBanner(b.id,{duracaoSeg:parseInt(e.target.value)||15})}
+            ⏱ <input type="number" min={3} value={b.duracaoSeg||15} onChange={e=>setBannersLocal(bs=>bs.map(x=>x.id===b.id?{...x,duracaoSeg:parseInt(e.target.value)||15}:x))} onBlur={e=>atualizarBanner(b.id,{duracaoSeg:parseInt(e.target.value)||15})}
               style={{width:42,border:"1px solid var(--border2)",borderRadius:6,padding:"4px",background:"var(--bg4)",color:"var(--text)",fontSize:11,textAlign:"center" as const}}/> s
           </div>}
         <button onClick={()=>mover(i,-1)} disabled={i===0} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===0?0.25:1,flexShrink:0}}>▲</button>
@@ -14349,9 +14399,10 @@ function CardapioTVPanel({empresa}:{empresa:string}){
     ))}
 
     <div className="card" style={{marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap" as const,gap:8}}>
-      <div style={{fontSize:11.5,color:"var(--text2)"}}>🔗 Link pra abrir na TV: <code style={{background:"var(--bg5)",padding:"2px 6px",borderRadius:4,color:"var(--btnPrimary)"}}>{tvUrl}</code></div>
+      <div style={{fontSize:11.5,color:"var(--text2)"}}>🔗 Link desta tela: <code style={{background:"var(--bg5)",padding:"2px 6px",borderRadius:4,color:"var(--btnPrimary)"}}>{tvUrl}</code></div>
       <button onClick={copiarLink} className="btn" style={{background:"var(--bg4)",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:11.5,padding:"6px 12px"}}>📋 Copiar link</button>
     </div>
+    </>}
   </div>;
 }
 
