@@ -1050,6 +1050,20 @@ const migrateDb=(m:any)=>{
       }
       m[e].produtosPrecoRepairV1=true;
     }
+    // Preço padrão pedido depois que a recuperação acima não achou histórico
+    // pra puxar (nenhum recibo tinha sido emitido ainda com esses produtos).
+    // "Massa de pizza" ganha o valor específico pedido, sempre; os demais só
+    // recebem R$3,50 se ainda estiverem sem preço — nunca sobrescreve um
+    // preço que já exista.
+    if(!m[e].produtosPrecoPadraoV1){
+      m[e].produtosProducao=(m[e].produtosProducao||[]).map((p:any)=>{
+        const nome=String(p?.nome||"").trim().toLowerCase();
+        if(nome==="massa de pizza")return{...p,precoFixo:1,atualizadoEm:new Date().toISOString()};
+        if(p.precoFixo>0)return p;
+        return{...p,precoFixo:3.5,atualizadoEm:new Date().toISOString()};
+      });
+      m[e].produtosPrecoPadraoV1=true;
+    }
     // Limpar caracteres corrompidos (�, zero-width) de nomes de produtos/itens
     {
       const RE_LIXO=/[\uFFFD\u200B-\u200D\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
