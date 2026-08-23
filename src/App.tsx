@@ -14711,6 +14711,23 @@ function PainelEmpresaAoVivo({empresa,db,cor}:{empresa:string,db:any,cor:string}
 function PainelAoVivoDashboard({state}:{state:any}){
   const [agora,setAgora]=useState(()=>new Date());
   useEffect(()=>{const t=setInterval(()=>setAgora(new Date()),1000);return()=>clearInterval(t);},[]);
+  const [tvToken,setTvToken]=useState<string|null>(null);
+  const [gerandoToken,setGerandoToken]=useState(false);
+  useEffect(()=>{
+    fetch("/api/painel-tv-token").then(r=>r.json()).then(d=>setTvToken(d?.token||null)).catch(()=>{});
+  },[]);
+  const tvLink=tvToken?`${window.location.origin}/painel-tv/${tvToken}`:"";
+  const copiarLinkTv=()=>{navigator.clipboard?.writeText(tvLink).then(()=>alert("Link copiado!")).catch(()=>{});};
+  const gerarNovoLinkTv=async()=>{
+    if(!confirm("Gerar um link novo? O link atual (se estiver aberto em alguma TV) para de funcionar na hora."))return;
+    setGerandoToken(true);
+    try{
+      const r=await fetch("/api/painel-tv-token/regenerar",{method:"POST"});
+      const d=await r.json();
+      setTvToken(d?.token||null);
+    }catch{alert("Não foi possível gerar o link — verifique a conexão.");}
+    setGerandoToken(false);
+  };
   const dbC=state?.CONFRARIA||{};
   const dbS=state?.SEAMA||{};
   const hoje=today();
@@ -14726,6 +14743,21 @@ function PainelAoVivoDashboard({state}:{state:any}){
           <span style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",display:"inline-block"}}/>
           <b style={{color:"#22C55E"}}>Ao vivo</b>
         </span>
+      </div>
+    </div>
+
+    <div className="card" style={{marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap" as const,gap:10}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:11.5,color:"var(--text2)",fontWeight:700,marginBottom:2}}>🔗 Link pra TV (sem login)</div>
+        {tvToken
+          ?<div style={{fontSize:11,color:"var(--text2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:420}}>
+            <code style={{background:"var(--bg5)",padding:"2px 6px",borderRadius:4,color:"var(--btnPrimary)"}}>{tvLink}</code>
+          </div>
+          :<div style={{fontSize:11,color:"var(--text3)"}}>Carregando link...</div>}
+      </div>
+      <div style={{display:"flex",gap:6,flexShrink:0}}>
+        <button onClick={copiarLinkTv} disabled={!tvToken} className="btn" style={{background:"var(--bg4)",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:11.5,padding:"6px 12px",opacity:tvToken?1:.5}}>📋 Copiar link</button>
+        <button onClick={gerarNovoLinkTv} disabled={gerandoToken} className="btn" style={{background:"none",border:"1px solid #F59E0B55",color:"#B45309",fontSize:11.5,padding:"6px 12px",opacity:gerandoToken?.6:1}}>🔄 Gerar novo</button>
       </div>
     </div>
 

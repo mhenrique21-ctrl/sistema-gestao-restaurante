@@ -2024,6 +2024,85 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // Painel Ao Vivo (TV pública, sem login): o link já carrega um token
+  // aleatório embutido — quem abre o link entra direto, sem digitar senha.
+  // O token fica num arquivo próprio (não faz parte do db de nenhuma
+  // empresa, já que o painel mostra as duas juntas) e o admin pode gerar um
+  // novo a qualquer momento, invalidando o link antigo na hora.
+  const PAINEL_TV_TOKEN_FILE = path.join(DADOS_DIR, 'painel_tv_token.json');
+  const painelTvToken = () => {
+    try { return JSON.parse(fs.readFileSync(PAINEL_TV_TOKEN_FILE, 'utf-8')).token || null; } catch { return null; }
+  };
+  const painelTvGerarToken = () => {
+    const token = crypto.randomBytes(24).toString('hex');
+    fs.mkdirSync(DADOS_DIR, { recursive: true });
+    fs.writeFileSync(PAINEL_TV_TOKEN_FILE, JSON.stringify({ token, criadoEm: new Date().toISOString() }));
+    return token;
+  };
+  const painelTvHoje = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  // Mesmos números que o Painel Ao Vivo autenticado mostra, só que calculados
+  // aqui no servidor a partir do JSON completo da empresa — NUNCA devolve o
+  // documento inteiro (que tem contas, folha de pagamento, fornecedores
+  // etc.) pro link público, só os agregados de hoje/ontem que a tela usa.
+  const painelTvAgregado = (emp) => {
+    const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+    let doc = {};
+    try { doc = JSON.parse(fs.readFileSync(file, 'utf-8')) || {}; } catch { doc = {}; }
+    const hoje = painelTvHoje();
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const ontem = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(d);
+    const vendas = Array.isArray(doc.vendas) ? doc.vendas : [];
+    const vHoje = vendas.find(v => v && v.data === hoje) || null;
+    const vOntem = vendas.find(v => v && v.data === ontem) || null;
+    const canaisChaves = ['maquininha', 'dinheiro', 'ifood', '99food', 'delivery', 'entregasClientes'];
+    const canais = {};
+    canaisChaves.forEach(k => { canais[k] = (vHoje && Number(vHoje[k])) || 0; });
+    const recibosHoje = (Array.isArray(doc.recibosVenda) ? doc.recibosVenda : []).filter(r => r && r.data === hoje);
+    const nRecibos = recibosHoje.length;
+    const ticketMedio = nRecibos ? recibosHoje.reduce((s, r) => s + (Number(r.total) || 0), 0) / nRecibos : 0;
+    const comprasHoje = (Array.isArray(doc.compras) ? doc.compras : [])
+      .filter(c => c && (c.data || '') === hoje)
+      .reduce((s, c) => s + (parseFloat(String(c.valor).replace(',', '.')) || 0), 0);
+    return {
+      totalHoje: (vHoje && Number(vHoje.total)) || 0,
+      totalOntem: (vOntem && Number(vOntem.total)) || 0,
+      porHora: (vHoje && Array.isArray(vHoje.porHora)) ? vHoje.porHora : [],
+      canais, nRecibos, ticketMedio, comprasHoje,
+    };
+  };
+
+  if (req.method === 'GET' && urlPath === '/api/painel-tv-token') {
+    let token = painelTvToken();
+    if (!token) token = painelTvGerarToken();
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ token }));
+    return;
+  }
+
+  if (req.method === 'POST' && urlPath === '/api/painel-tv-token/regenerar') {
+    const token = painelTvGerarToken();
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ token }));
+    return;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/painel-tv-dados') {
+    const tokenAtual = painelTvToken();
+    const tokenRecebido = new URLSearchParams(req.url.split('?')[1] || '').get('token') || '';
+    if (!tokenAtual || tokenRecebido !== tokenAtual) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: 'Link inválido ou expirado — peça um link novo ao administrador.' }));
+      return;
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.writeHead(200);
+    res.end(JSON.stringify({ CONFRARIA: painelTvAgregado('CONFRARIA'), SEAMA: painelTvAgregado('SEAMA') }));
+    return;
+  }
+
   if (req.method === 'GET' && urlPath.startsWith('/api/dados/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('null'); return; }

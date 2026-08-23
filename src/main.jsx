@@ -8,9 +8,17 @@ const root = ReactDOM.createRoot(document.getElementById('root'))
 // da CardapioTV, não o app todo. <tela> é opcional: sem ela, mostra a
 // primeira tela cadastrada (link antigo, de antes de existir múltiplas TVs).
 const tvMatch = window.location.pathname.match(/^\/tv\/([a-zA-Z]+)(?:\/([a-zA-Z0-9-]+))?\/?$/)
+// /painel-tv/<token>: Painel Ao Vivo público (CONFRARIA + SEAMA), pra deixar
+// aberto numa TV — o token é a única credencial, embutido no link copiado
+// dentro do app (Cardápio TV → Painel Ao Vivo). Bundle próprio, sem login.
+const painelTvMatch = window.location.pathname.match(/^\/painel-tv\/([a-zA-Z0-9]+)\/?$/)
 if (tvMatch) {
   import('./CardapioTV').then(({ default: CardapioTV }) => {
     root.render(<CardapioTV empresa={tvMatch[1]} tela={tvMatch[2] || ''} />)
+  })
+} else if (painelTvMatch) {
+  import('./PainelTV').then(({ default: PainelTV }) => {
+    root.render(<PainelTV token={painelTvMatch[1]} />)
   })
 } else {
   import('./App').then(({ default: App }) => {
