@@ -4607,10 +4607,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [formaPag,setFormaPag]=useState("dinheiro");
   const [vencimento,setVencimento]=useState(today());
   const [carrinho,setCarrinho]=useState([]);
-  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:""});
+  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
   const [sugestoes,setSugestoes]=useState([]);
   const [sugestoesForn,setSugestoesForn]=useState([]);
-  const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:""});
+  const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""});
   const [prodEdit,setProdEdit]=useState<string|null>(null);
   const [novaMarca,setNovaMarca]=useState("");
   const [gruposSugeridos,setGruposSugeridos]=useState<null|{nomeSugerido:string,ids:string[],motivo?:string}[]>(null);
@@ -4697,9 +4697,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setSugestoesForn(found);
   };
   const selecionarMP=(mp)=>{
-    setItemAtual(i=>({...i,nomeProduto:mp.nome,categoria:mp.categoria,unidade:mp.unidade}));
+    setItemAtual(i=>({...i,nomeProduto:mp.nome,categoria:mp.categoria,unidade:mp.unidade,comprarEmbalagem:false,qtdEmbalagemComprada:""}));
     setSugestoes([]);
   };
+  // Matéria-prima do nome digitado/selecionado agora — usada pra saber se
+  // existe uma conversão de embalagem cadastrada (mp.unidadeEmbalagem/
+  // equivaleEm) e mostrar o toggle "Comprei em <embalagem>" na hora da compra.
+  const mpDoItemAtual=(db.materiasPrimas||[]).find((m:any)=>m.nome.trim().toLowerCase()===itemAtual.nomeProduto.trim().toLowerCase());
+  const temConversaoEmbalagem=!!(mpDoItemAtual?.unidadeEmbalagem&&mpDoItemAtual?.equivaleEm>0);
+  const qtdEmbalConvertida=temConversaoEmbalagem?(parseFloat(itemAtual.qtdEmbalagemComprada)||0)*mpDoItemAtual.equivaleEm:0;
+  const valorTotalEmbal=parseMoney(itemAtual.valorTotal||0);
+  const valorUnitEmbalConvertido=qtdEmbalConvertida>0?valorTotalEmbal/qtdEmbalConvertida:0;
 
   const calcTotal=(unit,qtd)=>{
     const u=parseMoney(unit),q=parseFloat(qtd)||0;
@@ -4708,8 +4716,16 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
   const addItem=()=>{
     if(!itemAtual.nomeProduto||!itemAtual.valorTotal)return alert("Preencha produto e valor total.");
-    setCarrinho(c=>[...c,{...itemAtual,id:uid(),valorTotal:itemAtual.valorTotal,valorUnit:itemAtual.valorUnit}]);
-    setItemAtual({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:""});
+    // Comprou em embalagem (ex.: "2 sacos"): grava já convertido pra unidade
+    // base da matéria-prima (ex.: 10kg a R$9,80/kg) — Ficha Técnica e Estoque
+    // nunca precisam saber que a compra veio em sacos.
+    const usarConversao=temConversaoEmbalagem&&itemAtual.comprarEmbalagem;
+    if(usarConversao&&qtdEmbalConvertida<=0)return alert(`Informe a quantidade comprada em ${mpDoItemAtual.unidadeEmbalagem}.`);
+    const itemFinal=usarConversao
+      ?{...itemAtual,unidade:mpDoItemAtual.unidade,quantidade:String(qtdEmbalConvertida),valorUnit:String(valorUnitEmbalConvertido.toFixed(4))}
+      :itemAtual;
+    setCarrinho(c=>[...c,{...itemFinal,id:uid(),valorTotal:itemFinal.valorTotal,valorUnit:itemFinal.valorUnit}]);
+    setItemAtual({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
     setSugestoes([]);
   };
   const remItem=(id)=>setCarrinho(c=>c.filter(i=>i.id!==id));
@@ -5485,35 +5501,45 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             {unds.map(u=><option key={u} value={u}>{u==="kg"?"kg (quilograma)":u==="un"?"un (unidade)":u==="L"?"L (litro)":u==="g"?"g (grama)":u==="ml"?"ml (mililitro)":"pct (pacote)"}</option>)}
           </select>
         </div>
-        {itemAtual.unidade==="pct"&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
-          <label style={{fontSize:11,color:"var(--btnPrimary)",display:"block",marginBottom:3}}>Qtd por pacote (para calcular valor unitário)</label>
-          <input type="number" placeholder="Ex: 12 (unidades por caixa)" value={itemAtual.qtdPorPacote}
-            onChange={e=>setItemAtual(i=>({...i,qtdPorPacote:e.target.value}))}
-            className="inp" style={{marginBottom:0}}/>
-        </div>}
-        <div className="row" style={{marginBottom:8}}>
-          <div style={{flex:1}}>
-            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Quantidade{itemAtual.unidade==="pct"?" (pacotes)":""}</label>
-            <input type="number" placeholder="0" value={itemAtual.quantidade}
-              onChange={e=>{const qtd=e.target.value;const tot=calcTotal(itemAtual.valorUnit,qtd);setItemAtual(i=>({...i,quantidade:qtd,valorTotal:tot}));}}
+        {temConversaoEmbalagem&&<label style={{display:"flex",alignItems:"center",gap:9,padding:"9px 10px",background:itemAtual.comprarEmbalagem?"var(--btnPrimary)22":"var(--bg4)",border:`1px solid ${itemAtual.comprarEmbalagem?"var(--btnPrimary)":"var(--border2)"}`,borderRadius:9,marginBottom:8,cursor:"pointer"}}>
+          <input type="checkbox" checked={itemAtual.comprarEmbalagem} onChange={e=>setItemAtual(i=>({...i,comprarEmbalagem:e.target.checked,qtdEmbalagemComprada:""}))} style={{width:16,height:16,flexShrink:0}}/>
+          <span style={{fontSize:12,fontWeight:700,color:itemAtual.comprarEmbalagem?"var(--btnPrimary)":"var(--text)"}}>Comprei em {mpDoItemAtual.unidadeEmbalagem} (não em {mpDoItemAtual.unidade})</span>
+        </label>}
+        {temConversaoEmbalagem&&itemAtual.comprarEmbalagem?<>
+          <div style={{marginBottom:8}}>
+            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Quantidade ({mpDoItemAtual.unidadeEmbalagem}s)</label>
+            <input type="number" placeholder="0" value={itemAtual.qtdEmbalagemComprada}
+              onChange={e=>setItemAtual(i=>({...i,qtdEmbalagemComprada:e.target.value}))}
               className="inp"/>
           </div>
-          <div style={{flex:1}}>
-            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>{itemAtual.unidade==="pct"?"Valor por pacote":"Valor Unitário"}</label>
-            <MoneyInput value={itemAtual.valorUnit}
-              onChange={v=>{const tot=calcTotal(v,itemAtual.quantidade);setItemAtual(i=>({...i,valorUnit:v,valorTotal:tot}));}}
-              className="inp"/>
+          <div style={{marginBottom:10}}>
+            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Valor Total do Item</label>
+            <MoneyInput value={itemAtual.valorTotal} onChange={v=>setItemAtual(i=>({...i,valorTotal:v}))} className="inp"/>
           </div>
-        </div>
-        {itemAtual.unidade==="pct"&&itemAtual.qtdPorPacote&&itemAtual.valorUnit&&(
-          <div style={{fontSize:11,color:"#888",marginBottom:6,textAlign:"right"}}>
-            Valor/unidade: {fmtMoney(parseMoney(itemAtual.valorUnit)/(parseFloat(itemAtual.qtdPorPacote)||1))}
+          {qtdEmbalConvertida>0&&valorTotalEmbal>0&&<div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:11.5}}>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span style={{color:"#555"}}>Convertido pra</span><b style={{color:"#15803D"}}>{qtdEmbalConvertida}{mpDoItemAtual.unidade}</b></div>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span style={{color:"#555"}}>Valor por {mpDoItemAtual.unidade}</span><b style={{color:"#15803D"}}>{fmtMoney(valorUnitEmbalConvertido)}</b></div>
+          </div>}
+        </>:<>
+          <div className="row" style={{marginBottom:8}}>
+            <div style={{flex:1}}>
+              <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Quantidade{itemAtual.unidade==="pct"?" (pacotes)":""}</label>
+              <input type="number" placeholder="0" value={itemAtual.quantidade}
+                onChange={e=>{const qtd=e.target.value;const tot=calcTotal(itemAtual.valorUnit,qtd);setItemAtual(i=>({...i,quantidade:qtd,valorTotal:tot}));}}
+                className="inp"/>
+            </div>
+            <div style={{flex:1}}>
+              <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>{itemAtual.unidade==="pct"?"Valor por pacote":"Valor Unitário"}</label>
+              <MoneyInput value={itemAtual.valorUnit}
+                onChange={v=>{const tot=calcTotal(v,itemAtual.quantidade);setItemAtual(i=>({...i,valorUnit:v,valorTotal:tot}));}}
+                className="inp"/>
+            </div>
           </div>
-        )}
-        <div style={{marginBottom:10}}>
-          <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Valor Total do Item</label>
-          <MoneyInput value={itemAtual.valorTotal} onChange={v=>setItemAtual(i=>({...i,valorTotal:v}))} className="inp"/>
-        </div>
+          <div style={{marginBottom:10}}>
+            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Valor Total do Item</label>
+            <MoneyInput value={itemAtual.valorTotal} onChange={v=>setItemAtual(i=>({...i,valorTotal:v}))} className="inp"/>
+          </div>
+        </>}
         <button className="btn" onClick={addItem} style={{background:"var(--border2)",color:"var(--text)",padding:"11px",width:"100%",fontSize:14}}>
           + Adicionar ao Carrinho
         </button>
@@ -6074,6 +6100,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             </select>
           </div>
           <MoneyInput value={prodForm.valor} onChange={v=>setProdForm(p=>({...p,valor:v}))} placeholder="Valor unitário" className="inp" style={{marginBottom:8}}/>
+          <div style={{background:"var(--primary-wash,#7C3AED14)",border:"1px solid var(--btnPrimary)",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:"var(--btnPrimary)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>📦 Compro em embalagem fechada?</div>
+            <div className="row" style={{marginBottom:0}}>
+              <input placeholder="Unidade da embalagem (ex: saco)" value={prodForm.unidadeEmbalagem} onChange={e=>setProdForm(p=>({...p,unidadeEmbalagem:e.target.value}))} className="inp" style={{marginBottom:0}}/>
+              <input type="number" placeholder={`Equivale a quantos ${prodForm.unidade}`} value={prodForm.equivaleEm} onChange={e=>setProdForm(p=>({...p,equivaleEm:e.target.value}))} className="inp" style={{marginBottom:0}}/>
+            </div>
+            {prodForm.unidadeEmbalagem&&prodForm.equivaleEm&&<div style={{fontSize:10.5,color:"var(--text2)",marginTop:6}}>1 <b>{prodForm.unidadeEmbalagem}</b> = <b>{prodForm.equivaleEm}{prodForm.unidade}</b> — na compra, digite {prodForm.unidadeEmbalagem}s e o sistema converte sozinho.</div>}
+          </div>
           {prodEdit&&(()=>{
             const norma=(db.normalizacoes||[]).find((n:any)=>{
               const nl=prodForm.nome.toLowerCase().trim();
@@ -6133,25 +6167,27 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             <button className="btn" onClick={()=>{
               if(!prodForm.nome)return alert("Nome é obrigatório.");
               const v=parseMoney(prodForm.valor);
+              const unidadeEmbalagem=prodForm.unidadeEmbalagem.trim()||undefined;
+              const equivaleEm=parseFloat(prodForm.equivaleEm)||undefined;
               setDb(d=>{
                 const now=new Date().toISOString();
                 const mps=[...(d.materiasPrimas||[])];
                 if(prodEdit){
                   const idx=mps.findIndex(m=>m.id===prodEdit);
-                  if(idx>=0)mps[idx]={...mps[idx],nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||mps[idx].ultimoValor,atualizadoEm:now};
+                  if(idx>=0)mps[idx]={...mps[idx],nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||mps[idx].ultimoValor,unidadeEmbalagem,equivaleEm,atualizadoEm:now};
                 }else{
                   const ex=mps.find(m=>m.nome.toLowerCase()===prodForm.nome.toLowerCase());
-                  if(ex){ex.categoria=prodForm.categoria;ex.unidade=prodForm.unidade;if(v>0)ex.ultimoValor=v;ex.atualizadoEm=now;}
-                  else mps.push({id:uid(),nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||0,criadoEm:now});
+                  if(ex){ex.categoria=prodForm.categoria;ex.unidade=prodForm.unidade;if(v>0)ex.ultimoValor=v;ex.unidadeEmbalagem=unidadeEmbalagem;ex.equivaleEm=equivaleEm;ex.atualizadoEm=now;}
+                  else mps.push({id:uid(),nome:prodForm.nome,categoria:prodForm.categoria,unidade:prodForm.unidade,ultimoValor:v||0,unidadeEmbalagem,equivaleEm,criadoEm:now});
                 }
                 return{...d,materiasPrimas:mps};
               });
-              setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""});
+              setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""});
               setProdEdit(null);
             }} style={{background:"var(--btnPrimary)",color:"#fff",padding:"11px",flex:1,fontSize:13}}>
               {prodEdit?"💾 Atualizar":"➕ Cadastrar"}
             </button>
-            {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:""}); }}
+            {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""}); }}
               style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
           </div>
         </div>
@@ -6190,11 +6226,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       {mp.ultimoValor>0
                         ?<span style={{fontSize:11,color:"#22C55E",fontWeight:600}}>{fmtMoney(mp.ultimoValor)}</span>
                         :<span style={{fontSize:11,color:"var(--text3)"}}>Sem preço</span>}
+                      {mp.unidadeEmbalagem&&mp.equivaleEm>0&&<span style={{fontSize:10,color:"var(--btnPrimary)",background:"var(--primary-wash,#7C3AED14)",borderRadius:6,padding:"1px 6px"}}>📦 1 {mp.unidadeEmbalagem} = {mp.equivaleEm}{mp.unidade}</span>}
                     </div>
                   </div>
                   <div style={{display:"flex",gap:4,flexShrink:0}}>
                     <button onClick={()=>{
-                      setProdForm({nome:mp.nome,categoria:mp.categoria,unidade:mp.unidade,valor:String(mp.ultimoValor||"").replace(".",",")});
+                      setProdForm({nome:mp.nome,categoria:mp.categoria,unidade:mp.unidade,valor:String(mp.ultimoValor||"").replace(".",","),unidadeEmbalagem:mp.unidadeEmbalagem||"",equivaleEm:mp.equivaleEm?String(mp.equivaleEm):""});
                       setProdEdit(mp.id);
                       window.scrollTo({top:0,behavior:"smooth"});
                     }} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"5px 9px",fontSize:13,color:"var(--btnPrimary)"}}>✏️</button>
@@ -11262,28 +11299,28 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
             </div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-            <div style={{flex:1,minWidth:80,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
+            <div style={{flex:1,minWidth:80,background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px",textAlign:"center"}}>
               <div style={{color:"#1D4ED8",fontWeight:700,fontSize:14}}>{fmtMoney(f.custoTotal)}</div>
-              <div className="muted" style={{fontSize:10}}>Custo total</div>
+              <div style={{fontSize:10,color:"var(--text2)"}}>Custo total</div>
             </div>
-            {por>1&&<div style={{flex:1,minWidth:80,background:"var(--border)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-              <div style={{color:"#8B5CF6",fontWeight:700,fontSize:14}}>{fmtMoney(cp)}</div>
-              <div className="muted" style={{fontSize:10}}>Custo/porção</div>
+            {por>1&&<div style={{flex:1,minWidth:80,background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px",textAlign:"center"}}>
+              <div style={{color:"#7C3AED",fontWeight:700,fontSize:14}}>{fmtMoney(cp)}</div>
+              <div style={{fontSize:10,color:"var(--text2)"}}>Custo/porção</div>
             </div>}
-            <div style={{flex:1,minWidth:80,background:"#DCFCE7",borderRadius:10,padding:"10px",textAlign:"center",border:"1px solid #22C55E40"}}>
-              <div style={{color:"#22C55E",fontWeight:700,fontSize:14}}>{fmtMoney(pp)}</div>
-              <div className="muted" style={{fontSize:10}}>Preço/porção</div>
+            <div style={{flex:1,minWidth:80,background:"#DCFCE7",borderRadius:10,padding:"10px",textAlign:"center",border:"1px solid #16A34A55"}}>
+              <div style={{color:"#15803D",fontWeight:700,fontSize:14}}>{fmtMoney(pp)}</div>
+              <div style={{fontSize:10,color:"#166534"}}>Preço/porção</div>
             </div>
           </div>
           {f.insumos.map(i=>(
             <div key={i.id} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #0EA5E940"}}>
-              <span className="muted">{i.nome} ({i.quantidade}{i.unidade})</span><span>{fmtMoney(i.custo)}</span>
+              <span style={{color:"var(--text)"}}>{i.nome} ({i.quantidade}{i.unidade})</span><span style={{color:"var(--text)"}}>{fmtMoney(i.custo)}</span>
             </div>
           ))}
           <div style={{display:"flex",gap:8,marginTop:10}}>
-            <button className="btn" onClick={()=>edit(f)} style={{background:"var(--border)",color:"#888",padding:"6px 14px",fontSize:12}}>✏️ Editar</button>
-            <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"#DBEAFE",color:"var(--btnPrimary)",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
-            <button className="btn" onClick={()=>del(f)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 14px",fontSize:12}}>🗑️</button>
+            <button className="btn" onClick={()=>edit(f)} style={{background:"none",border:"1px solid var(--border2)",color:"var(--text2)",padding:"6px 14px",fontSize:12}}>✏️ Editar</button>
+            <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"none",border:"1px solid #1D4ED8",color:"#1D4ED8",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
+            <button className="btn" onClick={()=>del(f)} style={{background:"none",border:"1px solid #EF444455",color:"var(--btnDanger)",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
           {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
         </div>;
