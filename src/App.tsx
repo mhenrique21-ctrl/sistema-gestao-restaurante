@@ -14211,7 +14211,7 @@ function CardapioTVPanel({empresa}:{empresa:string}){
       .catch(()=>alert("Não foi possível salvar — verifique a conexão."));
   };
 
-  const redimBanner=(dataUrl:string,maxPx=1400,q=0.78):Promise<string>=>new Promise(res=>{
+  const redimBanner=(dataUrl:string,maxPx=1400,q=0.78):Promise<{dataUrl:string,w:number,h:number}>=>new Promise(res=>{
     const img=new Image();
     img.onload=()=>{
       let w=img.width,h=img.height;
@@ -14220,9 +14220,9 @@ function CardapioTVPanel({empresa}:{empresa:string}){
       c.getContext("2d")!.drawImage(img,0,0,w,h);
       let out=c.toDataURL("image/jpeg",q);
       if(out.length>1200000)out=c.toDataURL("image/jpeg",0.55);
-      res(out);
+      res({dataUrl:out,w,h});
     };
-    img.onerror=()=>res(dataUrl);
+    img.onerror=()=>res({dataUrl,w:0,h:0});
     img.src=dataUrl;
   });
 
@@ -14235,11 +14235,11 @@ function CardapioTVPanel({empresa}:{empresa:string}){
       try{
         const dataUrl:string=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result as string);rd.onerror=rej;rd.readAsDataURL(f);});
         const resized=await redimBanner(dataUrl);
-        const r=await fetch(`/api/cardapio-tv-upload/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagemBase64:resized.split(",")[1]})});
+        const r=await fetch(`/api/cardapio-tv-upload/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagemBase64:resized.dataUrl.split(",")[1]})});
         const data=await r.json();
         if(data.arquivo){
           const maxOrdem=novos.length?Math.max(...novos.map(b=>b.ordem||0))+1:0;
-          novos.push({id:uid(),nome:f.name.replace(/\.[^.]+$/,"")||"Banner",arquivo:data.arquivo,duracaoSeg:15,ativo:true,ordem:maxOrdem,criadoEm:new Date().toISOString()});
+          novos.push({id:uid(),nome:f.name.replace(/\.[^.]+$/,"")||"Banner",arquivo:data.arquivo,duracaoSeg:15,ativo:true,ordem:maxOrdem,largura:resized.w,altura:resized.h,criadoEm:new Date().toISOString()});
         }
       }catch{alert(`Falha ao enviar "${f.name}".`);}
     }
@@ -14277,6 +14277,10 @@ function CardapioTVPanel({empresa}:{empresa:string}){
       </div>
     </div>
 
+    <div style={{fontSize:11,color:"var(--text2)",background:"var(--bg5)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 12px",marginBottom:12,lineHeight:1.5}}>
+      📐 Tamanho recomendado: <b style={{color:"var(--text)"}}>1920×1080px</b> (paisagem) para TV deitada, ou <b style={{color:"var(--text)"}}>1080×1920px</b> (retrato) se a TV estiver em pé — use a mesma proporção da tela pra evitar cortes ou faixas pretas.
+    </div>
+
     {!banners.length&&<div className="card" style={{textAlign:"center",padding:28}}>
       <div style={{fontSize:32,marginBottom:8}}>📺</div>
       <div className="muted" style={{fontSize:13}}>Nenhum banner ainda. Suba uma imagem pra começar.</div>
@@ -14285,8 +14289,11 @@ function CardapioTVPanel({empresa}:{empresa:string}){
     {banners.map((b,i)=>(
       <div key={b.id} className="list-item" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const,opacity:b.ativo?1:0.5}}>
         <img src={`/banners/${empresa.toLowerCase()}/${b.arquivo}`} alt={b.nome} style={{width:64,height:40,objectFit:"cover",borderRadius:6,flexShrink:0,background:"var(--bg5)"}}/>
-        <input value={b.nome} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,nome:e.target.value}:x))} onBlur={e=>atualizarBanner(b.id,{nome:e.target.value})}
-          className="inp" style={{flex:"1 1 140px",fontSize:13,padding:"6px 8px",fontWeight:600,marginBottom:0,minWidth:100}}/>
+        <div style={{flex:"1 1 140px",minWidth:100}}>
+          <input value={b.nome} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,nome:e.target.value}:x))} onBlur={e=>atualizarBanner(b.id,{nome:e.target.value})}
+            className="inp" style={{fontSize:13,padding:"6px 8px",fontWeight:600,marginBottom:0}}/>
+          {!!b.largura&&<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>{b.largura}×{b.altura}px{b.largura>=b.altura?" · paisagem":" · retrato"}</div>}
+        </div>
         <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",flexShrink:0}}>
           ⏱ <input type="number" min={3} value={b.duracaoSeg||15} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,duracaoSeg:parseInt(e.target.value)||15}:x))} onBlur={e=>atualizarBanner(b.id,{duracaoSeg:parseInt(e.target.value)||15})}
             style={{width:42,border:"1px solid var(--border2)",borderRadius:6,padding:"4px",background:"var(--bg4)",color:"var(--text)",fontSize:11,textAlign:"center" as const}}/> s
