@@ -13413,6 +13413,24 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
 
   // ---- Integrações ----
   const [whatsNum,setWhatsNum]=useState(db.config?.whatsappNumero||"");
+  // Esses campos (nome pra impressão, rodapés, whatsapp...) são configuração
+  // por EMPRESA (db.config, e db já é o da empresa ativa) — mas useState só
+  // lê o valor inicial uma vez, no primeiro render. Trocar CONFRARIA↔SEAMA no
+  // topo não desmonta este painel, só troca a prop `db` por baixo — sem isto,
+  // o campo continuava mostrando o valor da empresa anterior até um reload
+  // manual da página.
+  useEffect(()=>{
+    setNomeEmpresa(db.config?.nomeEmpresa||empresa);
+    setImpNome(impCfg.nome);
+    setImpRodape(impCfg.rodape);
+    setReciboTitulo(impCfg.reciboTitulo);
+    setReciboTituloExtrato(impCfg.reciboTituloExtrato);
+    setReciboRodape(impCfg.reciboRodape);
+    setReciboTextoAssinatura(impCfg.reciboTextoAssinatura);
+    setAutoSyncInterval(db.config?.autoSyncInterval||65);
+    setWhatsNum(db.config?.whatsappNumero||"");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[empresa]);
   const [iaStatus,setIaStatus]=useState<"checking"|"ok"|"error"|"none">("checking");
   const [iaStatusDetail,setIaStatusDetail]=useState("");
   useEffect(()=>{
