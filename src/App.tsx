@@ -3543,9 +3543,11 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb
 
   const excluirRecibo=(r:any)=>{
     const jaLancado=r.lancadoEmVendas&&r.valorLancado>0;
-    const msg=jaLancado
+    const voltaProducao=r.origem==="producao"&&r.recibosEntregaIds?.length;
+    const msg=(jaLancado
       ?`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?\n\nEste recibo já está somado em ${aj.legVendasExtras} de ${fmtDate(r.data)}. Excluir também vai subtrair ${fmtMoney(r.valorLancado)} desse dia.`
-      :`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?`;
+      :`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?`)
+      +(voltaProducao?`\n\nEste recibo veio de um pedido de produção — excluir volta ele pra "a receber" lá, com a opção de gerar de novo.`:"");
     if(!confirm(msg))return;
     if(aj.confirmacaoReforcadaAcima>0&&r.total>=aj.confirmacaoReforcadaAcima){
       const digitado=prompt(`Recibo de ${fmtMoney(r.total)} — pra confirmar, digite o nome do ${aj.legCliente.toLowerCase()} ("${r.clienteNome}"):`);
@@ -3560,7 +3562,13 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb
         const i=vendas.findIndex((v:any)=>v.data===r.data);
         if(i>=0)vendas[i]={...vendas[i],[bucket]:Math.max(0,(vendas[i][bucket]||0)-r.valorLancado),total:Math.max(0,(vendas[i].total||0)-r.valorLancado),atualizadoEm:now};
       }
-      return{...d,recibosVenda:(d.recibosVenda||[]).filter((x:any)=>x.id!==r.id),vendas};
+      // Desfaz o "recebido" nos recibos de entrega que originaram este recibo
+      // de venda — reabre a opção de gerar em Produção → Arquivo, em vez de
+      // deixar o pedido travado como "recebido" sem recibo de venda nenhum.
+      const recibosEntrega=voltaProducao
+        ?(d.recibosEntrega||[]).map((re:any)=>r.recibosEntregaIds.includes(re.id)?{...re,recebido:false,recebidoEm:undefined,atualizadoEm:now}:re)
+        :d.recibosEntrega;
+      return{...d,recibosVenda:(d.recibosVenda||[]).filter((x:any)=>x.id!==r.id),vendas,recibosEntrega,};
     });
   };
 
@@ -8728,7 +8736,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       const numero=Math.max(0,...(d.recibosVenda||[]).map((r:any)=>r.numero||0))+1;
       const reciboVenda={id:uid(),numero,clienteNome,clienteTelefone:"",
         itens:itensCombo,total,data:hoje,criadoEm:now,atualizadoEm:now,
-        lancadoEmVendas:true,valorLancado:total,origem:"producao"};
+        lancadoEmVendas:true,valorLancado:total,origem:"producao",
+        recibosEntregaIds:recibos.map((r:any)=>r.id)};
       return{...d,
         recibosEntrega:(d.recibosEntrega||[]).map((r:any)=>idsSelecionados.has(r.id)?{...r,recebido:true,recebidoEm:hoje}:r),
         recibosVenda:[reciboVenda,...(d.recibosVenda||[])],
