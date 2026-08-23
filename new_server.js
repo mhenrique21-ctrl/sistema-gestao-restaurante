@@ -2307,6 +2307,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // pede pro Nginx não bufferizar — sem isso o "instantâneo" só chega quando o buffer dele encher
     });
     res.write(': conectado\n\n');
     sseClients[emp].add(res);
