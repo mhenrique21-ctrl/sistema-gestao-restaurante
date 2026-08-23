@@ -8755,6 +8755,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     setPendingSub?.("historico");
     onNavigate?.("vendas");
   };
+  // Destrava um recibo "recebido" que ficou órfão — o recibo de venda que
+  // ele gerou foi excluído antes de existir o vínculo (recibosEntregaIds),
+  // então nada trazia ele de volta pra "a receber" sozinho. Só libera se não
+  // houver mais nenhuma venda ativa apontando pra ele — senão duplicaria.
+  const gerarReciboNovamente=(recibo:any)=>{
+    const vendaAtiva=(db.recibosVenda||[]).find((rv:any)=>rv.recibosEntregaIds?.includes(recibo.id));
+    if(vendaAtiva)return alert(`Este recibo já tem uma venda ativa em Vendas → Recibos. Exclua ela lá primeiro se quiser gerar de novo.`);
+    if(!confirm(`Este recibo de ${recibo.categoria} está marcado como recebido, mas não tem mais um recibo de venda correspondente (foi excluído antes de esse vínculo existir).\n\nVoltar pra "a receber", liberando gerar de novo?`))return;
+    (setDbAndSave||setDb)((d:any)=>({...d,recibosEntrega:(d.recibosEntrega||[]).map((r:any)=>r.id===recibo.id?{...r,recebido:false,recebidoEm:undefined,atualizadoEm:new Date().toISOString()}:r)}));
+  };
 
   const montarTextoWhats=(ped:any)=>{
     const pc:Record<string,any[]>={};
@@ -9104,6 +9114,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   {!jaGerado.recebido&&onNavigate&&<button onClick={()=>gerarReciboDeVendas(jaGerado)} className="btn"
                     style={{width:"100%",marginTop:6,background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"9px",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                     💳 Gerar Recibo de Vendas
+                  </button>}
+                  {jaGerado.recebido&&<button onClick={()=>gerarReciboNovamente(jaGerado)} className="btn"
+                    style={{width:"100%",marginTop:6,background:"none",border:"1px solid var(--border2)",color:"var(--text2)",padding:"7px",fontSize:11,fontWeight:700}}>
+                    🔄 Gerar recibo novamente
                   </button>}
                   </>
                 :<button onClick={()=>abrirPreviaRecibo(ped,cat)} className="btn"
