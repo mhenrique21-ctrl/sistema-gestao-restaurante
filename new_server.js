@@ -135,10 +135,15 @@ const MIME = {
   '.css':  'text/css',
   '.json': 'application/json',
   '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.svg':  'image/svg+xml',
   '.ico':  'image/x-icon',
   '.woff2':'font/woff2',
   '.woff': 'font/woff',
+  '.mp4':  'video/mp4',
+  '.webm': 'video/webm',
+  '.mov':  'video/quicktime',
 };
 
 function serveFile(filePath, res) {
@@ -2304,20 +2309,23 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
-  // Cardápio TV — upload de imagem do banner (base64, mesmo padrão do Cupom IA)
+  // Cardápio TV — upload de banner, imagem ou vídeo (base64, mesmo padrão do Cupom IA)
   if (req.method === 'POST' && /^\/api\/cardapio-tv-upload\/[^/]+$/.test(urlPath)) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    const EXT_PERMITIDAS = ['jpg', 'mp4', 'webm', 'mov'];
+    const LIMITE = 80 * 1024 * 1024; // folga pro base64 (~+33%) de um vídeo de até ~60MB
     let body = '';
-    req.on('data', chunk => { body += chunk; if (body.length > 15 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({ error: 'Imagem muito grande.' })); req.destroy(); } });
+    req.on('data', chunk => { body += chunk; if (body.length > LIMITE) { res.writeHead(413); res.end(JSON.stringify({ error: 'Arquivo muito grande (máx. ~60MB de vídeo).' })); req.destroy(); } });
     req.on('end', () => {
       try {
-        const { imagemBase64 } = JSON.parse(body);
-        if (!imagemBase64) throw new Error('imagemBase64 ausente');
+        const { arquivoBase64, extensao } = JSON.parse(body);
+        if (!arquivoBase64) throw new Error('arquivoBase64 ausente');
+        const ext = EXT_PERMITIDAS.includes(extensao) ? extensao : 'jpg';
         const empDir = path.join(BANNERS_DIR, emp.toLowerCase());
         fs.mkdirSync(empDir, { recursive: true });
-        const arquivo = `${crypto.randomUUID()}.jpg`;
-        fs.writeFileSync(path.join(empDir, arquivo), Buffer.from(imagemBase64, 'base64'));
+        const arquivo = `${crypto.randomUUID()}.${ext}`;
+        fs.writeFileSync(path.join(empDir, arquivo), Buffer.from(arquivoBase64, 'base64'));
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end(JSON.stringify({ arquivo }));

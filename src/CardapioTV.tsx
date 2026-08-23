@@ -9,12 +9,14 @@ type Banner = {
   id: string;
   nome: string;
   arquivo: string;
+  tipo?: "imagem" | "video";
   duracaoSeg: number;
   ativo: boolean;
   ordem: number;
 };
 
 const DURACAO_PADRAO = 15;
+const DURACAO_MAX_VIDEO_SEG = 90; // segurança: se onEnded/onError nunca disparar (vídeo travado), avança mesmo assim
 const POLL_MS = 3 * 60 * 1000; // rebusca a lista a cada 3min — banner novo aparece sem tocar na TV
 
 export default function CardapioTV({ empresa }: { empresa: string }) {
@@ -54,29 +56,39 @@ export default function CardapioTV({ empresa }: { empresa: string }) {
     if (idx >= banners.length) setIdx(0);
   }, [banners, idx]);
 
+  const atual = banners[idx];
+  const avancar = () => setIdx(i => (banners.length ? (i + 1) % banners.length : 0));
+
+  // Imagem: avança sozinha após duracaoSeg. Vídeo: quem avança é onEnded (com
+  // um teto de segurança aqui embaixo, caso o vídeo trave sem nunca terminar).
   useEffect(() => {
     clearTimeout(timerRef.current);
-    if (!banners.length) return;
-    const atual = banners[idx];
-    const seg = (atual?.duracaoSeg && atual.duracaoSeg > 0) ? atual.duracaoSeg : DURACAO_PADRAO;
-    timerRef.current = setTimeout(() => setIdx(i => (i + 1) % banners.length), seg * 1000);
+    if (!atual) return;
+    const isVideo = atual.tipo === "video";
+    const seg = isVideo ? DURACAO_MAX_VIDEO_SEG
+      : ((atual.duracaoSeg && atual.duracaoSeg > 0) ? atual.duracaoSeg : DURACAO_PADRAO);
+    timerRef.current = setTimeout(avancar, seg * 1000);
     return () => clearTimeout(timerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, banners]);
 
-  const atual = banners[idx];
+  const mediaStyle: React.CSSProperties = {
+    position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+    animation: "cardapiotv-fadein .6s ease",
+  };
 
   return (
     <div style={{
       position: "fixed", inset: 0, background: "#000", overflow: "hidden",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
-      {banners.map((b, i) => (
-        <img key={b.id} src={`/banners/${empLower}/${b.arquivo}`} alt={b.nome}
-          style={{
-            position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
-            opacity: i === idx ? 1 : 0, transition: "opacity 1s ease",
-          }} />
-      ))}
+      <style>{`@keyframes cardapiotv-fadein{from{opacity:0}to{opacity:1}}`}</style>
+      {atual && (
+        atual.tipo === "video"
+          ? <video key={atual.id} src={`/banners/${empLower}/${atual.arquivo}`}
+              autoPlay muted playsInline onEnded={avancar} onError={avancar} style={mediaStyle} />
+          : <img key={atual.id} src={`/banners/${empLower}/${atual.arquivo}`} alt={atual.nome} style={mediaStyle} />
+      )}
       {carregado && !banners.length && (
         <div style={{ color: "#fff", textAlign: "center", fontFamily: "-apple-system,sans-serif" }}>
           <div style={{ fontSize: 40, fontWeight: 800, marginBottom: 10, opacity: 0.9 }}>{empLabel}</div>

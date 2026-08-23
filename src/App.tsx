@@ -14226,20 +14226,36 @@ function CardapioTVPanel({empresa}:{empresa:string}){
     img.src=dataUrl;
   });
 
+  const VIDEO_EXT:Record<string,string>={"video/mp4":"mp4","video/webm":"webm","video/quicktime":"mov"};
+  const MAX_VIDEO_MB=60;
+
   const addBanners=async(files:FileList|null)=>{
     if(!files||!files.length)return;
     setUploading(true);
     const novos=[...banners];
     for(let i=0;i<files.length;i++){
       const f=files[i];
+      const isVideo=f.type.startsWith("video/");
       try{
-        const dataUrl:string=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result as string);rd.onerror=rej;rd.readAsDataURL(f);});
-        const resized=await redimBanner(dataUrl);
-        const r=await fetch(`/api/cardapio-tv-upload/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagemBase64:resized.dataUrl.split(",")[1]})});
-        const data=await r.json();
-        if(data.arquivo){
-          const maxOrdem=novos.length?Math.max(...novos.map(b=>b.ordem||0))+1:0;
-          novos.push({id:uid(),nome:f.name.replace(/\.[^.]+$/,"")||"Banner",arquivo:data.arquivo,duracaoSeg:15,ativo:true,ordem:maxOrdem,largura:resized.w,altura:resized.h,criadoEm:new Date().toISOString()});
+        if(isVideo){
+          if(f.size>MAX_VIDEO_MB*1024*1024){alert(`"${f.name}" tem mais de ${MAX_VIDEO_MB}MB — reduza o vídeo antes de subir.`);continue;}
+          const dataUrl:string=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result as string);rd.onerror=rej;rd.readAsDataURL(f);});
+          const ext=VIDEO_EXT[f.type]||"mp4";
+          const r=await fetch(`/api/cardapio-tv-upload/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({arquivoBase64:dataUrl.split(",")[1],extensao:ext})});
+          const data=await r.json();
+          if(data.arquivo){
+            const maxOrdem=novos.length?Math.max(...novos.map(b=>b.ordem||0))+1:0;
+            novos.push({id:uid(),nome:f.name.replace(/\.[^.]+$/,"")||"Vídeo",arquivo:data.arquivo,tipo:"video",ativo:true,ordem:maxOrdem,criadoEm:new Date().toISOString()});
+          }
+        }else{
+          const dataUrl:string=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result as string);rd.onerror=rej;rd.readAsDataURL(f);});
+          const resized=await redimBanner(dataUrl);
+          const r=await fetch(`/api/cardapio-tv-upload/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({arquivoBase64:resized.dataUrl.split(",")[1],extensao:"jpg"})});
+          const data=await r.json();
+          if(data.arquivo){
+            const maxOrdem=novos.length?Math.max(...novos.map(b=>b.ordem||0))+1:0;
+            novos.push({id:uid(),nome:f.name.replace(/\.[^.]+$/,"")||"Banner",arquivo:data.arquivo,tipo:"imagem",duracaoSeg:15,ativo:true,ordem:maxOrdem,largura:resized.w,altura:resized.h,criadoEm:new Date().toISOString()});
+          }
         }
       }catch{alert(`Falha ao enviar "${f.name}".`);}
     }
@@ -14270,7 +14286,7 @@ function CardapioTVPanel({empresa}:{empresa:string}){
         <div className="muted" style={{fontSize:11.5,marginTop:2}}>{ativos.length} banner(s) ativo(s) · loop de {ativos.reduce((s,b)=>s+(b.duracaoSeg||15),0)}s no total</div>
       </div>
       <div>
-        <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>addBanners(e.target.files)}/>
+        <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime" multiple style={{display:"none"}} onChange={e=>addBanners(e.target.files)}/>
         <button className="btn" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{background:"var(--btnPrimary)",color:"#fff",padding:"9px 16px",fontSize:12.5}}>
           {uploading?"⟳ Enviando...":"➕ Novo banner"}
         </button>
@@ -14278,26 +14294,31 @@ function CardapioTVPanel({empresa}:{empresa:string}){
     </div>
 
     <div style={{fontSize:11,color:"var(--text2)",background:"var(--bg5)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 12px",marginBottom:12,lineHeight:1.5}}>
-      📐 Tamanho recomendado: <b style={{color:"var(--text)"}}>1920×1080px</b> (paisagem) para TV deitada, ou <b style={{color:"var(--text)"}}>1080×1920px</b> (retrato) se a TV estiver em pé — use a mesma proporção da tela pra evitar cortes ou faixas pretas.
+      📐 Tamanho recomendado: <b style={{color:"var(--text)"}}>1920×1080px</b> (paisagem) para TV deitada, ou <b style={{color:"var(--text)"}}>1080×1920px</b> (retrato) se a TV estiver em pé — use a mesma proporção da tela pra evitar cortes ou faixas pretas. Vídeos: até {MAX_VIDEO_MB}MB (mp4/webm/mov), sem áudio — a TV toca mudo e passa pro próximo assim que termina.
     </div>
 
     {!banners.length&&<div className="card" style={{textAlign:"center",padding:28}}>
       <div style={{fontSize:32,marginBottom:8}}>📺</div>
-      <div className="muted" style={{fontSize:13}}>Nenhum banner ainda. Suba uma imagem pra começar.</div>
+      <div className="muted" style={{fontSize:13}}>Nenhum banner ainda. Suba uma imagem ou vídeo pra começar.</div>
     </div>}
 
     {banners.map((b,i)=>(
       <div key={b.id} className="list-item" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const,opacity:b.ativo?1:0.5}}>
-        <img src={`/banners/${empresa.toLowerCase()}/${b.arquivo}`} alt={b.nome} style={{width:64,height:40,objectFit:"cover",borderRadius:6,flexShrink:0,background:"var(--bg5)"}}/>
+        {b.tipo==="video"
+          ?<video src={`/banners/${empresa.toLowerCase()}/${b.arquivo}`} muted preload="metadata" style={{width:64,height:40,objectFit:"cover",borderRadius:6,flexShrink:0,background:"#000"}}/>
+          :<img src={`/banners/${empresa.toLowerCase()}/${b.arquivo}`} alt={b.nome} style={{width:64,height:40,objectFit:"cover",borderRadius:6,flexShrink:0,background:"var(--bg5)"}}/>}
         <div style={{flex:"1 1 140px",minWidth:100}}>
           <input value={b.nome} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,nome:e.target.value}:x))} onBlur={e=>atualizarBanner(b.id,{nome:e.target.value})}
             className="inp" style={{fontSize:13,padding:"6px 8px",fontWeight:600,marginBottom:0}}/>
-          {!!b.largura&&<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>{b.largura}×{b.altura}px{b.largura>=b.altura?" · paisagem":" · retrato"}</div>}
+          {b.tipo==="video"?<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>🎬 vídeo</div>
+            :!!b.largura&&<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>{b.largura}×{b.altura}px{b.largura>=b.altura?" · paisagem":" · retrato"}</div>}
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",flexShrink:0}}>
-          ⏱ <input type="number" min={3} value={b.duracaoSeg||15} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,duracaoSeg:parseInt(e.target.value)||15}:x))} onBlur={e=>atualizarBanner(b.id,{duracaoSeg:parseInt(e.target.value)||15})}
-            style={{width:42,border:"1px solid var(--border2)",borderRadius:6,padding:"4px",background:"var(--bg4)",color:"var(--text)",fontSize:11,textAlign:"center" as const}}/> s
-        </div>
+        {b.tipo==="video"
+          ?<div style={{fontSize:11,color:"var(--text3)",flexShrink:0,padding:"0 4px"}}>duração do vídeo</div>
+          :<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",flexShrink:0}}>
+            ⏱ <input type="number" min={3} value={b.duracaoSeg||15} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,duracaoSeg:parseInt(e.target.value)||15}:x))} onBlur={e=>atualizarBanner(b.id,{duracaoSeg:parseInt(e.target.value)||15})}
+              style={{width:42,border:"1px solid var(--border2)",borderRadius:6,padding:"4px",background:"var(--bg4)",color:"var(--text)",fontSize:11,textAlign:"center" as const}}/> s
+          </div>}
         <button onClick={()=>mover(i,-1)} disabled={i===0} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===0?0.25:1,flexShrink:0}}>▲</button>
         <button onClick={()=>mover(i,1)} disabled={i===banners.length-1} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===banners.length-1?0.25:1,flexShrink:0}}>▼</button>
         <span onClick={()=>atualizarBanner(b.id,{ativo:!b.ativo})} title={b.ativo?"Desativar":"Ativar"}
