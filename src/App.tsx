@@ -3431,6 +3431,11 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,onVoltar}:{db:any,set
 function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,aj?:any,onVoltar:()=>void}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const cfg=getImpressaoCfg(db);
+  // Recibo de venda balcão soma no bucket "delivery" do dia; recibo gerado
+  // por um pedido de produção confirmado (Extrato de cliente) soma em
+  // "entregasClientes" — editar/excluir precisa desfazer no bucket certo,
+  // senão o total do dia fica errado (subtrai de um bucket que nunca somou).
+  const bucketDoRecibo=(r:any)=>r.origem==="producao"?"entregasClientes":"delivery";
   const [reciboEditando,setReciboEditando]=useState<any|null>(null);
   const [tipoEdicao,setTipoEdicao]=useState<"cliente"|"itens"|"valores"|"data"|"devolver"|"vendasExtras"|null>(null);
   const [busca,setBusca]=useState("");
@@ -3466,16 +3471,17 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb
       let extra:any={};
       if(novoValorVendas!=null){
         const dataAlvo=atualizacoesRecibo.data||antigo.data;
+        const bucket=bucketDoRecibo(antigo);
         const valorAntigo=antigo.lancadoEmVendas?(antigo.valorLancado||0):0;
         if(valorAntigo>0){
           const iOld=vendas.findIndex((v:any)=>v.data===antigo.data);
-          if(iOld>=0)vendas[iOld]={...vendas[iOld],delivery:Math.max(0,(vendas[iOld].delivery||0)-valorAntigo),total:Math.max(0,(vendas[iOld].total||0)-valorAntigo),atualizadoEm:now};
+          if(iOld>=0)vendas[iOld]={...vendas[iOld],[bucket]:Math.max(0,(vendas[iOld][bucket]||0)-valorAntigo),total:Math.max(0,(vendas[iOld].total||0)-valorAntigo),atualizadoEm:now};
         }
         const iNew=vendas.findIndex((v:any)=>v.data===dataAlvo);
         if(iNew>=0){
-          vendas[iNew]={...vendas[iNew],delivery:(vendas[iNew].delivery||0)+novoValorVendas,total:(vendas[iNew].total||0)+novoValorVendas,atualizadoEm:now};
+          vendas[iNew]={...vendas[iNew],[bucket]:(vendas[iNew][bucket]||0)+novoValorVendas,total:(vendas[iNew].total||0)+novoValorVendas,atualizadoEm:now};
         }else{
-          vendas.unshift({id:uid(),data:dataAlvo,total:novoValorVendas,maquininha:0,dinheiro:0,ifood:0,ifoodTaxa:0,ifoodLiq:0,"99food":0,nfoodTaxa:0,nfoodLiq:0,delivery:novoValorVendas,origem:"recibo_venda",criadoEm:now,atualizadoEm:now});
+          vendas.unshift({id:uid(),data:dataAlvo,total:novoValorVendas,maquininha:0,dinheiro:0,ifood:0,ifoodTaxa:0,ifoodLiq:0,"99food":0,nfoodTaxa:0,nfoodLiq:0,delivery:0,entregasClientes:0,[bucket]:novoValorVendas,origem:"recibo_venda",criadoEm:now,atualizadoEm:now});
         }
         extra={lancadoEmVendas:true,valorLancado:novoValorVendas};
       }
@@ -3501,8 +3507,9 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb
     setDbAndSave?.((d:any)=>{
       let vendas=[...(d.vendas||[])];
       if(jaLancado){
+        const bucket=bucketDoRecibo(r);
         const i=vendas.findIndex((v:any)=>v.data===r.data);
-        if(i>=0)vendas[i]={...vendas[i],delivery:Math.max(0,(vendas[i].delivery||0)-r.valorLancado),total:Math.max(0,(vendas[i].total||0)-r.valorLancado),atualizadoEm:now};
+        if(i>=0)vendas[i]={...vendas[i],[bucket]:Math.max(0,(vendas[i][bucket]||0)-r.valorLancado),total:Math.max(0,(vendas[i].total||0)-r.valorLancado),atualizadoEm:now};
       }
       return{...d,recibosVenda:(d.recibosVenda||[]).filter((x:any)=>x.id!==r.id),vendas};
     });
@@ -3525,7 +3532,10 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb
     {mostrados.map((r:any)=><div key={r.id} className="card" style={{marginBottom:10,padding:"12px 14px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
         <div>
-          <div style={{fontWeight:700,fontSize:13}}>#{formatarNumeroRecibo(r.numero,aj)} · {r.clienteNome}</div>
+          <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
+            <span>#{formatarNumeroRecibo(r.numero,aj)} · {r.clienteNome}</span>
+            {r.origem==="producao"&&<span style={{fontSize:9,fontWeight:700,color:"var(--btnPrimary)",background:"#7C3AED14",border:"1px solid var(--btnPrimary)",borderRadius:20,padding:"1px 7px"}}>🏭 Produção</span>}
+          </div>
           <div style={{fontSize:11,color:"var(--text2)",marginTop:2}}>{fmtDate(r.data)} · {(r.itens||[]).length} {(r.itens||[]).length===1?"item":"itens"}</div>
         </div>
         <div style={{fontSize:16,fontWeight:800,color:"#15803D"}}>{fmtMoney(r.total)}</div>
@@ -8627,14 +8637,29 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     w.document.close();
   };
   // Marca os selecionados como recebidos (não somem do histórico, só saem do
-  // Extrato) e lança a soma como venda de HOJE — dia do recebimento de
-  // verdade, não da entrega original.
+  // Extrato), lança a soma como venda de HOJE — dia do recebimento de
+  // verdade, não da entrega original — e gera UM recibo combinado em Vendas →
+  // Recibos (junta os itens de todos os recibos de entrega confirmados juntos
+  // nesse fechamento), pra essa venda por atacado aparecer junto com as
+  // vendas de balcão, não só como número somado no total do dia.
   const confirmarRecebimento=(idsSelecionados:Set<string>)=>{
     const recibos=(db.recibosEntrega||[]).filter((r:any)=>idsSelecionados.has(r.id));
     if(!recibos.length)return;
     const total=recibos.reduce((s:number,r:any)=>s+r.total,0);
     const hoje=today();
-    (setDbAndSave||setDb)((d:any)=>({...d,recibosEntrega:(d.recibosEntrega||[]).map((r:any)=>idsSelecionados.has(r.id)?{...r,recebido:true,recebidoEm:hoje}:r)}));
+    const now=new Date().toISOString();
+    const clienteNome=recibos[0].categoria||"";
+    const itensCombo=recibos.flatMap((r:any)=>r.itens||[]);
+    (setDbAndSave||setDb)((d:any)=>{
+      const numero=Math.max(0,...(d.recibosVenda||[]).map((r:any)=>r.numero||0))+1;
+      const reciboVenda={id:uid(),numero,clienteNome,clienteTelefone:"",
+        itens:itensCombo,total,data:hoje,criadoEm:now,atualizadoEm:now,
+        lancadoEmVendas:true,valorLancado:total,origem:"producao"};
+      return{...d,
+        recibosEntrega:(d.recibosEntrega||[]).map((r:any)=>idsSelecionados.has(r.id)?{...r,recebido:true,recebidoEm:hoje}:r),
+        recibosVenda:[reciboVenda,...(d.recibosVenda||[])],
+      };
+    });
     registrarEntregaComoVenda(hoje,total);
   };
 
