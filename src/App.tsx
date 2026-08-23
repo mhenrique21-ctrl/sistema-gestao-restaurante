@@ -11126,10 +11126,10 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
   const insQtdUsada=parseFloat(novoIns.qtdUsada)||0;
   const insCusto=insValorUnd*insQtdUsada;
   const [showConvPanel,setShowConvPanel]=useState(false);
-  const [convForm,setConvForm]=useState({precoEmbalagem:"",rendeQtd:""});
+  const [convForm,setConvForm]=useState({precoEmbalagem:"",rendeQtd:"",unidade:"kg"});
   const abrirConvPanel=()=>{
     if(!mpAtivo)return;
-    setConvForm({precoEmbalagem:String(mpAtivo.ultimoValor||""),rendeQtd:mpAtivo.equivaleEm?String(mpAtivo.equivaleEm):""});
+    setConvForm({precoEmbalagem:String(mpAtivo.ultimoValor||""),rendeQtd:mpAtivo.equivaleEm?String(mpAtivo.equivaleEm):"",unidade:mpAtivo.unidade||novoIns.unidade});
     setShowConvPanel(true);
   };
   const precoEmbalagemNum=parseFloat(convForm.precoEmbalagem)||0;
@@ -11137,9 +11137,10 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
   const novoValorPorUnd=rendeQtdNum>0?precoEmbalagemNum/rendeQtdNum:0;
   const salvarConversao=()=>{
     if(!mpAtivo)return;
-    if(rendeQtdNum<=0)return alert(`Informe quantos ${novoIns.unidade} a embalagem rende.`);
+    if(rendeQtdNum<=0)return alert(`Informe quantos ${convForm.unidade} a embalagem rende.`);
     if(precoEmbalagemNum<=0)return alert("Informe o preço pago pela embalagem.");
-    setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mpAtivo.id?{...m,unidadeEmbalagem:m.unidadeEmbalagem||"embalagem",equivaleEm:rendeQtdNum,ultimoValor:novoValorPorUnd,atualizadoEm:new Date().toISOString()}:m)}));
+    setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mpAtivo.id?{...m,unidade:convForm.unidade,unidadeEmbalagem:m.unidadeEmbalagem||"embalagem",equivaleEm:rendeQtdNum,ultimoValor:novoValorPorUnd,atualizadoEm:new Date().toISOString()}:m)}));
+    setNovoIns(i=>({...i,unidade:convForm.unidade}));
     setShowConvPanel(false);
   };
   const selecionarProd=(p:any)=>{
@@ -11435,20 +11436,26 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
           <div style={{fontSize:10.5,color:"var(--text2)",marginTop:4}}>Sempre o preço mais atual do cadastro — se mudar numa próxima compra, atualiza sozinho aqui e em "🔄 Atualizar Fichas".</div>
           {showConvPanel&&<div style={{background:"#F59E0B14",border:"1px solid #F59E0B55",borderRadius:9,padding:"11px 12px",marginTop:10}}>
             <div style={{fontSize:11.5,fontWeight:700,color:"#B45309",marginBottom:2}}>📦 Este preço é de uma embalagem fechada?</div>
-            <div style={{fontSize:10.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>Informe quanto rende a embalagem que você comprou — o sistema recalcula o preço por {novoIns.unidade} e corrige o cadastro de "{mpAtivo?.nome}" pra sempre.</div>
+            <div style={{fontSize:10.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>Confira também se a unidade cadastrada está certa. Ajuste os dois de uma vez — o sistema recalcula o preço e corrige o cadastro de "{mpAtivo?.nome}" pra sempre.</div>
+            <div style={{marginBottom:8}}>
+              <label style={{fontSize:10,color:"#666"}}>Unidade de medida correta</label>
+              <select value={convForm.unidade} onChange={e=>setConvForm(c=>({...c,unidade:e.target.value}))} className="inp" style={{marginBottom:0}}>
+                {["kg","g","L","ml","un"].map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1}}>
                 <label style={{fontSize:10,color:"#666"}}>Preço pago pela embalagem</label>
                 <input type="number" min="0" step="0.01" placeholder="0.00" value={convForm.precoEmbalagem} onChange={e=>setConvForm(c=>({...c,precoEmbalagem:e.target.value}))} className="inp" style={{marginBottom:0}}/>
               </div>
               <div style={{flex:1}}>
-                <label style={{fontSize:10,color:"#666"}}>Rende quantos {novoIns.unidade}</label>
+                <label style={{fontSize:10,color:"#666"}}>Rende quantos {convForm.unidade}</label>
                 <input type="number" min="0" step="0.01" placeholder="0" value={convForm.rendeQtd} onChange={e=>setConvForm(c=>({...c,rendeQtd:e.target.value}))} className="inp" style={{marginBottom:0}}/>
               </div>
             </div>
             {rendeQtdNum>0&&precoEmbalagemNum>0&&<div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"9px 11px",marginTop:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Preço atual</span><span style={{color:"var(--text3)",textDecoration:"line-through"}}>{fmtMoney(mpAtivo?.ultimoValor||0)}/{novoIns.unidade}</span></div>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Preço corrigido</span><b style={{color:"#15803D"}}>{fmtMoney(novoValorPorUnd)}/{novoIns.unidade}</b></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Cadastro atual</span><span style={{color:"var(--text3)",textDecoration:"line-through"}}>{fmtMoney(mpAtivo?.ultimoValor||0)}/{mpAtivo?.unidade}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Cadastro corrigido</span><b style={{color:"#15803D"}}>{fmtMoney(novoValorPorUnd)}/{convForm.unidade}</b></div>
             </div>}
             <div style={{display:"flex",gap:8,marginTop:10}}>
               <button onClick={salvarConversao} style={{flex:1,background:"#22C55E",color:"#fff",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer"}}>💾 Corrigir cadastro{mpAtivo?` de ${mpAtivo.nome}`:""}</button>
