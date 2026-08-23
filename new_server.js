@@ -31,6 +31,7 @@ const DIST = path.join(__dirname, 'dist');
 const LOGOS_DIR = path.join(__dirname, 'logos');
 const CERTS_DIR = path.join(__dirname, 'certs');
 const DADOS_DIR = path.join(__dirname, 'dados');
+const BANNERS_DIR = path.join(DADOS_DIR, 'banners');
 
 // Token de serviço (JWT admin do delivery-backend) usado pra proxiar as rotas
 // de catálogo (produtos/categorias) — ver getServiceToken() e as rotas
@@ -39,6 +40,20 @@ let _serviceToken = null;
 let _serviceTokenExpiry = 0;
 const CACHE_FILE = path.join(CERTS_DIR, 'sefaz_cache.json');
 fs.mkdirSync(DADOS_DIR, { recursive: true });
+fs.mkdirSync(BANNERS_DIR, { recursive: true });
+
+// ===== CARDÁPIO TV =====
+// Fica FORA do documento principal (dados/<empresa>.json), de propósito: aquele
+// arquivo já passa de 1-3MB e é lido/gravado a cada sync de qualquer aparelho
+// logado — embutir imagem teria feito o mesmo problema de performance que o
+// endpoint /versao (linha ~1966) existe pra evitar. Metadado dos banners é um
+// JSON pequeno à parte; a imagem em si vira arquivo estático em BANNERS_DIR.
+function cardapioTvFile(emp) {
+  return path.join(DADOS_DIR, `cardapio_tv_${emp.toLowerCase()}.json`);
+}
+function loadCardapioTv(emp) {
+  try { return JSON.parse(fs.readFileSync(cardapioTvFile(emp), 'utf-8')); } catch { return { banners: [] }; }
+}
 
 // ===== WEB PUSH =====
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
@@ -2256,6 +2271,64 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // Cardápio TV — lista de banners (metadado leve, público: a TV lê sem login)
+  if (req.method === 'GET' && /^\/api\/cardapio-tv\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.writeHead(200);
+    res.end(JSON.stringify(loadCardapioTv(emp)));
+    return;
+  }
+
+  // Cardápio TV — salvar lista de banners (o painel admin manda o array inteiro)
+  if (req.method === 'POST' && /^\/api\/cardapio-tv\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const incoming = JSON.parse(body);
+        if (!Array.isArray(incoming.banners)) throw new Error('banners deve ser um array');
+        fs.writeFileSync(cardapioTvFile(emp), JSON.stringify({ banners: incoming.banners }));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end('{"ok":true}');
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // Cardápio TV — upload de imagem do banner (base64, mesmo padrão do Cupom IA)
+  if (req.method === 'POST' && /^\/api\/cardapio-tv-upload\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 15 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({ error: 'Imagem muito grande.' })); req.destroy(); } });
+    req.on('end', () => {
+      try {
+        const { imagemBase64 } = JSON.parse(body);
+        if (!imagemBase64) throw new Error('imagemBase64 ausente');
+        const empDir = path.join(BANNERS_DIR, emp.toLowerCase());
+        fs.mkdirSync(empDir, { recursive: true });
+        const arquivo = `${crypto.randomUUID()}.jpg`;
+        fs.writeFileSync(path.join(empDir, arquivo), Buffer.from(imagemBase64, 'base64'));
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ arquivo }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // Dados da empresa — POST (salvar)
   if (req.method === 'POST' && urlPath.startsWith('/api/dados/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
@@ -2459,6 +2532,16 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       return serveFile(logoFile, res);
     }
     res.writeHead(404); res.end('Logo not found'); return;
+  }
+
+  // Banners do Cardápio TV (persiste entre builds, fora de dist/)
+  if (urlPath.startsWith('/banners/')) {
+    const bannerFile = path.join(BANNERS_DIR, urlPath.replace('/banners/', ''));
+    if (bannerFile.startsWith(BANNERS_DIR) && fs.existsSync(bannerFile)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return serveFile(bannerFile, res);
+    }
+    res.writeHead(404); res.end('Banner not found'); return;
   }
 
   // Static files from dist/

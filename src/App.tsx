@@ -1330,7 +1330,7 @@ export default function App() {
   const changeMenuLayout=(l:"bottom"|"top"|"fab")=>{setMenuLayout(l);localStorage.setItem("app_menu_layout",l);setMenuPickerOpen(false);setFabOpen(false);};
   const [sidebarColapsada,setSidebarColapsada]=useState<boolean>(()=>localStorage.getItem("app_sidebar_colapsada")==="1");
   const toggleSidebarColapsada=()=>{const v=!sidebarColapsada;setSidebarColapsada(v);localStorage.setItem("app_sidebar_colapsada",v?"1":"0");};
-  const DEFAULT_MENU_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","config"];
+  const DEFAULT_MENU_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","cardapio-tv","config"];
   const [menuOrder,setMenuOrder]=useState<string[]>(()=>{try{const s=localStorage.getItem("app_menu_order");if(s)return JSON.parse(s);}catch{}return DEFAULT_MENU_ORDER;});
   const changeMenuOrder=(order:string[])=>{setMenuOrder(order);localStorage.setItem("app_menu_order",JSON.stringify(order));};
   const [config,setConfig] = useState<ConfigAppState>(()=>{try{const s=localStorage.getItem("app_config");return s?JSON.parse(s):CONFIG_PADRAO;}catch{return CONFIG_PADRAO;}});
@@ -1631,6 +1631,7 @@ export default function App() {
       {id:"pm-prod",label:"Produtos",icon:"🍽️",sub:"produtos"},
       {id:"pm-cat",label:"Categorias",icon:"📂",sub:"categorias"},
     ]},
+    {id:"cardapio-tv",label:"Cardápio TV",icon:"📺"},
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
   const orderedStructure=[...menuStructure].sort((a,b)=>{const ai=menuOrder.indexOf(a.id);const bi=menuOrder.indexOf(b.id);return(ai<0?999:ai)-(bi<0?999:bi);});
@@ -1878,6 +1879,7 @@ export default function App() {
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="cardapio-tv" && <CardapioTVPanel empresa={empresa}/>}
               {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder} setConfigPanelOpen={setConfigPanelOpen} modoDiscreto={modoDiscreto} toggleModoDiscreto={toggleModoDiscreto}/>}
             </>
         }
@@ -13430,9 +13432,10 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           producao:{label:"Produção",icon:"🏭"},contas:{label:"Financeiro",icon:"📋"},
           estoque:{label:"Estoque",icon:"📦"},fluxo:{label:"Fluxo de Caixa",icon:"💵"},
           gestao:{label:"Gestão",icon:"⚙️"},agenda:{label:"Encomenda",icon:"📦"},
+          "cardapio-tv":{label:"Cardápio TV",icon:"📺"},
           config:{label:"Configurações",icon:"🔧"},
         };
-        const DEFAULT_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","config"];
+        const DEFAULT_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","cardapio-tv","config"];
         const order=menuOrder.length===DEFAULT_ORDER.length?menuOrder:DEFAULT_ORDER;
         const move=(i:number,dir:-1|1)=>{const o=[...order];const ni=i+dir;if(ni<0||ni>=o.length)return;[o[i],o[ni]]=[o[ni],o[i]];changeMenuOrder(o);};
         return(<>
@@ -14182,6 +14185,130 @@ ${cfg.encomendaAssinatura?`<div class="assinatura">Ciente: _____________________
   if(w){w.document.write(html);w.document.close();w.focus();w.print();}
 }
 
+
+// Banners vivem fora do documento principal (db) — arquivo próprio no
+// servidor (dados/cardapio_tv_<empresa>.json + imagem estática em
+// dados/banners/), pra não engordar o JSON de 1-3MB que já é lido/gravado a
+// cada sync de qualquer aparelho logado. Ver /api/cardapio-tv* no servidor.
+function CardapioTVPanel({empresa}:{empresa:string}){
+  const [banners,setBanners]=useState<any[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [uploading,setUploading]=useState(false);
+  const fileRef=useRef<HTMLInputElement>(null);
+
+  useEffect(()=>{
+    setLoading(true);
+    fetch(`/api/cardapio-tv/${empresa}`,{cache:"no-store"})
+      .then(r=>r.json())
+      .then(data=>setBanners((data?.banners||[]).slice().sort((a:any,b:any)=>(a.ordem??0)-(b.ordem??0))))
+      .catch(()=>{})
+      .finally(()=>setLoading(false));
+  },[empresa]);
+
+  const salvar=(novos:any[])=>{
+    setBanners(novos);
+    fetch(`/api/cardapio-tv/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({banners:novos})})
+      .catch(()=>alert("Não foi possível salvar — verifique a conexão."));
+  };
+
+  const redimBanner=(dataUrl:string,maxPx=1400,q=0.78):Promise<string>=>new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d")!.drawImage(img,0,0,w,h);
+      let out=c.toDataURL("image/jpeg",q);
+      if(out.length>1200000)out=c.toDataURL("image/jpeg",0.55);
+      res(out);
+    };
+    img.onerror=()=>res(dataUrl);
+    img.src=dataUrl;
+  });
+
+  const addBanners=async(files:FileList|null)=>{
+    if(!files||!files.length)return;
+    setUploading(true);
+    const novos=[...banners];
+    for(let i=0;i<files.length;i++){
+      const f=files[i];
+      try{
+        const dataUrl:string=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result as string);rd.onerror=rej;rd.readAsDataURL(f);});
+        const resized=await redimBanner(dataUrl);
+        const r=await fetch(`/api/cardapio-tv-upload/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagemBase64:resized.split(",")[1]})});
+        const data=await r.json();
+        if(data.arquivo){
+          const maxOrdem=novos.length?Math.max(...novos.map(b=>b.ordem||0))+1:0;
+          novos.push({id:uid(),nome:f.name.replace(/\.[^.]+$/,"")||"Banner",arquivo:data.arquivo,duracaoSeg:15,ativo:true,ordem:maxOrdem,criadoEm:new Date().toISOString()});
+        }
+      }catch{alert(`Falha ao enviar "${f.name}".`);}
+    }
+    setUploading(false);
+    if(fileRef.current)fileRef.current.value="";
+    salvar(novos);
+  };
+
+  const atualizarBanner=(id:string,patch:any)=>salvar(banners.map(b=>b.id===id?{...b,...patch}:b));
+  const excluirBanner=(id:string)=>{if(!confirm("Excluir este banner?"))return;salvar(banners.filter(b=>b.id!==id));};
+  const mover=(i:number,dir:-1|1)=>{
+    const ni=i+dir;if(ni<0||ni>=banners.length)return;
+    const novos=[...banners];[novos[i],novos[ni]]=[novos[ni],novos[i]];
+    salvar(novos.map((b,idx)=>({...b,ordem:idx})));
+  };
+
+  const tvUrl=`${window.location.origin}/tv/${empresa.toLowerCase()}`;
+  const copiarLink=()=>{navigator.clipboard?.writeText(tvUrl).then(()=>alert("Link copiado!")).catch(()=>{});};
+
+  if(loading)return <div className="muted" style={{textAlign:"center",padding:24}}>Carregando...</div>;
+
+  const ativos=banners.filter(b=>b.ativo);
+
+  return <div>
+    <div className="card" style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap" as const,gap:10}}>
+      <div>
+        <div style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>📺 Cardápio TV</div>
+        <div className="muted" style={{fontSize:11.5,marginTop:2}}>{ativos.length} banner(s) ativo(s) · loop de {ativos.reduce((s,b)=>s+(b.duracaoSeg||15),0)}s no total</div>
+      </div>
+      <div>
+        <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>addBanners(e.target.files)}/>
+        <button className="btn" disabled={uploading} onClick={()=>fileRef.current?.click()} style={{background:"var(--btnPrimary)",color:"#fff",padding:"9px 16px",fontSize:12.5}}>
+          {uploading?"⟳ Enviando...":"➕ Novo banner"}
+        </button>
+      </div>
+    </div>
+
+    {!banners.length&&<div className="card" style={{textAlign:"center",padding:28}}>
+      <div style={{fontSize:32,marginBottom:8}}>📺</div>
+      <div className="muted" style={{fontSize:13}}>Nenhum banner ainda. Suba uma imagem pra começar.</div>
+    </div>}
+
+    {banners.map((b,i)=>(
+      <div key={b.id} className="list-item" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const,opacity:b.ativo?1:0.5}}>
+        <img src={`/banners/${empresa.toLowerCase()}/${b.arquivo}`} alt={b.nome} style={{width:64,height:40,objectFit:"cover",borderRadius:6,flexShrink:0,background:"var(--bg5)"}}/>
+        <input value={b.nome} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,nome:e.target.value}:x))} onBlur={e=>atualizarBanner(b.id,{nome:e.target.value})}
+          className="inp" style={{flex:"1 1 140px",fontSize:13,padding:"6px 8px",fontWeight:600,marginBottom:0,minWidth:100}}/>
+        <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",flexShrink:0}}>
+          ⏱ <input type="number" min={3} value={b.duracaoSeg||15} onChange={e=>setBanners(bs=>bs.map(x=>x.id===b.id?{...x,duracaoSeg:parseInt(e.target.value)||15}:x))} onBlur={e=>atualizarBanner(b.id,{duracaoSeg:parseInt(e.target.value)||15})}
+            style={{width:42,border:"1px solid var(--border2)",borderRadius:6,padding:"4px",background:"var(--bg4)",color:"var(--text)",fontSize:11,textAlign:"center" as const}}/> s
+        </div>
+        <button onClick={()=>mover(i,-1)} disabled={i===0} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===0?0.25:1,flexShrink:0}}>▲</button>
+        <button onClick={()=>mover(i,1)} disabled={i===banners.length-1} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===banners.length-1?0.25:1,flexShrink:0}}>▼</button>
+        <span onClick={()=>atualizarBanner(b.id,{ativo:!b.ativo})} title={b.ativo?"Desativar":"Ativar"}
+          style={{position:"relative",width:38,height:22,flexShrink:0,cursor:"pointer"}}>
+          <span style={{position:"absolute",inset:0,background:b.ativo?"#16A34A":"var(--border2)",borderRadius:20,transition:".15s"}}>
+            <span style={{position:"absolute",width:16,height:16,left:b.ativo?19:3,top:3,background:"#fff",borderRadius:"50%",transition:".15s"}}/>
+          </span>
+        </span>
+        <button onClick={()=>excluirBanner(b.id)} className="btn" style={{background:"none",border:"1px solid #EF444433",color:"var(--btnDanger)",padding:"5px 8px",fontSize:12,flexShrink:0}}>🗑️</button>
+      </div>
+    ))}
+
+    <div className="card" style={{marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap" as const,gap:8}}>
+      <div style={{fontSize:11.5,color:"var(--text2)"}}>🔗 Link pra abrir na TV: <code style={{background:"var(--bg5)",padding:"2px 6px",borderRadius:4,color:"var(--btnPrimary)"}}>{tvUrl}</code></div>
+      <button onClick={copiarLink} className="btn" style={{background:"var(--bg4)",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:11.5,padding:"6px 12px"}}>📋 Copiar link</button>
+    </div>
+  </div>;
+}
 
 function ClientesEncPanel({db,setDb,empresa,aj}:{db:any,setDb:any,empresa:string,aj?:any}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;

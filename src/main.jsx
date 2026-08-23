@@ -1,10 +1,20 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <App />,
-)
+const root = ReactDOM.createRoot(document.getElementById('root'))
+
+// /tv/<empresa>: página pública pra TV, sem login e sem carregar o app inteiro
+// — import() dinâmico faz a TV baixar só o bundle da CardapioTV, não o app todo.
+const tvMatch = window.location.pathname.match(/^\/tv\/([a-zA-Z]+)\/?$/)
+if (tvMatch) {
+  import('./CardapioTV').then(({ default: CardapioTV }) => {
+    root.render(<CardapioTV empresa={tvMatch[1]} />)
+  })
+} else {
+  import('./App').then(({ default: App }) => {
+    root.render(<App />)
+  })
+}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
