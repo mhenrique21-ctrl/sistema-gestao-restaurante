@@ -13,6 +13,7 @@ type Banner = {
   duracaoSeg: number;
   ativo: boolean;
   ordem: number;
+  duasTelas?: boolean;
 };
 
 const DURACAO_PADRAO = 15;
@@ -23,6 +24,10 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
   const [banners, setBanners] = useState<Banner[]>([]);
   const [idx, setIdx] = useState(0);
   const [carregado, setCarregado] = useState(false);
+  // Só vem preenchido quando esta tela está PAREADA com outra (ver Cardápio
+  // TV → Telas → 🔗 Parear, no app) — diz qual metade de um banner "2 telas"
+  // desenhar aqui.
+  const [ladoPar, setLadoPar] = useState<"esquerda" | "direita" | null>(null);
   const timerRef = useRef<any>(null);
 
   const empLower = empresa.toLowerCase();
@@ -39,6 +44,7 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
         .filter(b => b.ativo)
         .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
       setBanners(ativos);
+      setLadoPar(data?.ladoPar || null);
     } catch {
       // mantém a lista anterior em caso de falha de rede — não apaga o que já estava passando
     } finally {
@@ -69,12 +75,14 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
     if (idx >= banners.length) setIdx(0);
   }, [banners, idx]);
 
+  const pareada = !!ladoPar;
   const atual = banners[idx];
   const avancar = () => setIdx(i => (banners.length ? (i + 1) % banners.length : 0));
 
-  // Imagem: avança sozinha após duracaoSeg. Vídeo: quem avança é onEnded (com
-  // um teto de segurança aqui embaixo, caso o vídeo trave sem nunca terminar).
+  // Modo normal (tela avulsa): imagem avança sozinha após duracaoSeg; vídeo
+  // avança no onEnded (com teto de segurança, caso o vídeo trave sem terminar).
   useEffect(() => {
+    if (pareada) return;
     clearTimeout(timerRef.current);
     if (!atual) return;
     const isVideo = atual.tipo === "video";
@@ -83,11 +91,47 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
     timerRef.current = setTimeout(avancar, seg * 1000);
     return () => clearTimeout(timerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx, banners]);
+  }, [idx, banners, pareada]);
+
+  // Modo pareado: esta TV e a parceira precisam mostrar o MESMO banner ao
+  // mesmo tempo (uma desenha a metade esquerda de um banner "2 telas", a
+  // outra a direita) — em vez de cada TV contar o próprio tempo a partir de
+  // quando ligou (o que cedo ou tarde desencontra as duas), a posição atual
+  // é calculada só a partir do relógio: Date.now() % duração total do ciclo.
+  // Como as duas usam a MESMA lista de banners (espelhada no servidor ao
+  // parear) e o mesmo relógio, chegam ao mesmo resultado sem trocar nenhuma
+  // mensagem entre si.
+  useEffect(() => {
+    if (!pareada || !banners.length) return;
+    const dur = (b: Banner) => ((b.duracaoSeg && b.duracaoSeg > 0) ? b.duracaoSeg : DURACAO_PADRAO) * 1000;
+    const totalMs = banners.reduce((s, b) => s + dur(b), 0);
+    if (!totalMs) return;
+    const calcular = () => {
+      let t = Date.now() % totalMs;
+      for (let i = 0; i < banners.length; i++) {
+        const d = dur(banners[i]);
+        if (t < d) return i;
+        t -= d;
+      }
+      return 0;
+    };
+    setIdx(calcular());
+    const t = setInterval(() => setIdx(i => { const n = calcular(); return n === i ? i : n; }), 500);
+    return () => clearInterval(t);
+  }, [pareada, banners]);
 
   const mediaStyle: React.CSSProperties = {
     position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
     animation: "cardapiotv-fadein .6s ease",
+  };
+  // Banner "2 telas": a imagem/vídeo é o dobro da largura da tela, deslocado
+  // meio-a-meio — cada lado do par mostra só sua metade (mesmo truque do
+  // mockup aprovado: width 200% + left 0%/-100%).
+  const ocupaDuas = pareada && !!atual?.duasTelas;
+  const cropStyle: React.CSSProperties = {
+    position: "absolute", top: 0, height: "100%", width: "200%",
+    left: ladoPar === "esquerda" ? "0%" : "-100%",
+    objectFit: "cover", animation: "cardapiotv-fadein .6s ease",
   };
 
   return (
@@ -99,8 +143,10 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
       {atual && (
         atual.tipo === "video"
           ? <video key={atual.id} src={`/banners/${empLower}/${atual.arquivo}`}
-              autoPlay muted playsInline onEnded={avancar} onError={avancar} style={mediaStyle} />
-          : <img key={atual.id} src={`/banners/${empLower}/${atual.arquivo}`} alt={atual.nome} style={mediaStyle} />
+              autoPlay muted playsInline loop={pareada}
+              onEnded={pareada ? undefined : avancar} onError={pareada ? undefined : avancar}
+              style={ocupaDuas ? cropStyle : mediaStyle} />
+          : <img key={atual.id} src={`/banners/${empLower}/${atual.arquivo}`} alt={atual.nome} style={ocupaDuas ? cropStyle : mediaStyle} />
       )}
       {carregado && !banners.length && (
         <div style={{ color: "#fff", textAlign: "center", fontFamily: "-apple-system,sans-serif" }}>

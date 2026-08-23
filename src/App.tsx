@@ -14818,11 +14818,51 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
     fetch(`/api/cardapio-tv/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({telas:novasTelas})})
       .catch(()=>alert("Não foi possível salvar — verifique a conexão."));
   };
-  // Toda ação de banner mexe só na tela ativa — as outras telas ficam intactas.
-  const salvar=(novosBanners:any[])=>salvarTelas(telas.map(t=>t.id===telaAtivaId?{...t,banners:novosBanners}:t));
+  // Toda ação de banner mexe só na tela ativa — as outras telas ficam intactas,
+  // EXCETO quando a tela ativa está pareada: aí a lista é espelhada pra tela
+  // parceira também, pra nunca existirem duas playlists divergentes.
+  const salvar=(novosBanners:any[])=>salvarTelas(telas.map(t=>{
+    if(t.id===telaAtivaId)return{...t,banners:novosBanners};
+    if(telaAtiva?.pareadaCom&&t.id===telaAtiva.pareadaCom)return{...t,banners:novosBanners};
+    return t;
+  }));
   // Digitação (nome/duração): atualiza local sem POST a cada tecla; o POST
   // de verdade só acontece no onBlur, via atualizarBanner→salvar.
   const setBannersLocal=(fn:(bs:any[])=>any[])=>setTelas(ts=>ts.map(t=>t.id===telaAtivaId?{...t,banners:fn(t.banners)}:t));
+  const [parearAlvo,setParearAlvo]=useState("");
+  // Parear liga duas telas: passam a compartilhar a MESMA lista de banners
+  // (uma decide onde fica a esquerda, a outra a direita) — é o que permite um
+  // banner panorâmico ser dividido entre elas sem cada lado ter sua própria
+  // cópia, que cedo ou tarde ficaria dessincronizada.
+  const parearCom=(outroId:string)=>{
+    if(!telaAtivaId||!outroId||!telaAtiva)return;
+    const bannersCompartilhados=telaAtiva.banners||[];
+    salvarTelas(telas.map(t=>{
+      if(t.id===telaAtivaId)return{...t,pareadaCom:outroId,ladoPar:"esquerda",banners:bannersCompartilhados};
+      if(t.id===outroId)return{...t,pareadaCom:telaAtivaId,ladoPar:"direita",banners:bannersCompartilhados};
+      return t;
+    }));
+    setParearAlvo("");
+  };
+  const desparear=()=>{
+    if(!telaAtiva?.pareadaCom)return;
+    if(!confirm("Desparear estas telas? Cada uma passa a ter sua própria lista de banners a partir de agora (banners \"ocupa as duas telas\" voltam a mostrar a imagem inteira)."))return;
+    const outroId=telaAtiva.pareadaCom;
+    salvarTelas(telas.map(t=>{
+      if(t.id!==telaAtivaId&&t.id!==outroId)return t;
+      return{...t,pareadaCom:undefined,ladoPar:undefined,banners:(t.banners||[]).map((b:any)=>b.duasTelas?{...b,duasTelas:false}:b)};
+    }));
+  };
+  const trocarLado=()=>{
+    if(!telaAtiva?.pareadaCom)return;
+    const outroId=telaAtiva.pareadaCom;
+    const novoLadoAtual=telaAtiva.ladoPar==="esquerda"?"direita":"esquerda";
+    salvarTelas(telas.map(t=>{
+      if(t.id===telaAtivaId)return{...t,ladoPar:novoLadoAtual};
+      if(t.id===outroId)return{...t,ladoPar:novoLadoAtual==="esquerda"?"direita":"esquerda"};
+      return t;
+    }));
+  };
 
   const criarTela=()=>{
     const nums=telas.map(t=>{const m=/^tv(\d+)$/.exec(t.id);return m?parseInt(m[1]):0;});
@@ -14948,6 +14988,26 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
           <button onClick={()=>excluirTela(telaAtivaId!)} className="btn" style={{background:"none",border:"1px solid #EF444433",color:"var(--btnDanger)",padding:"5px 8px",fontSize:11}}>🗑️ Excluir tela</button>
         </div>
         <div className="muted" style={{fontSize:11.5,marginTop:4}}>{ativos.length} banner(s) ativo(s) · loop de {ativos.reduce((s,b)=>s+(b.duracaoSeg||15),0)}s no total</div>
+        {telaAtiva.pareadaCom
+          ?<div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap" as const}}>
+            <span style={{fontSize:11,fontWeight:700,color:"#15803D",background:"#22C55E18",border:"1px solid #22C55E55",borderRadius:20,padding:"4px 10px"}}>
+              🔗 Pareada com {telas.find(t=>t.id===telaAtiva.pareadaCom)?.nome||"—"} · {telaAtiva.ladoPar==="esquerda"?"metade esquerda":"metade direita"}
+            </span>
+            <button onClick={trocarLado} className="btn" style={{background:"none",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:11,padding:"5px 9px"}}>🔄 Trocar lado</button>
+            <button onClick={desparear} className="btn" style={{background:"none",border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:11,padding:"5px 9px"}}>Desparear</button>
+          </div>
+          :<div style={{display:"flex",alignItems:"center",gap:6,marginTop:8,flexWrap:"wrap" as const}}>
+            {telas.filter(t=>t.id!==telaAtivaId&&!t.pareadaCom).length>0
+              ?<>
+                <select value={parearAlvo} onChange={e=>setParearAlvo(e.target.value)}
+                  style={{fontSize:11.5,border:"1px solid var(--border2)",borderRadius:7,padding:"6px 8px",background:"var(--bg4)",color:"var(--text)"}}>
+                  <option value="">Parear com...</option>
+                  {telas.filter(t=>t.id!==telaAtivaId&&!t.pareadaCom).map(t=><option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+                <button onClick={()=>parearAlvo&&parearCom(parearAlvo)} disabled={!parearAlvo} className="btn" style={{background:"none",border:"1px solid var(--btnPrimary)",color:"var(--btnPrimary)",fontSize:11.5,padding:"6px 10px",opacity:parearAlvo?1:.5}}>🔗 Parear</button>
+              </>
+              :<span style={{fontSize:11,color:"var(--text3)"}}>Crie outra tela pra poder parear e dividir um banner entre as duas.</span>}
+          </div>}
       </div>
       <div>
         <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime" multiple style={{display:"none"}} onChange={e=>addBanners(e.target.files)}/>
@@ -14959,6 +15019,7 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
 
     <div style={{fontSize:11,color:"var(--text2)",background:"var(--bg5)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 12px",marginBottom:12,lineHeight:1.5}}>
       📐 Tamanho recomendado: <b style={{color:"var(--text)"}}>1920×1080px</b> (paisagem) para TV deitada, ou <b style={{color:"var(--text)"}}>1080×1920px</b> (retrato) se a TV estiver em pé — use a mesma proporção da tela pra evitar cortes ou faixas pretas. Vídeos: até {MAX_VIDEO_MB}MB (mp4/webm/mov), sem áudio — a TV toca mudo e passa pro próximo assim que termina.
+      {telaAtiva.pareadaCom&&<><br/>🖼️ Tela pareada: marque "2 telas" num banner e suba uma imagem larga (ex: 3840×1080) — metade toca aqui, metade em {telas.find(t=>t.id===telaAtiva.pareadaCom)?.nome||"outra tela"}.</>}
     </div>
 
     {!banners.length&&<div className="card" style={{textAlign:"center",padding:28}}>
@@ -14977,12 +15038,17 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
           {b.tipo==="video"?<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>🎬 vídeo</div>
             :!!b.largura&&<div style={{fontSize:10,color:"var(--text3)",marginTop:3}}>{b.largura}×{b.altura}px{b.largura>=b.altura?" · paisagem":" · retrato"}</div>}
         </div>
-        {b.tipo==="video"
+        {b.tipo==="video"&&!telaAtiva.pareadaCom
           ?<div style={{fontSize:11,color:"var(--text3)",flexShrink:0,padding:"0 4px"}}>duração do vídeo</div>
           :<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",flexShrink:0}}>
             ⏱ <input type="number" min={3} value={b.duracaoSeg||15} onChange={e=>setBannersLocal(bs=>bs.map(x=>x.id===b.id?{...x,duracaoSeg:parseInt(e.target.value)||15}:x))} onBlur={e=>atualizarBanner(b.id,{duracaoSeg:parseInt(e.target.value)||15})}
               style={{width:42,border:"1px solid var(--border2)",borderRadius:6,padding:"4px",background:"var(--bg4)",color:"var(--text)",fontSize:11,textAlign:"center" as const}}/> s
           </div>}
+        {telaAtiva.pareadaCom&&
+          <button onClick={()=>atualizarBanner(b.id,{duasTelas:!b.duasTelas})} title="Ocupa as duas telas — mostra metade da imagem aqui, metade na tela parceira"
+            className="btn" style={{fontSize:10,fontWeight:700,padding:"4px 8px",borderRadius:6,border:`1px solid ${b.duasTelas?"var(--btnPrimary)":"var(--border2)"}`,background:b.duasTelas?"var(--btnPrimary)":"none",color:b.duasTelas?"#fff":"var(--text2)",flexShrink:0,whiteSpace:"nowrap" as const}}>
+            🖼️ 2 telas
+          </button>}
         <button onClick={()=>mover(i,-1)} disabled={i===0} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===0?0.25:1,flexShrink:0}}>▲</button>
         <button onClick={()=>mover(i,1)} disabled={i===banners.length-1} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===banners.length-1?0.25:1,flexShrink:0}}>▼</button>
         <span onClick={()=>atualizarBanner(b.id,{ativo:!b.ativo})} title={b.ativo?"Desativar":"Ativar"}

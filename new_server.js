@@ -2402,7 +2402,10 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.writeHead(200);
-    res.end(JSON.stringify({ banners: tela?.banners || [] }));
+    // ladoPar (esquerda/direita) só existe quando a tela está pareada com
+    // outra — é o que diz pro CardapioTV.tsx qual metade de um banner "2
+    // telas" desenhar aqui.
+    res.end(JSON.stringify({ banners: tela?.banners || [], ladoPar: tela?.ladoPar || null }));
     return;
   }
 
