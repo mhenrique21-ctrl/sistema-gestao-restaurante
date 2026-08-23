@@ -6077,13 +6077,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
     {subTab==="produtos"&&<div>
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
-      {/* Sub-tabs */}
-      <div style={{display:"flex",gap:5,marginBottom:14}}>
-        {[["catalogo","📦 Catálogo"],["substituicoes","🔄 Substituições"]].map(([k,l])=>(
-          <button key={k} onClick={()=>setProdSubTab(k as any)} className="pill"
-            style={{background:prodSubTab===k?"var(--btnPrimary)":"var(--bg4)",color:prodSubTab===k?"#fff":"#777",fontSize:11,padding:"6px 12px"}}>{l}</button>
-        ))}
-      </div>
+      {/* Sub-tab "Substituições" saiu do menu (a pedido) — o painel e as
+          regras já cadastradas continuam existindo por baixo (prodSubTab
+          default "catalogo"), só não tem mais como navegar até lá pela UI. */}
 
       {/* ===== CATÁLOGO ===== */}
       {prodSubTab==="catalogo"&&<div>
