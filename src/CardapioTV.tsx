@@ -23,7 +23,6 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
   const [banners, setBanners] = useState<Banner[]>([]);
   const [idx, setIdx] = useState(0);
   const [carregado, setCarregado] = useState(false);
-  const [aoVivo, setAoVivo] = useState(false);
   const timerRef = useRef<any>(null);
 
   const empLower = empresa.toLowerCase();
@@ -59,8 +58,6 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
     let es: EventSource | null = null;
     try {
       es = new EventSource(`/api/cardapio-tv-events/${empLabel}`);
-      es.onopen = () => setAoVivo(true);
-      es.onerror = () => setAoVivo(false);
       es.onmessage = () => buscar();
     } catch {}
 
@@ -98,16 +95,7 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
       position: "fixed", inset: 0, background: "#000", overflow: "hidden",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
-      <style>{`@keyframes cardapiotv-fadein{from{opacity:0}to{opacity:1}}@keyframes cardapiotv-pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
-      {aoVivo && (
-        <div style={{
-          position: "absolute", top: 14, right: 14, zIndex: 5, display: "flex", alignItems: "center", gap: 5,
-          background: "rgba(0,0,0,.5)", borderRadius: 20, padding: "3px 9px 3px 7px",
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", animation: "cardapiotv-pulse 1.6s infinite" }} />
-          <span style={{ fontSize: 9, color: "#fff", fontWeight: 700, letterSpacing: ".03em" }}>AO VIVO</span>
-        </div>
-      )}
+      <style>{`@keyframes cardapiotv-fadein{from{opacity:0}to{opacity:1}}`}</style>
       {atual && (
         atual.tipo === "video"
           ? <video key={atual.id} src={`/banners/${empLower}/${atual.arquivo}`}
