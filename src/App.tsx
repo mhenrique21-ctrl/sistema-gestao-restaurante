@@ -1916,7 +1916,7 @@ export default function App() {
               {tab==="vendas"     && <VendasPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave}/>}
+              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -8346,7 +8346,7 @@ function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string
   </div>;
 }
 
-function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void}){
+function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave,onNavigate}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void,onNavigate?:(tab:string)=>void}){
   const isAdmin=login?.role==="admin";
   _dbIconesProd=db.iconesProducao||{};
   const [iconPicker,setIconPicker]=useState<string|null>(null);
@@ -8736,6 +8736,16 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     });
     registrarEntregaComoVenda(hoje,total);
   };
+  // Atalho: confirma o recebimento de UM recibo de entrega (mesma lógica do
+  // Extrato, só que sem passar por lá) e já leva pra Vendas → Recibos, onde
+  // ele acabou de nascer.
+  const gerarReciboDeVendas=(recibo:any)=>{
+    if(recibo.recebido)return;
+    if(!confirm(`Gerar recibo de venda de ${recibo.categoria} — ${fmtMoney(recibo.total)}?\n\nIsso confirma o recebimento e soma no total de vendas de hoje.`))return;
+    confirmarRecebimento(new Set([recibo.id]));
+    setPendingSub?.("historico");
+    onNavigate?.("vendas");
+  };
 
   const montarTextoWhats=(ped:any)=>{
     const pc:Record<string,any[]>={};
@@ -9081,6 +9091,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   {!jaGerado.recebido&&<button onClick={()=>atualizarValoresRecibo(jaGerado,ped)} className="btn"
                     style={{width:"100%",marginTop:6,background:"none",border:"1px solid var(--btnPrimary)",color:"var(--btnPrimary)",padding:"7px",fontSize:11,fontWeight:700}}>
                     🔄 Atualizar valores com preço atual
+                  </button>}
+                  {!jaGerado.recebido&&onNavigate&&<button onClick={()=>gerarReciboDeVendas(jaGerado)} className="btn"
+                    style={{width:"100%",marginTop:6,background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"9px",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    💳 Gerar Recibo de Vendas
                   </button>}
                   </>
                 :<button onClick={()=>abrirPreviaRecibo(ped,cat)} className="btn"
