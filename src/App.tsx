@@ -1907,7 +1907,7 @@ export default function App() {
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
           ? (tab==="producao"
-            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave}/>
+            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} empresa={empresa}/>
             : tab==="agenda"
             ? <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={false} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} login={login} setDbAndSave={setDbAndSave}/>)
@@ -1916,7 +1916,7 @@ export default function App() {
               {tab==="vendas"     && <VendasPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab}/>}
+              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab} empresa={empresa}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -2978,9 +2978,9 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
 // estabelecimento): mesmo catálogo e mesmo cadastro de cliente que Produção/
 // Encomenda já usam — nada de catálogo ou cadastro de cliente duplicado.
 
-const montarTextoWhatsRecibo=(recibo:any,cfg:any,aj?:any)=>{
+const montarTextoWhatsRecibo=(recibo:any,cfg:any,aj?:any,empresa?:string)=>{
   aj=aj||VENDAS_AJUSTES_DEFAULT;
-  let txt=`🧾 *RECIBO DE VENDA #${formatarNumeroRecibo(recibo.numero,aj)}*\n🏢 ${impressaoNome(cfg,"Seama")}\n👤 ${aj.legCliente}: *${recibo.clienteNome}*\n📅 ${fmtDate(recibo.data)}\n\n`;
+  let txt=`🧾 *RECIBO DE VENDA #${formatarNumeroRecibo(recibo.numero,aj)}*\n🏢 ${impressaoNome(cfg,empresa||"Seama")}\n👤 ${aj.legCliente}: *${recibo.clienteNome}*\n📅 ${fmtDate(recibo.data)}\n\n`;
   recibo.itens.forEach((it:any)=>{txt+=`• ${it.nome}\n  ${it.quantidade} ${it.unidade} × ${fmtMoney(it.precoUnit)} = *${fmtMoney(it.subtotal)}*\n`;});
   txt+=`\n💰 *TOTAL: ${fmtMoney(recibo.total)}*\n`;
   return txt;
@@ -2988,7 +2988,7 @@ const montarTextoWhatsRecibo=(recibo:any,cfg:any,aj?:any)=>{
 
 // Mesmo padrão de impressão ("Imprimir → Salvar como PDF") usado em todo
 // recibo/relatório deste app — ver imprimirRecibo (Recibo de Entrega).
-const imprimirReciboVenda=(recibo:any,cfg:any,aj?:any)=>{
+const imprimirReciboVenda=(recibo:any,cfg:any,aj?:any,empresa?:string)=>{
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const fpx=FONTE_PX[cfg.fonte]||13;
   const w=window.open("","_blank","width=700,height=800");if(!w)return;
@@ -3014,7 +3014,7 @@ const imprimirReciboVenda=(recibo:any,cfg:any,aj?:any)=>{
     </style>
   </head><body>
     <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar como PDF</button></div>
-    ${cfg.logo?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"Seama")}</div>`:`<div class="brand">${impressaoNome(cfg,"Seama")}</div>`}
+    ${cfg.logo?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,empresa||"Seama")}</div>`:`<div class="brand">${impressaoNome(cfg,empresa||"Seama")}</div>`}
     <h1>Recibo de Venda #${formatarNumeroRecibo(recibo.numero,aj)}</h1>
     <div class="meta"><span>${aj.legCliente}</span><b>${recibo.clienteNome}</b></div>
     ${recibo.clienteTelefone?`<div class="meta"><span>Telefone</span><b>${recibo.clienteTelefone}</b></div>`:""}
@@ -3039,8 +3039,8 @@ function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPe
   if(fonteStack!=="inherit")wrapStyle.fontFamily=fonteStack;
   if(aj.corDestaque)wrapStyle["--btnPrimary"]=aj.corDestaque;
   let content:any;
-  if(subTab==="recibo")content=<EmitirReciboPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} login={login} aj={aj} onVoltar={voltar}/>;
-  else if(subTab==="historico")content=<RecibosVendaHistPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} aj={aj} onVoltar={voltar}/>;
+  if(subTab==="recibo")content=<EmitirReciboPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} login={login} aj={aj} empresa={empresa} onVoltar={voltar}/>;
+  else if(subTab==="historico")content=<RecibosVendaHistPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} aj={aj} empresa={empresa} onVoltar={voltar}/>;
   else if(subTab==="clientes")content=<><BackBar label="Vendas" onClick={voltar}/><ClientesEncPanel db={db} setDb={setDb} empresa={empresa} aj={aj}/></>;
   else if(subTab==="relatorio")content=<RecibosVendaRelatorioPanel db={db} state={state} empresa={empresa} aj={aj} onVoltar={voltar}/>;
   else if(subTab==="ajustes")content=<VendasAjustesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
@@ -3197,7 +3197,7 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
   </div>;
 }
 
-function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,login?:any,aj?:any,onVoltar:()=>void}){
+function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,login?:any,aj?:any,empresa?:string,onVoltar:()=>void}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   _dbIconesProd=db.iconesProducao||{};
   const prodsCatalog:any[]=db.produtosProducao||[];
@@ -3334,7 +3334,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,onVoltar}:{db:any,set
         <span style={{fontSize:22}}>✅</span>
         <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → {aj.legVendasExtras} de {fmtDate(reciboGerado.data)}.</span>
       </div>
-      <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,color:"var(--text2)",textTransform:"uppercase" as const,marginBottom:2}}>{impressaoNome(cfg,"Seama")}</div>
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,color:"var(--text2)",textTransform:"uppercase" as const,marginBottom:2}}>{impressaoNome(cfg,empresa||"Seama")}</div>
       <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>Recibo de Venda #{formatarNumeroRecibo(reciboGerado.numero,aj)}</div>
       <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text2)",marginBottom:14,paddingBottom:14,borderBottom:"1px solid var(--border)"}}>
         <span>{aj.legCliente}<br/><b style={{color:"var(--text)"}}>{reciboGerado.clienteNome}</b></span>
@@ -3349,8 +3349,8 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,onVoltar}:{db:any,set
         <span style={{fontSize:26,fontWeight:800,color:"#15803D"}}>{fmtMoney(reciboGerado.total)}</span>
       </div>
       <div style={{display:"flex",gap:10,marginTop:20}}>
-        <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado,cfg,aj))}`,"_blank")} className="btn" style={{flex:1,background:"#25d366",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>📲 Enviar por WhatsApp</button>
-        <button onClick={()=>imprimirReciboVenda(reciboGerado,cfg,aj)} className="btn" style={{flex:1,background:"#1a1a2e",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>🖨️ Gerar PDF</button>
+        <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado,cfg,aj,empresa))}`,"_blank")} className="btn" style={{flex:1,background:"#25d366",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>📲 Enviar por WhatsApp</button>
+        <button onClick={()=>imprimirReciboVenda(reciboGerado,cfg,aj,empresa)} className="btn" style={{flex:1,background:"#1a1a2e",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>🖨️ Gerar PDF</button>
       </div>
       <button onClick={()=>setReciboGerado(null)} className="btn-sec" style={{width:"100%",marginTop:10}}>+ Nova venda</button>
     </div>;
@@ -3477,7 +3477,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,onVoltar}:{db:any,set
   </div>;
 }
 
-function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,aj?:any,onVoltar:()=>void}){
+function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,aj?:any,empresa?:string,onVoltar:()=>void}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const cfg=getImpressaoCfg(db);
   // Recibo de venda balcão soma no bucket "delivery" do dia; recibo gerado
@@ -3601,8 +3601,8 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,onVoltar}:{db:any,setDb
         {r.lancadoEmVendas&&r.valorLancado>0?`✓ Em ${aj.legVendasExtras}`:"⚠️ Não lançado"}
       </span>}
       <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap" as const}}>
-        {aj.mostrarWhatsapp&&<button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r,cfg,aj))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>📲 WhatsApp</button>}
-        {aj.mostrarPdf&&<button onClick={()=>imprimirReciboVenda(r,cfg,aj)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🖨️ PDF</button>}
+        {aj.mostrarWhatsapp&&<button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r,cfg,aj,empresa))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>📲 WhatsApp</button>}
+        {aj.mostrarPdf&&<button onClick={()=>imprimirReciboVenda(r,cfg,aj,empresa)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🖨️ PDF</button>}
         <button onClick={()=>{setReciboEditando(r);setTipoEdicao(null);}} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>✏️ Editar</button>
         <button onClick={()=>excluirRecibo(r)} style={{background:"none",border:"1px solid #dc262644",borderRadius:5,color:"#dc2626",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>🗑️ Excluir</button>
       </div>
@@ -8354,7 +8354,7 @@ function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string
   </div>;
 }
 
-function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave,onNavigate}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void,onNavigate?:(tab:string)=>void}){
+function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave,onNavigate,empresa}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void,onNavigate?:(tab:string)=>void,empresa?:string}){
   const isAdmin=login?.role==="admin";
   _dbIconesProd=db.iconesProducao||{};
   const [iconPicker,setIconPicker]=useState<string|null>(null);
@@ -8617,7 +8617,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     let txt=`🧾 *${(cfg.reciboTitulo||"Recibo de Entrega").toUpperCase()}*\n🏢 Cliente: *${recibo.categoria}*\n📅 ${fmtDate(recibo.data)}\n\n`;
     recibo.itens.forEach((it:any)=>{txt+=`• ${it.nome}\n  ${it.quantidade} ${it.unidade} × ${fmtMoney(it.precoUnit)} = *${fmtMoney(it.subtotal)}*\n`;});
     txt+=`\n💰 *TOTAL: ${fmtMoney(recibo.total)}*\n`;
-    if(cfg.reciboMostrarAssinatura)txt+=`\n_${impressaoNome(cfg,"Seama")}\n${cfg.reciboTextoAssinatura}: _______________`;
+    if(cfg.reciboMostrarAssinatura)txt+=`\n_${impressaoNome(cfg,empresa||"Seama")}\n${cfg.reciboTextoAssinatura}: _______________`;
     return txt;
   };
   const imprimirRecibo=(recibo:any)=>{
@@ -8647,7 +8647,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       </style>
     </head><body>
       <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir</button></div>
-      ${cfg.logo?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,"Seama")}</div>`:`<div class="brand">${impressaoNome(cfg,"Seama")}</div>`}
+      ${cfg.logo?`<div class="brand">${impressaoLogoHtml(cfg,"height:28px;max-width:130px;object-fit:contain")}${impressaoNome(cfg,empresa||"Seama")}</div>`:`<div class="brand">${impressaoNome(cfg,empresa||"Seama")}</div>`}
       <h1>${cfg.reciboTitulo}</h1>
       <div class="meta"><span>Cliente</span><b>${recibo.categoria}</b></div>
       <div class="meta"><span>Data</span><b>${fmtDate(recibo.data)}</b></div>
@@ -8675,7 +8675,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     recibos.forEach((r:any)=>{txt+=`${fmtDate(r.data).slice(0,5)} — ${fmtMoney(r.total)}\n`;});
     txt+=`\n📦 ${recibos.length} entrega(s) neste fechamento\n`;
     txt+=`\n💰 *TOTAL A RECEBER: ${fmtMoney(total)}*\n`;
-    if(cfg.reciboMostrarAssinatura)txt+=`\n_${impressaoNome(cfg,"Seama")}\nReferente às entregas acima — recibo gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}_`;
+    if(cfg.reciboMostrarAssinatura)txt+=`\n_${impressaoNome(cfg,empresa||"Seama")}\nReferente às entregas acima — recibo gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}_`;
     return txt;
   };
   const imprimirExtrato=(cliente:string,recibos:any[],ini:string,fim:string)=>{
@@ -8705,7 +8705,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       </style>
     </head><body>
       <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir</button></div>
-      <div class="brand">${impressaoNome(cfg,"Seama")}</div>
+      <div class="brand">${impressaoNome(cfg,empresa||"Seama")}</div>
       <h1>${cfg.reciboTituloExtrato}</h1>
       <div class="meta"><span>Cliente</span><b>${cliente}</b></div>
       <div class="meta"><span>Período</span><b>${fmtDate(ini)} a ${fmtDate(fim)}</b></div>
