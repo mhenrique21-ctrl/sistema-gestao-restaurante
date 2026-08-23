@@ -1642,8 +1642,7 @@ export default function App() {
       {id:"prod-novo",label:"Novo Pedido",icon:"➕",sub:"novo"},
       {id:"prod-arq",label:"Arquivo",icon:"📂",sub:"pedidos",adminOnly:true},
       {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
-      {id:"prod-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
-      {id:"prod-recibos",label:"Recibos",icon:"🧾",sub:"recibos",adminOnly:true},
+      {id:"prod-cat",label:"Cliente",icon:"🏢",sub:"categorias",adminOnly:true},
       {id:"prod-relatorio",label:"Relatório",icon:"📊",sub:"relatorio",adminOnly:true},
     ]},
     {id:"contas",label:"Financeiro",icon:"📋",children:[
