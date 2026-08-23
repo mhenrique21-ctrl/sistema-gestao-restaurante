@@ -1726,7 +1726,10 @@ export default function App() {
       {id:"pm-prod",label:"Produtos",icon:"🍽️",sub:"produtos"},
       {id:"pm-cat",label:"Categorias",icon:"📂",sub:"categorias"},
     ]},
-    {id:"cardapio-tv",label:"Cardápio TV",icon:"📺"},
+    {id:"cardapio-tv",label:"Cardápio TV",icon:"📺",children:[
+      {id:"tv-telas",label:"Telas",icon:"📺",sub:"telas"},
+      {id:"tv-painel",label:"Painel Ao Vivo",icon:"📊",sub:"painel",adminOnly:true},
+    ]},
     {id:"config",label:"Configurações",icon:"🔧"},
   ];
   const orderedStructure=[...menuStructure].sort((a,b)=>{const ai=menuOrder.indexOf(a.id);const bi=menuOrder.indexOf(b.id);return(ai<0?999:ai)-(bi<0?999:bi);});
@@ -1974,7 +1977,7 @@ export default function App() {
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="cardapio-tv" && <CardapioTVPanel empresa={empresa}/>}
+              {tab==="cardapio-tv" && <CardapioTVPanel empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub} state={state}/>}
               {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder} setConfigPanelOpen={setConfigPanelOpen} modoDiscreto={modoDiscreto} toggleModoDiscreto={toggleModoDiscreto}/>}
             </>
         }
@@ -14610,11 +14613,147 @@ ${cfg.encomendaAssinatura?`<div class="assinatura">Ciente: _____________________
 }
 
 
+const CANAIS_VENDA_TV:[string,string][]=[["maquininha","Maquininha"],["dinheiro","Dinheiro"],["ifood","iFood"],["99food","99Food"],["delivery","Delivery"],["entregasClientes","Entregas"]];
+
+// Painel de UMA empresa dentro do "📊 Painel Ao Vivo" — só HOJE (sem seletor
+// de período, diferente do Dashboard normal). porHora só existe pra quem usa
+// a integração de PDV (hoje, só a Seama manda isso em /api/venda-pdv); sem
+// isso o gráfico por hora degrada pra um aviso em vez de inventar dado.
+function PainelEmpresaAoVivo({empresa,db,cor}:{empresa:string,db:any,cor:string}){
+  const hoje=today();
+  const ontem=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+  const vHoje=(db?.vendas||[]).find((v:any)=>v.data===hoje);
+  const vOntem=(db?.vendas||[]).find((v:any)=>v.data===ontem);
+  const totalHoje=vHoje?.total||0;
+  const totalOntem=vOntem?.total||0;
+  const deltaPct=totalOntem>0?((totalHoje-totalOntem)/totalOntem)*100:null;
+  const porHora:{hora:number,valor:number}[]=vHoje?.porHora||[];
+  const temHora=porHora.length>0;
+  const picoRow=temHora?porHora.reduce((m,x)=>x.valor>m.valor?x:m,porHora[0]):null;
+  const recibosHoje=(db?.recibosVenda||[]).filter((r:any)=>r.data===hoje);
+  const ticketMedio=recibosHoje.length?recibosHoje.reduce((s:number,r:any)=>s+(r.total||0),0)/recibosHoje.length:0;
+  const comprasHoje=(db?.compras||[]).filter((c:any)=>(c.data||"")===hoje).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
+  const canais=CANAIS_VENDA_TV.map(([k,label])=>({label,v:vHoje?.[k]||0})).filter(c=>c.v>0);
+  const maxCanal=Math.max(...canais.map(c=>c.v),1);
+
+  const chartW=300,chartH=64;
+  let pathLine="",pathArea="";
+  if(temHora){
+    const maxV=Math.max(...porHora.map(p=>p.valor),1);
+    const pts=porHora.map((p,i)=>{
+      const x=porHora.length>1?(i/(porHora.length-1))*chartW:0;
+      const y=chartH-6-(p.valor/maxV)*(chartH-14);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    pathLine=pts.join(" ");
+    pathArea=`M${pts[0]} L${pts.join(" L")} L${chartW},${chartH} L0,${chartH} Z`;
+  }
+
+  return <div className="card" style={{borderTop:`3px solid ${cor}`,borderRadius:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+      <div style={{fontSize:14,fontWeight:800,letterSpacing:".02em",color:cor,display:"flex",alignItems:"center",gap:7}}>
+        <span style={{width:7,height:7,borderRadius:"50%",background:cor,display:"inline-block"}}/>{empresa}
+      </div>
+      <div style={{fontSize:10.5,color:"var(--text3)"}}>{recibosHoje.length} recibo{recibosHoje.length!==1?"s":""} hoje</div>
+    </div>
+
+    <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap" as const,marginBottom:2}}>
+      <span style={{fontFamily:"monospace",fontSize:28,fontWeight:700}}>{fmtMoney(totalHoje)}</span>
+      {deltaPct!==null&&<span style={{fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:20,color:deltaPct>=0?"#22C55E":"var(--btnDanger)",background:deltaPct>=0?"#22C55E1a":"#EF44441a"}}>{deltaPct>=0?"▲":"▼"} {Math.abs(deltaPct).toFixed(0)}% vs ontem</span>}
+    </div>
+    <div style={{fontSize:11,color:"var(--text3)",marginBottom:14}}>Faturamento hoje</div>
+
+    {temHora?<div style={{marginBottom:14}}>
+      <svg viewBox={`0 0 ${chartW} ${chartH}`} preserveAspectRatio="none" style={{width:"100%",height:64,display:"block"}}>
+        <defs><linearGradient id={`grad-tv-${empresa}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={cor} stopOpacity=".35"/><stop offset="100%" stopColor={cor} stopOpacity="0"/></linearGradient></defs>
+        <path d={pathArea} fill={`url(#grad-tv-${empresa})`}/>
+        <polyline points={pathLine} fill="none" stroke={cor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--text3)",marginTop:3}}>
+        <span>{porHora[0]?.hora}h</span><span>vendas por hora</span><span>{porHora[porHora.length-1]?.hora}h</span>
+      </div>
+    </div>:<div style={{fontSize:11,color:"var(--text3)",background:"var(--bg4)",borderRadius:8,padding:"10px 12px",marginBottom:14,textAlign:"center" as const}}>Sem dado de venda por hora nessa empresa (precisa da integração de PDV).</div>}
+
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+      <div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:10,padding:"9px 10px"}}>
+        <div style={{fontFamily:"monospace",fontSize:14,fontWeight:700}}>{fmtMoney(ticketMedio)}</div>
+        <div style={{fontSize:9.5,color:"var(--text3)",textTransform:"uppercase" as const}}>Ticket médio</div>
+      </div>
+      <div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:10,padding:"9px 10px"}}>
+        <div style={{fontFamily:"monospace",fontSize:14,fontWeight:700}}>{picoRow?`${picoRow.hora}h`:"—"}</div>
+        <div style={{fontSize:9.5,color:"var(--text3)",textTransform:"uppercase" as const}}>Horário de pico</div>
+      </div>
+      <div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:10,padding:"9px 10px"}}>
+        <div style={{fontFamily:"monospace",fontSize:14,fontWeight:700}}>{fmtMoney(comprasHoje)}</div>
+        <div style={{fontSize:9.5,color:"var(--text3)",textTransform:"uppercase" as const}}>Compras hoje</div>
+      </div>
+    </div>
+
+    {canais.length>0&&<>
+      <div style={{fontSize:10,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:8}}>Por canal</div>
+      {canais.map(c=>(
+        <div key={c.label} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,fontSize:11.5}}>
+          <span style={{width:80,flexShrink:0,color:"var(--text2)"}}>{c.label}</span>
+          <div style={{flex:1,height:7,background:"var(--bg4)",borderRadius:4,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${(c.v/maxCanal)*100}%`,background:cor,borderRadius:4}}/>
+          </div>
+          <span style={{fontFamily:"monospace",width:70,textAlign:"right" as const,fontWeight:600}}>{fmtMoney(c.v)}</span>
+        </div>
+      ))}
+    </>}
+  </div>;
+}
+
+// "📊 Painel Ao Vivo" — CONFRARIA e SEAMA lado a lado, só o dia de hoje.
+// "Ao vivo" aqui é a MESMA sincronização automática entre aparelhos que o
+// resto do sistema já usa (ver autoSyncInterval em Configurações) — não é
+// um canal push dedicado; o relógio/carimbo no topo só deixam isso visível.
+function PainelAoVivoDashboard({state}:{state:any}){
+  const [agora,setAgora]=useState(()=>new Date());
+  useEffect(()=>{const t=setInterval(()=>setAgora(new Date()),1000);return()=>clearInterval(t);},[]);
+  const dbC=state?.CONFRARIA||{};
+  const dbS=state?.SEAMA||{};
+  const hoje=today();
+  const totalC=(dbC.vendas||[]).find((v:any)=>v.data===hoje)?.total||0;
+  const totalS=(dbS.vendas||[]).find((v:any)=>v.data===hoje)?.total||0;
+  const totalGeral=totalC+totalS;
+  return <div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:14}}>
+      <div style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>📊 Painel Ao Vivo</div>
+      <div style={{display:"flex",alignItems:"center",gap:10,fontSize:11.5,color:"var(--text2)"}}>
+        <span style={{fontFamily:"monospace",fontWeight:700}}>{agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
+        <span style={{display:"flex",alignItems:"center",gap:5,background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:20,padding:"4px 10px"}}>
+          <span style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",display:"inline-block"}}/>
+          <b style={{color:"#22C55E"}}>Ao vivo</b>
+        </span>
+      </div>
+    </div>
+
+    <div className="card" style={{display:"flex",alignItems:"center",gap:24,flexWrap:"wrap" as const,marginBottom:16}}>
+      <div>
+        <div style={{fontSize:10.5,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:4}}>Faturamento consolidado hoje</div>
+        <div style={{fontFamily:"monospace",fontSize:28,fontWeight:700}}>{fmtMoney(totalGeral)}</div>
+      </div>
+      <div style={{display:"flex",gap:20,marginLeft:"auto",flexWrap:"wrap" as const,fontSize:13}}>
+        <span style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:9,height:9,borderRadius:3,background:"#E0A860",display:"inline-block"}}/>CONFRARIA <b style={{fontFamily:"monospace"}}>{fmtMoney(totalC)}</b></span>
+        <span style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:9,height:9,borderRadius:3,background:"#4FC3A1",display:"inline-block"}}/>SEAMA <b style={{fontFamily:"monospace"}}>{fmtMoney(totalS)}</b></span>
+      </div>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:16}}>
+      <PainelEmpresaAoVivo empresa="CONFRARIA" db={dbC} cor="#E0A860"/>
+      <PainelEmpresaAoVivo empresa="SEAMA" db={dbS} cor="#4FC3A1"/>
+    </div>
+  </div>;
+}
+
 // Banners vivem fora do documento principal (db) — arquivo próprio no
 // servidor (dados/cardapio_tv_<empresa>.json + imagem estática em
 // dados/banners/), pra não engordar o JSON de 1-3MB que já é lido/gravado a
 // cada sync de qualquer aparelho logado. Ver /api/cardapio-tv* no servidor.
-function CardapioTVPanel({empresa}:{empresa:string}){
+function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,state?:any}){
+  const [subTab,setSubTab]=useState(pendingSub||"telas");
+  useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   const [telas,setTelas]=useState<any[]>([]);
   const [telaAtivaId,setTelaAtivaId]=useState<string|null>(null);
   const [loading,setLoading]=useState(true);
@@ -14734,6 +14873,8 @@ function CardapioTVPanel({empresa}:{empresa:string}){
 
   const tvUrl=telaAtiva?`${window.location.origin}/tv/${empresa.toLowerCase()}/${telaAtiva.id}`:"";
   const copiarLink=()=>{navigator.clipboard?.writeText(tvUrl).then(()=>alert("Link copiado!")).catch(()=>{});};
+
+  if(subTab==="painel")return <PainelAoVivoDashboard state={state}/>;
 
   if(loading)return <div className="muted" style={{textAlign:"center",padding:24}}>Carregando...</div>;
 
