@@ -1328,6 +1328,8 @@ export default function App() {
   const [menuPickerOpen,setMenuPickerOpen]=useState(false);
   const [fabOpen,setFabOpen]=useState(false);
   const changeMenuLayout=(l:"bottom"|"top"|"fab")=>{setMenuLayout(l);localStorage.setItem("app_menu_layout",l);setMenuPickerOpen(false);setFabOpen(false);};
+  const [sidebarColapsada,setSidebarColapsada]=useState<boolean>(()=>localStorage.getItem("app_sidebar_colapsada")==="1");
+  const toggleSidebarColapsada=()=>{const v=!sidebarColapsada;setSidebarColapsada(v);localStorage.setItem("app_sidebar_colapsada",v?"1":"0");};
   const DEFAULT_MENU_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","config"];
   const [menuOrder,setMenuOrder]=useState<string[]>(()=>{try{const s=localStorage.getItem("app_menu_order");if(s)return JSON.parse(s);}catch{}return DEFAULT_MENU_ORDER;});
   const changeMenuOrder=(order:string[])=>{setMenuOrder(order);localStorage.setItem("app_menu_order",JSON.stringify(order));};
@@ -1667,9 +1669,17 @@ export default function App() {
         .camera-zone:hover{border-color:var(--acc)}
         textarea.inp{min-height:110px;resize:vertical}
         .divider{border:none;border-top:1px solid var(--border);margin:10px 0}
-        .app-sidebar{display:none;position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);flex-direction:column;z-index:100;overflow-y:auto}
+        .app-sidebar{display:none;position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);flex-direction:column;z-index:100;overflow:visible;transition:width .2s ease}
+        .app-sidebar.colapsada{width:64px}
+        .app-sidebar.colapsada .sb-hide{display:none!important}
+        .app-sidebar.colapsada .sb-item-btn{justify-content:center;padding-left:0!important;padding-right:0!important}
+        .app-sidebar .sb-item{position:relative}
+        .app-sidebar .sb-flyout{display:none;position:absolute;left:100%;top:0;min-width:190px;background:#334155;border-radius:0 10px 10px 0;box-shadow:4px 4px 18px rgba(0,0,0,.25);padding:6px 0;z-index:150}
+        .app-sidebar.colapsada .sb-item:hover .sb-flyout{display:block}
+        .sb-toggle{position:absolute;top:18px;right:-12px;width:24px;height:24px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.15);transition:transform .2s ease}
+        .app-sidebar.colapsada .sb-toggle{transform:rotate(180deg)}
         @media(min-width:900px){
-          .app-root{max-width:none!important;padding-left:220px;padding-bottom:0!important}
+          .app-root{max-width:none!important;padding-left:${sidebarColapsada?64:220}px;padding-bottom:0!important}
           .app-sidebar{display:flex!important}
           .bottom-nav-bar{display:none!important}
           .fab-menu-container{display:none!important}
@@ -1684,40 +1694,52 @@ export default function App() {
       `}</style>
 
       {/* DESKTOP SIDEBAR */}
-      <div className="app-sidebar">
+      <div className={"app-sidebar"+(sidebarColapsada?" colapsada":"")}>
+        <button onClick={toggleSidebarColapsada} className="sb-toggle" title={sidebarColapsada?"Expandir menu":"Recolher menu"}>‹</button>
         <div style={{padding:"16px 16px 12px"}}>
           <LogoEmpresa empresa={empresa}/>
-          {isAdmin&&<div style={{display:"flex",gap:5,marginTop:10}}>
+          {isAdmin&&<div className="sb-hide" style={{display:"flex",gap:5,marginTop:10}}>
             {["CONFRARIA","SEAMA"].map(e=>(
               <button key={e} onClick={()=>setEmpresa(e)} className="pill"
                 style={{background:empresa===e?"var(--btnPrimary)":"rgba(255,255,255,0.08)",color:empresa===e?"#fff":"rgba(255,255,255,0.6)",fontSize:10,border:`1px solid ${empresa===e?"var(--btnPrimary)":"rgba(255,255,255,0.15)"}`,flex:1,justifyContent:"center",padding:"5px 6px"}}>{e}</button>
             ))}
           </div>}
-          {isOp&&<div style={{marginTop:8,fontSize:11,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.06)",borderRadius:8,padding:"6px 10px"}}>
+          {isOp&&<div className="sb-hide" style={{marginTop:8,fontSize:11,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.06)",borderRadius:8,padding:"6px 10px"}}>
             👤 <span style={{color:loginCorTexto,fontWeight:700}}>{login.label}</span>
           </div>}
         </div>
-        <div style={{flex:1,overflowY:"auto"}}>
+        <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
           {(()=>{
             const estoqueBaixo=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
-            const badge=(id:string)=>id==="estoque"&&estoqueBaixo>0?<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{estoqueBaixo}</span>
+            const badge=(id:string)=>id==="estoque"&&estoqueBaixo>0?<span className="sb-hide" style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{estoqueBaixo}</span>
               :null;
             return menuFiltered.map(m=>{
               const hasKids=!!m.children?.length;
               const isOpen=expandedMenu===m.id;
               const isActive=tab===m.id;
-              return <div key={m.id}>
-                <button onClick={()=>{if(hasKids){setExpandedMenu(isOpen?null:m.id);if(!isActive)navTo(m.id,m.children![0].sub);}else navTo(m.id);}}
+              const filhos=hasKids?m.children!.filter((c:any)=>!c.adminOnly||isAdmin):[];
+              return <div key={m.id} className="sb-item">
+                <button onClick={()=>{if(hasKids){setExpandedMenu(isOpen?null:m.id);if(!isActive)navTo(m.id,m.children![0].sub);}else navTo(m.id);}} className="sb-item-btn" title={sidebarColapsada?m.label:undefined}
                   style={{background:isActive?"var(--btnPrimary)":"none",border:"none",borderLeft:isActive?"3px solid var(--btnPrimary)":"3px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:isActive?"#ffffff":"rgba(255,255,255,0.6)",padding:"11px 18px",width:"100%",fontSize:13,fontWeight:isActive?700:400,transition:"all .15s"}}>
-                  <span style={{fontSize:17}}>{m.icon}</span>
-                  <span>{m.label}</span>
+                  <span style={{fontSize:17,flexShrink:0}}>{m.icon}</span>
+                  <span className="sb-hide">{m.label}</span>
                   {badge(m.id)}
-                  {hasKids&&<span style={{marginLeft:badge(m.id)?"4px":"auto",fontSize:10,color:"rgba(255,255,255,0.5)",transition:"transform .2s",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>▼</span>}
+                  {hasKids&&<span className="sb-hide" style={{marginLeft:badge(m.id)?"4px":"auto",fontSize:10,color:"rgba(255,255,255,0.5)",transition:"transform .2s",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>▼</span>}
                 </button>
-                {hasKids&&isOpen&&<div style={{background:"#334155",borderLeft:"3px solid rgba(255,255,255,0.08)"}}>
-                  {m.children!.filter((c:any)=>!c.adminOnly||isAdmin).map(c=>(
+                {hasKids&&isOpen&&<div className="sb-hide" style={{background:"#334155",borderLeft:"3px solid rgba(255,255,255,0.08)"}}>
+                  {filhos.map(c=>(
                     <button key={c.id} onClick={()=>navTo(m.id,c.sub)}
                       style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,color:tab===m.id&&pendingSub===null?"rgba(255,255,255,0.85)":"rgba(255,255,255,0.5)",padding:"8px 18px 8px 36px",width:"100%",fontSize:12,fontWeight:400,transition:"all .15s"}}>
+                      <span style={{fontSize:13}}>{c.icon}</span>
+                      <span>{c.label}</span>
+                    </button>
+                  ))}
+                </div>}
+                {hasKids&&<div className="sb-flyout">
+                  <div style={{fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"0.06em",padding:"8px 16px 4px"}}>{m.label}</div>
+                  {filhos.map(c=>(
+                    <button key={c.id} onClick={()=>navTo(m.id,c.sub)}
+                      style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,color:"rgba(255,255,255,0.6)",padding:"8px 16px",width:"100%",fontSize:12,whiteSpace:"nowrap"}}>
                       <span style={{fontSize:13}}>{c.icon}</span>
                       <span>{c.label}</span>
                     </button>
@@ -1728,13 +1750,13 @@ export default function App() {
           })()}
         </div>
         <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <div className="sb-hide" style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <span style={{fontSize:11,color:syncStatus==="ok"?"#22C55E":syncStatus==="erro"?"#F87171":syncStatus==="sync"?"#A5B4FC":"rgba(255,255,255,0.4)"}}>
               {syncStatus==="sync"?"⟳ Salvando...":syncStatus==="ok"?"✓ Sincronizado":syncStatus==="erro"?"⚠ Erro":"App Gestão v2.0"}
             </span>
           </div>
-          <button onClick={doLogout} style={{width:"100%",background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.35)",borderRadius:8,color:"#F87171",fontSize:11,fontWeight:700,padding:"7px",cursor:"pointer",letterSpacing:0.3}}>
-            🔒 Sair ({login.label})
+          <button onClick={doLogout} title={sidebarColapsada?`Sair (${login.label})`:undefined} style={{width:"100%",background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.35)",borderRadius:8,color:"#F87171",fontSize:11,fontWeight:700,padding:"7px",cursor:"pointer",letterSpacing:0.3}}>
+            🔒<span className="sb-hide"> Sair ({login.label})</span>
           </button>
         </div>
       </div>
