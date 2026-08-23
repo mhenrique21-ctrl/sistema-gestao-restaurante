@@ -1643,6 +1643,7 @@ export default function App() {
       {id:"prod-arq",label:"Arquivo",icon:"📂",sub:"pedidos",adminOnly:true},
       {id:"prod-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
       {id:"prod-cat",label:"Cliente",icon:"🏢",sub:"categorias",adminOnly:true},
+      {id:"prod-ficha",label:"Fichas",icon:"📝",sub:"ficha",adminOnly:true},
       {id:"prod-relatorio",label:"Relatório",icon:"📊",sub:"relatorio",adminOnly:true},
     ]},
     {id:"contas",label:"Financeiro",icon:"📋",children:[
@@ -1660,7 +1661,6 @@ export default function App() {
     {id:"fluxo",label:"Fluxo de Caixa",icon:"💵"},
     {id:"gestao",label:"Gestão",icon:"⚙️",children:[
       {id:"gest-rh",label:"RH",icon:"👥",sub:"rh"},
-      {id:"gest-ficha",label:"Fichas",icon:"📝",sub:"ficha"},
       {id:"gest-dre",label:"DRE",icon:"📈",sub:"dre"},
       {id:"gest-rel",label:"Relatórios",icon:"📄",sub:"relatorios"},
       {id:"gest-vs",label:"Versus",icon:"⚖️",sub:"versus"},
@@ -1906,7 +1906,7 @@ export default function App() {
       <div className="app-content" style={{padding:"14px 14px 0"}}>
         {isOp
           ? (tab==="producao"
-            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} empresa={empresa}/>
+            ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState}/>
             : tab==="agenda"
             ? <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={false} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} login={login} setDbAndSave={setDbAndSave}/>)
@@ -1915,7 +1915,7 @@ export default function App() {
               {tab==="vendas"     && <VendasPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab} empresa={empresa}/>}
+              {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab} empresa={empresa} state={state} setState={setState}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
@@ -8353,7 +8353,7 @@ function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string
   </div>;
 }
 
-function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave,onNavigate,empresa}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void,onNavigate?:(tab:string)=>void,empresa?:string}){
+function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave,onNavigate,empresa,state,setState}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void,onNavigate?:(tab:string)=>void,empresa?:string,state?:any,setState?:any}){
   const isAdmin=login?.role==="admin";
   _dbIconesProd=db.iconesProducao||{};
   const [iconPicker,setIconPicker]=useState<string|null>(null);
@@ -8376,6 +8376,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const showHist=subTab==="pedidos";
   const setShowHist=(v:boolean)=>setSubTab(v?"pedidos":"novo");
   const showRecibos=subTab==="recibos";
+  const showFicha=subTab==="ficha";
   const [extratoCliente,setExtratoCliente]=useState("");
   const [extratoIni,setExtratoIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [extratoFim,setExtratoFim]=useState(today());
@@ -9272,6 +9273,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         </div>
       </>;
     })()}
+
+    {showFicha&&<><BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/><FichaTecnica db={db} setDb={setDb} state={state} setState={setState} empresa={empresa}/></>}
 
     {showRelatorio&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showRelatorio&&(()=>{
@@ -11037,9 +11040,11 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
 }
 
 // ===================== FICHA TÉCNICA =====================
-function FichaTecnica({db,setDb}){
+function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?:any,setState?:any,empresa?:string}){
+  const outraEmpresa=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
+  const podeCompartilhar=!!(state&&setState&&empresa);
   const [subTab,setSubTab]=useState("lista");
-  const [form,setForm]=useState({nome:"",insumos:[],porcoes:"1",cmv:"30"});
+  const [form,setForm]=useState({nome:"",insumos:[],porcoes:"1",cmv:"30",compartilhada:false});
   const [novoIns,setNovoIns]=useState({nome:"",mp:"",precoTotal:"",qtdComprada:"",qtdUsada:"",unidade:"kg"});
   const [editId,setEditId]=useState(null);
   const formRef=useRef<HTMLDivElement>(null);
@@ -11085,17 +11090,85 @@ function FichaTecnica({db,setDb}){
   const cmvPct=Math.max(Math.min(parseFloat(form.cmv)||30,100),1);
   const custoPorcao=custoTotal/porcoes;
   const precoPorcao=custoPorcao/(cmvPct/100);
+  // Recalcula insumos/custo de uma ficha usando os PREÇOS DA EMPRESA ALVO
+  // (dTarget.materiasPrimas/compras) — é assim que o custo continua separado
+  // por empresa mesmo numa ficha compartilhada: a receita (nome, insumos,
+  // quantidades) é uma só, mas cada lado resolve o preço com sua própria
+  // matéria-prima. Mesma lógica de atualizar(), só que parametrizada.
+  const recalcularParaEmpresa=(ftBase:any,dTarget:any)=>{
+    const allMps=dTarget?.materiasPrimas||[];
+    const allCompras=dTarget?.compras||[];
+    const ins=(ftBase.insumos||[]).map((i:any)=>{
+      let mp=i.mpId?allMps.find((m:any)=>m.id===i.mpId):null;
+      if(!mp)mp=allMps.find((m:any)=>(m.nome||"").toLowerCase()===(i.nome||"").toLowerCase());
+      if(!mp){
+        const compra=allCompras.filter((c:any)=>{const np=(c.nomeProduto||"").toLowerCase();const nl=(i.nome||"").toLowerCase();return np.includes(nl)||nl.includes(np);}).sort((a:any,b:any)=>(b.data||"").localeCompare(a.data||""))[0];
+        const v=compra?.valorUnitario??i.valorUnd??0;
+        return{...i,valorUnd:v,custo:v*i.quantidade,mpId:undefined};
+      }
+      const v=mp.ultimoValor||0;
+      return{...i,valorUnd:v,custo:v*i.quantidade,mpId:mp.id};
+    });
+    const ct=ins.reduce((s:number,i:any)=>s+i.custo,0);
+    const por=ftBase.porcoes||1;const cmv=ftBase.cmv||30;
+    const cp=ct/por;const pp=cp/(cmv/100);
+    return{...ftBase,insumos:ins,custoTotal:ct,custoPorcao:cp,precoPorcao:pp,precoSugerido:pp};
+  };
   const save=()=>{
     if(!form.nome||!form.insumos.length)return alert("Adicione nome e ao menos um insumo.");
     const now=new Date().toISOString();
-    const ft={id:editId||uid(),nome:form.nome,insumos:form.insumos,
-      porcoes,cmv:cmvPct,custoTotal,custoPorcao,precoPorcao,precoSugerido:precoPorcao};
-    if(editId){setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.map(f=>f.id===editId?{...ft,criadoEm:f.criadoEm||now,atualizadoEm:now}:f)}));setEditId(null);}
-    else{setDb(d=>({...d,fichasTecnicas:[{...ft,criadoEm:now},...(d.fichasTecnicas||[])]}));}
-    setForm({nome:"",insumos:[],porcoes:"1",cmv:"30"});
+    const idFinal=editId||uid();
+    const compartilhando=podeCompartilhar&&form.compartilhada;
+    const ftBase={id:idFinal,nome:form.nome,insumos:form.insumos,porcoes,cmv:cmvPct,compartilhada:compartilhando};
+    const fichaAnterior=editId?(db.fichasTecnicas||[]).find((f:any)=>f.id===editId):null;
+
+    if(compartilhando){
+      setState((s:any)=>{
+        const dHere=s[empresa]||{};const dThere=s[outraEmpresa]||{};
+        const criadoEm=fichaAnterior?.criadoEm||now;
+        const ftHere={...recalcularParaEmpresa(ftBase,dHere),criadoEm,atualizadoEm:now};
+        const ftThere={...recalcularParaEmpresa(ftBase,dThere),criadoEm,atualizadoEm:now};
+        const upsert=(arr:any[],item:any)=>{const i=(arr||[]).findIndex((x:any)=>x.id===item.id);if(i>=0){const c=[...arr];c[i]=item;return c;}return[item,...(arr||[])];};
+        return{...s,
+          [empresa]:{...dHere,fichasTecnicas:upsert(dHere.fichasTecnicas,ftHere)},
+          [outraEmpresa]:{...dThere,fichasTecnicas:upsert(dThere.fichasTecnicas,ftThere)},
+        };
+      });
+    }else{
+      const ft={...ftBase,custoTotal,custoPorcao,precoPorcao,precoSugerido:precoPorcao};
+      // Estava compartilhada e foi desmarcada agora: avisa a outra empresa que
+      // o vínculo acabou (ela mantém a cópia como está, só para de receber
+      // atualizações), em vez de deixar a tag "compartilhada" lá mentindo.
+      if(fichaAnterior?.compartilhada&&podeCompartilhar){
+        setState((s:any)=>{
+          const dThere=s[outraEmpresa]||{};
+          return{...s,[outraEmpresa]:{...dThere,fichasTecnicas:(dThere.fichasTecnicas||[]).map((f:any)=>f.id===idFinal?{...f,compartilhada:false}:f)}};
+        });
+      }
+      if(editId)setDb((d:any)=>({...d,fichasTecnicas:d.fichasTecnicas.map((f:any)=>f.id===editId?{...ft,criadoEm:f.criadoEm||now,atualizadoEm:now}:f)}));
+      else setDb((d:any)=>({...d,fichasTecnicas:[{...ft,criadoEm:now},...(d.fichasTecnicas||[])]}));
+    }
+    setEditId(null);
+    setForm({nome:"",insumos:[],porcoes:"1",cmv:"30",compartilhada:false});
   };
-  const edit=(f)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30)});setSubTab("novo");setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);};
-  const del=(id)=>{_listaDeletados.add(id);setDb(d=>({...d,fichasTecnicas:d.fichasTecnicas.filter(f=>f.id!==id)}));};
+  const edit=(f:any)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30),compartilhada:!!f.compartilhada});setSubTab("novo");setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);};
+  const del=(f:any)=>{
+    if(f.compartilhada&&podeCompartilhar){
+      if(!confirm(`"${f.nome}" é uma ficha compartilhada — excluir vai remover ela das DUAS empresas (${empresa} e ${outraEmpresa}). Continuar?`))return;
+      _listaDeletados.add(f.id);
+      setState((s:any)=>{
+        const dHere=s[empresa]||{};const dThere=s[outraEmpresa]||{};
+        return{...s,
+          [empresa]:{...dHere,fichasTecnicas:(dHere.fichasTecnicas||[]).filter((x:any)=>x.id!==f.id)},
+          [outraEmpresa]:{...dThere,fichasTecnicas:(dThere.fichasTecnicas||[]).filter((x:any)=>x.id!==f.id)},
+        };
+      });
+      return;
+    }
+    if(!confirm(`Excluir "${f.nome}"?`))return;
+    _listaDeletados.add(f.id);
+    setDb((d:any)=>({...d,fichasTecnicas:d.fichasTecnicas.filter((x:any)=>x.id!==f.id)}));
+  };
   const atualizar=()=>{
     setDb(d=>{
       const allMps=d.materiasPrimas||[];
@@ -11178,8 +11251,11 @@ function FichaTecnica({db,setDb}){
         const cp=f.custoPorcao??(f.custoTotal/por);
         const pp=f.precoPorcao??(cp/(cmv/100));
         return <div key={f.id} className="card" style={{marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontWeight:700,fontSize:16}}>{f.nome}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap" as const,gap:6}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" as const}}>
+              <div style={{fontWeight:700,fontSize:16}}>{f.nome}</div>
+              {f.compartilhada&&<span className="tag" style={{background:"var(--btnPrimary)",color:"#fff"}}>🔗 Compartilhada com {outraEmpresa}</span>}
+            </div>
             <div style={{display:"flex",gap:5}}>
               {por>1&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>{por} porções</span>}
               <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>CMV {cmv}%</span>
@@ -11207,7 +11283,7 @@ function FichaTecnica({db,setDb}){
           <div style={{display:"flex",gap:8,marginTop:10}}>
             <button className="btn" onClick={()=>edit(f)} style={{background:"var(--border)",color:"#888",padding:"6px 14px",fontSize:12}}>✏️ Editar</button>
             <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"#DBEAFE",color:"var(--btnPrimary)",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
-            <button className="btn" onClick={()=>del(f.id)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 14px",fontSize:12}}>🗑️</button>
+            <button className="btn" onClick={()=>del(f)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
           {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
         </div>;
@@ -11230,6 +11306,13 @@ function FichaTecnica({db,setDb}){
             </div>
           </div>
         </div>
+        {podeCompartilhar&&<label style={{display:"flex",alignItems:"center",gap:10,marginTop:12,padding:"9px 10px",background:form.compartilhada?"var(--btnPrimary)22":"var(--bg4)",border:`1px solid ${form.compartilhada?"var(--btnPrimary)":"var(--border)"}`,borderRadius:8,cursor:"pointer"}}>
+          <input type="checkbox" checked={form.compartilhada} onChange={e=>setForm(f=>({...f,compartilhada:e.target.checked}))} style={{width:16,height:16,flexShrink:0}}/>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:form.compartilhada?"var(--btnPrimary)":"var(--text)"}}>🔗 Ficha compartilhada com {outraEmpresa}</div>
+            <div style={{fontSize:10,color:"var(--text2)",marginTop:1}}>Nome, insumos e quantidades ficam iguais nas duas empresas — cada uma calcula o custo com seu próprio preço.</div>
+          </div>
+        </label>}
       </div>
       <div className="card" style={{marginBottom:10}}>
         <div className="section-title">Adicionar Insumo</div>
@@ -12775,7 +12858,6 @@ function Gestao({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPend
   useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   return <div>
     {sub==="rh"         && <RH db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave}/>}
-    {sub==="ficha"      && <><BackBar label="RH" onClick={()=>setSub("rh")}/><FichaTecnica db={db} setDb={setDb}/></>}
     {sub==="dre"        && <><BackBar label="RH" onClick={()=>setSub("rh")}/><DREComp db={db} setDb={setDb} empresa={empresa}/></>}
     {sub==="relatorios" && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/></>}
     {sub==="versus"     && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Comparativo state={state}/></>}
