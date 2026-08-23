@@ -11119,20 +11119,40 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
   const marcasDoProd=prodSelecionado?(prodSelecionado.mpVinculados||[]).map((id:string)=>mps.find((m:any)=>m.id===id)).filter(Boolean):[];
   const marcaMaisRecente=marcasDoProd.length?mpMaisRecente(marcasDoProd):null;
   const mpDireta=novoIns.mpId?mps.find((m:any)=>m.id===novoIns.mpId):null;
-  const precoResolvido=marcaMaisRecente?(marcaMaisRecente.ultimoValor||0):mpDireta?(mpDireta.ultimoValor||0):0;
-  const temPrecoCatalogado=!!(marcaMaisRecente||mpDireta);
+  const mpAtivo=marcaMaisRecente||mpDireta;
+  const precoResolvido=mpAtivo?(mpAtivo.ultimoValor||0):0;
+  const temPrecoCatalogado=!!mpAtivo;
   const insValorUnd=temPrecoCatalogado?precoResolvido:(parseFloat(novoIns.precoManual)||0);
   const insQtdUsada=parseFloat(novoIns.qtdUsada)||0;
   const insCusto=insValorUnd*insQtdUsada;
+  const [showConvPanel,setShowConvPanel]=useState(false);
+  const [convForm,setConvForm]=useState({precoEmbalagem:"",rendeQtd:""});
+  const abrirConvPanel=()=>{
+    if(!mpAtivo)return;
+    setConvForm({precoEmbalagem:String(mpAtivo.ultimoValor||""),rendeQtd:mpAtivo.equivaleEm?String(mpAtivo.equivaleEm):""});
+    setShowConvPanel(true);
+  };
+  const precoEmbalagemNum=parseFloat(convForm.precoEmbalagem)||0;
+  const rendeQtdNum=parseFloat(convForm.rendeQtd)||0;
+  const novoValorPorUnd=rendeQtdNum>0?precoEmbalagemNum/rendeQtdNum:0;
+  const salvarConversao=()=>{
+    if(!mpAtivo)return;
+    if(rendeQtdNum<=0)return alert(`Informe quantos ${novoIns.unidade} a embalagem rende.`);
+    if(precoEmbalagemNum<=0)return alert("Informe o preço pago pela embalagem.");
+    setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mpAtivo.id?{...m,unidadeEmbalagem:m.unidadeEmbalagem||"embalagem",equivaleEm:rendeQtdNum,ultimoValor:novoValorPorUnd,atualizadoEm:new Date().toISOString()}:m)}));
+    setShowConvPanel(false);
+  };
   const selecionarProd=(p:any)=>{
     const marcas=(p.mpVinculados||[]).map((id:string)=>mps.find((m:any)=>m.id===id)).filter(Boolean);
     const recente=marcas.length?mpMaisRecente(marcas):null;
     setNovoIns(i=>({...i,nome:p.nome,prodListaId:p.id,mpId:recente?.id||"",unidade:p.unidade||i.unidade,precoManual:""}));
     setShowInsSugg(false);
+    setShowConvPanel(false);
   };
   const selecionarMpDireta=(mp:any)=>{
     setNovoIns(i=>({...i,nome:mp.nome,prodListaId:"",mpId:mp.id,unidade:mp.unidade||i.unidade,precoManual:""}));
     setShowInsSugg(false);
+    setShowConvPanel(false);
   };
   const addIns=()=>{
     const nome=novoIns.nome.trim();
@@ -11363,7 +11383,7 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
         <div className="section-title">Adicionar Insumo</div>
         <div style={{position:"relative",marginBottom:8}}>
           <input placeholder="Nome do produto (ex: Farinha, Ovo, Açúcar...)" value={novoIns.nome}
-            onChange={e=>{setNovoIns(i=>({...i,nome:e.target.value,prodListaId:"",mpId:"",precoManual:""}));setShowInsSugg(true);}}
+            onChange={e=>{setNovoIns(i=>({...i,nome:e.target.value,prodListaId:"",mpId:"",precoManual:""}));setShowInsSugg(true);setShowConvPanel(false);}}
             onKeyDown={e=>{if(e.key==="Enter"&&!showInsSugg)addIns();if(e.key==="Escape")setShowInsSugg(false);}}
             onFocus={()=>setShowInsSugg(true)}
             onBlur={()=>setTimeout(()=>setShowInsSugg(false),150)}
@@ -11405,9 +11425,36 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
         </div>}
 
         {temPrecoCatalogado?<div style={{background:"var(--card,var(--bg))",border:"2px solid #22C55E",borderRadius:9,padding:"10px 11px",marginBottom:8}}>
-          <div style={{fontSize:9.5,color:"#22C55E",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:4}}>{marcaMaisRecente?"Preço travado (marca mais recente)":"Preço travado (cadastro da matéria-prima)"}</div>
-          <div style={{fontSize:17,fontWeight:800,color:"#22C55E"}}>{fmtMoney(precoResolvido)} / {novoIns.unidade}</div>
-          <div style={{fontSize:10.5,color:"var(--text2)",marginTop:2}}>Sempre o preço mais atual do cadastro — se mudar numa próxima compra, atualiza sozinho aqui e em "🔄 Atualizar Fichas".</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+            <div>
+              <div style={{fontSize:9.5,color:"#22C55E",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:4}}>{marcaMaisRecente?"Preço travado (marca mais recente)":"Preço travado (cadastro da matéria-prima)"}</div>
+              <div style={{fontSize:17,fontWeight:800,color:"#22C55E"}}>{fmtMoney(precoResolvido)} / {novoIns.unidade}</div>
+            </div>
+            <button onClick={()=>showConvPanel?setShowConvPanel(false):abrirConvPanel()} style={{background:"none",border:"1px solid var(--border2)",borderRadius:7,color:"var(--text2)",fontSize:10.5,fontWeight:700,padding:"6px 10px",cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>🔧 Ajustar conversão</button>
+          </div>
+          <div style={{fontSize:10.5,color:"var(--text2)",marginTop:4}}>Sempre o preço mais atual do cadastro — se mudar numa próxima compra, atualiza sozinho aqui e em "🔄 Atualizar Fichas".</div>
+          {showConvPanel&&<div style={{background:"#F59E0B14",border:"1px solid #F59E0B55",borderRadius:9,padding:"11px 12px",marginTop:10}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:"#B45309",marginBottom:2}}>📦 Este preço é de uma embalagem fechada?</div>
+            <div style={{fontSize:10.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>Informe quanto rende a embalagem que você comprou — o sistema recalcula o preço por {novoIns.unidade} e corrige o cadastro de "{mpAtivo?.nome}" pra sempre.</div>
+            <div style={{display:"flex",gap:8}}>
+              <div style={{flex:1}}>
+                <label style={{fontSize:10,color:"#666"}}>Preço pago pela embalagem</label>
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={convForm.precoEmbalagem} onChange={e=>setConvForm(c=>({...c,precoEmbalagem:e.target.value}))} className="inp" style={{marginBottom:0}}/>
+              </div>
+              <div style={{flex:1}}>
+                <label style={{fontSize:10,color:"#666"}}>Rende quantos {novoIns.unidade}</label>
+                <input type="number" min="0" step="0.01" placeholder="0" value={convForm.rendeQtd} onChange={e=>setConvForm(c=>({...c,rendeQtd:e.target.value}))} className="inp" style={{marginBottom:0}}/>
+              </div>
+            </div>
+            {rendeQtdNum>0&&precoEmbalagemNum>0&&<div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"9px 11px",marginTop:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Preço atual</span><span style={{color:"var(--text3)",textDecoration:"line-through"}}>{fmtMoney(mpAtivo?.ultimoValor||0)}/{novoIns.unidade}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Preço corrigido</span><b style={{color:"#15803D"}}>{fmtMoney(novoValorPorUnd)}/{novoIns.unidade}</b></div>
+            </div>}
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              <button onClick={salvarConversao} style={{flex:1,background:"#22C55E",color:"#fff",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer"}}>💾 Corrigir cadastro{mpAtivo?` de ${mpAtivo.nome}`:""}</button>
+              <button onClick={()=>setShowConvPanel(false)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:7,color:"var(--text2)",padding:"9px 14px",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+            </div>
+          </div>}
         </div>:novoIns.nome.trim()&&<div style={{background:"#F59E0B14",border:"1px solid #F59E0B55",borderRadius:9,padding:"10px 11px",marginBottom:8}}>
           <div style={{fontSize:11,color:"#B45309",fontWeight:700,marginBottom:6}}>⚠️ Produto não encontrado no catálogo</div>
           <div style={{fontSize:10.5,color:"var(--text2)",marginBottom:6}}>Informe um preço manual só pra essa ficha, ou cadastre o produto em Compras → Insumos pra ele entrar na conversão automática.</div>
