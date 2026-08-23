@@ -8585,6 +8585,25 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     setReciboPrevia(null);
     setReciboGerado(recibo);
   };
+  // Recalcula um recibo de entrega JÁ GERADO com o preço de HOJE do catálogo —
+  // pra recibos antigos gerados quando o produto ainda não tinha preço fixo
+  // (ficavam de fora da conta, silenciosamente). Só mexe enquanto "a
+  // receber": recibo já recebido já entrou no total do dia e virou recibo de
+  // venda — mudar o valor depois bagunçaria os dois.
+  const atualizarValoresRecibo=(recibo:any,ped:any)=>{
+    if(recibo.recebido)return;
+    const itensCat=(ped.itens||[]).filter((it:any)=>(it.categoria||"")===recibo.categoria&&it.quantidade>0);
+    const itens=itensCat.map((it:any)=>{
+      const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);
+      const precoUnit=prod?.precoFixo||0;
+      return{nome:it.nome,quantidade:it.quantidade,unidade:it.unidade||"un",precoUnit,subtotal:Math.round(it.quantidade*precoUnit*100)/100};
+    }).filter((it:any)=>it.precoUnit>0);
+    if(!itens.length)return alert("Nenhum item dessa categoria tem preço fixo cadastrado (edite em Produtos).");
+    const total=Math.round(itens.reduce((s:number,it:any)=>s+it.subtotal,0)*100)/100;
+    if(total===recibo.total)return alert("Nenhuma mudança — os valores já estão atualizados.");
+    if(!confirm(`Atualizar recibo de ${recibo.categoria}?\n\nDe ${fmtMoney(recibo.total)} para ${fmtMoney(total)}.`))return;
+    (setDbAndSave||setDb)((d:any)=>({...d,recibosEntrega:(d.recibosEntrega||[]).map((r:any)=>r.id===recibo.id?{...r,itens,total,atualizadoEm:new Date().toISOString()}:r)}));
+  };
   const montarTextoWhatsRecibo=(recibo:any)=>{
     const cfg=getImpressaoCfg(db);
     let txt=`🧾 *${(cfg.reciboTitulo||"Recibo de Entrega").toUpperCase()}*\n🏢 Cliente: *${recibo.categoria}*\n📅 ${fmtDate(recibo.data)}\n\n`;
@@ -9055,9 +9074,15 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             const totalPrevisto=itensCat.reduce((s:number,it:any)=>{const prod=prodsCatalog.find((p:any)=>p.nome===it.nome);return s+it.quantidade*(prod?.precoFixo||0);},0);
             return <div key={cat} style={{marginTop:8}}>
               {jaGerado
-                ?<div style={{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>
+                ?<>
+                  <div style={{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>
                     ✅ Recibo de {cat} já gerado — {fmtMoney(jaGerado.total)} {jaGerado.recebido?"(recebido)":"(a receber)"}
                   </div>
+                  {!jaGerado.recebido&&<button onClick={()=>atualizarValoresRecibo(jaGerado,ped)} className="btn"
+                    style={{width:"100%",marginTop:6,background:"none",border:"1px solid var(--btnPrimary)",color:"var(--btnPrimary)",padding:"7px",fontSize:11,fontWeight:700}}>
+                    🔄 Atualizar valores com preço atual
+                  </button>}
+                  </>
                 :<button onClick={()=>abrirPreviaRecibo(ped,cat)} className="btn"
                     style={{width:"100%",background:"linear-gradient(135deg,#16A34A,#15803D)",color:"#fff",padding:"10px",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                     👁️ Ver Recibo de Entrega — {cat} — {fmtMoney(totalPrevisto)}
