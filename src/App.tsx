@@ -1091,6 +1091,57 @@ const migrateDb=(m:any)=>{
         Array.isArray(p.cats)?p:{...p,cats:p.cat?[p.cat]:[]}
       );
     }
+    // Corrige categorias de produção corrompidas: o POST de /api/dados no
+    // servidor decodificava cada chunk TCP como UTF-8 isoladamente (bug já
+    // corrigido lá), então um acento (ç, ã, õ...) caindo na fronteira entre
+    // dois chunks virava "�" — e cada rename subsequente corrompia de novo,
+    // gerando várias variantes da mesma categoria (ex: "PRODUÇÃO DANY",
+    // "PRODUÇ�O DANY", "PRODU����ÃO DANY") todas presas ao mesmo produto.
+    // Aqui elas são agrupadas pelo "esqueleto" (só letras/números, sem os
+    // acentos/lixo) e fundidas na variante limpa — se sobrar uma —, sem
+    // inventar acento que não dá pra recuperar.
+    if(!m[e].categoriasProducaoRepairV1){
+      const cats0:string[]=m[e].categoriasProducao||[];
+      if(cats0.some((c:string)=>c.includes("�"))){
+        const skeleton=(s:string)=>String(s||"").replace(/�/g,"").toUpperCase().replace(/[^A-Z0-9 ]/g,"").replace(/\s+/g," ").trim();
+        const grupos=new Map<string,string[]>();
+        cats0.forEach((c:string)=>{const sk=skeleton(c);if(!grupos.has(sk))grupos.set(sk,[]);grupos.get(sk)!.push(c);});
+        const canonicalPor=new Map<string,string>();
+        const catsFinal:string[]=[];
+        grupos.forEach((variantes,sk)=>{
+          if(!sk||variantes.length===1){catsFinal.push(...variantes);return;}
+          const limpas=variantes.filter(v=>!v.includes("�"));
+          const canonical=limpas[0]||[...variantes].sort((a,b)=>(a.match(/�/g)||[]).length-(b.match(/�/g)||[]).length)[0];
+          catsFinal.push(canonical);
+          variantes.forEach(v=>{if(v!==canonical)canonicalPor.set(v,canonical);});
+        });
+        if(canonicalPor.size){
+          const remap=(c:string)=>canonicalPor.get(c)||c;
+          m[e].categoriasProducao=catsFinal;
+          const agora=new Date().toISOString();
+          m[e].produtosProducao=(m[e].produtosProducao||[]).map((p:any)=>{
+            const atuais:string[]=Array.isArray(p.cats)&&p.cats.length?p.cats:(p.cat?[p.cat]:[]);
+            if(!atuais.some(c=>canonicalPor.has(c)))return p;
+            const novos=[...new Set(atuais.map(remap))];
+            return{...p,cats:novos,cat:novos[0]||"",atualizadoEm:agora};
+          });
+          if(m[e].categoriasClientes){
+            const cc={...m[e].categoriasClientes};
+            canonicalPor.forEach((canon,corr)=>{if(cc[corr]!==undefined){if(cc[canon]===undefined)cc[canon]=cc[corr];delete cc[corr];}});
+            m[e].categoriasClientes=cc;
+          }
+          if(m[e].iconesProducao){
+            const icons={...m[e].iconesProducao};
+            canonicalPor.forEach((canon,corr)=>{if(icons[corr]!==undefined){if(icons[canon]===undefined)icons[canon]=icons[corr];delete icons[corr];}});
+            m[e].iconesProducao=icons;
+          }
+          if(m[e].categoriasProducaoDeleted){
+            m[e].categoriasProducaoDeleted=[...new Set((m[e].categoriasProducaoDeleted||[]).map(remap))];
+          }
+        }
+      }
+      m[e].categoriasProducaoRepairV1=true;
+    }
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].usuarios)m[e].usuarios=[];
     if(!m[e].usuariosSeedDone){
@@ -8410,6 +8461,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const setShowHist=(v:boolean)=>setSubTab(v?"pedidos":"novo");
   const showRecibos=subTab==="recibos";
   const showFicha=subTab==="ficha";
+  const [fichaPrefill,setFichaPrefill]=useState<string|null>(null);
+  const abrirFichaDoProduto=(nome:string)=>{setFichaPrefill(nome);setSubTab("ficha");};
   const [extratoCliente,setExtratoCliente]=useState("");
   const [extratoIni,setExtratoIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [extratoFim,setExtratoFim]=useState(today());
@@ -9017,17 +9070,22 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}><SortCtrl id="prodCatalog" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/></div>
       <div style={{maxHeight:260,overflowY:"auto" as const}}>
         {!prodsCatalog.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhum produto cadastrado</div>}
-        {sortList(prodsCatalog,db,'prodCatalog','nome-az').map((p:any)=>(
-          <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
+        {sortList(prodsCatalog,db,'prodCatalog','nome-az').map((p:any)=>{
+          const temFicha=(db.fichasTecnicas||[]).some((f:any)=>(f.nome||"").trim().toLowerCase()===(p.nome||"").trim().toLowerCase());
+          return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
             <CatIconBadge icon={prodCatIcon(prodCats(p)[0]||"")} size={14}/>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
             {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
             {p.precoFixo>0&&<span style={{fontSize:10,color:"#15803D",background:"#22C55E18",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{fmtMoney(p.precoFixo)}</span>}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
+            <button onClick={()=>abrirFichaDoProduto(p.nome)} title={temFicha?"Ver Ficha Técnica":"Criar Ficha Técnica"}
+              style={{background:temFicha?"#22C55E12":"none",border:`1px solid ${temFicha?"#22C55E":"#7C3AED55"}`,borderRadius:6,color:temFicha?"#15803D":"#7C3AED",cursor:"pointer",fontSize:11,fontWeight:600,padding:"3px 7px",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap" as const}}>
+              📝 {temFicha?"Ficha":"Criar Ficha"}{temFicha&&<span style={{width:6,height:6,borderRadius:"50%",background:"#22C55E",flexShrink:0}}/>}
+            </button>
             <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnPrimary)",fontSize:13,padding:"0 3px"}}>✏️</button>
             <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnDanger)",fontSize:13,padding:"0 3px"}}>🗑️</button>
-          </div>
-        ))}
+          </div>;
+        })}
       </div>
     </div>}
 
@@ -9307,7 +9365,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       </>;
     })()}
 
-    {showFicha&&<><BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/><FichaTecnica db={db} setDb={setDb} state={state} setState={setState} empresa={empresa}/></>}
+    {showFicha&&<><BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/><FichaTecnica db={db} setDb={setDb} state={state} setState={setState} empresa={empresa} prefillNome={fichaPrefill} onConsumedPrefill={()=>setFichaPrefill(null)}/></>}
 
     {showRelatorio&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showRelatorio&&(()=>{
@@ -11073,7 +11131,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
 }
 
 // ===================== FICHA TÉCNICA =====================
-function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?:any,setState?:any,empresa?:string}){
+function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPrefill}:{db:any,setDb:any,state?:any,setState?:any,empresa?:string,prefillNome?:string|null,onConsumedPrefill?:()=>void}){
   const outraEmpresa=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
   const podeCompartilhar=!!(state&&setState&&empresa);
   const [subTab,setSubTab]=useState("lista");
@@ -11229,6 +11287,15 @@ function FichaTecnica({db,setDb,state,setState,empresa}:{db:any,setDb:any,state?
     setForm({nome:"",insumos:[],porcoes:"1",cmv:"30",compartilhada:false});
   };
   const edit=(f:any)=>{setEditId(f.id);setForm({nome:f.nome,insumos:f.insumos,porcoes:String(f.porcoes||1),cmv:String(f.cmv||30),compartilhada:!!f.compartilhada});setSubTab("novo");setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);};
+  // Veio de um atalho "📝 Criar/Ver Ficha" na lista de Produtos: abre a
+  // ficha já existente com esse nome pra editar, ou pré-preenche uma nova.
+  useEffect(()=>{
+    if(!prefillNome)return;
+    const existente=(db.fichasTecnicas||[]).find((f:any)=>(f.nome||"").trim().toLowerCase()===prefillNome.trim().toLowerCase());
+    if(existente)edit(existente);
+    else{setEditId(null);setForm({nome:prefillNome,insumos:[],porcoes:"1",cmv:"30",compartilhada:false});setSubTab("novo");setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),150);}
+    onConsumedPrefill?.();
+  },[prefillNome]);
   const del=(f:any)=>{
     if(f.compartilhada&&podeCompartilhar){
       if(!confirm(`"${f.nome}" é uma ficha compartilhada — excluir vai remover ela das DUAS empresas (${empresa} e ${outraEmpresa}). Continuar?`))return;

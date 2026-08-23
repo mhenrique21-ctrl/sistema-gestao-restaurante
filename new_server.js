@@ -2414,10 +2414,16 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
     const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
-    let body = '';
-    req.on('data', chunk => body += chunk);
+    // Acumula os chunks como Buffer bruto e só decodifica UTF-8 UMA VEZ no
+    // final. Fazer `body += chunk` decodifica cada chunk isoladamente — se um
+    // caractere acentuado (ç, ã, õ...) cair bem na fronteira entre dois
+    // chunks TCP (bem provável num payload grande, como o estado inteiro do
+    // app), cada metade vira lixo (U+FFFD) e corrompe o texto salvo.
+    const bodyChunks = [];
+    req.on('data', chunk => bodyChunks.push(chunk));
     req.on('end', () => {
       try {
+        const body = Buffer.concat(bodyChunks).toString('utf-8');
         let incoming = JSON.parse(body);
         // Rotating backup: keep last 48 backups (hourly over 2 days)
         const backDir = path.join(DADOS_DIR, 'backups', emp.toLowerCase());
