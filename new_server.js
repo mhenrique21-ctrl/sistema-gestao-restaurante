@@ -55,6 +55,17 @@ function loadCardapioTv(emp) {
   try { return JSON.parse(fs.readFileSync(cardapioTvFile(emp), 'utf-8')); } catch { return { banners: [] }; }
 }
 
+// Server-Sent Events: cada TV aberta mantém uma conexão HTTP viva aqui dentro.
+// Quando o painel salva a lista de banners, escrevemos direto nessas conexões
+// — a TV recebe o aviso na hora, em vez de esperar o próximo poll de 5min
+// (que continua existindo como rede de segurança, caso o canal caia).
+const sseClients = { CONFRARIA: new Set(), SEAMA: new Set() };
+function broadcastCardapioTv(emp) {
+  for (const res of sseClients[emp] || []) {
+    try { res.write('data: refresh\n\n'); } catch { sseClients[emp].delete(res); }
+  }
+}
+
 // ===== WEB PUSH =====
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
@@ -2287,6 +2298,36 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // Cardápio TV — canal ao vivo: a TV mantém esta conexão aberta e recebe um
+  // "refresh" assim que o painel salva algo, sem precisar ficar perguntando.
+  if (req.method === 'GET' && /^\/api\/cardapio-tv-events\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(); return; }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    res.write(': conectado\n\n');
+    sseClients[emp].add(res);
+    // Nginx (e alguns proxies) derrubam conexão HTTP ociosa — um comentário
+    // periódico mantém o canal vivo sem disparar o listener onmessage da TV.
+    const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25000);
+    req.on('close', () => { clearInterval(heartbeat); sseClients[emp].delete(res); });
+    return;
+  }
+
+  // Cardápio TV — quantas TVs estão com o canal aberto agora (selo no painel)
+  if (req.method === 'GET' && /^\/api\/cardapio-tv-status\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.writeHead(200);
+    res.end(JSON.stringify({ conectadas: sseClients[emp].size }));
+    return;
+  }
+
   // Cardápio TV — salvar lista de banners (o painel admin manda o array inteiro)
   if (req.method === 'POST' && /^\/api\/cardapio-tv\/[^/]+$/.test(urlPath)) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
@@ -2298,6 +2339,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         const incoming = JSON.parse(body);
         if (!Array.isArray(incoming.banners)) throw new Error('banners deve ser um array');
         fs.writeFileSync(cardapioTvFile(emp), JSON.stringify({ banners: incoming.banners }));
+        broadcastCardapioTv(emp);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end('{"ok":true}');

@@ -14194,6 +14194,7 @@ function CardapioTVPanel({empresa}:{empresa:string}){
   const [banners,setBanners]=useState<any[]>([]);
   const [loading,setLoading]=useState(true);
   const [uploading,setUploading]=useState(false);
+  const [tvsConectadas,setTvsConectadas]=useState(0);
   const fileRef=useRef<HTMLInputElement>(null);
 
   useEffect(()=>{
@@ -14203,6 +14204,13 @@ function CardapioTVPanel({empresa}:{empresa:string}){
       .then(data=>setBanners((data?.banners||[]).slice().sort((a:any,b:any)=>(a.ordem??0)-(b.ordem??0))))
       .catch(()=>{})
       .finally(()=>setLoading(false));
+  },[empresa]);
+
+  useEffect(()=>{
+    const checar=()=>fetch(`/api/cardapio-tv-status/${empresa}`,{cache:"no-store"}).then(r=>r.json()).then(d=>setTvsConectadas(d?.conectadas||0)).catch(()=>{});
+    checar();
+    const t=setInterval(checar,10000);
+    return()=>clearInterval(t);
   },[empresa]);
 
   const salvar=(novos:any[])=>{
@@ -14282,8 +14290,17 @@ function CardapioTVPanel({empresa}:{empresa:string}){
   return <div>
     <div className="card" style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap" as const,gap:10}}>
       <div>
-        <div style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>📺 Cardápio TV</div>
-        <div className="muted" style={{fontSize:11.5,marginTop:2}}>{ativos.length} banner(s) ativo(s) · loop de {ativos.reduce((s,b)=>s+(b.duracaoSeg||15),0)}s no total</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap" as const}}>
+          <div style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>📺 Cardápio TV</div>
+          {tvsConectadas>0
+            ?<span style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,color:"#16A34A",background:"#DCFCE7",borderRadius:20,padding:"3px 9px"}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:"#16A34A"}}/>{tvsConectadas>1?`${tvsConectadas} TVs conectadas`:"TV conectada"}
+            </span>
+            :<span style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,color:"var(--text3)",background:"var(--bg5)",borderRadius:20,padding:"3px 9px"}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:"var(--border2)"}}/>Nenhuma TV conectada
+            </span>}
+        </div>
+        <div className="muted" style={{fontSize:11.5,marginTop:4}}>{ativos.length} banner(s) ativo(s) · loop de {ativos.reduce((s,b)=>s+(b.duracaoSeg||15),0)}s no total</div>
       </div>
       <div>
         <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,video/quicktime" multiple style={{display:"none"}} onChange={e=>addBanners(e.target.files)}/>

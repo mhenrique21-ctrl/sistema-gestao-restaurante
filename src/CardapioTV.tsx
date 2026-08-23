@@ -17,12 +17,13 @@ type Banner = {
 
 const DURACAO_PADRAO = 15;
 const DURACAO_MAX_VIDEO_SEG = 90; // segurança: se onEnded/onError nunca disparar (vídeo travado), avança mesmo assim
-const POLL_MS = 3 * 60 * 1000; // rebusca a lista a cada 3min — banner novo aparece sem tocar na TV
+const POLL_MS = 5 * 60 * 1000; // rede de segurança — o canal ao vivo (SSE) já cobre o caso normal em ~1s
 
 export default function CardapioTV({ empresa }: { empresa: string }) {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [idx, setIdx] = useState(0);
   const [carregado, setCarregado] = useState(false);
+  const [aoVivo, setAoVivo] = useState(false);
   const timerRef = useRef<any>(null);
 
   const empLower = empresa.toLowerCase();
@@ -48,7 +49,19 @@ export default function CardapioTV({ empresa }: { empresa: string }) {
     const poll = setInterval(buscar, POLL_MS);
     // best-effort: evita a tela apagar em navegadores/TVs que suportam a API
     (navigator as any).wakeLock?.request?.("screen")?.catch(() => {});
-    return () => clearInterval(poll);
+
+    // Canal ao vivo: o servidor escreve aqui assim que o painel salva um
+    // banner novo — busca a lista na hora, em vez de esperar o próximo poll.
+    // EventSource reconecta sozinho se a conexão cair (comportamento nativo).
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/cardapio-tv-events/${empLabel}`);
+      es.onopen = () => setAoVivo(true);
+      es.onerror = () => setAoVivo(false);
+      es.onmessage = () => buscar();
+    } catch {}
+
+    return () => { clearInterval(poll); es?.close(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empLabel]);
 
@@ -82,7 +95,16 @@ export default function CardapioTV({ empresa }: { empresa: string }) {
       position: "fixed", inset: 0, background: "#000", overflow: "hidden",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
-      <style>{`@keyframes cardapiotv-fadein{from{opacity:0}to{opacity:1}}`}</style>
+      <style>{`@keyframes cardapiotv-fadein{from{opacity:0}to{opacity:1}}@keyframes cardapiotv-pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      {aoVivo && (
+        <div style={{
+          position: "absolute", top: 14, right: 14, zIndex: 5, display: "flex", alignItems: "center", gap: 5,
+          background: "rgba(0,0,0,.5)", borderRadius: 20, padding: "3px 9px 3px 7px",
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", animation: "cardapiotv-pulse 1.6s infinite" }} />
+          <span style={{ fontSize: 9, color: "#fff", fontWeight: 700, letterSpacing: ".03em" }}>AO VIVO</span>
+        </div>
+      )}
       {atual && (
         atual.tipo === "video"
           ? <video key={atual.id} src={`/banners/${empLower}/${atual.arquivo}`}
