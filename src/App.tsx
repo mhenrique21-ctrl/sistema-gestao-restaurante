@@ -4771,7 +4771,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [prodSubTab,setProdSubTab]=useState<"catalogo"|"substituicoes">("catalogo");
   const [showConciliarInsumos,setShowConciliarInsumos]=useState(false);
   const [conciliarBusca,setConciliarBusca]=useState<Record<string,string>>({});
-  const [conciliarEscolha,setConciliarEscolha]=useState<Record<string,{prodId?:string,prodNome?:string,novo?:boolean}>>({});
+  const [conciliarEscolha,setConciliarEscolha]=useState<Record<string,{prodId?:string,prodNome?:string,novo?:boolean,auto?:boolean}>>({});
+  const [autoSugestaoDispensada,setAutoSugestaoDispensada]=useState<Set<string>>(new Set());
   // Insumo "solto" = matéria-prima que nenhum produto da Lista de Compras
   // referencia em mpVinculados — fica invisível pro cálculo de preço mais
   // recente (Ficha Técnica, Painel Ao Vivo etc.), que resolve tudo por ali.
@@ -4798,6 +4799,31 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setConciliarEscolha({});
     setConciliarBusca({});
     setShowConciliarInsumos(false);
+  };
+  // Sugestão automática de vínculo: nome igual primeiro, senão um nome contido
+  // no outro (evita casar coisas curtas demais tipo "sal" com qualquer coisa).
+  // Só SUGERE — nunca aplica sozinho, sempre passa por "Aplicar" ou "trocar".
+  const nomeChaveConciliar=(s:string)=>String(s||"").trim().toLowerCase();
+  const autoMatchInsumo=(mp:any)=>{
+    const mk=nomeChaveConciliar(mp.nome);
+    if(!mk)return null;
+    const exato=produtosListaTodos.find((p:any)=>nomeChaveConciliar(p.nome)===mk);
+    if(exato)return exato;
+    return produtosListaTodos.find((p:any)=>{
+      const pk=nomeChaveConciliar(p.nome);
+      return pk.length>=4&&(mk.includes(pk)||pk.includes(mk));
+    })||null;
+  };
+  const autoPendentesConciliar=insumosSoltos.filter((mp:any)=>!conciliarEscolha[mp.id]&&!autoSugestaoDispensada.has(mp.id)&&autoMatchInsumo(mp));
+  const aplicarAutoTodosConciliar=()=>{
+    setConciliarEscolha(e=>{
+      const n={...e};
+      autoPendentesConciliar.forEach((mp:any)=>{
+        const m=autoMatchInsumo(mp);
+        if(m)n[mp.id]={prodId:m.id,prodNome:m.nome,auto:true};
+      });
+      return n;
+    });
   };
   const catsBase=["carnes","hortifruti","laticínios","grãos","temperos","proteína","insumos","bebidas","embalagens","descartáveis","material de limpeza","limpeza"];
   const cats=[...catsBase,...(db.config?.categoriasExtra||[])];
@@ -6335,10 +6361,16 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         {showConciliarInsumos&&<div className="card" style={{marginBottom:14,border:"2px solid var(--btnPrimary)"}}>
           <div style={{fontSize:13.5,fontWeight:800,color:"var(--btnPrimary)",marginBottom:4}}>🔗 Conciliar Insumos ({insumosSoltos.length} pendente{insumosSoltos.length!==1?"s":""})</div>
           <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:14,lineHeight:1.5}}>Pra cada insumo solto, busque o produto da Lista de Compras que ele representa — se já existir um parecido, ele entra como mais uma marca vinculada. Se não existir, cria um produto novo já com esse insumo dentro.</div>
+          {autoPendentesConciliar.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+            <span style={{fontFamily:"monospace",fontWeight:800,color:"#15803D",fontSize:15}}>{autoPendentesConciliar.length}</span>
+            <span style={{fontSize:11.5,color:"#15803D",flex:1,lineHeight:1.4}}>sugestõe{autoPendentesConciliar.length!==1?"s":""} automática{autoPendentesConciliar.length!==1?"s":""} pronta{autoPendentesConciliar.length!==1?"s":""} (nome igual ou muito parecido)</span>
+            <button onClick={aplicarAutoTodosConciliar} style={{background:"#22C55E",color:"#08240f",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>✅ Aplicar as {autoPendentesConciliar.length}</button>
+          </div>}
           {insumosSoltos.map((mp:any)=>{
             const bl=(conciliarBusca[mp.id]||"").trim().toLowerCase();
             const sugestoes=bl?produtosListaTodos.filter((p:any)=>(p.nome||"").toLowerCase().includes(bl)).slice(0,6):[];
             const escolha=conciliarEscolha[mp.id];
+            const sugestaoAuto=(!escolha&&!autoSugestaoDispensada.has(mp.id))?autoMatchInsumo(mp):null;
             return <div key={mp.id} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:10,padding:12,marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <span style={{fontSize:13,fontWeight:700}}>{mp.nome}</span>
@@ -6346,8 +6378,16 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               </div>
               {escolha
                 ?<div style={{display:"flex",alignItems:"center",gap:8,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803D",fontWeight:700}}>
+                  {escolha.auto&&<span style={{fontSize:9,fontWeight:800,background:"#22C55E",color:"#08240f",borderRadius:5,padding:"2px 6px",flexShrink:0}}>AUTO</span>}
                   ✓ Vai {escolha.novo?"virar produto novo":`entrar como marca de "${escolha.prodNome}"`}
-                  <button onClick={()=>setConciliarEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"#15803D",textDecoration:"underline",cursor:"pointer",fontSize:11.5}}>trocar</button>
+                  <button onClick={()=>setConciliarEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"#15803D",textDecoration:"underline",cursor:"pointer",fontSize:11.5,flexShrink:0}}>trocar</button>
+                </div>
+                :sugestaoAuto
+                ?<div style={{display:"flex",alignItems:"center",gap:8,background:"var(--primary-wash,#7C3AED14)",border:"1px solid var(--btnPrimary)",borderRadius:8,padding:"8px 10px",fontSize:12,color:"var(--btnPrimary)",fontWeight:700}}>
+                  <span style={{fontSize:9,fontWeight:800,background:"var(--btnPrimary)",color:"#fff",borderRadius:5,padding:"2px 6px",flexShrink:0}}>SUGESTÃO</span>
+                  <span style={{flex:1}}>"{sugestaoAuto.nome}"?</span>
+                  <button onClick={()=>escolherProdConciliar(mp.id,sugestaoAuto)} style={{background:"var(--btnPrimary)",color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Usar</button>
+                  <button onClick={()=>setAutoSugestaoDispensada(s=>new Set(s).add(mp.id))} style={{background:"none",border:"none",color:"var(--btnPrimary)",textDecoration:"underline",cursor:"pointer",fontSize:11,flexShrink:0}}>buscar outro</button>
                 </div>
                 :<div style={{position:"relative"}}>
                   <input placeholder="Buscar produto na Lista de Compras..." value={conciliarBusca[mp.id]||""} onChange={e=>setConciliarBusca(b=>({...b,[mp.id]:e.target.value}))} className="inp" style={{marginBottom:0,fontSize:12.5}}/>
