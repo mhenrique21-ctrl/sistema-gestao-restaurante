@@ -120,13 +120,19 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
     return () => clearInterval(t);
   }, [pareada, banners]);
 
+  // "contain" mostra a imagem/vídeo INTEIRO, sem cortar nada — quando a
+  // proporção não bate exatamente com a da TV, sobra uma faixa preta nas
+  // bordas (que se confunde com o fundo #000 do container) em vez de cortar
+  // pedaço da imagem como "cover" fazia.
   const mediaStyle: React.CSSProperties = {
-    position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+    position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
     animation: "cardapiotv-fadein .6s ease",
   };
   // Banner "2 telas": a imagem/vídeo é o dobro da largura da tela, deslocado
   // meio-a-meio — cada lado do par mostra só sua metade (mesmo truque do
-  // mockup aprovado: width 200% + left 0%/-100%).
+  // mockup aprovado: width 200% + left 0%/-100%). Aqui continua "cover" de
+  // propósito: um banner panorâmico precisa preencher a largura dupla sem
+  // faixa preta no meio, senão o corte no meio da tela fica visível.
   const ocupaDuas = pareada && !!atual?.duasTelas;
   const cropStyle: React.CSSProperties = {
     position: "absolute", top: 0, height: "100%", width: "200%",
