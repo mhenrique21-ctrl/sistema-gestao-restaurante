@@ -15099,7 +15099,7 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
 
     <div style={{fontSize:11,color:"var(--text2)",background:"var(--bg5)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 12px",marginBottom:12,lineHeight:1.5}}>
       📐 Tamanho recomendado: <b style={{color:"var(--text)"}}>1920×1080px</b> (paisagem) para TV deitada, ou <b style={{color:"var(--text)"}}>1080×1920px</b> (retrato) se a TV estiver em pé — use a mesma proporção da tela pra evitar cortes ou faixas pretas. Vídeos: até {MAX_VIDEO_MB}MB (mp4/webm/mov), sem áudio — a TV toca mudo e passa pro próximo assim que termina.
-      {telaAtiva.pareadaCom&&<><br/>🖼️ Tela pareada: marque "2 telas" num banner e suba uma imagem larga (ex: 3840×1080) — metade toca aqui, metade em {telas.find(t=>t.id===telaAtiva.pareadaCom)?.nome||"outra tela"}.</>}
+      {telaAtiva.pareadaCom&&<><br/>🔗 Tela pareada com {telas.find(t=>t.id===telaAtiva.pareadaCom)?.nome||"outra tela"}: os banners tocam sincronizados nas duas. Por padrão, cada um toca <b style={{color:"var(--text)"}}>inteiro</b> nas duas telas — só marque "✂️ Cortada ao meio" numa imagem panorâmica feita de propósito (ex: 3840×1080) pra dividir a metade entre as duas.</>}
     </div>
 
     {!banners.length&&<div className="card" style={{textAlign:"center",padding:28}}>
@@ -15125,9 +15125,9 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
               style={{width:42,border:"1px solid var(--border2)",borderRadius:6,padding:"4px",background:"var(--bg4)",color:"var(--text)",fontSize:11,textAlign:"center" as const}}/> s
           </div>}
         {telaAtiva.pareadaCom&&
-          <button onClick={()=>atualizarBanner(b.id,{duasTelas:!b.duasTelas})} title="Ocupa as duas telas — mostra metade da imagem aqui, metade na tela parceira"
+          <button onClick={()=>atualizarBanner(b.id,{duasTelas:!b.duasTelas})} title="Só pra imagem PANORÂMICA feita de propósito pra dividir: mostra metade aqui, metade na tela parceira. Deixe DESMARCADO pra esse banner tocar inteiro nas duas telas."
             className="btn" style={{fontSize:10,fontWeight:700,padding:"4px 8px",borderRadius:6,border:`1px solid ${b.duasTelas?"var(--btnPrimary)":"var(--border2)"}`,background:b.duasTelas?"var(--btnPrimary)":"none",color:b.duasTelas?"#fff":"var(--text2)",flexShrink:0,whiteSpace:"nowrap" as const}}>
-            🖼️ 2 telas
+            ✂️ {b.duasTelas?"Cortada ao meio":"Inteira nas 2"}
           </button>}
         <button onClick={()=>mover(i,-1)} disabled={i===0} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===0?0.25:1,flexShrink:0}}>▲</button>
         <button onClick={()=>mover(i,1)} disabled={i===banners.length-1} className="btn" style={{padding:"4px 8px",fontSize:11,opacity:i===banners.length-1?0.25:1,flexShrink:0}}>▼</button>
