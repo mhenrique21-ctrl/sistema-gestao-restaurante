@@ -219,7 +219,17 @@ function isRateLimited(emp) {
 }
 
 function decodeXmlEntities(s) {
-  return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCharCode(parseInt(h,16)));
+  // Uma passada só não basta quando o emissor da nota já grava o nome
+  // com escape duplo (ex: "M.A. SILVA &amp;amp; SILVA LTDA" no XML) — sobra
+  // um "&amp;" literal depois de decodificar uma vez. Repete até não sobrar
+  // entidade nenhuma (teto de 5 voltas, só por segurança contra XML malformado).
+  let out = s;
+  for (let i = 0; i < 5; i++) {
+    const next = out.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCharCode(parseInt(h,16)));
+    if (next === out) break;
+    out = next;
+  }
+  return out;
 }
 function getTag(xml, tag) {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));

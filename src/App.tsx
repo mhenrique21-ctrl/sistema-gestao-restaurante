@@ -4208,9 +4208,22 @@ function parseNFe(xmlString) {
   const g=(tag)=>{const el=doc.querySelector(tag);return el?el.textContent.trim():"";};
   const ga=(parent,tag)=>{const el=parent.querySelector(tag);return el?el.textContent.trim():"";};
 
+  // O DOMParser já decodifica entidades XML padrão (&amp; → &) uma vez — mas
+  // se o emissor gravou o nome com escape duplo (comum em notas de sistemas
+  // mal configurados: "M.A. SILVA &amp;amp; SILVA LTDA" no XML bruto), sobra
+  // um "&amp;" literal no texto. Repete a decodificação até não sobrar entidade.
+  const decodeRestante=(s:string)=>{
+    let out=s;
+    for(let i=0;i<5;i++){
+      const next=out.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'");
+      if(next===out)break;
+      out=next;
+    }
+    return out;
+  };
   const emit=doc.querySelector("emit");
   const fornecedor={
-    nome: emit?ga(emit,"xNome"):"",
+    nome: emit?decodeRestante(ga(emit,"xNome")):"",
     cnpj: emit?ga(emit,"CNPJ"):"",
     endereco: emit?(()=>{const e=emit.querySelector("enderEmit"); return e?[ga(e,"xLgr"),ga(e,"nro"),ga(e,"xBairro"),ga(e,"xMun"),ga(e,"UF")].filter(Boolean).join(", "):""})():"",
   };
@@ -5571,16 +5584,23 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     _execImportarNFeSefaz(nfe,all,{});
   };
 
+  // O diálogo de confirmação do botão só conta as NF-e "com itens" (ver
+  // onClick abaixo) — mas isso aqui processava a lista inteira, sem
+  // filtrar. Uma NF-e resumo (sem <det>, só o total) virava uma conta a
+  // pagar sozinha usando "NF-e {num} – {fornecedor}" como se fosse a
+  // descrição de uma compra de verdade — daí o "produto" esquisito
+  // aparecendo depois na conciliação de insumos.
   const importarTodasNFeSefaz=()=>{
-    const nsus=sefazList.map(n=>n.nsu).filter(Boolean);
-    const count=sefazList.length;
-    const todosItens=sefazList.flatMap(nfe=>nfe.itens||[]);
+    const comItens=sefazList.filter(n=>(n.itens||[]).length>0);
+    const nsus=comItens.map(n=>n.nsu).filter(Boolean);
+    const count=comItens.length;
+    const todosItens=comItens.flatMap(nfe=>nfe.itens||[]);
     const finalizarTodas=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
-      sefazList.forEach(nfe=>_execImportarNFeSefaz(nfe,true,resolucoesNome,vinculos));
-      setSefazList([]);
+      comItens.forEach(nfe=>_execImportarNFeSefaz(nfe,true,resolucoesNome,vinculos));
+      setSefazList(l=>l.filter(n=>!comItens.some(c=>c.nsu===n.nsu)));
       removeFromCache(nsus);
       setConciliacao(null);
-      alert(`✅ ${count} NF-e(s) importadas!`);
+      alert(`✅ ${count} NF-e(s) importadas! (as sem itens ficaram de fora — confira/lance manualmente se precisar)`);
     };
     const pend=itensNaoConciliados(todosItens,db);
     if(pend.length){setConciliacao({itens:pend,onConfirm:finalizarTodas});return;}
