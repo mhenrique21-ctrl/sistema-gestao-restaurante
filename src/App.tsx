@@ -8965,6 +8965,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const [addToPedForm,setAddToPedForm]=useState({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   const [addToPedSugg,setAddToPedSugg]=useState(false);
   const [collapsedPeds,setCollapsedPeds]=useState<Set<string>>(new Set());
+  const [histBusca,setHistBusca]=useState("");
+  const [histLimite,setHistLimite]=useState(30);
   const formRef=useRef<HTMLDivElement>(null);
   const addToPedSuggestions=addToPedForm.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(addToPedForm.nome.toLowerCase())).slice(0,8):[];
   const addItemToPedido=(pedId:string)=>{
@@ -9095,12 +9097,22 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     {/* Order history */}
     {showHist&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showHist&&<div className="card" style={{marginBottom:12,border:"1px solid #5b21b6"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap" as const,gap:6}}>
         <div className="section-title" style={{color:"#7C3AED",margin:0}}>📂 Pedidos Arquivados <span style={{fontSize:11,color:"#555"}}>({(db.pedidosProducao||[]).length})</span></div>
         <SortCtrl id="prodHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
       </div>
+      {!!(db.pedidosProducao||[]).length&&<div style={{position:"relative",marginBottom:8}}>
+        <input placeholder="🔍 Buscar por data, solicitante ou categoria..." value={histBusca} onChange={e=>{setHistBusca(e.target.value);setHistLimite(30);}} className="inp" style={{paddingRight:histBusca?36:14,marginBottom:0}}/>
+        {histBusca&&<button onClick={()=>setHistBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+      </div>}
       {!(db.pedidosProducao||[]).length&&<div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:16}}>Nenhum pedido ainda.</div>}
-      {sortList(db.pedidosProducao||[],db,'prodHist','data-desc').slice(0,30).map((ped:any)=>{
+      {(()=>{
+        const bl=histBusca.trim().toLowerCase();
+        const todosOrdenados=sortList(db.pedidosProducao||[],db,'prodHist','data-desc');
+        const filtrados=bl?todosOrdenados.filter((p:any)=>fmtDate(p.data).toLowerCase().includes(bl)||(p.solicitante||"").toLowerCase().includes(bl)||(p.itens||[]).some((it:any)=>(it.categoria||"").toLowerCase().includes(bl)||(it.nome||"").toLowerCase().includes(bl))):todosOrdenados;
+        if(bl&&!filtrados.length)return <div style={{fontSize:12,color:"#666",textAlign:"center" as const,padding:16}}>Nenhum pedido encontrado pra "{histBusca}".</div>;
+        return <>
+          {filtrados.slice(0,histLimite).map((ped:any)=>{
         const isEdit=editPedId===ped.id;
         const isCollapsed=collapsedPeds.has(ped.id)&&!isEdit;
         return <div key={ped.id} style={{background:"var(--bg4)",borderRadius:8,padding:"10px",marginBottom:8,border:`1px solid ${isEdit?"#7C3AED":"#E5E7EB"}`}}>
@@ -9263,7 +9275,12 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             </div>
           </div>}</>}
         </div>;
-      })}
+          })}
+          {filtrados.length>histLimite&&<button onClick={()=>setHistLimite(l=>l+30)} className="btn" style={{width:"100%",background:"none",border:"1px dashed var(--border2)",color:"var(--text2)",padding:"9px",fontSize:12,marginTop:4}}>
+            Carregar mais 30 (mostrando {Math.min(histLimite,filtrados.length)} de {filtrados.length})
+          </button>}
+        </>;
+      })()}
     </div>}
 
     {/* Recibos de Entrega — histórico + extrato de período por cliente */}
