@@ -14857,6 +14857,15 @@ function PainelEmpresaAoVivo({empresa,db,cor}:{empresa:string,db:any,cor:string}
   const comprasHoje=(db?.compras||[]).filter((c:any)=>(c.data||"")===hoje).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
   const canais=CANAIS_VENDA_TV.map(([k,label])=>({label,v:vHoje?.[k]||0})).filter(c=>c.v>0);
   const maxCanal=Math.max(...canais.map(c=>c.v),1);
+  // Budget de Compras — mesma % já configurada em Configurações (o teto de
+  // compras do Dashboard), só invertida: em vez de "quanto posso comprar hoje
+  // com base na venda de ontem", mostra "quanto preciso vender HOJE pra cobrir
+  // o que já comprei HOJE" (compras de hoje ÷ meta de CMV).
+  const budgetCompraPct=getDashboardCfg(db).aparencia.budgetCompraPct??30;
+  const vendasNecessarias=comprasHoje>0?comprasHoje/(budgetCompraPct/100):0;
+  const pctCobertura=vendasNecessarias>0?(totalHoje/vendasNecessarias)*100:100;
+  const corBudget=pctCobertura>=100?"#4ADE80":pctCobertura>=70?"#FBBF24":"#F87171";
+  const statusBudget=pctCobertura>=100?"good":pctCobertura>=70?"warn":"bad";
 
   const chartW=300,chartH=64;
   let pathLine="",pathArea="";
@@ -14911,6 +14920,23 @@ function PainelEmpresaAoVivo({empresa,db,cor}:{empresa:string,db:any,cor:string}
       </div>
     </div>
 
+    {comprasHoje>0&&<div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <span style={{fontSize:10.5,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700}}>🎯 Budget de Compras</span>
+        <span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:"2px 9px",color:corBudget,background:corBudget+"22"}}>
+          {statusBudget==="good"?`✓ Coberto${totalHoje>vendasNecessarias?` (+${fmtMoney(totalHoje-vendasNecessarias)})`:""}`:`⚠ Faltam ${fmtMoney(vendasNecessarias-totalHoje)}`}
+        </span>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"var(--text2)",marginBottom:5}}>
+        <span>Vendas necessárias (compras ÷ {budgetCompraPct}% de CMV)</span>
+        <span style={{fontFamily:"monospace",fontWeight:700,color:"var(--text)"}}>{fmtMoney(vendasNecessarias)}</span>
+      </div>
+      <div style={{height:8,background:"var(--bg5,var(--bg))",borderRadius:5,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${Math.min(pctCobertura,100)}%`,background:corBudget,borderRadius:5,transition:"width .3s"}}/>
+      </div>
+      <div style={{textAlign:"right" as const,fontSize:10,color:"var(--text3)",marginTop:3}}>{pctCobertura.toFixed(0)}% do necessário</div>
+    </div>}
+
     {canais.length>0&&<>
       <div style={{fontSize:10,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:8}}>Por canal</div>
       {canais.map(c=>(
@@ -14956,6 +14982,17 @@ function PainelAoVivoDashboard({state}:{state:any}){
   const totalC=(dbC.vendas||[]).find((v:any)=>v.data===hoje)?.total||0;
   const totalS=(dbS.vendas||[]).find((v:any)=>v.data===hoje)?.total||0;
   const totalGeral=totalC+totalS;
+  // Budget de Compras consolidado: soma dos dois lados, cada um com sua
+  // própria meta de CMV (podem estar configuradas diferentes por empresa).
+  const comprasHojeDe=(d:any)=>(d.compras||[]).filter((c:any)=>(c.data||"")===hoje).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
+  const comprasC=comprasHojeDe(dbC);
+  const comprasS=comprasHojeDe(dbS);
+  const comprasGeral=comprasC+comprasS;
+  const vNecC=comprasC>0?comprasC/((getDashboardCfg(dbC).aparencia.budgetCompraPct??30)/100):0;
+  const vNecS=comprasS>0?comprasS/((getDashboardCfg(dbS).aparencia.budgetCompraPct??30)/100):0;
+  const vNecGeral=vNecC+vNecS;
+  const pctCobGeral=vNecGeral>0?(totalGeral/vNecGeral)*100:100;
+  const corBudgetGeral=pctCobGeral>=100?"#4ADE80":pctCobGeral>=70?"#FBBF24":"#F87171";
   return <div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:14}}>
       <div style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>📊 Painel Ao Vivo</div>
@@ -14983,15 +15020,32 @@ function PainelAoVivoDashboard({state}:{state:any}){
       </div>
     </div>
 
-    <div className="card" style={{display:"flex",alignItems:"center",gap:24,flexWrap:"wrap" as const,marginBottom:16}}>
-      <div>
-        <div style={{fontSize:10.5,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:4}}>Faturamento consolidado hoje</div>
-        <div style={{fontFamily:"monospace",fontSize:28,fontWeight:700}}>{fmtMoney(totalGeral)}</div>
+    <div className="card" style={{marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:24,flexWrap:"wrap" as const}}>
+        <div>
+          <div style={{fontSize:10.5,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:4}}>Faturamento consolidado hoje</div>
+          <div style={{fontFamily:"monospace",fontSize:28,fontWeight:700}}>{fmtMoney(totalGeral)}</div>
+        </div>
+        <div style={{display:"flex",gap:20,marginLeft:"auto",flexWrap:"wrap" as const,fontSize:13}}>
+          <span style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:9,height:9,borderRadius:3,background:"#E0A860",display:"inline-block"}}/>CONFRARIA <b style={{fontFamily:"monospace"}}>{fmtMoney(totalC)}</b></span>
+          <span style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:9,height:9,borderRadius:3,background:"#4FC3A1",display:"inline-block"}}/>SEAMA <b style={{fontFamily:"monospace"}}>{fmtMoney(totalS)}</b></span>
+        </div>
       </div>
-      <div style={{display:"flex",gap:20,marginLeft:"auto",flexWrap:"wrap" as const,fontSize:13}}>
-        <span style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:9,height:9,borderRadius:3,background:"#E0A860",display:"inline-block"}}/>CONFRARIA <b style={{fontFamily:"monospace"}}>{fmtMoney(totalC)}</b></span>
-        <span style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:9,height:9,borderRadius:3,background:"#4FC3A1",display:"inline-block"}}/>SEAMA <b style={{fontFamily:"monospace"}}>{fmtMoney(totalS)}</b></span>
-      </div>
+      {comprasGeral>0&&<div style={{marginTop:14,paddingTop:12,borderTop:"1px solid var(--border)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap" as const,gap:6}}>
+          <span style={{fontSize:10.5,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700}}>🎯 Budget de Compras — hoje (as duas)</span>
+          <span style={{fontSize:10,fontWeight:800,borderRadius:20,padding:"2px 9px",color:corBudgetGeral,background:corBudgetGeral+"22"}}>
+            {pctCobGeral>=100?`✓ Coberto${totalGeral>vNecGeral?` (+${fmtMoney(totalGeral-vNecGeral)})`:""}`:`⚠ Faltam ${fmtMoney(vNecGeral-totalGeral)}`}
+          </span>
+        </div>
+        <div style={{display:"flex",gap:20,flexWrap:"wrap" as const,fontSize:11.5,color:"var(--text2)",marginBottom:6}}>
+          <span>Compras hoje: <b style={{fontFamily:"monospace",color:"var(--text)"}}>{fmtMoney(comprasGeral)}</b></span>
+          <span>Vendas necessárias: <b style={{fontFamily:"monospace",color:"var(--text)"}}>{fmtMoney(vNecGeral)}</b></span>
+        </div>
+        <div style={{height:8,background:"var(--bg4)",borderRadius:5,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${Math.min(pctCobGeral,100)}%`,background:corBudgetGeral,borderRadius:5,transition:"width .3s"}}/>
+        </div>
+      </div>}
     </div>
 
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:16}}>

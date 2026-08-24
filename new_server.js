@@ -2073,11 +2073,15 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     const comprasHoje = (Array.isArray(doc.compras) ? doc.compras : [])
       .filter(c => c && (c.data || '') === hoje)
       .reduce((s, c) => s + (parseFloat(String(c.valor).replace(',', '.')) || 0), 0);
+    // Budget de Compras: mesma % configurada em Configurações (o teto de
+    // compras do Dashboard), aqui invertida — compras de hoje ÷ meta de CMV
+    // = quanto precisa vender hoje pra cobrir o que já foi comprado hoje.
+    const budgetCompraPct = (doc.config && doc.config.dashboardPdv && doc.config.dashboardPdv.aparencia && doc.config.dashboardPdv.aparencia.budgetCompraPct) || 30;
     return {
       totalHoje: (vHoje && Number(vHoje.total)) || 0,
       totalOntem: (vOntem && Number(vOntem.total)) || 0,
       porHora: (vHoje && Array.isArray(vHoje.porHora)) ? vHoje.porHora : [],
-      canais, nRecibos, ticketMedio, comprasHoje,
+      canais, nRecibos, ticketMedio, comprasHoje, budgetCompraPct,
     };
   };
 

@@ -15,6 +15,7 @@ type Agregado = {
   nRecibos: number;
   ticketMedio: number;
   comprasHoje: number;
+  budgetCompraPct: number;
 };
 
 const POLL_MS = 20 * 1000;
@@ -39,6 +40,10 @@ function PainelEmpresa({ nome, cor, ag }: { nome: string; cor: string; ag: Agreg
   const porHora = ag.porHora || [];
   const temHora = porHora.length > 0;
   const picoRow = temHora ? porHora.reduce((m, x) => (x.valor > m.valor ? x : m), porHora[0]) : null;
+  const budgetPct = ag.budgetCompraPct || 30;
+  const vendasNecessarias = ag.comprasHoje > 0 ? ag.comprasHoje / (budgetPct / 100) : 0;
+  const pctCobertura = vendasNecessarias > 0 ? (ag.totalHoje / vendasNecessarias) * 100 : 100;
+  const corBudget = pctCobertura >= 100 ? "#4ADE80" : pctCobertura >= 70 ? "#FBBF24" : "#F87171";
 
   const chartW = 300, chartH = 64;
   let pathLine = "", pathArea = "";
@@ -109,6 +114,25 @@ function PainelEmpresa({ nome, cor, ag }: { nome: string; cor: string; ag: Agreg
         </div>
       </div>
 
+      {ag.comprasHoje > 0 && (
+        <div style={{ background: "#171B25", border: "1px solid #232838", borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+            <span style={{ fontSize: 10.5, color: "#666C82", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>🎯 Budget de Compras</span>
+            <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 20, padding: "2px 9px", color: corBudget, background: corBudget + "22" }}>
+              {pctCobertura >= 100 ? `✓ Coberto${ag.totalHoje > vendasNecessarias ? ` (+${fmtMoney(ag.totalHoje - vendasNecessarias)})` : ""}` : `⚠ Faltam ${fmtMoney(vendasNecessarias - ag.totalHoje)}`}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "#9AA0B4", marginBottom: 5 }}>
+            <span>Vendas necessárias (compras ÷ {budgetPct}% de CMV)</span>
+            <span style={{ fontFamily: "ui-monospace,monospace", fontWeight: 700, color: "#EEF0F6" }}>{fmtMoney(vendasNecessarias)}</span>
+          </div>
+          <div style={{ height: 8, background: "#0A0C11", borderRadius: 5, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(pctCobertura, 100)}%`, background: corBudget, borderRadius: 5 }} />
+          </div>
+          <div style={{ textAlign: "right", fontSize: 10, color: "#666C82", marginTop: 3 }}>{pctCobertura.toFixed(0)}% do necessário</div>
+        </div>
+      )}
+
       {canais.length > 0 && (
         <>
           <div style={{ fontSize: 10, color: "#666C82", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, marginBottom: 8 }}>Por canal</div>
@@ -161,6 +185,11 @@ export default function PainelTV({ token }: { token: string }) {
 
   const secsAtras = atualizadoEm ? Math.max(0, Math.round((agora.getTime() - atualizadoEm.getTime()) / 1000)) : null;
   const totalGeral = dados ? dados.CONFRARIA.totalHoje + dados.SEAMA.totalHoje : 0;
+  const vNec = (ag?: Agregado) => (ag && ag.comprasHoje > 0 ? ag.comprasHoje / ((ag.budgetCompraPct || 30) / 100) : 0);
+  const comprasGeral = (dados?.CONFRARIA.comprasHoje || 0) + (dados?.SEAMA.comprasHoje || 0);
+  const vNecGeral = vNec(dados?.CONFRARIA) + vNec(dados?.SEAMA);
+  const pctCobGeral = vNecGeral > 0 ? (totalGeral / vNecGeral) * 100 : 100;
+  const corBudgetGeral = pctCobGeral >= 100 ? "#4ADE80" : pctCobGeral >= 70 ? "#FBBF24" : "#F87171";
 
   return (
     <div style={{ minHeight: "100vh", background: "#0A0C11", color: "#EEF0F6", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
@@ -198,6 +227,23 @@ export default function PainelTV({ token }: { token: string }) {
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: "#E0A860", display: "inline-block" }} />CONFRARIA <b style={{ fontFamily: "ui-monospace,monospace" }}>{fmtMoney(dados?.CONFRARIA.totalHoje || 0)}</b></span>
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: "#4FC3A1", display: "inline-block" }} />SEAMA <b style={{ fontFamily: "ui-monospace,monospace" }}>{fmtMoney(dados?.SEAMA.totalHoje || 0)}</b></span>
               </div>
+              {comprasGeral > 0 && (
+                <div style={{ width: "100%", marginTop: 14, paddingTop: 12, borderTop: "1px solid #2E3448" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+                    <span style={{ fontSize: 10.5, color: "#666C82", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>🎯 Budget de Compras — hoje (as duas)</span>
+                    <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 20, padding: "2px 9px", color: corBudgetGeral, background: corBudgetGeral + "22" }}>
+                      {pctCobGeral >= 100 ? `✓ Coberto${totalGeral > vNecGeral ? ` (+${fmtMoney(totalGeral - vNecGeral)})` : ""}` : `⚠ Faltam ${fmtMoney(vNecGeral - totalGeral)}`}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 11.5, color: "#9AA0B4", marginBottom: 6 }}>
+                    <span>Compras hoje: <b style={{ fontFamily: "ui-monospace,monospace", color: "#EEF0F6" }}>{fmtMoney(comprasGeral)}</b></span>
+                    <span>Vendas necessárias: <b style={{ fontFamily: "ui-monospace,monospace", color: "#EEF0F6" }}>{fmtMoney(vNecGeral)}</b></span>
+                  </div>
+                  <div style={{ height: 8, background: "#171B25", borderRadius: 5, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${Math.min(pctCobGeral, 100)}%`, background: corBudgetGeral, borderRadius: 5 }} />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16 }}>
