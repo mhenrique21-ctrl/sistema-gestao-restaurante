@@ -134,4 +134,54 @@ router.put('/pdv-menu', authMiddleware, requireRole('admin'), async (req, res) =
   }
 });
 
+// GET /api/settings/condensed-categories — configuração de "categoria em cartão
+// único" (Comandas/kiosk mostram uma lista compacta em vez de 1 cartão por
+// produto) + a etapa de Adicionais que abre ao adicionar um item. PÚBLICO
+// (sem authMiddleware): kiosk.html é a tela de autoatendimento do cliente,
+// sem login — precisa ler isso pra montar a tela, igual GET /api/settings
+// já é público por esse mesmo motivo. Nada sensível aqui (só preferência de
+// exibição). Só admin edita (PUT abaixo).
+router.get('/condensed-categories', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT value FROM settings WHERE key = 'condensed_categories_config'`);
+    let config = {};
+    try { config = JSON.parse(result.rows[0]?.value || '{}'); } catch { config = {}; }
+    res.json({
+      categories: (config.categories && typeof config.categories === 'object') ? config.categories : {},
+      addonsSkipLabel: config.addonsSkipLabel || 'Pular',
+      addonsContinueLabel: config.addonsContinueLabel || 'Adicionar ({n}) e continuar',
+    });
+  } catch (err) {
+    console.error('[settings/condensed-categories/GET]', err.message);
+    res.status(500).json({ error: 'Erro ao buscar configuração' });
+  }
+});
+
+// PUT /api/settings/condensed-categories — só admin
+router.put('/condensed-categories', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { categories, addonsSkipLabel, addonsContinueLabel } = req.body;
+  if (categories !== undefined && (typeof categories !== 'object' || Array.isArray(categories) || categories === null)) {
+    return res.status(400).json({ error: 'categories deve ser um objeto {categoriaId: {...}}' });
+  }
+  try {
+    const current = await pool.query(`SELECT value FROM settings WHERE key = 'condensed_categories_config'`);
+    let existing = {};
+    try { existing = JSON.parse(current.rows[0]?.value || '{}'); } catch { existing = {}; }
+    const config = {
+      categories: categories !== undefined ? categories : (existing.categories || {}),
+      addonsSkipLabel: addonsSkipLabel !== undefined ? String(addonsSkipLabel || 'Pular') : (existing.addonsSkipLabel || 'Pular'),
+      addonsContinueLabel: addonsContinueLabel !== undefined ? String(addonsContinueLabel || 'Adicionar ({n}) e continuar') : (existing.addonsContinueLabel || 'Adicionar ({n}) e continuar'),
+    };
+    await pool.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('condensed_categories_config', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [JSON.stringify(config)]
+    );
+    res.json({ ok: true, ...config });
+  } catch (err) {
+    console.error('[settings/condensed-categories/PUT]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 module.exports = router;

@@ -201,6 +201,21 @@
   #screensaver-screen .info .price { font-size: 2rem; font-weight: 900; color: #E8B961; }
   #screensaver-screen .tap-hint { position: absolute; top: 30px; left: 0; right: 0; text-align: center; color: #fff; font-size: 1rem; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+
+  /* Categoria "em cartão único" — lista compacta em vez da grade de fotos.
+     #product-grid vira coluna única quando .condensed-mode está presente. */
+  #product-grid.condensed-mode { display: block; padding: 14px 22px 120px; }
+  .condensed-search { margin-bottom: 12px; }
+  .condensed-search input { width: 100%; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; font-size: 1rem; background: var(--surface); color: var(--text); }
+  .condensed-list { display: flex; flex-direction: column; gap: 8px; }
+  .condensed-row { display: flex; align-items: center; gap: 12px; width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; text-align: left; color: var(--text); box-shadow: var(--shadow); }
+  .condensed-row:active { transform: scale(.98); background: var(--card-active); }
+  .condensed-row.destaque { border: 2px solid var(--gold); }
+  .condensed-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .condensed-destaque-tag { font-size: .68rem; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: .04em; }
+  .condensed-row-name { font-size: 1rem; font-weight: 700; }
+  .condensed-row-desc { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .condensed-row-price { flex-shrink: 0; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -317,6 +332,20 @@ const API = '';
 
 let menu = [];
 let activeCategory = null;
+// "Categoria em cartão único": categoria com dezenas de variações (ex: 35
+// sabores de croissant) pode virar uma lista compacta (nome+preço, sem foto
+// obrigatória por item) em vez da grade de fotos — configurável em
+// Configurações → Autoatendimento (ver settings.js /condensed-categories).
+let condensedConfig = { categories: {}, addonsSkipLabel: 'Pular', addonsContinueLabel: 'Adicionar ({n}) e continuar' };
+let condensedSearchTerm = '';
+async function loadCondensedConfig() {
+  try {
+    const r = await fetch(`${API}/api/settings/condensed-categories`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && typeof d === 'object') condensedConfig = { categories: d.categories || {}, addonsSkipLabel: d.addonsSkipLabel || 'Pular', addonsContinueLabel: d.addonsContinueLabel || 'Adicionar ({n}) e continuar' };
+  } catch (e) { /* offline: segue com a config em memória (ou o padrão) */ }
+}
 let cart = [];
 let comanda = null;
 let scanPurpose = null; // 'order' | 'checkout' | 'history'
@@ -522,6 +551,7 @@ async function recarregarMenuSeOcioso() {
   if (cart.length) return;                  // carrinho aberto: não mexe
   const antes = JSON.stringify(menu.map(c => c.products.length)) + JSON.stringify(maisPedidos);
   await loadMenuIfNeeded(true);
+  await loadCondensedConfig();
   await carregarMaisPedidos();
   if (JSON.stringify(menu.map(c => c.products.length)) + JSON.stringify(maisPedidos) !== antes) {
     renderCategorySidebar(); renderCategoryBanner(); renderProductGrid();
@@ -577,6 +607,7 @@ function renderCategorySidebar() {
 
 function selectCategory(id) {
   activeCategory = id;
+  condensedSearchTerm = '';
   renderCategorySidebar();
   renderCategoryBanner();
   renderProductGrid();
@@ -610,12 +641,26 @@ function iconeDoProduto(p) {
   return iconeDaCategoria(cat);
 }
 
+// Ordena a lista condensada conforme a config da categoria — 'manual' respeita
+// a ordem que já veio do servidor (sort_order dos produtos).
+function ordenarCondensado(products, sortMode) {
+  if (sortMode === 'alpha') return [...products].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  if (sortMode === 'price') return [...products].sort((a, b) => (a.promo_price ?? a.price) - (b.promo_price ?? b.price));
+  if (sortMode === 'popular') return [...products].sort((a, b) => (maisPedidos.includes(b.id) ? 1 : 0) - (maisPedidos.includes(a.id) ? 1 : 0));
+  return products;
+}
+
 function renderProductGrid() {
   const el = document.getElementById('product-grid');
   const products = activeCategory === 'ofertas'
     ? getOffers().filter(p => p.available)
     : (menu.find(c => c.id === activeCategory)?.products || []).filter(p => p.available);
   if (!products.length) { el.innerHTML = '<div class="launched-empty">Sem produtos nesta categoria</div>'; return; }
+
+  const catCfg = activeCategory !== 'ofertas' ? (condensedConfig.categories[activeCategory] || {}) : {};
+  if (catCfg.condensed) { renderCondensedList(el, products, catCfg); return; }
+  el.classList.remove('condensed-mode');
+
   el.innerHTML = products.map(p => {
     const img = p.image_url
       ? `<img class="thumb" src="${p.image_url}">`
@@ -641,6 +686,52 @@ function renderProductGrid() {
       </div>
     </button>`;
   }).join('');
+}
+
+// Categoria "em cartão único": em vez da grade de fotos (uma por produto),
+// uma lista compacta — banner da categoria já cobre a foto, cada linha é só
+// nome+preço. Pensada pra categoria com muitas variações do mesmo produto
+// base (ex: 35 recheios de croissant), onde manter foto de cada uma não é
+// viável. Ver Configurações → Autoatendimento → "Cartão único" pra ligar.
+function renderCondensedList(el, products, catCfg) {
+  el.classList.add('condensed-mode');
+  let lista = ordenarCondensado(products, catCfg.sortMode || 'manual');
+  if (catCfg.defaultHighlightProductId) {
+    const idx = lista.findIndex(p => p.id === catCfg.defaultHighlightProductId);
+    if (idx > 0) { const [dest] = lista.splice(idx, 1); lista.unshift(dest); }
+  }
+  const termo = condensedSearchTerm.trim().toLowerCase();
+  const filtrada = termo
+    ? lista.filter(p => (p.name || '').toLowerCase().includes(termo) || ((catCfg.searchFields || []).includes('description') && (p.description || '').toLowerCase().includes(termo)))
+    : lista;
+
+  const buscaHtml = catCfg.searchEnabled ? `
+    <div class="condensed-search">
+      <input type="text" placeholder="🔍 Buscar..." value="${condensedSearchTerm.replace(/"/g, '&quot;')}"
+        oninput="condensedSearchTerm=this.value; renderProductGrid();">
+    </div>` : '';
+
+  if (!filtrada.length) {
+    el.innerHTML = buscaHtml + '<div class="launched-empty">Nada encontrado</div>';
+    return;
+  }
+
+  el.innerHTML = buscaHtml + '<div class="condensed-list">' + filtrada.map(p => {
+    const preco = p.promo_price != null
+      ? `<span class="price-old">${fmt(p.price)}</span><span class="price-new">${fmt(p.promo_price)}</span>`
+      : `<span class="price-new">${fmt(p.price)}</span>`;
+    const destaque = catCfg.defaultHighlightProductId === p.id;
+    return `
+    <button class="condensed-row ${destaque ? 'destaque' : ''}" onclick="openProductModal('${p.id}')">
+      <div class="condensed-row-info">
+        ${destaque ? '<span class="condensed-destaque-tag">⭐ Mais pedido</span>' : ''}
+        <span class="condensed-row-name">${p.name}</span>
+        ${p.description ? `<span class="condensed-row-desc">${p.description}</span>` : ''}
+      </div>
+      <span class="condensed-row-price">${preco}</span>
+      <span class="add-pill">+</span>
+    </button>`;
+  }).join('') + '</div>';
 }
 
 // ── Modal de produto (quantidade + adicionais + obs) ──
@@ -763,6 +854,7 @@ function renderProductModal() {
         </div>
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeProductModal()">Cancelar</button>
+          ${extras.length ? `<button class="btn btn-secondary" onclick="pularAdicionaisEAdicionar()">${condensedConfig.addonsSkipLabel}</button>` : ''}
           <button class="btn btn-primary" id="modal-add-btn" onclick="confirmAddToCart()">Adicionar — ${fmt(modalCurrentTotal())}</button>
         </div>
       </div>
@@ -861,6 +953,16 @@ function confirmAddToCart() {
   });
   closeProductModal();
   renderCartBar();
+}
+
+// "Pular" adicionais: limpa só os grupos OPCIONAIS (kind !== 'preparo' e não
+// obrigatórios) e adiciona o produto puro — atalho pra quem não quer
+// customizar. Grupo obrigatório continua bloqueando (confirmAddToCart valida
+// isso do mesmo jeito), então não dá pra "pular" uma escolha que é mandatória.
+function pularAdicionaisEAdicionar() {
+  const { extras } = gruposPorTipo(modalProduct);
+  extras.forEach(g => { if (!g.required) modalSelections[g.id] = {}; });
+  confirmAddToCart();
 }
 
 // ── Carrinho ─────────────────────────────────────────
@@ -1154,6 +1256,7 @@ async function init() {
     idleSeconds = parseInt(s.kiosk_idle_seconds) || 60;
   } catch (e) {}
   await loadMenuIfNeeded();
+  await loadCondensedConfig();
   carregarDestaques();
   // Selo depende do ranking: espera antes de desenhar a grade, senão a
   // primeira categoria apareceria sem selo até alguém trocar de aba.

@@ -631,6 +631,12 @@
   .prod-foto { width: 42px; height: 42px; min-width: 42px; border-radius: 8px; object-fit: cover; background: var(--c-border); }
   .prod-semfoto { width: 42px; height: 42px; min-width: 42px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
     font-size: 1rem; background: #FDF7EC; border: 1px dashed #DDC59A; color: #B4801A; }
+  /* Cartão-resumo de categoria condensada — mesmo bloco do prod-card normal,
+     mas é um <button> (reset de aparência nativa) e borda inteira dourada,
+     não só a lateral, pra ficar claro que representa a categoria toda. */
+  .prod-card-resumo { width: 100%; font: inherit; text-align: left; cursor: pointer; border: 2px solid var(--gold); background: #FDF7EC; }
+  .prod-card-resumo:active { transform: scale(.98); }
+  .prod-resumo-icone { display: flex; align-items: center; justify-content: center; font-size: 1.3rem; background: var(--card-active, #F1E8DA); }
   .prod-meio { flex: 1; min-width: 0; }
   .prod-nome { font-weight: 700; font-size: .88rem; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .prod-sub { font-size: .72rem; color: var(--c-muted); display: flex; align-items: center; gap: 5px; margin-top: 1px; }
@@ -1448,6 +1454,7 @@
       <span style="font-size:.85rem;color:var(--c-muted);flex:1">
         A ordem aqui é a ordem no totem e no delivery. Categoria com produto não se exclui — se desativa.
       </span>
+      <button class="btn btn-secondary" onclick="abrirConfigTextosCondensado()">🗂️ Textos do Cartão Único</button>
     </div>
     <div id="cat-lista"><div class="cart-empty">Carregando...</div></div>
     <div class="cat-nova">
@@ -2463,6 +2470,7 @@ async function loadCategorias() {
     if (rc.status === 403) { el.innerHTML = '<div class="cart-empty">Só administrador gerencia categorias</div>'; return; }
     _categorias = await rc.json();
     if (rp.ok) estoqueCats = await rp.json();
+    await loadCondensedConfig();
     renderCategorias();
   } catch (e) {
     el.innerHTML = '<div class="cart-empty">Erro ao carregar</div>';
@@ -2478,6 +2486,7 @@ function renderCategorias() {
     const n = contar(c.id);
     const semCanal = (estoqueCats.find(x => x.id === c.id)?.products || [])
       .every(p => p.show_kiosk === false && p.show_delivery === false);
+    const condensado = !!condensedConfig.categories[c.id]?.condensed;
     return `
     <div class="cat-item ${c.active ? '' : 'off'}">
       <span class="ic">${c.icon || '🍽'}</span>
@@ -2487,6 +2496,11 @@ function renderCategorias() {
         ${c.name === 'Ofertas' ? `<div class="cat-aviso">O totem monta a aba <b>Ofertas</b> sozinho, com quem tem preço
           promocional, e esconde esta categoria da barra lateral. Produto colocado aqui sem promoção fica invisível no totem.</div>` : ''}
       </div>
+      <label class="switch" title="Cartão único: mostra 1 cartão-resumo (com lista compacta por dentro) em vez de 1 por produto — sem exigir foto de cada variação">
+        <input type="checkbox" ${condensado ? 'checked' : ''} onchange="toggleCondensado('${c.id}', this.checked)">
+        <span class="slider"></span>
+      </label>
+      ${condensado ? `<button onclick="abrirConfigCategoriaCondensado('${c.id}')" title="Configurar lista compacta desta categoria">⚙️</button>` : ''}
       <button onclick="moverCategoria(${i}, -1)" ${i === 0 ? 'disabled' : ''} title="Subir">↑</button>
       <button onclick="moverCategoria(${i}, 1)" ${i === ordenadas.length - 1 ? 'disabled' : ''} title="Descer">↓</button>
       <button onclick="editarCategoria('${c.id}')">Editar</button>
@@ -4737,6 +4751,7 @@ async function loadEstoque() {
     const prevVal = sel.value;
     sel.innerHTML = '<option value="">Todas categorias</option>' + estoqueCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     sel.value = prevVal;
+    await loadCondensedConfig();
     renderEstoque();
   } catch (e) {
     el.innerHTML = '<div class="cart-empty">Erro ao carregar produtos</div>';
@@ -4747,7 +4762,9 @@ async function loadEstoque() {
 // só se descobre que um produto está sem foto ou fora do totem abrindo o
 // cadastro dele, um por um.
 const PROD_FLAGS = {
-  semfoto:   { rotulo: '📷 Sem foto',        teste: p => !p.image_url },
+  // Categoria "em cartão único" não exige foto por item (é o ponto da
+  // funcionalidade) — não faz sentido contar/filtrar esses produtos aqui.
+  semfoto:   { rotulo: '📷 Sem foto',        teste: p => !p.image_url && !condensedConfig.categories[p.category_id]?.condensed },
   off:       { rotulo: '⛔ Desativados',      teste: p => !p.available },
   semtotem:  { rotulo: '🖥 Fora do totem',    teste: p => p.show_kiosk === false },
   semdeliv:  { rotulo: '🛵 Fora do delivery', teste: p => p.show_delivery === false },
@@ -4755,6 +4772,113 @@ const PROD_FLAGS = {
   semdestino:{ rotulo: '🖨 Sem destino',      teste: p => !p.print_target },
 };
 let prodFlagAtivo = '';
+
+// "Categoria em cartão único": categoria com muitas variações do mesmo
+// produto base (ex: 35 recheios de croissant) vira UM cartão-resumo na
+// grade de "Todas" em vez de uma foto por variação — sem exigir foto de
+// cada uma. Ligado por categoria em Configurações → Categorias. Ver
+// settings.js GET/PUT /api/settings/condensed-categories.
+let condensedConfig = { categories: {}, addonsSkipLabel: 'Pular', addonsContinueLabel: 'Adicionar ({n}) e continuar' };
+async function loadCondensedConfig() {
+  try {
+    const res = await fetch(`${API}/api/settings/condensed-categories`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const d = await res.json();
+    condensedConfig = { categories: d.categories || {}, addonsSkipLabel: d.addonsSkipLabel || 'Pular', addonsContinueLabel: d.addonsContinueLabel || 'Adicionar ({n}) e continuar' };
+  } catch (e) { /* segue com a config em memória (ou o padrão) */ }
+}
+async function toggleCondensado(catId, ligar) {
+  const categories = { ...condensedConfig.categories, [catId]: { ...(condensedConfig.categories[catId] || {}), condensed: ligar } };
+  try {
+    const res = await fetch(`${API}/api/settings/condensed-categories`, {
+      method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ categories }),
+    });
+    if (!res.ok) { showToast('Erro ao salvar'); return; }
+    condensedConfig.categories = categories;
+    showToast(ligar ? 'Cartão único ativado' : 'Cartão único desativado');
+    renderCategorias();
+    if (document.getElementById('estoque-list')) renderEstoque();
+  } catch (e) { showToast('Erro de conexão'); }
+}
+
+async function salvarCondensedConfig(categories, extras) {
+  const body = { categories: categories !== undefined ? categories : condensedConfig.categories, ...extras };
+  const res = await fetch(`${API}/api/settings/condensed-categories`, {
+    method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { usrErro('Erro ao salvar'); return false; }
+  const d = await res.json();
+  condensedConfig = { categories: d.categories || {}, addonsSkipLabel: d.addonsSkipLabel, addonsContinueLabel: d.addonsContinueLabel };
+  return true;
+}
+
+// Textos globais do botão "Pular adicionais" no totem — não é por categoria
+// (o mesmo botão aparece em qualquer produto com adicional opcional).
+function abrirConfigTextosCondensado() {
+  usrModal('Textos do Cartão Único', `
+    <div class="field-group">
+      <label>Botão "Pular" (aparece no totem, na tela de adicionais)</label>
+      <input type="text" id="cc-skip" value="${(condensedConfig.addonsSkipLabel || 'Pular').replace(/"/g, '&quot;')}">
+    </div>
+    <div class="usr-aviso" style="margin:0">
+      Aparece só quando o produto tem adicional opcional pra oferecer — o cliente escolhe "Pular" pra levar o item sem customizar.
+    </div>`, 'Salvar', async () => {
+    const skip = document.getElementById('cc-skip').value.trim() || 'Pular';
+    const ok = await salvarCondensedConfig(undefined, { addonsSkipLabel: skip });
+    if (!ok) return;
+    document.getElementById('usr-modal-backdrop')?.remove();
+    showToast('Textos salvos');
+  });
+}
+
+// Configuração da lista compacta de UMA categoria condensada: ordem dos
+// itens, busca, e item destacado no topo.
+function abrirConfigCategoriaCondensado(catId) {
+  const c = _categorias.find(x => x.id === catId);
+  const produtos = (estoqueCats.find(x => x.id === catId)?.products || []);
+  const cfg = condensedConfig.categories[catId] || {};
+  const sortMode = cfg.sortMode || 'manual';
+  const searchEnabled = cfg.searchEnabled !== false; // padrão ligado
+  const searchFields = cfg.searchFields || ['name'];
+  usrModal(`Lista compacta — ${c?.name || ''}`, `
+    <div class="field-group">
+      <label>Ordem dos itens na lista do totem</label>
+      <select id="cc-sort">
+        <option value="manual" ${sortMode === 'manual' ? 'selected' : ''}>Manual (ordem do cadastro)</option>
+        <option value="alpha" ${sortMode === 'alpha' ? 'selected' : ''}>Alfabética</option>
+        <option value="price" ${sortMode === 'price' ? 'selected' : ''}>Preço: menor primeiro</option>
+        <option value="popular" ${sortMode === 'popular' ? 'selected' : ''}>Mais pedidos primeiro</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label><input type="checkbox" id="cc-search" ${searchEnabled ? 'checked' : ''}> Mostrar busca no topo da lista</label>
+    </div>
+    <div class="field-group">
+      <label><input type="checkbox" id="cc-search-desc" ${searchFields.includes('description') ? 'checked' : ''}> Busca também procura na descrição do item</label>
+    </div>
+    <div class="field-group">
+      <label>Item destacado no topo (opcional)</label>
+      <select id="cc-highlight">
+        <option value="">Nenhum destaque</option>
+        ${produtos.map(p => `<option value="${p.id}" ${cfg.defaultHighlightProductId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+      </select>
+    </div>`, 'Salvar', async () => {
+    const novoCfg = {
+      ...cfg,
+      sortMode: document.getElementById('cc-sort').value,
+      searchEnabled: document.getElementById('cc-search').checked,
+      searchFields: document.getElementById('cc-search-desc').checked ? ['name', 'description'] : ['name'],
+      defaultHighlightProductId: document.getElementById('cc-highlight').value || null,
+    };
+    const categories = { ...condensedConfig.categories, [catId]: novoCfg };
+    const ok = await salvarCondensedConfig(categories, {});
+    if (!ok) return;
+    document.getElementById('usr-modal-backdrop')?.remove();
+    showToast('Configuração salva');
+  });
+}
 
 // Para onde vai a ficha de preparo. O cupom do cliente sai sempre no caixa —
 // isso aqui é só a segunda via, de produção.
@@ -4798,9 +4922,21 @@ function renderEstoque() {
   const el = document.getElementById('estoque-list');
   renderProdChips(catFilter);
 
+  // Sem filtro de categoria, a lista vira uma sequência de blocos com título.
+  // Repetir "Bolos e Tortas" em 11 linhas seguidas não informava nada.
+  const agrupar = !catFilter && !search && !prodFlagAtivo;
+
   const rows = [];
   for (const cat of estoqueCats) {
     if (catFilter && cat.id !== catFilter) continue;
+    // Categoria "em cartão único" (ex: 35 recheios de croissant) vira UM
+    // cartão-resumo em vez de um por produto — só na visão "Todas" sem busca
+    // nem filtro ativo; filtrando por ela (ou entrando pelo cartão), continua
+    // mostrando a lista normal pra editar cada produto.
+    if (agrupar && condensedConfig.categories[cat.id]?.condensed && cat.products.length) {
+      rows.push({ __resumo: true, category_id: cat.id, category_name: cat.name, category_icon: cat.icon, count: cat.products.length });
+      continue;
+    }
     for (const p of cat.products) {
       if (search && !p.name.toLowerCase().includes(search)) continue;
       if (prodFlagAtivo && !PROD_FLAGS[prodFlagAtivo].teste(p)) continue;
@@ -4808,18 +4944,25 @@ function renderEstoque() {
     }
   }
   const cont = document.getElementById('prod-contagem');
-  if (cont) cont.textContent = rows.length === 1 ? '1 produto' : `${rows.length} produtos`;
+  if (cont) cont.textContent = rows.length === 1 ? '1 produto' : `${rows.length} produto(s)/categoria(s)`;
   if (!rows.length) { el.innerHTML = '<div class="cart-empty">Nenhum produto encontrado</div>'; return; }
 
-  // Sem filtro de categoria, a lista vira uma sequência de blocos com título.
-  // Repetir "Bolos e Tortas" em 11 linhas seguidas não informava nada.
-  const agrupar = !catFilter && !search;
   let ultimaCat = null;
   el.innerHTML = `<div class="prod-grade">` + rows.map(p => {
     let cabecalho = '';
     if (agrupar && p.category_name !== ultimaCat) {
       ultimaCat = p.category_name;
       cabecalho = `<div class="prod-grupo">${p.category_name}</div>`;
+    }
+    if (p.__resumo) {
+      return cabecalho + `
+      <button class="prod-card prod-card-resumo" onclick="setProdCat('${p.category_id}')" title="Ver os ${p.count} itens">
+        <span class="prod-foto prod-resumo-icone">${p.category_icon || '🍽'}</span>
+        <div class="prod-meio">
+          <div class="prod-nome">${p.category_name}</div>
+          <div class="prod-sub"><span>🗂️ Cartão único · ${p.count} itens · toque pra ver a lista</span></div>
+        </div>
+      </button>`;
     }
     // Saldo só aparece pra produto de revenda. Mostrar "0 un" em tapioca —
     // que é feita na hora e nunca terá saldo — treinaria o operador a ignorar
