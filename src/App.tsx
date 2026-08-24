@@ -6325,7 +6325,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         {insumosSoltos.length>0&&<div style={{display:"flex",alignItems:"center",gap:12,background:"#FEF3C7",border:"1px solid #F59E0B55",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
           <div>
             <div style={{fontSize:22,fontWeight:800,color:"#B45309",fontFamily:"monospace"}}>{insumosSoltos.length}</div>
-            <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.4}}>insumo(s) sem vínculo com<br/>a Lista de Compras</div>
+            <div style={{fontSize:11.5,color:"#92400e",lineHeight:1.4}}>insumo(s) sem vínculo com<br/>a Lista de Compras</div>
           </div>
           <button onClick={()=>setShowConciliarInsumos(v=>!v)} className="btn" style={{marginLeft:"auto",flexShrink:0,background:"#F59E0B",color:"#2b1600",padding:"9px 16px",fontSize:12.5,fontWeight:700}}>
             {showConciliarInsumos?"✕ Fechar":"🔗 Conciliar agora"}
@@ -6347,7 +6347,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               {escolha
                 ?<div style={{display:"flex",alignItems:"center",gap:8,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803D",fontWeight:700}}>
                   ✓ Vai {escolha.novo?"virar produto novo":`entrar como marca de "${escolha.prodNome}"`}
-                  <button onClick={()=>setConciliarEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:11.5}}>trocar</button>
+                  <button onClick={()=>setConciliarEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"#15803D",textDecoration:"underline",cursor:"pointer",fontSize:11.5}}>trocar</button>
                 </div>
                 :<div style={{position:"relative"}}>
                   <input placeholder="Buscar produto na Lista de Compras..." value={conciliarBusca[mp.id]||""} onChange={e=>setConciliarBusca(b=>({...b,[mp.id]:e.target.value}))} className="inp" style={{marginBottom:0,fontSize:12.5}}/>
