@@ -81,7 +81,8 @@ router.put('/sangria-categories', authMiddleware, requireRole('admin'), async (r
   try {
     await pool.query(
       `INSERT INTO settings (key, value, updated_at) VALUES ('sangria_categories', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+       RETURNING key`,
       [JSON.stringify(categorias)]
     );
     res.json({ ok: true, categorias });
@@ -124,7 +125,8 @@ router.put('/pdv-menu', authMiddleware, requireRole('admin'), async (req, res) =
     const config = { fontSize, accentColor, position, displayMode, hiddenItems };
     await pool.query(
       `INSERT INTO settings (key, value, updated_at) VALUES ('pdv_menu_config', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+       RETURNING key`,
       [JSON.stringify(config)]
     );
     res.json({ ok: true, ...config });
@@ -174,7 +176,8 @@ router.put('/condensed-categories', authMiddleware, requireRole('admin'), async 
     };
     await pool.query(
       `INSERT INTO settings (key, value, updated_at) VALUES ('condensed_categories_config', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+       RETURNING key`,
       [JSON.stringify(config)]
     );
     res.json({ ok: true, ...config });
