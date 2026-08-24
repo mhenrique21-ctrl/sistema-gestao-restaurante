@@ -1476,6 +1476,10 @@ export default function App() {
   // Última versão vista de cada empresa (data+tamanho do arquivo no servidor).
   // É o que permite ao polling decidir se precisa baixar o documento.
   const versaoRef = useRef<Record<string,string>>({});
+  // Sempre aponta pro setDbAndSave mais atual (reatribuído a cada render, ver
+  // abaixo) — permite reenviar um salvamento interrompido a partir de um
+  // useEffect com dependências que não recriam a cada render (ver onVisible).
+  const flushRef = useRef<((fn:(d:any)=>any)=>void)|null>(null);
 
   // On mount: load both companies from server
   useEffect(()=>{
@@ -1533,7 +1537,24 @@ export default function App() {
     // pra segundo plano (tela bloqueia, troca de app). Sem isso, ao voltar o
     // usuário via dados desatualizados até o próximo ciclo do polling cair —
     // buscar na hora que a aba volta a ficar visível resolve.
-    const onVisible=()=>{if(document.visibilityState==="visible")poll();};
+    //
+    // Bug real (celular): tocar num item da Lista de Compras (marcar como
+    // comprado) e travar a tela ou trocar de app LOGO EM SEGUIDA podia matar
+    // o POST de setDbAndSave no meio do caminho — a mudança já tinha sido
+    // aplicada na tela (otimista), então parecia ter funcionado, mas nunca
+    // chegava no servidor, e ninguém mais via o item sumir. directSaveRef só
+    // volta a "false" quando aquele POST específico termina (sucesso OU
+    // falha); se ainda estiver "true" quando o app volta a ficar visível, é
+    // sinal de que ele foi interrompido — reenvia o estado atual (que ainda
+    // tem a mudança, intacta em memória) pra completar o que ficou pendente.
+    const onVisible=()=>{
+      if(document.visibilityState!=="visible")return;
+      poll();
+      if(directSaveRef.current){
+        directSaveRef.current=false;
+        flushRef.current?.((d:any)=>d);
+      }
+    };
     document.addEventListener("visibilitychange",onVisible);
     window.addEventListener("focus",onVisible);
     return()=>{
@@ -1665,6 +1686,7 @@ export default function App() {
         .finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
     })();
   };
+  flushRef.current=setDbAndSave;
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao"||login?.role==="op_enc";
   const isAdmin=login?.role==="admin";
