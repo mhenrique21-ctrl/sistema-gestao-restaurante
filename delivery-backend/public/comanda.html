@@ -4794,12 +4794,17 @@ async function toggleCondensado(catId, ligar) {
       method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ categories }),
     });
-    if (!res.ok) { showToast('Erro ao salvar'); return; }
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || `Erro ao salvar (${res.status})`);
+      renderCategorias(); // reverte o switch visualmente — sem isso ele fica marcado mesmo sem ter salvo
+      return;
+    }
     condensedConfig.categories = categories;
     showToast(ligar ? 'Cartão único ativado' : 'Cartão único desativado');
     renderCategorias();
     if (document.getElementById('estoque-list')) renderEstoque();
-  } catch (e) { showToast('Erro de conexão'); }
+  } catch (e) { showToast('Erro de conexão'); renderCategorias(); }
 }
 
 async function salvarCondensedConfig(categories, extras) {
@@ -4808,7 +4813,7 @@ async function salvarCondensedConfig(categories, extras) {
     method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
-  if (!res.ok) { usrErro('Erro ao salvar'); return false; }
+  if (!res.ok) { const d = await res.json().catch(() => ({})); usrErro(d.error || `Erro ao salvar (${res.status})`); return false; }
   const d = await res.json();
   condensedConfig = { categories: d.categories || {}, addonsSkipLabel: d.addonsSkipLabel, addonsContinueLabel: d.addonsContinueLabel };
   return true;
