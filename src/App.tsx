@@ -1075,6 +1075,15 @@ const migrateDb=(m:any)=>{
         (ped.itens||[]).some((i:any)=>temLixo(i.nome))
           ?{...ped,itens:ped.itens.map((i:any)=>temLixo(i.nome)?{...i,nome:limpar(i.nome)}:i)}
           :ped);
+      // Mesma limpeza nos produtos/pedidos de PRODUÇÃO (ex: "Trança de
+      // camar����o" → "Trança de camaro") — não recupera o
+      // acento perdido, só tira o lixo visível; se sobrar um nome ambíguo dá
+      // pra corrigir manualmente editando o produto.
+      m[e].produtosProducao=(m[e].produtosProducao||[]).map((p:any)=>temLixo(p.nome)?{...p,nome:limpar(p.nome)}:p);
+      m[e].pedidosProducao=(m[e].pedidosProducao||[]).map((ped:any)=>
+        (ped.itens||[]).some((i:any)=>temLixo(i.nome))
+          ?{...ped,itens:ped.itens.map((i:any)=>temLixo(i.nome)?{...i,nome:limpar(i.nome)}:i)}
+          :ped);
       // Ícones de categoria de produção corrompidos (ex: emoji virou "????") caem pro padrão 📦
       if(m[e].iconesProducao){
         const icons={...m[e].iconesProducao};
@@ -1090,6 +1099,24 @@ const migrateDb=(m:any)=>{
       m[e].produtosProducao=m[e].produtosProducao.map((p:any)=>
         Array.isArray(p.cats)?p:{...p,cats:p.cat?[p.cat]:[]}
       );
+    }
+    // Produto de produção duplicado (mesmo nome, dois cadastros — ex: "Bauru"
+    // aparecendo duas vezes com categorias diferentes). Junta num só, somando
+    // as categorias de todos e mantendo o preço fixo que já existir, em vez
+    // de simplesmente descartar a cópia extra e perder o que só ela tinha.
+    if(!m[e].produtosProducaoDedupV1){
+      const porNome=new Map<string,any>();
+      (m[e].produtosProducao||[]).forEach((p:any)=>{
+        const k=(p.nome||"").trim().toLowerCase();
+        if(!k)return;
+        const atuais:string[]=Array.isArray(p.cats)&&p.cats.length?p.cats:(p.cat?[p.cat]:[]);
+        const existente=porNome.get(k);
+        if(!existente){porNome.set(k,{...p,cats:atuais});return;}
+        const catsUnidas=[...new Set([...(existente.cats||[]),...atuais])];
+        porNome.set(k,{...existente,cats:catsUnidas,cat:existente.cat||catsUnidas[0]||"",precoFixo:existente.precoFixo>0?existente.precoFixo:p.precoFixo});
+      });
+      m[e].produtosProducao=[...porNome.values()];
+      m[e].produtosProducaoDedupV1=true;
     }
     // Corrige categorias de produção corrompidas: o POST de /api/dados no
     // servidor decodificava cada chunk TCP como UTF-8 isoladamente (bug já
