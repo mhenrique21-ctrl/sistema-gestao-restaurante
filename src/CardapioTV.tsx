@@ -134,6 +134,11 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
     objectFit: "cover", animation: "cardapiotv-fadein .6s ease",
   };
 
+  // ?debug=1 no link mostra o estado real que ESTA tela recebeu do servidor
+  // — sem isso, numa TV de verdade não tem como abrir o DevTools pra
+  // conferir se o pareamento/flag "2 telas" chegou certinho.
+  const debug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
+
   return (
     <div style={{
       position: "fixed", inset: 0, background: "#000", overflow: "hidden",
@@ -162,6 +167,15 @@ export default function CardapioTV({ empresa, tela }: { empresa: string, tela?: 
               background: i === idx ? "#fff" : "rgba(255,255,255,0.3)", transition: "background .2s",
             }} />
           ))}
+        </div>
+      )}
+      {debug && (
+        <div style={{
+          position: "absolute", top: 10, left: 10, background: "#000000cc", color: "#0f0",
+          fontFamily: "ui-monospace,monospace", fontSize: 13, lineHeight: 1.6, padding: "10px 12px",
+          borderRadius: 8, border: "1px solid #0f04", zIndex: 999, whiteSpace: "pre",
+        }}>
+          {`empresa: ${empLabel}\ntela: ${telaId}\npareada: ${pareada ? "sim" : "não"}\nladoPar: ${ladoPar || "—"}\nbanners: ${banners.length}\nidx atual: ${idx}\nbanner atual: ${atual?.nome || "—"}\nduasTelas: ${atual?.duasTelas ? "sim" : "não"}\nocupaDuas (renderizando cortado): ${ocupaDuas ? "SIM" : "não"}`}
         </div>
       )}
     </div>
