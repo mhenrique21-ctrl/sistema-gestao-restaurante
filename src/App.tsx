@@ -8598,7 +8598,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     const itensFilled=_itensFilled(prodsCatalog);
     if(!itensFilled.length)return alert("Preencha pelo menos 1 quantidade (Atual ou Pedido).");
 
-    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    const agoraCriado=new Date().toISOString();
+    const pedido={id:uid(),data:today(),itens:itensFilled,solicitante:login?.label||"",criadoEm:agoraCriado,atualizadoEm:agoraCriado};
     (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:[pedido,...(d.pedidosProducao||[])]}));
     try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}
     setQtdsCatalog({});setQtdsAtual({});
@@ -8624,7 +8625,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const itensMarcados=itens.filter((it:any)=>marcados.has(it.id));
   const gerarPedido=()=>{
     if(!itensMarcados.length)return alert("Marque pelo menos 1 produto.");
-    const pedido={id:uid(),data:today(),itens:itensMarcados.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:new Date().toISOString()};
+    const agoraCriado2=new Date().toISOString();
+    const pedido={id:uid(),data:today(),itens:itensMarcados.map(it=>({nome:it.nome,quantidade:it.quantidade,qtdAtual:it.qtdAtual||"",unidade:it.unidade,categoria:it.cat||"",obs:it.obs||""})),solicitante:login?.label||"",criadoEm:agoraCriado2,atualizadoEm:agoraCriado2};
     const idsMarcados=itensMarcados.map((it:any)=>it.id);
     idsMarcados.forEach((id:string)=>_listaDeletados.add(id));
     const restantes=itens.filter((it:any)=>!marcados.has(it.id));
@@ -8969,14 +8971,21 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const [histLimite,setHistLimite]=useState(30);
   const formRef=useRef<HTMLDivElement>(null);
   const addToPedSuggestions=addToPedForm.nome.length>=1?prodsCatalog.filter((p:any)=>(p.nome||"").toLowerCase().includes(addToPedForm.nome.toLowerCase())).slice(0,8):[];
+  // As três funções abaixo (adicionar/remover/editar item dum pedido já
+  // arquivado) precisam carimbar atualizadoEm no PEDIDO — sem isso, o merge
+  // no servidor não tem como saber qual cópia é mais nova quando dois
+  // aparelhos mexem perto um do outro, e o último POST simplesmente vence
+  // (mesma classe de bug já vista em produtosProducao: itens somem sem
+  // aviso quando um aparelho com cópia desatualizada salva por cima).
   const addItemToPedido=(pedId:string)=>{
     const nome=addToPedForm.nome.trim();if(!nome)return alert("Produto obrigatório.");
     const qtd=parseFloat(addToPedForm.qtd)||0;
-    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:[...(p.itens||[]),{nome,quantidade:qtd,qtdAtual:addToPedForm.qtdAtual||"",unidade:addToPedForm.unidade,categoria:addToPedForm.cat||"",obs:addToPedForm.obs||""}]}:p)}));
+    const agora=new Date().toISOString();
+    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:[...(p.itens||[]),{nome,quantidade:qtd,qtdAtual:addToPedForm.qtdAtual||"",unidade:addToPedForm.unidade,categoria:addToPedForm.cat||"",obs:addToPedForm.obs||""}],atualizadoEm:agora}:p)}));
     setAddToPedForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
   const delItemFromPedido=(pedId:string,idx:number)=>{
-    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:(p.itens||[]).filter((_:any,i:number)=>i!==idx)}:p)}));
+    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:(p.itens||[]).filter((_:any,i:number)=>i!==idx),atualizadoEm:new Date().toISOString()}:p)}));
   };
   const salvarEdicaoPedido=(pedId:string)=>{
     setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>{
@@ -8987,7 +8996,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         const novaObs=editObs[key]!==undefined?editObs[key]:it.obs;
         return!isNaN(novaQtd)&&novaQtd>=0?{...it,quantidade:novaQtd,obs:novaObs}:it;
       }).filter((it:any)=>it.quantidade>0);
-      return{...p,itens:novosItens};
+      return{...p,itens:novosItens,atualizadoEm:new Date().toISOString()};
     })}));
     setEditPedId(null);setEditQtds({});setEditObs({});
   };
@@ -15329,7 +15338,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
       if(itensPed.length>0){
         const pedido={id:uid(),data:form.dataEntrega||today(),itens:itensPed,
           solicitante:`Encomenda — ${form.cliente}`,origem:"encomenda",encId:novaEnc.id,
-          criadoEm:now};
+          criadoEm:now,atualizadoEm:now};
         sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])],pedidosProducao:[pedido,...(d.pedidosProducao||[])],clientesEncomenda:upsertCliente(d.clientesEncomenda||[],form.cliente,form.telefone,now)}));
       }else{
         sv(d=>({...d,encomendas:[novaEnc,...(d.encomendas||[])],clientesEncomenda:upsertCliente(d.clientesEncomenda||[],form.cliente,form.telefone,now)}));
