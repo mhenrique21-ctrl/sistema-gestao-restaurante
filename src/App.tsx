@@ -14792,6 +14792,10 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
   const [uploading,setUploading]=useState(false);
   const [tvsConectadas,setTvsConectadas]=useState(0);
   const fileRef=useRef<HTMLInputElement>(null);
+  const [showRecuperar,setShowRecuperar]=useState(false);
+  const [backupsTv,setBackupsTv]=useState<any[]|null>(null);
+  const [orfaosTv,setOrfaosTv]=useState<any[]|null>(null);
+  const [carregandoRecuperar,setCarregandoRecuperar]=useState(false);
 
   useEffect(()=>{
     setLoading(true);
@@ -14864,6 +14868,45 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
     }));
   };
 
+  // Excluir tela nunca teve backup — o painel salva a lista inteira por
+  // cima da anterior. Agora o servidor guarda uma cópia a cada salvamento
+  // (ver POST /api/cardapio-tv/:emp), e os arquivos de imagem/vídeo em si
+  // nunca são apagados por excluirTela — só a lista que apontava pra eles.
+  const abrirRecuperar=async()=>{
+    setShowRecuperar(v=>!v);
+    if(backupsTv||orfaosTv)return;
+    setCarregandoRecuperar(true);
+    try{
+      const [rb,ro]=await Promise.all([
+        fetch(`/api/cardapio-tv-backups/${empresa}`).then(r=>r.json()),
+        fetch(`/api/cardapio-tv-orfaos/${empresa}`).then(r=>r.json()),
+      ]);
+      setBackupsTv(Array.isArray(rb)?rb:[]);
+      setOrfaosTv(Array.isArray(ro)?ro:[]);
+    }catch{setBackupsTv([]);setOrfaosTv([]);}
+    setCarregandoRecuperar(false);
+  };
+  const restaurarBackupTv=async(arquivo:string)=>{
+    if(!confirm("Restaurar este backup? Isso substitui TODAS as telas atuais (incluindo as de agora) pelo que estava salvo nesse momento."))return;
+    try{
+      const r=await fetch(`/api/cardapio-tv-backups/${empresa}/restaurar`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({arquivo})});
+      if(!r.ok)throw new Error();
+      const d=await fetch(`/api/cardapio-tv/${empresa}`,{cache:"no-store"}).then(x=>x.json());
+      const t=(d?.telas||[]).map((tela:any)=>({...tela,banners:(tela.banners||[]).slice().sort((a:any,b:any)=>(a.ordem??0)-(b.ordem??0))}));
+      setTelas(t);
+      setTelaAtivaId(t[0]?.id||null);
+      setShowRecuperar(false);
+      setBackupsTv(null);setOrfaosTv(null);
+      alert("Backup restaurado!");
+    }catch{alert("Não foi possível restaurar — verifique a conexão.");}
+  };
+  const readicionarOrfao=(orfao:any)=>{
+    if(!telaAtivaId)return alert("Selecione (ou crie) uma tela primeiro.");
+    const maxOrdem=banners.length?Math.max(...banners.map((b:any)=>b.ordem||0))+1:0;
+    salvar([...banners,{id:uid(),nome:orfao.arquivo.replace(/\.[^.]+$/,""),arquivo:orfao.arquivo,tipo:orfao.tipo,duracaoSeg:15,ativo:true,ordem:maxOrdem,criadoEm:new Date().toISOString()}]);
+    setOrfaosTv(list=>list?list.filter(o=>o.arquivo!==orfao.arquivo):list);
+  };
+
   const criarTela=()=>{
     const nums=telas.map(t=>{const m=/^tv(\d+)$/.exec(t.id);return m?parseInt(m[1]):0;});
     const n=nums.length?Math.max(...nums)+1:1;
@@ -14873,8 +14916,11 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
   };
   const renomearTela=(id:string,nome:string)=>salvarTelas(telas.map(t=>t.id===id?{...t,nome}:t));
   const excluirTela=(id:string)=>{
-    if(!confirm("Excluir esta tela e todos os banners dela? A TV que abrir esse link vai parar de mostrar conteúdo."))return;
-    const restantes=telas.filter(t=>t.id!==id);
+    if(!confirm("Excluir esta tela e todos os banners dela? A TV que abrir esse link vai parar de mostrar conteúdo.\n\nOs arquivos de imagem/vídeo continuam no servidor — dá pra recuperar em \"🕐 Recuperar\"."))return;
+    // Se a tela excluída estava pareada, a parceira não pode ficar apontando
+    // pra um id que não existe mais (senão nem aparece de novo como "livre"
+    // pra parear com outra tela).
+    const restantes=telas.filter(t=>t.id!==id).map(t=>t.pareadaCom===id?{...t,pareadaCom:undefined,ladoPar:undefined}:t);
     salvarTelas(restantes);
     setTelaAtivaId(restantes[0]?.id||null);
   };
@@ -14972,7 +15018,41 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
         </button>
       ))}
       <button onClick={criarTela} className="btn" style={{flexShrink:0,background:"none",border:"1px dashed var(--border2)",color:"var(--text2)",padding:"8px 14px",fontSize:12.5}}>+ Nova tela</button>
+      <button onClick={abrirRecuperar} className="btn" style={{flexShrink:0,background:showRecuperar?"var(--btnPrimary)":"none",border:"1px solid var(--border2)",color:showRecuperar?"#fff":"var(--text2)",padding:"8px 14px",fontSize:12.5}}>🕐 Recuperar</button>
     </div>
+
+    {showRecuperar&&<div className="card" style={{marginBottom:12,border:"1px solid var(--btnPrimary)"}}>
+      <div className="section-title" style={{color:"var(--btnPrimary)",marginBottom:8}}>🕐 Recuperar tela/banner excluído</div>
+      {carregandoRecuperar&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:12}}>Carregando...</div>}
+      {!carregandoRecuperar&&<>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>📼 Últimos estados salvos</div>
+        {!backupsTv?.length&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Nenhum backup ainda (só começam a partir de agora, com esse ajuste).</div>}
+        {!!backupsTv?.length&&<div style={{maxHeight:180,overflowY:"auto" as const,marginBottom:14}}>
+          {backupsTv.slice(0,20).map(bk=>(
+            <div key={bk.arquivo} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600}}>{new Date(bk.quando).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+                <div className="muted" style={{fontSize:10.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{bk.telas?.length?bk.telas.join(", "):"sem telas"}</div>
+              </div>
+              <button onClick={()=>restaurarBackupTv(bk.arquivo)} className="btn" style={{flexShrink:0,background:"none",border:"1px solid var(--btnPrimary)",color:"var(--btnPrimary)",fontSize:11,padding:"5px 10px"}}>Restaurar</button>
+            </div>
+          ))}
+        </div>}
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>🖼️ Banners sem tela (arquivos que sobraram)</div>
+        {!orfaosTv?.length&&<div className="muted" style={{fontSize:12}}>Nenhum arquivo órfão encontrado.</div>}
+        {!!orfaosTv?.length&&<div style={{maxHeight:220,overflowY:"auto" as const}}>
+          {orfaosTv.map(orf=>(
+            <div key={orf.arquivo} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+              {orf.tipo==="video"
+                ?<video src={`/banners/${empresa.toLowerCase()}/${orf.arquivo}`} muted preload="metadata" style={{width:52,height:32,objectFit:"cover",borderRadius:6,flexShrink:0,background:"#000"}}/>
+                :<img src={`/banners/${empresa.toLowerCase()}/${orf.arquivo}`} alt="" style={{width:52,height:32,objectFit:"cover",borderRadius:6,flexShrink:0,background:"var(--bg5)"}}/>}
+              <div style={{flex:1,minWidth:0,fontSize:11.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{orf.arquivo}</div>
+              <button onClick={()=>readicionarOrfao(orf)} disabled={!telaAtiva} className="btn" style={{flexShrink:0,background:"none",border:"1px solid #22C55E",color:"#22C55E",fontSize:11,padding:"5px 10px",opacity:telaAtiva?1:.5}}>➕ Add à tela atual</button>
+            </div>
+          ))}
+        </div>}
+      </>}
+    </div>}
 
     {!telaAtiva&&<div className="card" style={{textAlign:"center",padding:28}}>
       <div style={{fontSize:32,marginBottom:8}}>📺</div>

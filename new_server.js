@@ -2444,13 +2444,27 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   if (req.method === 'POST' && /^\/api\/cardapio-tv\/[^/]+$/.test(urlPath)) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
-    let body = '';
-    req.on('data', chunk => body += chunk);
+    const bodyChunks = [];
+    req.on('data', chunk => bodyChunks.push(chunk));
     req.on('end', () => {
       try {
+        const body = Buffer.concat(bodyChunks).toString('utf-8');
         const incoming = JSON.parse(body);
         if (!Array.isArray(incoming.telas)) throw new Error('telas deve ser um array');
-        fs.writeFileSync(cardapioTvFile(emp), JSON.stringify({ telas: incoming.telas }));
+        // Antes de sobrescrever, guarda uma cópia do que tinha — diferente do
+        // dados/<empresa>.json (que já tem backup rotativo), esse arquivo
+        // nunca teve, então uma exclusão de tela por engano não tinha volta.
+        const file = cardapioTvFile(emp);
+        try {
+          if (fs.existsSync(file)) {
+            const backDir = path.join(DADOS_DIR, 'backups', `cardapio-tv-${emp.toLowerCase()}`);
+            fs.mkdirSync(backDir, { recursive: true });
+            fs.writeFileSync(path.join(backDir, `backup_${Date.now()}.json`), fs.readFileSync(file));
+            const backups = fs.readdirSync(backDir).filter(f => f.startsWith('backup_')).sort();
+            if (backups.length > 30) backups.slice(0, backups.length - 30).forEach(f => { try { fs.unlinkSync(path.join(backDir, f)); } catch {} });
+          }
+        } catch (e) { console.error(`[Cardápio TV ${emp}] falha ao fazer backup (salvamento seguiu normalmente):`, e.message); }
+        fs.writeFileSync(file, JSON.stringify({ telas: incoming.telas }));
         broadcastCardapioTv(emp);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
@@ -2460,6 +2474,77 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         res.end(JSON.stringify({ error: e.message }));
       }
     });
+    return;
+  }
+
+  // Cardápio TV — lista os backups de telas salvos (pra restaurar depois de
+  // uma exclusão por engano, como a que motivou este endpoint existir).
+  if (req.method === 'GET' && /^\/api\/cardapio-tv-backups\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('[]'); return; }
+    const backDir = path.join(DADOS_DIR, 'backups', `cardapio-tv-${emp.toLowerCase()}`);
+    let lista = [];
+    try {
+      lista = fs.readdirSync(backDir).filter(f => f.startsWith('backup_')).sort().reverse().map(f => {
+        let telas = [];
+        try { telas = JSON.parse(fs.readFileSync(path.join(backDir, f), 'utf-8')).telas || []; } catch {}
+        return { arquivo: f, quando: parseInt(f.replace('backup_', '').replace('.json', '')) || 0, telas: telas.map(t => t.nome) };
+      });
+    } catch { lista = []; }
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify(lista));
+    return;
+  }
+
+  // Cardápio TV — restaura um backup específico (substitui o estado atual)
+  if (req.method === 'POST' && /^\/api\/cardapio-tv-backups\/[^/]+\/restaurar$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    const bodyChunks = [];
+    req.on('data', chunk => bodyChunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const { arquivo } = JSON.parse(Buffer.concat(bodyChunks).toString('utf-8'));
+        if (!/^backup_\d+\.json$/.test(arquivo || '')) throw new Error('backup inválido');
+        const backDir = path.join(DADOS_DIR, 'backups', `cardapio-tv-${emp.toLowerCase()}`);
+        const origem = path.join(backDir, arquivo);
+        if (!fs.existsSync(origem)) throw new Error('backup não encontrado');
+        fs.writeFileSync(cardapioTvFile(emp), fs.readFileSync(origem));
+        broadcastCardapioTv(emp);
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end('{"ok":true}');
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // Cardápio TV — arquivos de banner (imagem/vídeo) que estão no disco mas não
+  // são mais referenciados por nenhuma tela. Excluir uma tela nunca apaga os
+  // arquivos em si, só a lista que apontava pra eles — isso lista o que
+  // sobrou pra dar pra recolocar sem precisar subir tudo de novo.
+  if (req.method === 'GET' && /^\/api\/cardapio-tv-orfaos\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end('[]'); return; }
+    const dir = path.join(BANNERS_DIR, emp.toLowerCase());
+    let arquivos = [];
+    try { arquivos = fs.readdirSync(dir); } catch { arquivos = []; }
+    const usados = new Set();
+    (loadCardapioTv(emp).telas || []).forEach(t => (t.banners || []).forEach(b => { if (b.arquivo) usados.add(b.arquivo); }));
+    const VIDEO_EXT = ['mp4', 'webm', 'mov'];
+    const orfaos = arquivos.filter(f => !usados.has(f)).map(f => {
+      let stat = null;
+      try { stat = fs.statSync(path.join(dir, f)); } catch {}
+      const ext = (f.split('.').pop() || '').toLowerCase();
+      return { arquivo: f, tipo: VIDEO_EXT.includes(ext) ? 'video' : 'imagem', mtime: stat ? stat.mtimeMs : 0 };
+    }).sort((a, b) => b.mtime - a.mtime);
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify(orfaos));
     return;
   }
 
