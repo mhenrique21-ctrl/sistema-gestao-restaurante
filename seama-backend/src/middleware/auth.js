@@ -20,6 +20,16 @@ async function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Token inválido ou expirado' });
   }
 
+  // Token de serviço (ver routes/serviceToken.js): id sintético, não é UUID
+  // de usuário real — a consulta abaixo quebraria (users.id é UUID). Confia
+  // direto no payload, sem revogação por usuário porque não é um usuário,
+  // é o próprio backend do Gestão (autenticado pelo segredo compartilhado
+  // na hora de EMITIR o token, não aqui).
+  if (payload.id === 'service-gestao') {
+    req.user = { id: payload.id, username: payload.name, role: payload.role };
+    return next();
+  }
+
   try {
     const r = await pool.query(
       `SELECT id, username, role, active, can_sangria, can_suprimento, sangria_limit

@@ -13817,7 +13817,13 @@ function EstoquePdvPanel(){
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao carregar estoque");
       setItens(d.itens||[]);setAbaixo(d.abaixo||0);
-    }catch(e:any){setErro(e.message||"Erro de conexão com o PDV");}
+    }catch(e:any){
+      // Limpa a lista no erro — sem isso, trocar de CONFRARIA pra SEAMA e a
+      // busca falhar deixava os números da empresa ANTERIOR na tela, por
+      // baixo do aviso de erro, parecendo dados do PDV errado.
+      setItens([]);setAbaixo(0);
+      setErro(e.message||"Erro de conexão com o PDV");
+    }
     setLoading(false);
   };
   useEffect(()=>{load();},[empresa]);
