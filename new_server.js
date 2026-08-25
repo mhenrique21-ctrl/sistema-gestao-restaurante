@@ -1447,11 +1447,17 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // estoque mais abaixo).
 
   if (req.method === 'POST' && urlPath === '/api/seama-estoque') {
-    let body = '';
-    req.on('data', c => body += c);
+    // Buffer[] em vez de string += : concatenar Buffers como string corrompe
+    // caractere multibyte (nome de item com acento) partido entre dois
+    // pacotes TCP — essa rota é por onde toda compra chega no PDV, então um
+    // nome corrompido aqui nasce errado na fila de vínculos pendentes do
+    // PDV, e nunca mais casa com o nome original (mesmo bug já corrigido em
+    // outro lugar deste arquivo).
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
     req.on('end', async () => {
       try {
-        const { empresa, origin_id, supplier, items } = JSON.parse(body);
+        const { empresa, origin_id, supplier, items } = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
         if (!origin_id || !Array.isArray(items) || !items.length) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'origin_id e items são obrigatórios' })); return;
         }
@@ -1480,11 +1486,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // Sem isso o estoque do PDV fica maior que a realidade e só aparece na
   // contagem física.
   if (req.method === 'POST' && urlPath === '/api/seama-estorno') {
-    let body = '';
-    req.on('data', c => body += c);
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
     req.on('end', async () => {
       try {
-        const { empresa, origin_id, items } = JSON.parse(body);
+        const { empresa, origin_id, items } = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
         if (!origin_id) { res.writeHead(400); res.end(JSON.stringify({ error: 'origin_id é obrigatório' })); return; }
         const alvo = pdvDaEmpresa(empresa);
         const secret = alvo.secret;
@@ -1896,11 +1902,15 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
 
     // POST /api/estoque-pdv/inventario  body:{empresa,itens:[{id,contado}],motivo}
     if (req.method === 'POST' && partes[2] === 'inventario' && partes.length === 3) {
-      let body = '';
-      req.on('data', c => body += c);
+      // Buffer[] em vez de string += : concatenar Buffers como string
+      // corrompe caractere multibyte (nome com acento) partido entre dois
+      // pacotes TCP — mesmo bug já corrigido em outra rota deste arquivo,
+      // reintroduzido aqui sem querer.
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
       req.on('end', async () => {
         try {
-          const { empresa: empresaRaw, itens, motivo } = JSON.parse(body);
+          const { empresa: empresaRaw, itens, motivo } = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
           const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
           if (!Array.isArray(itens) || !itens.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Informe ao menos um item contado' })); return; }
           const token = await getServiceToken(empresa);
@@ -1965,11 +1975,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     // POST /api/estoque-pdv/:id/ajuste  body:{empresa,tipo:'contagem'|'perda',valor,motivo}
     if (req.method === 'POST' && partes[3] === 'ajuste') {
       const id = partes[2];
-      let body = '';
-      req.on('data', c => body += c);
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
       req.on('end', async () => {
         try {
-          const { empresa: empresaRaw, tipo, valor, motivo } = JSON.parse(body);
+          const { empresa: empresaRaw, tipo, valor, motivo } = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
           const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
           if (!['contagem', 'perda'].includes(tipo)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Tipo inválido' })); return; }
           const token = await getServiceToken(empresa);
@@ -2028,11 +2038,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
 
     // POST /api/estoque-pdv/vinculos  body:{empresa,source_name,product_id,factor} — cria o vínculo
     if (req.method === 'POST' && urlPath === '/api/estoque-pdv/vinculos') {
-      let body = '';
-      req.on('data', c => body += c);
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
       req.on('end', async () => {
         try {
-          const { empresa: empresaRaw, source_name, product_id, factor } = JSON.parse(body);
+          const { empresa: empresaRaw, source_name, product_id, factor } = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
           const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
           const token = await getServiceToken(empresa);
           const base = pdvDaEmpresa(empresa).base;
@@ -2053,11 +2063,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
 
     // POST /api/estoque-pdv/classificar  body:{empresa,kind,source_names} — classifica em massa
     if (req.method === 'POST' && urlPath === '/api/estoque-pdv/classificar') {
-      let body = '';
-      req.on('data', c => body += c);
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
       req.on('end', async () => {
         try {
-          const { empresa: empresaRaw, kind, source_names } = JSON.parse(body);
+          const { empresa: empresaRaw, kind, source_names } = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
           const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
           const token = await getServiceToken(empresa);
           const base = pdvDaEmpresa(empresa).base;
@@ -2079,11 +2089,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     // PATCH /api/estoque-pdv/entradas/:id?empresa=  body:{quantidade?,custo_unitario?} — corrige uma entrada
     if (req.method === 'PATCH' && partes[2] === 'entradas' && partes.length === 4) {
       const id = partes[3];
-      let body = '';
-      req.on('data', c => body += c);
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
       req.on('end', async () => {
         try {
-          const payload = JSON.parse(body);
+          const payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
           const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
           const token = await getServiceToken(empresa);
           const base = pdvDaEmpresa(empresa).base;
