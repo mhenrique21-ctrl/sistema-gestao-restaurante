@@ -15087,9 +15087,15 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
 
         {/* ---- Matérias-primas ---- */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)",marginBottom:2}}>
-          <span style={{fontSize:12.5,fontWeight:700}}>🧂 Matérias-primas · {conciliaMpsFiltradas.length}</span>
+          <div style={{display:"flex",alignItems:"center",gap:9}}>
+            {conciliaMpsFiltradas.length>0&&(()=>{const todasMarcadasMp=conciliaMpsFiltradas.every(m=>conciliaSelMp.has(m.id));return(
+              <span onClick={conciliaToggleSelAllMp} title={todasMarcadasMp?"Desmarcar todos":"Marcar todos"}
+                style={{width:18,height:18,borderRadius:5,border:"1.5px solid var(--border2)",background:todasMarcadasMp?"var(--btnPrimary)":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,cursor:"pointer"}}>{todasMarcadasMp?"✓":""}</span>
+            );})()}
+            <span style={{fontSize:12.5,fontWeight:700}}>🧂 Matérias-primas · {conciliaMpsFiltradas.length}</span>
+          </div>
           {conciliaMpsFiltradas.length>0&&<button onClick={conciliaToggleSelAllMp} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"4px 0"}}>
-            {conciliaMpsFiltradas.every(m=>conciliaSelMp.has(m.id))?"Desmarcar todos":`Selecionar todos (${conciliaMpsFiltradas.length})`}
+            {conciliaMpsFiltradas.every(m=>conciliaSelMp.has(m.id))?"Desmarcar todos":"Marcar todos"}
           </button>}
         </div>
         {conciliaMpsFiltradas.slice(0,200).map(mp=>{
@@ -15113,9 +15119,15 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
 
         {/* ---- Produtos ---- */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)",marginTop:16,marginBottom:2}}>
-          <span style={{fontSize:12.5,fontWeight:700}}>🛒 Produtos (Lista de Compras) · {conciliaProdsFiltrados.length}</span>
+          <div style={{display:"flex",alignItems:"center",gap:9}}>
+            {conciliaProdsFiltrados.length>0&&(()=>{const todasMarcadasProd=conciliaProdsFiltrados.every(p=>conciliaSelProd.has(p.id));return(
+              <span onClick={conciliaToggleSelAllProd} title={todasMarcadasProd?"Desmarcar todos":"Marcar todos"}
+                style={{width:18,height:18,borderRadius:5,border:"1.5px solid var(--border2)",background:todasMarcadasProd?"var(--btnPrimary)":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,cursor:"pointer"}}>{todasMarcadasProd?"✓":""}</span>
+            );})()}
+            <span style={{fontSize:12.5,fontWeight:700}}>🛒 Produtos (Lista de Compras) · {conciliaProdsFiltrados.length}</span>
+          </div>
           {conciliaProdsFiltrados.length>0&&<button onClick={conciliaToggleSelAllProd} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"4px 0"}}>
-            {conciliaProdsFiltrados.every(p=>conciliaSelProd.has(p.id))?"Desmarcar todos":`Selecionar todos (${conciliaProdsFiltrados.length})`}
+            {conciliaProdsFiltrados.every(p=>conciliaSelProd.has(p.id))?"Desmarcar todos":"Marcar todos"}
           </button>}
         </div>
         {conciliaProdsFiltrados.slice(0,200).map(p=>{
