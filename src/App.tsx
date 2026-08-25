@@ -2026,7 +2026,7 @@ export default function App() {
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub} empresa={empresa}/>}
               {tab==="cardapio-tv" && <CardapioTVPanel empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub} state={state}/>}
               {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder} setConfigPanelOpen={setConfigPanelOpen} modoDiscreto={modoDiscreto} toggleModoDiscreto={toggleModoDiscreto}/>}
             </>
@@ -13423,7 +13423,7 @@ function PmDayPicker({selected,onChange,pill}:{selected:number[],onChange:(d:num
   </div>;
 }
 
-function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,setPendingSub?:(s:string|null)=>void}){
+function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:string|null,setPendingSub?:(s:string|null)=>void,empresa:string}){
   const [subTab,setSubTabState]=useState(pendingSub==="categorias"?"categorias":"produtos");
   const setSubTab=(s:string)=>{setSubTabState(s);setPendingSub?.(null);};
   useEffect(()=>{if(pendingSub){setSubTabState(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -13596,7 +13596,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
       <button className="pill" onClick={()=>setSubTab("estoque")} style={{background:subTab==="estoque"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="estoque"?"#fff":"#777"}}>📦 Estoque</button>
     </div>
 
-    {subTab==="estoque"&&<EstoquePdvPanel/>}
+    {subTab==="estoque"&&<EstoquePdvPanel empresa={empresa==="SEAMA"?"SEAMA":"CONFRARIA"}/>}
 
     {subTab!=="estoque"&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
     {subTab!=="estoque"&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
@@ -13801,8 +13801,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
 // abaixoMinimo}, não importa qual PDV está por trás.
 const diasAtras=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d);};
 
-function EstoquePdvPanel(){
-  const [empresa,setEmpresa]=useState<"CONFRARIA"|"SEAMA">("CONFRARIA");
+function EstoquePdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
   const [view,setView]=useState<"saldo"|"vendas"|"inventario"|"entradas"|"margem"|"vinculos">("saldo");
   const [itens,setItens]=useState<any[]>([]);
   const [abaixo,setAbaixo]=useState(0);
@@ -14032,13 +14031,8 @@ function EstoquePdvPanel(){
   };
 
   return <div>
-    <div className="section-title">📦 Estoque do PDV</div>
-    <div className="muted" style={{fontSize:11,marginBottom:12}}>Ajustar aqui reflete direto no PDV, na hora — é o mesmo banco de dados.</div>
-
-    <div style={{display:"flex",gap:6,marginBottom:12}}>
-      <button className="pill" onClick={()=>setEmpresa("CONFRARIA")} style={{flex:1,background:empresa==="CONFRARIA"?"#22C55E":"var(--bg4)",color:empresa==="CONFRARIA"?"#fff":"#777",fontWeight:700}}>🟢 CONFRARIA</button>
-      <button className="pill" onClick={()=>setEmpresa("SEAMA")} style={{flex:1,background:empresa==="SEAMA"?"#22C55E":"var(--bg4)",color:empresa==="SEAMA"?"#fff":"#777",fontWeight:700}}>SEAMA</button>
-    </div>
+    <div className="section-title">📦 Estoque do PDV {empresa}</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Ajustar aqui reflete direto no PDV, na hora — é o mesmo banco de dados. Troque de empresa no seletor do topo do app pra ver o estoque do outro PDV.</div>
 
     <div style={{display:"flex",gap:5,marginBottom:14}}>
       <button className="pill" onClick={()=>setView("saldo")} style={{background:view==="saldo"?"var(--btnPrimary)":"var(--bg4)",color:view==="saldo"?"#fff":"#777"}}>💰 Saldo</button>
@@ -14129,7 +14123,7 @@ function EstoquePdvPanel(){
             <option value="">Todas as categorias</option>
             {categorias.map(c=><option key={c} value={c}>{c}</option>)}
           </select>
-          <button className="btn" onClick={gerarFolha} style={{background:"var(--bg4)"}}>🔄</button>
+          <button className="btn" onClick={gerarFolha} style={{background:"var(--bg4)",padding:"9px 13px"}}>🔄</button>
         </div>
         <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,cursor:"pointer",fontSize:12}}>
           <input type="checkbox" checked={invCega} onChange={e=>setInvCega(e.target.checked)}/>
@@ -14162,7 +14156,7 @@ function EstoquePdvPanel(){
         <input type="date" value={entDe} onChange={e=>setEntDe(e.target.value)} className="inp" style={{flex:1,minWidth:120,marginBottom:0}}/>
         <input type="date" value={entAte} onChange={e=>setEntAte(e.target.value)} className="inp" style={{flex:1,minWidth:120,marginBottom:0}}/>
         <input placeholder="Fornecedor..." value={entFornecedor} onChange={e=>setEntFornecedor(e.target.value)} className="inp" style={{flex:1,minWidth:120,marginBottom:0}}/>
-        <button className="btn" onClick={carregarEntradas} style={{background:"var(--btnPrimary)",color:"#fff"}}>Filtrar</button>
+        <button className="btn" onClick={carregarEntradas} style={{background:"var(--btnPrimary)",color:"#fff",padding:"9px 16px"}}>Filtrar</button>
       </div>
       {entLoading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
       {entDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ {entDados.erro}</div>}
@@ -14223,24 +14217,24 @@ function EstoquePdvPanel(){
         {vincDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ {vincDados.erro}</div>}
         {vincDados&&<>
           <div style={{fontWeight:700,marginBottom:10}}>🏆 {(vincDados.pendentes||[]).length} item(ns) esperando vínculo</div>
-          {!!(vincDados.pendentes||[]).length&&<div style={{display:"flex",gap:8,marginBottom:14}}>
-            <button className="btn" onClick={()=>classificarTodos("materia_prima")} style={{flex:1,background:"var(--bg4)",fontSize:11}}>Classificar todos: Matéria-prima</button>
-            <button className="btn" onClick={()=>classificarTodos("higiene_limpeza")} style={{flex:1,background:"var(--bg4)",fontSize:11}}>Classificar todos: Higiene</button>
+          {!!(vincDados.pendentes||[]).length&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
+            <button className="pill" onClick={()=>classificarTodos("materia_prima")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Classificar todos: Matéria-prima</button>
+            <button className="pill" onClick={()=>classificarTodos("higiene_limpeza")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Classificar todos: Higiene</button>
           </div>}
           {(vincDados.pendentes||[]).map((p:any)=>{
             const esc=vincEscolha[p.source_name]||{produto:"",fator:"1"};
             return <div key={p.source_name} className="card" style={{marginBottom:9,padding:"11px 13px"}}>
               <div style={{fontSize:12.5,fontWeight:700}}>{p.source_name}</div>
               <div className="muted" style={{fontSize:10,margin:"2px 0 9px"}}>{p.quantidade} {p.unidade} retido · {p.supplier||"fornecedor não informado"}</div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-                <select value={esc.produto} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,produto:e.target.value}}))} className="inp" style={{flex:1,minWidth:110,marginBottom:0,fontSize:11.5}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap" as const,alignItems:"center"}}>
+                <select value={esc.produto} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,produto:e.target.value}}))} className="inp" style={{flex:"1 1 200px",maxWidth:320,minWidth:160,marginBottom:0,fontSize:11.5}}>
                   <option value="">Vincular a...</option>
                   {[...itens].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
                 </select>
-                <input value={esc.fator} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,fator:e.target.value}}))} title="1 embalagem = quantas unidades" className="inp" style={{width:48,marginBottom:0,textAlign:"center"}}/>
-                <button className="btn" onClick={()=>vincular(p.source_name)} style={{background:"#22C55E",color:"#06210f",fontSize:11,fontWeight:700}}>Vincular</button>
-                <button className="btn" onClick={()=>classificarUm(p.source_name,"materia_prima")} style={{background:"var(--bg4)",fontSize:11}}>Matéria-prima</button>
-                <button className="btn" onClick={()=>classificarUm(p.source_name,"higiene_limpeza")} style={{background:"var(--bg4)",fontSize:11}}>Higiene</button>
+                <input value={esc.fator} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,fator:e.target.value}}))} title="1 embalagem = quantas unidades" className="inp" style={{width:52,flexShrink:0,marginBottom:0,textAlign:"center"}}/>
+                <button className="pill" onClick={()=>vincular(p.source_name)} style={{background:"#22C55E",color:"#06210f",fontSize:11,fontWeight:700}}>Vincular</button>
+                <button className="pill" onClick={()=>classificarUm(p.source_name,"materia_prima")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Matéria-prima</button>
+                <button className="pill" onClick={()=>classificarUm(p.source_name,"higiene_limpeza")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Higiene</button>
               </div>
             </div>;
           })}
@@ -14257,8 +14251,8 @@ function EstoquePdvPanel(){
         <label style={{fontSize:11,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>Custo unitário</label>
         <input value={editCusto} onChange={e=>setEditCusto(e.target.value)} className="inp" placeholder="—"/>
         <div style={{display:"flex",gap:8,marginTop:14}}>
-          <button className="btn" onClick={()=>setEditEntrada(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
-          <button className="btn" onClick={salvarEditEntrada} style={{background:"var(--btnPrimary)",color:"#fff",flex:1}}>Salvar</button>
+          <button className="btn" onClick={()=>setEditEntrada(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1,padding:"10px"}}>Cancelar</button>
+          <button className="btn" onClick={salvarEditEntrada} style={{background:"var(--btnPrimary)",color:"#fff",flex:1,padding:"10px"}}>Salvar</button>
         </div>
       </div>
     </div>}
@@ -14279,8 +14273,8 @@ function EstoquePdvPanel(){
         <label style={{fontSize:11,fontWeight:700,color:"var(--text2)",display:"block",marginTop:10,marginBottom:4}}>Motivo (opcional)</label>
         <textarea value={ajusteMotivo} onChange={e=>setAjusteMotivo(e.target.value)} className="inp" style={{minHeight:50}}/>
         <div style={{display:"flex",gap:8,marginTop:14}}>
-          <button className="btn" onClick={()=>setAjusteModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
-          <button className="btn" onClick={salvarAjuste} disabled={salvandoAjuste} style={{background:"var(--btnPrimary)",color:"#fff",flex:1}}>{salvandoAjuste?"Salvando...":"Salvar ajuste"}</button>
+          <button className="btn" onClick={()=>setAjusteModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1,padding:"10px"}}>Cancelar</button>
+          <button className="btn" onClick={salvarAjuste} disabled={salvandoAjuste} style={{background:"var(--btnPrimary)",color:"#fff",flex:1,padding:"10px"}}>{salvandoAjuste?"Salvando...":"Salvar ajuste"}</button>
         </div>
       </div>
     </div>}
@@ -14304,7 +14298,7 @@ function EstoquePdvPanel(){
             </div>
           </div>
         ))}
-        <button className="btn" onClick={()=>setHistModal(null)} style={{width:"100%",background:"var(--bg4)",marginTop:12}}>Fechar</button>
+        <button className="btn" onClick={()=>setHistModal(null)} style={{width:"100%",background:"var(--bg4)",marginTop:12,padding:"10px"}}>Fechar</button>
       </div>
     </div>}
   </div>;
