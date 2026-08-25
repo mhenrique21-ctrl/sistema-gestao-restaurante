@@ -14129,7 +14129,14 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
       const r=await fetch("/api/estoque-pdv/vinculos",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({empresa,source_name:sourceName,product_id:esc.produto,factor:fator})});
       const d=await r.json();
-      if(!r.ok)throw new Error(d.error||"Erro ao vincular");
+      if(!r.ok){
+        // "Já está vinculado" normalmente quer dizer que a lista que você tá
+        // vendo tá desatualizada (alguém — ou você mesmo antes — já resolveu
+        // esse item). Recarrega mesmo no erro, senão a linha fica presa na
+        // tela mostrando um item que já não existe mais como pendente.
+        carregarVinculos();
+        throw new Error(d.error||"Erro ao vincular");
+      }
       carregarVinculos();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
@@ -14140,7 +14147,7 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
     try{
       const r=await fetch("/api/estoque-pdv/classificar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,kind,source_names:nomes})});
       const d=await r.json();
-      if(!r.ok)throw new Error(d.error||"Erro ao classificar");
+      if(!r.ok){carregarVinculos();throw new Error(d.error||"Erro ao classificar");}
       carregarVinculos();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
@@ -14148,7 +14155,7 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
     try{
       const r=await fetch("/api/estoque-pdv/classificar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,kind,source_names:[sourceName]})});
       const d=await r.json();
-      if(!r.ok)throw new Error(d.error||"Erro ao classificar");
+      if(!r.ok){carregarVinculos();throw new Error(d.error||"Erro ao classificar");}
       carregarVinculos();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
@@ -14364,7 +14371,10 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
         {vincLoading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
         {vincDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ {vincDados.erro}</div>}
         {vincDados&&<>
-          <div style={{fontWeight:700,marginBottom:10}}>🏆 {(vincDados.pendentes||[]).length} item(ns) esperando vínculo</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <span style={{fontWeight:700}}>🏆 {(vincDados.pendentes||[]).length} item(ns) esperando vínculo</span>
+            <button onClick={carregarVinculos} disabled={vincLoading} title="Atualizar lista" style={{marginLeft:"auto",background:"var(--bg4)",border:"1px solid var(--border2)",color:"var(--text2)",borderRadius:8,width:30,height:30,flexShrink:0,cursor:"pointer",fontSize:13}}>{vincLoading?"⏳":"🔄"}</button>
+          </div>
           {(()=>{const nSug=(vincDados.pendentes||[]).filter((p:any)=>sugestaoClassificacao(p.source_name)).length;
             return nSug>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"var(--accLight,#F6C45322)",border:"1px solid var(--btnPrimary)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
               <span style={{fontFamily:"monospace",fontWeight:800,color:"var(--btnPrimary)",fontSize:15}}>{nSug}</span>

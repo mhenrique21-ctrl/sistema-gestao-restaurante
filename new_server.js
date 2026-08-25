@@ -1845,6 +1845,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // shape antes de devolver pro navegador (ver normalizarListaEstoque() e
   // normalizarFolhaInventario() mais acima).
   if (urlPath.startsWith('/api/estoque-pdv')) {
+    // Sempre dinâmico (saldo, pendentes, vínculos mudam a cada ação) — nunca
+    // deixa o navegador reaproveitar uma resposta antiga achando que ainda
+    // vale, o que faria uma lista de pendentes já resolvida continuar
+    // aparecendo na tela.
+    res.setHeader('Cache-Control', 'no-store');
     const partes = urlPath.split('/').filter(Boolean); // ["api","estoque-pdv", ...]
     const query = new URLSearchParams(req.url.split('?')[1] || '');
 
