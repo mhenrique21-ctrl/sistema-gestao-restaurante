@@ -2046,7 +2046,7 @@ export default function App() {
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub} empresa={empresa}/>}
+              {tab==="produtos-menu" && <ProdutosMenuPanel pendingSub={pendingSub} setPendingSub={setPendingSub} empresa={empresa} db={db}/>}
               {tab==="cardapio-tv" && <CardapioTVPanel empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub} state={state}/>}
               {tab==="config"     && <ConfiguracoesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState} theme={theme} toggleTheme={toggleTheme} menuLayout={menuLayout} changeMenuLayout={changeMenuLayout} menuOrder={menuOrder} changeMenuOrder={changeMenuOrder} setConfigPanelOpen={setConfigPanelOpen} modoDiscreto={modoDiscreto} toggleModoDiscreto={toggleModoDiscreto}/>}
             </>
@@ -13524,7 +13524,7 @@ function PmDayPicker({selected,onChange,pill}:{selected:number[],onChange:(d:num
   </div>;
 }
 
-function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:string|null,setPendingSub?:(s:string|null)=>void,empresa:string}){
+function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:string|null,setPendingSub?:(s:string|null)=>void,empresa:string,db?:any}){
   const [subTab,setSubTabState]=useState(pendingSub==="categorias"?"categorias":"produtos");
   const setSubTab=(s:string)=>{setSubTabState(s);setPendingSub?.(null);};
   useEffect(()=>{if(pendingSub){setSubTabState(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -13699,7 +13699,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
       <button className="pill" onClick={()=>setSubTab("estoque")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="estoque"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="estoque"?"#fff":"#777"}}>📦 Estoque</button>
     </div>
 
-    {subTab==="estoque"&&<EstoquePdvPanel empresa={empresa==="SEAMA"?"SEAMA":"CONFRARIA"}/>}
+    {subTab==="estoque"&&<EstoquePdvPanel empresa={empresa==="SEAMA"?"SEAMA":"CONFRARIA"} db={db}/>}
 
     {subTab!=="estoque"&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
     {subTab!=="estoque"&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
@@ -13915,7 +13915,16 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
 // abaixoMinimo}, não importa qual PDV está por trás.
 const diasAtras=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d);};
 
-function EstoquePdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
+// Categoria da compra (escolhida por alguém no lançamento) → melhor palpite
+// de classificação PDV, quando o item ficou sem produto de cardápio
+// correspondente. Sinal mais confiável que adivinhar pelo nome — é
+// categorização humana que já existe, não um chute nosso.
+const CATEGORIA_PARA_CLASSIFICACAO:Record<string,"materia_prima"|"higiene_limpeza"> = {
+  "hortifruti":"materia_prima","temperos":"materia_prima","grãos":"materia_prima",
+  "carnes":"materia_prima","proteína":"materia_prima","laticínios":"materia_prima","insumos":"materia_prima",
+  "limpeza":"higiene_limpeza","material de limpeza":"higiene_limpeza",
+};
+function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
   const [view,setView]=useState<"saldo"|"vendas"|"inventario"|"entradas"|"margem"|"vinculos">("saldo");
   const [itens,setItens]=useState<any[]>([]);
   const [abaixo,setAbaixo]=useState(0);
@@ -14143,6 +14152,31 @@ function EstoquePdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
       carregarVinculos();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
+  // Sugestão automática: casa o nome do pendente do PDV com uma matéria-prima
+  // já cadastrada no Gestão (mesma compra que gerou os dois) e usa a
+  // categoria que ela já tem. Sem match, ou categoria não mapeada
+  // (bebidas, embalagens...), não sugere nada — errar uma classificação em
+  // massa é pior que deixar pra decidir na mão.
+  const sugestaoClassificacao=(sourceName:string):"materia_prima"|"higiene_limpeza"|null=>{
+    if(!db?.materiasPrimas?.length)return null;
+    const alvo=foldNome(sourceName);
+    const mp=db.materiasPrimas.find((m:any)=>foldNome(m.nome)===alvo)
+      ||db.materiasPrimas.find((m:any)=>{const mn=foldNome(m.nome);return mn.length>=4&&(alvo.includes(mn)||mn.includes(alvo));});
+    return mp?CATEGORIA_PARA_CLASSIFICACAO[(mp.categoria||"").toLowerCase()]||null:null;
+  };
+  const classificarSugeridos=async()=>{
+    const alvos=(vincDados?.pendentes||[]).map((p:any)=>({nome:p.source_name,kind:sugestaoClassificacao(p.source_name)})).filter((x:any)=>x.kind);
+    if(!alvos.length)return;
+    if(!confirm(`Classificar ${alvos.length} item(ns) pela categoria que já têm no Gestão? Eles não voltam a aparecer aqui.`))return;
+    try{
+      const porKind:Record<string,string[]>={};
+      alvos.forEach((a:any)=>{(porKind[a.kind]=porKind[a.kind]||[]).push(a.nome);});
+      await Promise.all(Object.entries(porKind).map(([kind,nomes])=>
+        fetch("/api/estoque-pdv/classificar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,kind,source_names:nomes})})
+      ));
+      carregarVinculos();
+    }catch(e:any){alert("Erro ao classificar: "+(e.message||""));}
+  };
 
   return <div>
     <div className="section-title">📦 Estoque do PDV {empresa}</div>
@@ -14331,14 +14365,24 @@ function EstoquePdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
         {vincDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ {vincDados.erro}</div>}
         {vincDados&&<>
           <div style={{fontWeight:700,marginBottom:10}}>🏆 {(vincDados.pendentes||[]).length} item(ns) esperando vínculo</div>
+          {(()=>{const nSug=(vincDados.pendentes||[]).filter((p:any)=>sugestaoClassificacao(p.source_name)).length;
+            return nSug>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"var(--accLight,#F6C45322)",border:"1px solid var(--btnPrimary)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+              <span style={{fontFamily:"monospace",fontWeight:800,color:"var(--btnPrimary)",fontSize:15}}>{nSug}</span>
+              <span style={{fontSize:11.5,color:"var(--btnPrimary)",flex:1,lineHeight:1.4}}>parece{nSug!==1?"m":""} insumo/limpeza pela categoria que já {nSug!==1?"têm":"tem"} no Gestão</span>
+              <button onClick={classificarSugeridos} style={{background:"var(--btnPrimary)",color:"#fff",border:"none",borderRadius:8,padding:"8px 13px",fontSize:11.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>✨ Classificar {nSug}</button>
+            </div>;})()}
           {!!(vincDados.pendentes||[]).length&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
             <button className="pill" onClick={()=>classificarTodos("materia_prima")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Classificar todos: Matéria-prima</button>
             <button className="pill" onClick={()=>classificarTodos("higiene_limpeza")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Classificar todos: Higiene</button>
           </div>}
           {(vincDados.pendentes||[]).map((p:any)=>{
             const esc=vincEscolha[p.source_name]||{produto:"",fator:"1"};
+            const sug=sugestaoClassificacao(p.source_name);
             return <div key={p.source_name} className="card" style={{marginBottom:9,padding:"11px 13px"}}>
-              <div style={{fontSize:12.5,fontWeight:700}}>{p.source_name}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                <span style={{fontSize:12.5,fontWeight:700}}>{p.source_name}</span>
+                {sug&&<button onClick={()=>classificarUm(p.source_name,sug)} style={{marginLeft:"auto",flexShrink:0,background:"var(--accLight,#F6C45322)",border:"1px solid var(--btnPrimary)",color:"var(--btnPrimary)",borderRadius:20,padding:"2px 9px",fontSize:9.5,fontWeight:700,cursor:"pointer"}}>💡 {sug==="materia_prima"?"Matéria-prima":"Higiene"}?</button>}
+              </div>
               <div className="muted" style={{fontSize:10,margin:"2px 0 9px"}}>{p.quantidade} {p.unidade} retido · {p.supplier||"fornecedor não informado"}</div>
               <select value={esc.produto} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,produto:e.target.value}}))} className="inp" style={{width:"100%",marginBottom:8,fontSize:12.5}}>
                 <option value="">Vincular a...</option>
