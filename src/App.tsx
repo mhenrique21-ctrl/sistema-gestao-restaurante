@@ -4803,8 +4803,6 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [notaData,setNotaData]=useState("");
   const [editFornId,setEditFornId]=useState<string|null>(null);
   const [editFornForm,setEditFornForm]=useState({nome:"",cnpj:"",endereco:""});
-  const [showCatMgmt,setShowCatMgmt]=useState(false);
-  const [novaCat,setNovaCat]=useState("");
   const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
   const [normEdit,setNormEdit]=useState<string|null>(null);
   const [buscaProd,setBuscaProd]=useState("");
@@ -4919,8 +4917,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       return n;
     });
   };
-  const catsBase=["carnes","hortifruti","laticínios","grãos","temperos","proteína","insumos","bebidas","embalagens","descartáveis","material de limpeza","limpeza"];
-  const cats=[...catsBase,...(db.config?.categoriasExtra||[])];
+  // Categoria da compra vem da mesma lista rica que "Lista → Categorias"
+  // gerencia (db.listaCategorias) — antes eram 12 categorias genéricas fixas,
+  // divorciadas da lista de verdade que o usuário já mantém pra outra tela.
+  const catsListaRica:string[]=db.listaCategorias||[];
+  const catsListaOrdem:string[]=db.listaCatOrdem||[];
+  const catsListaDel:string[]=db.listaCatDeleted||[];
+  const catsAllRica=[...CATS_DEFAULT,...catsListaRica.filter((c:string)=>!CATS_DEFAULT.includes(c))].filter((c:string)=>!catsListaDel.includes(c));
+  const cats=catsListaOrdem.length>0?[...catsListaOrdem.filter((c:string)=>catsAllRica.includes(c)),...catsAllRica.filter((c:string)=>!catsListaOrdem.includes(c))]:catsAllRica;
   const unds=["kg","un","L","g","ml","pct"];
   const formasPag=["dinheiro","cartão débito","cartão crédito","pix","boleto","fiado"];
 
@@ -5755,7 +5759,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         </div>
         <div className="row" style={{marginBottom:8,marginTop:sugestoes.length?44:0}}>
           <select value={itemAtual.categoria} onChange={e=>setItemAtual(i=>({...i,categoria:e.target.value}))} className="inp">
-            {cats.map(c=><option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+            {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
           </select>
           <select value={itemAtual.unidade} onChange={e=>setItemAtual(i=>({...i,unidade:e.target.value,qtdPorPacote:""}))} className="inp">
             {unds.map(u=><option key={u} value={u}>{u==="kg"?"kg (quilograma)":u==="un"?"un (unidade)":u==="L"?"L (litro)":u==="g"?"g (grama)":u==="ml"?"ml (mililitro)":"pct (pacote)"}</option>)}
@@ -5804,32 +5808,11 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           + Adicionar ao Carrinho
         </button>
         <div style={{display:"flex",gap:14,marginTop:6}}>
-          <button onClick={()=>setShowCatMgmt(v=>!v)} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"2px 0"}}>
-            ⚙️ Gerenciar categorias personalizadas
-          </button>
           <button onClick={()=>setShowConfigCatsPdv(true)} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"2px 0"}}>
             🏪 Categorias que vão pro PDV ({empresa})
           </button>
         </div>
-        {showCatMgmt&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",borderRadius:8,padding:10,marginTop:6}}>
-          <div style={{display:"flex",gap:6,marginBottom:6}}>
-            <input value={novaCat} onChange={e=>setNovaCat(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}/>
-            <button className="btn" onClick={()=>{
-              const n=novaCat.trim().toLowerCase();
-              if(!n||cats.includes(n))return;
-              setDb(d=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));
-              setNovaCat("");
-            }} style={{background:"var(--btnPrimary)",color:"#fff",padding:"8px 12px",fontSize:13}}>+</button>
-          </div>
-          {(db.config?.categoriasExtra||[]).map((c:string)=>(
-            <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #0EA5E940"}}>
-              <span style={{fontSize:12,color:"#aaa"}}>{c.charAt(0).toUpperCase()+c.slice(1)}</span>
-              <button onClick={()=>setDb(d=>({...d,config:{...(d.config||{}),categoriasExtra:(d.config?.categoriasExtra||[]).filter((x:string)=>x!==c)}}))}
-                style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:13}}>🗑️</button>
-            </div>
-          ))}
-          {!(db.config?.categoriasExtra||[]).length&&<span style={{fontSize:11,color:"#555"}}>Nenhuma categoria extra cadastrada.</span>}
-        </div>}
+        <div style={{fontSize:10.5,color:"var(--text3)",marginTop:4}}>Pra criar, renomear ou reordenar categorias de compra, use <b>Lista → Categorias</b>.</div>
       </div>
 
       {/* carrinho */}
@@ -6354,7 +6337,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <input placeholder="Nome do insumo *" value={prodForm.nome} onChange={e=>setProdForm(p=>({...p,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
           <div className="row" style={{marginBottom:8}}>
             <select value={prodForm.categoria} onChange={e=>setProdForm(p=>({...p,categoria:e.target.value}))} className="inp">
-              {cats.map(c=><option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+              {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
             </select>
             <select value={prodForm.unidade} onChange={e=>setProdForm(p=>({...p,unidade:e.target.value}))} className="inp" style={{maxWidth:80}}>
               {unds.map(u=><option key={u} value={u}>{u}</option>)}
@@ -6477,7 +6460,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             {cats.map((c:string)=>{
               const desligada=getCategoriasDesligadasPdv(db).includes(c);
               return <div key={c} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
-                <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"capitalize" as const}}>{c}</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"capitalize" as const}}>{catIcon(c)} {c}</span>
                 <span onClick={()=>toggleCategoriaPdv(c)} style={{width:38,height:22,borderRadius:20,background:desligada?"var(--border2)":"#22C55E",position:"relative",cursor:"pointer",flexShrink:0}}>
                   <span style={{position:"absolute",width:17,height:17,borderRadius:"50%",background:"#fff",top:2.5,left:desligada?2.5:19,boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}/>
                 </span>
@@ -13962,10 +13945,16 @@ const diasAtras=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return 
 // de classificação PDV, quando o item ficou sem produto de cardápio
 // correspondente. Sinal mais confiável que adivinhar pelo nome — é
 // categorização humana que já existe, não um chute nosso.
+// Remapeado pra lista rica de categorias (db.listaCategorias / CATS_DEFAULT) —
+// só entram aqui categorias sem ambiguidade razoável; "bebidas", "mercearia
+// básica", "cafés e complementos", "chocolates", "molhos" etc. ficam de fora
+// de propósito (podem ser matéria-prima OU item vendido direto, não dá pra
+// chutar certo sem olhar o item).
 const CATEGORIA_PARA_CLASSIFICACAO:Record<string,"materia_prima"|"higiene_limpeza"> = {
-  "hortifruti":"materia_prima","temperos":"materia_prima","grãos":"materia_prima",
-  "carnes":"materia_prima","proteína":"materia_prima","laticínios":"materia_prima","insumos":"materia_prima",
-  "limpeza":"higiene_limpeza","material de limpeza":"higiene_limpeza",
+  "hortifruti":"materia_prima","temperos":"materia_prima","grãos":"materia_prima","farinhas":"materia_prima",
+  "carnes":"materia_prima","proteína":"materia_prima","laticínios":"materia_prima","polpas":"materia_prima",
+  "massas":"materia_prima","latas, caixas e temperos":"materia_prima","insumos":"materia_prima",
+  "limpeza":"higiene_limpeza","material de limpeza":"higiene_limpeza","descartáveis":"higiene_limpeza",
 };
 function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
   const [view,setView]=useState<"saldo"|"vendas"|"inventario"|"entradas"|"margem"|"vinculos">("saldo");
@@ -14594,9 +14583,6 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   const categoriasFin:string[]=db.categorias||[];
 
   // ---- Compras ----
-  const catsBase=["carnes","hortifruti","laticínios","grãos","temperos","proteína","insumos","bebidas","embalagens","descartáveis","material de limpeza","limpeza"];
-  const catsExtra:string[]=db.config?.categoriasExtra||[];
-  const [novaCatCompra,setNovaCatCompra]=useState("");
   const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
   const [normEdit,setNormEdit]=useState<string|null>(null);
 
@@ -14894,28 +14880,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
     {subTab==="compras"&&<div>
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🏷️ Categorias de Compras</div>
-        <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Categorias base são fixas. Adicione categorias extras personalizadas.</div>
-        <div style={{marginBottom:8}}>
-          <div style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Fixas</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-            {catsBase.map(c=><span key={c} className="tag" style={{background:"var(--bg4)",color:"var(--text2)",fontSize:11}}>{c}</span>)}
-          </div>
-        </div>
-        <div style={{fontSize:11,color:"#22C55E",fontWeight:700,marginBottom:4,marginTop:8,textTransform:"uppercase",letterSpacing:1}}>Personalizadas</div>
-        <div style={{display:"flex",gap:6,marginBottom:6}}>
-          <input value={novaCatCompra} onChange={e=>setNovaCatCompra(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}
-            onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatCompra.trim().toLowerCase();if(!n||[...catsBase,...catsExtra].includes(n))return;setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));setNovaCatCompra("");}}}/>
-          <button className="btn" onClick={()=>{const n=novaCatCompra.trim().toLowerCase();if(!n||[...catsBase,...catsExtra].includes(n))return;setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:[...(d.config?.categoriasExtra||[]),n]}}));setNovaCatCompra("");}}
-            style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,fontWeight:700}}>+</button>
-        </div>
-        {catsExtra.map(c=>(
-          <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
-            <span style={{fontSize:12}}>{c.charAt(0).toUpperCase()+c.slice(1)}</span>
-            <button onClick={()=>setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasExtra:(d.config?.categoriasExtra||[]).filter((x:string)=>x!==c)}}))}
-              style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:13}}>🗑️</button>
-          </div>
-        ))}
-        {!catsExtra.length&&<div className="muted" style={{fontSize:11,marginTop:4}}>Nenhuma categoria personalizada.</div>}
+        <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.6}}>As categorias usadas ao lançar uma compra agora são as mesmas de <b>Lista → Categorias</b> — crie, renomeie, reordene ou apague por lá; a mudança já aparece aqui.</div>
       </div>
 
       <div className="card" style={{marginBottom:12}}>
