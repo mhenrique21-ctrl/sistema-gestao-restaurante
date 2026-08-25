@@ -13436,7 +13436,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
   const load=async()=>{
     setLoading(true);setErro("");
     try{
-      const [rc,rp]=await Promise.all([fetch("/api/menu-categorias"),fetch("/api/menu-produtos")]);
+      const [rc,rp]=await Promise.all([fetch(`/api/menu-categorias?empresa=${empresa}`),fetch(`/api/menu-produtos?empresa=${empresa}`)]);
       const dc=await rc.json(),dp=await rp.json();
       if(!rc.ok||!Array.isArray(dc))throw new Error(dc?.error||"Erro ao carregar categorias");
       if(!rp.ok||!Array.isArray(dp))throw new Error(dp?.error||"Erro ao carregar produtos");
@@ -13444,7 +13444,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
     }catch(e:any){setErro(e.message||"Erro de conexão com o catálogo");}
     setLoading(false);
   };
-  useEffect(()=>{load();},[]);
+  useEffect(()=>{load();},[empresa]);
 
   const produtosFlat=useMemo(()=>catalogo.flatMap((c:any)=>c.products||[]),[catalogo]);
 
@@ -13467,7 +13467,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
   });
 
   // ---- Modal Produto ----
-  const PROD_EMPTY={id:"",name:"",price:"",category_id:"",description:"",image_url:"",promo_price:"",featured:false,promo_days:[] as number[],active_days:[] as number[],all_days:true,print_target:"",show_kiosk:true,show_delivery:true};
+  const PROD_EMPTY={id:"",name:"",price:"",category_id:"",description:"",image_url:"",promo_price:"",featured:false,promo_days:[] as number[],active_days:[] as number[],all_days:true,print_target:"",show_kiosk:true,show_delivery:true,code:"",barcode:""};
   const [prodModal,setProdModal]=useState<any>(null); // null = fechado
   const [uploading,setUploading]=useState(false);
 
@@ -13477,13 +13477,14 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
     image_url:p.image_url||"",promo_price:p.promo_price!=null?String(p.promo_price):"",featured:!!p.featured,
     promo_days:p.promo_days||[],active_days:p.active_days||[],all_days:!p.active_days||p.active_days.length===0,
     print_target:p.print_target||"",show_kiosk:p.show_kiosk!==false,show_delivery:p.show_delivery!==false,
+    code:p.code||"",barcode:p.barcode||"",
   });
 
   const uploadImagem=async(file:File)=>{
     setUploading(true);
     try{
       const fd=new FormData();fd.append("image",file);fd.append("folder","products");
-      const r=await fetch("/api/menu-produtos/upload",{method:"POST",body:fd});
+      const r=await fetch(`/api/menu-produtos/upload?empresa=${empresa}`,{method:"POST",body:fd});
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao enviar imagem");
       setProdModal((f:any)=>({...f,image_url:d.url}));
@@ -13497,14 +13498,15 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
     if(!m.category_id)return alert("Selecione uma categoria.");
     const price=parseMoney(m.price);
     if(!(price>0))return alert("Informe um preço válido.");
-    const payload:any={
-      name:m.name.trim(),price,category_id:m.category_id,description:m.description||null,
-      image_url:m.image_url||null,promo_price:m.promo_price?parseMoney(m.promo_price):null,
-      promo_days:m.promo_days,featured:m.featured,active_days:m.all_days?[]:m.active_days,
-      print_target:m.print_target||null,show_kiosk:m.show_kiosk,show_delivery:m.show_delivery,
-    };
+    const payload:any=empresa==="SEAMA"
+      ? {name:m.name.trim(),price,category_id:m.category_id,description:m.description||null,
+         image_url:m.image_url||null,code:m.code||null,barcode:m.barcode||null}
+      : {name:m.name.trim(),price,category_id:m.category_id,description:m.description||null,
+         image_url:m.image_url||null,promo_price:m.promo_price?parseMoney(m.promo_price):null,
+         promo_days:m.promo_days,featured:m.featured,active_days:m.all_days?[]:m.active_days,
+         print_target:m.print_target||null,show_kiosk:m.show_kiosk,show_delivery:m.show_delivery};
     try{
-      const r=await fetch(m.id?`/api/menu-produtos/${m.id}`:"/api/menu-produtos",{
+      const r=await fetch(m.id?`/api/menu-produtos/${m.id}?empresa=${empresa}`:`/api/menu-produtos?empresa=${empresa}`,{
         method:m.id?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
       });
       const d=await r.json();
@@ -13516,7 +13518,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
 
   const toggleDisponivel=async(p:any)=>{
     try{
-      const r=await fetch(`/api/menu-produtos/${p.id}/available`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({available:!p.available})});
+      const r=await fetch(`/api/menu-produtos/${p.id}/available?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({available:!p.available})});
       if(!r.ok)throw new Error((await r.json()).error||"Erro ao atualizar");
       await load();
     }catch(e:any){alert(e.message||"Erro de conexão");}
@@ -13525,7 +13527,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
   const delProduto=async(p:any)=>{
     if(!confirm(`Excluir o produto "${p.name}"? Essa ação não pode ser desfeita.`))return;
     try{
-      const r=await fetch(`/api/menu-produtos/${p.id}`,{method:"DELETE"});
+      const r=await fetch(`/api/menu-produtos/${p.id}?empresa=${empresa}`,{method:"DELETE"});
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao excluir");
       await load();
@@ -13544,7 +13546,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
     setReordenando(p.id);
     try{
       await Promise.all(reordenado.map((prod:any,i:number)=>
-        fetch(`/api/menu-produtos/${prod.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({sort_order:i})})
+        fetch(`/api/menu-produtos/${prod.id}?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({sort_order:i})})
       ));
       await load();
     }catch(e:any){alert("Erro ao reordenar produto");}
@@ -13562,13 +13564,13 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
     if(!m.name.trim())return alert("Nome é obrigatório.");
     const payload={name:m.name.trim(),description:m.description||null,sort_order:parseInt(m.sort_order)||0,printer:m.printer||null};
     try{
-      const r=await fetch(m.id?`/api/menu-categorias/${m.id}`:"/api/menu-categorias",{
+      const r=await fetch(m.id?`/api/menu-categorias/${m.id}?empresa=${empresa}`:`/api/menu-categorias?empresa=${empresa}`,{
         method:m.id?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
       });
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao salvar categoria");
-      if(m.id&&m.applyPrinter){
-        await fetch(`/api/menu-categorias/${m.id}/apply-printer`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({printer:m.printer||null})});
+      if(empresa==="CONFRARIA"&&m.id&&m.applyPrinter){
+        await fetch(`/api/menu-categorias/${m.id}/apply-printer?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({printer:m.printer||null})});
       }
       setCatModal(null);
       await load();
@@ -13577,7 +13579,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
 
   const toggleCategoriaAtiva=async(c:any)=>{
     try{
-      const r=await fetch(`/api/menu-categorias/${c.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:!c.active})});
+      const r=await fetch(`/api/menu-categorias/${c.id}?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:!c.active})});
       if(!r.ok)throw new Error((await r.json()).error||"Erro ao atualizar");
       await load();
     }catch(e:any){alert(e.message||"Erro de conexão");}
@@ -13719,6 +13721,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
           </label>
         </div>
 
+        {empresa==="CONFRARIA"?<>
         <div className="row" style={{marginBottom:10,alignItems:"center"}}>
           <div style={{flex:1}}>
             <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Preço promocional (R$, opcional)</div>
@@ -13756,6 +13759,16 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
           <option value="balcao">🏪 Balcão</option>
         </select>
         <div style={{fontSize:11,color:"var(--text2)",marginBottom:14}}>Independente do destino, todos os itens sempre saem no Caixa.</div>
+        </>:<div className="row" style={{marginBottom:14}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Código</div>
+            <input value={prodModal.code} onChange={e=>setProdModal((f:any)=>({...f,code:e.target.value}))} className="inp"/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:4}}>Código de barras</div>
+            <input value={prodModal.barcode} onChange={e=>setProdModal((f:any)=>({...f,barcode:e.target.value}))} className="inp"/>
+          </div>
+        </div>}
 
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>setProdModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>

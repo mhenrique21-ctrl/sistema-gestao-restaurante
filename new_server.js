@@ -1725,9 +1725,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
-  // ── Catálogo real (produtos/categorias do delivery-backend) ──────────
+  // ── Catálogo real (produtos/categorias) — Confraria e Seama ───────────
   // Proxy autenticado por token de serviço — o navegador nunca vê o JWT
-  // nem o segredo, só fala com este backend.
+  // nem o segredo, só fala com este backend. Empresa vem sempre em query
+  // string (?empresa=), inclusive em POST/PATCH/DELETE, pra não precisar
+  // ler o corpo antes de saber pra qual PDV mandar.
   if (
     (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias')) ||
     (req.method === 'POST' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/menu-produtos/upload')) ||
@@ -1736,23 +1738,86 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   ) {
     const isUpload = urlPath === '/api/menu-produtos/upload';
     const idFromPath = () => urlPath.split('/')[3]; // /api/menu-produtos/:id[...] ou /api/menu-categorias/:id
+    const queryCat = new URLSearchParams(req.url.split('?')[1] || '');
+    const empresa = String(queryCat.get('empresa') || 'CONFRARIA').toUpperCase() === 'SEAMA' ? 'SEAMA' : 'CONFRARIA';
+
     let upstreamPath = null;
-    if (isUpload) upstreamPath = '/api/menu/upload';
-    else if (urlPath === '/api/menu-produtos') upstreamPath = req.method === 'GET' ? '/api/menu/admin' : '/api/menu/products';
-    else if (urlPath === '/api/menu-categorias') upstreamPath = '/api/categories';
-    else if (req.method === 'PATCH' && urlPath.endsWith('/available')) upstreamPath = `/api/menu/products/${idFromPath()}/available`;
-    else if (urlPath.startsWith('/api/menu-produtos/')) upstreamPath = `/api/menu/products/${idFromPath()}`;
-    else if (urlPath.startsWith('/api/menu-categorias/')) upstreamPath = `/api/categories/${idFromPath()}`;
+    if (empresa === 'CONFRARIA') {
+      if (isUpload) upstreamPath = '/api/menu/upload';
+      else if (urlPath === '/api/menu-produtos') upstreamPath = req.method === 'GET' ? '/api/menu/admin' : '/api/menu/products';
+      else if (urlPath === '/api/menu-categorias') upstreamPath = '/api/categories';
+      else if (req.method === 'PATCH' && urlPath.endsWith('/available')) upstreamPath = `/api/menu/products/${idFromPath()}/available`;
+      else if (urlPath.startsWith('/api/menu-produtos/')) upstreamPath = `/api/menu/products/${idFromPath()}`;
+      else if (urlPath.startsWith('/api/menu-categorias/')) upstreamPath = `/api/categories/${idFromPath()}`;
+    } else {
+      // Seama: produtos e categorias vivem sob /api/products e /api/categories
+      // direto (sem indireção tipo /admin), e não tem sub-rota .../available —
+      // "available" é só mais um campo do PATCH normal.
+      if (isUpload) upstreamPath = '/api/products/upload';
+      else if (urlPath === '/api/menu-produtos') upstreamPath = '/api/products';
+      else if (urlPath === '/api/menu-categorias') upstreamPath = '/api/categories';
+      else if (req.method === 'PATCH' && urlPath.endsWith('/available')) upstreamPath = `/api/products/${idFromPath()}`;
+      else if (urlPath.startsWith('/api/menu-produtos/')) upstreamPath = `/api/products/${idFromPath()}`;
+      else if (urlPath.startsWith('/api/menu-categorias/')) upstreamPath = `/api/categories/${idFromPath()}`;
+    }
 
     const chunks = [];
     req.on('data', c => chunks.push(c));
     req.on('end', async () => {
       try {
-        // Catálogo hoje só existe pro delivery-backend (Confraria) — sem
-        // pedir isso explícito, getServiceToken() cairia no padrão SEAMA.
-        const token = await getServiceToken('CONFRARIA');
-        const base = process.env.DELIVERY_BACKEND_URL || 'http://localhost:4000';
+        const token = await getServiceToken(empresa);
+        const base = pdvDaEmpresa(empresa).base;
         const buf = Buffer.concat(chunks);
+
+        // GET da lista de produtos: Confraria já devolve agrupado por
+        // categoria (com produtos aninhados); o Seama devolve uma lista
+        // plana — agrupa aqui pra tela não precisar saber a diferença.
+        if (empresa === 'SEAMA' && req.method === 'GET' && urlPath === '/api/menu-produtos') {
+          const [rp, rc] = await Promise.all([
+            fetch(`${base}/api/products`, { headers: { Authorization: 'Bearer ' + token } }),
+            fetch(`${base}/api/categories`, { headers: { Authorization: 'Bearer ' + token } }),
+          ]);
+          const produtos = await rp.json().catch(() => []);
+          const categorias = await rc.json().catch(() => []);
+          if (!rp.ok || !Array.isArray(produtos)) { res.writeHead(rp.status); res.end(JSON.stringify(produtos)); return; }
+          const nomeCat = {};
+          (Array.isArray(categorias) ? categorias : []).forEach(c => { nomeCat[c.id] = c.name; });
+          const porCategoria = {};
+          for (const p of produtos) {
+            const catId = p.category_id || '__sem_categoria__';
+            if (!porCategoria[catId]) porCategoria[catId] = { id: catId, name: nomeCat[catId] || 'Sem categoria', products: [] };
+            porCategoria[catId].products.push({
+              id: p.id, name: p.name, description: p.description, price: p.price,
+              image_url: p.image_url, available: p.available, category_id: p.category_id,
+              category_name: nomeCat[catId] || 'Sem categoria', sort_order: p.sort_order,
+              code: p.code, barcode: p.barcode, print_kitchen: p.print_kitchen,
+              track_stock: p.track_stock, stock_qty: p.stock_qty, stock_min: p.stock_min,
+              // Campos que só existem na Confraria (promo/agendamento/kiosk):
+              // vêm com valor neutro pra tela não quebrar ao ler algo que o
+              // Seama não tem — o modal esconde os controles desses campos
+              // quando a empresa é Seama, então eles nunca são editados aqui.
+              featured: false, promo_price: null, promo_label: null, promo_max_qty: null,
+              active_days: [], print_target: null, show_kiosk: true, show_delivery: true,
+            });
+          }
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify(Object.values(porCategoria)));
+          return;
+        }
+
+        // GET de categorias do Seama: mesmo raciocínio, preenche os campos
+        // que só a Confraria tem (description/image_url/printer) com null.
+        if (empresa === 'SEAMA' && req.method === 'GET' && urlPath === '/api/menu-categorias') {
+          const upstream = await fetch(`${base}${upstreamPath}`, { headers: { Authorization: 'Bearer ' + token } });
+          const data = await upstream.json().catch(() => []);
+          if (!upstream.ok || !Array.isArray(data)) { res.writeHead(upstream.status); res.end(JSON.stringify(data)); return; }
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify(data.map(c => ({ ...c, description: null, image_url: null, printer: null }))));
+          return;
+        }
+
         const upstream = await fetch(`${base}${upstreamPath}`, {
           method: req.method,
           headers: {
