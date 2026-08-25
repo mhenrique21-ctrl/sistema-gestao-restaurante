@@ -13803,7 +13803,7 @@ const diasAtras=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return 
 
 function EstoquePdvPanel(){
   const [empresa,setEmpresa]=useState<"CONFRARIA"|"SEAMA">("CONFRARIA");
-  const [view,setView]=useState<"saldo"|"vendas"|"inventario">("saldo");
+  const [view,setView]=useState<"saldo"|"vendas"|"inventario"|"entradas"|"margem"|"vinculos">("saldo");
   const [itens,setItens]=useState<any[]>([]);
   const [abaixo,setAbaixo]=useState(0);
   const [loading,setLoading]=useState(true);
@@ -13944,6 +13944,93 @@ function EstoquePdvPanel(){
     setSalvandoInv(false);
   };
 
+  // ---- Entradas ----
+  const [entDe,setEntDe]=useState(diasAtras(30));
+  const [entAte,setEntAte]=useState(today());
+  const [entFornecedor,setEntFornecedor]=useState("");
+  const [entDados,setEntDados]=useState<any>(null);
+  const [entLoading,setEntLoading]=useState(false);
+  const carregarEntradas=async()=>{
+    setEntLoading(true);
+    try{
+      const qs=new URLSearchParams({empresa,de:entDe,ate:entAte,...(entFornecedor?{fornecedor:entFornecedor}:{})});
+      const r=await fetch(`/api/estoque-pdv/entradas?${qs.toString()}`);
+      setEntDados(await r.json());
+    }catch(e:any){setEntDados({erro:e.message});}
+    setEntLoading(false);
+  };
+  useEffect(()=>{if(view==="entradas")carregarEntradas();},[view,empresa]);
+
+  const [editEntrada,setEditEntrada]=useState<any>(null);
+  const [editQtd,setEditQtd]=useState("");
+  const [editCusto,setEditCusto]=useState("");
+  const abrirEditEntrada=(l:any)=>{setEditEntrada(l);setEditQtd(String(l.quantidade));setEditCusto(l.custo_unitario!=null?String(l.custo_unitario):"");};
+  const salvarEditEntrada=async()=>{
+    const payload:any={};
+    const q=parseFloat(String(editQtd).replace(",","."));
+    if(Number.isFinite(q)&&q>0)payload.quantidade=q;
+    if(editCusto.trim())payload.custo_unitario=parseFloat(String(editCusto).replace(",","."));
+    try{
+      const r=await fetch(`/api/estoque-pdv/entradas/${editEntrada.id}?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao corrigir");
+      setEditEntrada(null);carregarEntradas();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+
+  // ---- Margem ----
+  const [margemDados,setMargemDados]=useState<any>(null);
+  const [margemLoading,setMargemLoading]=useState(false);
+  useEffect(()=>{
+    if(view!=="margem")return;
+    setMargemLoading(true);
+    fetch(`/api/estoque-pdv/margens?empresa=${empresa}`).then(r=>r.json()).then(setMargemDados).catch(()=>setMargemDados({erro:true})).finally(()=>setMargemLoading(false));
+  },[view,empresa]);
+
+  // ---- Vínculos pendentes ----
+  const [vincDados,setVincDados]=useState<any>(null);
+  const [vincLoading,setVincLoading]=useState(false);
+  const carregarVinculos=async()=>{
+    setVincLoading(true);
+    try{const r=await fetch(`/api/estoque-pdv/vinculos?empresa=${empresa}`);setVincDados(await r.json());}
+    catch(e:any){setVincDados({erro:e.message});}
+    setVincLoading(false);
+  };
+  useEffect(()=>{if(view==="vinculos")carregarVinculos();},[view,empresa]);
+  const [vincEscolha,setVincEscolha]=useState<Record<string,{produto:string,fator:string}>>({});
+  const vincular=async(sourceName:string)=>{
+    const esc=vincEscolha[sourceName];
+    if(!esc?.produto)return alert("Escolha o produto do cardápio.");
+    const fator=parseFloat(String(esc.fator||"1").replace(",","."));
+    if(!(fator>0))return alert("Informe um fator válido.");
+    try{
+      const r=await fetch("/api/estoque-pdv/vinculos",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({empresa,source_name:sourceName,product_id:esc.produto,factor:fator})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao vincular");
+      carregarVinculos();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+  const classificarTodos=async(kind:"materia_prima"|"higiene_limpeza")=>{
+    const nomes=(vincDados?.pendentes||[]).map((p:any)=>p.source_name);
+    if(!nomes.length)return;
+    if(!confirm(`Classificar ${nomes.length} item(ns) como ${kind==="materia_prima"?"matéria-prima":"higiene e limpeza"}? Eles não voltam a aparecer aqui.`))return;
+    try{
+      const r=await fetch("/api/estoque-pdv/classificar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,kind,source_names:nomes})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao classificar");
+      carregarVinculos();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+  const classificarUm=async(sourceName:string,kind:"materia_prima"|"higiene_limpeza")=>{
+    try{
+      const r=await fetch("/api/estoque-pdv/classificar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,kind,source_names:[sourceName]})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao classificar");
+      carregarVinculos();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+
   return <div>
     <div className="section-title">📦 Estoque do PDV</div>
     <div className="muted" style={{fontSize:11,marginBottom:12}}>Ajustar aqui reflete direto no PDV, na hora — é o mesmo banco de dados.</div>
@@ -13957,6 +14044,9 @@ function EstoquePdvPanel(){
       <button className="pill" onClick={()=>setView("saldo")} style={{background:view==="saldo"?"var(--btnPrimary)":"var(--bg4)",color:view==="saldo"?"#fff":"#777"}}>💰 Saldo</button>
       <button className="pill" onClick={()=>setView("vendas")} style={{background:view==="vendas"?"var(--btnPrimary)":"var(--bg4)",color:view==="vendas"?"#fff":"#777"}}>📊 Vendas por produto</button>
       <button className="pill" onClick={()=>setView("inventario")} style={{background:view==="inventario"?"var(--btnPrimary)":"var(--bg4)",color:view==="inventario"?"#fff":"#777"}}>📋 Inventário</button>
+      <button className="pill" onClick={()=>setView("entradas")} style={{background:view==="entradas"?"var(--btnPrimary)":"var(--bg4)",color:view==="entradas"?"#fff":"#777"}}>📥 Entradas</button>
+      <button className="pill" onClick={()=>setView("margem")} style={{background:view==="margem"?"var(--btnPrimary)":"var(--bg4)",color:view==="margem"?"#fff":"#777"}}>💹 Margem</button>
+      <button className="pill" onClick={()=>setView("vinculos")} style={{background:view==="vinculos"?"var(--btnPrimary)":"var(--bg4)",color:view==="vinculos"?"#fff":"#777"}}>🔗 Vínculos pendentes</button>
     </div>
 
     {view==="saldo"&&<div>
@@ -14065,6 +14155,112 @@ function EstoquePdvPanel(){
         <textarea placeholder="Motivo (opcional)" value={lancMotivo} onChange={e=>setLancMotivo(e.target.value)} className="inp" style={{marginTop:10,minHeight:50}}/>
         <button className="btn" onClick={fecharContagem} disabled={salvandoInv} style={{width:"100%",background:"#22C55E",color:"#06210f",padding:"12px",fontWeight:700,marginTop:8}}>{salvandoInv?"Salvando...":"✅ Fechar contagem e aplicar ajustes"}</button>
       </div>}
+    </div>}
+
+    {view==="entradas"&&<div>
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+        <input type="date" value={entDe} onChange={e=>setEntDe(e.target.value)} className="inp" style={{flex:1,minWidth:120,marginBottom:0}}/>
+        <input type="date" value={entAte} onChange={e=>setEntAte(e.target.value)} className="inp" style={{flex:1,minWidth:120,marginBottom:0}}/>
+        <input placeholder="Fornecedor..." value={entFornecedor} onChange={e=>setEntFornecedor(e.target.value)} className="inp" style={{flex:1,minWidth:120,marginBottom:0}}/>
+        <button className="btn" onClick={carregarEntradas} style={{background:"var(--btnPrimary)",color:"#fff"}}>Filtrar</button>
+      </div>
+      {entLoading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+      {entDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ {entDados.erro}</div>}
+      {entDados?.resumo&&<div className="card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+          <span style={{fontSize:12,color:"var(--text2)"}}>{entDados.resumo.movimentos} entrada(s) · {entDados.resumo.notas} nota(s)</span>
+          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:17}}>{fmtMoney(entDados.resumo.total)}</span>
+        </div>
+        {entDados.resumo.sem_custo>0&&<div className="muted" style={{fontSize:10,marginBottom:10}}>{entDados.resumo.sem_custo} entrada(s) sem custo informado — não entram no total.</div>}
+        {(entDados.linhas||[]).map((l:any)=>(
+          <div key={l.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:700}}>{l.produto}</div>
+              <div className="muted" style={{fontSize:10}}>{l.fornecedor||"—"} · {fmtDate(String(l.data).slice(0,10))}</div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontFamily:"monospace",fontWeight:700,fontSize:12.5}}>{l.total!=null?fmtMoney(l.total):"—"}</div>
+              <div className="muted" style={{fontSize:9}}>{l.quantidade} un{l.custo_unitario!=null?` · ${fmtMoney(l.custo_unitario)}`:""}</div>
+            </div>
+            <button className="btn" onClick={()=>abrirEditEntrada(l)} style={{background:"var(--bg4)",width:30,height:30,padding:0,flexShrink:0}}>✏️</button>
+          </div>
+        ))}
+        {!(entDados.linhas||[]).length&&<EmptyState msg="Nenhuma entrada no período."/>}
+      </div>}
+    </div>}
+
+    {view==="margem"&&<div>
+      {margemLoading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+      {margemDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ Erro ao carregar margem.</div>}
+      {margemDados?.resumo&&<div className="card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+          <span style={{fontSize:12,color:"var(--text2)"}}>{margemDados.resumo.total} produto(s) de revenda</span>
+          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:17}}>{fmtMoney(margemDados.resumo.valor_estoque)}</span>
+        </div>
+        {margemDados.resumo.subiram>0&&<div style={{fontSize:11,color:"var(--btnDanger)",background:"#EF444422",borderRadius:8,padding:"7px 10px",marginBottom:6}}>⚠️ {margemDados.resumo.subiram} produto(s) com custo mais alto que na compra anterior — confira se o preço de venda acompanhou.</div>}
+        {margemDados.resumo.sem_custo>0&&<div className="muted" style={{fontSize:10,marginBottom:10}}>{margemDados.resumo.sem_custo} produto(s) ainda sem custo conhecido.</div>}
+        <div style={{display:"flex",gap:8,padding:"0 0 6px",fontSize:9.5,textTransform:"uppercase" as const,color:"var(--text3)",borderBottom:"2px solid var(--border2)",marginBottom:2}}>
+          <span style={{flex:1}}>Produto</span><span style={{width:64,textAlign:"right"}}>Custo</span><span style={{width:64,textAlign:"right"}}>Venda</span><span style={{width:56,textAlign:"right"}}>Margem</span>
+        </div>
+        {(margemDados.itens||[]).map((it:any)=>(
+          <div key={it.id} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12.5,fontWeight:700}}>{it.nome}</div>
+              {it.variacao_pct!=null&&it.variacao_pct>5&&<div style={{fontSize:9.5,color:"var(--btnDanger)"}}>custo subiu {it.variacao_pct}%</div>}
+            </div>
+            <span style={{width:64,textAlign:"right",fontFamily:"monospace",fontSize:11.5}}>{it.custo!=null?fmtMoney(it.custo):"—"}</span>
+            <span style={{width:64,textAlign:"right",fontFamily:"monospace",fontSize:11.5}}>{fmtMoney(it.preco)}</span>
+            <span style={{width:56,textAlign:"right",fontFamily:"monospace",fontWeight:800,fontSize:12,color:it.margem_pct==null?undefined:it.margem_pct<0?"var(--btnDanger)":"#22C55E"}}>{it.margem_pct!=null?`${it.margem_pct}%`:"—"}</span>
+          </div>
+        ))}
+      </div>}
+    </div>}
+
+    {view==="vinculos"&&<div>
+      <div className="card">
+        <p className="muted" style={{fontSize:12,marginBottom:12,lineHeight:1.6}}>Quando você lança uma compra em Compras, os itens chegam aqui. O vínculo diz qual produto do cardápio cada item da nota alimenta — feito uma vez, as próximas compras entram sozinhas.</p>
+        {vincLoading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+        {vincDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ {vincDados.erro}</div>}
+        {vincDados&&<>
+          <div style={{fontWeight:700,marginBottom:10}}>🏆 {(vincDados.pendentes||[]).length} item(ns) esperando vínculo</div>
+          {!!(vincDados.pendentes||[]).length&&<div style={{display:"flex",gap:8,marginBottom:14}}>
+            <button className="btn" onClick={()=>classificarTodos("materia_prima")} style={{flex:1,background:"var(--bg4)",fontSize:11}}>Classificar todos: Matéria-prima</button>
+            <button className="btn" onClick={()=>classificarTodos("higiene_limpeza")} style={{flex:1,background:"var(--bg4)",fontSize:11}}>Classificar todos: Higiene</button>
+          </div>}
+          {(vincDados.pendentes||[]).map((p:any)=>{
+            const esc=vincEscolha[p.source_name]||{produto:"",fator:"1"};
+            return <div key={p.source_name} className="card" style={{marginBottom:9,padding:"11px 13px"}}>
+              <div style={{fontSize:12.5,fontWeight:700}}>{p.source_name}</div>
+              <div className="muted" style={{fontSize:10,margin:"2px 0 9px"}}>{p.quantidade} {p.unidade} retido · {p.supplier||"fornecedor não informado"}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+                <select value={esc.produto} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,produto:e.target.value}}))} className="inp" style={{flex:1,minWidth:110,marginBottom:0,fontSize:11.5}}>
+                  <option value="">Vincular a...</option>
+                  {[...itens].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
+                </select>
+                <input value={esc.fator} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,fator:e.target.value}}))} title="1 embalagem = quantas unidades" className="inp" style={{width:48,marginBottom:0,textAlign:"center"}}/>
+                <button className="btn" onClick={()=>vincular(p.source_name)} style={{background:"#22C55E",color:"#06210f",fontSize:11,fontWeight:700}}>Vincular</button>
+                <button className="btn" onClick={()=>classificarUm(p.source_name,"materia_prima")} style={{background:"var(--bg4)",fontSize:11}}>Matéria-prima</button>
+                <button className="btn" onClick={()=>classificarUm(p.source_name,"higiene_limpeza")} style={{background:"var(--bg4)",fontSize:11}}>Higiene</button>
+              </div>
+            </div>;
+          })}
+          {!(vincDados.pendentes||[]).length&&<EmptyState msg="Nenhum item esperando vínculo. 🎉"/>}
+        </>}
+      </div>
+    </div>}
+
+    {editEntrada&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto" as const}}>
+      <div className="card" style={{width:"100%",maxWidth:400}}>
+        <div style={{fontWeight:700,marginBottom:14}}>Corrigir entrada — {editEntrada.produto}</div>
+        <label style={{fontSize:11,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>Quantidade</label>
+        <input value={editQtd} onChange={e=>setEditQtd(e.target.value)} className="inp" style={{marginBottom:10}}/>
+        <label style={{fontSize:11,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>Custo unitário</label>
+        <input value={editCusto} onChange={e=>setEditCusto(e.target.value)} className="inp" placeholder="—"/>
+        <div style={{display:"flex",gap:8,marginTop:14}}>
+          <button className="btn" onClick={()=>setEditEntrada(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
+          <button className="btn" onClick={salvarEditEntrada} style={{background:"var(--btnPrimary)",color:"#fff",flex:1}}>Salvar</button>
+        </div>
+      </div>
     </div>}
 
     {ajusteModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto" as const}}>

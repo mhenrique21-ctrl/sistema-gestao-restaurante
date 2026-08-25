@@ -1932,6 +1932,106 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       return;
     }
 
+    // GET /api/estoque-pdv/entradas | /margens | /vinculos — os três já saem
+    // no mesmo formato dos dois PDVs, sem precisar de tradução (ver comentário
+    // de normalização no início do arquivo).
+    if (req.method === 'GET' && partes.length === 3 && ['entradas', 'margens', 'vinculos'].includes(partes[2])) {
+      const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const upstreamPath = partes[2] === 'vinculos' ? '/api/supply/links' : `/api/stock/${partes[2]}`;
+          const qs = new URLSearchParams(query); qs.delete('empresa');
+          const suffix = qs.toString() ? `?${qs.toString()}` : '';
+          const upstream = await fetch(`${base}${upstreamPath}${suffix}`, { headers: { Authorization: 'Bearer ' + token } });
+          const data = await upstream.json().catch(() => ({}));
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(upstream.status);
+          res.end(JSON.stringify(data));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: `Erro ao buscar ${partes[2]} do PDV: ` + e.message }));
+        }
+      })();
+      return;
+    }
+
+    // POST /api/estoque-pdv/vinculos  body:{empresa,source_name,product_id,factor} — cria o vínculo
+    if (req.method === 'POST' && urlPath === '/api/estoque-pdv/vinculos') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const { empresa: empresaRaw, source_name, product_id, factor } = JSON.parse(body);
+          const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const upstream = await fetch(`${base}/api/supply/links`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ source_name, product_id, factor }),
+          });
+          const data = await upstream.json().catch(() => ({}));
+          res.setHeader('Content-Type', 'application/json'); res.writeHead(upstream.status);
+          res.end(JSON.stringify(data));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao vincular: ' + e.message }));
+        }
+      });
+      return;
+    }
+
+    // POST /api/estoque-pdv/classificar  body:{empresa,kind,source_names} — classifica em massa
+    if (req.method === 'POST' && urlPath === '/api/estoque-pdv/classificar') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const { empresa: empresaRaw, kind, source_names } = JSON.parse(body);
+          const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const upstream = await fetch(`${base}/api/supply/classify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ kind, source_names }),
+          });
+          const data = await upstream.json().catch(() => ({}));
+          res.setHeader('Content-Type', 'application/json'); res.writeHead(upstream.status);
+          res.end(JSON.stringify(data));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao classificar: ' + e.message }));
+        }
+      });
+      return;
+    }
+
+    // PATCH /api/estoque-pdv/entradas/:id?empresa=  body:{quantidade?,custo_unitario?} — corrige uma entrada
+    if (req.method === 'PATCH' && partes[2] === 'entradas' && partes.length === 4) {
+      const id = partes[3];
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body);
+          const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const upstream = await fetch(`${base}/api/stock/entradas/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify(payload),
+          });
+          const data = await upstream.json().catch(() => ({}));
+          res.setHeader('Content-Type', 'application/json'); res.writeHead(upstream.status);
+          res.end(JSON.stringify(data));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao corrigir entrada: ' + e.message }));
+        }
+      });
+      return;
+    }
+
     res.writeHead(404); res.end(JSON.stringify({ error: 'Rota de estoque não encontrada' }));
     return;
   }
