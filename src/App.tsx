@@ -565,6 +565,36 @@ const estornarCompraSeama = async (empresa, grupoId, nomes, opcoes = {}) => {
   }
 };
 
+// Devolve no estoque da Gestão (materiaPrima.estoqueAtual) o que uma compra
+// excluída tinha lançado — irmã da estornarCompraSeama, mas local/síncrona
+// porque não fala com nenhum backend externo. Lê a mesma trilha que os 4
+// pontos de "finalizar compra" já escrevem (movEstoque tipo "entrada",
+// grupoId da nota), soma por matéria-prima e desconta. Não apaga a entrada
+// original — registra um "ajuste" compensatório, igual a Contagem de Estoque
+// já faz, pra manter o histórico auditável em vez de reescrever o passado.
+// Sem nomes, estorna a nota toda; com nomes, só os itens daquele(s) nome(s)
+// (mesma limitação de nome-só que estornarCompraSeama já tem: duas linhas
+// com o mesmo produto na mesma nota estornam juntas).
+const estornarEstoqueGestao = (d: any, grupoId: string, nomes?: string[] | null) => {
+  const materiasPrimas = d.materiasPrimas || [];
+  const movEstoqueAtual = d.movEstoque || [];
+  if (!grupoId) return { materiasPrimas, movEstoque: movEstoqueAtual };
+  const filtro = nomes && nomes.length ? new Set(nomes.map((n) => String(n || "").toLowerCase())) : null;
+  const entradas = movEstoqueAtual.filter((mv: any) => mv.tipo === "entrada" && mv.grupoId === grupoId && (!filtro || filtro.has(String(mv.mpNome || "").toLowerCase())));
+  if (!entradas.length) return { materiasPrimas, movEstoque: movEstoqueAtual };
+  const porMp: Record<string, number> = {};
+  entradas.forEach((mv: any) => { porMp[mv.mpId] = (porMp[mv.mpId] || 0) + (mv.quantidade || 0); });
+  const now = new Date().toISOString();
+  const novosMovs: any[] = [];
+  const materiasPrimasAtualizadas = materiasPrimas.map((m: any) => {
+    const qtd = porMp[m.id];
+    if (!qtd) return m;
+    novosMovs.push({ id: uid(), mpId: m.id, mpNome: m.nome, tipo: "ajuste", quantidade: qtd, unidade: m.unidade || "un", custo: m.ultimoValor || 0, data: today(), descricao: "Estorno – compra excluída", grupoId, criadoEm: now });
+    return { ...m, estoqueAtual: (m.estoqueAtual || 0) - qtd, atualizadoEm: now };
+  });
+  return { materiasPrimas: materiasPrimasAtualizadas, movEstoque: [...novosMovs, ...movEstoqueAtual] };
+};
+
 const parseMoney= (s) => {
   const str=String(s).trim();
   // handles "1.234,56" (pt-BR) or "1234.56" (en) or "1234,56"
@@ -6085,14 +6115,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           const grupos=[...new Set((db.compras||[]).map(c=>c.grupoId).filter(Boolean))];
           const temPdv=["SEAMA","CONFRARIA"].includes(String(empresa||"").toUpperCase());
           if(!confirm(`⚠️ Apagar TODO o histórico de compras da ${empresa}?\n\n${(db.compras||[]).length} registro(s) serão removidos permanentemente.`
-            +(temPdv?`\n\nAntes de apagar, a quantidade de ${grupos.length} nota(s) será devolvida no estoque do PDV.`:"")
+            +`\n\nAntes de apagar, a quantidade de ${grupos.length} nota(s) será devolvida no estoque`+(temPdv?` (aqui e no PDV)`:``)+`.`
             +`\n\nDigite "CONFIRMAR" para continuar.`))return;
           const confirmacao=window.prompt('Digite CONFIRMAR para apagar todo o histórico de compras:');
           if(confirmacao!=="CONFIRMAR")return alert("Cancelado. Nenhum dado foi removido.");
 
           // Estorna ANTES de apagar: depois de limpar o histórico não há mais de
-          // onde tirar os grupos, e o estoque do PDV ficaria inflado pra sempre,
-          // aparecendo só na contagem física.
+          // onde tirar os grupos, e o estoque (Gestão e do PDV) ficaria inflado
+          // pra sempre, aparecendo só na contagem física.
           if(temPdv&&grupos.length){
             let falhas=0;
             for(const gid of grupos){
@@ -6100,7 +6130,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             }
             if(falhas)alert(`⚠️ ${falhas} de ${grupos.length} nota(s) não puderam ser estornadas no PDV. Confira o estoque por lá antes de considerar fechado.`);
           }
-          (setDbAndSave||setDb)((d:any)=>({...d,compras:[],contas:(d.contas||[]).filter((c:any)=>!grupos.includes(c.grupoId))}));
+          (setDbAndSave||setDb)((d:any)=>{
+            let materiasPrimas=d.materiasPrimas,movEstoque=d.movEstoque;
+            grupos.forEach((gid:string)=>{
+              const estorno=estornarEstoqueGestao({...d,materiasPrimas,movEstoque},gid,null);
+              materiasPrimas=estorno.materiasPrimas;movEstoque=estorno.movEstoque;
+            });
+            return{...d,compras:[],contas:(d.contas||[]).filter((c:any)=>!grupos.includes(c.grupoId)),materiasPrimas,movEstoque};
+          });
           alert("✅ Histórico de compras e lançamentos financeiros apagados.");
         }} style={{background:"#FEE2E2",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
       </div>
@@ -6226,7 +6263,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         </div>
                         <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"#1D4ED8",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
-                        <button onClick={e=>{e.stopPropagation();if(!confirm(empresa==="SEAMA"?`Excluir "${item.nomeProduto}"?\n\nSe ele tiver entrado no estoque do PDV, a quantidade será devolvida.`:"Excluir item?"))return;_listaDeletados.add(item.id);const gid=nota.grupoId;(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c)};});estornarCompraSeama(empresa,gid,[item.nomeProduto]);}}
+                        <button onClick={e=>{e.stopPropagation();if(!confirm(`Excluir "${item.nomeProduto}"?\n\nA quantidade lançada no estoque será devolvida${EMPRESAS_COM_PDV.includes(empresa)?" (aqui e no PDV)":""}.`))return;_listaDeletados.add(item.id);const gid=nota.grupoId;(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);const estorno=estornarEstoqueGestao(d,gid,[item.nomeProduto]);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c),...estorno};});estornarCompraSeama(empresa,gid,[item.nomeProduto]);}}
                           style={{background:"none",border:"none",color:"#EF444455",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
                       </div>
                     )}
@@ -6266,12 +6303,15 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       alert(`✅ Compra transferida para ${outra}`);
                     }} style={{background:"#DBEAFE",color:"#8B5CF6",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={()=>{
-                      if(!confirm(empresa==="SEAMA"?"Excluir esta nota e todos os seus itens?\n\nOs itens que entraram no estoque do PDV serão devolvidos.":"Excluir esta nota e todos os seus itens?"))return;
+                      if(!confirm(`Excluir esta nota e todos os seus itens?\n\nA quantidade lançada no estoque será devolvida${EMPRESAS_COM_PDV.includes(empresa)?" (aqui e no PDV)":""}.`))return;
                       estornarCompraSeama(empresa,nota.grupoId,null);
                       const cIds=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId).map(c=>c.id);
                       const ctIds=(db.contas||[]).filter(c=>c.grupoId===nota.grupoId).map(c=>c.id);
                       [...cIds,...ctIds].forEach(id=>_listaDeletados.add(id));
-                      (setDbAndSave||setDb)(d=>({...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId)}));
+                      (setDbAndSave||setDb)(d=>{
+                        const estorno=estornarEstoqueGestao(d,nota.grupoId,null);
+                        return{...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId),...estorno};
+                      });
                       setVerNota(null);
                     }} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️ Excluir</button>
                   </div>
@@ -11033,10 +11073,14 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
     const itens=(db.compras||[]).filter((c:any)=>(c.grupoId||c.id)===gid);
     _listaDeletados.add(conta.id);
     itens.forEach((i:any)=>_listaDeletados.add(i.id));
-    (setDbAndSave||setDb)((d:any)=>({...d,
-      contas:(d.contas||[]).filter((c:any)=>c.id!==conta.id),
-      compras:(d.compras||[]).filter((c:any)=>(c.grupoId||c.id)!==gid),
-    }));
+    (setDbAndSave||setDb)((d:any)=>{
+      const estorno=estornarEstoqueGestao(d,gid,null);
+      return{...d,
+        contas:(d.contas||[]).filter((c:any)=>c.id!==conta.id),
+        compras:(d.compras||[]).filter((c:any)=>(c.grupoId||c.id)!==gid),
+        ...estorno,
+      };
+    });
     estornarCompraSeama(empresa,gid,null);
     setContaCompraExcluir(null);
   };
@@ -11129,14 +11173,14 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
           <div className="muted" style={{fontSize:12,lineHeight:1.6,marginBottom:14}}>
             <b>{contaCompraExcluir.descricao}</b><br/>
             Esse lançamento veio de uma compra com {itens.length} item(ns) no histórico
-            {temPdv?" e que pode ter entrado no estoque do PDV":""}.
+            {temPdv?" e que pode ter entrado no estoque (Gestão e PDV)":" e que pode ter entrado no estoque"}.
           </div>
 
           <button className="btn" onClick={()=>excluirSoLancamento(contaCompraExcluir)}
             style={{width:"100%",textAlign:"left" as const,padding:"11px 13px",marginBottom:9,background:"var(--bg3)",border:"1px solid var(--border2)"}}>
             <div style={{fontWeight:700,fontSize:13}}>Só o lançamento financeiro</div>
             <div className="muted" style={{fontSize:11,marginTop:3,lineHeight:1.5}}>
-              A compra continua no histórico{temPdv?" e o estoque do PDV não muda":""}. Use quando a conta a pagar foi lançada em duplicidade.
+              A compra continua no histórico e o estoque não muda. Use quando a conta a pagar foi lançada em duplicidade.
             </div>
           </button>
 
@@ -11145,7 +11189,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
             <div style={{fontWeight:700,fontSize:13,color:"#B91C1C"}}>A compra inteira</div>
             <div style={{fontSize:11,marginTop:3,lineHeight:1.5,color:"#7F1D1D"}}>
               Apaga o lançamento e os {itens.length} item(ns) do histórico
-              {temPdv?", e devolve a quantidade no estoque do PDV":""}.
+              {temPdv?", e devolve a quantidade no estoque (Gestão e PDV)":", e devolve a quantidade no estoque"}.
             </div>
           </button>
 
@@ -14523,7 +14567,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void,setConfigPanelOpen?:(v:boolean)=>void,modoDiscreto:boolean,toggleModoDiscreto:()=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
-  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
+  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["conciliacao","🔗 Conciliação"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
 
   // Shared helpers
   const setConfig=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
@@ -14585,6 +14629,81 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   // ---- Compras ----
   const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
   const [normEdit,setNormEdit]=useState<string|null>(null);
+
+  // ---- Conciliação (Central) ----
+  // Mostra 100% das matérias-primas e produtos do catálogo, com o status de
+  // vínculo de cada um — hoje essa visão fica espalhada entre Compras
+  // (Conciliar Insumos), a Lista de Compras e o painel de Estoque do PDV,
+  // nenhuma mostra tudo junto. Seleção múltipla: checkbox por linha (padrão 1)
+  // + "selecionar todos os visíveis" por grupo, que junto do filtro por
+  // status funciona como seleção por critério (padrão 3) — filtra por "sem
+  // vínculo" e seleciona tudo de uma vez, sem precisar definir uma regra à parte.
+  const [conciliaBusca,setConciliaBusca]=useState("");
+  const [conciliaFiltro,setConciliaFiltro]=useState<"todos"|"solto"|"vinculado"|"pdv">("todos");
+  const [conciliaSelMp,setConciliaSelMp]=useState<Set<string>>(new Set());
+  const [conciliaSelProd,setConciliaSelProd]=useState<Set<string>>(new Set());
+  const [conciliaPdvPend,setConciliaPdvPend]=useState<any[]>([]);
+  useEffect(()=>{
+    if(subTab!=="conciliacao"||!EMPRESAS_COM_PDV.includes(empresa)){setConciliaPdvPend([]);return;}
+    fetch(`/api/estoque-pdv/vinculos?empresa=${empresa}`).then(r=>r.json()).then(d=>setConciliaPdvPend(d?.pendentes||[])).catch(()=>setConciliaPdvPend([]));
+  },[subTab,empresa]);
+  const conciliaMpsTodas:any[]=db.materiasPrimas||[];
+  const conciliaProdsTodos:any[]=db.produtosLista||[];
+  const conciliaProdVinculadoDe=(mpId:string)=>conciliaProdsTodos.find((p:any)=>(p.mpVinculados||[]).includes(mpId));
+  const conciliaPdvPendenteDe=(nome:string)=>{
+    const alvo=foldNome(nome);
+    return conciliaPdvPend.find((p:any)=>foldNome(p.source_name)===alvo)||null;
+  };
+  const conciliaMpStatus=(mp:any):"pdv"|"vinculado"|"solto"=>{
+    if(conciliaPdvPendenteDe(mp.nome))return "pdv";
+    if(conciliaProdVinculadoDe(mp.id))return "vinculado";
+    return "solto";
+  };
+  const conciliaProdStatus=(p:any):"ok"|"solto"=>(p.mpVinculados||[]).length>0?"ok":"solto";
+  const conciliaBq=conciliaBusca.trim().toLowerCase();
+  const conciliaPassaFiltroMp=(mp:any)=>{
+    if(conciliaBq&&!(mp.nome||"").toLowerCase().includes(conciliaBq))return false;
+    if(conciliaFiltro==="todos")return true;
+    return conciliaMpStatus(mp)===conciliaFiltro;
+  };
+  const conciliaPassaFiltroProd=(p:any)=>{
+    if(conciliaBq&&!(p.nome||"").toLowerCase().includes(conciliaBq))return false;
+    if(conciliaFiltro==="todos")return true;
+    if(conciliaFiltro==="pdv")return false; // pendência de PDV é conceito de matéria-prima, não de produto
+    return conciliaProdStatus(p)===(conciliaFiltro==="vinculado"?"ok":"solto");
+  };
+  const conciliaMpsFiltradas=conciliaMpsTodas.filter(conciliaPassaFiltroMp);
+  const conciliaProdsFiltrados=conciliaProdsTodos.filter(conciliaPassaFiltroProd);
+  const conciliaToggleMp=(id:string)=>setConciliaSelMp(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
+  const conciliaToggleProd=(id:string)=>setConciliaSelProd(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
+  const conciliaToggleSelAllMp=()=>setConciliaSelMp(prev=>{
+    const todasDentro=conciliaMpsFiltradas.every(m=>prev.has(m.id));
+    const n=new Set(prev);
+    conciliaMpsFiltradas.forEach(m=>todasDentro?n.delete(m.id):n.add(m.id));
+    return n;
+  });
+  const conciliaToggleSelAllProd=()=>setConciliaSelProd(prev=>{
+    const todasDentro=conciliaProdsFiltrados.every(p=>prev.has(p.id));
+    const n=new Set(prev);
+    conciliaProdsFiltrados.forEach(p=>todasDentro?n.delete(p.id):n.add(p.id));
+    return n;
+  });
+  const conciliaExcluirSelecionados=()=>{
+    const nMp=conciliaSelMp.size,nProd=conciliaSelProd.size,total=nMp+nProd;
+    if(!total)return;
+    const partes=[nMp?`${nMp} matéria(s)-prima`:null,nProd?`${nProd} produto(s) do catálogo`:null].filter(Boolean).join(" e ");
+    if(!confirm(`Excluir ${total} ite${total>1?"ns":"m"} selecionado${total>1?"s":""}?\n\n${partes}.\n\nIsso não pode ser desfeito.`))return;
+    if(nMp){
+      conciliaSelMp.forEach(id=>_listaDeletados.add(id));
+      (setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter((m:any)=>!conciliaSelMp.has(m.id))}));
+    }
+    if(nProd){
+      conciliaSelProd.forEach(id=>_listaDeletados.add(id));
+      applyBothProdutos(setState,setDb,(d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>!conciliaSelProd.has(p.id))}));
+    }
+    setConciliaSelMp(new Set());
+    setConciliaSelProd(new Set());
+  };
 
   // ---- SEFAZ ----
   const [sefazConfig,setSefazConfig]=useState<Record<string,boolean>>({});
@@ -14943,6 +15062,88 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           </div>
         </div>
       </div>
+    </div>}
+
+    {/* ===== CONCILIAÇÃO (CENTRAL) ===== */}
+    {subTab==="conciliacao"&&<div style={{paddingBottom:conciliaSelMp.size+conciliaSelProd.size>0?60:0}}>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:6}}>🔗 Central de Conciliação</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:12,lineHeight:1.6}}>Todas as matérias-primas e produtos do catálogo de {empresa}, com o status de vínculo de cada um. Toque pra selecionar vários e excluir de uma vez.</div>
+
+        <div style={{position:"relative",marginBottom:8}}>
+          <input placeholder="🔍 Buscar por nome..." value={conciliaBusca} onChange={e=>setConciliaBusca(e.target.value)} className="inp" style={{marginBottom:0,paddingRight:conciliaBusca?36:14}}/>
+          {conciliaBusca&&<button onClick={()=>setConciliaBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
+        </div>
+
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+          {([["todos","Todos"],["solto","Sem vínculo"],["vinculado","Vinculados"],...(EMPRESAS_COM_PDV.includes(empresa)?[["pdv","Pendente PDV"]]:[])] as [string,string][]).map(([k,label])=>{
+            const n=k==="todos"?(conciliaMpsTodas.length+conciliaProdsTodos.length)
+              :k==="pdv"?conciliaMpsTodas.filter(m=>conciliaMpStatus(m)==="pdv").length
+              :conciliaMpsTodas.filter(m=>conciliaMpStatus(m)===k).length+conciliaProdsTodos.filter(p=>conciliaProdStatus(p)===(k==="vinculado"?"ok":"solto")).length;
+            return <span key={k} onClick={()=>setConciliaFiltro(k as any)}
+              style={{fontSize:11,fontWeight:700,padding:"6px 11px",borderRadius:20,cursor:"pointer",border:conciliaFiltro===k?"1.5px solid var(--btnPrimary)":"1.5px solid var(--border2)",background:conciliaFiltro===k?"var(--btnPrimary)22":"transparent",color:conciliaFiltro===k?"var(--btnPrimary)":"var(--text2)"}}>{label} · {n}</span>;
+          })}
+        </div>
+
+        {/* ---- Matérias-primas ---- */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)",marginBottom:2}}>
+          <span style={{fontSize:12.5,fontWeight:700}}>🧂 Matérias-primas · {conciliaMpsFiltradas.length}</span>
+          {conciliaMpsFiltradas.length>0&&<button onClick={conciliaToggleSelAllMp} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"4px 0"}}>
+            {conciliaMpsFiltradas.every(m=>conciliaSelMp.has(m.id))?"Desmarcar todos":`Selecionar todos (${conciliaMpsFiltradas.length})`}
+          </button>}
+        </div>
+        {conciliaMpsFiltradas.slice(0,200).map(mp=>{
+          const st=conciliaMpStatus(mp);
+          const vinc=st==="vinculado"?conciliaProdVinculadoDe(mp.id):null;
+          return <div key={mp.id} onClick={()=>conciliaToggleMp(mp.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 2px",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
+            <span style={{width:18,height:18,borderRadius:5,border:"1.5px solid var(--border2)",background:conciliaSelMp.has(mp.id)?"var(--btnPrimary)":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12}}>{conciliaSelMp.has(mp.id)?"✓":""}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{mp.nome}</div>
+              <div style={{fontSize:10.5,color:"#888"}}>{mp.categoria||"—"}{vinc?` · vinculada a "${vinc.nome}"`:""}</div>
+            </div>
+            <span style={{fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap" as const,
+              background:st==="pdv"?"#EDE9FE":st==="vinculado"?"#DCFCE7":"#FEF3C7",
+              color:st==="pdv"?"#7C3AED":st==="vinculado"?"#15803D":"#92400E"}}>
+              {st==="pdv"?"PDV pendente":st==="vinculado"?"vinculada":"solta"}
+            </span>
+          </div>;
+        })}
+        {!conciliaMpsFiltradas.length&&<div style={{fontSize:11,color:"#888",padding:"10px 0"}}>Nenhuma matéria-prima encontrada.</div>}
+        {conciliaMpsFiltradas.length>200&&<div style={{fontSize:10.5,color:"#888",padding:"6px 0"}}>Mostrando as primeiras 200 de {conciliaMpsFiltradas.length} — refine a busca pra ver o resto.</div>}
+
+        {/* ---- Produtos ---- */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border)",marginTop:16,marginBottom:2}}>
+          <span style={{fontSize:12.5,fontWeight:700}}>🛒 Produtos (Lista de Compras) · {conciliaProdsFiltrados.length}</span>
+          {conciliaProdsFiltrados.length>0&&<button onClick={conciliaToggleSelAllProd} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"4px 0"}}>
+            {conciliaProdsFiltrados.every(p=>conciliaSelProd.has(p.id))?"Desmarcar todos":`Selecionar todos (${conciliaProdsFiltrados.length})`}
+          </button>}
+        </div>
+        {conciliaProdsFiltrados.slice(0,200).map(p=>{
+          const st=conciliaProdStatus(p);
+          const nMarcas=(p.mpVinculados||[]).length;
+          return <div key={p.id} onClick={()=>conciliaToggleProd(p.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 2px",borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
+            <span style={{width:18,height:18,borderRadius:5,border:"1.5px solid var(--border2)",background:conciliaSelProd.has(p.id)?"var(--btnPrimary)":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12}}>{conciliaSelProd.has(p.id)?"✓":""}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{p.nome}</div>
+              <div style={{fontSize:10.5,color:"#888"}}>{nMarcas} marca{nMarcas!==1?"s":""} vinculada{nMarcas!==1?"s":""}</div>
+            </div>
+            <span style={{fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap" as const,
+              background:st==="ok"?"#DCFCE7":"#FEF3C7",color:st==="ok"?"#15803D":"#92400E"}}>
+              {st==="ok"?"ok":"sem vínculo"}
+            </span>
+          </div>;
+        })}
+        {!conciliaProdsFiltrados.length&&<div style={{fontSize:11,color:"#888",padding:"10px 0"}}>Nenhum produto encontrado.</div>}
+        {conciliaProdsFiltrados.length>200&&<div style={{fontSize:10.5,color:"#888",padding:"6px 0"}}>Mostrando os primeiros 200 de {conciliaProdsFiltrados.length} — refine a busca pra ver o resto.</div>}
+      </div>
+
+      {(conciliaSelMp.size+conciliaSelProd.size)>0&&<div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:250,display:"flex",justifyContent:"center",padding:"10px 16px calc(10px + env(safe-area-inset-bottom))",pointerEvents:"none"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:30,padding:"8px 8px 8px 16px",boxShadow:"0 8px 24px rgba(0,0,0,.35)",maxWidth:440,width:"100%",pointerEvents:"auto"}}>
+          <span style={{fontSize:12,fontWeight:700,flex:1}}>{conciliaSelMp.size+conciliaSelProd.size} selecionado{(conciliaSelMp.size+conciliaSelProd.size)>1?"s":""}</span>
+          <button onClick={()=>{setConciliaSelMp(new Set());setConciliaSelProd(new Set());}} style={{background:"none",border:"none",color:"var(--text2)",fontSize:12,cursor:"pointer",padding:"8px 10px"}}>Cancelar</button>
+          <button onClick={conciliaExcluirSelecionados} style={{background:"var(--btnDanger)",color:"#fff",border:"none",borderRadius:24,padding:"9px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>🗑️ Excluir</button>
+        </div>
+      </div>}
     </div>}
 
     {/* ===== NF-e / SEFAZ ===== */}
