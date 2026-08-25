@@ -244,6 +244,52 @@ router.get('/:id/movements', async (req, res) => {
   }
 });
 
+// GET /api/stock/:id/vendas?de=&ate= — como este produto foi vendido, por
+// forma de pagamento. Uma venda pode ter mais de uma forma de pagamento ao
+// mesmo tempo (split) — nesse caso não dá pra saber com certeza qual forma
+// pagou qual item, então as unidades dessa venda entram no bucket "misto"
+// em vez de uma divisão proporcional inventada. Sem conceito de canal aqui
+// (balcão/mesa/delivery) — o Seama não separa isso hoje.
+router.get('/:id/vendas', async (req, res) => {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : null;
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : null;
+  const filtroData = [
+    de ? `DATE(s.created_at AT TIME ZONE '${TZ}') >= ${sqlStr(de)}` : null,
+    ate ? `DATE(s.created_at AT TIME ZONE '${TZ}') <= ${sqlStr(ate)}` : null,
+  ].filter(Boolean).map((c) => ` AND ${c}`).join('');
+
+  try {
+    const itens = await pool.query(
+      `SELECT si.sale_id, si.quantity
+         FROM sale_items si JOIN sales s ON s.id = si.sale_id
+        WHERE si.product_id = $1 AND s.status = 'concluida'${filtroData}`,
+      [req.params.id]
+    );
+    if (!itens.rows.length) return res.json({ total_unidades: 0, por_forma_pagamento: {} });
+
+    const saleIds = [...new Set(itens.rows.map((r) => r.sale_id))];
+    const pagamentos = await pool.query(
+      `SELECT sale_id, method FROM sale_payments WHERE sale_id IN (${saleIds.map(sqlStr).join(',')})`
+    );
+    const metodosPor = {};
+    pagamentos.rows.forEach((p) => { (metodosPor[p.sale_id] = metodosPor[p.sale_id] || []).push(p.method); });
+
+    const porPagamento = {};
+    let totalUnidades = 0;
+    itens.rows.forEach((it) => {
+      const q = parseInt(it.quantity, 10) || 0;
+      totalUnidades += q;
+      const metodos = metodosPor[it.sale_id] || [];
+      const chave = metodos.length === 1 ? metodos[0] : metodos.length > 1 ? 'misto' : 'nao_informado';
+      porPagamento[chave] = (porPagamento[chave] || 0) + q;
+    });
+
+    res.json({ total_unidades: totalUnidades, por_forma_pagamento: porPagamento });
+  } catch (err) {
+    return internalError(res, err, '[stock/vendas]');
+  }
+});
+
 // GET /api/stock/entradas?de=&ate=&fornecedor= — extrato do que entrou.
 // Fornecedor e data vêm de purchase_entries pelo origin_id, não do texto do
 // motivo: interpretar string quebraria no primeiro fornecedor com travessão

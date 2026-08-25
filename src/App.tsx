@@ -1774,6 +1774,7 @@ export default function App() {
     {id:"produtos-menu",label:"Produtos",icon:"🍽️",children:[
       {id:"pm-prod",label:"Produtos",icon:"🍽️",sub:"produtos"},
       {id:"pm-cat",label:"Categorias",icon:"📂",sub:"categorias"},
+      {id:"pm-estoque",label:"Estoque",icon:"📦",sub:"estoque"},
     ]},
     {id:"cardapio-tv",label:"Cardápio TV",icon:"📺",children:[
       {id:"tv-telas",label:"Telas",icon:"📺",sub:"telas"},
@@ -13592,10 +13593,13 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
     <div style={{display:"flex",gap:5,marginBottom:14}}>
       <button className="pill" onClick={()=>setSubTab("produtos")} style={{background:subTab==="produtos"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="produtos"?"#fff":"#777"}}>🍽️ Produtos</button>
       <button className="pill" onClick={()=>setSubTab("categorias")} style={{background:subTab==="categorias"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="categorias"?"#fff":"#777"}}>📂 Categorias</button>
+      <button className="pill" onClick={()=>setSubTab("estoque")} style={{background:subTab==="estoque"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="estoque"?"#fff":"#777"}}>📦 Estoque</button>
     </div>
 
-    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
-    {loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
+    {subTab==="estoque"&&<EstoquePdvPanel/>}
+
+    {subTab!=="estoque"&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {subTab!=="estoque"&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
 
     {subTab==="produtos"&&<div>
       {/* Toolbar de filtros — igual ADMIN-03 */}
@@ -13784,6 +13788,321 @@ function ProdutosMenuPanel({pendingSub,setPendingSub}:{pendingSub?:string|null,s
           <button className="btn" onClick={()=>setCatModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
           <button className="btn" onClick={saveCategoria} style={{background:"var(--btnPrimary)",color:"#fff",flex:1}}>Salvar</button>
         </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ===================== ESTOQUE DO PDV (Confraria e Seama) =====================
+// Fala com os dois PDVs pelo mesmo proxy do catálogo (new_server.js:
+// /api/estoque-pdv*, autenticado por token de serviço). Os dois backends têm
+// formatos de campo diferentes — a normalização acontece do lado do
+// new_server.js, então aqui é sempre {id,nome,categoria,saldo,minimo,
+// abaixoMinimo}, não importa qual PDV está por trás.
+const diasAtras=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d);};
+
+function EstoquePdvPanel(){
+  const [empresa,setEmpresa]=useState<"CONFRARIA"|"SEAMA">("CONFRARIA");
+  const [view,setView]=useState<"saldo"|"vendas"|"inventario">("saldo");
+  const [itens,setItens]=useState<any[]>([]);
+  const [abaixo,setAbaixo]=useState(0);
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState("");
+  const [busca,setBusca]=useState("");
+
+  const load=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const r=await fetch(`/api/estoque-pdv?empresa=${empresa}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar estoque");
+      setItens(d.itens||[]);setAbaixo(d.abaixo||0);
+    }catch(e:any){setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[empresa]);
+
+  const filtrados=itens.filter((i:any)=>!busca||i.nome.toLowerCase().includes(busca.toLowerCase()))
+    .sort((a:any,b:any)=>(b.abaixoMinimo?1:0)-(a.abaixoMinimo?1:0)||a.saldo-b.saldo);
+
+  // ---- Ajustar saldo (contagem física ou perda) ----
+  const [ajusteModal,setAjusteModal]=useState<any>(null);
+  const [ajusteTipo,setAjusteTipo]=useState<"contagem"|"perda">("contagem");
+  const [ajusteValor,setAjusteValor]=useState("");
+  const [ajusteMotivo,setAjusteMotivo]=useState("");
+  const [salvandoAjuste,setSalvandoAjuste]=useState(false);
+  const abrirAjuste=(it:any)=>{setAjusteModal(it);setAjusteTipo("contagem");setAjusteValor(String(it.saldo));setAjusteMotivo("");};
+  const salvarAjuste=async()=>{
+    const valor=parseFloat(String(ajusteValor).replace(",","."));
+    if(!Number.isFinite(valor)||valor<0)return alert("Informe um valor válido.");
+    setSalvandoAjuste(true);
+    try{
+      const r=await fetch(`/api/estoque-pdv/${ajusteModal.id}/ajuste`,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({empresa,tipo:ajusteTipo,valor,motivo:ajusteMotivo||null})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao ajustar");
+      setAjusteModal(null);load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setSalvandoAjuste(false);
+  };
+
+  // ---- Histórico de movimentos ----
+  const [histModal,setHistModal]=useState<any>(null);
+  const [histDados,setHistDados]=useState<any>(null);
+  const [histLoading,setHistLoading]=useState(false);
+  const abrirHistorico=async(it:any)=>{
+    setHistModal(it);setHistDados(null);setHistLoading(true);
+    try{
+      const r=await fetch(`/api/estoque-pdv/${it.id}/movimentos?empresa=${empresa}`);
+      setHistDados(await r.json());
+    }catch(e:any){setHistDados({erro:e.message});}
+    setHistLoading(false);
+  };
+  const tipoIcone=(t:string)=>t==="entrada"?"🟢":t==="ajuste"?"🟡":"🔴";
+
+  // ---- Vendas por produto ----
+  const [vendaProdId,setVendaProdId]=useState("");
+  const [vendaPeriodo,setVendaPeriodo]=useState<"hoje"|"7"|"30">("7");
+  const [vendaDados,setVendaDados]=useState<any>(null);
+  const [vendaLoading,setVendaLoading]=useState(false);
+  useEffect(()=>{
+    if(view!=="vendas"||!vendaProdId)return;
+    const de=vendaPeriodo==="hoje"?today():diasAtras(parseInt(vendaPeriodo,10));
+    setVendaLoading(true);setVendaDados(null);
+    fetch(`/api/estoque-pdv/${vendaProdId}/vendas?empresa=${empresa}&de=${de}&ate=${today()}`)
+      .then(r=>r.json()).then(setVendaDados).catch(()=>setVendaDados({erro:true})).finally(()=>setVendaLoading(false));
+  },[view,vendaProdId,vendaPeriodo,empresa]);
+  const ROTULO_PAGAMENTO:Record<string,string>={pix:"Pix",cartao_credito:"Cartão crédito",cartao_debito:"Cartão débito",dinheiro:"Dinheiro",misto:"Misto (dividido)",nao_informado:"Não informado"};
+  const ROTULO_CANAL:Record<string,string>={balcao:"Balcão",mesa:"Mesa",delivery:"Delivery",retirada:"Retirada"};
+
+  // ---- Inventário: gerar folha + lançar contagem ----
+  const [invSub,setInvSub]=useState<"folha"|"lancar">("folha");
+  const [invCategoria,setInvCategoria]=useState("");
+  const [invCega,setInvCega]=useState(true);
+  const [invFolha,setInvFolha]=useState<any[]>([]);
+  const [invLoading,setInvLoading]=useState(false);
+  const categorias=useMemo(()=>[...new Set(itens.map((i:any)=>i.categoria).filter(Boolean))] as string[],[itens]);
+  const gerarFolha=async()=>{
+    setInvLoading(true);
+    try{
+      const r=await fetch(`/api/estoque-pdv/inventario/folha?empresa=${empresa}`);
+      const d=await r.json();
+      let lista=(d.itens||[]) as any[];
+      if(invCategoria)lista=lista.filter(i=>i.categoria===invCategoria);
+      lista.sort((a,b)=>(a.categoria||"").localeCompare(b.categoria||"","pt-BR")||a.nome.localeCompare(b.nome,"pt-BR"));
+      setInvFolha(lista);
+    }catch(e:any){alert("Erro ao gerar folha: "+e.message);}
+    setInvLoading(false);
+  };
+  useEffect(()=>{if(view==="inventario")gerarFolha();},[view,empresa]);
+  const imprimirFolha=()=>{
+    const linhas=invFolha.map(p=>`<tr><td>${p.nome}</td>${invCega?"":`<td class="num">${p.saldoAtual}</td>`}<td class="branco"></td></tr>`).join("");
+    abrirRelatorio(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Folha de contagem — ${empresa}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:24px;color:#1a1a1a;font-size:12px}
+        h1{font-size:16px;margin:0 0 2px}
+        .meta{font-size:11px;color:#666;margin-bottom:14px}
+        table{width:100%;border-collapse:collapse}
+        th{text-align:left;font-size:10px;text-transform:uppercase;color:#888;padding:4px 6px;border-bottom:2px solid #1a1a1a}
+        th.num,td.num{text-align:right}
+        td{padding:7px 6px;border-bottom:1px solid #ddd}
+        td.branco{width:110px;border-bottom:1.5px solid #1a1a1a}
+        .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
+        .no-print-bar button{padding:8px 22px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+        @media print{.no-print-bar{display:none}}
+      </style></head><body>
+      <div class="no-print-bar"><button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button><button onclick="window.print()" style="background:#F6C453;color:#1a1406">🖨️ Imprimir</button></div>
+      <h1>Folha de contagem — ${empresa==="CONFRARIA"?"Confraria":"Seama"}${invCategoria?" · "+invCategoria:""}</h1>
+      <div class="meta">${new Date().toLocaleDateString("pt-BR",{timeZone:TZ})} · ${invFolha.length} produto(s)${invCega?" · contagem cega":""}</div>
+      <table><thead><tr><th>Produto</th>${invCega?"":"<th class=\"num\">Sistema</th>"}<th>Contado</th></tr></thead><tbody>${linhas}</tbody></table>
+    </body></html>`);
+  };
+
+  const [lancContagem,setLancContagem]=useState<Record<string,string>>({});
+  const [lancMotivo,setLancMotivo]=useState("");
+  const [salvandoInv,setSalvandoInv]=useState(false);
+  const fecharContagem=async()=>{
+    const itensContados=Object.entries(lancContagem)
+      .map(([id,v])=>({id,contado:parseFloat(String(v).replace(",","."))}))
+      .filter(i=>Number.isFinite(i.contado)&&i.contado>=0);
+    if(!itensContados.length)return alert("Digite ao menos uma contagem.");
+    setSalvandoInv(true);
+    try{
+      const r=await fetch("/api/estoque-pdv/inventario",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({empresa,itens:itensContados,motivo:lancMotivo||null})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao fechar contagem");
+      alert(`✅ Contagem fechada: ${d.divergentes} produto(s) ajustado(s)${d.valorDiferenca!=null?` · diferença de ${fmtMoney(d.valorDiferenca)}`:""}.`);
+      setLancContagem({});setLancMotivo("");load();gerarFolha();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setSalvandoInv(false);
+  };
+
+  return <div>
+    <div className="section-title">📦 Estoque do PDV</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Ajustar aqui reflete direto no PDV, na hora — é o mesmo banco de dados.</div>
+
+    <div style={{display:"flex",gap:6,marginBottom:12}}>
+      <button className="pill" onClick={()=>setEmpresa("CONFRARIA")} style={{flex:1,background:empresa==="CONFRARIA"?"#22C55E":"var(--bg4)",color:empresa==="CONFRARIA"?"#fff":"#777",fontWeight:700}}>🟢 CONFRARIA</button>
+      <button className="pill" onClick={()=>setEmpresa("SEAMA")} style={{flex:1,background:empresa==="SEAMA"?"#22C55E":"var(--bg4)",color:empresa==="SEAMA"?"#fff":"#777",fontWeight:700}}>SEAMA</button>
+    </div>
+
+    <div style={{display:"flex",gap:5,marginBottom:14}}>
+      <button className="pill" onClick={()=>setView("saldo")} style={{background:view==="saldo"?"var(--btnPrimary)":"var(--bg4)",color:view==="saldo"?"#fff":"#777"}}>💰 Saldo</button>
+      <button className="pill" onClick={()=>setView("vendas")} style={{background:view==="vendas"?"var(--btnPrimary)":"var(--bg4)",color:view==="vendas"?"#fff":"#777"}}>📊 Vendas por produto</button>
+      <button className="pill" onClick={()=>setView("inventario")} style={{background:view==="inventario"?"var(--btnPrimary)":"var(--bg4)",color:view==="inventario"?"#fff":"#777"}}>📋 Inventário</button>
+    </div>
+
+    {view==="saldo"&&<div>
+      {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+      {loading?<div className="muted" style={{fontSize:12}}>Carregando...</div>:<>
+        <div style={{display:"flex",gap:10,marginBottom:12}}>
+          <div className="card" style={{flex:1,textAlign:"center",padding:"10px 8px"}}><div style={{fontSize:20,fontWeight:800}}>{itens.length}</div><div className="muted" style={{fontSize:10}}>produtos c/ controle</div></div>
+          <div className="card" style={{flex:1,textAlign:"center",padding:"10px 8px",border:abaixo>0?"1px solid #EF444455":undefined}}><div style={{fontSize:20,fontWeight:800,color:abaixo>0?"var(--btnDanger)":undefined}}>{abaixo}</div><div className="muted" style={{fontSize:10}}>abaixo do mínimo</div></div>
+        </div>
+        <input placeholder="🔍 Buscar produto..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{marginBottom:10}}/>
+        {!filtrados.length&&<EmptyState msg="Nenhum produto controla estoque ainda."/>}
+        {filtrados.map((it:any)=>(
+          <div key={it.id} className="card" style={{marginBottom:8,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,border:it.abaixoMinimo?"1px solid #EF444455":undefined}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700}}>{it.nome}</div>
+              <div className="muted" style={{fontSize:10}}>{it.categoria||"—"}{it.abaixoMinimo?" · ⚠️ abaixo do mínimo":""}</div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontFamily:"monospace",fontWeight:700,fontSize:15,color:it.abaixoMinimo?"var(--btnDanger)":undefined}}>{it.saldo}</div>
+              <div className="muted" style={{fontSize:9}}>mín. {it.minimo}</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+              <button className="btn" onClick={()=>abrirAjuste(it)} style={{background:"var(--bg4)",fontSize:11,padding:"5px 9px"}}>Ajustar</button>
+              <button className="btn" onClick={()=>abrirHistorico(it)} style={{background:"var(--bg4)",fontSize:11,padding:"5px 9px"}}>Histórico</button>
+            </div>
+          </div>
+        ))}
+      </>}
+    </div>}
+
+    {view==="vendas"&&<div>
+      <select value={vendaProdId} onChange={e=>setVendaProdId(e.target.value)} className="inp" style={{marginBottom:10}}>
+        <option value="">Selecione um produto...</option>
+        {[...itens].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
+      </select>
+      {vendaProdId&&<>
+        <div style={{display:"flex",gap:5,marginBottom:12}}>
+          <button className="pill" onClick={()=>setVendaPeriodo("hoje")} style={{background:vendaPeriodo==="hoje"?"var(--btnPrimary)":"var(--bg4)",color:vendaPeriodo==="hoje"?"#fff":"#777"}}>Hoje</button>
+          <button className="pill" onClick={()=>setVendaPeriodo("7")} style={{background:vendaPeriodo==="7"?"var(--btnPrimary)":"var(--bg4)",color:vendaPeriodo==="7"?"#fff":"#777"}}>7 dias</button>
+          <button className="pill" onClick={()=>setVendaPeriodo("30")} style={{background:vendaPeriodo==="30"?"var(--btnPrimary)":"var(--bg4)",color:vendaPeriodo==="30"?"#fff":"#777"}}>30 dias</button>
+        </div>
+        {vendaLoading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+        {vendaDados&&!vendaDados.erro&&<div className="card">
+          <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:24,fontWeight:800}}>{vendaDados.total_unidades||0}</div><div className="muted" style={{fontSize:11}}>unidades vendidas no período</div></div>
+          {!vendaDados.total_unidades&&<EmptyState msg="Nenhuma venda deste produto no período."/>}
+          {!!vendaDados.total_unidades&&<>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",marginBottom:8}}>💳 Por forma de pagamento</div>
+            {Object.entries(vendaDados.por_forma_pagamento||{}).sort((a:any,b:any)=>b[1]-a[1]).map(([k,v]:any)=>(
+              <div key={k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,fontSize:12}}>
+                <span style={{width:110,flexShrink:0,color:"var(--text2)"}}>{ROTULO_PAGAMENTO[k]||k}</span>
+                <div style={{flex:1,height:9,background:"var(--bg4)",borderRadius:5,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.round(v/vendaDados.total_unidades*100)}%`,background:"var(--btnPrimary)"}}/></div>
+                <span style={{width:44,textAlign:"right",fontFamily:"monospace",fontWeight:700,flexShrink:0}}>{v} un</span>
+              </div>
+            ))}
+            {vendaDados.por_canal&&<>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--text2)",margin:"14px 0 8px"}}>🏪 Por canal</div>
+              {Object.entries(vendaDados.por_canal).sort((a:any,b:any)=>b[1]-a[1]).map(([k,v]:any)=>(
+                <div key={k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,fontSize:12}}>
+                  <span style={{width:110,flexShrink:0,color:"var(--text2)"}}>{ROTULO_CANAL[k]||k}</span>
+                  <div style={{flex:1,height:9,background:"var(--bg4)",borderRadius:5,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.round(v/vendaDados.total_unidades*100)}%`,background:"var(--btnPrimary)"}}/></div>
+                  <span style={{width:44,textAlign:"right",fontFamily:"monospace",fontWeight:700,flexShrink:0}}>{v} un</span>
+                </div>
+              ))}
+            </>}
+            {empresa==="SEAMA"&&(vendaDados.por_forma_pagamento?.misto>0)&&<div className="muted" style={{fontSize:10,marginTop:10,lineHeight:1.5}}>⚠️ "Misto" são vendas pagas com mais de uma forma ao mesmo tempo — não dá pra saber com certeza qual forma pagou qual item.</div>}
+          </>}
+        </div>}
+      </>}
+    </div>}
+
+    {view==="inventario"&&<div>
+      <div style={{display:"flex",gap:5,marginBottom:14}}>
+        <button className="pill" onClick={()=>setInvSub("folha")} style={{background:invSub==="folha"?"var(--btnPrimary)":"var(--bg4)",color:invSub==="folha"?"#fff":"#777"}}>1. Gerar folha</button>
+        <button className="pill" onClick={()=>setInvSub("lancar")} style={{background:invSub==="lancar"?"var(--btnPrimary)":"var(--bg4)",color:invSub==="lancar"?"#fff":"#777"}}>2. Lançar contagem</button>
+      </div>
+
+      {invSub==="folha"&&<div className="card">
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <select value={invCategoria} onChange={e=>{setInvCategoria(e.target.value);}} className="inp" style={{flex:1,marginBottom:0}}>
+            <option value="">Todas as categorias</option>
+            {categorias.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+          <button className="btn" onClick={gerarFolha} style={{background:"var(--bg4)"}}>🔄</button>
+        </div>
+        <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,cursor:"pointer",fontSize:12}}>
+          <input type="checkbox" checked={invCega} onChange={e=>setInvCega(e.target.checked)}/>
+          🙈 Contagem cega — não mostra o saldo do sistema na folha
+        </label>
+        {invLoading?<div className="muted" style={{fontSize:12}}>Gerando...</div>:<div className="muted" style={{fontSize:12,marginBottom:12}}>{invFolha.length} produto(s) nesta folha{invCategoria?` (${invCategoria})`:""}.</div>}
+        <button className="btn" onClick={imprimirFolha} disabled={!invFolha.length} style={{width:"100%",background:"var(--btnPrimary)",color:"#fff",padding:"12px",fontWeight:700}}>🖨️ Imprimir folha de contagem</button>
+      </div>}
+
+      {invSub==="lancar"&&<div className="card">
+        <div className="muted" style={{fontSize:11,marginBottom:10}}>Digite os números que os colaboradores contaram — deixe em branco o que não foi contado ainda.</div>
+        {invFolha.map(p=>{
+          const val=lancContagem[p.id]||"";
+          const contado=parseFloat(String(val).replace(",","."));
+          const delta=Number.isFinite(contado)?Math.round((contado-p.saldoAtual)*100)/100:null;
+          return <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
+            <input value={val} onChange={e=>setLancContagem(m=>({...m,[p.id]:e.target.value}))} placeholder="—" className="inp" style={{width:64,textAlign:"center",marginBottom:0}}/>
+            <span style={{width:42,textAlign:"right",fontFamily:"monospace",fontSize:11,fontWeight:700,color:delta==null?"var(--text3)":delta>0?"#22C55E":delta<0?"var(--btnDanger)":"var(--text3)"}}>{delta==null?"—":delta>0?`+${delta}`:delta}</span>
+          </div>;
+        })}
+        {!invFolha.length&&<div className="muted" style={{fontSize:12}}>Gere a folha primeiro (aba "1. Gerar folha").</div>}
+        <textarea placeholder="Motivo (opcional)" value={lancMotivo} onChange={e=>setLancMotivo(e.target.value)} className="inp" style={{marginTop:10,minHeight:50}}/>
+        <button className="btn" onClick={fecharContagem} disabled={salvandoInv} style={{width:"100%",background:"#22C55E",color:"#06210f",padding:"12px",fontWeight:700,marginTop:8}}>{salvandoInv?"Salvando...":"✅ Fechar contagem e aplicar ajustes"}</button>
+      </div>}
+    </div>}
+
+    {ajusteModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto" as const}}>
+      <div className="card" style={{width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto" as const}}>
+        <div style={{fontWeight:700,marginBottom:4}}>{ajusteModal.nome}</div>
+        <div className="muted" style={{fontSize:11,marginBottom:14}}>Saldo atual: {ajusteModal.saldo}</div>
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          <button className="pill" onClick={()=>setAjusteTipo("contagem")} style={{flex:1,background:ajusteTipo==="contagem"?"var(--btnPrimary)":"var(--bg4)",color:ajusteTipo==="contagem"?"#fff":"#777"}}>📋 Contagem física</button>
+          <button className="pill" onClick={()=>setAjusteTipo("perda")} style={{flex:1,background:ajusteTipo==="perda"?"var(--btnPrimary)":"var(--bg4)",color:ajusteTipo==="perda"?"#fff":"#777"}}>📉 Perda</button>
+        </div>
+        <label style={{fontSize:11,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>{ajusteTipo==="contagem"?"Saldo contado agora":"Quantidade perdida"}</label>
+        <input value={ajusteValor} onChange={e=>setAjusteValor(e.target.value)} className="inp" inputMode="decimal"/>
+        {ajusteTipo==="contagem"&&Number.isFinite(parseFloat(String(ajusteValor).replace(",",".")))&&<div className="muted" style={{fontSize:11,marginTop:2,marginBottom:10}}>
+          Estava em {ajusteModal.saldo}, vai pra {ajusteValor} ({(()=>{const d=Math.round((parseFloat(String(ajusteValor).replace(",","."))-ajusteModal.saldo)*100)/100;return d>0?`+${d}`:d;})()})
+        </div>}
+        <label style={{fontSize:11,fontWeight:700,color:"var(--text2)",display:"block",marginTop:10,marginBottom:4}}>Motivo (opcional)</label>
+        <textarea value={ajusteMotivo} onChange={e=>setAjusteMotivo(e.target.value)} className="inp" style={{minHeight:50}}/>
+        <div style={{display:"flex",gap:8,marginTop:14}}>
+          <button className="btn" onClick={()=>setAjusteModal(null)} style={{background:"var(--border2)",color:"var(--text2)",flex:1}}>Cancelar</button>
+          <button className="btn" onClick={salvarAjuste} disabled={salvandoAjuste} style={{background:"var(--btnPrimary)",color:"#fff",flex:1}}>{salvandoAjuste?"Salvando...":"Salvar ajuste"}</button>
+        </div>
+      </div>
+    </div>}
+
+    {histModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto" as const}}>
+      <div className="card" style={{width:"100%",maxWidth:460,maxHeight:"90vh",overflowY:"auto" as const}}>
+        <div style={{fontWeight:700,marginBottom:10}}>{histModal.nome}</div>
+        {histLoading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+        {histDados?.erro&&<div style={{color:"var(--btnDanger)",fontSize:12}}>⚠️ {histDados.erro}</div>}
+        {histDados?.movimentos&&!histDados.movimentos.length&&<EmptyState msg="Nenhuma movimentação ainda."/>}
+        {histDados?.movimentos?.map((m:any)=>(
+          <div key={m.id} style={{display:"flex",gap:8,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+            <span>{tipoIcone(m.tipo)}</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:600}}>{m.origem||m.motivo||m.tipo}</div>
+              <div className="muted" style={{fontSize:10}}>{new Date(m.data).toLocaleString("pt-BR",{timeZone:TZ})}{m.operador?` · ${m.operador}`:""}</div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontFamily:"monospace",fontWeight:700,fontSize:12,color:m.quantidade>0?"#22C55E":"var(--btnDanger)"}}>{m.quantidade>0?"+":""}{m.quantidade}</div>
+              {m.saldo_depois!=null&&<div className="muted" style={{fontSize:9}}>saldo: {m.saldo_depois}</div>}
+            </div>
+          </div>
+        ))}
+        <button className="btn" onClick={()=>setHistModal(null)} style={{width:"100%",background:"var(--bg4)",marginTop:12}}>Fechar</button>
       </div>
     </div>}
   </div>;

@@ -137,6 +137,56 @@ router.post('/:id/ajuste', async (req, res) => {
   }
 });
 
+// GET /api/stock/:id/vendas?de=&ate= — como este produto foi vendido: por
+// forma de pagamento e por canal (balcão/mesa/delivery/retirada). Só conta
+// venda CONCLUÍDA (pedido pago, comanda fechada) — uma comanda ainda aberta
+// pode ter item cancelado depois, e contaria venda que nunca aconteceu.
+router.get('/:id/vendas', async (req, res) => {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : null;
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : null;
+  const filtroData = (campo) => [
+    de ? `DATE(${campo} AT TIME ZONE 'America/Belem') >= ${sqlStr(de)}` : null,
+    ate ? `DATE(${campo} AT TIME ZONE 'America/Belem') <= ${sqlStr(ate)}` : null,
+  ].filter(Boolean).map((c) => ` AND ${c}`).join('');
+
+  try {
+    const pedidos = await pool.query(
+      `SELECT oi.quantity, o.payment_method, o.delivery_type AS canal
+         FROM order_items oi JOIN orders o ON o.id = oi.order_id
+        WHERE oi.product_id = $1 AND o.payment_status = 'pago'${filtroData('o.created_at')}`,
+      [req.params.id]
+    );
+    // comandas não distinguem mesa/balcão em coluna própria — o rótulo livre
+    // (ex: "Mesa 5") é a única pista disponível; sem "mesa" no texto, cai em
+    // balcão (é o caso mais comum de comanda avulsa).
+    const comandas = await pool.query(
+      `SELECT ci.quantity, c.payment_method,
+              CASE WHEN c.label ILIKE 'mesa%' THEN 'mesa' ELSE 'balcao' END AS canal
+         FROM comanda_items ci JOIN comandas c ON c.id = ci.comanda_id
+        WHERE ci.product_id = $1 AND c.status = 'fechada'${filtroData('c.closed_at')}`,
+      [req.params.id]
+    );
+
+    const porPagamento = {}, porCanal = {};
+    let totalUnidades = 0;
+    [...pedidos.rows, ...comandas.rows].forEach((r) => {
+      const q = parseInt(r.quantity, 10) || 0;
+      totalUnidades += q;
+      const pag = r.payment_method || 'nao_informado';
+      porPagamento[pag] = (porPagamento[pag] || 0) + q;
+      porCanal[r.canal] = (porCanal[r.canal] || 0) + q;
+    });
+
+    res.json({
+      total_unidades: totalUnidades,
+      por_forma_pagamento: porPagamento,
+      por_canal: porCanal,
+    });
+  } catch (err) {
+    return erro(res, err, '[stock/vendas]');
+  }
+});
+
 // POST /api/stock/marcar-categoria — liga (ou desliga) o controle numa
 // categoria inteira. Marcar 22 bebidas uma a uma é a tarefa que faz alguém
 // desistir no décimo produto.

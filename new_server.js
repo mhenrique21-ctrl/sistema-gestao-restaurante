@@ -33,11 +33,12 @@ const CERTS_DIR = path.join(__dirname, 'certs');
 const DADOS_DIR = path.join(__dirname, 'dados');
 const BANNERS_DIR = path.join(DADOS_DIR, 'banners');
 
-// Token de serviço (JWT admin do delivery-backend) usado pra proxiar as rotas
-// de catálogo (produtos/categorias) — ver getServiceToken() e as rotas
-// /api/menu-produtos* / /api/menu-categorias* mais abaixo.
-let _serviceToken = null;
-let _serviceTokenExpiry = 0;
+// Token de serviço (JWT admin do PDV) usado pra proxiar rotas de catálogo e
+// estoque — ver getServiceToken() e as rotas /api/menu-produtos*,
+// /api/menu-categorias* e /api/estoque-pdv* mais abaixo. Um cache por
+// empresa: CONFRARIA e SEAMA são dois backends diferentes, cada um com seu
+// próprio JWT.
+const _serviceTokens = { CONFRARIA: { token: null, expiry: 0 }, SEAMA: { token: null, expiry: 0 } };
 const CACHE_FILE = path.join(CERTS_DIR, 'sefaz_cache.json');
 fs.mkdirSync(DADOS_DIR, { recursive: true });
 fs.mkdirSync(BANNERS_DIR, { recursive: true });
@@ -870,19 +871,77 @@ async function sefazSync(emp) {
   return sefazVarrerTudo(emp);
 }
 
-// Obtém (e cacheia) um JWT admin do delivery-backend, via segredo compartilhado
-// GESTAO_SERVICE_SECRET, pra proxiar as rotas de catálogo (produtos/categorias).
-async function getServiceToken() {
-  if (_serviceToken && Date.now() < _serviceTokenExpiry) return _serviceToken;
-  const base = process.env.DELIVERY_BACKEND_URL || 'http://localhost:4000';
-  const secret = process.env.GESTAO_SERVICE_SECRET;
-  if (!secret) throw new Error('GESTAO_SERVICE_SECRET não configurado neste servidor');
-  const r = await fetch(`${base}/api/service-token`, { method: 'POST', headers: { 'x-service-secret': secret } });
-  if (!r.ok) throw new Error(`Falha ao obter token de serviço (HTTP ${r.status})`);
+// Resolve segredo/URL de cada PDV. Cada um tem seu próprio backend — a
+// Confraria reaproveita o GESTAO_SERVICE_SECRET (mesmo segredo já usado nas
+// rotas de catálogo); o Seama usa SEAMA_SERVICE_SECRET (mesmo valor que
+// SERVICE_SECRET no .env do seama-backend — nomes diferentes, mesmo segredo).
+function pdvDaEmpresa(emp) {
+  const e = String(emp || 'SEAMA').toUpperCase();
+  if (e === 'CONFRARIA') return {
+    secret: process.env.GESTAO_SERVICE_SECRET,
+    base: process.env.CONFRARIA_PDV_URL || 'https://pedidos.confrariacafe.com',
+    envVar: 'GESTAO_SERVICE_SECRET',
+  };
+  return {
+    secret: process.env.SEAMA_SERVICE_SECRET,
+    base: process.env.SEAMA_PDV_URL || 'https://seama.confrariacafe.com',
+    envVar: 'SEAMA_SERVICE_SECRET',
+  };
+}
+
+// Obtém (e cacheia, por empresa) um JWT admin do PDV certo, pra proxiar rotas
+// de catálogo e estoque sem precisar de login de usuário real.
+async function getServiceToken(empresa) {
+  const emp = String(empresa || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+  const cache = _serviceTokens[emp];
+  if (cache.token && Date.now() < cache.expiry) return cache.token;
+  const alvo = pdvDaEmpresa(emp);
+  if (!alvo.secret) throw new Error(`${alvo.envVar} não configurado neste servidor`);
+  const r = await fetch(`${alvo.base}/api/service-token`, { method: 'POST', headers: { 'x-service-secret': alvo.secret } });
+  if (!r.ok) throw new Error(`Falha ao obter token de serviço do PDV ${emp} (HTTP ${r.status})`);
   const data = await r.json();
-  _serviceToken = data.token;
-  _serviceTokenExpiry = Date.now() + Math.max(0, (data.expiresIn || 3600) - 60) * 1000; // renova 1min antes de expirar
-  return _serviceToken;
+  cache.token = data.token;
+  cache.expiry = Date.now() + Math.max(0, (data.expiresIn || 3600) - 60) * 1000; // renova 1min antes de expirar
+  return cache.token;
+}
+
+// ---- Estoque PDV: normalizadores ----
+// Confraria (delivery-backend) e Seama (seama-backend) têm APIs de estoque
+// com nomes de campo diferentes (stock_qty/estoque, stock_min/minimo,
+// category_name/categoria...) — essas funções traduzem os dois formatos pro
+// mesmo shape, pra tela do Gestão não precisar saber qual PDV está por trás.
+
+function normalizarListaEstoque(empresa, j) {
+  if (empresa === 'CONFRARIA') {
+    return {
+      itens: (j.itens || []).map(i => ({
+        id: i.id, nome: i.name, categoria: i.category_name || null,
+        saldo: i.stock_qty, minimo: i.stock_min, abaixoMinimo: i.abaixo_do_minimo,
+      })),
+      abaixo: j.abaixo || 0,
+    };
+  }
+  const itens = j.itens || [];
+  return {
+    itens: itens.map(i => ({
+      id: i.id, nome: i.name, categoria: i.categoria || null,
+      saldo: i.estoque, minimo: i.minimo, abaixoMinimo: i.abaixoMinimo,
+      giroDia: i.giroDia, cobertura: i.cobertura, sugestaoCompra: i.sugestaoCompra,
+    })),
+    abaixo: itens.filter(i => i.abaixoMinimo).length,
+    giroDias: j.giroDias,
+  };
+}
+
+function normalizarFolhaInventario(empresa, j) {
+  if (empresa === 'CONFRARIA') {
+    return (Array.isArray(j) ? j : []).map(p => ({
+      id: p.id, nome: p.name, categoria: p.category_name || null, saldoAtual: p.stock_qty,
+    }));
+  }
+  return (j.itens || []).map(p => ({
+    id: p.id, nome: p.name, categoria: p.categoria || null, saldoAtual: p.estoque,
+  }));
 }
 
 // ---- IA (Anthropic) — helper compartilhado com retry, usado por /api/scan e pelas rotas de conciliação de produtos ----
@@ -1383,25 +1442,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // Proxy autenticado por segredo de serviço: o navegador nunca vê a
   // credencial, só fala com este backend. O PDV é a fonte da verdade do
   // estoque dos itens de revenda; aqui a compra só é empurrada pra lá.
-  // Cada PDV tem seu próprio segredo e endereço. Antes isto estava fixo na
-  // SEAMA, então compra lançada pra CONFRARIA não chegava a lugar nenhum.
-  // Sem chave configurada, a rota diz QUAL variável falta, em vez de
-  // encaminhar pro PDV errado.
-  const pdvDaEmpresa = (emp) => {
-    const e = String(emp || 'SEAMA').toUpperCase();
-    // A Confraria reaproveita o GESTAO_SERVICE_SECRET, que os dois lados já
-    // usam nas rotas de catálogo — nada novo pra configurar no servidor.
-    if (e === 'CONFRARIA') return {
-      secret: process.env.GESTAO_SERVICE_SECRET,
-      base: process.env.CONFRARIA_PDV_URL || 'https://pedidos.confrariacafe.com',
-      envVar: 'GESTAO_SERVICE_SECRET',
-    };
-    return {
-      secret: process.env.SEAMA_SERVICE_SECRET,
-      base: process.env.SEAMA_PDV_URL || 'https://seama.confrariacafe.com',
-      envVar: 'SEAMA_SERVICE_SECRET',
-    };
-  };
+  // Cada PDV tem seu próprio segredo e endereço (pdvDaEmpresa, definida no
+  // escopo do módulo — também usada por getServiceToken() e pelo proxy de
+  // estoque mais abaixo).
 
   if (req.method === 'POST' && urlPath === '/api/seama-estoque') {
     let body = '';
@@ -1705,7 +1748,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     req.on('data', c => chunks.push(c));
     req.on('end', async () => {
       try {
-        const token = await getServiceToken();
+        // Catálogo hoje só existe pro delivery-backend (Confraria) — sem
+        // pedir isso explícito, getServiceToken() cairia no padrão SEAMA.
+        const token = await getServiceToken('CONFRARIA');
         const base = process.env.DELIVERY_BACKEND_URL || 'http://localhost:4000';
         const buf = Buffer.concat(chunks);
         const upstream = await fetch(`${base}${upstreamPath}`, {
@@ -1725,6 +1770,169 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         res.end(JSON.stringify({ error: 'Erro ao falar com o catálogo: ' + e.message }));
       }
     });
+    return;
+  }
+
+  // ── Estoque do PDV (Confraria e Seama) ────────────────────────────────
+  // Proxy autenticado por token de serviço, igual ao catálogo acima, mas
+  // aqui a empresa vem em query string (GET) ou no corpo (POST) — os dois
+  // PDVs respondem em formatos diferentes, então cada rota traduz pro mesmo
+  // shape antes de devolver pro navegador (ver normalizarListaEstoque() e
+  // normalizarFolhaInventario() mais acima).
+  if (urlPath.startsWith('/api/estoque-pdv')) {
+    const partes = urlPath.split('/').filter(Boolean); // ["api","estoque-pdv", ...]
+    const query = new URLSearchParams(req.url.split('?')[1] || '');
+
+    // GET /api/estoque-pdv?empresa=&categoria=
+    if (req.method === 'GET' && partes.length === 2) {
+      const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const upstream = await fetch(`${base}/api/stock`, { headers: { Authorization: 'Bearer ' + token } });
+          const data = await upstream.json().catch(() => ({}));
+          if (!upstream.ok) { res.writeHead(upstream.status); res.end(JSON.stringify(data)); return; }
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify(normalizarListaEstoque(empresa, data)));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao falar com o estoque do PDV: ' + e.message }));
+        }
+      })();
+      return;
+    }
+
+    // GET /api/estoque-pdv/inventario/folha?empresa=
+    if (req.method === 'GET' && partes[2] === 'inventario' && partes[3] === 'folha') {
+      const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const upstreamPath = empresa === 'CONFRARIA' ? '/api/stock/inventario/novo' : '/api/stock';
+          const upstream = await fetch(`${base}${upstreamPath}`, { headers: { Authorization: 'Bearer ' + token } });
+          const data = await upstream.json().catch(() => ({}));
+          if (!upstream.ok) { res.writeHead(upstream.status); res.end(JSON.stringify(data)); return; }
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify({ itens: normalizarFolhaInventario(empresa, data) }));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao gerar folha de inventário: ' + e.message }));
+        }
+      })();
+      return;
+    }
+
+    // POST /api/estoque-pdv/inventario  body:{empresa,itens:[{id,contado}],motivo}
+    if (req.method === 'POST' && partes[2] === 'inventario' && partes.length === 3) {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const { empresa: empresaRaw, itens, motivo } = JSON.parse(body);
+          const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+          if (!Array.isArray(itens) || !itens.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Informe ao menos um item contado' })); return; }
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          let upstream, data;
+          if (empresa === 'CONFRARIA') {
+            upstream = await fetch(`${base}/api/stock/inventario`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+              body: JSON.stringify({ itens: itens.map(i => ({ product_id: i.id, counted_qty: i.contado })), notes: motivo }),
+            });
+            data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) { res.writeHead(upstream.status); res.end(JSON.stringify(data)); return; }
+            res.setHeader('Content-Type', 'application/json'); res.writeHead(200);
+            res.end(JSON.stringify({ ok: true, contados: data.contados, divergentes: data.divergentes, valorDiferenca: data.valor_diferenca, detalhes: data.detalhes || [] }));
+          } else {
+            upstream = await fetch(`${base}/api/stock/contagem`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+              body: JSON.stringify({ itens: itens.map(i => ({ product_id: i.id, contado: i.contado })), motivo }),
+            });
+            data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) { res.writeHead(upstream.status); res.end(JSON.stringify(data)); return; }
+            const ajustados = data.ajustados || [];
+            res.setHeader('Content-Type', 'application/json'); res.writeHead(200);
+            res.end(JSON.stringify({
+              ok: true, contados: ajustados.length + (data.sem_mudanca || 0), divergentes: ajustados.length, valorDiferenca: null,
+              detalhes: ajustados.map(a => ({ produto: a.produto, sistema: a.de, contado: a.para, diferenca: a.diferenca, valor: null })),
+            }));
+          }
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao lançar contagem: ' + e.message }));
+        }
+      });
+      return;
+    }
+
+    // GET /api/estoque-pdv/:id/movimentos?empresa=  |  GET /api/estoque-pdv/:id/vendas?empresa=&de=&ate=
+    if (req.method === 'GET' && (partes[3] === 'movimentos' || partes[3] === 'vendas')) {
+      const id = partes[2];
+      const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+      const acao = partes[3];
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          let upstreamPath;
+          if (acao === 'movimentos') upstreamPath = `/api/stock/${id}/${empresa === 'CONFRARIA' ? 'movimentos' : 'movements'}`;
+          else upstreamPath = `/api/stock/${id}/vendas?de=${encodeURIComponent(query.get('de') || '')}&ate=${encodeURIComponent(query.get('ate') || '')}`;
+          const upstream = await fetch(`${base}${upstreamPath}`, { headers: { Authorization: 'Bearer ' + token } });
+          const data = await upstream.json().catch(() => ({}));
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(upstream.status);
+          res.end(JSON.stringify(data)); // movimentos/vendas já saem no mesmo shape dos dois PDVs — sem tradução
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: `Erro ao buscar ${acao} do PDV: ` + e.message }));
+        }
+      })();
+      return;
+    }
+
+    // POST /api/estoque-pdv/:id/ajuste  body:{empresa,tipo:'contagem'|'perda',valor,motivo}
+    if (req.method === 'POST' && partes[3] === 'ajuste') {
+      const id = partes[2];
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const { empresa: empresaRaw, tipo, valor, motivo } = JSON.parse(body);
+          const empresa = String(empresaRaw || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+          if (!['contagem', 'perda'].includes(tipo)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Tipo inválido' })); return; }
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          let upstream, data;
+          if (empresa === 'CONFRARIA') {
+            upstream = await fetch(`${base}/api/stock/${id}/ajuste`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+              body: JSON.stringify({ tipo, valor, motivo }),
+            });
+            data = await upstream.json().catch(() => ({}));
+            res.setHeader('Content-Type', 'application/json'); res.writeHead(upstream.status);
+            res.end(JSON.stringify(data));
+          } else {
+            upstream = await fetch(`${base}/api/stock/${id}/movement`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+              body: JSON.stringify({ type: tipo === 'contagem' ? 'ajuste' : 'perda', quantity: valor, reason: motivo }),
+            });
+            data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) { res.writeHead(upstream.status); res.end(JSON.stringify(data)); return; }
+            res.setHeader('Content-Type', 'application/json'); res.writeHead(200);
+            res.end(JSON.stringify({ ok: true, saldo: data.stock_qty }));
+          }
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao ajustar estoque: ' + e.message }));
+        }
+      });
+      return;
+    }
+
+    res.writeHead(404); res.end(JSON.stringify({ error: 'Rota de estoque não encontrada' }));
     return;
   }
 

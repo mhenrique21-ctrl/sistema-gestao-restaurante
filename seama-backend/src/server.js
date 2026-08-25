@@ -56,6 +56,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/stock', require('./routes/stock'));
 app.use('/api/supply', require('./routes/supply'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/service-token', require('./routes/serviceToken'));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
