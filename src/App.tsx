@@ -305,6 +305,38 @@ const applyBothProdutos = (setState:any, setDb:any, fn:(d:any)=>any) => {
   });
   else setDb(fn);
 };
+// Toda vez que uma compra é lançada (qualquer via — manual, cupom IA, NF-e,
+// SEFAZ), roda em cima das matérias-primas tocadas por ELA: se o nome já
+// vinculado a algum produto bate EXATO (fold: sem acento/maiúscula) com uma
+// que ainda está solta, vincula sozinha, sem pedir nada — é o mesmo insumo,
+// só que a nota chegou por um caminho que nunca passa pela tela de
+// conciliação (compra manual, ou nome que já existia no catálogo e por isso
+// nunca disparou o modal de "produtos não bateram com nada"). Nome só
+// PARECIDO (não igual) não vincula sozinho — vira pendente pro admin
+// aprovar, mesmo critério de sugestão que autoMatchInsumo já usa.
+const autoVincularInsumosCompra = (prodsListaIn:any[], mpsTocadas:any[]) => {
+  let prodsLista = prodsListaIn;
+  const autoVinculados:{mp:string,prod:string}[] = [];
+  const pendentes:{mp:string,prod:string}[] = [];
+  mpsTocadas.forEach((mp:any) => {
+    if (!mp) return;
+    if (prodsLista.some((p:any) => (p.mpVinculados||[]).includes(mp.id))) return;
+    const alvo = foldNome(mp.nome);
+    if (!alvo) return;
+    const exato = prodsLista.find((p:any) => foldNome(p.nome) === alvo);
+    if (exato) {
+      prodsLista = prodsLista.map((p:any) => p.id === exato.id ? { ...p, mpVinculados: [...new Set([...(p.mpVinculados||[]), mp.id])] } : p);
+      autoVinculados.push({ mp: mp.nome, prod: exato.nome });
+      return;
+    }
+    const parecido = prodsLista.find((p:any) => {
+      const pn = foldNome(p.nome);
+      return pn.length >= 4 && (alvo.includes(pn) || pn.includes(alvo));
+    });
+    if (parecido) pendentes.push({ mp: mp.nome, prod: parecido.nome });
+  });
+  return { prodsLista, autoVinculados, pendentes };
+};
 // Dia cujo faturamento vira base do budget de compras: o último dia com
 // movimento antes de `dataAlvo`, pulando domingo (nem CONFRARIA nem SEAMA
 // abrem nesse dia) — segunda-feira usa o sábado anterior, não o domingo vazio.
@@ -5024,6 +5056,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(checkDuplicataCompra(db,fornecedor,totalCompraManual,dataCom)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${fornecedor}" com valor similar em ${fmtDate(dataCom)}. Deseja continuar mesmo assim?`))return;
     }
+    let resultoConcilia={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       const grupoId=uid();
       const novasCompras=carrinho.map(item=>({
@@ -5037,6 +5070,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       // atualizar / cadastrar matérias-primas
       let mps=[...(d.materiasPrimas||[])];
       let movs=[...(d.movEstoque||[])];
+      const mpsTocadas:any[]=[];
       carrinho.forEach(item=>{
         const vUnit=parseMoney(item.valorUnit);
         const ex=mps.find(m=>m.nome.toLowerCase()===item.nomeProduto.toLowerCase());
@@ -5053,6 +5087,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             mp2.estoqueAtual=(mp2.estoqueAtual||0)+qtd;
             movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataCom,descricao:`Compra – ${fornecedor}`,grupoId,criadoEm:new Date().toISOString()});
           }
+          mpsTocadas.push(mp2);
         }
       });
       // cadastrar fornecedor se novo
@@ -5073,13 +5108,21 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         grupoId,
         criadoEm:new Date().toISOString(),
       };
-      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])],movEstoque:[...movs]};
+      const auto=autoVincularInsumosCompra(d.produtosLista||[],mpsTocadas);
+      resultoConcilia={autoVinculados:auto.autoVinculados,pendentes:auto.pendentes};
+      const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])],movEstoque:[...movs],produtosLista:auto.prodsLista};
       enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras,getCategoriasDesligadasPdv(db));
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     // reset
     setCarrinho([]);setFornecedor("");setDataCom(today());setFormaPag("dinheiro");setVencimento(today());
-    alert(`✅ Entrada finalizada!\n${carrinho.length} produto(s) registrado(s) no estoque e financeiro.`);
+    let msg=`✅ Entrada finalizada!\n${carrinho.length} produto(s) registrado(s) no estoque e financeiro.`;
+    if(resultoConcilia.autoVinculados.length)msg+=`\n\n🔗 ${resultoConcilia.autoVinculados.length} insumo(s) vinculado(s) automaticamente (nome já conhecido).`;
+    if(resultoConcilia.pendentes.length){
+      msg+=`\n\n⚠️ ${resultoConcilia.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConcilia.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n");
+      setShowConciliarInsumos(true);
+    }
+    alert(msg);
   };
 
   // ---- IA ----
@@ -5236,6 +5279,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const _execConfirmarIA=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=iaResult.fornecedor;
     const dataIA=iaResult.data||today();
+    let resultoConciliaIA={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -5255,6 +5299,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       let mps=[...(d.materiasPrimas||[])];
       let movs=[...(d.movEstoque||[])];
       let prodsLista=[...(d.produtosLista||[])];
+      const mpsTocadas:any[]=[];
       paresCompra.forEach(({key,compra:c}:any)=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
@@ -5273,8 +5318,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataIA,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
           }
           prodsLista=aplicarVinculoConciliacao(prodsLista,vinculos[key],mp2,c);
+          mpsTocadas.push(mp2);
         }
       });
+      const autoIA=autoVincularInsumosCompra(prodsLista,mpsTocadas);
+      prodsLista=autoIA.prodsLista;
+      resultoConciliaIA={autoVinculados:autoIA.autoVinculados,pendentes:autoIA.pendentes};
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
       const contaFin:any={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,...(nfeXml?{xmlNFe:nfeXml,nNF:iaResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||""}:{}),criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas,produtosLista:prodsLista};
@@ -5283,7 +5332,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);setNfeXml("");
     setConciliacao(null);
-    alert("✅ Cupom importado! Estoque e financeiro atualizados.");
+    let msgIA="✅ Cupom importado! Estoque e financeiro atualizados.";
+    if(resultoConciliaIA.autoVinculados.length)msgIA+=`\n\n🔗 ${resultoConciliaIA.autoVinculados.length} insumo(s) vinculado(s) automaticamente (nome já conhecido).`;
+    if(resultoConciliaIA.pendentes.length){
+      msgIA+=`\n\n⚠️ ${resultoConciliaIA.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConciliaIA.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n");
+      setShowConciliarInsumos(true);
+    }
+    alert(msgIA);
   };
   // Alterna removido/de-volta num item lido pela IA e recalcula o total a
   // partir só dos itens ativos — é esse total corrigido que vai pro registro
@@ -5341,6 +5396,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const _execConfirmarNFe=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=nfeResult.fornecedor;
     const dataNFe=nfeResult.data||today();
+    let resultoConciliaNFe={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -5361,6 +5417,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       let mps=[...(d.materiasPrimas||[])];
       let movs=[...(d.movEstoque||[])];
       let prodsLista=[...(d.produtosLista||[])];
+      const mpsTocadas:any[]=[];
       paresCompra.forEach(({key,compra:c}:any)=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
@@ -5378,8 +5435,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataNFe,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
           }
           prodsLista=aplicarVinculoConciliacao(prodsLista,vinculos[key],mp2,c);
+          mpsTocadas.push(mp2);
         }
       });
+      const autoNFe=autoVincularInsumosCompra(prodsLista,mpsTocadas);
+      prodsLista=autoNFe.prodsLista;
+      resultoConciliaNFe={autoVinculados:autoNFe.autoVinculados,pendentes:autoNFe.pendentes};
       const statusFin=["dinheiro","pix","cartão débito"].includes(nfeFormaPag)?"pago":"pendente";
       const tipoNF=(nfeResult.modelo||"55")==="65"?"NFC-e":"NF-e";
       const desc=`${tipoNF} ${nfeResult.nNF?`#${nfeResult.nNF} – `:""}${forn?.nome||"Fornecedor"} (${nfeFormaPag})`;
@@ -5395,7 +5456,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setNfeResult(null);setNfeError("");setNfeXml("");
     if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";
     setConciliacao(null);
-    alert(`✅ NF-e importada! ${qtdItens} produto(s) registrado(s).`);
+    let msgNFe=`✅ NF-e importada! ${qtdItens} produto(s) registrado(s).`;
+    if(resultoConciliaNFe.autoVinculados.length)msgNFe+=`\n\n🔗 ${resultoConciliaNFe.autoVinculados.length} insumo(s) vinculado(s) automaticamente (nome já conhecido).`;
+    if(resultoConciliaNFe.pendentes.length){
+      msgNFe+=`\n\n⚠️ ${resultoConciliaNFe.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConciliaNFe.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n");
+      setShowConciliarInsumos(true);
+    }
+    alert(msgNFe);
   };
   const confirmarNFe=()=>{
     if(!nfeResult)return;
@@ -5631,6 +5698,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const _execImportarNFeSefaz=(nfe:any,all:boolean,resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=nfe.fornecedor;
     const dataSefaz=nfe.data||today();
+    let resultoConciliaSefaz={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -5650,6 +5718,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       let mps=[...(d.materiasPrimas||[])];
       let movs=[...(d.movEstoque||[])];
       let prodsLista=[...(d.produtosLista||[])];
+      const mpsTocadas:any[]=[];
       paresCompra.forEach(({key,compra:c}:any)=>{
         const ex=mps.find(m=>m.nome.toLowerCase()===c.nomeProduto.toLowerCase());
         if(ex){
@@ -5667,8 +5736,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             movs.push({id:uid(),mpId:mp2.id,mpNome:mp2.nome,tipo:"entrada",quantidade:qtd,unidade:mp2.unidade||"un",custo:mp2.ultimoValor||0,data:dataSefaz,descricao:`Compra – ${forn?.nome||"—"}`,grupoId,criadoEm:new Date().toISOString()});
           }
           prodsLista=aplicarVinculoConciliacao(prodsLista,vinculos[key],mp2,c);
+          mpsTocadas.push(mp2);
         }
       });
+      const autoSefaz=autoVincularInsumosCompra(prodsLista,mpsTocadas);
+      prodsLista=autoSefaz.prodsLista;
+      resultoConciliaSefaz={autoVinculados:autoSefaz.autoVinculados,pendentes:autoSefaz.pendentes};
       const fpNfe=(nfe.formaPag&&formasPag.includes(nfe.formaPag))?nfe.formaPag:sefazFormaPag;
       const vencNfe=nfe.dVenc||sefazVenc;
       const statusFin=["dinheiro","pix","cartão débito"].includes(fpNfe)?"pago":"pendente";
@@ -5686,6 +5759,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(!all){
       setSefazList(l=>l.filter(n=>n.nsu!==nfe.nsu));
       removeFromCache([nfe.nsu]);
+      if(resultoConciliaSefaz.pendentes.length){
+        alert(`⚠️ ${resultoConciliaSefaz.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConciliaSefaz.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n"));
+        setShowConciliarInsumos(true);
+      }
     }
   };
   const importarNFeSefaz=(nfe:any,all=false)=>{
