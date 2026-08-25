@@ -4468,11 +4468,11 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
           return <div key={key} style={{marginBottom:10,border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
             <div style={{padding:"8px 10px",background:"var(--bg3)"}}>
               <div style={{fontSize:13,fontWeight:700}}>{it.nome}</div>
-              <div style={{fontSize:10,color:"#888",marginTop:2}}>{it.categoria||"—"}{it.unidade?` · ${it.unidade}`:""}</div>
+              <div style={{fontSize:10,color:"var(--text2)",marginTop:2}}>{it.categoria||"—"}{it.unidade?` · ${it.unidade}`:""}</div>
 
               {vinc?.prodListaNovo&&<div style={{marginTop:8,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
                 <span style={{fontSize:11,color:"#fbbf24",background:"#fbbf2418",border:"1px solid #fbbf2444",borderRadius:6,padding:"3px 8px",fontWeight:700}}>✨ Novo produto: {vinc.prodListaNovo.nome}</span>
-                <button onClick={()=>desfazer(key)} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#888",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>
+                <button onClick={()=>desfazer(key)} style={{fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>
               </div>}
 
               {prodSugerido&&<div style={{marginTop:8,background:"#7C3AED14",border:"1px solid var(--btnPrimary)",borderRadius:8,padding:"8px 9px"}}>
@@ -4481,13 +4481,13 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
                   <span>Produto da Lista: <b style={{color:"var(--btnPrimary)"}}>{prodSugerido.nome}</b></span>
                 </div>
                 {marcasLinkadas.length>0&&<div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginLeft:20}}>
-                  {marcasLinkadas.map((m:any)=><span key={m.id} style={{fontSize:10,background:"var(--card,var(--bg2))",border:"1px solid var(--border2)",borderRadius:20,padding:"2px 8px",color:"#888"}}>{m.nome}</span>)}
+                  {marcasLinkadas.map((m:any)=><span key={m.id} style={{fontSize:10,background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:20,padding:"2px 8px",color:"var(--text2)"}}>{m.nome}</span>)}
                   <span style={{fontSize:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:20,padding:"2px 8px",color:"#15803D",fontWeight:700}}>+ {it.nome} (esta compra)</span>
                 </div>}
-                <button onClick={()=>desfazer(key)} style={{marginTop:6,fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"#888",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>
+                <button onClick={()=>desfazer(key)} style={{marginTop:6,fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>
               </div>}
 
-              {!vinc&&!isCadastrando&&<div style={{fontSize:11,color:"#888",marginTop:8}}>Nenhum produto da Lista parecido encontrado.</div>}
+              {!vinc&&!isCadastrando&&<div style={{fontSize:11,color:"var(--text2)",marginTop:8}}>Nenhum produto da Lista parecido encontrado.</div>}
 
               {!isCadastrando&&<div style={btnRow}>
                 <button onClick={()=>{setBuscaAberta(isOpen?null:key);setBusca("");}} style={btnBase}>
@@ -4499,11 +4499,11 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
 
             {isOpen&&<div style={{padding:"8px 10px",borderTop:"1px solid var(--border)"}}>
               <input autoFocus placeholder="🔍 Buscar produto na Lista de Compras..." value={busca} onChange={(e:any)=>setBusca(e.target.value)} className="inp" style={{marginBottom:6,fontSize:12}}/>
-              {!candidatos.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum produto encontrado{busca?` para "${busca}"`:""}.</div>}
+              {!candidatos.length&&<div style={{fontSize:11,color:"var(--text2)",padding:"4px 0"}}>Nenhum produto encontrado{busca?` para "${busca}"`:""}.</div>}
               <div style={{maxHeight:140,overflowY:"auto" as const}}>
                 {candidatos.map((p:any)=><div key={p.id} onClick={()=>vincularExistente(key,p.id)}
-                  style={{padding:"6px 8px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:2,color:"#334155"}}>
-                  {p.nome} <span style={{color:"#555",fontSize:10}}>({p.cat||"—"})</span>
+                  style={{padding:"8px 9px",fontSize:12,cursor:"pointer",borderRadius:6,marginBottom:3,background:"var(--bg3)",border:"1px solid var(--border)",color:"var(--text)"}}>
+                  {p.nome} <span style={{color:"var(--text2)",fontSize:10}}>({p.cat||"—"})</span>
                 </div>)}
               </div>
             </div>}
