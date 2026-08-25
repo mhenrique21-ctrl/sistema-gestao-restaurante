@@ -5803,9 +5803,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         <button className="btn" onClick={addItem} style={{background:"var(--border2)",color:"var(--text)",padding:"11px",width:"100%",fontSize:14}}>
           + Adicionar ao Carrinho
         </button>
-        <button onClick={()=>setShowCatMgmt(v=>!v)} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",marginTop:6,padding:"2px 0"}}>
-          ⚙️ Gerenciar categorias personalizadas
-        </button>
+        <div style={{display:"flex",gap:14,marginTop:6}}>
+          <button onClick={()=>setShowCatMgmt(v=>!v)} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"2px 0"}}>
+            ⚙️ Gerenciar categorias personalizadas
+          </button>
+          <button onClick={()=>setShowConfigCatsPdv(true)} style={{background:"none",border:"none",color:"var(--btnPrimary)",fontSize:11,cursor:"pointer",padding:"2px 0"}}>
+            🏪 Categorias que vão pro PDV ({empresa})
+          </button>
+        </div>
         {showCatMgmt&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",borderRadius:8,padding:10,marginTop:6}}>
           <div style={{display:"flex",gap:6,marginBottom:6}}>
             <input value={novaCat} onChange={e=>setNovaCat(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}/>
