@@ -463,8 +463,17 @@ const mesclarProdutosDuplicados=(d:any,{canonicoId,idsRemovidos,nomeFinal}:{cano
 // CONFRARIA simplesmente não descia.
 const EMPRESAS_COM_PDV = ["SEAMA", "CONFRARIA"];
 
-const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
-  if (!EMPRESAS_COM_PDV.includes(empresa) || !grupoId || !itens?.length) return;
+// Categoria "desligada" nunca é empurrada pro PDV — fica só no Gestão
+// (custo, matéria-prima já registrados normalmente), sem entrar na fila de
+// vínculos pendentes de lá. Hortifruti/tempero/carne raramente são produto
+// vendido no balcão; forçar vínculo pra esses só inflava a fila sem
+// necessidade. Vazio (padrão) = tudo passa, igual sempre foi.
+const getCategoriasDesligadasPdv = (db: any): string[] => db?.config?.categoriasParaPdvDesligadas || [];
+
+const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens, categoriasDesligadas: string[] = []) => {
+  const desligadas = new Set((categoriasDesligadas || []).map((c) => String(c || "").toLowerCase()));
+  const itensFiltrados = desligadas.size ? (itens || []).filter((i: any) => !desligadas.has(String(i.categoria || "").toLowerCase())) : itens;
+  if (!EMPRESAS_COM_PDV.includes(empresa) || !grupoId || !itensFiltrados?.length) return;
   try {
     const r = await fetch("/api/seama-estoque", {
       method: "POST",
@@ -473,7 +482,7 @@ const enviarCompraSeama = async (empresa, grupoId, fornecedor, itens) => {
         empresa,
         origin_id: grupoId,
         supplier: fornecedor || null,
-        items: itens.map((i) => {
+        items: itensFiltrados.map((i) => {
           // Custo unitário da NOTA. O PDV converte pra unidade dele usando o
           // fator do de-para (1 multipack = 6 latas), então aqui vai o valor
           // como está na compra, sem conversão.
@@ -4803,6 +4812,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [catColaps,setCatColaps]=useState<Set<string>>(new Set());
   const [prodSubTab,setProdSubTab]=useState<"catalogo"|"substituicoes">("catalogo");
   const [showConciliarInsumos,setShowConciliarInsumos]=useState(false);
+  const [showConfigCatsPdv,setShowConfigCatsPdv]=useState(false);
+  const toggleCategoriaPdv=(cat:string)=>{
+    const atuais=getCategoriasDesligadasPdv(db);
+    const desligadas=atuais.includes(cat)?atuais.filter(c=>c!==cat):[...atuais,cat];
+    setDb((d:any)=>({...d,config:{...(d.config||{}),categoriasParaPdvDesligadas:desligadas}}));
+  };
   const [conciliarBusca,setConciliarBusca]=useState<Record<string,string>>({});
   const [conciliarEscolha,setConciliarEscolha]=useState<Record<string,{prodId?:string,prodNome?:string,novo?:boolean,auto?:boolean}>>({});
   const [autoSugestaoDispensada,setAutoSugestaoDispensada]=useState<Set<string>>(new Set());
@@ -5025,7 +5040,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         criadoEm:new Date().toISOString(),
       };
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[novaContaFinanceiro,...(d.contas||[])],movEstoque:[...movs]};
-      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras,getCategoriasDesligadasPdv(db));
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     // reset
@@ -5229,7 +5244,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       const statusFin=["dinheiro","pix","cartão débito"].includes(iaFormaPag)?"pago":"pendente";
       const contaFin:any={id:uid(),descricao:`Compra (IA) – ${forn?.nome||"Fornecedor"} (${iaFormaPag})`,categoria:"Alimentação",valor:iaResult.totalCompra||0,vencimento:iaVenc,status:statusFin,tipo:"saida",origem:"compra",grupoId,...(nfeXml?{xmlNFe:nfeXml,nNF:iaResult.nNF||"",fornecedorNome:forn?.nome||"",fornecedorCnpj:forn?.cnpj||""}:{}),criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas,produtosLista:prodsLista};
-      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras,getCategoriasDesligadasPdv(db));
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);setNfeXml("");
@@ -5339,7 +5354,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         chNFe:nfeResult.chNFe||"",
         ...(nfeXml?{xmlNFe:nfeXml}:{}),criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas,produtosLista:prodsLista};
-      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras,getCategoriasDesligadasPdv(db));
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     const qtdItens=nfeResult.itens.length;
@@ -5631,7 +5646,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         ...(nfe.rawXml?{xmlNFe:nfe.rawXml}:{}),
         criadoEm:new Date().toISOString()};
       const base={...d,compras:[...novasCompras,...d.compras],materiasPrimas:mps,fornecedores,contas:[contaFin,...(d.contas||[])],movEstoque:[...movs],normalizacoes:normsAtualizadas,produtosLista:prodsLista};
-      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras);
+      enviarCompraSeama(empresa,grupoId,novasCompras[0]?.fornecedor,novasCompras,getCategoriasDesligadasPdv(db));
       return reconciliarLista(base,novasCompras.map(c=>c.nomeProduto));
     });
     if(!all){
@@ -6259,7 +6274,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       // Mover pra SEAMA é uma forma de compra chegar na empresa como
                       // qualquer outra, então tem que descer pro estoque do PDV igual.
                       // Era o único dos cinco caminhos que criam compra sem avisar o PDV.
-                      enviarCompraSeama(outra,novoGrupoId,nota.fornecedor,novosItens);
+                      enviarCompraSeama(outra,novoGrupoId,nota.fornecedor,novosItens,getCategoriasDesligadasPdv((state||{})[outra]));
                       alert(`✅ Compra transferida para ${outra}`);
                     }} style={{background:"#DBEAFE",color:"#8B5CF6",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={()=>{
@@ -6442,6 +6457,29 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <button onClick={()=>setShowConciliarInsumos(v=>!v)} className="btn" style={{marginLeft:"auto",flexShrink:0,background:"#F59E0B",color:"#2b1600",padding:"9px 16px",fontSize:12.5,fontWeight:700}}>
             {showConciliarInsumos?"✕ Fechar":"🔗 Conciliar agora"}
           </button>
+        </div>}
+
+        <button onClick={()=>setShowConfigCatsPdv(true)} className="btn" style={{background:"none",border:"1px solid var(--border2)",color:"var(--text2)",padding:"7px 12px",fontSize:11.5,marginBottom:14}}>
+          ⚙️ Categorias que vão pro PDV ({empresa})
+        </button>
+
+        {showConfigCatsPdv&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto" as const}} onClick={()=>setShowConfigCatsPdv(false)}>
+          <div className="card" style={{width:"100%",maxWidth:440,maxHeight:"85vh",overflowY:"auto" as const}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>⚙️ Categorias que vão pro PDV — {empresa}</div>
+            <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:14,lineHeight:1.55}}>
+              Quando uma compra dessa categoria é lançada, o item continua sendo registrado normalmente aqui (custo, matéria-prima) — só decide se ele também vai pra fila de vínculo do estoque do PDV. Desligado não apaga nada que já está pendente, só evita que compra <b>nova</b> dessa categoria entre na fila.
+            </div>
+            {cats.map((c:string)=>{
+              const desligada=getCategoriasDesligadasPdv(db).includes(c);
+              return <div key={c} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+                <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"capitalize" as const}}>{c}</span>
+                <span onClick={()=>toggleCategoriaPdv(c)} style={{width:38,height:22,borderRadius:20,background:desligada?"var(--border2)":"#22C55E",position:"relative",cursor:"pointer",flexShrink:0}}>
+                  <span style={{position:"absolute",width:17,height:17,borderRadius:"50%",background:"#fff",top:2.5,left:desligada?2.5:19,boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}/>
+                </span>
+              </div>;
+            })}
+            <button className="btn" onClick={()=>setShowConfigCatsPdv(false)} style={{width:"100%",background:"var(--btnPrimary)",color:"#fff",padding:"11px",marginTop:14,fontWeight:700}}>Fechar</button>
+          </div>
         </div>}
 
         {showConciliarInsumos&&<div className="card" style={{marginBottom:14,border:"2px solid var(--btnPrimary)"}}>
