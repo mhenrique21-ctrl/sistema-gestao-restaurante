@@ -24,9 +24,12 @@ async function authMiddleware(req, res, next) {
   // de usuário real — a consulta abaixo quebraria (users.id é UUID). Confia
   // direto no payload, sem revogação por usuário porque não é um usuário,
   // é o próprio backend do Gestão (autenticado pelo segredo compartilhado
-  // na hora de EMITIR o token, não aqui).
+  // na hora de EMITIR o token, não aqui). id:null (não a string sintética)
+  // — colunas created_by são UUID e aceitam NULL; a string quebrava
+  // qualquer INSERT que gravasse req.user.id (ex: classificar/vincular com
+  // quantidade retida), virando "Erro interno" sem pista nenhuma.
   if (payload.id === 'service-gestao') {
-    req.user = { id: payload.id, username: payload.name, role: payload.role };
+    req.user = { id: null, username: payload.name, role: payload.role };
     return next();
   }
 

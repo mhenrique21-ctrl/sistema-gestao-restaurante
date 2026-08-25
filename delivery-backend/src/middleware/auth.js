@@ -54,6 +54,19 @@ async function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Token inválido ou expirado' });
   }
 
+  // Token de serviço (ver routes/serviceToken.js): id sintético "service-gestao",
+  // não é UUID de usuário real. Sem este desvio, a consulta abaixo (users.id é
+  // UUID) lançava exceção, caía no catch de "banco fora do ar" e seguia com
+  // req.user.id = "service-gestao" — string que quebrava qualquer INSERT em
+  // coluna created_by (UUID), com "Erro interno" sem explicação nenhuma pra
+  // quem estava só tentando vincular ou classificar um item. id:null aqui é
+  // proposital — as colunas created_by aceitam NULL (ação sem operador humano
+  // por trás), diferente da string inválida.
+  if (payload.id === 'service-gestao') {
+    req.user = { id: null, name: payload.name, role: payload.role };
+    return next();
+  }
+
   try {
     const atual = await estadoDoUsuario(payload.id);
     if (!atual) return res.status(401).json({ error: 'Usuário não encontrado', code: 'SEM_CONTA' });
