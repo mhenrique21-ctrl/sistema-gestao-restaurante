@@ -77,6 +77,47 @@ describe('mergeArrayById', () => {
 
     assert.equal(resultadoDoPoll.find((c) => c.id === 'x').status, 'pago', 'poll não pode reverter a marcação otimista que ainda não foi salva');
   });
+
+  function venda(id, overrides = {}) {
+    return { id, data: '2026-08-24', total: 100, maquininha: 0, dinheiro: 0, ...overrides };
+  }
+
+  test('regressão: venda manual e venda do PDV no mesmo dia coexistem (não são a mesma entidade)', () => {
+    // Cenário real relatado: usuário digita as vendas do dia na aba
+    // Lançamentos e clica "Salvar Vendas" — o valor some. Causa: a dedup por
+    // data de "vendas" tratava a venda manual e a venda sincronizada do PDV
+    // (origem:"pdv", resincronizada a cada minuto por delivery-backend/
+    // gestaoSync) como duplicatas do mesmo dia e descartava uma das duas —
+    // quase sempre a manual, porque a do PDV tem carimbo mais recente.
+    const manual = venda('manual-1', { atualizadoEm: '2026-08-24T09:00:00.000Z' });
+    const pdv = venda('pdv-confraria-2026-08-24', { origem: 'pdv', delivery: 50, atualizadoEm: '2026-08-24T09:05:00.000Z' });
+
+    const result = mergeArrayById([], [manual, pdv], new Set(), true);
+
+    assert.deepEqual(result.map((v) => v.id).sort(), ['manual-1', 'pdv-confraria-2026-08-24'], 'as duas vendas do mesmo dia devem sobreviver — são registros diferentes (manual vs pdv)');
+  });
+
+  test('vendas: duas entradas manuais pro mesmo dia (dois dispositivos) ainda deduplicam pelo mais recente', () => {
+    const deviceA = venda('a', { atualizadoEm: '2026-08-24T10:00:00.000Z', maquininha: 200 });
+    const deviceB = venda('b', { atualizadoEm: '2026-08-24T10:05:00.000Z', maquininha: 300 });
+
+    const result = mergeArrayById([deviceA], [deviceB], new Set(), true);
+
+    assert.equal(result.length, 1, 'duas entradas manuais pro mesmo dia continuam sendo tratadas como duplicata');
+    assert.equal(result[0].id, 'b', 'a mais recente (deviceB) vence');
+  });
+
+  test('vendas: reenvio do PDV pro mesmo dia atualiza a própria linha, sem duplicar nem afetar a manual', () => {
+    const manual = venda('manual-1', { atualizadoEm: '2026-08-24T09:00:00.000Z' });
+    const pdvAntigo = venda('pdv-confraria-2026-08-24', { origem: 'pdv', delivery: 30, atualizadoEm: '2026-08-24T09:05:00.000Z' });
+    const pdvNovo = venda('pdv-confraria-2026-08-24', { origem: 'pdv', delivery: 80, atualizadoEm: '2026-08-24T09:10:00.000Z' });
+
+    const result = mergeArrayById([manual, pdvAntigo], [pdvNovo], new Set(), true);
+
+    assert.equal(result.length, 2);
+    assert.equal(result.find((v) => v.id === 'manual-1').maquininha, 0, 'venda manual intacta');
+    assert.equal(result.find((v) => v.origem === 'pdv').delivery, 80, 'reenvio do pdv atualiza o valor');
+  });
 });
 
 describe('mergeDocument', () => {

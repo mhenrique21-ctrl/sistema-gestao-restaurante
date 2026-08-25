@@ -31,33 +31,43 @@ function itemTimestamp(item) {
 // o que existir); sem timestamp em nenhum dos dois, o incoming vence (é o
 // que o usuário acabou de mexer nesta requisição especificamente).
 // Para vendas (lançamentos): também verifica por data — dois itens com a mesma
-// data devem ser tratados como a mesma entidade, mesmo que tenham IDs diferentes
-// (isso acontece quando dois dispositivos criam entrada pra o mesmo dia antes de sincronizar).
+// data E a mesma origem devem ser tratados como a mesma entidade, mesmo que
+// tenham IDs diferentes (isso acontece quando dois dispositivos criam entrada
+// pra o mesmo dia antes de sincronizar). A origem entra na chave porque uma
+// venda digitada à mão e uma venda sincronizada do PDV (origem:"pdv") para o
+// MESMO dia são dois registros que devem coexistir, não duplicatas — chavear
+// só por data colapsava os dois em um só (normalmente o do PDV, que
+// resincroniza a cada minuto e quase sempre tem o carimbo mais recente),
+// apagando silenciosamente o lançamento manual do usuário a cada "Salvar
+// Vendas" sempre que havia uma venda de PDV no mesmo dia.
 export function mergeArrayById(existingArr, incomingArr, deletedIds, isVendas = false) {
   const existingMap = new Map((existingArr || []).map((i) => [i.id, i]));
   const incomingMap = new Map((incomingArr || []).map((i) => [i.id, i]));
   const allIds = new Set([...existingMap.keys(), ...incomingMap.keys()]);
 
-  // Para vendas, também rastreia por data pra deduplicar entradas do mesmo dia
+  // Para vendas, também rastreia por data+origem pra deduplicar entradas do
+  // mesmo dia E mesma origem, sem misturar manual com pdv.
   const vendasByDate = new Map();
   if (isVendas) {
+    const chave = (v) => `${v.data}::${v.origem || 'manual'}`;
     (existingArr || []).forEach((v) => {
       if (!deletedIds.has(v.id) && v.data) {
-        vendasByDate.set(v.data, { item: v, source: 'existing' });
+        vendasByDate.set(chave(v), { item: v, source: 'existing' });
       }
     });
     (incomingArr || []).forEach((v) => {
       if (!deletedIds.has(v.id) && v.data) {
-        const existing = vendasByDate.get(v.data);
+        const k = chave(v);
+        const existing = vendasByDate.get(k);
         if (existing) {
           const et = itemTimestamp(existing.item);
           const it = itemTimestamp(v);
           const winner = (et != null && it != null)
             ? (it >= et ? { item: v, source: 'incoming' } : existing)
             : (it != null ? { item: v, source: 'incoming' } : existing);
-          vendasByDate.set(v.data, winner);
+          vendasByDate.set(k, winner);
         } else {
-          vendasByDate.set(v.data, { item: v, source: 'incoming' });
+          vendasByDate.set(k, { item: v, source: 'incoming' });
         }
       }
     });
