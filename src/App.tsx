@@ -6501,13 +6501,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                     🏪 PDV: vai virar "{pdvEsc.produtoNome}"
                     <button onClick={()=>setPdvEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"#A78BFA",textDecoration:"underline",cursor:"pointer",fontSize:11,flexShrink:0}}>trocar</button>
                   </div>
-                  :<div style={{display:"flex",gap:6,alignItems:"center"}}>
-                    <select defaultValue="" onChange={e=>{const it=pdvItens.find((i:any)=>i.id===e.target.value);if(it)setPdvEscolha(m=>({...m,[mp.id]:{produtoId:it.id,produtoNome:it.nome,factor:"1"}}));}} className="inp" style={{marginBottom:0,fontSize:11.5,flex:1}}>
+                  :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    <select defaultValue="" onChange={e=>{const it=pdvItens.find((i:any)=>i.id===e.target.value);if(it)setPdvEscolha(m=>({...m,[mp.id]:{produtoId:it.id,produtoNome:it.nome,factor:"1"}}));}} className="inp" style={{marginBottom:0,fontSize:11.5,width:"100%"}}>
                       <option value="">🏪 Vincular também no PDV...</option>
                       {pdvSug&&<option value={pdvSug.id}>💡 {pdvSug.nome} (sugestão)</option>}
                       {[...pdvItens].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
                     </select>
-                    {pdvSug&&<button onClick={()=>setPdvEscolha(m=>({...m,[mp.id]:{produtoId:pdvSug.id,produtoNome:pdvSug.nome,factor:"1",auto:true}}))} style={{background:"#7C3AED",color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Usar sugestão</button>}
+                    {pdvSug&&<button onClick={()=>setPdvEscolha(m=>({...m,[mp.id]:{produtoId:pdvSug.id,produtoNome:pdvSug.nome,factor:"1",auto:true}}))} style={{background:"#7C3AED",color:"#fff",border:"none",borderRadius:6,padding:"8px 10px",fontSize:11,fontWeight:700,cursor:"pointer",width:"100%"}}>Usar sugestão</button>}
                   </div>}
               </div>}
             </div>;
@@ -13693,10 +13693,10 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa}:{pendingSub?:strin
     <div className="section-title">🍽️ Produtos do Cardápio</div>
     <div className="muted" style={{fontSize:11,marginBottom:12}}>Catálogo real — o que você mudar aqui aparece direto no PDV e no Delivery (mesmo cadastro do Admin).</div>
 
-    <div style={{display:"flex",gap:5,marginBottom:14}}>
-      <button className="pill" onClick={()=>setSubTab("produtos")} style={{background:subTab==="produtos"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="produtos"?"#fff":"#777"}}>🍽️ Produtos</button>
-      <button className="pill" onClick={()=>setSubTab("categorias")} style={{background:subTab==="categorias"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="categorias"?"#fff":"#777"}}>📂 Categorias</button>
-      <button className="pill" onClick={()=>setSubTab("estoque")} style={{background:subTab==="estoque"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="estoque"?"#fff":"#777"}}>📦 Estoque</button>
+    <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any,paddingBottom:2}}>
+      <button className="pill" onClick={()=>setSubTab("produtos")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="produtos"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="produtos"?"#fff":"#777"}}>🍽️ Produtos</button>
+      <button className="pill" onClick={()=>setSubTab("categorias")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="categorias"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="categorias"?"#fff":"#777"}}>📂 Categorias</button>
+      <button className="pill" onClick={()=>setSubTab("estoque")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="estoque"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="estoque"?"#fff":"#777"}}>📦 Estoque</button>
     </div>
 
     {subTab==="estoque"&&<EstoquePdvPanel empresa={empresa==="SEAMA"?"SEAMA":"CONFRARIA"}/>}
@@ -14148,13 +14148,13 @@ function EstoquePdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
     <div className="section-title">📦 Estoque do PDV {empresa}</div>
     <div className="muted" style={{fontSize:11,marginBottom:12}}>Ajustar aqui reflete direto no PDV, na hora — é o mesmo banco de dados. Troque de empresa no seletor do topo do app pra ver o estoque do outro PDV.</div>
 
-    <div style={{display:"flex",gap:5,marginBottom:14}}>
-      <button className="pill" onClick={()=>setView("saldo")} style={{background:view==="saldo"?"var(--btnPrimary)":"var(--bg4)",color:view==="saldo"?"#fff":"#777"}}>💰 Saldo</button>
-      <button className="pill" onClick={()=>setView("vendas")} style={{background:view==="vendas"?"var(--btnPrimary)":"var(--bg4)",color:view==="vendas"?"#fff":"#777"}}>📊 Vendas por produto</button>
-      <button className="pill" onClick={()=>setView("inventario")} style={{background:view==="inventario"?"var(--btnPrimary)":"var(--bg4)",color:view==="inventario"?"#fff":"#777"}}>📋 Inventário</button>
-      <button className="pill" onClick={()=>setView("entradas")} style={{background:view==="entradas"?"var(--btnPrimary)":"var(--bg4)",color:view==="entradas"?"#fff":"#777"}}>📥 Entradas</button>
-      <button className="pill" onClick={()=>setView("margem")} style={{background:view==="margem"?"var(--btnPrimary)":"var(--bg4)",color:view==="margem"?"#fff":"#777"}}>💹 Margem</button>
-      <button className="pill" onClick={()=>setView("vinculos")} style={{background:view==="vinculos"?"var(--btnPrimary)":"var(--bg4)",color:view==="vinculos"?"#fff":"#777"}}>🔗 Vínculos pendentes</button>
+    <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any,paddingBottom:2}}>
+      <button className="pill" onClick={()=>setView("saldo")} style={{flexShrink:0,whiteSpace:"nowrap",background:view==="saldo"?"var(--btnPrimary)":"var(--bg4)",color:view==="saldo"?"#fff":"#777"}}>💰 Saldo</button>
+      <button className="pill" onClick={()=>setView("vendas")} style={{flexShrink:0,whiteSpace:"nowrap",background:view==="vendas"?"var(--btnPrimary)":"var(--bg4)",color:view==="vendas"?"#fff":"#777"}}>📊 Vendas por produto</button>
+      <button className="pill" onClick={()=>setView("inventario")} style={{flexShrink:0,whiteSpace:"nowrap",background:view==="inventario"?"var(--btnPrimary)":"var(--bg4)",color:view==="inventario"?"#fff":"#777"}}>📋 Inventário</button>
+      <button className="pill" onClick={()=>setView("entradas")} style={{flexShrink:0,whiteSpace:"nowrap",background:view==="entradas"?"var(--btnPrimary)":"var(--bg4)",color:view==="entradas"?"#fff":"#777"}}>📥 Entradas</button>
+      <button className="pill" onClick={()=>setView("margem")} style={{flexShrink:0,whiteSpace:"nowrap",background:view==="margem"?"var(--btnPrimary)":"var(--bg4)",color:view==="margem"?"#fff":"#777"}}>💹 Margem</button>
+      <button className="pill" onClick={()=>setView("vinculos")} style={{flexShrink:0,whiteSpace:"nowrap",background:view==="vinculos"?"var(--btnPrimary)":"var(--bg4)",color:view==="vinculos"?"#fff":"#777"}}>🔗 Vínculos pendentes</button>
     </div>
 
     {view==="saldo"&&<div>
@@ -14191,7 +14191,7 @@ function EstoquePdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
         {[...itens].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
       </select>
       {vendaProdId&&<>
-        <div style={{display:"flex",gap:5,marginBottom:12}}>
+        <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap" as const}}>
           <button className="pill" onClick={()=>setVendaPeriodo("hoje")} style={{background:vendaPeriodo==="hoje"?"var(--btnPrimary)":"var(--bg4)",color:vendaPeriodo==="hoje"?"#fff":"#777"}}>Hoje</button>
           <button className="pill" onClick={()=>setVendaPeriodo("7")} style={{background:vendaPeriodo==="7"?"var(--btnPrimary)":"var(--bg4)",color:vendaPeriodo==="7"?"#fff":"#777"}}>7 dias</button>
           <button className="pill" onClick={()=>setVendaPeriodo("30")} style={{background:vendaPeriodo==="30"?"var(--btnPrimary)":"var(--bg4)",color:vendaPeriodo==="30"?"#fff":"#777"}}>30 dias</button>
@@ -14340,15 +14340,16 @@ function EstoquePdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
             return <div key={p.source_name} className="card" style={{marginBottom:9,padding:"11px 13px"}}>
               <div style={{fontSize:12.5,fontWeight:700}}>{p.source_name}</div>
               <div className="muted" style={{fontSize:10,margin:"2px 0 9px"}}>{p.quantidade} {p.unidade} retido · {p.supplier||"fornecedor não informado"}</div>
+              <select value={esc.produto} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,produto:e.target.value}}))} className="inp" style={{width:"100%",marginBottom:8,fontSize:12.5}}>
+                <option value="">Vincular a...</option>
+                {[...itens].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
+              </select>
               <div style={{display:"flex",gap:8,flexWrap:"wrap" as const,alignItems:"center"}}>
-                <select value={esc.produto} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,produto:e.target.value}}))} className="inp" style={{flex:"1 1 200px",maxWidth:320,minWidth:160,marginBottom:0,fontSize:11.5}}>
-                  <option value="">Vincular a...</option>
-                  {[...itens].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
-                </select>
-                <input value={esc.fator} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,fator:e.target.value}}))} title="1 embalagem = quantas unidades" className="inp" style={{width:52,flexShrink:0,marginBottom:0,textAlign:"center"}}/>
-                <button className="pill" onClick={()=>vincular(p.source_name)} style={{background:"#22C55E",color:"#06210f",fontSize:11,fontWeight:700}}>Vincular</button>
-                <button className="pill" onClick={()=>classificarUm(p.source_name,"materia_prima")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Matéria-prima</button>
-                <button className="pill" onClick={()=>classificarUm(p.source_name,"higiene_limpeza")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Higiene</button>
+                <input value={esc.fator} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,fator:e.target.value}}))} title="1 embalagem = quantas unidades" className="inp" style={{width:56,flexShrink:0,marginBottom:0,textAlign:"center"}}/>
+                <button className="pill" onClick={()=>vincular(p.source_name)} style={{flexShrink:0,background:"#22C55E",color:"#06210f",fontSize:11,fontWeight:700}}>Vincular</button>
+                <span style={{flex:1,minWidth:8}}/>
+                <button className="pill" onClick={()=>classificarUm(p.source_name,"materia_prima")} style={{flexShrink:0,background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Matéria-prima</button>
+                <button className="pill" onClick={()=>classificarUm(p.source_name,"higiene_limpeza")} style={{flexShrink:0,background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Higiene</button>
               </div>
             </div>;
           })}
