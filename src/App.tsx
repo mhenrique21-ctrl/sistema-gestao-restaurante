@@ -14159,6 +14159,18 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
       carregarVinculos();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
+  // Escape hatch pra item preso que não sai da fila de jeito nenhum (ex: nome
+  // corrompido numa compra antiga, antes da correção de UTF-8, que não casa
+  // mais com nada) — descarta sem criar vínculo nem classificação.
+  const descartarPendente=async(sourceName:string)=>{
+    if(!confirm(`Descartar "${sourceName}" da fila, sem vincular nem classificar? Use só se ele não sair de jeito nenhum.`))return;
+    try{
+      const r=await fetch(`/api/estoque-pdv/vinculos?empresa=${empresa}&nome=${encodeURIComponent(sourceName)}`,{method:"DELETE"});
+      const d=await r.json();
+      if(!r.ok){carregarVinculos();throw new Error(d.error||"Erro ao descartar");}
+      carregarVinculos();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
   // Sugestão automática: casa o nome do pendente do PDV com uma matéria-prima
   // já cadastrada no Gestão (mesma compra que gerou os dois) e usa a
   // categoria que ela já tem. Sem match, ou categoria não mapeada
@@ -14404,6 +14416,7 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
                 <span style={{flex:1,minWidth:8}}/>
                 <button className="pill" onClick={()=>classificarUm(p.source_name,"materia_prima")} style={{flexShrink:0,background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Matéria-prima</button>
                 <button className="pill" onClick={()=>classificarUm(p.source_name,"higiene_limpeza")} style={{flexShrink:0,background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Higiene</button>
+                <button onClick={()=>descartarPendente(p.source_name)} title="Tira da fila sem vincular nem classificar — pra item preso que não casa com nada" style={{flexShrink:0,background:"none",border:"none",color:"var(--text3)",textDecoration:"underline",cursor:"pointer",fontSize:10.5,marginLeft:"auto"}}>descartar</button>
               </div>
             </div>;
           })}

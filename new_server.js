@@ -2112,6 +2112,29 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       return;
     }
 
+    // DELETE /api/estoque-pdv/vinculos?empresa=&nome= — descarta um pendente
+    // preso (item que não casa com nada, nome corrompido em compra antiga
+    // etc.), sem vincular nem classificar.
+    if (req.method === 'DELETE' && urlPath === '/api/estoque-pdv/vinculos') {
+      const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+      const nome = query.get('nome') || '';
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const upstream = await fetch(`${base}/api/supply/pending?nome=${encodeURIComponent(nome)}`, {
+            method: 'DELETE', headers: { Authorization: 'Bearer ' + token },
+          });
+          const data = await upstream.json().catch(() => ({}));
+          res.setHeader('Content-Type', 'application/json'); res.writeHead(upstream.status);
+          res.end(JSON.stringify(data));
+        } catch (e) {
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao descartar: ' + e.message }));
+        }
+      })();
+      return;
+    }
+
     res.writeHead(404); res.end(JSON.stringify({ error: 'Rota de estoque não encontrada' }));
     return;
   }

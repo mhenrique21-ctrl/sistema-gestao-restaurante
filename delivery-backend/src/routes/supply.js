@@ -391,4 +391,24 @@ router.delete('/classify/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/supply/pending?nome= — descarta um pendente sem vincular nem
+// classificar. Escape hatch pra item preso (ex: nome que ficou corrompido
+// numa importação antiga e não casa mais com nada) ou insumo que não deveria
+// nunca ter entrado na fila (veio junto na mesma nota por engano).
+router.delete('/pending', async (req, res) => {
+  const nome = req.query.nome;
+  if (!nome) return res.status(400).json({ error: 'Informe o nome' });
+  try {
+    await pool.query(
+      `UPDATE pending_supply_items SET resolved = true
+        WHERE resolved = false AND upper(regexp_replace(trim(source_name), '\\s+', ' ', 'g')) = $1
+        RETURNING id`,
+      [norm(nome)]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    return internalError(res, err, '[supply/pending delete]');
+  }
+});
+
 module.exports = router;
