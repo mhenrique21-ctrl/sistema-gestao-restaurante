@@ -285,6 +285,26 @@ const fmtPct    = (v) => `${(parseFloat(v)||0).toFixed(1)}%`;
 const TZ        = "America/Sao_Paulo";
 const today     = () => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(new Date());
 const uid       = () => Math.random().toString(36).slice(2)+Date.now().toString(36);
+// Chave de comparação de nome pra conciliação de compras (matéria-prima,
+// produtosLista, vínculo do PDV): dobra acento e espaço duplicado, senão
+// "Açúcar" e "Acucar  " viram cadastros diferentes. Usado em todo lugar que
+// tenta casar um nome de compra bruto com um cadastro — antes cada tela
+// (Insumos, Lista de Produtos, vínculo do PDV) tinha sua própria versão
+// disso, com critério ligeiramente diferente.
+const foldNome = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim().toLowerCase();
+// produtosLista é compartilhado entre as empresas (mesmo catálogo de compras
+// pras duas) — gravar só na empresa atual (setDb puro) deixa a outra
+// desatualizada até o próximo poll trazer por cima. applyBothProd já existia
+// dentro de ListaComprasPanel; virou helper de módulo pra Compras usar
+// também (o painel de Conciliar Insumos gravava só na empresa atual).
+const applyBothProdutos = (setState:any, setDb:any, fn:(d:any)=>any) => {
+  if (setState) setState((prev:any) => {
+    const nx = { ...prev };
+    Object.keys(nx).forEach(e => { if (nx[e] && typeof nx[e] === "object" && "produtosLista" in nx[e]) nx[e] = fn(nx[e]); });
+    return nx;
+  });
+  else setDb(fn);
+};
 // Dia cujo faturamento vira base do budget de compras: o último dia com
 // movimento antes de `dataAlvo`, pulando domingo (nem CONFRARIA nem SEAMA
 // abrem nesse dia) — segunda-feira usa o sábado anterior, não o domingo vazio.
@@ -4294,7 +4314,6 @@ function parseNFe(xmlString) {
 function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfirm,onCancel}:
   {itens:{nome:string,categoria?:string,unidade?:string}[],materiasPrimas:any[],produtosLista:any[],ruas?:string[],
    onConfirm:(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>)=>void,onCancel:()=>void}){
-  const semAcento=(s:string)=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
   const [resolucoesNome,setResolucoesNome]=useState<Record<string,string>>({});
   const [vinculos,setVinculos]=useState<Record<string,ConciliacaoVinculo>>({});
   const [sugeridosIA,setSugeridosIA]=useState<Set<string>>(new Set());
@@ -4307,10 +4326,10 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
   const cats=[...new Set([...CATS_DEFAULT,...produtosLista.map((p:any)=>p.cat).filter(Boolean)])];
 
   const sugerirProdLista=(nome:string):any=>{
-    const alvo=semAcento(nome);
+    const alvo=foldNome(nome);
     if(!alvo)return null;
     return produtosLista.find((p:any)=>{
-      const pn=semAcento(p.nome);
+      const pn=foldNome(p.nome);
       return pn.includes(alvo)||alvo.includes(pn);
     })||null;
   };
@@ -4793,12 +4812,49 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const produtosListaTodos=db.produtosLista||[];
   const prodVinculadoDe=(mpId:string)=>produtosListaTodos.find((p:any)=>(p.mpVinculados||[]).includes(mpId));
   const insumosSoltos=(db.materiasPrimas||[]).filter((mp:any)=>!prodVinculadoDe(mp.id));
+
+  // ---- Ponte com o PDV (vínculo pendente lá também) ----
+  // O mesmo item de compra pode estar esperando vínculo nos dois lados ao
+  // mesmo tempo: aqui (materiaPrima → produtoLista) e no PDV (nome bruto →
+  // produto que controla estoque). Cruza os dois por nome pra resolver junto
+  // quando der, em vez de pedir a mesma decisão duas vezes em telas
+  // diferentes.
+  const [pdvPendentes,setPdvPendentes]=useState<any[]>([]);
+  const [pdvItens,setPdvItens]=useState<any[]>([]);
+  const [pdvEscolha,setPdvEscolha]=useState<Record<string,{produtoId?:string,produtoNome?:string,factor?:string,auto?:boolean}>>({});
+  useEffect(()=>{
+    if(!showConciliarInsumos)return;
+    Promise.all([
+      fetch(`/api/estoque-pdv/vinculos?empresa=${empresa}`).then(r=>r.json()).catch(()=>null),
+      fetch(`/api/estoque-pdv?empresa=${empresa}`).then(r=>r.json()).catch(()=>null),
+    ]).then(([vinc,est])=>{
+      setPdvPendentes(vinc?.pendentes||[]);
+      setPdvItens(est?.itens||[]);
+    });
+  },[showConciliarInsumos,empresa]);
+  const pdvPendenteDe=(nomeInsumo:string)=>{
+    const alvo=foldNome(nomeInsumo);
+    return pdvPendentes.find((p:any)=>foldNome(p.source_name)===alvo)||null;
+  };
+  const pdvSugestaoProduto=(nomeInsumo:string)=>{
+    const alvo=foldNome(nomeInsumo);
+    return pdvItens.find((i:any)=>{const n=foldNome(i.nome);return n.length>=4&&(alvo.includes(n)||n.includes(alvo));})||null;
+  };
+  const vincularNoPdv=async(nomeInsumo:string,produtoId:string,factor:string)=>{
+    try{
+      await fetch("/api/estoque-pdv/vinculos",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({empresa,source_name:nomeInsumo,product_id:produtoId,factor:parseFloat(factor)||1})});
+    }catch(e){/* falha aqui não desfaz o vínculo já salvo no Gestão — o item só continua pendente no PDV até tentar de novo */}
+  };
   const escolherProdConciliar=(mpId:string,prod:any)=>setConciliarEscolha(e=>({...e,[mpId]:{prodId:prod.id,prodNome:prod.nome}}));
   const escolherNovoConciliar=(mpId:string,nome:string)=>setConciliarEscolha(e=>({...e,[mpId]:{novo:true,prodNome:nome}}));
   const salvarConciliacaoInsumos=()=>{
     const escolhas=Object.entries(conciliarEscolha).filter(([mpId])=>insumosSoltos.some((mp:any)=>mp.id===mpId));
     if(!escolhas.length)return;
-    setDb((d:any)=>{
+    // produtosLista é compartilhado entre as empresas — grava nas duas (via
+    // applyBothProdutos), senão a outra empresa via poll trazia de volta o
+    // estado antigo por cima do vínculo recém-criado.
+    applyBothProdutos(setState,setDb,(d:any)=>{
       let prodsLista=[...(d.produtosLista||[])];
       escolhas.forEach(([mpId,esc]:[string,any])=>{
         if(esc.novo){
@@ -4810,21 +4866,30 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       });
       return{...d,produtosLista:prodsLista};
     });
+    // Vínculo escolhido pro PDV (Fase 2 — ponte entre Gestão e PDV): dispara
+    // depois do setState acima, não bloqueia o salvamento no Gestão se a
+    // rede do PDV falhar.
+    escolhas.forEach(([mpId])=>{
+      const pdv=pdvEscolha[mpId];
+      if(pdv?.produtoId)vincularNoPdv(insumosSoltos.find((mp:any)=>mp.id===mpId)?.nome,pdv.produtoId,pdv.factor||"1");
+    });
     setConciliarEscolha({});
     setConciliarBusca({});
+    setPdvEscolha({});
     setShowConciliarInsumos(false);
   };
   // Sugestão automática de vínculo: nome igual primeiro, senão um nome contido
   // no outro (evita casar coisas curtas demais tipo "sal" com qualquer coisa).
   // Só SUGERE — nunca aplica sozinho, sempre passa por "Aplicar" ou "trocar".
-  const nomeChaveConciliar=(s:string)=>String(s||"").trim().toLowerCase();
+  // foldNome (dobra acento/espaço) em vez de só lowercase — "Açúcar" e
+  // "Acucar" agora casam.
   const autoMatchInsumo=(mp:any)=>{
-    const mk=nomeChaveConciliar(mp.nome);
+    const mk=foldNome(mp.nome);
     if(!mk)return null;
-    const exato=produtosListaTodos.find((p:any)=>nomeChaveConciliar(p.nome)===mk);
+    const exato=produtosListaTodos.find((p:any)=>foldNome(p.nome)===mk);
     if(exato)return exato;
     return produtosListaTodos.find((p:any)=>{
-      const pk=nomeChaveConciliar(p.nome);
+      const pk=foldNome(p.nome);
       return pk.length>=4&&(mk.includes(pk)||pk.includes(mk));
     })||null;
   };
@@ -6392,10 +6457,16 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             const sugestoes=bl?produtosListaTodos.filter((p:any)=>(p.nome||"").toLowerCase().includes(bl)).slice(0,6):[];
             const escolha=conciliarEscolha[mp.id];
             const sugestaoAuto=(!escolha&&!autoSugestaoDispensada.has(mp.id))?autoMatchInsumo(mp):null;
+            const pdvPend=pdvPendenteDe(mp.nome);
+            const pdvEsc=pdvEscolha[mp.id];
+            const pdvSug=pdvPend&&!pdvEsc?pdvSugestaoProduto(mp.nome):null;
             return <div key={mp.id} style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:10,padding:12,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
                 <span style={{fontSize:13,fontWeight:700}}>{mp.nome}</span>
-                <span style={{fontFamily:"monospace",fontSize:11.5,color:"var(--text2)"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</span>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  {pdvPend&&<span style={{fontSize:9,fontWeight:800,background:"#7C3AED22",color:"#A78BFA",borderRadius:20,padding:"2px 8px"}}>🏪 pendente no PDV também</span>}
+                  <span style={{fontFamily:"monospace",fontSize:11.5,color:"var(--text2)"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</span>
+                </div>
               </div>
               {escolha
                 ?<div style={{display:"flex",alignItems:"center",gap:8,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803D",fontWeight:700}}>
@@ -6424,6 +6495,21 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                     </div>
                   </div>}
                 </div>}
+              {pdvPend&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed var(--border2)"}}>
+                {pdvEsc
+                  ?<div style={{display:"flex",alignItems:"center",gap:8,background:"#7C3AED14",border:"1px solid #7C3AED55",borderRadius:8,padding:"7px 10px",fontSize:11.5,color:"#A78BFA",fontWeight:700}}>
+                    🏪 PDV: vai virar "{pdvEsc.produtoNome}"
+                    <button onClick={()=>setPdvEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"#A78BFA",textDecoration:"underline",cursor:"pointer",fontSize:11,flexShrink:0}}>trocar</button>
+                  </div>
+                  :<div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <select defaultValue="" onChange={e=>{const it=pdvItens.find((i:any)=>i.id===e.target.value);if(it)setPdvEscolha(m=>({...m,[mp.id]:{produtoId:it.id,produtoNome:it.nome,factor:"1"}}));}} className="inp" style={{marginBottom:0,fontSize:11.5,flex:1}}>
+                      <option value="">🏪 Vincular também no PDV...</option>
+                      {pdvSug&&<option value={pdvSug.id}>💡 {pdvSug.nome} (sugestão)</option>}
+                      {[...pdvItens].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
+                    </select>
+                    {pdvSug&&<button onClick={()=>setPdvEscolha(m=>({...m,[mp.id]:{produtoId:pdvSug.id,produtoNome:pdvSug.nome,factor:"1",auto:true}}))} style={{background:"#7C3AED",color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Usar sugestão</button>}
+                  </div>}
+              </div>}
             </div>;
           })}
           <div style={{display:"flex",gap:8,marginTop:4}}>
@@ -7221,20 +7307,19 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // Conciliar Tudo — varre o catálogo inteiro procurando produtos sem preço
   // vinculado (em vez de exigir abrir cada linha manualmente) e sugere o
   // vínculo mais provável por nome parecido, ignorando acento/maiúsculas.
-  const semAcento=(s:string)=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
   const ctPendentes=prodsCatalog.filter((p:any)=>!getProdVinculados(p).length&&!p.concRevisado);
   const sugerirParaProduto=(item:any):{tipo:"produto",produto:any,mpIds:string[]}|{tipo:"mp",mp:any}|null=>{
-    const alvo=semAcento(item.nome);
+    const alvo=foldNome(item.nome);
     const outroProd=prodsCatalog.find((p:any)=>{
       if(p.id===item.id)return false;
       const vids=getProdVinculados(p);
       if(!vids.length)return false;
-      const pn=semAcento(p.nome);
+      const pn=foldNome(p.nome);
       return pn.includes(alvo)||alvo.includes(pn);
     });
     if(outroProd)return{tipo:"produto",produto:outroProd,mpIds:getProdVinculados(outroProd)};
     const mp=(db.materiasPrimas||[]).find((m:any)=>{
-      const mn=semAcento(m.nome);
+      const mn=foldNome(m.nome);
       return mn.includes(alvo)||alvo.includes(mn);
     });
     if(mp)return{tipo:"mp",mp};
@@ -7321,19 +7406,35 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).filter((p:any)=>p.id!==id)}));
     }
   };
+  // Mescla as marcas (mpVinculados) de todas as duplicatas antes de descartar
+  // — antes, remover uma duplicata que tinha vínculo que a mantida não tinha
+  // apagava esse vínculo em silêncio, sem contar pro usuário.
+  const mesclarEUniq=(lista:any[]):{uniq:any[],vinculosSalvos:number}=>{
+    const porChave=new Map<string,any>();
+    let vinculosSalvos=0;
+    lista.forEach((p:any)=>{
+      const k=foldNome(p.nome);
+      const existente=porChave.get(k);
+      if(!existente){porChave.set(k,{...p});return;}
+      const idsNovos=(p.mpVinculados||[]).filter((id:string)=>!(existente.mpVinculados||[]).includes(id));
+      if(idsNovos.length){existente.mpVinculados=[...(existente.mpVinculados||[]),...idsNovos];vinculosSalvos+=idsNovos.length;}
+      if(!existente.rua&&p.rua)existente.rua=p.rua;
+      if(!existente.cat&&p.cat)existente.cat=p.cat;
+    });
+    return{uniq:[...porChave.values()],vinculosSalvos:vinculosSalvos};
+  };
   const removerDuplicatas=()=>{
     const total=(db.produtosLista||[]).length;
-    const seen=new Set<string>();
-    const uniq=(db.produtosLista||[]).filter((p:any)=>{const k=p.nome.trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
+    const{uniq,vinculosSalvos}=mesclarEUniq(db.produtosLista||[]);
     const removidos=total-uniq.length;
     if(removidos===0){alert("Nenhum produto duplicado encontrado.");return;}
-    if(!confirm(`Remover ${removidos} produto(s) duplicado(s) do catálogo?`))return;
+    const avisoVinculos=vinculosSalvos?` (${vinculosSalvos} vínculo(s) de marca foram mesclados no produto mantido, não perdidos)`:"";
+    if(!confirm(`Remover ${removidos} produto(s) duplicado(s) do catálogo?${avisoVinculos}`))return;
     applyBothProd((d:any)=>{
-      const s2=new Set<string>();
-      const u2=(d.produtosLista||[]).filter((p:any)=>{const k=p.nome.trim().toLowerCase();if(s2.has(k))return false;s2.add(k);return true;});
+      const{uniq:u2}=mesclarEUniq(d.produtosLista||[]);
       return{...d,produtosLista:u2,produtosDedupV1:true};
     });
-    alert(`✅ ${removidos} duplicata(s) removida(s). Restaram ${uniq.length} produtos.`);
+    alert(`✅ ${removidos} duplicata(s) removida(s)${avisoVinculos}. Restaram ${uniq.length} produtos.`);
   };
 
   // === RUAS ===
