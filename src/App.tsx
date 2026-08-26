@@ -2856,27 +2856,25 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
     nfoodTaxa:v.nfoodTaxa?String(v.nfoodTaxa):"",
     delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","):"",
   });
-  // Um lançamento por dia: ao abrir a tela (ou trocar a data no formulário),
-  // se já existir um registro pra essa data — venha de onde vier (manual, PDV,
-  // recibo de venda) — carrega ele pra edição automática. Sem isso, salvar
-  // sem perceber que o dia já tinha lançamento criava um SEGUNDO registro pro
-  // mesmo dia: dois cards no Histórico, cada um só com parte dos canais
-  // preenchidos (o resto "sumia" porque estava no outro registro), e o valor
-  // de recibo de venda lançado em Vendas Extras ficava só no registro velho,
-  // nunca aparecendo no formulário que o usuário estava editando.
+  // Um lançamento MANUAL por dia: ao abrir a tela (ou trocar a data no
+  // formulário), se já existir um registro de origem manual pra essa data,
+  // carrega ele pra edição automática. Importante: só olha a origem manual
+  // (sem campo "origem", ou "manual") — registros de PDV/recibo de venda pra
+  // MESMA data são entidades separadas de propósito (mergeDocument.js funde
+  // vendas por data+origem exatamente pra deixar os dois coexistirem), então
+  // esse auto-load não pode "engolir" o registro do PDV/recibo pra dentro do
+  // lançamento manual, senão a origem se perde na próxima vez que salvar
+  // (reg não carrega origem) e o valor do PDV/recibo passa a competir com o
+  // manual pela mesma chave de fusão, sumindo ou duplicando no próximo sync.
   //
-  // Se já existir MAIS de um registro pro mesmo dia (duplicata antiga, de
-  // antes desse conserto), esse auto-load sempre acharia o primeiro da
-  // lista — e se o usuário tivesse acabado de clicar em "editar" no SEGUNDO
-  // duplicado (pra excluir esse, por exemplo), o efeito rodava por cima e
-  // trocava de volta pro primeiro, na cara dele, sem editar() ter efeito
-  // nenhum. Por isso: se o editId atual já aponta pra um registro que bate
-  // com a data selecionada, respeita a escolha manual e não mexe.
+  // Se o editId atual já aponta pra um registro (de QUALQUER origem, ex.:
+  // clicou "editar" direto num card do Histórico) que bate com a data
+  // selecionada, respeita a escolha manual e não mexe.
   useEffect(()=>{
     const vendas=db.vendas||[];
     const atual=editId?vendas.find((v:any)=>v.id===editId):null;
     if(atual&&atual.data===form.data)return;
-    const existente=vendas.find((v:any)=>v.data===form.data);
+    const existente=vendaDoDia(vendas,form.data);
     if(existente){setEditId(existente.id);setForm(formDeRegistro(existente));}
     else setEditId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2890,21 +2888,22 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
       ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
       "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
       delivery:deliveryValor};
-    // Acha o registro do dia por DATA — não confia cegamente no editId. Um
-    // editId "preso" de uma edição anterior (aba/tela ficou aberta o dia
-    // inteiro sem o efeito de auto-load rodar de novo) apontava pra um
+    // Acha o registro do dia por DATA+ORIGEM — não confia cegamente no
+    // editId. Um editId "preso" de uma edição anterior (aba ficou aberta o
+    // dia inteiro sem o efeito de auto-load rodar de novo) apontava pra um
     // registro de OUTRA data, e como `editId || vendas.find(...)` nunca
-    // chegava a olhar a data quando editId existia (mesmo apontando pro dia
-    // errado), criava um registro NOVO pro dia atual em vez de atualizar o
-    // que já existia — o duplicado nascia mesmo com o editId "setado".
-    // Só usa editId quando ele bate com o registro do dia selecionado; caso
-    // contrário, a data manda.
+    // chegava a olhar a data quando editId existia, criava um registro NOVO
+    // em vez de atualizar o que já existia. Só usa o editId quando ele bate
+    // com o registro do dia selecionado (de qualquer origem — respeita um
+    // clique explícito em "editar"); caso contrário, cai pro registro de
+    // origem MANUAL daquele dia (nunca no de PDV/recibo, ver comentário
+    // acima). Preserva a origem do registro achado ao salvar por cima dele.
     setDbAndSave(d=>{
       const vendas=[...(d.vendas||[])];
-      const porData=vendas.find(v=>v.data===form.data);
+      const porData=vendaDoDia(vendas,form.data);
       const idAlvo=(editId&&vendas.some(v=>v.id===editId&&v.data===form.data))?editId:porData?.id;
       const i=idAlvo?vendas.findIndex(v=>v.id===idAlvo):-1;
-      if(i>=0)vendas[i]={...reg,id:vendas[i].id,criadoEm:vendas[i].criadoEm||now,atualizadoEm:now};
+      if(i>=0)vendas[i]={...reg,id:vendas[i].id,origem:vendas[i].origem,criadoEm:vendas[i].criadoEm||now,atualizadoEm:now};
       else vendas.unshift({...reg,id:uid(),criadoEm:now,atualizadoEm:now});
       return{...d,vendas};
     });
@@ -3163,8 +3162,8 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       <button className="btn" onClick={save} style={{background:"var(--btnPrimary)",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
       {editId&&<div style={{display:"flex",gap:8,marginTop:8}}>
         <button className="btn" onClick={()=>{
-          const existente=(db.vendas||[]).find((v:any)=>v.data===form.data);
-          if(existente){setEditId(existente.id);setForm(formDeRegistro(existente));}
+          const existente=editId&&(db.vendas||[]).find((v:any)=>v.id===editId);
+          if(existente){setForm(formDeRegistro(existente));}
           else{setEditId(null);setForm(emptyForm());}
         }} style={{flex:1,background:"var(--border)",color:"#888",padding:"10px",fontSize:13}}>Cancelar</button>
         <button className="btn" onClick={()=>del(editId)} style={{flex:1,background:"#F3E8FF",color:"var(--btnDanger)",padding:"10px",fontSize:13}}>🗑️ Excluir este dia</button>
@@ -3198,7 +3197,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
       return <div key={v.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-          <span style={{fontWeight:700}}>{fmtDate(v.data)}</span>
+          <span style={{fontWeight:700}}>{fmtDate(v.data)}{v.origem&&v.origem!=="manual"&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>({v.origem==="pdv"?"PDV":v.origem==="recibo_venda"?"recibo de venda":v.origem==="recibo"?"recibo de entrega":v.origem})</span>}</span>
           <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(v.total)}</span>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
@@ -3567,8 +3566,8 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
       // só soma no bucket "delivery" do dia, igual o Recibo de Entrega soma em
       // "entregasClientes". Cria a linha do dia se ainda não existir.
       let vendas=[...(d.vendas||[])];
-      vendas=consolidarVendasDoDia(vendas,data);
-      const i=vendas.findIndex((v:any)=>v.data===data);
+      vendas=consolidarVendasDoDia(vendas,data,"recibo_venda");
+      const i=vendas.findIndex((v:any)=>v.data===data&&origemVenda(v)==="recibo_venda");
       if(i>=0){
         vendas[i]={...vendas[i],delivery:(vendas[i].delivery||0)+totalVenda,total:(vendas[i].total||0)+totalVenda,atualizadoEm:now};
       }else{
@@ -3775,16 +3774,18 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
         const dataAlvo=atualizacoesRecibo.data||antigo.data;
         const bucket=bucketDoRecibo(antigo);
         const valorAntigo=antigo.lancadoEmVendas?(antigo.valorLancado||0):0;
-        // Junta duplicata do dia antes de mexer — senão o subtrai/soma podia
-        // acertar a duplicata errada (a que não tinha o valor do recibo) e
-        // "reenviar" parecia não fazer efeito nenhum no total certo.
-        vendas=consolidarVendasDoDia(vendas,antigo.data);
-        if(dataAlvo!==antigo.data)vendas=consolidarVendasDoDia(vendas,dataAlvo);
+        // Junta duplicata do dia (dentro da mesma origem "recibo_venda") antes
+        // de mexer — senão o subtrai/soma podia acertar a duplicata errada (a
+        // que não tinha o valor do recibo) e "reenviar" parecia não fazer
+        // efeito nenhum no total certo. Nunca mistura com o registro manual
+        // do mesmo dia — são entidades separadas de propósito.
+        vendas=consolidarVendasDoDia(vendas,antigo.data,"recibo_venda");
+        if(dataAlvo!==antigo.data)vendas=consolidarVendasDoDia(vendas,dataAlvo,"recibo_venda");
         if(valorAntigo>0){
-          const iOld=vendas.findIndex((v:any)=>v.data===antigo.data);
+          const iOld=vendas.findIndex((v:any)=>v.data===antigo.data&&origemVenda(v)==="recibo_venda");
           if(iOld>=0)vendas[iOld]={...vendas[iOld],[bucket]:Math.max(0,(vendas[iOld][bucket]||0)-valorAntigo),total:Math.max(0,(vendas[iOld].total||0)-valorAntigo),atualizadoEm:now};
         }
-        const iNew=vendas.findIndex((v:any)=>v.data===dataAlvo);
+        const iNew=vendas.findIndex((v:any)=>v.data===dataAlvo&&origemVenda(v)==="recibo_venda");
         if(iNew>=0){
           vendas[iNew]={...vendas[iNew],[bucket]:(vendas[iNew][bucket]||0)+novoValorVendas,total:(vendas[iNew].total||0)+novoValorVendas,atualizadoEm:now};
         }else{
@@ -3816,9 +3817,9 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
     setDbAndSave?.((d:any)=>{
       let vendas=[...(d.vendas||[])];
       if(jaLancado){
-        vendas=consolidarVendasDoDia(vendas,r.data);
+        vendas=consolidarVendasDoDia(vendas,r.data,"recibo_venda");
         const bucket=bucketDoRecibo(r);
-        const i=vendas.findIndex((v:any)=>v.data===r.data);
+        const i=vendas.findIndex((v:any)=>v.data===r.data&&origemVenda(v)==="recibo_venda");
         if(i>=0)vendas[i]={...vendas[i],[bucket]:Math.max(0,(vendas[i][bucket]||0)-r.valorLancado),total:Math.max(0,(vendas[i].total||0)-r.valorLancado),atualizadoEm:now};
       }
       // Desfaz o "recebido" nos recibos de entrega que originaram este recibo
@@ -5063,7 +5064,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   // de confirmar a entrada.
   const budgetCompraPct=getDashboardCfg(db).aparencia.budgetCompraPct??30;
   const diaAnteriorCompra=diaReferenciaBudget(dataCom);
-  const vendasDiaAnteriorCompra=(db.vendas||[]).find((v:any)=>v.data===diaAnteriorCompra)?.total||0;
+  const vendasDiaAnteriorCompra=mergeVendasDoDia(db.vendas||[],diaAnteriorCompra)?.total||0;
   const budgetDoDiaCompra=vendasDiaAnteriorCompra*(budgetCompraPct/100);
   const jaCompradoNoDia=(db.compras||[]).filter((c:any)=>c.data===dataCom).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
   const projetadoNoDia=jaCompradoNoDia+totalCarrinho;
@@ -7920,7 +7921,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const budgetCompraPct=getDashboardCfg(db).aparencia.budgetCompraPct??30;
   const amanhaLista=(()=>{const d=new Date(today()+"T12:00:00");d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);})();
   const diaRefListaBudget=diaReferenciaBudget(amanhaLista);
-  const vendasRefListaBudget=(db.vendas||[]).find((v:any)=>v.data===diaRefListaBudget)?.total||0;
+  const vendasRefListaBudget=mergeVendasDoDia(db.vendas||[],diaRefListaBudget)?.total||0;
   const budgetListaAmanha=vendasRefListaBudget*(budgetCompraPct/100);
   const compradoAmanha=(db.compras||[]).filter((c:any)=>c.data===amanhaLista).reduce((s:number,c:any)=>s+parseMoney(c.valor||0),0);
   const saldoListaAmanha=budgetListaAmanha-compradoAmanha;
@@ -9149,8 +9150,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   // fechamento de caixa do PDV faz pra maquininha/dinheiro.
   const registrarEntregaComoVenda=(dataEntrega:string,valor:number)=>{
     (setDbAndSave||setDb)((d:any)=>{
-      const vendas=[...(d.vendas||[])];
-      const i=vendas.findIndex((v:any)=>v.data===dataEntrega);
+      let vendas=[...(d.vendas||[])];
+      vendas=consolidarVendasDoDia(vendas,dataEntrega,"recibo");
+      const i=vendas.findIndex((v:any)=>v.data===dataEntrega&&origemVenda(v)==="recibo");
       const agora=new Date().toISOString();
       if(i>=0){
         const atual=vendas[i];
@@ -15914,15 +15916,25 @@ const mergeVendasDoDia=(vendas:any[],data:string):any=>{
   merged.porHora=Object.keys(porHoraMap).map(h=>({hora:Number(h),valor:porHoraMap[Number(h)]})).sort((a,b)=>a.hora-b.hora);
   return merged;
 };
-// Some além de só LER mesclado — usado onde algo vai ESCREVER num registro
-// de vendas específico (reenviar recibo pra Vendas Extras, excluir recibo)
-// e precisa que aquele registro seja o único e o certo: junta as duplicatas
-// do dia num só (mantendo o id da primeira) antes de subtrair/somar, senão
-// o ajuste podia acertar a duplicata errada e deixar a diferença sumida.
-const consolidarVendasDoDia=(vendas:any[],data:string):any[]=>{
-  const dias=(vendas||[]).filter((v:any)=>v.data===data);
+// mergeDocument.js funde vendas por chave DATA+ORIGEM (não só data): uma
+// venda manual e uma vinda do PDV/de um recibo pro MESMO dia são registros
+// que devem COEXISTIR (o comentário lá é explícito sobre isso — chavear só
+// por data colapsava os dois, apagando o lançamento manual toda vez que
+// havia venda de PDV no mesmo dia). Os pontos que ESCREVEM num registro de
+// vendas têm que respeitar a mesma chave, senão o efeito é o mesmo bug ao
+// contrário: achar/editar por data sozinha pode acertar o registro de OUTRA
+// origem (ex.: a busca do recibo caindo no registro manual do dia), fazendo
+// o valor "não aparecer" onde devia ou sumir de onde estava.
+const origemVenda=(v:any)=>v.origem||"manual";
+const vendaDoDia=(vendas:any[],data:string,origem?:string)=>(vendas||[]).find((v:any)=>v.data===data&&origemVenda(v)===(origem||"manual"));
+// Junta duplicatas do dia DENTRO da mesma origem (duas entradas manuais pro
+// mesmo dia, por exemplo) antes de escrever — nunca junta origens
+// diferentes entre si, isso quebraria a coexistência que o merge espera.
+const consolidarVendasDoDia=(vendas:any[],data:string,origem?:string):any[]=>{
+  const alvo=origem||"manual";
+  const dias=(vendas||[]).filter((v:any)=>v.data===data&&origemVenda(v)===alvo);
   if(dias.length<=1)return vendas;
-  const merged=mergeVendasDoDia(vendas,data);
+  const merged=mergeVendasDoDia(dias,data);
   const removerIds=new Set(dias.slice(1).map((v:any)=>v.id));
   removerIds.forEach((id:any)=>_listaDeletados.add(id));
   return vendas.filter((v:any)=>!removerIds.has(v.id)).map((v:any)=>v.id===merged.id?{...merged,atualizadoEm:new Date().toISOString()}:v);
