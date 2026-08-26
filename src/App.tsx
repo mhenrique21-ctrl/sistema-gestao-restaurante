@@ -2847,27 +2847,54 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   const outros=["maquininha","dinheiro"].reduce((s,m)=>s+parseMoney(form[m]||0),0)+deliveryValor;
   const total=outros+ifoodLiq+nfoodLiq;
 
-  const save=()=>{
-    const now=new Date().toISOString();
-    const reg={id:editId||uid(),data:form.data,total,
-      maquininha:parseMoney(form.maquininha||0),
-      dinheiro:parseMoney(form.dinheiro||0),
-      ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
-      "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
-      delivery:deliveryValor};
-    if(editId){setDbAndSave(d=>({...d,vendas:(d.vendas||[]).map(v=>v.id===editId?{...reg,criadoEm:v.criadoEm||now,atualizadoEm:now}:v)}));setEditId(null);}
-    else{setDbAndSave(d=>({...d,vendas:[{...reg,criadoEm:now},...(d.vendas||[])]}));}
-    setForm(emptyForm());
-  };
-  const edit=(v)=>{setEditId(v.id);setForm({data:v.data,
+  const formDeRegistro=(v:any)=>({data:v.data,
     maquininha:v.maquininha?String(v.maquininha.toFixed(2)).replace(".",","):"",
     dinheiro:v.dinheiro?String(v.dinheiro.toFixed(2)).replace(".",","):"",
     ifood:v.ifood?String(v.ifood.toFixed(2)).replace(".",","):"",
     ifoodTaxa:v.ifoodTaxa?String(v.ifoodTaxa):"",
     "99food":v["99food"]?String(v["99food"].toFixed(2)).replace(".",","):"",
     nfoodTaxa:v.nfoodTaxa?String(v.nfoodTaxa):"",
-    delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","): "",
-  });setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+    delivery:v.delivery?String(v.delivery.toFixed(2)).replace(".",","):"",
+  });
+  // Um lançamento por dia: ao abrir a tela (ou trocar a data no formulário),
+  // se já existir um registro pra essa data — venha de onde vier (manual, PDV,
+  // recibo de venda) — carrega ele pra edição automática. Sem isso, salvar
+  // sem perceber que o dia já tinha lançamento criava um SEGUNDO registro pro
+  // mesmo dia: dois cards no Histórico, cada um só com parte dos canais
+  // preenchidos (o resto "sumia" porque estava no outro registro), e o valor
+  // de recibo de venda lançado em Vendas Extras ficava só no registro velho,
+  // nunca aparecendo no formulário que o usuário estava editando.
+  useEffect(()=>{
+    const existente=(db.vendas||[]).find((v:any)=>v.data===form.data);
+    if(existente){setEditId(existente.id);setForm(formDeRegistro(existente));}
+    else setEditId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[form.data]);
+
+  const save=()=>{
+    const now=new Date().toISOString();
+    const reg={data:form.data,total,
+      maquininha:parseMoney(form.maquininha||0),
+      dinheiro:parseMoney(form.dinheiro||0),
+      ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
+      "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
+      delivery:deliveryValor};
+    // Acha o registro do dia por DATA, não só por editId — o efeito acima já
+    // devia ter carregado o editId certo, mas se o registro do dia tiver sido
+    // criado depois (por um recibo, por exemplo) sem o form ter recarregado
+    // ainda, isso evita criar um duplicado mesmo assim.
+    setDbAndSave(d=>{
+      const vendas=[...(d.vendas||[])];
+      const idAlvo=editId||vendas.find(v=>v.data===form.data)?.id;
+      const i=idAlvo?vendas.findIndex(v=>v.id===idAlvo):-1;
+      if(i>=0)vendas[i]={...reg,id:vendas[i].id,criadoEm:vendas[i].criadoEm||now,atualizadoEm:now};
+      else vendas.unshift({...reg,id:uid(),criadoEm:now,atualizadoEm:now});
+      return{...d,vendas};
+    });
+    setEditId(null);
+    setForm(emptyForm());
+  };
+  const edit=(v)=>{setEditId(v.id);setForm(formDeRegistro(v));setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{_listaDeletados.add(id);setDbAndSave(d=>({...d,vendas:(d.vendas||[]).filter(v=>v.id!==id)}));};
   // ---- Leitura combinada de comprovantes (IA): várias fotos numa chamada só, separadas por forma de pagamento ----
   const iaCombRef=useRef<HTMLInputElement>(null);
@@ -2992,7 +3019,8 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
     })()}
     <div className="section-title">Lançar Vendas do Dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
-      <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
+      <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:editId?4:10}}/>
+      {editId&&<div style={{fontSize:11,color:"#15803D",background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 10px",marginBottom:10,fontWeight:600}}>✏️ Editando o lançamento já existente de {fmtDate(form.data)} — os campos abaixo vieram do que já estava salvo.</div>}
       <div style={{marginBottom:10}}>
         <input ref={iaCombRef} type="file" accept="image/*" multiple onChange={e=>{addCombFiles(e.target.files);if(iaCombRef.current)iaCombRef.current.value="";}} style={{display:"none"}}/>
         <input ref={iaCombCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addCombFiles(e.target.files);if(iaCombCamRef.current)iaCombCamRef.current.value="";}} style={{display:"none"}}/>
@@ -3110,7 +3138,11 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         <span>{aj.legTotalLiquido}</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
       </div>
       <button className="btn" onClick={save} style={{background:"var(--btnPrimary)",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
-      {editId&&<button className="btn" onClick={()=>{setEditId(null);setForm(emptyForm());}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+      {editId&&<button className="btn" onClick={()=>{
+        const existente=(db.vendas||[]).find((v:any)=>v.data===form.data);
+        if(existente){setEditId(existente.id);setForm(formDeRegistro(existente));}
+        else{setEditId(null);setForm(emptyForm());}
+      }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
     </div>
 
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
