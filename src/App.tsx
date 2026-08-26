@@ -3165,6 +3165,9 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       </div>}
       {aj.canalVendasExtras&&<div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legVendasExtras}</label>
+        <div style={{fontSize:9,fontFamily:"monospace",color:"#F59E0B",background:"#3A2E0F",padding:"4px 6px",marginBottom:4,borderRadius:4,wordBreak:"break-all" as const}}>
+          DEBUG editId={String(editId)} | pdvAchado={vendaSincronizada?vendaSincronizada.id:"null"} | pdvDelivery={vendaSincronizada?vendaSincronizada.delivery:"-"} | deliveryManual={String(deliveryManual)} | sincronizado={String(deliverySincronizado)}
+        </div>
         {deliverySincronizado?<>
           <div style={{display:"flex",alignItems:"center",gap:6,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"7px 10px",marginBottom:6,fontSize:11,color:"#15803D",fontWeight:700}}>
             🔄 Sincronizado automaticamente do delivery
