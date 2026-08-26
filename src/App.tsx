@@ -2864,8 +2864,19 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   // preenchidos (o resto "sumia" porque estava no outro registro), e o valor
   // de recibo de venda lançado em Vendas Extras ficava só no registro velho,
   // nunca aparecendo no formulário que o usuário estava editando.
+  //
+  // Se já existir MAIS de um registro pro mesmo dia (duplicata antiga, de
+  // antes desse conserto), esse auto-load sempre acharia o primeiro da
+  // lista — e se o usuário tivesse acabado de clicar em "editar" no SEGUNDO
+  // duplicado (pra excluir esse, por exemplo), o efeito rodava por cima e
+  // trocava de volta pro primeiro, na cara dele, sem editar() ter efeito
+  // nenhum. Por isso: se o editId atual já aponta pra um registro que bate
+  // com a data selecionada, respeita a escolha manual e não mexe.
   useEffect(()=>{
-    const existente=(db.vendas||[]).find((v:any)=>v.data===form.data);
+    const vendas=db.vendas||[];
+    const atual=editId?vendas.find((v:any)=>v.id===editId):null;
+    if(atual&&atual.data===form.data)return;
+    const existente=vendas.find((v:any)=>v.data===form.data);
     if(existente){setEditId(existente.id);setForm(formDeRegistro(existente));}
     else setEditId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2895,7 +2906,13 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
     setForm(emptyForm());
   };
   const edit=(v)=>{setEditId(v.id);setForm(formDeRegistro(v));setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
-  const del=(id)=>{_listaDeletados.add(id);setDbAndSave(d=>({...d,vendas:(d.vendas||[]).filter(v=>v.id!==id)}));};
+  const del=(id)=>{
+    const alvo=(db.vendas||[]).find((v:any)=>v.id===id);
+    if(!confirm(`Excluir o lançamento${alvo?` de ${fmtDate(alvo.data)}`:""}?`))return;
+    _listaDeletados.add(id);
+    setDbAndSave(d=>({...d,vendas:(d.vendas||[]).filter(v=>v.id!==id)}));
+    if(editId===id){setEditId(null);setForm(emptyForm());}
+  };
   // ---- Leitura combinada de comprovantes (IA): várias fotos numa chamada só, separadas por forma de pagamento ----
   const iaCombRef=useRef<HTMLInputElement>(null);
   const iaCombCamRef=useRef<HTMLInputElement>(null);
@@ -3138,11 +3155,14 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         <span>{aj.legTotalLiquido}</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
       </div>
       <button className="btn" onClick={save} style={{background:"var(--btnPrimary)",color:"#fff",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
-      {editId&&<button className="btn" onClick={()=>{
-        const existente=(db.vendas||[]).find((v:any)=>v.data===form.data);
-        if(existente){setEditId(existente.id);setForm(formDeRegistro(existente));}
-        else{setEditId(null);setForm(emptyForm());}
-      }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+      {editId&&<div style={{display:"flex",gap:8,marginTop:8}}>
+        <button className="btn" onClick={()=>{
+          const existente=(db.vendas||[]).find((v:any)=>v.data===form.data);
+          if(existente){setEditId(existente.id);setForm(formDeRegistro(existente));}
+          else{setEditId(null);setForm(emptyForm());}
+        }} style={{flex:1,background:"var(--border)",color:"#888",padding:"10px",fontSize:13}}>Cancelar</button>
+        <button className="btn" onClick={()=>del(editId)} style={{flex:1,background:"#F3E8FF",color:"var(--btnDanger)",padding:"10px",fontSize:13}}>🗑️ Excluir este dia</button>
+      </div>}
     </div>
 
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
