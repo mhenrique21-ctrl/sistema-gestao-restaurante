@@ -2840,7 +2840,17 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   // mão, o valor do dia vem direto do registro origem:"pdv", não do formulário.
   const [deliveryManual,setDeliveryManual]=useState(false);
   useEffect(()=>{setDeliveryManual(false);},[form.data]);
-  const vendaSincronizada=!editId?(db.vendas||[]).find((v:any)=>v.data===form.data&&v.origem==="pdv"):null;
+  // Não pode depender de "!editId" pra decidir se existe sincronização — o
+  // auto-load (acima) carrega o registro manual do dia automaticamente
+  // sempre que ele já existe, então editId praticamente NUNCA fica vazio
+  // pro dia corrente. Com "!editId", isso desligava a sincronização (e a
+  // trava de gravação em dobro logo abaixo) assim que o primeiro
+  // lançamento manual do dia era salvo — bug real: o registro manual
+  // continuava salvando o delivery copiado do PDV pra sempre, porque
+  // deliverySincronizado nunca mais voltava a ser true depois da primeira
+  // vez. Em vez disso, só exclui o próprio registro do PDV de si mesmo
+  // (o caso raro de clicar "editar" direto nele).
+  const vendaSincronizada=(db.vendas||[]).find((v:any)=>v.data===form.data&&v.origem==="pdv"&&v.id!==editId)||null;
   const deliverySincronizado=!!vendaSincronizada&&!deliveryManual&&(vendaSincronizada.delivery||0)>0;
   // Quando sincronizado, o valor já mora no registro origem:"pdv" (separado,
   // ver comentário acima) — mergeVendasDoDia/mergeVendasDoDiaServer somam os
