@@ -3165,9 +3165,6 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       </div>}
       {aj.canalVendasExtras&&<div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legVendasExtras}</label>
-        <div style={{fontSize:9,fontFamily:"monospace",color:"#F59E0B",background:"#3A2E0F",padding:"4px 6px",marginBottom:4,borderRadius:4,wordBreak:"break-all" as const}}>
-          DEBUG editId={String(editId)} | pdvAchado={vendaSincronizada?vendaSincronizada.id:"null"} | pdvDelivery={vendaSincronizada?vendaSincronizada.delivery:"-"} | deliveryManual={String(deliveryManual)} | sincronizado={String(deliverySincronizado)}
-        </div>
         {deliverySincronizado?<>
           <div style={{display:"flex",alignItems:"center",gap:6,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"7px 10px",marginBottom:6,fontSize:11,color:"#15803D",fontWeight:700}}>
             🔄 Sincronizado automaticamente do delivery
@@ -14441,6 +14438,35 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
       carregarVinculos();
     }catch(e:any){alert("Erro ao classificar: "+(e.message||""));}
   };
+  // "Categorias que vão pro PDV" (Compras → Insumos) só filtra na HORA de
+  // lançar a compra — enviarCompraSeama nunca manda item de categoria
+  // desligada. Mas ela não tem como filtrar retroativamente o que já está
+  // pendente aqui: essa fila vem do backend do PDV (pending_supply_items),
+  // que não guarda a categoria do Gestão — só nome/quantidade/fornecedor.
+  // Pra achar a categoria de um pendente, cruza por nome com o catálogo de
+  // matérias-primas (mesma lógica de sugestaoClassificacao), e se a
+  // categoria encontrada estiver desligada, oferece descartar em lote —
+  // "respeitar a regra" pro que já ficou preso antes da configuração
+  // existir ou de o item ser reclassificado.
+  const categoriaDesligadaDe=(sourceName:string):string|null=>{
+    if(!db?.materiasPrimas?.length)return null;
+    const desligadas=getCategoriasDesligadasPdv(db);
+    if(!desligadas.length)return null;
+    const alvo=foldNome(sourceName);
+    const mp=db.materiasPrimas.find((m:any)=>foldNome(m.nome)===alvo)
+      ||db.materiasPrimas.find((m:any)=>{const mn=foldNome(m.nome);return mn.length>=4&&(alvo.includes(mn)||mn.includes(alvo));});
+    const cat=(mp?.categoria||"").toLowerCase();
+    return cat&&desligadas.includes(cat)?cat:null;
+  };
+  const descartarDesligados=async()=>{
+    const alvos=(vincDados?.pendentes||[]).map((p:any)=>p.source_name).filter((nome:string)=>categoriaDesligadaDe(nome));
+    if(!alvos.length)return;
+    if(!confirm(`Descartar ${alvos.length} item(ns) de categoria desligada do PDV? Eles não voltam a aparecer aqui, sem virar vínculo nem classificação.`))return;
+    try{
+      await Promise.all(alvos.map((nome:string)=>fetch(`/api/estoque-pdv/vinculos?empresa=${empresa}&nome=${encodeURIComponent(nome)}`,{method:"DELETE"})));
+      carregarVinculos();
+    }catch(e:any){alert("Erro ao descartar: "+(e.message||""));}
+  };
 
   return <div>
     <div className="section-title">📦 Estoque do PDV {empresa}</div>
@@ -14638,6 +14664,12 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
               <span style={{fontSize:11.5,color:"var(--btnPrimary)",flex:1,lineHeight:1.4}}>parece{nSug!==1?"m":""} insumo/limpeza pela categoria que já {nSug!==1?"têm":"tem"} no Gestão</span>
               <button onClick={classificarSugeridos} style={{background:"var(--btnPrimary)",color:"#fff",border:"none",borderRadius:8,padding:"8px 13px",fontSize:11.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>✨ Classificar {nSug}</button>
             </div>;})()}
+          {(()=>{const nDesl=(vincDados.pendentes||[]).filter((p:any)=>categoriaDesligadaDe(p.source_name)).length;
+            return nDesl>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"var(--dangerBg,#3A1518)",border:"1px solid var(--btnDanger)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+              <span style={{fontFamily:"monospace",fontWeight:800,color:"var(--btnDanger)",fontSize:15}}>{nDesl}</span>
+              <span style={{fontSize:11.5,color:"var(--btnDanger)",flex:1,lineHeight:1.4}}>{nDesl!==1?"são":"é"} de categoria desligada do PDV (Compras → Insumos) e não deviam pedir vínculo</span>
+              <button onClick={descartarDesligados} style={{background:"var(--btnDanger)",color:"#fff",border:"none",borderRadius:8,padding:"8px 13px",fontSize:11.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>🚫 Descartar {nDesl}</button>
+            </div>;})()}
           {!!(vincDados.pendentes||[]).length&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
             <button className="pill" onClick={()=>classificarTodos("materia_prima")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Classificar todos: Matéria-prima</button>
             <button className="pill" onClick={()=>classificarTodos("higiene_limpeza")} style={{background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Classificar todos: Higiene</button>
@@ -14645,10 +14677,12 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
           {(vincDados.pendentes||[]).map((p:any)=>{
             const esc=vincEscolha[p.source_name]||{produto:"",fator:"1"};
             const sug=sugestaoClassificacao(p.source_name);
+            const catDesl=categoriaDesligadaDe(p.source_name);
             return <div key={p.source_name} className="card" style={{marginBottom:9,padding:"11px 13px"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
                 <span style={{fontSize:12.5,fontWeight:700}}>{p.source_name}</span>
-                {sug&&<button onClick={()=>classificarUm(p.source_name,sug)} style={{marginLeft:"auto",flexShrink:0,background:"var(--accLight,#F6C45322)",border:"1px solid var(--btnPrimary)",color:"var(--btnPrimary)",borderRadius:20,padding:"2px 9px",fontSize:9.5,fontWeight:700,cursor:"pointer"}}>💡 {sug==="materia_prima"?"Matéria-prima":"Higiene"}?</button>}
+                {catDesl&&<button onClick={()=>descartarPendente(p.source_name)} title={`Categoria "${catDesl}" está desligada do PDV`} style={{marginLeft:"auto",flexShrink:0,background:"var(--dangerBg,#3A1518)",border:"1px solid var(--btnDanger)",color:"var(--btnDanger)",borderRadius:20,padding:"2px 9px",fontSize:9.5,fontWeight:700,cursor:"pointer"}}>🚫 {catDesl}</button>}
+                {!catDesl&&sug&&<button onClick={()=>classificarUm(p.source_name,sug)} style={{marginLeft:"auto",flexShrink:0,background:"var(--accLight,#F6C45322)",border:"1px solid var(--btnPrimary)",color:"var(--btnPrimary)",borderRadius:20,padding:"2px 9px",fontSize:9.5,fontWeight:700,cursor:"pointer"}}>💡 {sug==="materia_prima"?"Matéria-prima":"Higiene"}?</button>}
               </div>
               <div className="muted" style={{fontSize:10,margin:"2px 0 9px"}}>{p.quantidade} {p.unidade} retido · {p.supplier||"fornecedor não informado"}</div>
               <select value={esc.produto} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,produto:e.target.value}}))} className="inp" style={{width:"100%",marginBottom:8,fontSize:12.5}}>
