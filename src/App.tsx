@@ -2890,13 +2890,19 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
       ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
       "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
       delivery:deliveryValor};
-    // Acha o registro do dia por DATA, não só por editId — o efeito acima já
-    // devia ter carregado o editId certo, mas se o registro do dia tiver sido
-    // criado depois (por um recibo, por exemplo) sem o form ter recarregado
-    // ainda, isso evita criar um duplicado mesmo assim.
+    // Acha o registro do dia por DATA — não confia cegamente no editId. Um
+    // editId "preso" de uma edição anterior (aba/tela ficou aberta o dia
+    // inteiro sem o efeito de auto-load rodar de novo) apontava pra um
+    // registro de OUTRA data, e como `editId || vendas.find(...)` nunca
+    // chegava a olhar a data quando editId existia (mesmo apontando pro dia
+    // errado), criava um registro NOVO pro dia atual em vez de atualizar o
+    // que já existia — o duplicado nascia mesmo com o editId "setado".
+    // Só usa editId quando ele bate com o registro do dia selecionado; caso
+    // contrário, a data manda.
     setDbAndSave(d=>{
       const vendas=[...(d.vendas||[])];
-      const idAlvo=editId||vendas.find(v=>v.data===form.data)?.id;
+      const porData=vendas.find(v=>v.data===form.data);
+      const idAlvo=(editId&&vendas.some(v=>v.id===editId&&v.data===form.data))?editId:porData?.id;
       const i=idAlvo?vendas.findIndex(v=>v.id===idAlvo):-1;
       if(i>=0)vendas[i]={...reg,id:vendas[i].id,criadoEm:vendas[i].criadoEm||now,atualizadoEm:now};
       else vendas.unshift({...reg,id:uid(),criadoEm:now,atualizadoEm:now});
