@@ -3100,7 +3100,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
           <input readOnly value={fmtMoney(vendaSincronizada.delivery||0)} className="inp" style={{color:"#15803D",fontWeight:700}}/>
         </>:<>
-          <MoneyInput value={form.delivery} onChange={v=>setForm(f=>({...f,delivery:v}))} className="inp"/>
+          <MoneyInput value={form.delivery} onChange={v=>{setDeliveryManual(true);setForm(f=>({...f,delivery:v}));}} className="inp"/>
           {deliveryManual&&vendaSincronizada&&(vendaSincronizada.delivery||0)>0&&
             <button onClick={()=>setDeliveryManual(false)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"underline",padding:0,marginTop:4}}>🔄 usar valor sincronizado</button>}
         </>}
