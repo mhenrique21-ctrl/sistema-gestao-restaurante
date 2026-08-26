@@ -2465,6 +2465,27 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // aqui no servidor a partir do JSON completo da empresa — NUNCA devolve o
   // documento inteiro (que tem contas, folha de pagamento, fornecedores
   // etc.) pro link público, só os agregados de hoje/ontem que a tela usa.
+  // Espelha o mergeVendasDoDia do App.tsx: um dia pode ter mais de um
+  // registro de vendas em coexistência de propósito (manual + PDV + recibo
+  // de venda + recibo de entrega — mergeDocument.js funde por data+origem,
+  // não só por data). Um .find() simples aqui pegava só o primeiro que
+  // aparecesse no array e ignorava os outros — o Painel TV (link público,
+  // sem login) mostrava um total menor que o painel de dentro do app, que já
+  // soma todos. Sem isso o operador via dois números diferentes pro "mesmo"
+  // faturamento do dia, dependendo de qual tela estava olhando.
+  const CAMPOS_VENDA_NUM_TV = ['maquininha', 'dinheiro', 'ifood', 'ifoodLiq', '99food', 'nfoodLiq', 'delivery', 'entregasClientes', 'total'];
+  const mergeVendasDoDiaServer = (vendas, data) => {
+    const dias = (vendas || []).filter(v => v && v.data === data);
+    if (!dias.length) return null;
+    if (dias.length === 1) return dias[0];
+    const merged = { ...dias[0] };
+    CAMPOS_VENDA_NUM_TV.forEach(k => { merged[k] = dias.reduce((s, v) => s + (Number(v[k]) || 0), 0); });
+    const porHoraMap = {};
+    dias.forEach(v => (Array.isArray(v.porHora) ? v.porHora : []).forEach(p => { porHoraMap[p.hora] = (porHoraMap[p.hora] || 0) + (Number(p.valor) || 0); }));
+    merged.porHora = Object.keys(porHoraMap).map(h => ({ hora: Number(h), valor: porHoraMap[h] })).sort((a, b) => a.hora - b.hora);
+    return merged;
+  };
+
   const painelTvAgregado = (emp) => {
     const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
     let doc = {};
@@ -2473,8 +2494,8 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     const d = new Date(); d.setDate(d.getDate() - 1);
     const ontem = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(d);
     const vendas = Array.isArray(doc.vendas) ? doc.vendas : [];
-    const vHoje = vendas.find(v => v && v.data === hoje) || null;
-    const vOntem = vendas.find(v => v && v.data === ontem) || null;
+    const vHoje = mergeVendasDoDiaServer(vendas, hoje);
+    const vOntem = mergeVendasDoDiaServer(vendas, ontem);
     const canaisChaves = ['maquininha', 'dinheiro', 'ifood', '99food', 'delivery', 'entregasClientes'];
     const canais = {};
     canaisChaves.forEach(k => { canais[k] = (vHoje && Number(vHoje[k])) || 0; });
