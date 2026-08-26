@@ -2842,10 +2842,22 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   useEffect(()=>{setDeliveryManual(false);},[form.data]);
   const vendaSincronizada=!editId?(db.vendas||[]).find((v:any)=>v.data===form.data&&v.origem==="pdv"):null;
   const deliverySincronizado=!!vendaSincronizada&&!deliveryManual&&(vendaSincronizada.delivery||0)>0;
-  const deliveryValor=deliverySincronizado?(vendaSincronizada.delivery||0):parseMoney(form.delivery||0);
+  // Quando sincronizado, o valor já mora no registro origem:"pdv" (separado,
+  // ver comentário acima) — mergeVendasDoDia/mergeVendasDoDiaServer somam os
+  // dois registros do dia pro Painel Ao Vivo, então gravar esse MESMO valor
+  // de novo dentro do registro manual conta ele duas vezes ali (foi
+  // exatamente o bug relatado: Painel Ao Vivo mostrando Delivery em dobro,
+  // 483,10 = 241,55 do PDV + 241,55 copiado pro manual). O valor sincronizado
+  // entra só na PRÉVIA de total mostrada aqui no formulário (pra bater com o
+  // que o dia inteiro vai somar); o que é GRAVADO no registro manual é 0
+  // nesse caso — some do registro manual, mas continua contando pelo lado
+  // do registro do PDV.
+  const deliveryValorSalvar=deliverySincronizado?0:parseMoney(form.delivery||0);
+  const deliveryValorExibir=deliverySincronizado?(vendaSincronizada.delivery||0):deliveryValorSalvar;
 
-  const outros=["maquininha","dinheiro"].reduce((s,m)=>s+parseMoney(form[m]||0),0)+deliveryValor;
+  const outros=["maquininha","dinheiro"].reduce((s,m)=>s+parseMoney(form[m]||0),0)+deliveryValorExibir;
   const total=outros+ifoodLiq+nfoodLiq;
+  const totalRegistroManual=total-deliveryValorExibir+deliveryValorSalvar;
 
   const formDeRegistro=(v:any)=>({data:v.data,
     maquininha:v.maquininha?String(v.maquininha.toFixed(2)).replace(".",","):"",
@@ -2882,12 +2894,12 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
 
   const save=()=>{
     const now=new Date().toISOString();
-    const reg={data:form.data,total,
+    const reg={data:form.data,total:totalRegistroManual,
       maquininha:parseMoney(form.maquininha||0),
       dinheiro:parseMoney(form.dinheiro||0),
       ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
       "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
-      delivery:deliveryValor};
+      delivery:deliveryValorSalvar};
     // Acha o registro do dia por DATA+ORIGEM — não confia cegamente no
     // editId. Um editId "preso" de uma edição anterior (aba ficou aberta o
     // dia inteiro sem o efeito de auto-load rodar de novo) apontava pra um
