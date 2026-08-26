@@ -107,6 +107,30 @@ describe('mergeArrayById', () => {
     assert.equal(result[0].id, 'b', 'a mais recente (deviceB) vence');
   });
 
+  test('regressão: duplicata dentro do MESMO lado escolhe por timestamp, não pela ordem do array', () => {
+    // Cenário real relatado: "os valores da Confraria ficam oscilando se eu
+    // mexer em qualquer coisa" — sobra de duplicata (lixo de antes do
+    // conserto de "salvar duplica") dentro do MESMO array (existing ou
+    // incoming) fazia o merge escolher só o ÚLTIMO da ordem de iteração,
+    // sem olhar timestamp — e como esse merge roda a cada POST/poll
+    // (inclusive de telas que nem mexem em vendas), o vencedor podia trocar
+    // a cada sincronização dependendo de como o array estava ordenado
+    // naquele momento, oscilando o total na tela.
+    const antiga = venda('frag-antiga', { atualizadoEm: '2026-08-24T09:00:00.000Z', maquininha: 3108.98 });
+    const recente = venda('frag-recente', { atualizadoEm: '2026-08-24T10:00:00.000Z', delivery: 241.55 });
+
+    // A mais recente vem PRIMEIRO no array — mesmo assim tem que vencer,
+    // provando que é o timestamp que decide, não a posição.
+    const resultOrdem1 = mergeArrayById([recente, antiga], [], new Set(), true);
+    assert.equal(resultOrdem1.length, 1);
+    assert.equal(resultOrdem1[0].id, 'frag-recente');
+
+    // Mesmos dois itens, ordem invertida — resultado tem que ser IDÊNTICO.
+    const resultOrdem2 = mergeArrayById([antiga, recente], [], new Set(), true);
+    assert.equal(resultOrdem2.length, 1);
+    assert.equal(resultOrdem2[0].id, 'frag-recente', 'trocar a ordem do array não pode trocar o vencedor');
+  });
+
   test('vendas: reenvio do PDV pro mesmo dia atualiza a própria linha, sem duplicar nem afetar a manual', () => {
     const manual = venda('manual-1', { atualizadoEm: '2026-08-24T09:00:00.000Z' });
     const pdvAntigo = venda('pdv-confraria-2026-08-24', { origem: 'pdv', delivery: 30, atualizadoEm: '2026-08-24T09:05:00.000Z' });

@@ -47,30 +47,40 @@ export function mergeArrayById(existingArr, incomingArr, deletedIds, isVendas = 
 
   // Para vendas, também rastreia por data+origem pra deduplicar entradas do
   // mesmo dia E mesma origem, sem misturar manual com pdv.
+  //
+  // Bug real (relatado como "os valores da Confraria ficam oscilando se eu
+  // mexer em qualquer coisa"): o existingArr.forEach abaixo fazia
+  // vendasByDate.set(chave, ...) incondicionalmente pra CADA item — se o
+  // próprio existingArr (ou o próprio incomingArr) já tivesse mais de um
+  // registro de duplicata pra mesma chave (lixo deixado por versões
+  // anteriores do bug de "salvar duplica"), só o ÚLTIMO da ordem de
+  // iteração sobrevivia, sem comparar timestamp nenhum — e a comparação
+  // cruzada (existing vs incoming) só rodava depois, sobre esse sobrevivente
+  // arbitrário. Como esse merge roda de novo a cada POST/poll (inclusive os
+  // disparados por telas que nem mexem em vendas), e a ORDEM dos itens no
+  // array podia variar entre chamadas, o vencedor — e portanto o total
+  // somado depois — podia mudar a cada sincronização: oscilando na tela sem
+  // o usuário ter tocado em Vendas. Corrigido comparando timestamp em TODA
+  // inserção (dentro do mesmo lado também, não só entre lados), então o
+  // resultado só depende de quem tem o carimbo mais recente — nunca da
+  // ordem de iteração.
   const vendasByDate = new Map();
   if (isVendas) {
     const chave = (v) => `${v.data}::${v.origem || 'manual'}`;
-    (existingArr || []).forEach((v) => {
-      if (!deletedIds.has(v.id) && v.data) {
-        vendasByDate.set(chave(v), { item: v, source: 'existing' });
-      }
-    });
-    (incomingArr || []).forEach((v) => {
-      if (!deletedIds.has(v.id) && v.data) {
-        const k = chave(v);
-        const existing = vendasByDate.get(k);
-        if (existing) {
-          const et = itemTimestamp(existing.item);
-          const it = itemTimestamp(v);
-          const winner = (et != null && it != null)
-            ? (it >= et ? { item: v, source: 'incoming' } : existing)
-            : (it != null ? { item: v, source: 'incoming' } : existing);
-          vendasByDate.set(k, winner);
-        } else {
-          vendasByDate.set(k, { item: v, source: 'incoming' });
-        }
-      }
-    });
+    const considerar = (v, source) => {
+      if (!v || !v.id || deletedIds.has(v.id) || !v.data) return;
+      const k = chave(v);
+      const atual = vendasByDate.get(k);
+      if (!atual) { vendasByDate.set(k, { item: v, source }); return; }
+      const et = itemTimestamp(atual.item);
+      const it = itemTimestamp(v);
+      // Sem carimbo em nenhum dos dois: mantém quem já estava (não troca só
+      // por causa da ordem de iteração).
+      const vence = (et != null && it != null) ? (it >= et) : (it != null);
+      if (vence) vendasByDate.set(k, { item: v, source });
+    };
+    (existingArr || []).forEach((v) => considerar(v, 'existing'));
+    (incomingArr || []).forEach((v) => considerar(v, 'incoming'));
   }
 
   const merged = [];
