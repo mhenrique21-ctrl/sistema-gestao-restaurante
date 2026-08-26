@@ -3566,7 +3566,8 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
       // Mesmo lançamento manual de Vendas (data/maquininha/dinheiro/.../delivery) —
       // só soma no bucket "delivery" do dia, igual o Recibo de Entrega soma em
       // "entregasClientes". Cria a linha do dia se ainda não existir.
-      const vendas=[...(d.vendas||[])];
+      let vendas=[...(d.vendas||[])];
+      vendas=consolidarVendasDoDia(vendas,data);
       const i=vendas.findIndex((v:any)=>v.data===data);
       if(i>=0){
         vendas[i]={...vendas[i],delivery:(vendas[i].delivery||0)+totalVenda,total:(vendas[i].total||0)+totalVenda,atualizadoEm:now};
@@ -3774,6 +3775,11 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
         const dataAlvo=atualizacoesRecibo.data||antigo.data;
         const bucket=bucketDoRecibo(antigo);
         const valorAntigo=antigo.lancadoEmVendas?(antigo.valorLancado||0):0;
+        // Junta duplicata do dia antes de mexer — senão o subtrai/soma podia
+        // acertar a duplicata errada (a que não tinha o valor do recibo) e
+        // "reenviar" parecia não fazer efeito nenhum no total certo.
+        vendas=consolidarVendasDoDia(vendas,antigo.data);
+        if(dataAlvo!==antigo.data)vendas=consolidarVendasDoDia(vendas,dataAlvo);
         if(valorAntigo>0){
           const iOld=vendas.findIndex((v:any)=>v.data===antigo.data);
           if(iOld>=0)vendas[iOld]={...vendas[iOld],[bucket]:Math.max(0,(vendas[iOld][bucket]||0)-valorAntigo),total:Math.max(0,(vendas[iOld].total||0)-valorAntigo),atualizadoEm:now};
@@ -3810,6 +3816,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
     setDbAndSave?.((d:any)=>{
       let vendas=[...(d.vendas||[])];
       if(jaLancado){
+        vendas=consolidarVendasDoDia(vendas,r.data);
         const bucket=bucketDoRecibo(r);
         const i=vendas.findIndex((v:any)=>v.data===r.data);
         if(i>=0)vendas[i]={...vendas[i],[bucket]:Math.max(0,(vendas[i][bucket]||0)-r.valorLancado),total:Math.max(0,(vendas[i].total||0)-r.valorLancado),atualizadoEm:now};
@@ -15889,6 +15896,37 @@ ${cfg.encomendaAssinatura?`<div class="assinatura">Ciente: _____________________
 
 
 const CANAIS_VENDA_TV:[string,string][]=[["maquininha","Maquininha"],["dinheiro","Dinheiro"],["ifood","iFood"],["99food","99Food"],["delivery","Delivery"],["entregasClientes","Entregas"]];
+// Defesa contra duplicata de vendas do mesmo dia (registro velho antes do
+// conserto de "um lançamento por dia" em Lançamentos, ou qualquer outra
+// forma de acabar com dois registros pra mesma data): em vez de pegar só o
+// primeiro que .find() achar — que podia ser o incompleto, deixando os
+// paineis "Ao Vivo" com o total errado até alguém limpar a duplicata na
+// mão — soma os canais de TODOS os registros daquele dia.
+const CAMPOS_VENDA_NUM=["total","maquininha","dinheiro","ifood","ifoodLiq","99food","nfoodLiq","delivery","entregasClientes"];
+const mergeVendasDoDia=(vendas:any[],data:string):any=>{
+  const dias=(vendas||[]).filter((v:any)=>v.data===data);
+  if(!dias.length)return null;
+  if(dias.length===1)return dias[0];
+  const merged:any={...dias[0]};
+  CAMPOS_VENDA_NUM.forEach(k=>{merged[k]=dias.reduce((s:number,v:any)=>s+(v[k]||0),0);});
+  const porHoraMap:Record<number,number>={};
+  dias.forEach((v:any)=>(v.porHora||[]).forEach((p:any)=>{porHoraMap[p.hora]=(porHoraMap[p.hora]||0)+(p.valor||0);}));
+  merged.porHora=Object.keys(porHoraMap).map(h=>({hora:Number(h),valor:porHoraMap[Number(h)]})).sort((a,b)=>a.hora-b.hora);
+  return merged;
+};
+// Some além de só LER mesclado — usado onde algo vai ESCREVER num registro
+// de vendas específico (reenviar recibo pra Vendas Extras, excluir recibo)
+// e precisa que aquele registro seja o único e o certo: junta as duplicatas
+// do dia num só (mantendo o id da primeira) antes de subtrair/somar, senão
+// o ajuste podia acertar a duplicata errada e deixar a diferença sumida.
+const consolidarVendasDoDia=(vendas:any[],data:string):any[]=>{
+  const dias=(vendas||[]).filter((v:any)=>v.data===data);
+  if(dias.length<=1)return vendas;
+  const merged=mergeVendasDoDia(vendas,data);
+  const removerIds=new Set(dias.slice(1).map((v:any)=>v.id));
+  removerIds.forEach((id:any)=>_listaDeletados.add(id));
+  return vendas.filter((v:any)=>!removerIds.has(v.id)).map((v:any)=>v.id===merged.id?{...merged,atualizadoEm:new Date().toISOString()}:v);
+};
 
 // Painel de UMA empresa dentro do "📊 Painel Ao Vivo" — só HOJE (sem seletor
 // de período, diferente do Dashboard normal). porHora só existe pra quem usa
@@ -15897,8 +15935,8 @@ const CANAIS_VENDA_TV:[string,string][]=[["maquininha","Maquininha"],["dinheiro"
 function PainelEmpresaAoVivo({empresa,db,cor}:{empresa:string,db:any,cor:string}){
   const hoje=today();
   const ontem=(()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
-  const vHoje=(db?.vendas||[]).find((v:any)=>v.data===hoje);
-  const vOntem=(db?.vendas||[]).find((v:any)=>v.data===ontem);
+  const vHoje=mergeVendasDoDia(db?.vendas||[],hoje);
+  const vOntem=mergeVendasDoDia(db?.vendas||[],ontem);
   const totalHoje=vHoje?.total||0;
   const totalOntem=vOntem?.total||0;
   const deltaPct=totalOntem>0?((totalHoje-totalOntem)/totalOntem)*100:null;
@@ -16032,8 +16070,8 @@ function PainelAoVivoDashboard({state}:{state:any}){
   const dbC=state?.CONFRARIA||{};
   const dbS=state?.SEAMA||{};
   const hoje=today();
-  const totalC=(dbC.vendas||[]).find((v:any)=>v.data===hoje)?.total||0;
-  const totalS=(dbS.vendas||[]).find((v:any)=>v.data===hoje)?.total||0;
+  const totalC=mergeVendasDoDia(dbC.vendas||[],hoje)?.total||0;
+  const totalS=mergeVendasDoDia(dbS.vendas||[],hoje)?.total||0;
   const totalGeral=totalC+totalS;
   // Budget de Compras consolidado: soma dos dois lados, cada um com sua
   // própria meta de CMV (podem estar configuradas diferentes por empresa).
