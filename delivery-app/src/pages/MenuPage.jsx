@@ -109,7 +109,8 @@ export default function MenuPage() {
       // Banner do dia: adminIndex = (jsDay + 6) % 7
       const adminIdx = (new Date().getDay() + 6) % 7
       const dayBanner = s.business_hours?.[adminIdx]?.banner_url
-      setBannerUrl(dayBanner || s.banner_image_url || null)
+      const rawBanner = dayBanner || s.banner_image_url || null
+      setBannerUrl(rawBanner && rawBanner.startsWith('http') ? rawBanner : null)
       setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates, s.store_closed_manual))
     }).catch(() => {})
   }, [])
