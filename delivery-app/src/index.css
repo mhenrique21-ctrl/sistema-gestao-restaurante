@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+* { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+/* ── Design System · Confraria Café ─────────────────────────────
+   Grid 8px · Radius 24px · Sombras suaves · Tema claro premium  */
+:root {
+  --bg:        #F8F5F1;   /* fundo principal */
+  --surface:   #EFE7DC;   /* header / áreas elevadas bege */
+  --card:      #FFFFFF;   /* cards */
+  --border:    #E9E1D8;   /* bordas */
+  --brown:     #5D4037;   /* marrom principal */
+  --gold:      #C89B5A;   /* caramelo (accent) */
+  --gold-dim:  #A97142;   /* marrom claro */
+  --cream:     #2E2A26;   /* texto principal (nome legado) */
+  --muted:     #7B6F66;   /* texto secundário */
+  --danger:    #D84343;
+  --green:     #43A047;
+  --radius:    24px;
+  --shadow-soft: 0 2px 16px rgba(93,64,55,0.06), 0 1px 3px rgba(93,64,55,0.04);
+  --shadow-lift: 0 8px 28px rgba(93,64,55,0.10), 0 2px 6px rgba(93,64,55,0.05);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--cream);
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Limita a largura em desktop, centraliza como app mobile */
+#root {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  overflow-x: hidden;
+  box-shadow: 0 0 60px rgba(93,64,55,0.08);
+}
+
+/* Título display (marca / seções) */
+.font-display {
+  font-family: 'Georgia', 'Palatino Linotype', serif;
+  letter-spacing: -0.025em;
+  font-feature-settings: "kern" 1;
+}
+
+/* Safe area */
+.safe-top    { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Scrollbar hide */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Scroll snap */
+.scroll-snap-x { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+.scroll-snap-x > * { scroll-snap-align: start; }
+
+/* Press effect (micro-interação 60fps: transform/opacity only) */
+.press { transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s ease, box-shadow 0.2s ease; }
+.press:active { transform: scale(0.96); opacity: 0.9; }
+
+/* Card premium */
+.card-soft {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Botão principal caramelo */
+.btn-gold {
+  background: linear-gradient(135deg, #C89B5A 0%, #A97142 100%);
+  color: #FFFFFF;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  border-radius: 18px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
+  box-shadow: 0 6px 20px rgba(169,113,66,0.35);
+  min-height: 44px;
+}
+.btn-gold:active { transform: scale(0.97); opacity: 0.92; }
+.btn-gold:disabled { opacity: 0.4; box-shadow: none; }
+
+/* Botão secundário */
+.btn-outline {
+  background: var(--card);
+  color: var(--brown);
+  font-weight: 700;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  min-height: 44px;
+  box-shadow: var(--shadow-soft);
+}
+
+/* Chip de categoria */
+.chip {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 38px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--brown);
+  box-shadow: var(--shadow-soft);
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip:active { transform: scale(0.94); }
+.chip-active {
+  background: linear-gradient(135deg, #C89B5A 0%, #A97142 100%);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(169,113,66,0.4);
+}
+
+/* Selos sofisticados */
+.badge-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.badge-offer  { background: rgba(200,155,90,0.14); color: var(--gold-dim); }
+.badge-brown  { background: var(--brown); color: #fff; }
+.badge-off    { background: rgba(93,64,55,0.92); color: #F6E9D9; }
+.badge-green  { background: rgba(67,160,71,0.12); color: var(--green); }
+.badge-danger { background: rgba(216,67,67,0.10); color: var(--danger); }
+
+/* Shimmer skeleton (claro) */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #EFE9E1 25%, #F7F3EC 50%, #EFE9E1 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 20px;
+}
+
+/* Slide up sheet */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.slide-up { animation: slideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.3s ease forwards; }
+
+/* Scale in (feedback adicionar ao carrinho) */
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.scale-in { animation: scaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+
+/* PIX pulse */
+@keyframes pix-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(200,155,90,0.35); }
+  50%       { box-shadow: 0 0 0 8px rgba(200,155,90,0); }
+}
+.pix-qr { animation: pix-pulse 2s infinite; }
+
+/* Divisor dourado */
+.gold-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
