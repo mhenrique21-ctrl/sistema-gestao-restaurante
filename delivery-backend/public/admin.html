@@ -2962,9 +2962,9 @@ async function npConfirmar() {
       delivery_fee: fee,
       troco: troco || null,
     });
-    toast('Pedido #' + novo.order_number + ' criado! WhatsApp enviado ao cliente.');
     overlay.remove();
     carregarPedidos();
+    await reenviarWA(novo.id);
   } catch(e) {
     toast(e.message || 'Erro ao criar pedido', true);
   }
