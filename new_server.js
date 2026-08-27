@@ -2437,6 +2437,66 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       return;
     }
 
+    // ---- Relatório (Vendas, Produtos, Consulta — só existe de verdade no
+    // PDV da Seama hoje; Confraria só tem um /api/reports/daily bem mais
+    // simples, sem período nem ranking, então fica de fora por enquanto) ----
+    if (area === 'relatorio') {
+      (async () => {
+        try {
+          if (empresa === 'CONFRARIA') return enviarJson(200, { disponivel: false });
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const headers = { Authorization: 'Bearer ' + token };
+          const sub = partes[3];
+
+          const periodoQs = () => {
+            const qs = new URLSearchParams();
+            if (query.get('from')) qs.set('from', query.get('from'));
+            if (query.get('to')) qs.set('to', query.get('to'));
+            return qs.toString() ? `?${qs.toString()}` : '';
+          };
+
+          if (req.method === 'GET' && sub === 'vendas' && partes.length === 4) {
+            const suffix = periodoQs();
+            const [rSum, rPat] = await Promise.all([
+              fetch(`${base}/api/reports/summary${suffix}`, { headers }),
+              fetch(`${base}/api/reports/patterns${suffix}`, { headers }),
+            ]);
+            const summary = await rSum.json().catch(() => ({}));
+            if (!rSum.ok) return enviarJson(rSum.status, summary);
+            const patterns = await rPat.json().catch(() => ({}));
+            return enviarJson(200, { disponivel: true, ...summary, porHora: patterns.porHora || [] });
+          }
+
+          if (req.method === 'GET' && sub === 'produtos' && partes.length === 4) {
+            const upstream = await fetch(`${base}/api/reports/products${periodoQs()}`, { headers });
+            const data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            return enviarJson(200, { disponivel: true, ...data });
+          }
+
+          if (req.method === 'GET' && sub === 'consulta' && partes.length === 4) {
+            const data = query.get('data') || '';
+            const upstream = await fetch(`${base}/api/sales?date=${encodeURIComponent(data)}`, { headers });
+            const d = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) return enviarJson(upstream.status, d);
+            return enviarJson(200, { disponivel: true, ...d });
+          }
+
+          if (req.method === 'GET' && sub === 'consulta' && partes.length === 5) {
+            const upstream = await fetch(`${base}/api/sales/${partes[4]}`, { headers });
+            const d = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, d);
+          }
+
+          enviarJson(404, { error: 'Rota de relatório não encontrada' });
+        } catch (e) {
+          enviarErro('Erro ao falar com relatório do PDV: ' + e.message);
+        }
+      })();
+      return;
+    }
+
     res.writeHead(404); res.end(JSON.stringify({ error: 'Área de configuração de PDV não encontrada' }));
     return;
   }

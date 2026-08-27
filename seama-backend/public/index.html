@@ -650,26 +650,15 @@
     <div id="caixa-body"></div>
   </div>
 
-  <div id="rel-screen">
-    <div id="rel-tabs">
-      <button class="cfg-tab active" data-rtab="vendas">📈 Vendas</button>
-      <button class="cfg-tab" data-rtab="produtos">🏆 Produtos</button>
-      <button class="cfg-tab" data-rtab="estoque">📦 Estoque</button>
-      <button class="cfg-tab" data-rtab="entradas">📥 Entradas</button>
-      <button class="cfg-tab" data-rtab="margem">💰 Margem</button>
-      <button class="cfg-tab" data-rtab="consulta">🧾 Consulta</button>
-    </div>
-    <div id="rel-data" style="display:none">
-      <input type="date" id="cons-data">
-    </div>
-    <div id="rel-periodo">
-      <button class="per-btn active" data-dias="0">Hoje</button>
-      <button class="per-btn" data-dias="7">7 dias</button>
-      <button class="per-btn" data-dias="30">30 dias</button>
-      <button class="per-btn" data-dias="90">90 dias</button>
-    </div>
-    <div id="rel-body"></div>
-  </div>
+  <!-- #rel-screen fica vazia de propósito: os handlers de nav-vendas/
+       nav-caixa/nav-config ainda chamam document.getElementById('rel-screen')
+       pra tirar a classe "active" ao trocar de tela — remover a div quebraria
+       essas três. O conteúdo (abas, período, corpo do relatório) saiu daqui;
+       o botão que abria essa tela também saiu do rodapé. As funções que
+       preenchiam isso (loadRelatorio, renderVendas, renderProdutos,
+       renderEstoque, renderEntradas, renderMargem, loadConsulta) ficaram
+       inertes — só eram chamadas pelos elementos que saíram. -->
+  <div id="rel-screen"></div>
 
   <div id="config-screen">
     <div id="config-tabs">
@@ -766,7 +755,9 @@
   <div id="footer-nav">
     <button class="nav-btn active" id="nav-vendas"><span class="ic">🧾</span>Vendas</button>
     <button class="nav-btn" id="nav-caixa"><span class="ic">💰</span>Caixa</button>
-    <button class="nav-btn" id="nav-relatorios"><span class="ic">📊</span>Relatórios</button>
+    <!-- Relatórios saiu do tablet e passou a viver só no App Gestão
+         (Configurações de PDV → Relatório) — mesma API por trás
+         (/api/reports/*, /api/sales), só a interface daqui que foi. -->
     <button class="nav-btn" id="nav-config"><span class="ic">⚙️</span>Config</button>
   </div>
 </div>
@@ -1713,7 +1704,7 @@ function relRange() {
   return `from=${from}&to=${to}`;
 }
 
-document.getElementById('nav-relatorios').addEventListener('click', () => {
+document.getElementById('nav-relatorios')?.addEventListener('click', () => {
   if (!['admin', 'gerente'].includes(CURRENT_USER?.role)) { showToast('Só admin ou gerente acessa relatórios'); return; }
   document.getElementById('config-screen').classList.remove('active');
   document.getElementById('caixa-screen').classList.remove('active');
@@ -2146,7 +2137,7 @@ function abrirCancelamento(v) {
   });
 }
 
-document.getElementById('cons-data').addEventListener('change', loadConsulta);
+document.getElementById('cons-data')?.addEventListener('change', loadConsulta);
 
 document.querySelectorAll('.per-btn').forEach(b => b.addEventListener('click', () => {
   relDias = parseInt(b.dataset.dias, 10);

@@ -1872,6 +1872,7 @@ export default function App() {
       {id:"pm-sangria",label:"Sangria",icon:"💸",sub:"sangria"},
       {id:"pm-fech",label:"Fechamento",icon:"🔒",sub:"fechamento"},
       {id:"pm-apar",label:"Aparência",icon:"🎨",sub:"aparencia-pdv"},
+      {id:"pm-rel",label:"Relatório",icon:"📊",sub:"relatorio-pdv"},
     ]},
     {id:"cardapio-tv",label:"Cardápio TV",icon:"📺",children:[
       {id:"tv-telas",label:"Telas",icon:"📺",sub:"telas"},
@@ -13947,8 +13948,9 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
   const ptColor=(t:string)=>t==="cozinha"?"#f59e0b":t==="balcao"?"#3b82f6":"#64748b";
 
   const empresaPdv=empresa==="SEAMA"?"SEAMA":"CONFRARIA";
-  const [estoqueView,setEstoqueView]=useState<{v:"saldo"|"vinculos",n:number}>({v:pendingSub==="compras"?"vinculos":"saldo",n:0});
-  const abrirVinculos=()=>{setEstoqueView(s=>({v:"vinculos",n:s.n+1}));setSubTab("estoque");};
+  const [estoqueView,setEstoqueView]=useState<{v:"saldo"|"vinculos"|"entradas"|"margem",n:number}>({v:pendingSub==="compras"?"vinculos":"saldo",n:0});
+  const abrirEstoqueView=(v:"saldo"|"vinculos"|"entradas"|"margem")=>{setEstoqueView(s=>({v,n:s.n+1}));setSubTab("estoque");};
+  const abrirVinculos=()=>abrirEstoqueView("vinculos");
 
   return <div>
     <div className="section-title">🔧 Configurações de PDV</div>
@@ -13964,6 +13966,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
       <button className="pill" onClick={()=>setSubTab("sangria")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="sangria"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="sangria"?"#fff":"#777"}}>💸 Sangria</button>
       <button className="pill" onClick={()=>setSubTab("fechamento")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="fechamento"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="fechamento"?"#fff":"#777"}}>🔒 Fechamento</button>
       <button className="pill" onClick={()=>setSubTab("aparencia-pdv")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="aparencia-pdv"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="aparencia-pdv"?"#fff":"#777"}}>🎨 Aparência</button>
+      <button className="pill" onClick={()=>setSubTab("relatorio-pdv")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="relatorio-pdv"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="relatorio-pdv"?"#fff":"#777"}}>📊 Relatório</button>
     </div>
 
     {subTab==="estoque"&&<EstoquePdvPanel key={estoqueView.n} empresa={empresaPdv} db={db} initialView={estoqueView.v}/>}
@@ -13972,9 +13975,10 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
     {subTab==="sangria"&&<SangriaPdvPanel empresa={empresaPdv}/>}
     {subTab==="fechamento"&&<FechamentoPdvPanel empresa={empresaPdv}/>}
     {subTab==="aparencia-pdv"&&<AparenciaPdvPanel empresa={empresaPdv}/>}
+    {subTab==="relatorio-pdv"&&<RelatorioPdvPanel empresa={empresaPdv} onAbrirEstoque={abrirEstoqueView}/>}
 
-    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv"].includes(subTab)&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
-    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv"].includes(subTab)&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
+    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv","relatorio-pdv"].includes(subTab)&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv","relatorio-pdv"].includes(subTab)&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
 
     {subTab==="produtos"&&<div>
       {/* Toolbar de filtros — igual ADMIN-03 */}
@@ -14202,7 +14206,7 @@ const CATEGORIA_PARA_CLASSIFICACAO:Record<string,"materia_prima"|"higiene_limpez
   "massas":"materia_prima","latas, caixas e temperos":"materia_prima","insumos":"materia_prima",
   "limpeza":"higiene_limpeza","material de limpeza":"higiene_limpeza","descartáveis":"higiene_limpeza",
 };
-function EstoquePdvPanel({empresa,db,initialView}:{empresa:"CONFRARIA"|"SEAMA",db?:any,initialView?:"saldo"|"vinculos"}){
+function EstoquePdvPanel({empresa,db,initialView}:{empresa:"CONFRARIA"|"SEAMA",db?:any,initialView?:"saldo"|"vinculos"|"entradas"|"margem"}){
   const [view,setView]=useState<"saldo"|"vendas"|"inventario"|"entradas"|"margem"|"vinculos">(initialView||"saldo");
   const [itens,setItens]=useState<any[]>([]);
   const [abaixo,setAbaixo]=useState(0);
@@ -15238,6 +15242,171 @@ function AparenciaPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
       })}
       <button className="btn" disabled={salvandoFontes} onClick={()=>salvarCampo("fontes",Object.fromEntries(CAMADAS_FONTE_PDV.map(c=>[c.chave,Math.min(FONTE_PDV_MAX,Math.max(FONTE_PDV_MIN,parseInt(fontes[c.chave],10)||c.padrao))])),setSalvandoFontes,"Tamanhos salvos!")} style={{marginTop:10,padding:"7px 12px",fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>{salvandoFontes?"Salvando...":"Salvar tamanhos"}</button>
     </div>
+  </div>;
+}
+
+const PERIODOS_RELATORIO_PDV:[string,string][]=[["hoje","Hoje"],["7","7 dias"],["30","30 dias"],["90","90 dias"]];
+const periodoParaDatas=(p:string)=>({from:p==="hoje"?today():diasAtras(parseInt(p,10)-1),to:today()});
+
+function RelatorioPdvPanel({empresa,onAbrirEstoque}:{empresa:"CONFRARIA"|"SEAMA",onAbrirEstoque:(v:"saldo"|"entradas"|"margem")=>void}){
+  const [view,setView]=useState<"vendas"|"produtos"|"consulta">("vendas");
+  const [periodo,setPeriodo]=useState("hoje");
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState("");
+
+  const [vendas,setVendas]=useState<any>(null);
+  const [produtos,setProdutos]=useState<any>(null);
+
+  const [consultaData,setConsultaData]=useState(today());
+  const [consultaLista,setConsultaLista]=useState<any>(null);
+  const [consultaSel,setConsultaSel]=useState<any>(null);
+  const [carregandoDetalhe,setCarregandoDetalhe]=useState(false);
+
+  const loadVendas=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const {from,to}=periodoParaDatas(periodo);
+      const r=await fetch(`/api/pdv-config/relatorio/vendas?empresa=${empresa}&from=${from}&to=${to}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar relatório de vendas");
+      setVendas(d);
+    }catch(e:any){setVendas(null);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  const loadProdutos=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const {from,to}=periodoParaDatas(periodo);
+      const r=await fetch(`/api/pdv-config/relatorio/produtos?empresa=${empresa}&from=${from}&to=${to}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar ranking de produtos");
+      setProdutos(d);
+    }catch(e:any){setProdutos(null);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  const loadConsulta=async()=>{
+    setLoading(true);setErro("");setConsultaSel(null);
+    try{
+      const r=await fetch(`/api/pdv-config/relatorio/consulta?empresa=${empresa}&data=${consultaData}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar vendas do dia");
+      setConsultaLista(d);
+    }catch(e:any){setConsultaLista(null);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+
+  useEffect(()=>{
+    if(view==="vendas")loadVendas();
+    else if(view==="produtos")loadProdutos();
+    else if(view==="consulta")loadConsulta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[view,periodo,empresa,view==="consulta"?consultaData:null]);
+
+  const verDetalhe=async(id:string)=>{
+    setCarregandoDetalhe(true);
+    try{
+      const r=await fetch(`/api/pdv-config/relatorio/consulta/${id}?empresa=${empresa}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar detalhe");
+      setConsultaSel(d);
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setCarregandoDetalhe(false);
+  };
+
+  const pillBtn=(id:string,label:string,onClick:()=>void)=>(
+    <button key={id} className="pill" onClick={onClick} style={{flexShrink:0,whiteSpace:"nowrap",background:view===id?"var(--btnPrimary)":"var(--bg4)",color:view===id?"#fff":"#777"}}>{label}</button>
+  );
+
+  const semDados=!loading&&!erro&&(view==="vendas"?!vendas?.disponivel:view==="produtos"?!produtos?.disponivel:view==="consulta"?!consultaLista?.disponivel:false);
+
+  const maxHora=view==="vendas"&&vendas?.porHora?.length?Math.max(...vendas.porHora.map((h:any)=>h.faturamento)):0;
+  const variacaoTxt=(v:number|null)=>v==null?"":`${v>=0?"↑":"↓"} ${Math.abs(v).toFixed(0)}% vs período anterior`;
+
+  return <div>
+    <div className="section-title" style={{fontSize:15}}>📊 Relatório</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Faturamento, ranking de produtos e consulta de vendas do PDV.</div>
+
+    <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any,paddingBottom:2}}>
+      {pillBtn("vendas","📈 Vendas",()=>setView("vendas"))}
+      {pillBtn("produtos","🏆 Produtos",()=>setView("produtos"))}
+      <button className="pill" onClick={()=>onAbrirEstoque("saldo")} style={{flexShrink:0,whiteSpace:"nowrap",background:"var(--bg4)",color:"#777"}}>📦 Estoque</button>
+      <button className="pill" onClick={()=>onAbrirEstoque("entradas")} style={{flexShrink:0,whiteSpace:"nowrap",background:"var(--bg4)",color:"#777"}}>📥 Entradas</button>
+      <button className="pill" onClick={()=>onAbrirEstoque("margem")} style={{flexShrink:0,whiteSpace:"nowrap",background:"var(--bg4)",color:"#777"}}>💰 Margem</button>
+      {pillBtn("consulta","🧾 Consulta",()=>setView("consulta"))}
+    </div>
+
+    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={()=>view==="vendas"?loadVendas():view==="produtos"?loadProdutos():loadConsulta()} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {loading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+    {semDados&&<div className="card"><div style={{fontSize:12.5}}>🚧 O PDV da Confraria ainda não tem esse relatório — essa aba só funciona pra Seama por enquanto.</div></div>}
+
+    {!loading&&!erro&&!semDados&&(view==="vendas"||view==="produtos")&&<div style={{display:"flex",gap:6,marginBottom:12}}>
+      {PERIODOS_RELATORIO_PDV.map(([v,l])=><button key={v} className="btn" onClick={()=>setPeriodo(v)} style={{padding:"6px 12px",fontSize:11.5,borderRadius:20,background:periodo===v?"var(--btnPrimary)":"var(--bg4)",color:periodo===v?"#fff":"var(--text)"}}>{l}</button>)}
+    </div>}
+
+    {!loading&&!erro&&!semDados&&view==="vendas"&&vendas&&<>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        <div className="card"><div className="muted" style={{fontSize:10}}>Faturamento</div><div style={{fontSize:16,fontWeight:800}}>{fmtMoney(vendas.atual?.faturamento||0)}</div><div className="muted" style={{fontSize:10,marginTop:3,color:(vendas.comparacao?.faturamento||0)>=0?"#22C55E":"var(--btnDanger)"}}>{variacaoTxt(vendas.comparacao?.faturamento)}</div></div>
+        <div className="card"><div className="muted" style={{fontSize:10}}>Vendas</div><div style={{fontSize:16,fontWeight:800}}>{vendas.atual?.vendas||0}</div><div className="muted" style={{fontSize:10,marginTop:3,color:(vendas.comparacao?.vendas||0)>=0?"#22C55E":"var(--btnDanger)"}}>{variacaoTxt(vendas.comparacao?.vendas)}</div></div>
+        <div className="card"><div className="muted" style={{fontSize:10}}>Ticket médio</div><div style={{fontSize:16,fontWeight:800}}>{fmtMoney(vendas.atual?.ticketMedio||0)}</div><div className="muted" style={{fontSize:10,marginTop:3,color:(vendas.comparacao?.ticketMedio||0)>=0?"#22C55E":"var(--btnDanger)"}}>{variacaoTxt(vendas.comparacao?.ticketMedio)}</div></div>
+        <div className="card"><div className="muted" style={{fontSize:10}}>Itens vendidos</div><div style={{fontSize:16,fontWeight:800}}>{vendas.atual?.unidades||0}</div><div className="muted" style={{fontSize:10,marginTop:3,color:(vendas.comparacao?.unidades||0)>=0?"#22C55E":"var(--btnDanger)"}}>{variacaoTxt(vendas.comparacao?.unidades)}</div></div>
+      </div>
+      <div className="card">
+        <div style={{fontSize:11.5,fontWeight:700,marginBottom:10}}>Movimento por hora</div>
+        {!vendas.porHora?.length&&<div className="muted" style={{fontSize:11}}>Sem vendas no período.</div>}
+        {!!vendas.porHora?.length&&<div style={{display:"flex",alignItems:"flex-end",gap:4,height:70}}>
+          {vendas.porHora.map((h:any)=><div key={h.hora} title={`${h.hora}h — ${fmtMoney(h.faturamento)}`} style={{flex:1,background:"var(--btnPrimary)",opacity:h.faturamento===maxHora?1:.6,borderRadius:"3px 3px 0 0",height:`${maxHora?Math.max(4,(h.faturamento/maxHora)*100):4}%`}}/>)}
+        </div>}
+        {!!vendas.porHora?.length&&<div style={{display:"flex",gap:4,marginTop:5}}>{vendas.porHora.map((h:any)=><span key={h.hora} className="muted" style={{flex:1,textAlign:"center",fontSize:8.5}}>{h.hora}h</span>)}</div>}
+      </div>
+    </>}
+
+    {!loading&&!erro&&!semDados&&view==="produtos"&&produtos&&<div className="card">
+      {!produtos.ranking?.length&&<div className="muted" style={{fontSize:12}}>Sem vendas no período.</div>}
+      {(produtos.ranking||[]).slice(0,30).map((p:any,i:number)=>(
+        <div key={p.product_id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderTop:i>0?"1px solid var(--border)":"none"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:9.5,fontWeight:800,padding:"2px 7px",borderRadius:5,background:p.abc==="A"?"#DCFCE7":p.abc==="B"?"#FEF3C7":"var(--bg4)",color:p.abc==="A"?"#15803D":p.abc==="B"?"#B45309":"var(--text3)"}}>{p.abc}</span>
+            <div><div style={{fontSize:12,fontWeight:600}}>{p.name}</div><div className="muted" style={{fontSize:10}}>{p.quantidade} un. · {p.participacao.toFixed(1)}%</div></div>
+          </div>
+          <div style={{fontSize:12,fontWeight:700}}>{fmtMoney(p.faturamento)}</div>
+        </div>
+      ))}
+      {!!produtos.parados?.length&&<div style={{marginTop:12,paddingTop:10,borderTop:"1px solid var(--border)"}}>
+        <div className="muted" style={{fontSize:11,fontWeight:700,marginBottom:4}}>⚠️ {produtos.parados.length} produto(s) ativo(s) sem venda no período</div>
+      </div>}
+    </div>}
+
+    {!loading&&!erro&&!semDados&&view==="consulta"&&<>
+      <input type="date" className="inp" value={consultaData} onChange={e=>setConsultaData(e.target.value)} style={{marginBottom:12,fontSize:12,maxWidth:180}}/>
+      {consultaLista&&<>
+        <div className="muted" style={{fontSize:11,marginBottom:8}}>{consultaLista.sales?.length||0} venda(s) — {fmtMoney((consultaLista.sales||[]).reduce((s:number,v:any)=>s+(parseFloat(v.total)||0),0))}</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap" as const}}>
+          <div className="card" style={{flex:"1 1 260px",maxHeight:420,overflowY:"auto",padding:0}}>
+            {(consultaLista.sales||[]).map((v:any)=>(
+              <div key={v.id} onClick={()=>verDetalhe(v.id)} style={{padding:"9px 12px",borderBottom:"1px solid var(--border)",cursor:"pointer",display:"flex",justifyContent:"space-between",background:consultaSel?.id===v.id?"var(--bg4)":"transparent"}}>
+                <div><div style={{fontSize:12,fontWeight:600}}>#{v.sale_number} · {new Date(v.created_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</div><div className="muted" style={{fontSize:10}}>{v.operator_name||"—"}</div></div>
+                <div style={{fontSize:12,fontWeight:700}}>{fmtMoney(v.total)}</div>
+              </div>
+            ))}
+            {!consultaLista.sales?.length&&<div className="muted" style={{fontSize:12,padding:14}}>Nenhuma venda nesse dia.</div>}
+          </div>
+          <div className="card" style={{flex:"1 1 260px"}}>
+            {carregandoDetalhe&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+            {!carregandoDetalhe&&!consultaSel&&<div className="muted" style={{fontSize:12}}>Toque numa venda pra ver o detalhe.</div>}
+            {!carregandoDetalhe&&consultaSel&&<div>
+              <div style={{fontSize:12.5,fontWeight:700,marginBottom:8}}>Venda #{consultaSel.sale_number}</div>
+              {(consultaSel.items||[]).map((it:any,i:number)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"3px 0"}}>
+                  <span>{it.quantity}x {it.product_name}</span><span>{fmtMoney((it.unit_price||0)*(it.quantity||0))}</span>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700,marginTop:8,paddingTop:8,borderTop:"1px solid var(--border)"}}><span>Total</span><span>{fmtMoney(consultaSel.total)}</span></div>
+              {!!consultaSel.payments?.length&&<div className="muted" style={{fontSize:10.5,marginTop:6}}>{consultaSel.payments.map((p:any)=>p.method).join(", ")}</div>}
+            </div>}
+          </div>
+        </div>
+      </>}
+    </>}
   </div>;
 }
 
