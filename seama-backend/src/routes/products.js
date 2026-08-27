@@ -117,6 +117,12 @@ router.delete('/:id', requireRole('admin'), async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Produto não encontrado' });
     res.json({ deleted: true });
   } catch (err) {
+    // Produto com venda registrada não pode ser apagado (sale_items referencia
+    // o id) — sem isso o erro chegava como "Erro interno" genérico, sem dizer
+    // o que fazer. Mesmo tratamento que o delivery-backend da Confraria já tem.
+    if (err.code === '23503') {
+      return res.status(409).json({ error: 'Este produto já tem vendas registradas e não pode ser excluído. Desative-o em vez disso.' });
+    }
     return internalError(res, err, '[products/DELETE]');
   }
 });
