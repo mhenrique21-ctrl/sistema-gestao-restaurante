@@ -27,6 +27,19 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        // Com clientsClaim, este service worker assume TODAS as páginas do
+        // domínio — e o navigateFallback padrão responde index.html (o app
+        // React) pra qualquer navegação. As páginas abaixo não são rotas do
+        // app: são aplicações próprias servidas pelo backend. Sem esta lista,
+        // abrir /admin.html devolvia o app do cliente e o React Router
+        // avisava "No routes matched" — foi o que deixou a aba Delivery do
+        // PDV em branco, já que ela abre /admin.html num iframe. O curl
+        // recebia o arquivo certo justamente por não passar pelo SW.
+        navigateFallbackDenylist: [
+          /^\/admin\.html/, /^\/comanda\.html/, /^\/kiosk\.html/,
+          /^\/kitchen\.html/, /^\/retaguarda\.html/, /^\/home\.html/,
+          /^\/enderecos\.html/, /^\/emergencia\.html/, /^\/api\//,
+        ],
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [{
           urlPattern: /\/api\/menu/,
