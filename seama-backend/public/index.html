@@ -675,11 +675,11 @@
     <div id="config-tabs">
       <button class="cfg-tab active" data-tab="cardapio">🍽️ Cardápio</button>
       <button class="cfg-tab" data-tab="impressora">🖨️ Impressora</button>
-      <button class="cfg-tab" data-tab="adicionais">➕ Adicionais</button>
-      <button class="cfg-tab" data-tab="usuarios">👥 Usuários</button>
-      <button class="cfg-tab" data-tab="vinculos">🔗 Compras</button>
-      <button class="cfg-tab" data-tab="sangria">💸 Sangria</button>
-      <button class="cfg-tab" data-tab="fechamento">🔒 Fechamento</button>
+      <!-- Adicionais, Usuários, Compras, Sangria e Fechamento saíram daqui e
+           passaram a viver só no App Gestão (Configurações de PDV), pra não
+           ter duas telas editando a mesma coisa. As rotas de backend
+           (/api/addons, /api/auth/users, /api/settings) continuam de pé —
+           o Gestão fala com elas por trás, então nada daqui foi perdido. -->
       <button class="cfg-tab" data-tab="aparencia">🎨 Aparência</button>
     </div>
 
@@ -740,104 +740,13 @@
         </div>
       </div>
 
-      <div id="config-tab-usuarios" class="cfg-pane">
-        <div class="cfg-form" style="max-width:560px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <h3 style="margin:0">Usuários do sistema</h3>
-            <button id="usr-add-btn" style="height:32px;padding:0 13px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:12px;font-weight:600">+ Novo usuário</button>
-          </div>
-          <p class="cfg-hint">Usuário nunca é excluído — o histórico de vendas e caixa precisa saber quem fez o quê. Desativar tira da tela de login e corta o acesso na hora.</p>
-          <div id="usr-list"></div>
-          <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
-          <button id="usr-mypin-btn" style="height:36px;padding:0 15px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:12.5px;font-weight:600">🔑 Trocar meu PIN</button>
-        </div>
-      </div>
-
-      <div id="config-tab-adicionais" class="cfg-pane">
-        <div class="cfg-form" style="max-width:680px">
-          <h3>Grupos de adicionais</h3>
-          <p class="cfg-hint">Um grupo existe uma vez só e vale para todos os produtos marcados nele. Mudou o preço do queijo aqui, mudou em todos os produtos de uma vez. Preço zero aparece como "grátis" na venda.</p>
-          <div id="adc-body"></div>
-          <button id="adc-add-group" style="margin-top:10px">+ Novo grupo</button>
-        </div>
-      </div>
-
-      <div id="config-tab-vinculos" class="cfg-pane">
-        <div class="cfg-form" style="max-width:620px">
-          <h3>Compras vindas do App Gestão</h3>
-          <p class="cfg-hint">Quando você lança uma compra no Gestão para a SEAMA, os itens chegam aqui. O vínculo diz qual produto do cardápio cada item da nota alimenta, e quantas unidades saem de cada embalagem — 1 multipack de 6 vira 6 latas. Feito uma vez, as próximas compras entram sozinhas.</p>
-          <div id="vinc-body"></div>
-        </div>
-      </div>
-
-      <div id="config-tab-sangria" class="cfg-pane">
-        <div class="cfg-form" style="max-width:620px">
-          <h3>Categorias visíveis na sangria</h3>
-          <p class="cfg-hint">Ative só as categorias que fazem sentido pra pagamento em dinheiro no balcão. Ao escolher uma categoria numa sangria, ela vira automaticamente uma conta paga no Financeiro do Gestão. Sangria sem categoria (ex: depósito no cofre) continua funcionando normal, sem virar conta.</p>
-          <div id="sangria-cat-list"></div>
-          <div class="field-group" style="display:flex;gap:8px;align-items:flex-end;margin-top:10px">
-            <div style="flex:1"><label>Nova categoria</label><input id="sangria-cat-new" placeholder="Ex: Fornecedor / Insumos"></div>
-            <button id="sangria-cat-add" class="btn btn-secondary" style="width:auto;padding:10px 16px">+ Adicionar</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="config-tab-fechamento" class="cfg-pane">
-        <div class="cfg-form" style="max-width:620px">
-          <h3>Fechamento de Caixa</h3>
-          <p class="cfg-hint">Regras usadas na hora de conferir e fechar o turno.</p>
-
-          <div class="field-group">
-            <label>Tolerância de diferença (R$)</label>
-            <input id="fch-cfg-tolerancia" type="number" step="0.01" min="0" placeholder="0,00">
-            <p class="cfg-hint" style="margin:4px 0 0">Diferença de dinheiro ou cartão até esse valor não gera o aviso "ATENÇÃO" ao operador — cobre troco arredondado, sem virar cobrança por centavos.</p>
-          </div>
-
-          <div class="field-group">
-            <label>Nomes das máquinas</label>
-            <div style="display:flex;gap:8px">
-              <input id="fch-cfg-m1nome" placeholder="Máquina 1" style="flex:1">
-              <input id="fch-cfg-m2nome" placeholder="Máquina 2" style="flex:1">
-            </div>
-            <p class="cfg-hint" style="margin:4px 0 0">Só pra identificar no fechamento — continua um total geral por máquina, sem detalhar bandeira.</p>
-          </div>
-
-          <label class="toggle-row">
-            <input type="checkbox" id="fch-cfg-maq-obrig">
-            <b>Preenchimento das máquinas é obrigatório</b>
-          </label>
-          <p class="cfg-hint" style="margin-top:-8px">Ligado: precisa preencher pelo menos uma das duas pra fechar. Desligado: as duas ficam totalmente opcionais.</p>
-
-          <label class="toggle-row">
-            <input type="checkbox" id="fch-cfg-pix-somado">
-            <b>PIX somado junto com débito/crédito na conferência</b>
-          </label>
-          <p class="cfg-hint" style="margin-top:-8px">Ligado: PIX entra na comparação com as máquinas. Desligado: PIX fica de fora — só débito e crédito são conferidos contra as máquinas.</p>
-
-          <label class="toggle-row">
-            <input type="checkbox" id="fch-cfg-obs-obrig">
-            <b>Observação obrigatória quando há diferença</b>
-          </label>
-          <p class="cfg-hint" style="margin-top:-8px">Acima da tolerância, o operador precisa escrever o motivo antes de conseguir fechar.</p>
-
-          <div class="field-group">
-            <label>Diferença que exige aprovação do gerente (R$)</label>
-            <input id="fch-cfg-limite" type="number" step="0.01" min="0" placeholder="Deixe vazio pra não exigir">
-            <p class="cfg-hint" style="margin:4px 0 0">Acima desse valor, um operador comum não fecha sozinho — precisa de gerente ou admin logado.</p>
-          </div>
-
-          <label class="toggle-row">
-            <input type="checkbox" id="fch-cfg-mostrar-total">
-            <b>Mostrar total geral do turno na tela de Caixa</b>
-          </label>
-          <p class="cfg-hint" style="margin-top:-8px">Exibe o valor total vendido (dinheiro+cartão+PIX) já na tela de "Caixa aberto", antes de fechar — não só no relatório final.</p>
-
-          <div id="fch-cfg-error" style="color:var(--danger);font-size:12px;min-height:16px"></div>
-          <div class="modal-actions" style="max-width:200px">
-            <button class="primary" id="fch-cfg-save">Salvar</button>
-          </div>
-        </div>
-      </div>
+      <!-- Painéis de Usuários, Adicionais, Vínculos de compras, Sangria e
+           Fechamento saíram daqui — ver comentário nos botões de Config
+           acima. As divs (#usr-list, #adc-body, #vinc-body,
+           #sangria-cat-list, #fch-cfg-*) não existem mais, então o JS que as
+           preenchia (loadAdicionais, renderSangriaCategorias,
+           loadFechamentoConfig etc.) ficou inerte — nunca é chamado, porque
+           só era disparado pelo clique nas abas que saíram. -->
 
       <div id="config-tab-aparencia" class="cfg-pane">
         <div class="cfg-form" style="max-width:620px">
@@ -3007,7 +2916,7 @@ function loadFechamentoConfig() {
   document.getElementById('fch-cfg-obs-obrig').checked = SETTINGS.fechamento_obs_obrigatoria === 'true';
 }
 
-document.getElementById('fch-cfg-save').addEventListener('click', async () => {
+document.getElementById('fch-cfg-save')?.addEventListener('click', async () => {
   const errEl = document.getElementById('fch-cfg-error');
   errEl.textContent = '';
   const btn = document.getElementById('fch-cfg-save');
@@ -3127,7 +3036,7 @@ async function salvarSangriaCategorias() {
   } catch (e) { if (e.message !== 'unauthorized') showToast('Erro ao salvar'); }
 }
 
-document.getElementById('sangria-cat-add').addEventListener('click', () => {
+document.getElementById('sangria-cat-add')?.addEventListener('click', () => {
   const input = document.getElementById('sangria-cat-new');
   const nome = input.value.trim();
   if (!nome) return;
@@ -3272,7 +3181,7 @@ function renderAdicionais() {
   }));
 }
 
-document.getElementById('adc-add-group').addEventListener('click', async () => {
+document.getElementById('adc-add-group')?.addEventListener('click', async () => {
   const nome = prompt('Nome do novo grupo de adicionais:');
   if (!nome || !nome.trim()) return;
   const g = await adcApi('/api/addons/groups', 'POST', { name: nome.trim() });
@@ -3657,8 +3566,8 @@ function renderUsuarios() {
   el.querySelectorAll('button[data-id]').forEach(b => b.addEventListener('click', () => openUsuarioModal(b.dataset.id)));
 }
 
-document.getElementById('usr-add-btn').addEventListener('click', () => openUsuarioModal(null));
-document.getElementById('usr-mypin-btn').addEventListener('click', openMeuPinModal);
+document.getElementById('usr-add-btn')?.addEventListener('click', () => openUsuarioModal(null));
+document.getElementById('usr-mypin-btn')?.addEventListener('click', openMeuPinModal);
 
 function openUsuarioModal(userId) {
   const u = USUARIOS.find(x => x.id === userId) || null;

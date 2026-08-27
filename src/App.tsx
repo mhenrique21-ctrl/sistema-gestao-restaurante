@@ -14956,6 +14956,16 @@ function UsuariosPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
       await load();
     }catch(e:any){alert(e.message||"Erro de conexão");}
   };
+  const redefinirSenha=async(u:any)=>{
+    const novo=window.prompt(empresa==="CONFRARIA"?`Nova senha para "${u.nome}" (mín. 6 caracteres):`:`Novo PIN para "${u.nome}" (4 a 6 dígitos):`);
+    if(!novo)return;
+    try{
+      const body=empresa==="CONFRARIA"?{senha:novo}:{pin:novo};
+      const r=await fetch(`/api/pdv-config/usuarios/${u.id}?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      if(!r.ok)throw new Error((await r.json()).error||"Erro ao redefinir");
+      alert(empresa==="CONFRARIA"?"Senha redefinida.":"PIN redefinido.");
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
 
   return <div>
     <div className="section-title" style={{fontSize:15}}>👤 Usuários do PDV</div>
@@ -14968,7 +14978,10 @@ function UsuariosPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
           <div style={{fontSize:13,fontWeight:700}}>{u.nome}</div>
           <div className="muted" style={{fontSize:10.5,marginTop:2}}>{u.cargo}{u.detalhe?` · ${u.detalhe}`:""}</div>
         </div>
-        <button className="btn" onClick={()=>toggleAtivo(u)} style={{padding:"4px 9px",fontSize:11,background:u.ativo?"var(--bg4)":"var(--btnPrimary)",color:u.ativo?"var(--text)":"#fff"}}>{u.ativo?"Desativar":"Ativar"}</button>
+        <div style={{display:"flex",gap:6}}>
+          <button className="btn" onClick={()=>redefinirSenha(u)} style={{padding:"4px 9px",fontSize:11,background:"var(--bg4)"}}>{empresa==="CONFRARIA"?"Redefinir senha":"Redefinir PIN"}</button>
+          <button className="btn" onClick={()=>toggleAtivo(u)} style={{padding:"4px 9px",fontSize:11,background:u.ativo?"var(--bg4)":"var(--btnPrimary)",color:u.ativo?"var(--text)":"#fff"}}>{u.ativo?"Desativar":"Ativar"}</button>
+        </div>
       </div>
     ))}
     {!loading&&!erro&&!showNovo&&<button className="btn" onClick={()=>setShowNovo(true)} style={{width:"100%",padding:10,fontSize:12,background:"var(--bg4)",fontWeight:700}}>+ Novo operador de PDV</button>}

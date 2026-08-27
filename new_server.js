@@ -2288,6 +2288,8 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
             const payload = {};
             if (body.ativo !== undefined) payload.active = !!body.ativo;
             if (body.cargo !== undefined) payload.role = body.cargo;
+            if (empresa === 'CONFRARIA' && body.senha !== undefined) payload.password = body.senha;
+            if (empresa === 'SEAMA' && body.pin !== undefined) payload.pin = body.pin;
             const upstreamPath = (empresa === 'CONFRARIA' ? '/api/users/' : '/api/auth/users/') + partes[3];
             const upstream = await fetch(`${base}${upstreamPath}`, { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await upstream.json().catch(() => ({}));
