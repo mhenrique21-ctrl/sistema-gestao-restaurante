@@ -27,12 +27,26 @@ body {
   color: var(--cream);
   overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Limita a largura em desktop, centraliza como app mobile */
+#root {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  overflow-x: hidden;
+  box-shadow: 0 0 60px rgba(93,64,55,0.08);
 }
 
 /* Título display (marca / seções) */
 .font-display {
-  font-family: Georgia, 'Times New Roman', serif;
-  letter-spacing: -0.02em;
+  font-family: 'Georgia', 'Palatino Linotype', serif;
+  letter-spacing: -0.025em;
+  font-feature-settings: "kern" 1;
 }
 
 /* Safe area */
@@ -90,24 +104,25 @@ body {
 /* Chip de categoria */
 .chip {
   flex-shrink: 0;
-  padding: 10px 18px;
+  padding: 8px 16px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  min-height: 40px;
-  border: 1px solid var(--border);
+  min-height: 38px;
+  border: 1.5px solid var(--border);
   background: var(--card);
   color: var(--brown);
   box-shadow: var(--shadow-soft);
-  transition: background 0.25s ease, color 0.25s ease, transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
   cursor: pointer;
+  white-space: nowrap;
 }
-.chip:active { transform: scale(0.95); }
+.chip:active { transform: scale(0.94); }
 .chip-active {
   background: linear-gradient(135deg, #C89B5A 0%, #A97142 100%);
   color: #FFFFFF;
   border-color: transparent;
-  box-shadow: 0 4px 14px rgba(169,113,66,0.35);
+  box-shadow: 0 4px 14px rgba(169,113,66,0.4);
 }
 
 /* Selos sofisticados */

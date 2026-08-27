@@ -3,7 +3,6 @@ import { api } from '../api'
 import ProductModal from '../components/ProductModal'
 import { useCart, itemLineTotal } from '../store/cart'
 import { useNavigate } from 'react-router-dom'
-import hero from '../assets/hero.png'
 import { checkStoreOpen } from '../utils/storeStatus'
 import { trackViewOferta } from '../utils/metaPixel'
 
@@ -111,7 +110,7 @@ export default function MenuPage() {
       const adminIdx = (new Date().getDay() + 6) % 7
       const dayBanner = s.business_hours?.[adminIdx]?.banner_url
       setBannerUrl(dayBanner || s.banner_image_url || null)
-      setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates))
+      setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates, s.store_closed_manual))
     }).catch(() => {})
   }, [])
 
@@ -176,10 +175,17 @@ export default function MenuPage() {
         </div>
 
         {/* ── Hero banner ── */}
-        <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
-          style={{ boxShadow: 'var(--shadow-lift)' }}>
-          <img src={bannerUrl || hero} alt="" className="w-full h-auto block" />
-        </div>
+        {bannerUrl ? (
+          <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
+            style={{ boxShadow: 'var(--shadow-lift)' }}>
+            <img src={bannerUrl} alt="" className="w-full h-auto block" />
+          </div>
+        ) : (
+          <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative flex items-center justify-center"
+            style={{ height: 110, background: 'linear-gradient(135deg,#C89B5A 0%,#A97142 60%,#7D5231 100%)', boxShadow: 'var(--shadow-lift)' }}>
+            <p className="text-white font-display font-bold text-xl tracking-wide opacity-90">☕ {storeName}</p>
+          </div>
+        )}
 
         {/* ── Busca ── */}
         <div className="px-5 overflow-hidden"
@@ -236,7 +242,18 @@ export default function MenuPage() {
       <div className="flex-1 overflow-y-auto no-scrollbar pb-32" onScroll={handleProductsScroll}>
         {loading ? (
           <div className="px-5 pt-5 space-y-3">
-            {[1,2,3,4,5].map((i) => <div key={i} className="skeleton h-28" />)}
+            {[1,2,3,4,5].map((i) => (
+              <div key={i} className="card-soft p-4 flex gap-4">
+                <div className="flex-1 space-y-2">
+                  <div className="skeleton h-3 w-16 rounded-full" />
+                  <div className="skeleton h-4 w-3/4 rounded-full" />
+                  <div className="skeleton h-3 w-full rounded-full" />
+                  <div className="skeleton h-3 w-2/3 rounded-full" />
+                  <div className="skeleton h-4 w-20 rounded-full mt-2" />
+                </div>
+                <div className="skeleton w-24 h-24 rounded-2xl flex-shrink-0" />
+              </div>
+            ))}
           </div>
         ) : (
           <>
