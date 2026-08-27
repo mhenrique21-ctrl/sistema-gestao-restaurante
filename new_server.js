@@ -2397,6 +2397,46 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       return;
     }
 
+    // ---- Aparência (cor de categoria, grade de produtos, tamanho de letra —
+    // só existe no PDV da Seama hoje) ----
+    if (area === 'aparencia') {
+      (async () => {
+        try {
+          if (req.method === 'GET') {
+            if (empresa === 'CONFRARIA') return enviarJson(200, { disponivel: false });
+            const token = await getServiceToken(empresa);
+            const base = pdvDaEmpresa(empresa).base;
+            const upstream = await fetch(`${base}/api/settings`, { headers: { Authorization: 'Bearer ' + token } });
+            const data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            let layout = {}; try { layout = JSON.parse(data.ui_layout || '{}'); } catch {}
+            let fontes = {}; try { fontes = JSON.parse(data.ui_font_sizes || '{}'); } catch {}
+            return enviarJson(200, { disponivel: true, corCategoria: data.cat_active_color || 'verde', layout, fontes });
+          }
+
+          if (req.method === 'PUT') {
+            if (empresa === 'CONFRARIA') return enviarJson(400, { error: 'Aparência ainda não existe no PDV da Confraria' });
+            const body = await lerBody();
+            const token = await getServiceToken(empresa);
+            const base = pdvDaEmpresa(empresa).base;
+            const payload = {};
+            if (body.corCategoria !== undefined) payload.cat_active_color = String(body.corCategoria);
+            if (body.layout !== undefined) payload.ui_layout = JSON.stringify(body.layout);
+            if (body.fontes !== undefined) payload.ui_font_sizes = JSON.stringify(body.fontes);
+            if (!Object.keys(payload).length) return enviarJson(400, { error: 'Nada para salvar' });
+            const upstream = await fetch(`${base}/api/settings`, { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          enviarJson(404, { error: 'Rota de aparência não encontrada' });
+        } catch (e) {
+          enviarErro('Erro ao falar com aparência do PDV: ' + e.message);
+        }
+      })();
+      return;
+    }
+
     res.writeHead(404); res.end(JSON.stringify({ error: 'Área de configuração de PDV não encontrada' }));
     return;
   }

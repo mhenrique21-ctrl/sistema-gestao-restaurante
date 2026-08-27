@@ -1871,6 +1871,7 @@ export default function App() {
       {id:"pm-compras",label:"Compras",icon:"🔗",sub:"compras"},
       {id:"pm-sangria",label:"Sangria",icon:"💸",sub:"sangria"},
       {id:"pm-fech",label:"Fechamento",icon:"🔒",sub:"fechamento"},
+      {id:"pm-apar",label:"Aparência",icon:"🎨",sub:"aparencia-pdv"},
     ]},
     {id:"cardapio-tv",label:"Cardápio TV",icon:"📺",children:[
       {id:"tv-telas",label:"Telas",icon:"📺",sub:"telas"},
@@ -13962,6 +13963,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
       <button className="pill" onClick={abrirVinculos} style={{flexShrink:0,whiteSpace:"nowrap",background:(subTab==="estoque"&&estoqueView.v==="vinculos")?"var(--btnPrimary)":"var(--bg4)",color:(subTab==="estoque"&&estoqueView.v==="vinculos")?"#fff":"#777"}}>🔗 Compras</button>
       <button className="pill" onClick={()=>setSubTab("sangria")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="sangria"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="sangria"?"#fff":"#777"}}>💸 Sangria</button>
       <button className="pill" onClick={()=>setSubTab("fechamento")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="fechamento"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="fechamento"?"#fff":"#777"}}>🔒 Fechamento</button>
+      <button className="pill" onClick={()=>setSubTab("aparencia-pdv")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="aparencia-pdv"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="aparencia-pdv"?"#fff":"#777"}}>🎨 Aparência</button>
     </div>
 
     {subTab==="estoque"&&<EstoquePdvPanel key={estoqueView.n} empresa={empresaPdv} db={db} initialView={estoqueView.v}/>}
@@ -13969,9 +13971,10 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
     {subTab==="usuarios-pdv"&&<UsuariosPdvPanel empresa={empresaPdv}/>}
     {subTab==="sangria"&&<SangriaPdvPanel empresa={empresaPdv}/>}
     {subTab==="fechamento"&&<FechamentoPdvPanel empresa={empresaPdv}/>}
+    {subTab==="aparencia-pdv"&&<AparenciaPdvPanel empresa={empresaPdv}/>}
 
-    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento"].includes(subTab)&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
-    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento"].includes(subTab)&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
+    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv"].includes(subTab)&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv"].includes(subTab)&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
 
     {subTab==="produtos"&&<div>
       {/* Toolbar de filtros — igual ADMIN-03 */}
@@ -15116,6 +15119,125 @@ function FechamentoPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
       <ToggleSwitch checked={cfg.pixSomado!==false} onChange={v=>setCfg({...cfg,pixSomado:v})} label="Pix soma no total do turno"/>
       <button className="btn" disabled={salvando} onClick={salvar} style={{width:"100%",padding:10,fontSize:12,background:"var(--btnPrimary)",color:"#fff",fontWeight:700,marginTop:12}}>{salvando?"Salvando...":"Salvar regras"}</button>
     </div>}
+  </div>;
+}
+
+// Mesmas 5 opções, mesmos tons e mesmo texto de contraste do seletor de cor
+// do PDV Seama (Config → Aparência) — só espelhado aqui, sem reinventar.
+const CORES_CATEGORIA_PDV:[string,{rot:string,bg:string,fg:string,barra:string,cnt:string}][]=[
+  ["verde",{rot:"Verde",bg:"#5F8B64",fg:"#ffffff",barra:"",cnt:"contraste 3,9:1"}],
+  ["ambar",{rot:"Âmbar",bg:"#B88433",fg:"#2C2522",barra:"",cnt:"contraste 4,6:1"}],
+  ["creme",{rot:"Creme",bg:"#F6F4F1",fg:"#2C2522",barra:"",cnt:"contraste 13,7:1"}],
+  ["marrom",{rot:"Marrom",bg:"#5A4638",fg:"#ffffff",barra:"",cnt:"contraste 1,7:1"}],
+  ["barra",{rot:"C/ barra",bg:"#5A4638",fg:"#ffffff",barra:"#E8A33D",cnt:"cor da marca"}],
+];
+const OPCOES_LAYOUT_PDV:{chave:string,rot:string,desc:string,padrao:string,opcoes:{v:string,r:string}[]}[]=[
+  {chave:"cols",rot:"Produtos por linha",desc:"Menos colunas = foto maior e alvo de toque maior",padrao:"4",opcoes:[{v:"3",r:"3"},{v:"4",r:"4"},{v:"5",r:"5"},{v:"6",r:"6"}]},
+  {chave:"foto",rot:"Foto do produto",desc:"Sem foto cabe muito mais item por tela",padrao:"quadrada",opcoes:[{v:"quadrada",r:"Quadrada"},{v:"paisagem",r:"Retangular"},{v:"oculta",r:"Sem foto"}]},
+  {chave:"densidade",rot:"Espaçamento",desc:"Respiro entre os cards",padrao:"normal",opcoes:[{v:"compacto",r:"Compacto"},{v:"normal",r:"Normal"},{v:"espacoso",r:"Espaçoso"}]},
+  {chave:"carrinho",rot:"Largura do carrinho",desc:"O que sobra fica para a grade de produtos",padrao:"normal",opcoes:[{v:"estreito",r:"Estreito"},{v:"normal",r:"Normal"},{v:"largo",r:"Largo"}]},
+];
+const CAMADAS_FONTE_PDV:{chave:string,rot:string,desc:string,padrao:number}[]=[
+  {chave:"menu",rot:"Menu e navegação",desc:"Categorias, abas e barra inferior",padrao:15},
+  {chave:"produto",rot:"Nome do produto",desc:"Card na grade de venda",padrao:15},
+  {chave:"carrinho",rot:"Carrinho",desc:"Nome, quantidade e sinais + −",padrao:14},
+];
+const FONTE_PDV_MIN=11,FONTE_PDV_MAX=20;
+
+function AparenciaPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
+  const [dados,setDados]=useState<any>(null);
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState("");
+  const [salvandoCor,setSalvandoCor]=useState(false);
+  const [salvandoLayout,setSalvandoLayout]=useState(false);
+  const [salvandoFontes,setSalvandoFontes]=useState(false);
+
+  const load=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const r=await fetch(`/api/pdv-config/aparencia?empresa=${empresa}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar aparência");
+      setDados(d);
+    }catch(e:any){setDados(null);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[empresa]);
+
+  const salvarCampo=async(campo:string,valor:any,setSalvando:(v:boolean)=>void,msg:string)=>{
+    setSalvando(true);
+    try{
+      const r=await fetch(`/api/pdv-config/aparencia?empresa=${empresa}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({[campo]:valor})});
+      if(!r.ok)throw new Error((await r.json()).error||"Erro ao salvar");
+      alert(msg);
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setSalvando(false);
+  };
+
+  if(loading)return <div><div className="section-title" style={{fontSize:15}}>🎨 Aparência do PDV</div><div className="muted" style={{fontSize:12}}>Carregando...</div></div>;
+  if(erro)return <div><div className="section-title" style={{fontSize:15}}>🎨 Aparência do PDV</div><div className="card" style={{border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div></div>;
+  if(!dados?.disponivel)return <div>
+    <div className="section-title" style={{fontSize:15}}>🎨 Aparência do PDV</div>
+    <div className="card"><div style={{fontSize:12.5}}>🚧 O PDV da Confraria ainda não tem essas configurações de aparência — essa tela só funciona pra Seama por enquanto.</div></div>
+  </div>;
+
+  const layout=dados.layout||{};
+  const fontes=dados.fontes||{};
+  const corAtual=dados.corCategoria||"verde";
+
+  return <div>
+    <div className="section-title" style={{fontSize:15}}>🎨 Aparência do PDV</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Cor, grade de produtos e tamanho de letra da tela de venda do tablet.</div>
+
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{fontSize:12.5,fontWeight:700,marginBottom:4}}>Cor da categoria selecionada</div>
+      <div className="muted" style={{fontSize:11,marginBottom:10}}>Marca qual categoria está aberta no menu lateral da venda.</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        {CORES_CATEGORIA_PDV.map(([k,c])=>(
+          <div key={k} onClick={()=>setDados({...dados,corCategoria:k})} style={{cursor:"pointer",padding:8,borderRadius:10,border:corAtual===k?"2px solid var(--btnPrimary)":"1px solid var(--border2)",width:92,textAlign:"center"}}>
+            <div style={{height:24,borderRadius:6,background:c.bg,boxShadow:c.barra?`inset 4px 0 0 ${c.barra}`:"none",marginBottom:6}}/>
+            <div style={{fontSize:11,fontWeight:600}}>{c.rot}</div>
+            <div className="muted" style={{fontSize:9.5}}>{c.cnt}</div>
+          </div>
+        ))}
+      </div>
+      <button className="btn" disabled={salvandoCor} onClick={()=>salvarCampo("corCategoria",corAtual,setSalvandoCor,"Cor salva!")} style={{padding:"7px 12px",fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>{salvandoCor?"Salvando...":"Salvar cor"}</button>
+    </div>
+
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{fontSize:12.5,fontWeight:700,marginBottom:4}}>Grade de produtos</div>
+      <div className="muted" style={{fontSize:11,marginBottom:10}}>Como os produtos aparecem na tela de venda.</div>
+      {OPCOES_LAYOUT_PDV.map(o=>(
+        <div key={o.chave} style={{marginBottom:10}}>
+          <div style={{fontSize:11.5,fontWeight:600}}>{o.rot}</div>
+          <div className="muted" style={{fontSize:10,marginBottom:6}}>{o.desc}</div>
+          <div style={{display:"flex",gap:6}}>
+            {o.opcoes.map(x=>{
+              const ativo=(layout[o.chave]||o.padrao)===x.v;
+              return <button key={x.v} className="btn" onClick={()=>setDados({...dados,layout:{...layout,[o.chave]:x.v}})} style={{padding:"5px 10px",fontSize:11,background:ativo?"var(--btnPrimary)":"var(--bg4)",color:ativo?"#fff":"var(--text)"}}>{x.r}</button>;
+            })}
+          </div>
+        </div>
+      ))}
+      <button className="btn" disabled={salvandoLayout} onClick={()=>salvarCampo("layout",layout,setSalvandoLayout,"Grade salva!")} style={{padding:"7px 12px",fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>{salvandoLayout?"Salvando...":"Salvar grade"}</button>
+    </div>
+
+    <div className="card">
+      <div style={{fontSize:12.5,fontWeight:700,marginBottom:4}}>Tamanho das letras</div>
+      <div className="muted" style={{fontSize:11,marginBottom:10}}>Cada linha é uma camada — ajustar uma não mexe nas outras.</div>
+      {CAMADAS_FONTE_PDV.map(c=>{
+        const v=Math.min(FONTE_PDV_MAX,Math.max(FONTE_PDV_MIN,parseInt(fontes[c.chave],10)||c.padrao));
+        return <div key={c.chave} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderTop:"1px solid var(--border)"}}>
+          <div><div style={{fontSize:11.5,fontWeight:600}}>{c.rot}</div><div className="muted" style={{fontSize:10}}>{c.desc}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button className="btn" disabled={v<=FONTE_PDV_MIN} onClick={()=>setDados({...dados,fontes:{...fontes,[c.chave]:v-1}})} style={{width:26,height:26,padding:0,fontSize:14,background:"var(--bg4)"}}>−</button>
+            <span style={{fontSize:12,minWidth:34,textAlign:"center"}}>{v} px</span>
+            <button className="btn" disabled={v>=FONTE_PDV_MAX} onClick={()=>setDados({...dados,fontes:{...fontes,[c.chave]:v+1}})} style={{width:26,height:26,padding:0,fontSize:14,background:"var(--bg4)"}}>+</button>
+          </div>
+        </div>;
+      })}
+      <button className="btn" disabled={salvandoFontes} onClick={()=>salvarCampo("fontes",Object.fromEntries(CAMADAS_FONTE_PDV.map(c=>[c.chave,Math.min(FONTE_PDV_MAX,Math.max(FONTE_PDV_MIN,parseInt(fontes[c.chave],10)||c.padrao))])),setSalvandoFontes,"Tamanhos salvos!")} style={{marginTop:10,padding:"7px 12px",fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>{salvandoFontes?"Salvando...":"Salvar tamanhos"}</button>
+    </div>
   </div>;
 }
 

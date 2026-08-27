@@ -675,12 +675,15 @@
     <div id="config-tabs">
       <button class="cfg-tab active" data-tab="cardapio">🍽️ Cardápio</button>
       <button class="cfg-tab" data-tab="impressora">🖨️ Impressora</button>
-      <!-- Adicionais, Usuários, Compras, Sangria e Fechamento saíram daqui e
-           passaram a viver só no App Gestão (Configurações de PDV), pra não
-           ter duas telas editando a mesma coisa. As rotas de backend
-           (/api/addons, /api/auth/users, /api/settings) continuam de pé —
-           o Gestão fala com elas por trás, então nada daqui foi perdido. -->
-      <button class="cfg-tab" data-tab="aparencia">🎨 Aparência</button>
+      <!-- Adicionais, Usuários, Compras, Sangria, Fechamento e Aparência
+           saíram daqui e passaram a viver só no App Gestão (Configurações
+           de PDV), pra não ter duas telas editando a mesma coisa. As rotas
+           de backend (/api/addons, /api/auth/users, /api/settings)
+           continuam de pé — o Gestão fala com elas por trás, então nada
+           daqui foi perdido. IMPORTANTE: a cor/grade/fonte continuam sendo
+           APLICADAS na tela de venda a partir do mesmo /api/settings (ver
+           aplicarCorCategoria/aplicarLayout/aplicarFontes no carregamento
+           inicial) — só o painel que EDITAVA isso aqui no tablet que saiu. -->
     </div>
 
     <div id="config-body">
@@ -748,35 +751,15 @@
            loadFechamentoConfig etc.) ficou inerte — nunca é chamado, porque
            só era disparado pelo clique nas abas que saíram. -->
 
-      <div id="config-tab-aparencia" class="cfg-pane">
-        <div class="cfg-form" style="max-width:620px">
-          <h3>Cor da categoria selecionada</h3>
-          <p class="cfg-hint">Marca qual categoria está aberta no menu lateral da venda. A prévia mostra como fica sobre o fundo escuro da barra — a porcentagem é o contraste medido: quanto maior, mais fácil de identificar de relance.</p>
-          <div id="cor-cat-grid"></div>
-          <div id="cor-cat-erro" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:10px"></div>
-          <div class="modal-actions" style="max-width:460px">
-            <button class="primary" id="cor-cat-salvar">Salvar</button>
-          </div>
-
-          <h3 style="margin-top:26px">Grade de produtos</h3>
-          <p class="cfg-hint">Como os produtos aparecem na tela de venda. Menos colunas deixa a foto maior e o toque mais fácil; mais colunas mostra mais produto sem rolar. Muda na hora — só vale para os outros aparelhos depois de salvar.</p>
-          <div id="lay-grid"></div>
-          <div id="lay-erro" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:10px"></div>
-          <div class="modal-actions" style="max-width:460px">
-            <button id="lay-restaurar">Restaurar padrão</button>
-            <button class="primary" id="lay-salvar">Salvar grade</button>
-          </div>
-
-          <h3 style="margin-top:26px">Tamanho das letras</h3>
-          <p class="cfg-hint">Cada linha é uma camada do sistema — os textos que você lê no mesmo momento e da mesma distância. Ajustar uma não mexe nas outras. A mudança aparece na hora; só vale para todos os aparelhos depois de salvar.</p>
-          <div id="fs-grid"></div>
-          <div id="fs-erro" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:10px"></div>
-          <div class="modal-actions" style="max-width:460px">
-            <button id="fs-restaurar">Restaurar padrão</button>
-            <button class="primary" id="fs-salvar">Salvar tamanhos</button>
-          </div>
-        </div>
-      </div>
+      <!-- Painel de Aparência (cor de categoria, grade de produtos, tamanho
+           de letra) também saiu — mesma observação do comentário acima.
+           #cor-cat-grid, #lay-grid, #fs-grid etc. não existem mais; as
+           funções que os preenchiam (renderCoresCategoria/renderLayout/
+           renderFontes) já tinham guarda "if (!el) return", então não
+           quebram. As que APLICAM a aparência na tela de venda
+           (aplicarCorCategoria/aplicarLayout/aplicarFontes), chamadas no
+           carregamento inicial, continuam intactas — é o que faz o que
+           for salvo no Gestão aparecer aqui de verdade. -->
     </div>
   </div>
 
@@ -3811,7 +3794,7 @@ function renderCoresCategoria() {
   }));
 }
 
-document.getElementById('cor-cat-salvar').addEventListener('click', async () => {
+document.getElementById('cor-cat-salvar')?.addEventListener('click', async () => {
   const errEl = document.getElementById('cor-cat-erro');
   errEl.textContent = '';
   try {
@@ -3881,12 +3864,12 @@ function renderLayout() {
   }));
 }
 
-document.getElementById('lay-restaurar').addEventListener('click', () => {
+document.getElementById('lay-restaurar')?.addEventListener('click', () => {
   aplicarLayout(Object.fromEntries(OPCOES_LAYOUT.map(o => [o.chave, o.padrao])));
   renderLayout();
 });
 
-document.getElementById('lay-salvar').addEventListener('click', async () => {
+document.getElementById('lay-salvar')?.addEventListener('click', async () => {
   const errEl = document.getElementById('lay-erro');
   errEl.textContent = '';
   try {
@@ -3948,12 +3931,12 @@ function renderFontes() {
   }));
 }
 
-document.getElementById('fs-restaurar').addEventListener('click', () => {
+document.getElementById('fs-restaurar')?.addEventListener('click', () => {
   aplicarFontes(Object.fromEntries(CAMADAS_FONTE.map(c => [c.chave, c.padrao])));
   renderFontes();
 });
 
-document.getElementById('fs-salvar').addEventListener('click', async () => {
+document.getElementById('fs-salvar')?.addEventListener('click', async () => {
   const errEl = document.getElementById('fs-erro');
   errEl.textContent = '';
   try {
