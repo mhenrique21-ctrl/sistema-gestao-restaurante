@@ -1866,6 +1866,11 @@ export default function App() {
       {id:"pm-prod",label:"Produtos",icon:"🍽️",sub:"produtos"},
       {id:"pm-cat",label:"Categorias",icon:"📂",sub:"categorias"},
       {id:"pm-estoque",label:"Estoque",icon:"📦",sub:"estoque"},
+      {id:"pm-adic",label:"Adicionais",icon:"🧩",sub:"adicionais"},
+      {id:"pm-usr",label:"Usuários",icon:"👤",sub:"usuarios-pdv"},
+      {id:"pm-compras",label:"Compras",icon:"🔗",sub:"compras"},
+      {id:"pm-sangria",label:"Sangria",icon:"💸",sub:"sangria"},
+      {id:"pm-fech",label:"Fechamento",icon:"🔒",sub:"fechamento"},
     ]},
     {id:"cardapio-tv",label:"Cardápio TV",icon:"📺",children:[
       {id:"tv-telas",label:"Telas",icon:"📺",sub:"telas"},
@@ -13761,9 +13766,15 @@ function PmDayPicker({selected,onChange,pill}:{selected:number[],onChange:(d:num
 }
 
 function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:string|null,setPendingSub?:(s:string|null)=>void,empresa:string,db?:any}){
-  const [subTab,setSubTabState]=useState(pendingSub==="categorias"?"categorias":"produtos");
+  const [subTab,setSubTabState]=useState(pendingSub==="compras"?"estoque":pendingSub==="categorias"?"categorias":"produtos");
   const setSubTab=(s:string)=>{setSubTabState(s);setPendingSub?.(null);};
-  useEffect(()=>{if(pendingSub){setSubTabState(pendingSub);setPendingSub?.(null);}},[pendingSub]);
+  useEffect(()=>{
+    if(pendingSub){
+      if(pendingSub==="compras"){setEstoqueView(s=>({v:"vinculos",n:s.n+1}));setSubTabState("estoque");}
+      else setSubTabState(pendingSub);
+      setPendingSub?.(null);
+    }
+  },[pendingSub]);
 
   const [cats,setCats]=useState<any[]>([]);
   const [catalogo,setCatalogo]=useState<any[]>([]); // categorias com produtos aninhados (vem de /api/menu-produtos)
@@ -13926,7 +13937,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
   const ptColor=(t:string)=>t==="cozinha"?"#f59e0b":t==="balcao"?"#3b82f6":"#64748b";
 
   const empresaPdv=empresa==="SEAMA"?"SEAMA":"CONFRARIA";
-  const [estoqueView,setEstoqueView]=useState<{v:"saldo"|"vinculos",n:number}>({v:"saldo",n:0});
+  const [estoqueView,setEstoqueView]=useState<{v:"saldo"|"vinculos",n:number}>({v:pendingSub==="compras"?"vinculos":"saldo",n:0});
   const abrirVinculos=()=>{setEstoqueView(s=>({v:"vinculos",n:s.n+1}));setSubTab("estoque");};
 
   return <div>
