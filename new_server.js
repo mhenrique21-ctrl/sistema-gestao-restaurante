@@ -2139,6 +2139,266 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // ── Configurações de PDV (Adicionais, Usuários, Sangria, Fechamento) ──
+  // Confraria (delivery-backend) e Seama (seama-backend) têm APIs diferentes
+  // pra cada uma dessas áreas — cada rota abaixo traduz pro mesmo shape antes
+  // de devolver pro navegador, igual o estoque acima. Empresa sempre vem em
+  // ?empresa= na query string, mesmo em POST/PATCH/DELETE, pra não precisar
+  // ler o corpo antes de saber qual PDV chamar.
+  if (urlPath.startsWith('/api/pdv-config')) {
+    res.setHeader('Cache-Control', 'no-store');
+    const partes = urlPath.split('/').filter(Boolean); // ["api","pdv-config", area, ...]
+    const query = new URLSearchParams(req.url.split('?')[1] || '');
+    const area = partes[2];
+    const empresa = String(query.get('empresa') || 'SEAMA').toUpperCase() === 'CONFRARIA' ? 'CONFRARIA' : 'SEAMA';
+
+    const lerBody = () => new Promise((resolve, reject) => {
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
+      req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')); } catch (e) { reject(e); } });
+    });
+    const enviarJson = (status, obj) => { res.setHeader('Content-Type', 'application/json'); res.writeHead(status); res.end(JSON.stringify(obj)); };
+    const enviarErro = (msg) => enviarJson(500, { error: msg });
+
+    // ---- Adicionais ----
+    if (area === 'adicionais') {
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const headers = { Authorization: 'Bearer ' + token };
+
+          if (req.method === 'GET' && partes.length === 3) {
+            const upstream = await fetch(`${base}${empresa === 'CONFRARIA' ? '/api/addon-groups' : '/api/addons'}`, { headers });
+            const data = await upstream.json().catch(() => []);
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            const grupos = (Array.isArray(data) ? data : []).map(g => empresa === 'CONFRARIA' ? ({
+              id: g.id, nome: g.name, maxSelecao: g.max_select, ativo: g.active,
+              opcoes: (g.options || []).map(o => ({ id: o.id, nome: o.name, preco: parseFloat(o.price) || 0, ativo: o.active })),
+              nProdutos: (g.products || []).length,
+            }) : ({
+              id: g.id, nome: g.name, maxSelecao: g.max_per_item, ativo: g.active,
+              opcoes: (g.options || []).map(o => ({ id: o.id, nome: o.name, preco: parseFloat(o.price) || 0, ativo: o.active })),
+              nProdutos: (g.product_ids || []).length,
+            }));
+            return enviarJson(200, { grupos, podeExcluirGrupo: empresa === 'SEAMA' });
+          }
+
+          if (req.method === 'POST' && partes[3] === 'grupos' && partes.length === 4) {
+            const body = await lerBody();
+            const nome = String(body.nome || '').trim();
+            if (!nome) return enviarJson(400, { error: 'Informe o nome do grupo' });
+            const max = parseInt(body.maxSelecao, 10) || 1;
+            const upstreamPath = empresa === 'CONFRARIA' ? '/api/addon-groups' : '/api/addons/groups';
+            const payload = empresa === 'CONFRARIA' ? { name: nome, max_select: max } : { name: nome, max_per_item: max };
+            const upstream = await fetch(`${base}${upstreamPath}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          if (req.method === 'PATCH' && partes[3] === 'grupos' && partes.length === 5) {
+            const body = await lerBody();
+            const payload = {};
+            if (body.nome !== undefined) payload.name = body.nome;
+            if (body.ativo !== undefined) payload.active = !!body.ativo;
+            if (body.maxSelecao !== undefined) payload[empresa === 'CONFRARIA' ? 'max_select' : 'max_per_item'] = parseInt(body.maxSelecao, 10) || 1;
+            const upstreamPath = (empresa === 'CONFRARIA' ? '/api/addon-groups/' : '/api/addons/groups/') + partes[4];
+            const upstream = await fetch(`${base}${upstreamPath}`, { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          if (req.method === 'POST' && partes[3] === 'grupos' && partes[5] === 'opcoes' && partes.length === 6) {
+            const body = await lerBody();
+            const nome = String(body.nome || '').trim();
+            if (!nome) return enviarJson(400, { error: 'Informe o nome da opção' });
+            const preco = parseFloat(String(body.preco ?? 0).replace(',', '.')) || 0;
+            const upstreamPath = (empresa === 'CONFRARIA' ? '/api/addon-groups/' : '/api/addons/groups/') + partes[4] + '/options';
+            const upstream = await fetch(`${base}${upstreamPath}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nome, price: preco }) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          if (req.method === 'PATCH' && partes[3] === 'opcoes' && partes.length === 5) {
+            const body = await lerBody();
+            const payload = {};
+            if (body.nome !== undefined) payload.name = body.nome;
+            if (body.preco !== undefined) payload.price = parseFloat(String(body.preco).replace(',', '.')) || 0;
+            if (body.ativo !== undefined) payload.active = !!body.ativo;
+            const upstreamPath = (empresa === 'CONFRARIA' ? '/api/addon-groups/options/' : '/api/addons/options/') + partes[4];
+            const upstream = await fetch(`${base}${upstreamPath}`, { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          if (req.method === 'DELETE' && partes[3] === 'opcoes' && partes.length === 5) {
+            const upstreamPath = (empresa === 'CONFRARIA' ? '/api/addon-groups/options/' : '/api/addons/options/') + partes[4];
+            const upstream = await fetch(`${base}${upstreamPath}`, { method: 'DELETE', headers });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          enviarJson(404, { error: 'Rota de adicionais não encontrada' });
+        } catch (e) {
+          enviarErro('Erro ao falar com adicionais do PDV: ' + e.message);
+        }
+      })();
+      return;
+    }
+
+    // ---- Usuários do PDV ----
+    if (area === 'usuarios') {
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const headers = { Authorization: 'Bearer ' + token };
+
+          if (req.method === 'GET' && partes.length === 3) {
+            const upstream = await fetch(`${base}${empresa === 'CONFRARIA' ? '/api/users' : '/api/auth/users'}`, { headers });
+            const data = await upstream.json().catch(() => []);
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            const usuarios = (Array.isArray(data) ? data : []).map(u => empresa === 'CONFRARIA' ? ({
+              id: u.id, nome: u.name, cargo: u.role, ativo: u.active, temPin: !!u.tem_pin, detalhe: u.email,
+            }) : ({
+              id: u.id, nome: u.username, cargo: u.role, ativo: u.active !== false, temPin: true,
+              detalhe: u.sangria_limit != null ? `sangria até R$ ${Number(u.sangria_limit).toFixed(2)}` : 'sem limite de sangria',
+            }));
+            return enviarJson(200, { usuarios });
+          }
+
+          if (req.method === 'POST' && partes.length === 3) {
+            const body = await lerBody();
+            const nome = String(body.nome || '').trim();
+            if (!nome) return enviarJson(400, { error: 'Informe o nome do operador' });
+            let upstream;
+            if (empresa === 'CONFRARIA') {
+              if (!body.senha || String(body.senha).length < 6) return enviarJson(400, { error: 'Informe uma senha com pelo menos 6 caracteres' });
+              upstream = await fetch(`${base}/api/users`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nome, password: body.senha, role: body.cargo || 'atendente' }) });
+            } else {
+              if (!/^\d{4,6}$/.test(String(body.pin || ''))) return enviarJson(400, { error: 'Informe um PIN de 4 a 6 dígitos' });
+              upstream = await fetch(`${base}/api/auth/users`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ username: nome, pin: body.pin, role: body.cargo || 'operador' }) });
+            }
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          if (req.method === 'PATCH' && partes.length === 4) {
+            const body = await lerBody();
+            const payload = {};
+            if (body.ativo !== undefined) payload.active = !!body.ativo;
+            if (body.cargo !== undefined) payload.role = body.cargo;
+            const upstreamPath = (empresa === 'CONFRARIA' ? '/api/users/' : '/api/auth/users/') + partes[3];
+            const upstream = await fetch(`${base}${upstreamPath}`, { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          enviarJson(404, { error: 'Rota de usuários do PDV não encontrada' });
+        } catch (e) {
+          enviarErro('Erro ao falar com usuários do PDV: ' + e.message);
+        }
+      })();
+      return;
+    }
+
+    // ---- Sangria (categorias) ----
+    if (area === 'sangria') {
+      (async () => {
+        try {
+          const token = await getServiceToken(empresa);
+          const base = pdvDaEmpresa(empresa).base;
+          const headers = { Authorization: 'Bearer ' + token };
+
+          if (req.method === 'GET') {
+            if (empresa === 'CONFRARIA') {
+              const upstream = await fetch(`${base}/api/settings/sangria-categories`, { headers });
+              const data = await upstream.json().catch(() => ({ categorias: [] }));
+              return enviarJson(upstream.status, data);
+            }
+            const upstream = await fetch(`${base}/api/settings`, { headers });
+            const data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            let categorias = [];
+            try { categorias = JSON.parse(data.sangria_categories || '[]'); } catch {}
+            return enviarJson(200, { categorias: Array.isArray(categorias) ? categorias : [] });
+          }
+
+          if (req.method === 'PUT') {
+            const body = await lerBody();
+            const categorias = Array.isArray(body.categorias) ? body.categorias : [];
+            if (empresa === 'CONFRARIA') {
+              const upstream = await fetch(`${base}/api/settings/sangria-categories`, { method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ categorias }) });
+              const data = await upstream.json().catch(() => ({}));
+              return enviarJson(upstream.status, data);
+            }
+            const upstream = await fetch(`${base}/api/settings`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ sangria_categories: JSON.stringify(categorias) }) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, { ...data, categorias });
+          }
+
+          enviarJson(404, { error: 'Rota de sangria não encontrada' });
+        } catch (e) {
+          enviarErro('Erro ao falar com categorias de sangria: ' + e.message);
+        }
+      })();
+      return;
+    }
+
+    // ---- Fechamento (regras hoje só existem no PDV da Seama) ----
+    if (area === 'fechamento') {
+      (async () => {
+        try {
+          if (req.method === 'GET') {
+            if (empresa === 'CONFRARIA') return enviarJson(200, { disponivel: false });
+            const token = await getServiceToken(empresa);
+            const base = pdvDaEmpresa(empresa).base;
+            const upstream = await fetch(`${base}/api/settings`, { headers: { Authorization: 'Bearer ' + token } });
+            const data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            return enviarJson(200, {
+              disponivel: true,
+              tolerancia: data.fechamento_tolerancia != null ? parseFloat(data.fechamento_tolerancia) : 0.01,
+              maquina1Nome: data.fechamento_maquina1_nome || 'Máquina 1',
+              maquina2Nome: data.fechamento_maquina2_nome || 'Máquina 2',
+              obsObrigatoria: data.fechamento_obs_obrigatoria === 'true',
+              limiteAprovacao: data.fechamento_limite_aprovacao ? parseFloat(data.fechamento_limite_aprovacao) : null,
+              maquinasObrigatorio: data.fechamento_maquinas_obrigatorio !== 'false',
+              pixSomado: data.fechamento_pix_somado !== 'false',
+            });
+          }
+
+          if (req.method === 'PUT') {
+            if (empresa === 'CONFRARIA') return enviarJson(400, { error: 'Regras de fechamento ainda não existem no PDV da Confraria' });
+            const body = await lerBody();
+            const token = await getServiceToken(empresa);
+            const base = pdvDaEmpresa(empresa).base;
+            const payload = {
+              fechamento_tolerancia: String(body.tolerancia ?? 0.01),
+              fechamento_maquina1_nome: String(body.maquina1Nome || 'Máquina 1'),
+              fechamento_maquina2_nome: String(body.maquina2Nome || 'Máquina 2'),
+              fechamento_obs_obrigatoria: body.obsObrigatoria ? 'true' : 'false',
+              fechamento_maquinas_obrigatorio: body.maquinasObrigatorio === false ? 'false' : 'true',
+              fechamento_pix_somado: body.pixSomado === false ? 'false' : 'true',
+            };
+            if (body.limiteAprovacao != null && body.limiteAprovacao !== '') payload.fechamento_limite_aprovacao = String(body.limiteAprovacao);
+            const upstream = await fetch(`${base}/api/settings`, { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await upstream.json().catch(() => ({}));
+            return enviarJson(upstream.status, data);
+          }
+
+          enviarJson(404, { error: 'Rota de fechamento não encontrada' });
+        } catch (e) {
+          enviarErro('Erro ao falar com regras de fechamento: ' + e.message);
+        }
+      })();
+      return;
+    }
+
+    res.writeHead(404); res.end(JSON.stringify({ error: 'Área de configuração de PDV não encontrada' }));
+    return;
+  }
+
   // NF-e sync via SEFAZ
   if (req.method === 'POST' && urlPath === '/api/nfe-sync') {
     let body = '';

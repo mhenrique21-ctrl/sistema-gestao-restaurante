@@ -13925,20 +13925,33 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
   const ptLabel=(t:string)=>t==="cozinha"?"🍳 Cozinha":t==="balcao"?"🏪 Balcão":"🧾 Caixa";
   const ptColor=(t:string)=>t==="cozinha"?"#f59e0b":t==="balcao"?"#3b82f6":"#64748b";
 
+  const empresaPdv=empresa==="SEAMA"?"SEAMA":"CONFRARIA";
+  const [estoqueView,setEstoqueView]=useState<{v:"saldo"|"vinculos",n:number}>({v:"saldo",n:0});
+  const abrirVinculos=()=>{setEstoqueView(s=>({v:"vinculos",n:s.n+1}));setSubTab("estoque");};
+
   return <div>
-    <div className="section-title">🍽️ Produtos do Cardápio</div>
-    <div className="muted" style={{fontSize:11,marginBottom:12}}>Catálogo real — o que você mudar aqui aparece direto no PDV e no Delivery (mesmo cadastro do Admin).</div>
+    <div className="section-title">🔧 Configurações de PDV</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Catálogo, estoque e ajustes do PDV — o que você mudar aqui aparece direto no PDV e no Delivery (mesmo cadastro do Admin).</div>
 
     <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none" as any,paddingBottom:2}}>
       <button className="pill" onClick={()=>setSubTab("produtos")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="produtos"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="produtos"?"#fff":"#777"}}>🍽️ Produtos</button>
       <button className="pill" onClick={()=>setSubTab("categorias")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="categorias"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="categorias"?"#fff":"#777"}}>📂 Categorias</button>
-      <button className="pill" onClick={()=>setSubTab("estoque")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="estoque"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="estoque"?"#fff":"#777"}}>📦 Estoque</button>
+      <button className="pill" onClick={()=>{setEstoqueView(s=>({v:"saldo",n:s.n+1}));setSubTab("estoque");}} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="estoque"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="estoque"?"#fff":"#777"}}>📦 Estoque</button>
+      <button className="pill" onClick={()=>setSubTab("adicionais")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="adicionais"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="adicionais"?"#fff":"#777"}}>🧩 Adicionais</button>
+      <button className="pill" onClick={()=>setSubTab("usuarios-pdv")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="usuarios-pdv"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="usuarios-pdv"?"#fff":"#777"}}>👤 Usuários</button>
+      <button className="pill" onClick={abrirVinculos} style={{flexShrink:0,whiteSpace:"nowrap",background:(subTab==="estoque"&&estoqueView.v==="vinculos")?"var(--btnPrimary)":"var(--bg4)",color:(subTab==="estoque"&&estoqueView.v==="vinculos")?"#fff":"#777"}}>🔗 Compras</button>
+      <button className="pill" onClick={()=>setSubTab("sangria")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="sangria"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="sangria"?"#fff":"#777"}}>💸 Sangria</button>
+      <button className="pill" onClick={()=>setSubTab("fechamento")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="fechamento"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="fechamento"?"#fff":"#777"}}>🔒 Fechamento</button>
     </div>
 
-    {subTab==="estoque"&&<EstoquePdvPanel empresa={empresa==="SEAMA"?"SEAMA":"CONFRARIA"} db={db}/>}
+    {subTab==="estoque"&&<EstoquePdvPanel key={estoqueView.n} empresa={empresaPdv} db={db} initialView={estoqueView.v}/>}
+    {subTab==="adicionais"&&<AdicionaisPdvPanel empresa={empresaPdv}/>}
+    {subTab==="usuarios-pdv"&&<UsuariosPdvPanel empresa={empresaPdv}/>}
+    {subTab==="sangria"&&<SangriaPdvPanel empresa={empresaPdv}/>}
+    {subTab==="fechamento"&&<FechamentoPdvPanel empresa={empresaPdv}/>}
 
-    {subTab!=="estoque"&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
-    {subTab!=="estoque"&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
+    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento"].includes(subTab)&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {!["estoque","adicionais","usuarios-pdv","sangria","fechamento"].includes(subTab)&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
 
     {subTab==="produtos"&&<div>
       {/* Toolbar de filtros — igual ADMIN-03 */}
@@ -14166,8 +14179,8 @@ const CATEGORIA_PARA_CLASSIFICACAO:Record<string,"materia_prima"|"higiene_limpez
   "massas":"materia_prima","latas, caixas e temperos":"materia_prima","insumos":"materia_prima",
   "limpeza":"higiene_limpeza","material de limpeza":"higiene_limpeza","descartáveis":"higiene_limpeza",
 };
-function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
-  const [view,setView]=useState<"saldo"|"vendas"|"inventario"|"entradas"|"margem"|"vinculos">("saldo");
+function EstoquePdvPanel({empresa,db,initialView}:{empresa:"CONFRARIA"|"SEAMA",db?:any,initialView?:"saldo"|"vinculos"}){
+  const [view,setView]=useState<"saldo"|"vendas"|"inventario"|"entradas"|"margem"|"vinculos">(initialView||"saldo");
   const [itens,setItens]=useState<any[]>([]);
   const [abaixo,setAbaixo]=useState(0);
   const [loading,setLoading]=useState(true);
@@ -14761,6 +14774,314 @@ function EstoquePdvPanel({empresa,db}:{empresa:"CONFRARIA"|"SEAMA",db?:any}){
         ))}
         <button className="btn" onClick={()=>setHistModal(null)} style={{width:"100%",background:"var(--bg4)",marginTop:12,padding:"10px"}}>Fechar</button>
       </div>
+    </div>}
+  </div>;
+}
+
+// ===================== ADICIONAIS / USUÁRIOS / SANGRIA / FECHAMENTO (PDV) =====================
+function AdicionaisPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
+  const [grupos,setGrupos]=useState<any[]>([]);
+  const [podeExcluir,setPodeExcluir]=useState(false);
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState("");
+  const [expandido,setExpandido]=useState<string|null>(null);
+  const [novoNome,setNovoNome]=useState("");
+  const [novoMax,setNovoMax]=useState("1");
+  const [salvando,setSalvando]=useState(false);
+  const [opNome,setOpNome]=useState("");
+  const [opPreco,setOpPreco]=useState("");
+
+  const load=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const r=await fetch(`/api/pdv-config/adicionais?empresa=${empresa}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar adicionais");
+      setGrupos(d.grupos||[]);setPodeExcluir(!!d.podeExcluirGrupo);
+    }catch(e:any){setGrupos([]);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[empresa]);
+
+  const criarGrupo=async()=>{
+    if(!novoNome.trim())return alert("Informe o nome do grupo.");
+    setSalvando(true);
+    try{
+      const r=await fetch(`/api/pdv-config/adicionais/grupos?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nome:novoNome.trim(),maxSelecao:parseInt(novoMax)||1})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao criar grupo");
+      setNovoNome("");setNovoMax("1");await load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setSalvando(false);
+  };
+  const toggleGrupoAtivo=async(g:any)=>{
+    try{
+      const r=await fetch(`/api/pdv-config/adicionais/grupos/${g.id}?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ativo:!g.ativo})});
+      if(!r.ok)throw new Error((await r.json()).error||"Erro ao atualizar");
+      await load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+  const criarOpcao=async(grupoId:string)=>{
+    if(!opNome.trim())return alert("Informe o nome da opção.");
+    try{
+      const r=await fetch(`/api/pdv-config/adicionais/grupos/${grupoId}/opcoes?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nome:opNome.trim(),preco:parseFloat(opPreco.replace(",","."))||0})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao criar opção");
+      setOpNome("");setOpPreco("");await load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+  const toggleOpcaoAtiva=async(o:any)=>{
+    try{
+      const r=await fetch(`/api/pdv-config/adicionais/opcoes/${o.id}?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ativo:!o.ativo})});
+      if(!r.ok)throw new Error((await r.json()).error||"Erro ao atualizar");
+      await load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+  const excluirOpcao=async(o:any)=>{
+    if(!confirm(`Excluir a opção "${o.nome}"?`))return;
+    try{
+      const r=await fetch(`/api/pdv-config/adicionais/opcoes/${o.id}?empresa=${empresa}`,{method:"DELETE"});
+      if(!r.ok)throw new Error((await r.json()).error||"Erro ao excluir");
+      await load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+
+  return <div>
+    <div className="section-title" style={{fontSize:15}}>🧩 Adicionais</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Grupos de adicionais (ex: Tamanho, Ponto da carne) vendidos no PDV{!podeExcluir&&" — grupo não usado mais? desative-o (excluir grupo não é suportado pelo PDV da Confraria)"}.</div>
+    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {loading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+    {!loading&&!erro&&grupos.map(g=>(
+      <div className="card" key={g.id} style={{marginBottom:8,opacity:g.ativo?1:.55}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>setExpandido(expandido===g.id?null:g.id)}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700}}>{g.nome}</div>
+            <div className="muted" style={{fontSize:10.5,marginTop:2}}>{(g.opcoes||[]).length} opções · máx. {g.maxSelecao} por item · {g.nProdutos} produtos</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}} onClick={e=>e.stopPropagation()}>
+            <span className="chip" style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:20,background:g.ativo?"var(--successBg,#DCFCE7)":"var(--dangerBg,#FEE2E2)",color:g.ativo?"var(--successText,#15803D)":"var(--btnDanger)"}}>{g.ativo?"ativo":"inativo"}</span>
+            <button className="btn" onClick={()=>toggleGrupoAtivo(g)} style={{padding:"4px 9px",fontSize:11,background:"var(--bg4)"}}>{g.ativo?"Desativar":"Ativar"}</button>
+          </div>
+        </div>
+        {expandido===g.id&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)"}}>
+          {(g.opcoes||[]).map((o:any)=>(
+            <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",opacity:o.ativo?1:.5}}>
+              <div style={{fontSize:12}}>{o.nome} <span className="muted">— R$ {o.preco.toFixed(2)}</span></div>
+              <div style={{display:"flex",gap:6}}>
+                <button className="btn" onClick={()=>toggleOpcaoAtiva(o)} style={{padding:"3px 8px",fontSize:10.5,background:"var(--bg4)"}}>{o.ativo?"Desativar":"Ativar"}</button>
+                <button className="btn" onClick={()=>excluirOpcao(o)} style={{padding:"3px 8px",fontSize:10.5,background:"var(--btnDanger)",color:"#fff"}}>Excluir</button>
+              </div>
+            </div>
+          ))}
+          <div style={{display:"flex",gap:6,marginTop:8}}>
+            <input className="inp" placeholder="Nome da opção" value={opNome} onChange={e=>setOpNome(e.target.value)} style={{flex:1,fontSize:12}}/>
+            <input className="inp" placeholder="Preço" value={opPreco} onChange={e=>setOpPreco(e.target.value)} style={{width:80,fontSize:12}}/>
+            <button className="btn" onClick={()=>criarOpcao(g.id)} style={{padding:"6px 10px",fontSize:11,background:"var(--btnPrimary)",color:"#fff"}}>+ Opção</button>
+          </div>
+        </div>}
+      </div>
+    ))}
+    {!loading&&!erro&&<div className="card" style={{marginTop:4}}>
+      <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>+ Novo grupo de adicional</div>
+      <div style={{display:"flex",gap:6}}>
+        <input className="inp" placeholder="Nome do grupo" value={novoNome} onChange={e=>setNovoNome(e.target.value)} style={{flex:1,fontSize:12}}/>
+        <input className="inp" placeholder="Máx." value={novoMax} onChange={e=>setNovoMax(e.target.value)} style={{width:60,fontSize:12}}/>
+        <button className="btn" disabled={salvando} onClick={criarGrupo} style={{padding:"8px 12px",fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>{salvando?"...":"Criar"}</button>
+      </div>
+    </div>}
+  </div>;
+}
+
+function UsuariosPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
+  const [usuarios,setUsuarios]=useState<any[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState("");
+  const [showNovo,setShowNovo]=useState(false);
+  const [nome,setNome]=useState("");
+  const [senha,setSenha]=useState("");
+  const [cargo,setCargo]=useState("");
+  const [salvando,setSalvando]=useState(false);
+  const cargos=empresa==="CONFRARIA"?["admin","atendente","cozinha","entregador","operador"]:["admin","gerente","operador"];
+
+  const load=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const r=await fetch(`/api/pdv-config/usuarios?empresa=${empresa}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar usuários");
+      setUsuarios(d.usuarios||[]);
+    }catch(e:any){setUsuarios([]);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  useEffect(()=>{load();setCargo(empresa==="CONFRARIA"?"atendente":"operador");},[empresa]);
+
+  const criar=async()=>{
+    if(!nome.trim())return alert("Informe o nome do operador.");
+    if(!senha.trim())return alert(empresa==="CONFRARIA"?"Informe uma senha (mín. 6 caracteres).":"Informe um PIN de 4 a 6 dígitos.");
+    setSalvando(true);
+    try{
+      const body:any={nome:nome.trim(),cargo};
+      if(empresa==="CONFRARIA")body.senha=senha; else body.pin=senha;
+      const r=await fetch(`/api/pdv-config/usuarios?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao criar operador");
+      setNome("");setSenha("");setShowNovo(false);await load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setSalvando(false);
+  };
+  const toggleAtivo=async(u:any)=>{
+    try{
+      const r=await fetch(`/api/pdv-config/usuarios/${u.id}?empresa=${empresa}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ativo:!u.ativo})});
+      if(!r.ok)throw new Error((await r.json()).error||"Erro ao atualizar");
+      await load();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+
+  return <div>
+    <div className="section-title" style={{fontSize:15}}>👤 Usuários do PDV</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Operadores que entram no tablet do PDV{empresa==="SEAMA"?" (login por PIN)":" (login por senha)"} — separado dos usuários do sistema Gestão.</div>
+    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {loading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+    {!loading&&!erro&&usuarios.map(u=>(
+      <div className="card" key={u.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",opacity:u.ativo?1:.55}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700}}>{u.nome}</div>
+          <div className="muted" style={{fontSize:10.5,marginTop:2}}>{u.cargo}{u.detalhe?` · ${u.detalhe}`:""}</div>
+        </div>
+        <button className="btn" onClick={()=>toggleAtivo(u)} style={{padding:"4px 9px",fontSize:11,background:u.ativo?"var(--bg4)":"var(--btnPrimary)",color:u.ativo?"var(--text)":"#fff"}}>{u.ativo?"Desativar":"Ativar"}</button>
+      </div>
+    ))}
+    {!loading&&!erro&&!showNovo&&<button className="btn" onClick={()=>setShowNovo(true)} style={{width:"100%",padding:10,fontSize:12,background:"var(--bg4)",fontWeight:700}}>+ Novo operador de PDV</button>}
+    {showNovo&&<div className="card">
+      <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>+ Novo operador</div>
+      <input className="inp" placeholder="Nome de usuário" value={nome} onChange={e=>setNome(e.target.value)} style={{marginBottom:8,fontSize:12}}/>
+      <input className="inp" placeholder={empresa==="CONFRARIA"?"Senha (mín. 6 caracteres)":"PIN (4 a 6 dígitos)"} value={senha} onChange={e=>setSenha(e.target.value)} style={{marginBottom:8,fontSize:12}}/>
+      <select className="inp" value={cargo} onChange={e=>setCargo(e.target.value)} style={{marginBottom:10,fontSize:12}}>
+        {cargos.map(c=><option key={c} value={c}>{c}</option>)}
+      </select>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" onClick={()=>setShowNovo(false)} style={{flex:1,padding:9,fontSize:12,background:"var(--bg4)"}}>Cancelar</button>
+        <button className="btn" disabled={salvando} onClick={criar} style={{flex:1,padding:9,fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>{salvando?"Salvando...":"Criar"}</button>
+      </div>
+    </div>}
+  </div>;
+}
+
+function SangriaPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
+  const [categorias,setCategorias]=useState<{nome:string,ativo:boolean}[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState("");
+  const [salvando,setSalvando]=useState(false);
+  const [novaCat,setNovaCat]=useState("");
+
+  const load=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const r=await fetch(`/api/pdv-config/sangria?empresa=${empresa}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar categorias");
+      setCategorias(d.categorias||[]);
+    }catch(e:any){setCategorias([]);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[empresa]);
+
+  const salvar=async(lista:{nome:string,ativo:boolean}[])=>{
+    setSalvando(true);
+    try{
+      const r=await fetch(`/api/pdv-config/sangria?empresa=${empresa}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({categorias:lista})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao salvar");
+      setCategorias(lista);
+    }catch(e:any){alert(e.message||"Erro de conexão");await load();}
+    setSalvando(false);
+  };
+  const toggle=(i:number)=>salvar(categorias.map((c,idx)=>idx===i?{...c,ativo:!c.ativo}:c));
+  const remover=(i:number)=>{if(confirm(`Remover a categoria "${categorias[i].nome}"?`))salvar(categorias.filter((_,idx)=>idx!==i));};
+  const adicionar=()=>{if(!novaCat.trim())return;salvar([...categorias,{nome:novaCat.trim(),ativo:true}]);setNovaCat("");};
+
+  return <div>
+    <div className="section-title" style={{fontSize:15}}>💸 Categorias de Sangria</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Motivos disponíveis pro operador escolher ao registrar uma sangria no caixa do PDV.</div>
+    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {loading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+    {!loading&&!erro&&<div className="card">
+      {categorias.length===0&&<div className="muted" style={{fontSize:12,padding:"6px 0"}}>Nenhuma categoria cadastrada ainda.</div>}
+      {categorias.map((c,i)=>(
+        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderTop:i>0?"1px solid var(--border)":"none",opacity:c.ativo?1:.5}}>
+          <div style={{fontSize:12.5,fontWeight:600}}>{c.nome}</div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="btn" disabled={salvando} onClick={()=>toggle(i)} style={{padding:"3px 8px",fontSize:10.5,background:"var(--bg4)"}}>{c.ativo?"Desativar":"Ativar"}</button>
+            <button className="btn" disabled={salvando} onClick={()=>remover(i)} style={{padding:"3px 8px",fontSize:10.5,background:"var(--btnDanger)",color:"#fff"}}>Remover</button>
+          </div>
+        </div>
+      ))}
+    </div>}
+    {!loading&&!erro&&<div style={{display:"flex",gap:6,marginTop:8}}>
+      <input className="inp" placeholder="Nova categoria de sangria" value={novaCat} onChange={e=>setNovaCat(e.target.value)} style={{flex:1,fontSize:12}}/>
+      <button className="btn" disabled={salvando} onClick={adicionar} style={{padding:"8px 12px",fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>+ Adicionar</button>
+    </div>}
+  </div>;
+}
+
+function FechamentoPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
+  const [cfg,setCfg]=useState<any>(null);
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState("");
+  const [salvando,setSalvando]=useState(false);
+
+  const load=async()=>{
+    setLoading(true);setErro("");
+    try{
+      const r=await fetch(`/api/pdv-config/fechamento?empresa=${empresa}`);
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar regras");
+      setCfg(d);
+    }catch(e:any){setCfg(null);setErro(e.message||"Erro de conexão com o PDV");}
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[empresa]);
+
+  const salvar=async()=>{
+    setSalvando(true);
+    try{
+      const r=await fetch(`/api/pdv-config/fechamento?empresa=${empresa}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao salvar");
+      alert("Regras de fechamento salvas.");
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setSalvando(false);
+  };
+
+  return <div>
+    <div className="section-title" style={{fontSize:15}}>🔒 Regras de Fechamento</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>Como o PDV confere o caixa na hora de fechar o turno.</div>
+    {erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
+    {loading&&<div className="muted" style={{fontSize:12}}>Carregando...</div>}
+    {!loading&&!erro&&cfg&&!cfg.disponivel&&<div className="card">
+      <div style={{fontSize:12.5}}>🚧 O PDV da Confraria ainda não tem regras de fechamento configuráveis — essa tela só funciona pra Seama por enquanto.</div>
+    </div>}
+    {!loading&&!erro&&cfg&&cfg.disponivel&&<div className="card">
+      <div style={{marginBottom:10}}>
+        <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Tolerância de diferença (R$)</label>
+        <input className="inp" value={cfg.tolerancia} onChange={e=>setCfg({...cfg,tolerancia:e.target.value})} style={{fontSize:12}}/>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Nome da maquininha 1</label>
+        <input className="inp" value={cfg.maquina1Nome} onChange={e=>setCfg({...cfg,maquina1Nome:e.target.value})} style={{fontSize:12}}/>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Nome da maquininha 2</label>
+        <input className="inp" value={cfg.maquina2Nome} onChange={e=>setCfg({...cfg,maquina2Nome:e.target.value})} style={{fontSize:12}}/>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Limite de aprovação (R$, opcional)</label>
+        <input className="inp" value={cfg.limiteAprovacao??""} onChange={e=>setCfg({...cfg,limiteAprovacao:e.target.value})} style={{fontSize:12}}/>
+      </div>
+      <ToggleSwitch checked={!!cfg.obsObrigatoria} onChange={v=>setCfg({...cfg,obsObrigatoria:v})} label="Observação obrigatória com diferença" desc="Pede o motivo antes de fechar o caixa quando há diferença"/>
+      <ToggleSwitch checked={cfg.maquinasObrigatorio!==false} onChange={v=>setCfg({...cfg,maquinasObrigatorio:v})} label="Conferência das maquininhas obrigatória"/>
+      <ToggleSwitch checked={cfg.pixSomado!==false} onChange={v=>setCfg({...cfg,pixSomado:v})} label="Pix soma no total do turno"/>
+      <button className="btn" disabled={salvando} onClick={salvar} style={{width:"100%",padding:10,fontSize:12,background:"var(--btnPrimary)",color:"#fff",fontWeight:700,marginTop:12}}>{salvando?"Salvando...":"Salvar regras"}</button>
     </div>}
   </div>;
 }
