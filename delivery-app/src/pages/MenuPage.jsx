@@ -89,6 +89,7 @@ export default function MenuPage() {
   const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
   const [storeStatus, setStoreStatus] = useState({ open: true })
+  const [todayHours, setTodayHours] = useState(null)
   const [searchCollapsed, setSearchCollapsed] = useState(false)
   const catRefs = useRef({})
   const lastScrollY = useRef(0)
@@ -106,6 +107,11 @@ export default function MenuPage() {
       if (s.store_name) setStoreName(s.store_name)
       if (s.logo_url) setLogoUrl(s.logo_url)
       setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates, s.store_closed_manual))
+      if (s.business_hours) {
+        const adminIdx = (new Date().getDay() + 6) % 7
+        const day = s.business_hours[adminIdx]
+        if (day?.open && day.from && day.to) setTodayHours(`${day.from} – ${day.to}`)
+      }
     }).catch(() => {})
   }, [])
 
@@ -149,6 +155,9 @@ export default function MenuPage() {
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'currentColor' }} />
                 {storeStatus.open ? 'Aberto agora' : (storeStatus.reason || 'Fechado')}
               </span>
+              {todayHours && (
+                <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{todayHours}</span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
