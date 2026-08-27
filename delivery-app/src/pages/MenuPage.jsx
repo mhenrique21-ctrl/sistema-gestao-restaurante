@@ -83,7 +83,6 @@ function ProductCard({ product, catName, onClick }) {
 export default function MenuPage() {
   const [menu, setMenu] = useState([])
   const [storeName, setStoreName] = useState('Confraria Café')
-  const [bannerUrl, setBannerUrl] = useState(null)
   const [logoUrl, setLogoUrl] = useState(null)
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState(null)
@@ -106,11 +105,6 @@ export default function MenuPage() {
     api.settings().then((s) => {
       if (s.store_name) setStoreName(s.store_name)
       if (s.logo_url) setLogoUrl(s.logo_url)
-      // Banner do dia: adminIndex = (jsDay + 6) % 7
-      const adminIdx = (new Date().getDay() + 6) % 7
-      const dayBanner = s.business_hours?.[adminIdx]?.banner_url
-      const rawBanner = dayBanner || s.banner_image_url || null
-      setBannerUrl(rawBanner && rawBanner.startsWith('http') ? rawBanner : null)
       setStoreStatus(checkStoreOpen(s.business_hours, s.special_dates, s.store_closed_manual))
     }).catch(() => {})
   }, [])
