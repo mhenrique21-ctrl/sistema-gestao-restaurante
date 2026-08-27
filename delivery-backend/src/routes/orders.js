@@ -1111,8 +1111,9 @@ router.patch('/:id/status', async (req, res) => {
   try {
     // Status anterior é lido antes do UPDATE: é ele que diz se o cancelamento
     // é novo (e deve devolver estoque) ou repetido (e não deve devolver de novo).
-    const antes = await pool.query(`SELECT status FROM orders WHERE id = $1`, [req.params.id]);
+    const antes = await pool.query(`SELECT status, asaas_payment_id FROM orders WHERE id = $1`, [req.params.id]);
     const anterior = antes.rows[0]?.status || null;
+    const asaasPaymentId = antes.rows[0]?.asaas_payment_id || null;
 
     const result = await pool.query(
       `UPDATE orders SET status = $1 WHERE id = $2
@@ -1141,6 +1142,16 @@ router.patch('/:id/status', async (req, res) => {
         orderId: req.params.id,
         userId: req.user?.id || null,
       });
+
+      // Estorno automático PIX (Asaas) — só quando pedido foi pago
+      if (asaasPaymentId && ['pago', 'confirmado', 'em_preparo', 'pronto'].includes(anterior)) {
+        try {
+          await asaasService.refundPixCharge(asaasPaymentId);
+          console.log(`[asaas/refund] Estorno PIX solicitado para payment ${asaasPaymentId}`);
+        } catch (refundErr) {
+          console.error(`[asaas/refund] Falha no estorno ${asaasPaymentId}:`, refundErr.message);
+        }
+      }
     }
 
     // Cupom: registra uso definitivo apenas quando pedido fica PRONTO

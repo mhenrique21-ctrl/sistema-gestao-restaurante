@@ -67,4 +67,9 @@ async function createPixCharge({ name, cpfCnpj, phone, value, description, exter
   };
 }
 
-module.exports = { findOrCreateCustomer, createPixCharge, request };
+// Estorna uma cobrança PIX já paga (reembolso total)
+async function refundPixCharge(paymentId) {
+  return request('POST', `/payments/${paymentId}/refund`, {});
+}
+
+module.exports = { findOrCreateCustomer, createPixCharge, refundPixCharge, request };
