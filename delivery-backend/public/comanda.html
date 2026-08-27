@@ -1965,6 +1965,25 @@ const TAB_SCREENS = {
 // Abas que hoje ficam nos botões grandes do topo (Fazer Pedido/Delivery/Comandas/Caixa)
 // em vez da lista lateral — 'financeiro' é a aba real por trás do botão "Caixa".
 
+// ── Telas movidas para o App Gestão ──────────────────────
+// Esconde só o BOTÃO do menu. As telas, as rotas de API e os dados continuam
+// existindo: a ponte com a Gestão conversa com a API, não com a tela, então
+// nada aqui a afeta. Reverter = tirar o nome desta lista.
+//
+// Atenção ao esconder 'insumos' e 'compras': é nelas que a compra vinda da
+// Gestão vira estoque (o de-para nome-da-nota → produto/insumo). Com elas
+// ocultas, as compras continuam chegando e entrando na fila
+// pending_supply_items, mas ninguém as concilia — o estoque do PDV para de
+// ser atualizado por compra. Decisão do dono, tomada com esse efeito à vista.
+const TABS_OCULTAS = ['insumos', 'fichas', 'margem', 'compras', 'adicionais'];
+
+function ocultarTabsMovidas() {
+  TABS_OCULTAS.forEach(t => {
+    document.querySelector(`.tab-tile[data-tab="${t}"]`)?.classList.add('hidden');
+  });
+}
+ocultarTabsMovidas();
+
 function showTab(tab) {
   document.querySelectorAll('.tab-tile').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   for (const [key, screenId] of Object.entries(TAB_SCREENS)) {
