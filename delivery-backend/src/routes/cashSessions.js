@@ -2,38 +2,13 @@ const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { getOpenSession, getSessionSummary } = require('../services/cashSummary');
+const { enviarSangria: enviarSangriaParaGestao } = require('../services/gestaoSync');
 
 router.use(authMiddleware, requireRole('admin', 'atendente'));
 
 function erro(res, err, tag) {
   console.error(tag, err.message);
   return res.status(500).json({ error: 'Erro interno do servidor' });
-}
-
-// Sangria categorizada vira conta paga na Gestão (Financeiro > Contas). Nunca
-// deixa a sangria falhar por causa da Gestão fora do ar — só loga e segue.
-// movimentoId dá idempotência: reenviar a mesma sangria atualiza em vez de
-// duplicar a conta.
-async function enviarSangriaParaGestao({ movimentoId, categoria, valor, motivo, data }) {
-  const base = process.env.GESTAO_URL;
-  const secret = process.env.SEAMA_SERVICE_SECRET;
-  if (!base || !secret) { console.error('[cash-sessions/sangria] Integração com a Gestão não configurada'); return; }
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 15000);
-  try {
-    const r = await fetch(`${base.replace(/\/$/, '')}/api/sangria-pdv`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
-      body: JSON.stringify({ empresa: 'CONFRARIA', categoria, valor, motivo, data, movimentoId }),
-      signal: ctrl.signal,
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) console.error('[cash-sessions/sangria] falha ao enviar pra Gestão:', d.error || r.status);
-  } catch (e) {
-    console.error('[cash-sessions/sangria] erro ao enviar pra Gestão:', e.message);
-  } finally {
-    clearTimeout(t);
-  }
 }
 
 // GET /api/cash-sessions/current — turno aberto + conferência parcial.

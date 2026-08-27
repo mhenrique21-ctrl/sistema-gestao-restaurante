@@ -180,8 +180,7 @@ router.post('/movement', async (req, res) => {
     // Dispara depois de responder: o operador não espera a viagem até a
     // Gestão pra ver a sangria confirmada na tela. Erro aqui só vai pro log.
     if (type === 'sangria' && category) {
-      enviarSangria({ movimentoId: r.rows[0].id, categoria: category, valor: amount, motivo: reason || null, data: todayBelem() })
-        .catch((e) => console.error('[cash-sessions/movement] erro ao sincronizar sangria com a Gestão:', e.message));
+      enviarSangria({ movimentoId: r.rows[0].id, categoria: category, valor: amount, motivo: reason || null, data: todayBelem() });
     }
   } catch (err) {
     return internalError(res, err, '[cash-sessions/movement]');

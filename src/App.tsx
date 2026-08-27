@@ -6433,7 +6433,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         </div>
                         <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"#1D4ED8",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
-                        <button onClick={e=>{e.stopPropagation();if(!confirm(`Excluir "${item.nomeProduto}"?\n\nA quantidade lançada no estoque será devolvida${EMPRESAS_COM_PDV.includes(empresa)?" (aqui e no PDV)":""}.`))return;_listaDeletados.add(item.id);const gid=nota.grupoId;(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);const estorno=estornarEstoqueGestao(d,gid,[item.nomeProduto]);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c),...estorno};});estornarCompraSeama(empresa,gid,[item.nomeProduto]);}}
+                        <button onClick={async e=>{e.stopPropagation();if(!confirm(`Excluir "${item.nomeProduto}"?\n\nA quantidade lançada no estoque será devolvida${EMPRESAS_COM_PDV.includes(empresa)?" (aqui e no PDV)":""}.`))return;const gid=nota.grupoId;if(EMPRESAS_COM_PDV.includes(empresa)){try{await estornarCompraSeama(empresa,gid,[item.nomeProduto],{silencioso:true});}catch(err:any){if(!confirm(`⚠️ Não consegui estornar no PDV: ${err.message}\n\nO estoque do PDV vai ficar MAIOR que a realidade até você corrigir lá manualmente.\n\nExcluir mesmo assim?`))return;}}_listaDeletados.add(item.id);(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);const estorno=estornarEstoqueGestao(d,gid,[item.nomeProduto]);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c),...estorno};});}}
                           style={{background:"none",border:"none",color:"#EF444455",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
                       </div>
                     )}
@@ -6451,14 +6451,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         <table><thead><tr><th>Produto</th><th>Categoria</th><th>Qtd</th><th>Vl. Unit.</th><th>Total</th></tr></thead><tbody>${rows}</tbody>
                         <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(totalVivo)}</td></tr></tfoot></table>`));
                     }} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir</button>
-                    <button className="btn" onClick={()=>{
+                    <button className="btn" onClick={async()=>{
                       const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
                       if(!confirm(empresa==="SEAMA"
                         ?`Transferir compra #${num} para ${outra}?\n\nA compra deixa de ser da SEAMA, então os itens que entraram no estoque do PDV serão devolvidos.`
                         :`Transferir compra #${num} para ${outra}?${outra==="SEAMA"?"\n\nOs itens de revenda entrarão no estoque do PDV da Seama.":""}`))return;
                       // Saindo da SEAMA, o estoque do PDV precisa devolver o que entrou —
                       // senão a compra muda de empresa e a mercadoria fica contada aqui.
-                      estornarCompraSeama(empresa,nota.grupoId,null);
+                      if(EMPRESAS_COM_PDV.includes(empresa)){
+                        try{ await estornarCompraSeama(empresa,nota.grupoId,null,{silencioso:true}); }
+                        catch(err:any){ if(!confirm(`⚠️ Não consegui estornar no PDV: ${err.message}\n\nO estoque do PDV de origem vai ficar MAIOR que a realidade até você corrigir lá manualmente.\n\nMover mesmo assim?`))return; }
+                      }
                       const novoGrupoId=uid();
                       const novosItens=itensVivos.map(it=>({...it,id:uid(),grupoId:novoGrupoId}));
                       const contaOrig=(db.contas||[]).find((c:any)=>c.grupoId===nota.grupoId);
@@ -6472,9 +6475,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       enviarCompraSeama(outra,novoGrupoId,nota.fornecedor,novosItens,getCategoriasDesligadasPdv((state||{})[outra]));
                       alert(`✅ Compra transferida para ${outra}`);
                     }} style={{background:"#DBEAFE",color:"#8B5CF6",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
-                    <button className="btn" onClick={()=>{
+                    <button className="btn" onClick={async()=>{
                       if(!confirm(`Excluir esta nota e todos os seus itens?\n\nA quantidade lançada no estoque será devolvida${EMPRESAS_COM_PDV.includes(empresa)?" (aqui e no PDV)":""}.`))return;
-                      estornarCompraSeama(empresa,nota.grupoId,null);
+                      if(EMPRESAS_COM_PDV.includes(empresa)){
+                        try{ await estornarCompraSeama(empresa,nota.grupoId,null,{silencioso:true}); }
+                        catch(err:any){ if(!confirm(`⚠️ Não consegui estornar no PDV: ${err.message}\n\nO estoque do PDV vai ficar MAIOR que a realidade até você corrigir lá manualmente.\n\nExcluir mesmo assim?`))return; }
+                      }
                       const cIds=(db.compras||[]).filter(c=>(c.grupoId||c.id)===nota.grupoId).map(c=>c.id);
                       const ctIds=(db.contas||[]).filter(c=>c.grupoId===nota.grupoId).map(c=>c.id);
                       [...cIds,...ctIds].forEach(id=>_listaDeletados.add(id));
@@ -11239,8 +11245,12 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
   // quantidade no estoque do PDV. O estorno é idempotente por item, então
   // excluir aqui depois de já ter excluído pela tela Compras não devolve duas
   // vezes.
-  const excluirCompraInteira=(conta:any)=>{
+  const excluirCompraInteira=async(conta:any)=>{
     const gid=conta.grupoId;
+    if(EMPRESAS_COM_PDV.includes(empresa)){
+      try{ await estornarCompraSeama(empresa,gid,null,{silencioso:true}); }
+      catch(err:any){ if(!confirm(`⚠️ Não consegui estornar no PDV: ${err.message}\n\nO estoque do PDV vai ficar MAIOR que a realidade até você corrigir lá manualmente.\n\nExcluir mesmo assim?`))return; }
+    }
     const itens=(db.compras||[]).filter((c:any)=>(c.grupoId||c.id)===gid);
     _listaDeletados.add(conta.id);
     itens.forEach((i:any)=>_listaDeletados.add(i.id));
@@ -11252,7 +11262,6 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
         ...estorno,
       };
     });
-    estornarCompraSeama(empresa,gid,null);
     setContaCompraExcluir(null);
   };
   const delGrupo=(gid:string)=>{if(!confirm("Excluir toda a série?"))return;const ids=(db.contas||[]).filter((c:any)=>c.grupoRecorr===gid).map((c:any)=>c.id);ids.forEach(id=>_listaDeletados.add(id));(setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).filter((c:any)=>c.grupoRecorr!==gid)}));};

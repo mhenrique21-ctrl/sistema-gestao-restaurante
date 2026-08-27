@@ -172,7 +172,11 @@ function avisarVenda() {
 async function aoFecharCaixa(data) {
   try {
     await enfileirar(data || todayBelem());
-    return await enviarPendentes();
+    const r = await enviarPendentes();
+    // Rede de segurança: qualquer sangria que tenha ficado pendente (Gestão
+    // fora do ar no momento em que foi registrada) tenta subir de novo aqui.
+    await enviarSangriasPendentes().catch((e) => console.error('[gestaoSync] erro ao reenviar sangrias pendentes no fechamento:', e.message));
+    return r;
   } catch (e) {
     console.error('[gestaoSync] erro ao sincronizar com o Gestão:', e.message);
     return { enviados: 0, falhas: 1, erro: e.message };
@@ -197,6 +201,7 @@ function iniciarSincronizacaoPeriodica() {
       if (!(await caixaAberto())) return;
       await enfileirar(todayBelem());
       await enviarPendentes();
+      await enviarSangriasPendentes();
     } catch (e) {
       console.error('[gestaoSync] erro na sincronização periódica:', e.message);
     }
@@ -207,7 +212,104 @@ function iniciarSincronizacaoPeriodica() {
   return timer;
 }
 
+// Sangria categorizada vira conta paga na Gestão (Financeiro > Contas).
+// Antes disso era um único fetch fire-and-forget dentro de cashSessions.js:
+// se a Gestão estivesse fora do ar no exato instante da sangria, o evento se
+// perdia pra sempre — nada ficava guardado pra tentar de novo depois. Agora
+// a sangria primeiro vai pra uma fila durável (gestao_sync_sangria), igual o
+// faturamento do dia já faz em gestao_sync — só some da fila depois de a
+// Gestão confirmar 200.
+let _tabelaSangriaPronta = null;
+function garantirTabelaSangria() {
+  if (!_tabelaSangriaPronta) {
+    _tabelaSangriaPronta = pool.query(`
+      CREATE TABLE IF NOT EXISTS gestao_sync_sangria (
+        movimento_id UUID PRIMARY KEY,
+        categoria VARCHAR(150),
+        valor NUMERIC(10,2) NOT NULL,
+        motivo TEXT,
+        data DATE,
+        sent_at TIMESTAMPTZ,
+        attempts INT NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch((e) => { _tabelaSangriaPronta = null; throw e; });
+  }
+  return _tabelaSangriaPronta;
+}
+
+// Grava a sangria na fila. movimentoId dá idempotência: reenfileirar a mesma
+// sangria (ex: retry do caller) não cria linha duplicada.
+async function enfileirarSangria({ movimentoId, categoria, valor, motivo, data }) {
+  await garantirTabelaSangria();
+  await pool.query(
+    `INSERT INTO gestao_sync_sangria (movimento_id, categoria, valor, motivo, data)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (movimento_id) DO NOTHING`,
+    [movimentoId, categoria, valor, motivo, data]
+  );
+}
+
+async function enviarSangriaUm(linha) {
+  const secret = process.env.SEAMA_SERVICE_SECRET;
+  if (!secret) { console.error('[gestaoSync/sangria] SEAMA_SERVICE_SECRET não configurado'); return { ok: false }; }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(`${GESTAO_URL.replace(/\/$/, '')}/api/sangria-pdv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-service-secret': secret },
+      body: JSON.stringify({ empresa: EMPRESA, categoria: linha.categoria, valor: parseFloat(linha.valor), motivo: linha.motivo, data: linha.data, movimentoId: linha.movimento_id }),
+      signal: ctrl.signal,
+    });
+    const corpo = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(corpo.error || `HTTP ${res.status}`);
+    await pool.query(
+      `UPDATE gestao_sync_sangria SET sent_at = NOW(), last_error = NULL, attempts = attempts + 1
+        WHERE movimento_id = $1 RETURNING movimento_id`,
+      [linha.movimento_id]
+    );
+    return { movimentoId: linha.movimento_id, ok: true };
+  } catch (e) {
+    const msg = String(e.message || e).slice(0, 300);
+    await pool.query(
+      `UPDATE gestao_sync_sangria SET attempts = attempts + 1, last_error = $2 WHERE movimento_id = $1 RETURNING movimento_id`,
+      [linha.movimento_id, msg]
+    );
+    console.error(`[gestaoSync/sangria] falha ao enviar sangria ${linha.movimento_id}: ${msg}`);
+    return { movimentoId: linha.movimento_id, ok: false, erro: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Tenta TODAS as sangrias pendentes, não só a mais recente — é assim que uma
+// sangria que falhou porque a Gestão estava fora do ar sobe sozinha depois.
+async function enviarSangriasPendentes() {
+  await garantirTabelaSangria();
+  if (!process.env.SEAMA_SERVICE_SECRET) return { enviados: 0, falhas: 0, motivo: 'SEAMA_SERVICE_SECRET não configurado' };
+  const r = await pool.query(
+    `SELECT movimento_id, categoria, valor, motivo, data FROM gestao_sync_sangria
+      WHERE sent_at IS NULL ORDER BY created_at`
+  );
+  const out = [];
+  for (const linha of r.rows) out.push(await enviarSangriaUm(linha));
+  return { enviados: out.filter((x) => x.ok).length, falhas: out.filter((x) => !x.ok).length, detalhes: out };
+}
+
+// Chamado a cada sangria registrada no caixa — enfileira (grava durável) e já
+// tenta mandar na hora; se falhar, a linha fica pendente e o job periódico
+// (mesmo timer do faturamento, ver iniciarSincronizacaoPeriodica) e o
+// fechamento de caixa tentam de novo depois. Sem await de propósito: o
+// operador não espera a chamada à Gestão pra ver a sangria confirmada.
+function enviarSangria(evento) {
+  enfileirarSangria(evento)
+    .then(() => enviarSangriasPendentes())
+    .catch((e) => console.error('[gestaoSync/sangria] erro ao enfileirar sangria:', e.message));
+}
+
 module.exports = {
   aoFecharCaixa, avisarVenda, enviarPendentes, enfileirar, totaisDoDia,
-  porHoraDoDia, iniciarSincronizacaoPeriodica,
+  porHoraDoDia, iniciarSincronizacaoPeriodica, enviarSangria, enviarSangriasPendentes,
 };
