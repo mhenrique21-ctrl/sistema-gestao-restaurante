@@ -1737,10 +1737,10 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // string (?empresa=), inclusive em POST/PATCH/DELETE, pra não precisar
   // ler o corpo antes de saber pra qual PDV mandar.
   if (
-    (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias')) ||
-    (req.method === 'POST' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/menu-produtos/upload')) ||
-    (req.method === 'PATCH' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/menu-categorias/'))) ||
-    (req.method === 'DELETE' && urlPath.startsWith('/api/menu-produtos/'))
+    (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/pdv-destaques')) ||
+    (req.method === 'POST' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/menu-produtos/upload' || urlPath === '/api/pdv-destaques')) ||
+    (req.method === 'PATCH' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/menu-categorias/') || urlPath.startsWith('/api/pdv-destaques/'))) ||
+    (req.method === 'DELETE' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/pdv-destaques/')))
   ) {
     const isUpload = urlPath === '/api/menu-produtos/upload';
     const idFromPath = () => urlPath.split('/')[3]; // /api/menu-produtos/:id[...] ou /api/menu-categorias/:id
@@ -1750,6 +1750,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     let upstreamPath = null;
     if (empresa === 'CONFRARIA') {
       if (isUpload) upstreamPath = '/api/menu/upload';
+    // Destaques do totem: passaram a ser gerenciados na Gestão em vez de na
+    // tela do PDV. No GET vai pra /admin porque a rota pública só devolve o
+    // que está ativo, e aqui é preciso ver e editar tudo.
+    else if (urlPath === '/api/pdv-destaques') upstreamPath = req.method === 'GET' ? '/api/highlights/admin' : '/api/highlights';
+    else if (urlPath.startsWith('/api/pdv-destaques/')) upstreamPath = `/api/highlights/${idFromPath()}`;
       else if (urlPath === '/api/menu-produtos') upstreamPath = req.method === 'GET' ? '/api/menu/admin' : '/api/menu/products';
       else if (urlPath === '/api/menu-categorias') upstreamPath = '/api/categories';
       else if (req.method === 'PATCH' && urlPath.endsWith('/available')) upstreamPath = `/api/menu/products/${idFromPath()}/available`;

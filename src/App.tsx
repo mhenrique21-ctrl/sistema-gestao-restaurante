@@ -15411,11 +15411,284 @@ function RelatorioPdvPanel({empresa,onAbrirEstoque}:{empresa:"CONFRARIA"|"SEAMA"
 }
 
 // ===================== CONFIGURAÇÕES =====================
+
+// ── Destaques do totem (antes ficava na tela do PDV) ──────────────────
+// A tela do totem é deitada e a foto ocupa ela inteira. Foto de celular vem
+// em pé: sem recortar, o navegador corta sozinho pelo meio e quase sempre
+// decepa o produto. Por isso o editor veio junto do PDV em vez de só enviar o
+// arquivo — quem cadastra decide o enquadramento, e o que sobe já sai em
+// 1600×1000 comprimido, a proporção da tela do tablet.
+const DEST_L = 1600, DEST_A = 1000;   // saída final, 16:10
+const EDIT_L = 640,  EDIT_A = 400;    // prévia na tela, mesma proporção
+const DEST_MAX_ENTRADA = 2400;        // reduz na entrada: editor fluido, giro sem estourar memória
+
+function PdvDestaques(){
+  const [lista,setLista]=useState<any[]>([]);
+  const [carregando,setCarregando]=useState(true);
+  const [erro,setErro]=useState("");
+  const [form,setForm]=useState<any>(null);
+  const [salvando,setSalvando]=useState(false);
+  const [ed,setEd]=useState<any>(null);
+  const canvasRef=useRef<HTMLCanvasElement|null>(null);
+  const edRef=useRef<any>(null);
+  const fileRef=useRef<HTMLInputElement|null>(null);
+
+  const carregar=async()=>{
+    setCarregando(true);setErro("");
+    try{
+      const r=await fetch("/api/pdv-destaques");
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar");
+      setLista(Array.isArray(d)?d:[]);
+    }catch(e:any){setErro(e.message||"Erro de conexão");}
+    setCarregando(false);
+  };
+  useEffect(()=>{carregar();},[]);
+
+  const canvasParaImagem=(cv:HTMLCanvasElement):Promise<HTMLImageElement>=>new Promise((ok,falha)=>{
+    cv.toBlob(blob=>{
+      if(!blob)return falha(new Error("Não consegui processar a foto"));
+      const img=new Image();const url=URL.createObjectURL(blob);
+      img.onload=()=>{URL.revokeObjectURL(url);ok(img);};
+      img.onerror=()=>{URL.revokeObjectURL(url);falha(new Error("Não consegui processar a foto"));};
+      img.src=url;
+    },"image/jpeg",0.92);
+  });
+
+  const normalizar=async(img:HTMLImageElement)=>{
+    const maior=Math.max(img.width,img.height);
+    if(maior<=DEST_MAX_ENTRADA)return img;
+    const f=DEST_MAX_ENTRADA/maior;
+    const cv=document.createElement("canvas");
+    cv.width=Math.round(img.width*f);cv.height=Math.round(img.height*f);
+    cv.getContext("2d")!.drawImage(img,0,0,cv.width,cv.height);
+    return canvasParaImagem(cv);
+  };
+
+  const desenhar=()=>{
+    const cv=canvasRef.current,e=edRef.current;
+    if(!cv||!e)return;
+    const ctx=cv.getContext("2d")!;
+    ctx.imageSmoothingEnabled=true;(ctx as any).imageSmoothingQuality="high";
+    ctx.clearRect(0,0,EDIT_L,EDIT_A);
+    ctx.drawImage(e.img,e.x,e.y,e.img.width*e.escala,e.img.height*e.escala);
+  };
+
+  // A moldura nunca pode ficar com faixa vazia: prende o deslocamento nas bordas.
+  const limitar=()=>{
+    const e=edRef.current;if(!e)return;
+    const l=e.img.width*e.escala,a=e.img.height*e.escala;
+    e.x=Math.min(0,Math.max(EDIT_L-l,e.x));
+    e.y=Math.min(0,Math.max(EDIT_A-a,e.y));
+  };
+
+  const abrirEditor=(img:HTMLImageElement)=>{
+    const escalaMin=Math.max(EDIT_L/img.width,EDIT_A/img.height);
+    const e:any={img,escala:escalaMin,escalaMin,x:0,y:0,arrastando:false,px:0,py:0};
+    e.x=(EDIT_L-img.width*escalaMin)/2;e.y=(EDIT_A-img.height*escalaMin)/2;
+    edRef.current=e;
+    // Acima de 1,4x de ampliação o borrão já é perceptível na tela do tablet.
+    setEd({zoom:1,aviso:escalaMin*(DEST_L/EDIT_L)>1.4});
+    setTimeout(desenhar,0);
+  };
+
+  const escolherArquivo=(f:File|undefined)=>{
+    if(!f)return;
+    const img=new Image();
+    img.onload=async()=>{URL.revokeObjectURL(img.src);
+      try{abrirEditor(await normalizar(img));}catch(e:any){alert(e.message);}};
+    img.onerror=()=>{URL.revokeObjectURL(img.src);alert("Não consegui abrir esse arquivo");};
+    img.src=URL.createObjectURL(f);
+  };
+
+  const zoom=(mult:number)=>{
+    const e=edRef.current;if(!e)return;
+    const cx=EDIT_L/2,cy=EDIT_A/2,nova=e.escalaMin*mult;
+    e.x=cx-(cx-e.x)*(nova/e.escala);e.y=cy-(cy-e.y)*(nova/e.escala);
+    e.escala=nova;limitar();desenhar();
+    setEd((s:any)=>({...s,zoom:mult}));
+  };
+
+  // Gira recriando a imagem já rotacionada: o resto do editor segue tratando
+  // tudo como foto normal, sem transformação acumulada.
+  const girar=async()=>{
+    const e=edRef.current;if(!e)return;
+    const t=document.createElement("canvas");
+    t.width=e.img.height;t.height=e.img.width;
+    const c=t.getContext("2d")!;
+    c.translate(t.width/2,t.height/2);c.rotate(Math.PI/2);
+    c.drawImage(e.img,-e.img.width/2,-e.img.height/2);
+    try{abrirEditor(await canvasParaImagem(t));}catch(err:any){alert(err.message);}
+  };
+
+  const arrastar=(clientX:number,clientY:number,inicio:boolean)=>{
+    const e=edRef.current,cv=canvasRef.current;if(!e||!cv)return;
+    if(inicio){e.arrastando=true;e.px=clientX;e.py=clientY;return;}
+    if(!e.arrastando)return;
+    // O canvas é exibido menor que sua resolução interna: converte o movimento.
+    const fator=EDIT_L/cv.getBoundingClientRect().width;
+    e.x+=(clientX-e.px)*fator;e.y+=(clientY-e.py)*fator;
+    e.px=clientX;e.py=clientY;limitar();desenhar();
+  };
+
+  const usarFoto=async()=>{
+    const e=edRef.current;if(!e)return;
+    setSalvando(true);
+    try{
+      const fator=DEST_L/EDIT_L;
+      const cv=document.createElement("canvas");
+      cv.width=DEST_L;cv.height=DEST_A;
+      const ctx=cv.getContext("2d")!;
+      ctx.imageSmoothingEnabled=true;(ctx as any).imageSmoothingQuality="high";
+      ctx.fillStyle="#000";ctx.fillRect(0,0,DEST_L,DEST_A);
+      ctx.drawImage(e.img,e.x*fator,e.y*fator,e.img.width*e.escala*fator,e.img.height*e.escala*fator);
+      const blob:Blob=await new Promise((ok,no)=>cv.toBlob(b=>b?ok(b):no(new Error("Não consegui preparar a foto")),"image/jpeg",0.85));
+      const fd=new FormData();
+      fd.append("image",new File([blob],"destaque.jpg",{type:"image/jpeg"}));
+      fd.append("folder","destaques");
+      const r=await fetch("/api/menu-produtos/upload",{method:"POST",body:fd});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao enviar a foto");
+      setForm((f:any)=>({...(f||{title:"",subtitle:"",price_label:""}),image_url:d.url}));
+      edRef.current=null;setEd(null);
+    }catch(err:any){alert(err.message||"Erro ao enviar a foto");}
+    setSalvando(false);
+  };
+
+  const salvar=async()=>{
+    if(!form?.image_url){alert("Escolha a foto do destaque");return;}
+    setSalvando(true);
+    try{
+      const corpo={title:form.title||null,subtitle:form.subtitle||null,
+                   price_label:form.price_label||null,image_url:form.image_url};
+      const r=await fetch(form.id?"/api/pdv-destaques/"+form.id:"/api/pdv-destaques",
+        {method:form.id?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(corpo)});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao salvar");
+      setForm(null);await carregar();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+    setSalvando(false);
+  };
+
+  const excluir=async(id:string)=>{
+    if(!confirm("Excluir este destaque? Ele deixa de aparecer no totem."))return;
+    try{
+      const r=await fetch("/api/pdv-destaques/"+id,{method:"DELETE"});
+      if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||"Erro ao excluir");}
+      await carregar();
+    }catch(e:any){alert(e.message||"Erro de conexão");}
+  };
+
+  const fundo=(url:string)=>url?{backgroundImage:"url('"+url+"')",backgroundSize:"cover",backgroundPosition:"center"}:{};
+
+  return <div>
+    <div className="section-title">🖥️ Destaques do totem</div>
+    <div style={{fontSize:12,color:"var(--text2)",marginBottom:12}}>
+      São as fotos que passam na tela do tablet quando ninguém está usando. Ficavam no PDV e agora se configuram por aqui.
+    </div>
+
+    {erro&&<div style={{background:"#FEE2E2",color:"#B91C1C",padding:"9px 12px",borderRadius:9,fontSize:12.5,marginBottom:10}}>{erro}</div>}
+
+    {!form&&<button className="btn" onClick={()=>setForm({title:"",subtitle:"",price_label:"",image_url:""})}
+      style={{background:"#6366F1",color:"#fff",padding:"11px 16px",fontSize:13,fontWeight:700,marginBottom:14}}>
+      + Novo destaque
+    </button>}
+
+    {form&&<div className="card" style={{marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>{form.id?"Editar destaque":"Novo destaque"}</div>
+      <div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:10,flexWrap:"wrap" as const}}>
+        <div style={{width:176,height:110,borderRadius:10,border:"1px solid var(--border2)",flexShrink:0,
+                     display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"var(--text2)",
+                     background:"var(--bg3)",...fundo(form.image_url)}}>
+          {!form.image_url&&"sem foto"}
+        </div>
+        <div style={{flex:1,minWidth:180}}>
+          <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}}
+                 onChange={e=>{escolherArquivo(e.target.files?.[0]);if(fileRef.current)fileRef.current.value="";}}/>
+          <button className="btn" type="button" onClick={()=>fileRef.current?.click()}
+            style={{background:"var(--bg4)",border:"1.5px dashed #6366F166",color:"#6366F1",fontSize:12.5,padding:"9px 12px",borderRadius:9}}>
+            🖼️ {form.image_url?"Trocar foto":"Escolher foto"}
+          </button>
+          <div style={{fontSize:10.5,color:"var(--text2)",marginTop:6}}>Sai em 1600 × 1000, a proporção da tela do tablet.</div>
+        </div>
+      </div>
+      <input className="inp" placeholder="Título (ex: Torta Holandesa)" value={form.title}
+             onChange={e=>setForm({...form,title:e.target.value})} style={{marginBottom:8}}/>
+      <input className="inp" placeholder="Subtítulo (opcional)" value={form.subtitle}
+             onChange={e=>setForm({...form,subtitle:e.target.value})} style={{marginBottom:8}}/>
+      <input className="inp" placeholder="Preço em texto (ex: R$ 23,90)" value={form.price_label}
+             onChange={e=>setForm({...form,price_label:e.target.value})} style={{marginBottom:10}}/>
+      <div style={{display:"flex",gap:8}}>
+        <button className="btn" onClick={()=>setForm(null)} style={{flex:1,padding:"11px"}}>Cancelar</button>
+        <button className="btn" onClick={salvar} disabled={salvando}
+          style={{flex:2,background:"#22C55E",color:"#051208",padding:"11px",fontWeight:700}}>
+          {salvando?"Salvando...":"Salvar destaque"}
+        </button>
+      </div>
+    </div>}
+
+    {carregando?<div style={{color:"var(--text2)",fontSize:12.5,padding:"14px 0"}}>Carregando...</div>
+     :lista.length===0?<div style={{color:"var(--text2)",fontSize:12.5,textAlign:"center" as const,padding:"20px 0"}}>
+        Nenhum destaque cadastrado — o totem cai no comportamento antigo, mostrando produtos em promoção que tenham foto.
+      </div>
+     :<div style={{display:"flex",flexDirection:"column" as const,gap:9}}>
+        {lista.map((h:any)=>(
+          <div key={h.id} style={{display:"flex",gap:11,alignItems:"center",border:"1px solid var(--border2)",borderRadius:11,padding:9}}>
+            <div style={{width:96,height:60,borderRadius:8,flexShrink:0,background:"var(--bg3)",...fundo(h.image_url)}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13}}>{h.title||"(sem título)"}</div>
+              {h.subtitle&&<div style={{fontSize:11.5,color:"var(--text2)"}}>{h.subtitle}</div>}
+              {h.price_label&&<div style={{fontSize:11.5,color:"#22C55E",fontWeight:700}}>{h.price_label}</div>}
+            </div>
+            <button className="btn" onClick={()=>setForm({id:h.id,title:h.title||"",subtitle:h.subtitle||"",
+                                                          price_label:h.price_label||"",image_url:h.image_url||""})}
+              style={{padding:"6px 11px",fontSize:12}}>✏️</button>
+            <button className="btn" onClick={()=>excluir(h.id)}
+              style={{padding:"6px 11px",fontSize:12,background:"#FEE2E2",color:"#EF4444"}}>🗑</button>
+          </div>
+        ))}
+      </div>}
+
+    {ed&&<div style={{position:"fixed",inset:0,background:"rgba(20,16,10,.6)",display:"flex",alignItems:"center",
+                      justifyContent:"center",zIndex:200,padding:16}}>
+      <div style={{background:"var(--card)",borderRadius:16,padding:18,maxWidth:700,width:"100%"}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Enquadrar a foto</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:4}}>Arraste pra escolher o que aparece. Sai em 1600 × 1000.</div>
+        {ed.aviso&&<div style={{color:"#B45309",fontSize:11.5,marginBottom:6}}>⚠️ Essa foto é pequena e vai sair borrada. Se tiver uma versão maior, use ela.</div>}
+        <div style={{background:"#14100A",borderRadius:11,overflow:"hidden",display:"flex",justifyContent:"center"}}>
+          <canvas ref={canvasRef} width={EDIT_L} height={EDIT_A}
+            style={{width:"100%",maxWidth:EDIT_L,height:"auto",display:"block",cursor:"grab",touchAction:"none"}}
+            onMouseDown={e=>arrastar(e.clientX,e.clientY,true)}
+            onMouseMove={e=>arrastar(e.clientX,e.clientY,false)}
+            onMouseUp={()=>{if(edRef.current)edRef.current.arrastando=false;}}
+            onMouseLeave={()=>{if(edRef.current)edRef.current.arrastando=false;}}
+            onTouchStart={e=>arrastar(e.touches[0].clientX,e.touches[0].clientY,true)}
+            onTouchMove={e=>{e.preventDefault();arrastar(e.touches[0].clientX,e.touches[0].clientY,false);}}
+            onTouchEnd={()=>{if(edRef.current)edRef.current.arrastando=false;}}/>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 0"}}>
+          <span style={{fontSize:12,color:"var(--text2)"}}>Zoom</span>
+          <input type="range" min={1} max={4} step={0.02} value={ed.zoom} style={{flex:1}}
+                 onChange={e=>zoom(parseFloat(e.target.value))}/>
+          <button className="btn" type="button" onClick={girar} style={{padding:"7px 12px",fontSize:12}}>↻ Girar</button>
+        </div>
+        <div style={{display:"flex",gap:9}}>
+          <button className="btn" onClick={()=>{edRef.current=null;setEd(null);}} style={{flex:1,padding:"11px"}}>✕ Cancelar</button>
+          <button className="btn" onClick={usarFoto} disabled={salvando}
+            style={{flex:2,background:"#6366F1",color:"#fff",padding:"11px",fontWeight:700}}>
+            {salvando?"Enviando...":"Usar esta foto"}
+          </button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
 function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,toggleTheme,menuLayout,changeMenuLayout,menuOrder,changeMenuOrder,setConfigPanelOpen,modoDiscreto,toggleModoDiscreto}:
   {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void,setConfigPanelOpen?:(v:boolean)=>void,modoDiscreto:boolean,toggleModoDiscreto:()=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
-  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["conciliacao","🔗 Conciliação"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
+  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["conciliacao","🔗 Conciliação"],["pdvdestaques","🖥️ Destaques do totem"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
 
   // Shared helpers
   const setConfig=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
@@ -16007,6 +16280,10 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
     </div>}
 
     {/* ===== NF-e / SEFAZ ===== */}
+    {subTab==="pdvdestaques"&&<div>
+      <PdvDestaques/>
+    </div>}
+
     {subTab==="sefaz"&&<div>
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>📄 Certificado Digital</div>
