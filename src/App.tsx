@@ -1862,7 +1862,7 @@ export default function App() {
       {id:"agenda-cad",label:"Cadastradas",icon:"📋",sub:"cadastradas",adminOnly:true},
       {id:"agenda-ann",label:"Anotações",icon:"📝",sub:"anotacoes",adminOnly:true},
     ]},
-    {id:"produtos-menu",label:"Produtos",icon:"🍽️",children:[
+    {id:"produtos-menu",label:"Configurações de PDV",icon:"🔧",children:[
       {id:"pm-prod",label:"Produtos",icon:"🍽️",sub:"produtos"},
       {id:"pm-cat",label:"Categorias",icon:"📂",sub:"categorias"},
       {id:"pm-estoque",label:"Estoque",icon:"📦",sub:"estoque"},
