@@ -176,16 +176,11 @@ export default function MenuPage() {
         </div>
 
         {/* ── Hero banner ── */}
-        {bannerUrl ? (
+        {bannerUrl && (
           <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
             style={{ boxShadow: 'var(--shadow-lift)' }}>
             <img src={bannerUrl} alt="" className="w-full h-auto block"
               onError={() => setBannerUrl(null)} />
-          </div>
-        ) : (
-          <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative flex items-center justify-center"
-            style={{ height: 110, background: 'linear-gradient(135deg,#C89B5A 0%,#A97142 60%,#7D5231 100%)', boxShadow: 'var(--shadow-lift)' }}>
-            <p className="text-white font-display font-bold text-xl tracking-wide opacity-90">☕ {storeName}</p>
           </div>
         )}
 
