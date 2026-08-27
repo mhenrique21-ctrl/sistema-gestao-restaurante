@@ -1871,7 +1871,7 @@ export default function App() {
       {id:"tv-telas",label:"Telas",icon:"📺",sub:"telas"},
       {id:"tv-painel",label:"Painel Ao Vivo",icon:"📊",sub:"painel",adminOnly:true},
     ]},
-    {id:"config",label:"Configurações",icon:"🔧"},
+    {id:"config",label:"Configurações de PDV",icon:"🔧"},
   ];
   const orderedStructure=[...menuStructure].sort((a,b)=>{const ai=menuOrder.indexOf(a.id);const bi=menuOrder.indexOf(b.id);return(ai<0?999:ai)-(bi<0?999:bi);});
   const allTabs=orderedStructure.map(m=>({id:m.id,label:m.label,icon:m.icon}));
@@ -15035,7 +15035,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   };
 
   return <div>
-    <div className="section-title" style={{fontSize:16,marginBottom:12}}>🔧 Configurações</div>
+    <div className="section-title" style={{fontSize:16,marginBottom:12}}>🔧 Configurações de PDV</div>
     <div style={{display:"flex",gap:4,marginBottom:14,overflowX:"auto",paddingBottom:4,WebkitOverflowScrolling:"touch" as any}}>
       {subTabs.map(([id,label])=>(
         <button key={id} onClick={()=>setSubTab(id)}
@@ -15130,7 +15130,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           estoque:{label:"Estoque",icon:"📦"},fluxo:{label:"Fluxo de Caixa",icon:"💵"},
           gestao:{label:"Gestão",icon:"⚙️"},agenda:{label:"Encomenda",icon:"📦"},
           "cardapio-tv":{label:"Cardápio TV",icon:"📺"},
-          config:{label:"Configurações",icon:"🔧"},
+          config:{label:"Configurações de PDV",icon:"🔧"},
         };
         const DEFAULT_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","cardapio-tv","config"];
         const order=menuOrder.length===DEFAULT_ORDER.length?menuOrder:DEFAULT_ORDER;
