@@ -179,7 +179,8 @@ export default function MenuPage() {
         {bannerUrl ? (
           <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
             style={{ boxShadow: 'var(--shadow-lift)' }}>
-            <img src={bannerUrl} alt="" className="w-full h-auto block" />
+            <img src={bannerUrl} alt="" className="w-full h-auto block"
+              onError={() => setBannerUrl(null)} />
           </div>
         ) : (
           <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative flex items-center justify-center"
