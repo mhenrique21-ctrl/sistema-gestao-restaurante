@@ -168,12 +168,21 @@ export default function MenuPage() {
           </div>
         </div>
 
-        {/* ── Hero banner ── */}
-        {bannerUrl && (
-          <div className="mx-5 mb-4 rounded-3xl overflow-hidden relative"
-            style={{ boxShadow: 'var(--shadow-lift)' }}>
-            <img src={bannerUrl} alt="" className="w-full h-auto block"
-              onError={() => setBannerUrl(null)} />
+        {/* ── Categorias ── */}
+        {!search && (
+          <div className="flex gap-2.5 px-5 pb-3 overflow-x-auto no-scrollbar">
+            {offers.length > 0 && (
+              <button onClick={() => scrollTo('ofertas')}
+                className={`chip press ${active === 'ofertas' ? 'chip-active' : ''}`}>
+                Ofertas
+              </button>
+            )}
+            {menuSemOfertas.map((cat) => (
+              <button key={cat.id} onClick={() => scrollTo(cat.id)}
+                className={`chip press ${active === cat.id ? 'chip-active' : ''}`}>
+                {cat.name}
+              </button>
+            ))}
           </div>
         )}
 
@@ -196,24 +205,6 @@ export default function MenuPage() {
               style={{ color: 'var(--cream)' }} />
           </div>
         </div>
-
-        {/* ── Categorias ── */}
-        {!search && (
-          <div className="flex gap-2.5 px-5 pb-3 overflow-x-auto no-scrollbar">
-            {offers.length > 0 && (
-              <button onClick={() => scrollTo('ofertas')}
-                className={`chip press ${active === 'ofertas' ? 'chip-active' : ''}`}>
-                Ofertas
-              </button>
-            )}
-            {menuSemOfertas.map((cat) => (
-              <button key={cat.id} onClick={() => scrollTo(cat.id)}
-                className={`chip press ${active === cat.id ? 'chip-active' : ''}`}>
-                {cat.name}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Aviso loja fechada */}
