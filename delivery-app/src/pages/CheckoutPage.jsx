@@ -500,7 +500,7 @@ export default function CheckoutPage() {
           {success.payment_method === 'pix' && success.status === 'aguardando_pagamento' && pixAutoEnabled && success.pix?.qrCode && (
             <StripePixBox qrCodeUrl={success.pix.qrCodeUrl} qrCodeData={success.pix.qrCode} total={parseFloat(success.total)} />
           )}
-          {success.payment_method === 'pix' && success.status === 'aguardando_pagamento' && settings.pix_key && (
+          {success.payment_method === 'pix' && success.status === 'aguardando_pagamento' && settings.pix_key && !pixAutoEnabled && (
             <div style={{ marginTop: 10 }}>
               <PixBox pixKey={settings.pix_key} total={parseFloat(success.total)} />
             </div>
