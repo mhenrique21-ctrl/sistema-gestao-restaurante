@@ -326,7 +326,7 @@ const autoVincularInsumosCompra = (prodsListaIn:any[], mpsTocadas:any[]) => {
     const exato = prodsLista.find((p:any) => foldNome(p.nome) === alvo);
     if (exato) {
       prodsLista = prodsLista.map((p:any) => p.id === exato.id ? { ...p, mpVinculados: [...new Set([...(p.mpVinculados||[]), mp.id])] } : p);
-      autoVinculados.push({ mp: mp.nome, prod: exato.nome });
+      autoVinculados.push({ mp: mp.nome, prod: exato.nome, mpId: mp.id, prodId: exato.id });
       return;
     }
     const parecido = prodsLista.find((p:any) => {
@@ -4967,6 +4967,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [catColaps,setCatColaps]=useState<Set<string>>(new Set());
   const [prodSubTab,setProdSubTab]=useState<"catalogo"|"substituicoes">("catalogo");
   const [showConciliarInsumos,setShowConciliarInsumos]=useState(false);
+  // Vinculos feitos sozinhos pela ultima compra. Ficam visiveis num quadro ate
+  // o admin conferir: antes so existia a contagem no alert ("3 insumo(s)
+  // vinculado(s)"), que sumia sem dizer QUAIS nem deixar voltar atras — um
+  // vinculo errado ficava mudo, jogando o custo da compra no produto errado.
+  const [avisoAuto,setAvisoAuto]=useState<{mp:string,prod:string,mpId?:string,prodId?:string}[]>([]);
+  const desfazerAutoVinculo=(v:{mp:string,prod:string,mpId?:string,prodId?:string})=>{
+    if(!v.mpId||!v.prodId)return;
+    applyBothProdutos(setState,setDb,(d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>
+      p.id===v.prodId?{...p,mpVinculados:(p.mpVinculados||[]).filter((id:string)=>id!==v.mpId)}:p)}));
+    setAvisoAuto(a=>a.filter(x=>x.mpId!==v.mpId));
+  };
   const [showConfigCatsPdv,setShowConfigCatsPdv]=useState(false);
   const toggleCategoriaPdv=(cat:string)=>{
     const atuais=getCategoriasDesligadasPdv(db);
@@ -5162,7 +5173,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(checkDuplicataCompra(db,fornecedor,totalCompraManual,dataCom)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${fornecedor}" com valor similar em ${fmtDate(dataCom)}. Deseja continuar mesmo assim?`))return;
     }
-    let resultoConcilia={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
+    let resultoConcilia={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       const grupoId=uid();
       const novasCompras=carrinho.map(item=>({
@@ -5223,7 +5234,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     // reset
     setCarrinho([]);setFornecedor("");setDataCom(today());setFormaPag("dinheiro");setVencimento(today());
     let msg=`✅ Entrada finalizada!\n${carrinho.length} produto(s) registrado(s) no estoque e financeiro.`;
-    if(resultoConcilia.autoVinculados.length)msg+=`\n\n🔗 ${resultoConcilia.autoVinculados.length} insumo(s) vinculado(s) automaticamente (nome já conhecido).`;
+    if(resultoConcilia.autoVinculados.length){
+      setAvisoAuto(resultoConcilia.autoVinculados);
+      msg+=`\n\n🔗 ${resultoConcilia.autoVinculados.length} insumo(s) vinculado(s) automaticamente — confira no quadro azul de Compras (da pra desfazer).`;
+    }
     if(resultoConcilia.pendentes.length){
       msg+=`\n\n⚠️ ${resultoConcilia.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConcilia.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n");
       setShowConciliarInsumos(true);
@@ -5385,7 +5399,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const _execConfirmarIA=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=iaResult.fornecedor;
     const dataIA=iaResult.data||today();
-    let resultoConciliaIA={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
+    let resultoConciliaIA={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -5439,7 +5453,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setIaResult(null);setIaText("");setImgBase64(null);setImgPreview(null);setNfeXml("");
     setConciliacao(null);
     let msgIA="✅ Cupom importado! Estoque e financeiro atualizados.";
-    if(resultoConciliaIA.autoVinculados.length)msgIA+=`\n\n🔗 ${resultoConciliaIA.autoVinculados.length} insumo(s) vinculado(s) automaticamente (nome já conhecido).`;
+    if(resultoConciliaIA.autoVinculados.length){
+      setAvisoAuto(resultoConciliaIA.autoVinculados);
+      msgIA+=`\n\n🔗 ${resultoConciliaIA.autoVinculados.length} insumo(s) vinculado(s) automaticamente — confira no quadro azul de Compras (da pra desfazer).`;
+    }
     if(resultoConciliaIA.pendentes.length){
       msgIA+=`\n\n⚠️ ${resultoConciliaIA.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConciliaIA.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n");
       setShowConciliarInsumos(true);
@@ -5502,7 +5519,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const _execConfirmarNFe=(resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=nfeResult.fornecedor;
     const dataNFe=nfeResult.data||today();
-    let resultoConciliaNFe={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
+    let resultoConciliaNFe={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -5563,7 +5580,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(nfeRef.current)(nfeRef.current as HTMLInputElement).value="";
     setConciliacao(null);
     let msgNFe=`✅ NF-e importada! ${qtdItens} produto(s) registrado(s).`;
-    if(resultoConciliaNFe.autoVinculados.length)msgNFe+=`\n\n🔗 ${resultoConciliaNFe.autoVinculados.length} insumo(s) vinculado(s) automaticamente (nome já conhecido).`;
+    if(resultoConciliaNFe.autoVinculados.length){
+      setAvisoAuto(resultoConciliaNFe.autoVinculados);
+      msgNFe+=`\n\n🔗 ${resultoConciliaNFe.autoVinculados.length} insumo(s) vinculado(s) automaticamente — confira no quadro azul de Compras (da pra desfazer).`;
+    }
     if(resultoConciliaNFe.pendentes.length){
       msgNFe+=`\n\n⚠️ ${resultoConciliaNFe.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConciliaNFe.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n");
       setShowConciliarInsumos(true);
@@ -5804,7 +5824,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const _execImportarNFeSefaz=(nfe:any,all:boolean,resolucoesNome:Record<string,string>,vinculos:Record<string,ConciliacaoVinculo>={})=>{
     const forn=nfe.fornecedor;
     const dataSefaz=nfe.data||today();
-    let resultoConciliaSefaz={autoVinculados:[] as {mp:string,prod:string}[],pendentes:[] as {mp:string,prod:string}[]};
+    let resultoConciliaSefaz={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
       if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
@@ -6664,6 +6684,23 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
           </div>
         </div>
+
+        {avisoAuto.length>0&&<div className="card" style={{marginBottom:14,border:"2px solid #3B82F6",background:"#3B82F60D"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+            <div style={{fontSize:13.5,fontWeight:800,color:"#2563EB",flex:1}}>🔗 {avisoAuto.length} insumo(s) vinculado(s) automaticamente</div>
+            <button onClick={()=>setAvisoAuto([])} className="btn" style={{background:"none",border:"1px solid var(--border2)",color:"var(--text2)",padding:"5px 12px",fontSize:11.5,flexShrink:0}}>Conferi, fechar</button>
+          </div>
+          <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:12,lineHeight:1.5}}>
+            O nome batia exatamente com um produto da Lista de Compras, então o vínculo foi feito sozinho. Confira: é ele que decide em qual produto o custo desta compra vai cair.
+          </div>
+          {avisoAuto.map((v,i)=><div key={(v.mpId||"")+i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:i?"1px solid var(--border)":"none"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{v.mp}</div>
+              <div style={{fontSize:11,color:"var(--text2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>→ {v.prod}</div>
+            </div>
+            <button onClick={()=>desfazerAutoVinculo(v)} className="btn" style={{background:"none",border:"1px solid #EF4444",color:"#EF4444",padding:"5px 12px",fontSize:11.5,flexShrink:0}}>Desfazer</button>
+          </div>)}
+        </div>}
 
         {/* Conciliar Insumos: liga matérias-primas "soltas" a um produto da Lista de Compras */}
         {insumosSoltos.length>0&&<div style={{display:"flex",alignItems:"center",gap:12,background:"#FEF3C7",border:"1px solid #F59E0B55",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
