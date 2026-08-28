@@ -16339,12 +16339,19 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🔧 Manutenção</div>
         <button className="btn" onClick={()=>{
-          if(!confirm("Limpar o cache de NF-es e forçar re-download na próxima sync?"))return;
-          fetch("/api/nfe-cache/clear",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})}).then(()=>alert("✅ Cache limpo!")).catch(e=>alert("Erro: "+e.message));
+          // Limpar o cache sozinho NÃO traz as notas de volta: a SEFAZ não
+          // reenvia NSU já consumido. O botão antigo prometia isso e descartava
+          // as notas de vez — foi como as 25 do Confraria sumiram. Zerar o NSU
+          // junto é o que torna a promessa verdadeira.
+          if(!confirm("Rebaixar todas as NF-es do zero?\n\nLimpa o cache E volta o NSU para 0. Sem zerar o NSU as notas NAO voltam — a SEFAZ nao reenvia NSU ja consumido.\n\nA proxima varredura rebaixa tudo o que a SEFAZ ainda guarda (cerca de 90 dias), o que leva varios ciclos de 65 min."))return;
+          Promise.all([
+            fetch("/api/nfe-cache/clear",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})}),
+            fetch(`/api/nsu-status?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nsu:0})}),
+          ]).then(()=>{setSefazNSU(0);setSefazNsuInput("0");alert("✅ Cache limpo e NSU zerado. A proxima varredura rebaixa tudo.");}).catch(e=>alert("Erro: "+e.message));
         }} style={{background:"#F3E8FF",color:"var(--btnDanger)",border:"1px solid #EF444440",padding:"10px",width:"100%",fontSize:12,marginBottom:6}}>
-          🗑️ Limpar Cache SEFAZ ({empresa})
+          🔄 Rebaixar todas as NF-es ({empresa})
         </button>
-        <div className="muted" style={{fontSize:11}}>Remove NF-es em cache. Na próxima sincronização, todas serão buscadas novamente a partir do NSU atual.</div>
+        <div className="muted" style={{fontSize:11}}>Limpa o cache e volta o NSU para 0, que é o que faz as notas realmente voltarem — a SEFAZ não reenvia NSU já consumido. Antes, limpar sozinho descartava as notas de vez.</div>
       </div>
     </div>}
 
