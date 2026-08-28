@@ -2667,7 +2667,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
           <div className="muted" style={{fontSize:flbl(10),marginTop:2}}>Custo com marketplaces</div>
           <div className="muted" style={{fontSize:flbl(9),marginTop:1}}>{custoMarketplacesPct.toFixed(1)}% do faturamento — comissão iFood + 99Food</div>
         </div>,
-        cmv:()=><div className="card" style={{background:"#DBEAFE",border:"1px solid #0EA5E940",cursor:isMobile?"pointer":undefined}} onClick={isMobile?()=>setChartAmpliado("cmv"):undefined}>
+        cmv:()=><div className="card" style={{background:"var(--infoBg)",border:"1px solid #0EA5E940",cursor:isMobile?"pointer":undefined}} onClick={isMobile?()=>setChartAmpliado("cmv"):undefined}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
               <div className="muted" style={{marginBottom:4}}>CMV no Período{expandHint}</div>
@@ -3123,7 +3123,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
     <div className="section-title">Lançar Vendas do Dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
       <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:editId?4:10}}/>
-      {editId&&<div style={{fontSize:11,color:"#15803D",background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 10px",marginBottom:10,fontWeight:600}}>✏️ Editando o lançamento já existente de {fmtDate(form.data)} — os campos abaixo vieram do que já estava salvo.</div>}
+      {editId&&<div style={{fontSize:11,color:"var(--successText)",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 10px",marginBottom:10,fontWeight:600}}>✏️ Editando o lançamento já existente de {fmtDate(form.data)} — os campos abaixo vieram do que já estava salvo.</div>}
       <div style={{marginBottom:10}}>
         <input ref={iaCombRef} type="file" accept="image/*" multiple onChange={e=>{addCombFiles(e.target.files);if(iaCombRef.current)iaCombRef.current.value="";}} style={{display:"none"}}/>
         <input ref={iaCombCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addCombFiles(e.target.files);if(iaCombCamRef.current)iaCombCamRef.current.value="";}} style={{display:"none"}}/>
@@ -3225,11 +3225,11 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       {aj.canalVendasExtras&&<div style={{marginBottom:8}}>
         <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legVendasExtras}</label>
         {deliverySincronizado?<>
-          <div style={{display:"flex",alignItems:"center",gap:6,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"7px 10px",marginBottom:6,fontSize:11,color:"#15803D",fontWeight:700}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"7px 10px",marginBottom:6,fontSize:11,color:"var(--successText)",fontWeight:700}}>
             🔄 Sincronizado automaticamente do delivery
             <button onClick={()=>{setDeliveryManual(true);setForm(f=>({...f,delivery:String((vendaSincronizada.delivery||0).toFixed(2)).replace(".",",")}));}} style={{marginLeft:"auto",background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"underline",padding:0}}>editar</button>
           </div>
-          <input readOnly value={fmtMoney(vendaSincronizada.delivery||0)} className="inp" style={{color:"#15803D",fontWeight:700}}/>
+          <input readOnly value={fmtMoney(vendaSincronizada.delivery||0)} className="inp" style={{color:"var(--successText)",fontWeight:700}}/>
         </>:<>
           <MoneyInput value={form.delivery} onChange={v=>{setDeliveryManual(true);setForm(f=>({...f,delivery:v}));}} className="inp"/>
           {deliveryManual&&vendaSincronizada&&(vendaSincronizada.delivery||0)>0&&
@@ -3247,7 +3247,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           if(existente){setForm(formDeRegistro(existente));}
           else{setEditId(null);setForm(emptyForm());}
         }} style={{flex:1,background:"var(--border)",color:"#888",padding:"10px",fontSize:13}}>Cancelar</button>
-        <button className="btn" onClick={()=>del(editId)} style={{flex:1,background:"#F3E8FF",color:"var(--btnDanger)",padding:"10px",fontSize:13}}>🗑️ Excluir este dia</button>
+        <button className="btn" onClick={()=>del(editId)} style={{flex:1,background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"10px",fontSize:13}}>🗑️ Excluir este dia</button>
       </div>}
     </div>
 
@@ -3272,7 +3272,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
             <tbody>${rows}</tbody>
             <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(total)}</td></tr></tfoot>
           </table>`));
-      }} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🖨️ {aj.legBotaoImprimir}</button>
+      }} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:12}}>🖨️ {aj.legBotaoImprimir}</button>
     </div>
     {(()=>{const q=busca.toLowerCase();const sortKey=(db.config?.sortPrefs||{})['vendas']||'data-desc';const vendasFiltradas=sortList((db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))),db,'vendas','data-desc');return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
@@ -3282,12 +3282,12 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(v.total)}</span>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-          {v.maquininha>0&&<span className="tag" style={{background:"#DCFCE7",color:"#15803D"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
-          {v.dinheiro>0&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
-          {v.ifood>0&&<span className="tag" style={{background:"#FEE2E2",color:"#B91C1C"}}>
+          {v.maquininha>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
+          {v.dinheiro>0&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
+          {v.ifood>0&&<span className="tag" style={{background:"var(--dangerBg)",color:"var(--dangerText)"}}>
             iFood: {fmtMoney(v.ifood)}{v.ifoodTaxa>0?` (-${v.ifoodTaxa}%→${fmtMoney(v.ifoodLiq??v.ifood)})`:""}
           </span>}
-          {v["99food"]>0&&<span className="tag" style={{background:"#FEF3C7",color:"#B45309"}}>
+          {v["99food"]>0&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>
             99food: {fmtMoney(v["99food"])}{v.nfoodTaxa>0?` (-${v.nfoodTaxa}%→${fmtMoney(v.nfoodLiq??v["99food"])})`:""}
           </span>}
           {v.delivery>0&&<span className="tag" style={{background:"#F3E8DC",color:"#78350F"}}>vendas extras: {fmtMoney(v.delivery)}</span>}
@@ -3297,7 +3297,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         </div>}
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-          <button className="btn" onClick={()=>del(v.id)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
+          <button className="btn" onClick={()=>del(v.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {v.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(v.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;
@@ -3663,9 +3663,9 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
   if(reciboGerado){
     const cfg=getImpressaoCfg(db);
     return <div style={{maxWidth:480,margin:"0 auto"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:"11px 14px",marginBottom:18}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:10,padding:"11px 14px",marginBottom:18}}>
         <span style={{fontSize:22}}>✅</span>
-        <span style={{fontSize:13,color:"#15803D",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → {aj.legVendasExtras} de {fmtDate(reciboGerado.data)}.</span>
+        <span style={{fontSize:13,color:"var(--successText)",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → {aj.legVendasExtras} de {fmtDate(reciboGerado.data)}.</span>
       </div>
       <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,color:"var(--text2)",textTransform:"uppercase" as const,marginBottom:2}}>{impressaoNome(cfg,empresa||"Seama")}</div>
       <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>Recibo de Venda #{formatarNumeroRecibo(reciboGerado.numero,aj)}</div>
@@ -3679,7 +3679,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
       </div>)}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",paddingTop:14,marginTop:4}}>
         <span style={{fontSize:13,fontWeight:800,textTransform:"uppercase" as const,letterSpacing:.5}}>Total</span>
-        <span style={{fontSize:26,fontWeight:800,color:"#15803D"}}>{fmtMoney(reciboGerado.total)}</span>
+        <span style={{fontSize:26,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(reciboGerado.total)}</span>
       </div>
       <div style={{display:"flex",gap:10,marginTop:20}}>
         <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado,cfg,aj,empresa))}`,"_blank")} className="btn" style={{flex:1,background:"#25d366",color:"#fff",padding:12,fontSize:13,fontWeight:800}}>📲 Enviar por WhatsApp</button>
@@ -3753,7 +3753,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
       {/* Itens da venda */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
         <span style={{fontSize:12,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5}}>Itens da venda</span>
-        {!!itensVenda.length&&<span style={{fontSize:11,fontWeight:800,background:"#7C3AED",color:"#fff",borderRadius:999,padding:"2px 9px"}}>{itensVenda.length}</span>}
+        {!!itensVenda.length&&<span style={{fontSize:11,fontWeight:800,background:"var(--categoryText)",color:"#fff",borderRadius:999,padding:"2px 9px"}}>{itensVenda.length}</span>}
       </div>
       <div className="card" style={{marginBottom:18,padding:0}}>
         {!itensVenda.length
@@ -3802,7 +3802,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
             <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>Total</span>
             <span style={{fontSize:22,fontWeight:800}}>{fmtMoney(totalVenda)}</span>
           </div>
-          <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"#7C3AED",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
+          <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"var(--categoryText)",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
           <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → {aj.legVendasExtras}</b> de {fmtDate(dataVenda||today())}.</div>
         </div>
       </div>
@@ -3936,9 +3936,9 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
           </div>
           <div style={{fontSize:11,color:"var(--text2)",marginTop:2}}>{fmtDate(r.data)} · {(r.itens||[]).length} {(r.itens||[]).length===1?"item":"itens"}</div>
         </div>
-        <div style={{fontSize:16,fontWeight:800,color:"#15803D"}}>{fmtMoney(r.total)}</div>
+        <div style={{fontSize:16,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(r.total)}</div>
       </div>
-      {aj.mostrarChipVendasExtras&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E55"}:{background:"#FEF3C7",color:"#B45309",border:"1px solid #FDE68A"})}}>
+      {aj.mostrarChipVendasExtras&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E55"}:{background:"#FEF3C7",color:"#B45309",border:"1px solid #FDE68A"})}}>
         {r.lancadoEmVendas&&r.valorLancado>0?`✓ Em ${aj.legVendasExtras}`:"⚠️ Não lançado"}
       </span>}
       <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap" as const}}>
@@ -4017,12 +4017,12 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
     return <div>
       <BackBar label={aj.legVendasExtras} onClick={()=>setTipoEdicao(null)}/>
       {lancado
-        ? <div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:14,marginBottom:16}}>
-            <div style={{fontWeight:800,fontSize:13,color:"#15803D"}}>✓ Lançado em {aj.legVendasExtras}</div>
+        ? <div style={{background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:10,padding:14,marginBottom:16}}>
+            <div style={{fontWeight:800,fontSize:13,color:"var(--successText)"}}>✓ Lançado em {aj.legVendasExtras}</div>
             <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>{fmtMoney(recibo.valorLancado)} somado em {fmtDate(recibo.data)}. Editou os itens? Use "Editar Itens" pra reenviar o valor certo.</div>
           </div>
-        : <div style={{background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:10,padding:14,marginBottom:16}}>
-            <div style={{fontWeight:800,fontSize:13,color:"#B45309"}}>⚠️ Ainda não lançado em {aj.legVendasExtras}</div>
+        : <div style={{background:"var(--warningBg)",border:"1px solid #FDE68A",borderRadius:10,padding:14,marginBottom:16}}>
+            <div style={{fontWeight:800,fontSize:13,color:"var(--warningText)"}}>⚠️ Ainda não lançado em {aj.legVendasExtras}</div>
             <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>Recibos não entram automaticamente aqui — use o botão abaixo pra somar {fmtMoney(recibo.total)} no dia {fmtDate(recibo.data)}.</div>
           </div>}
       <button disabled={lancado} onClick={()=>onSalvarComVendas({},recibo.total)} style={{width:"100%",background:lancado?"var(--border2)":"var(--btnPrimary)",color:lancado?"var(--text2)":"white",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:lancado?"default":"pointer",fontSize:14}}>{lancado?"✓ Já lançado":`💵 Lançar em ${aj.legVendasExtras}`}</button>
@@ -4037,7 +4037,7 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
         <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Total (com desconto se houver)</label>
         <input className="inp" type="number" step="0.01" value={totalEdit} onChange={e=>setTotalEdit(e.target.value)} placeholder="0.00" style={{marginBottom:0}}/>
       </div>
-      <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,padding:"12px",marginBottom:16,fontSize:12}}>
+      <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,padding:"12px",marginBottom:16,fontSize:12}}>
         <div style={{display:"flex",justifyContent:"space-between"}}>
           <span>Total original:</span>
           <strong>R$ {(recibo.total||0).toFixed(2).replace(".",",")}</strong>
@@ -4065,7 +4065,7 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
   if(tipoEdicao==="devolver"){
     return <div>
       <BackBar label="Devolver/Cancelar" onClick={()=>setTipoEdicao(null)}/>
-      <div style={{background:"#fee2e2",border:"1px solid #fecaca",borderRadius:8,padding:"12px",marginBottom:16}}>
+      <div style={{background:"var(--dangerBg)",border:"1px solid #fecaca",borderRadius:8,padding:"12px",marginBottom:16}}>
         <div style={{fontWeight:700,color:"#dc2626",marginBottom:4}}>⚠️ Ação irreversível</div>
         <div style={{fontSize:12,color:"#991b1b"}}>Isso marcará o recibo como devolvido/cancelado.</div>
       </div>
@@ -4115,7 +4115,7 @@ function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,on
       <div key={idx} style={{border:"1px solid var(--border)",borderRadius:12,padding:11,marginBottom:8,background:"var(--bg4)"}}>
         <div style={{display:"flex",gap:8,marginBottom:8}}>
           <input className="inp" value={item.nome} onChange={e=>atualizarItem(idx,"nome",e.target.value)} placeholder="Produto" style={{marginBottom:0,flex:1,fontSize:13}}/>
-          <button onClick={()=>removerItem(idx)} style={{width:36,height:36,flexShrink:0,background:"var(--card)",border:"1px solid #dc262644",borderRadius:8,color:"#dc2626",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          <button onClick={()=>removerItem(idx)} style={{width:36,height:36,flexShrink:0,background:"var(--bg3)",border:"1px solid #dc262644",borderRadius:8,color:"#dc2626",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
         <div style={{display:"flex",gap:8}}>
           <div style={{flex:1}}>
@@ -4127,7 +4127,7 @@ function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,on
             <input className="inp" value={item.precoUnit} onChange={e=>atualizarItem(idx,"precoUnit",e.target.value)} style={{marginBottom:0,fontSize:13,fontFamily:"monospace"}}/>
           </div>
         </div>
-        <div style={{fontSize:11,fontWeight:700,color:"#15803D",textAlign:"right" as const,marginTop:6}}>Subtotal: {fmtMoney(item.subtotal||0)}</div>
+        <div style={{fontSize:11,fontWeight:700,color:"var(--successText)",textAlign:"right" as const,marginTop:6}}>Subtotal: {fmtMoney(item.subtotal||0)}</div>
       </div>
     ))}
     {!itens.length&&<div style={{fontSize:12,color:"var(--text2)",textAlign:"center" as const,padding:"12px 0"}}>Nenhum item — adicione abaixo.</div>}
@@ -4149,7 +4149,7 @@ function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,on
       </div>}
       <div style={{fontSize:12,display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
         <span style={{color:"var(--text2)"}}>{jaLancado?"Novo valor":"Valor a lançar"}</span>
-        <strong style={{color:"#15803D",fontSize:14}}>{fmtMoney(novoTotal)}</strong>
+        <strong style={{color:"var(--successText)",fontSize:14}}>{fmtMoney(novoTotal)}</strong>
       </div>
       <button disabled={!itens.length} onClick={()=>onSalvarComVendas({itens,total:novoTotal},novoTotal)} style={{width:"100%",background:!itens.length?"var(--border2)":"var(--btnPrimary)",color:!itens.length?"var(--text2)":"var(--onPrimary,#FFFFFF)",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:!itens.length?"default":"pointer",fontSize:14,marginTop:10}}>{jaLancado?`Salvar e substituir em ${aj.legVendasExtras}`:`Salvar e lançar em ${aj.legVendasExtras}`}</button>
     </div>
@@ -4205,7 +4205,7 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
 
     <div className="card" style={{marginBottom:16,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
       <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>{recibos.length} recibo(s) no período</span>
-      <span style={{fontSize:24,fontWeight:800,color:"#15803D"}}>{fmtMoney(totalPeriodo)}</span>
+      <span style={{fontSize:24,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(totalPeriodo)}</span>
     </div>
 
     {relTab==="cliente"&&(()=>{
@@ -4321,14 +4321,14 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
       const pendentes=recibos.filter((r:any)=>!(r.lancadoEmVendas&&r.valorLancado>0));
       const totalPendente=pendentes.reduce((s:number,r:any)=>s+(r.total||0),0);
       return <>
-        <div className="card" style={{marginBottom:16,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"baseline",background:"#FEF3C7",border:"1px solid #FDE68A"}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#B45309",textTransform:"uppercase" as const}}>{pendentes.length} recibo(s) pendente(s)</span>
-          <span style={{fontSize:20,fontWeight:800,color:"#B45309"}}>{fmtMoney(totalPendente)}</span>
+        <div className="card" style={{marginBottom:16,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"baseline",background:"var(--warningBg)",border:"1px solid #FDE68A"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"var(--warningText)",textTransform:"uppercase" as const}}>{pendentes.length} recibo(s) pendente(s)</span>
+          <span style={{fontSize:20,fontWeight:800,color:"var(--warningText)"}}>{fmtMoney(totalPendente)}</span>
         </div>
         {!pendentes.length&&<EmptyState msg={`Nenhum recibo pendente — tudo lançado em ${aj.legVendasExtras}. 🎉`}/>}
         {pendentes.sort((a:any,b:any)=>a.data<b.data?-1:1).map((r:any)=><div key={r.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
           <span style={{fontSize:13}}>#{formatarNumeroRecibo(r.numero,aj)} · {r.clienteNome} <span style={{color:"var(--text2)",fontSize:11}}>({fmtDate(r.data)})</span></span>
-          <span style={{fontWeight:700,color:"#B45309"}}>{fmtMoney(r.total)}</span>
+          <span style={{fontWeight:700,color:"var(--warningText)"}}>{fmtMoney(r.total)}</span>
         </div>)}
       </>;
     })()}
@@ -4408,7 +4408,7 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
       const semFicha=linhas.filter((l:any)=>l.custo==null).length;
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Margem por produto</div>
-        {semFicha>0&&<div style={{fontSize:11,color:"#B45309",marginBottom:10}}>⚠️ {semFicha} produto(s) sem ficha técnica cadastrada — margem não calculada pra eles</div>}
+        {semFicha>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>⚠️ {semFicha} produto(s) sem ficha técnica cadastrada — margem não calculada pra eles</div>}
         {!linhas.length&&<EmptyState msg="Nenhum item vendido no período."/>}
         {linhas.map((l:any)=><div key={l.nome} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
           <span style={{fontSize:13}}>{l.nome} <span style={{color:"var(--text2)",fontSize:11}}>({l.qtd})</span></span>
@@ -4661,7 +4661,7 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
                 </div>
                 {marcasLinkadas.length>0&&<div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginLeft:20}}>
                   {marcasLinkadas.map((m:any)=><span key={m.id} style={{fontSize:10,background:"var(--bg2)",border:"1px solid var(--border2)",borderRadius:20,padding:"2px 8px",color:"var(--text2)"}}>{m.nome}</span>)}
-                  <span style={{fontSize:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:20,padding:"2px 8px",color:"#15803D",fontWeight:700}}>+ {it.nome} (esta compra)</span>
+                  <span style={{fontSize:10,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:20,padding:"2px 8px",color:"var(--successText)",fontWeight:700}}>+ {it.nome} (esta compra)</span>
                 </div>}
                 <button onClick={()=>desfazer(key)} style={{marginTop:6,fontSize:11,background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",padding:"3px 8px",cursor:"pointer"}}>Desfazer</button>
               </div>}
@@ -4687,8 +4687,8 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
               </div>
             </div>}
 
-            {isCadastrando&&<div style={{padding:"10px",borderTop:"1px solid #FDE68A",background:"#FEF3C7"}}>
-              <div style={{fontSize:11,color:"#B45309",fontWeight:700,marginBottom:8}}>✏️ Sem produto parecido — confira os nomes antes de cadastrar</div>
+            {isCadastrando&&<div style={{padding:"10px",borderTop:"1px solid #FDE68A",background:"var(--warningBg)"}}>
+              <div style={{fontSize:11,color:"var(--warningText)",fontWeight:700,marginBottom:8}}>✏️ Sem produto parecido — confira os nomes antes de cadastrar</div>
               <div style={{marginBottom:8}}>
                 <label style={{fontSize:9.5,color:"#92400E",textTransform:"uppercase" as const,fontWeight:700,display:"block",marginBottom:3}}>Produto da Lista (genérico)</label>
                 <input value={novoForm.nome} onChange={(e:any)=>setNovoForm(f=>({...f,nome:e.target.value}))} className="inp" style={{fontSize:12.5}}/>
@@ -4891,7 +4891,7 @@ function ConsumoInsumos({db,setSubTab}:{db:any,setSubTab:(s:string)=>void}){
     </div>
 
     {subiram.length>0&&<div className="card" style={{marginBottom:12,background:"#FEF2F2",border:"1px solid #FECACA"}}>
-      <div style={{fontSize:12,fontWeight:700,color:"#B91C1C",marginBottom:5}}>⚠️ {subiram.length} insumo(s) com gasto mais de 20% acima</div>
+      <div style={{fontSize:12,fontWeight:700,color:"var(--dangerText)",marginBottom:5}}>⚠️ {subiram.length} insumo(s) com gasto mais de 20% acima</div>
       <div style={{fontSize:11,color:"#7F1D1D",lineHeight:1.7}}>
         {subiram.slice(0,6).map(l=>`${l.nome} (+${l.varValor!.toFixed(0)}%)`).join(" · ")}
         {subiram.length>6?` e mais ${subiram.length-6}`:""}
@@ -6065,9 +6065,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Valor Total do Item</label>
             <MoneyInput value={itemAtual.valorTotal} onChange={v=>setItemAtual(i=>({...i,valorTotal:v}))} className="inp"/>
           </div>
-          {qtdEmbalConvertida>0&&valorTotalEmbal>0&&<div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:11.5}}>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span style={{color:"#555"}}>Convertido pra</span><b style={{color:"#15803D"}}>{qtdEmbalConvertida}{mpDoItemAtual.unidade}</b></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span style={{color:"#555"}}>Valor por {mpDoItemAtual.unidade}</span><b style={{color:"#15803D"}}>{fmtMoney(valorUnitEmbalConvertido)}</b></div>
+          {qtdEmbalConvertida>0&&valorTotalEmbal>0&&<div style={{background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:11.5}}>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span style={{color:"#555"}}>Convertido pra</span><b style={{color:"var(--successText)"}}>{qtdEmbalConvertida}{mpDoItemAtual.unidade}</b></div>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}><span style={{color:"#555"}}>Valor por {mpDoItemAtual.unidade}</span><b style={{color:"var(--successText)"}}>{fmtMoney(valorUnitEmbalConvertido)}</b></div>
           </div>}
         </>:<>
           <div className="row" style={{marginBottom:8}}>
@@ -6113,7 +6113,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontWeight:700,color:"#1D4ED8",fontSize:14}}>{fmtMoney(parseMoney(item.valorTotal))}</span>
+              <span style={{fontWeight:700,color:"var(--infoText)",fontSize:14}}>{fmtMoney(parseMoney(item.valorTotal))}</span>
               <button className="btn" onClick={()=>remItem(item.id)} style={{background:"transparent",color:"var(--btnDanger)",fontSize:18,padding:"0 4px"}}>✕</button>
             </div>
           </div>
@@ -6138,7 +6138,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           {pctProjetadoNoDia>100&&<div style={{fontSize:11,color:"var(--btnDanger)",marginTop:6,fontWeight:600}}>⚠️ Essa entrada leva o dia a {fmtMoney(projetadoNoDia-budgetDoDiaCompra)} acima do budget — não deveria ultrapassar {fmtMoney(budgetDoDiaCompra)}.</div>}
         </div>}
         {/* resumo financeiro */}
-        <div style={{background:"#DBEAFE",borderRadius:10,padding:"12px",marginBottom:12,border:"1px solid #0EA5E940"}}>
+        <div style={{background:"var(--infoBg)",borderRadius:10,padding:"12px",marginBottom:12,border:"1px solid #0EA5E940"}}>
           <div style={{fontSize:12,color:"var(--btnPrimary)",fontWeight:700,marginBottom:6}}>📋 LANÇAMENTO NO FINANCEIRO</div>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
             <span className="muted">Forma de pagamento</span>
@@ -6192,7 +6192,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <input ref={fileGalRef} type="file" accept="image/*,application/pdf" onChange={handleFile} style={{display:"none"}}/>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFile} style={{display:"none"}}/>
         </div>
-        <div className="camera-zone" onClick={()=>xmlIaRef.current?.click()} style={{flex:1,marginBottom:0,background:"#DCFCE7",borderColor:"#14532d"}}>
+        <div className="camera-zone" onClick={()=>xmlIaRef.current?.click()} style={{flex:1,marginBottom:0,background:"var(--successBg)",borderColor:"#14532d"}}>
           <div style={{fontSize:36,marginBottom:8}}>📄</div>
           <div style={{fontWeight:600,marginBottom:4,color:"#22C55E"}}>XML NF-e</div>
           <div className="muted" style={{fontSize:12}}>Anexar XML</div>
@@ -6217,14 +6217,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
                 <span style={{fontWeight:600,fontSize:13,textDecoration:item.removido?"line-through":"none"}}>{item.nome}</span>
-                <span style={{color:"#1D4ED8",fontWeight:700,textDecoration:item.removido?"line-through":"none",whiteSpace:"nowrap" as const}}>{fmtMoney(item.valorTotal||0)}</span>
+                <span style={{color:"var(--infoText)",fontWeight:700,textDecoration:item.removido?"line-through":"none",whiteSpace:"nowrap" as const}}>{fmtMoney(item.valorTotal||0)}</span>
               </div>
               <div className="muted">{item.removido?"removido":<>{item.quantidade} {item.unidade} •
                 <span className="tag" style={{background:"#DCFCE7",color:"#22C55E",marginLeft:6,fontSize:10}}>{item.categoria}</span></>}
               </div>
             </div>
             <button onClick={()=>toggleItemIA(i)} title={item.removido?"Desfazer":"Remover item"}
-              style={{width:30,height:30,flexShrink:0,background:"var(--card)",border:`1px solid ${item.removido?"var(--border2)":"#dc262644"}`,borderRadius:8,color:item.removido?"var(--text2)":"#dc2626",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              style={{width:30,height:30,flexShrink:0,background:"var(--bg3)",border:`1px solid ${item.removido?"var(--border2)":"#dc262644"}`,borderRadius:8,color:item.removido?"var(--text2)":"#dc2626",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>
               {item.removido?"↩":"✕"}
             </button>
           </div>
@@ -6255,7 +6255,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     {/* ===== NF-e SEFAZ ===== */}
     {subTab==="nfe"&&<div>
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
-      <div style={{background:"#DCFCE7",border:"1px solid #22C55E40",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
+      <div style={{background:"var(--successBg)",border:"1px solid #22C55E40",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:14,color:"#22C55E",marginBottom:4}}>📄 Importação Automática via SEFAZ</div>
         <div style={{fontSize:11,color:"#6b7280",marginBottom:10}}>CNPJ: 58.564.214/0001-70 · Certificado A1 configurado</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
@@ -6271,7 +6271,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       </div>
 
       {/* Baixar nota rápido por chave */}
-      <div style={{background:"#DBEAFE",border:"2px solid #f59e0b44",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
+      <div style={{background:"var(--infoBg)",border:"2px solid #f59e0b44",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:14,color:"#f59e0b",marginBottom:4}}>⚡ Baixar Nota Rápido</div>
         <div style={{fontSize:11,color:"#9ca3af",marginBottom:8}}>Cole a chave de 44 dígitos — tenta baixar o XML direto. Se não disponível, manifesta e aguarda.</div>
         <input value={chaveConsultaInput} onChange={e=>{const v=e.target.value.replace(/\D/g,'').slice(0,44);setChaveConsultaInput(v);setChaveConsultaError("");setChaveConsultaResult(null);}}
@@ -6394,7 +6394,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             return{...d,compras:[],contas:(d.contas||[]).filter((c:any)=>!grupos.includes(c.grupoId)),materiasPrimas,movEstoque};
           });
           alert("✅ Histórico de compras e lançamentos financeiros apagados.");
-        }} style={{background:"#FEE2E2",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
+        }} style={{background:"var(--dangerBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️ Apagar tudo</button>}
       </div>
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
         <div style={{position:"relative",flex:1}}><input placeholder="🔍 Buscar fornecedor ou produto..." value={buscaHist} onChange={e=>setBuscaHist(e.target.value)} className="inp" style={{paddingRight:buscaHist?36:14,marginBottom:0}}/>{buscaHist&&<button onClick={()=>setBuscaHist("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
@@ -6448,14 +6448,14 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   <div style={{fontSize:11,color:"#888",marginTop:2,display:"flex",gap:8}}>
                     <span>{fmtDate(nota.data)}</span>
                     <span>{nota.itens.length} {nota.itens.length===1?"item":"itens"}</span>
-                    {nota.origem==="ia"&&<span style={{color:"#8B5CF6"}}>IA</span>}
-                    {nota.origem==="nfe"&&<span style={{color:"#1D4ED8"}}>NF-e</span>}
+                    {nota.origem==="ia"&&<span style={{color:"var(--category)"}}>IA</span>}
+                    {nota.origem==="nfe"&&<span style={{color:"var(--infoText)"}}>NF-e</span>}
                     {nota.origem==="sefaz"&&<span style={{color:"var(--btnPrimary)"}}>SEFAZ</span>}
                     {nota.origem==="manual"&&<span style={{color:"#22C55E"}}>Manual</span>}
                   </div>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontWeight:700,color:"#1D4ED8",fontSize:14}}>{fmtMoney(open?totalVivo:nota.total)}</div>
+                  <div style={{fontWeight:700,color:"var(--infoText)",fontSize:14}}>{fmtMoney(open?totalVivo:nota.total)}</div>
                   <div style={{fontSize:11,color:"#555",marginTop:2}}>{open?"▲":"▼"}</div>
                 </div>
               </div>
@@ -6517,7 +6517,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                           <div style={{fontSize:10,color:"#555"}}>{item.categoria}{item.valorUnitario>0?` · ${fmtMoney(item.valorUnitario)}/${item.unidade}`:""}</div>
                         </div>
                         <span style={{fontSize:12,color:"#aaa",textAlign:"right"}}>{item.quantidade||1} {item.unidade}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:"#1D4ED8",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:"var(--infoText)",textAlign:"right"}}>{fmtMoney(parseMoney(item.valor))}</span>
                         <button onClick={async e=>{e.stopPropagation();if(!confirm(`Excluir "${item.nomeProduto}"?\n\nA quantidade lançada no estoque será devolvida${EMPRESAS_COM_PDV.includes(empresa)?" (aqui e no PDV)":""}.`))return;const gid=nota.grupoId;if(EMPRESAS_COM_PDV.includes(empresa)){try{await estornarCompraSeama(empresa,gid,[item.nomeProduto],{silencioso:true});}catch(err:any){if(!confirm(`⚠️ Não consegui estornar no PDV: ${err.message}\n\nO estoque do PDV vai ficar MAIOR que a realidade até você corrigir lá manualmente.\n\nExcluir mesmo assim?`))return;}}_listaDeletados.add(item.id);(setDbAndSave||setDb)(d=>{const compras=d.compras.filter(c=>c.id!==item.id);const novoTotal=compras.filter(c=>(c.grupoId||c.id)===gid).reduce((s,c)=>s+parseMoney(c.valor),0);const estorno=estornarEstoqueGestao(d,gid,[item.nomeProduto]);return{...d,compras,contas:(d.contas||[]).map(c=>c.grupoId===gid?{...c,valor:novoTotal}:c),...estorno};});}}
                           style={{background:"none",border:"none",color:"#EF444455",fontSize:14,cursor:"pointer",padding:0,textAlign:"center"}}>🗑️</button>
                       </div>
@@ -6535,7 +6535,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         <p><b>Fornecedor:</b> ${nota.fornecedor} &nbsp;|&nbsp; <b>Data:</b> ${fmtDate(nota.data)}${nota.nNF?` &nbsp;|&nbsp; <b>NF:</b> ${nota.nNF}`:""} &nbsp;|&nbsp; <b>Origem:</b> ${nota.origem}</p>
                         <table><thead><tr><th>Produto</th><th>Categoria</th><th>Qtd</th><th>Vl. Unit.</th><th>Total</th></tr></thead><tbody>${rows}</tbody>
                         <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(totalVivo)}</td></tr></tfoot></table>`));
-                    }} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir</button>
+                    }} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:12}}>🖨️ Imprimir</button>
                     <button className="btn" onClick={async()=>{
                       const outra=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
                       if(!confirm(empresa==="SEAMA"
@@ -6559,7 +6559,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       // Era o único dos cinco caminhos que criam compra sem avisar o PDV.
                       enviarCompraSeama(outra,novoGrupoId,nota.fornecedor,novosItens,getCategoriasDesligadasPdv((state||{})[outra]));
                       alert(`✅ Compra transferida para ${outra}`);
-                    }} style={{background:"#DBEAFE",color:"#8B5CF6",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
+                    }} style={{background:"var(--infoBg)",color:"var(--category)",padding:"6px 12px",fontSize:12}}>📤 Mover</button>
                     <button className="btn" onClick={async()=>{
                       if(!confirm(`Excluir esta nota e todos os seus itens?\n\nA quantidade lançada no estoque será devolvida${EMPRESAS_COM_PDV.includes(empresa)?" (aqui e no PDV)":""}.`))return;
                       if(EMPRESAS_COM_PDV.includes(empresa)){
@@ -6574,7 +6574,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         return{...d,compras:d.compras.filter(c=>(c.grupoId||c.id)!==nota.grupoId),contas:(d.contas||[]).filter(c=>c.grupoId!==nota.grupoId),...estorno};
                       });
                       setVerNota(null);
-                    }} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️ Excluir</button>
+                    }} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️ Excluir</button>
                   </div>
                 </div>
               </div>}
@@ -6660,10 +6660,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               return termos.some((t:string)=>(nl===t||nl.includes(t)||t.includes(nl)))&&n.nomePadrao!==prodForm.nome;
             });
             if(!norma)return null;
-            return <div style={{background:"#F3E8FF",border:"1px solid #8B5CF640",borderRadius:8,padding:"8px 12px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+            return <div style={{background:"var(--categoryBg)",border:"1px solid #8B5CF640",borderRadius:8,padding:"8px 12px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
               <span style={{fontSize:12,color:"#c4b5fd",flex:1}}>🔄 Substituição disponível: <strong>→ {norma.nomePadrao}</strong></span>
               <button className="btn" onClick={()=>setProdForm(p=>({...p,nome:norma.nomePadrao}))}
-                style={{background:"#8B5CF6",color:"#fff",padding:"5px 10px",fontSize:11,flexShrink:0}}>Aplicar</button>
+                style={{background:"var(--category)",color:"#fff",padding:"5px 10px",fontSize:11,flexShrink:0}}>Aplicar</button>
             </div>;
           })()}
           {prodEdit&&(()=>{
@@ -6755,9 +6755,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         </div>}
 
         {/* Conciliar Insumos: liga matérias-primas "soltas" a um produto da Lista de Compras */}
-        {insumosSoltos.length>0&&<div style={{display:"flex",alignItems:"center",gap:12,background:"#FEF3C7",border:"1px solid #F59E0B55",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
+        {insumosSoltos.length>0&&<div style={{display:"flex",alignItems:"center",gap:12,background:"var(--warningBg)",border:"1px solid #F59E0B55",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
           <div>
-            <div style={{fontSize:22,fontWeight:800,color:"#B45309",fontFamily:"monospace"}}>{insumosSoltos.length}</div>
+            <div style={{fontSize:22,fontWeight:800,color:"var(--warningText)",fontFamily:"monospace"}}>{insumosSoltos.length}</div>
             <div style={{fontSize:11.5,color:"#92400e",lineHeight:1.4}}>insumo(s) sem vínculo com<br/>a Lista de Compras</div>
           </div>
           <button onClick={()=>setShowConciliarInsumos(v=>!v)} className="btn" style={{marginLeft:"auto",flexShrink:0,background:"#F59E0B",color:"#2b1600",padding:"9px 16px",fontSize:12.5,fontWeight:700}}>
@@ -6797,9 +6797,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             {insumosSoltosVis.length} de {insumosSoltos.length}
             <button onClick={()=>setInsumosFiltro("")} style={{marginLeft:8,background:"none",border:"none",color:"var(--btnPrimary)",textDecoration:"underline",cursor:"pointer",fontSize:11}}>limpar</button>
           </div>}
-          {autoPendentesConciliar.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
-            <span style={{fontFamily:"monospace",fontWeight:800,color:"#15803D",fontSize:15}}>{autoPendentesConciliar.length}</span>
-            <span style={{fontSize:11.5,color:"#15803D",flex:1,lineHeight:1.4}}>sugestõe{autoPendentesConciliar.length!==1?"s":""} automática{autoPendentesConciliar.length!==1?"s":""} pronta{autoPendentesConciliar.length!==1?"s":""} (nome igual ou muito parecido)</span>
+          {autoPendentesConciliar.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+            <span style={{fontFamily:"monospace",fontWeight:800,color:"var(--successText)",fontSize:15}}>{autoPendentesConciliar.length}</span>
+            <span style={{fontSize:11.5,color:"var(--successText)",flex:1,lineHeight:1.4}}>sugestõe{autoPendentesConciliar.length!==1?"s":""} automática{autoPendentesConciliar.length!==1?"s":""} pronta{autoPendentesConciliar.length!==1?"s":""} (nome igual ou muito parecido)</span>
             <button onClick={aplicarAutoTodosConciliar} style={{background:"#22C55E",color:"#08240f",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>✅ Aplicar as {autoPendentesConciliar.length}</button>
           </div>}
           {insumosSoltosVis.map((mp:any)=>{
@@ -6877,13 +6877,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   style={{width:56,textAlign:"center" as const,fontSize:11.5,padding:"3px 4px",borderRadius:6,border:"1px solid var(--border2)",background:"var(--bg)",color:"var(--text)"}}/>
                 <span>unidade(s)</span>
                 {(mp.unidadesPorEmbalagem||1)>1&&mp.ultimoValor>0&&
-                  <span style={{color:"#B45309",fontWeight:700}}>= {fmtMoney(mp.ultimoValor/mp.unidadesPorEmbalagem)} por unidade</span>}
+                  <span style={{color:"var(--warningText)",fontWeight:700}}>= {fmtMoney(mp.ultimoValor/mp.unidadesPorEmbalagem)} por unidade</span>}
               </div>
               {escolha
-                ?<div style={{display:"flex",alignItems:"center",gap:8,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803D",fontWeight:700}}>
+                ?<div style={{display:"flex",alignItems:"center",gap:8,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",fontSize:12,color:"var(--successText)",fontWeight:700}}>
                   {escolha.auto&&<span style={{fontSize:9,fontWeight:800,background:"#22C55E",color:"#08240f",borderRadius:5,padding:"2px 6px",flexShrink:0}}>AUTO</span>}
                   ✓ Vai {escolha.novo?"virar produto novo":`entrar como marca de "${escolha.prodNome}"`}
-                  <button onClick={()=>setConciliarEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"#15803D",textDecoration:"underline",cursor:"pointer",fontSize:11.5,flexShrink:0}}>trocar</button>
+                  <button onClick={()=>setConciliarEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"var(--successText)",textDecoration:"underline",cursor:"pointer",fontSize:11.5,flexShrink:0}}>trocar</button>
                 </div>
                 :sugestaoAuto
                 ?<div style={{display:"flex",alignItems:"center",gap:8,background:"var(--primary-wash,#7C3AED14)",border:"1px solid var(--btnPrimary)",borderRadius:8,padding:"8px 10px",fontSize:12,color:"var(--btnPrimary)",fontWeight:700}}>
@@ -6905,7 +6905,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       <div key={"lista-"+i.id} onMouseDown={()=>escolherNovoConciliar(mp.id,i.nome)}
                         style={{padding:"8px 10px",fontSize:12,borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,cursor:"pointer"}}>
                         <span>{i.nome}</span>
-                        <span style={{fontSize:9,fontWeight:800,background:"#F59E0B22",color:"#B45309",borderRadius:20,padding:"2px 7px",flexShrink:0}}>só na lista · cadastra ao vincular</span>
+                        <span style={{fontSize:9,fontWeight:800,background:"#F59E0B22",color:"var(--warningText)",borderRadius:20,padding:"2px 7px",flexShrink:0}}>só na lista · cadastra ao vincular</span>
                       </div>
                     ))}
                     <div onMouseDown={()=>escolherNovoConciliar(mp.id,mp.nome)} style={{padding:"8px 10px",fontSize:12,fontWeight:700,color:"var(--btnPrimary)",cursor:"pointer"}}>
@@ -6925,7 +6925,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       {pdvSug&&<option value={pdvSug.id}>💡 {pdvSug.nome} (sugestão)</option>}
                       {[...pdvItens].sort((a:any,b:any)=>a.nome.localeCompare(b.nome,"pt-BR")).map((i:any)=><option key={i.id} value={i.id}>{i.nome}</option>)}
                     </select>
-                    {pdvSug&&<button onClick={()=>setPdvEscolha(m=>({...m,[mp.id]:{produtoId:pdvSug.id,produtoNome:pdvSug.nome,factor:"1",auto:true}}))} style={{background:"#7C3AED",color:"#fff",border:"none",borderRadius:6,padding:"8px 10px",fontSize:11,fontWeight:700,cursor:"pointer",width:"100%"}}>Usar sugestão</button>}
+                    {pdvSug&&<button onClick={()=>setPdvEscolha(m=>({...m,[mp.id]:{produtoId:pdvSug.id,produtoNome:pdvSug.nome,factor:"1",auto:true}}))} style={{background:"var(--categoryText)",color:"#fff",border:"none",borderRadius:6,padding:"8px 10px",fontSize:11,fontWeight:700,cursor:"pointer",width:"100%"}}>Usar sugestão</button>}
                   </div>}
               </div>}
             </div>;
@@ -6974,8 +6974,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                         :<span style={{fontSize:11,color:"var(--text3)"}}>Sem preço</span>}
                       {mp.unidadeEmbalagem&&mp.equivaleEm>0&&<span style={{fontSize:10,color:"var(--btnPrimary)",background:"var(--primary-wash,#7C3AED14)",borderRadius:6,padding:"1px 6px"}}>📦 1 {mp.unidadeEmbalagem} = {mp.equivaleEm}{mp.unidade}</span>}
                       {prodVinculadoDe(mp.id)
-                        ?<span style={{fontSize:9.5,fontWeight:700,color:"#15803D",background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:20,padding:"1px 7px"}}>🔗 Vinculado</span>
-                        :<span style={{fontSize:9.5,fontWeight:700,color:"#B45309",background:"#FEF3C7",border:"1px solid #F59E0B55",borderRadius:20,padding:"1px 7px"}}>⚠️ Solto</span>}
+                        ?<span style={{fontSize:9.5,fontWeight:700,color:"var(--successText)",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:20,padding:"1px 7px"}}>🔗 Vinculado</span>
+                        :<span style={{fontSize:9.5,fontWeight:700,color:"var(--warningText)",background:"var(--warningBg)",border:"1px solid #F59E0B55",borderRadius:20,padding:"1px 7px"}}>⚠️ Solto</span>}
                     </div>
                   </div>
                   <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -7083,7 +7083,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <div key={n.id} className="list-item">
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#1D4ED8",marginBottom:3}}>→ {n.nomePadrao}</div>
+                <div style={{fontWeight:700,fontSize:13,color:"var(--infoText)",marginBottom:3}}>→ {n.nomePadrao}</div>
                 <div className="muted" style={{fontSize:11,lineHeight:1.5}}>
                   {(n.termos||[]).length?(n.termos as string[]).join(" • "):"(sem termos — substitui o nome exato)"}
                 </div>
@@ -7172,7 +7172,7 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
   return <div style={{position:"relative",borderRadius:10,marginBottom:4,overflow:"hidden",touchAction:"pan-y"}}>
     <div style={{position:"absolute",inset:0,borderRadius:10,background:"var(--bg2)"}}>
       <div ref={iconRRef} style={{position:"absolute",top:"50%",left:14,transform:"translateY(-50%) scale(.8)",width:30,height:30,borderRadius:9,background:"#22C55E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,opacity:0,transition:"opacity .08s linear",pointerEvents:"none"}}>✓</div>
-      {onLeft&&<div ref={iconLRef} style={{position:"absolute",top:"50%",right:14,transform:"translateY(-50%) scale(.8)",width:30,height:30,borderRadius:9,background:"#B45309",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,opacity:0,transition:"opacity .08s linear",pointerEvents:"none"}}>✏️</div>}
+      {onLeft&&<div ref={iconLRef} style={{position:"absolute",top:"50%",right:14,transform:"translateY(-50%) scale(.8)",width:30,height:30,borderRadius:9,background:"var(--warningText)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,opacity:0,transition:"opacity .08s linear",pointerEvents:"none"}}>✏️</div>}
     </div>
     <div ref={cardRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
       style={{...rowStyle,position:"relative",cursor:disabled?"default":"grab"}}>
@@ -7239,7 +7239,7 @@ function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem,p
     <textarea placeholder="Observações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:40,marginBottom:8,resize:"vertical" as const}}/>
     <div style={{display:"flex",gap:6}}>
       <button className="btn" onClick={cancelEdit} style={{flex:1,background:"var(--border2)",color:"var(--text2)",padding:"9px",fontSize:13}}>Cancelar</button>
-      <button className="btn" onClick={()=>{if(editId){del(editId);cancelEdit();}}} style={{background:"#FEE2E2",color:"var(--btnDanger)",padding:"9px 12px",fontSize:13}}>🗑️</button>
+      <button className="btn" onClick={()=>{if(editId){del(editId);cancelEdit();}}} style={{background:"var(--dangerBg)",color:"var(--btnDanger)",padding:"9px 12px",fontSize:13}}>🗑️</button>
       <button className="btn" onClick={saveItem} style={{flex:1,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"9px",fontSize:13,fontWeight:700}}>💾 Salvar</button>
     </div>
   </div>;
@@ -8170,7 +8170,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       {pendentes.length>0&&<span style={{background:"#EF444422",color:"var(--btnDanger)",border:"1px solid #EF444444",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
       {comprados.length>0&&<span style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>✅ {comprados.length}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
-        {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"#DBEAFE",color:"#1D4ED8",border:"1px solid #0EA5E940",padding:"6px 12px",fontSize:12}}>🖨️</button>}
+        {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"var(--infoBg)",color:"var(--infoText)",border:"1px solid #0EA5E940",padding:"6px 12px",fontSize:12}}>🖨️</button>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
@@ -8225,10 +8225,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           return <div key={mes} style={{marginBottom:8,border:"1px solid var(--border2)",borderRadius:10,overflow:"hidden"}}>
             <div onClick={toggleMes} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:"var(--bg5)",cursor:"pointer",userSelect:"none" as const}}>
               <span style={{fontSize:15}}>{aberto?"📂":"📁"}</span>
-              <span style={{flex:1,fontSize:13,fontWeight:700,color:"#B45309"}}>{label}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:700,color:"var(--warningText)"}}>{label}</span>
               <span style={{fontSize:11,color:"#888",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:"1px 8px"}}>{pedidos.length} lista{pedidos.length>1?"s":""}</span>
               {isAdmin&&<button onClick={e=>{e.stopPropagation();if(!confirm(`Excluir todas as ${pedidos.length} lista(s) arquivada(s) de ${label}?`))return;const ids=pedidos.map((p:any)=>p.id);ids.forEach((id:string)=>_listaDeletados.add(id));setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>!ids.includes(p.id))}));}}
-                style={{background:"#FEE2E2",border:"1px solid #EF444444",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700,flexShrink:0}}>🗑️ Apagar mês</button>}
+                style={{background:"var(--dangerBg)",border:"1px solid #EF444444",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700,flexShrink:0}}>🗑️ Apagar mês</button>}
               <span style={{fontSize:11,color:"#555"}}>{aberto?"▲":"▼"}</span>
             </div>
             {aberto&&<div style={{padding:"6px 8px 8px"}}>
@@ -8242,7 +8242,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
                     <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #22C55E44",borderRadius:6,color:"#22C55E",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
                     <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
-                    {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"#FEE2E2",border:"1px solid #EF444444",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:12,padding:"3px 8px",fontWeight:700,flexShrink:0}}>🗑️</button>}
+                    {isAdmin&&<button onClick={e=>{e.stopPropagation();delPedido(p.id);}} style={{background:"var(--dangerBg)",border:"1px solid #EF444444",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:12,padding:"3px 8px",fontWeight:700,flexShrink:0}}>🗑️</button>}
                     <span style={{fontSize:11,color:"#555"}}>{expanded?"▲":"▼"}</span>
                   </div>
                   {expanded&&<div style={{padding:"8px 12px"}}>
@@ -8326,14 +8326,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         </div>
         {!itensPend.length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhum item pendente na lista.</div>}
         {itensPend.length>0&&<>
-          <div style={{fontSize:11,color:"#888",marginBottom:10,background:"#DCFCE7",borderRadius:6,padding:"6px 10px",border:"1px solid #F59E0B40"}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:10,background:"var(--successBg)",borderRadius:6,padding:"6px 10px",border:"1px solid #F59E0B40"}}>
             Valores baseados no último preço de compra registrado. {semPreco.length>0&&<span style={{color:"#f59e0b"}}>{semPreco.length} item(ns) sem preço cadastrado.</span>}
           </div>
           {cats.map(cat=>{
             const catLinhas=linhas.filter(l=>(l.categoria||"outros")===cat);
             const catTotal=catLinhas.filter(l=>l.temPreco).reduce((s,l)=>s+l.subtotal,0);
             return <div key={cat} style={{marginBottom:8}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#8B5CF6",textTransform:"uppercase" as const,padding:"4px 0",borderBottom:"1px solid #0EA5E940",marginBottom:4}}>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--category)",textTransform:"uppercase" as const,padding:"4px 0",borderBottom:"1px solid #0EA5E940",marginBottom:4}}>
                 {catIcon(cat)} {cat} {catTotal>0&&<span style={{color:"#F59E0B",fontWeight:400}}>— {fmtMoney(catTotal)}</span>}
               </div>
               {catLinhas.map((l,idx)=>{
@@ -8355,7 +8355,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                       <span style={{color:"#f59e0b",fontSize:10,whiteSpace:"nowrap" as const}}>sem preço</span>
                     }
                   </div>
-                  {isExpanded&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
+                  {isExpanded&&<div style={{background:"var(--infoBg)",border:"1px solid #0EA5E940",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
                     <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produtos de compra</div>
                     <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} onClick={e=>e.stopPropagation()} autoFocus
                       className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
@@ -8430,7 +8430,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     {/* Gerenciar categorias (admin only) */}
     {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
-      <div className="section-title" style={{color:"#8B5CF6"}}>🏷️ Categorias — Ordem de exibição</div>
+      <div className="section-title" style={{color:"var(--category)"}}>🏷️ Categorias — Ordem de exibição</div>
       <div style={{marginBottom:10}}>
         {cats.map((c,idx)=>(
           <div key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
@@ -8463,7 +8463,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div style={{display:"flex",gap:6}}>
         <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0}}/>
-        <button className="btn" onClick={addCat} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
+        <button className="btn" onClick={addCat} style={{background:"var(--category)",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
       </div>
     </div>}
 
@@ -8581,7 +8581,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div className="section-title" style={{color:"#22C55E",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-          {ctPendentes.length>0&&<button className="btn" onClick={()=>setShowConciliarTudo(true)} style={{background:"#FEF3C7",color:"#B45309",padding:"6px 12px",fontSize:11,fontWeight:700}}>🔗 Conciliar Tudo ({ctPendentes.length} pendente{ctPendentes.length!==1?"s":""})</button>}
+          {ctPendentes.length>0&&<button className="btn" onClick={()=>setShowConciliarTudo(true)} style={{background:"var(--warningBg)",color:"var(--warningText)",padding:"6px 12px",fontSize:11,fontWeight:700}}>🔗 Conciliar Tudo ({ctPendentes.length} pendente{ctPendentes.length!==1?"s":""})</button>}
           <button className="btn" onClick={removerDuplicatas} style={{background:"#F3E8FF",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
         </div>
       </div>
@@ -8613,7 +8613,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         const mps=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb4?(mn.includes(cb4)||cb4.includes(mn)):(mn.includes(q)||q.includes(mn));}).slice(0,20);
         const vinMps=(db.materiasPrimas||[]).filter((m:any)=>eVids.includes(m.id));
         vinMps.forEach((m:any)=>{if(!mps.find((o:any)=>o.id===m.id))mps.unshift(m);});
-        return <div style={{marginBottom:8,background:"#DBEAFE",borderRadius:8,border:"1px solid #0EA5E940",padding:"6px 8px"}}>
+        return <div style={{marginBottom:8,background:"var(--infoBg)",borderRadius:8,border:"1px solid #0EA5E940",padding:"6px 8px"}}>
           <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Conciliar — clique para vincular</div>
           <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)}
             className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
@@ -8687,7 +8687,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               const mpOpts=(db.materiasPrimas||[]).filter((m:any)=>{const mn=m.nome.toLowerCase();return cb2?(mn.includes(cb2)||cb2.includes(mn)):(mn.includes(q2)||q2.includes(mn));}).slice(0,20);
               const vinMps=(db.materiasPrimas||[]).filter((m:any)=>pVids.includes(m.id));
               vinMps.forEach((m:any)=>{if(!mpOpts.find((o:any)=>o.id===m.id))mpOpts.unshift(m);});
-              return <div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
+              return <div style={{background:"var(--infoBg)",border:"1px solid #0EA5E940",borderRadius:"0 0 8px 8px",padding:"6px 8px",marginBottom:4}}>
                 <div style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase" as const,marginBottom:4,letterSpacing:.5}}>🔗 Vincular a produtos de compra</div>
                 <input placeholder="🔍 Pesquisar matéria-prima..." value={concBusca} onChange={e=>setConcBusca(e.target.value)} autoFocus
                   className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
@@ -8777,7 +8777,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   <button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🚫 Não conciliar</button>
                 </div>}
               </div>
-              {isManual&&<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",padding:"6px 8px"}}>
+              {isManual&&<div style={{background:"var(--infoBg)",border:"1px solid #0EA5E940",padding:"6px 8px"}}>
                 <input placeholder="🔍 Pesquisar matéria-prima..." value={ctBusca} onChange={e=>setCtBusca(e.target.value)} autoFocus
                   className="inp" style={{marginBottom:6,fontSize:12,padding:"6px 10px"}}/>
                 {!mpOpts.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{ctBusca?` para "${ctBusca}"`:""}</div>}
@@ -8859,7 +8859,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   <span style={{fontSize:15}}>{catIcon(p.cat||"outros")}</span>
                   <span style={{flex:1,fontSize:13,fontWeight:600}}>{p.nome}</span>
                   <span style={{fontSize:11,color:"#888"}}>{p.unidade}</span>
-                  {p.cat&&<span style={{fontSize:10,color:"#8B5CF6",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
+                  {p.cat&&<span style={{fontSize:10,color:"var(--category)",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{p.cat}</span>}
                 </div>
               ))}
             </div>}
@@ -8932,7 +8932,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <button className="btn" onClick={fecharLista} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #22C55E40",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
           🔒 Fechar Lista
         </button>
-        {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"#FEE2E2",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
+        {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"var(--dangerBg)",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
           🗑️ Limpar
         </button>}
       </>}
@@ -9063,7 +9063,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
                 {item.urgente&&<span style={{fontSize:9,background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
-                <span style={{fontSize:10,color:"#8B5CF6",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
+                <span style={{fontSize:10,color:"var(--category)",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
                 <div style={{display:"flex",alignItems:"center",gap:2}} onClick={(e:any)=>e.stopPropagation()} onPointerDown={(e:any)=>e.stopPropagation()}>
@@ -9159,7 +9159,7 @@ function IconPickerPopup({value,onPick,style}:{value:string,onPick:(icon:string)
   const lAtual=parseIconLetra(value);
   const [tab,setTab]=useState<"emoji"|"letra">(lAtual?"letra":"emoji");
   const [letraSel,setLetraSel]=useState<string|null>(lAtual?lAtual.letra:null);
-  return <div style={{position:"absolute" as const,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,maxWidth:260,boxShadow:"0 8px 24px #0008",...style}}>
+  return <div style={{position:"absolute" as const,zIndex:99,background:"var(--categoryBg)",border:"1px solid #5b21b6",borderRadius:10,padding:8,maxWidth:260,boxShadow:"0 8px 24px #0008",...style}}>
     <div style={{display:"flex",gap:4,marginBottom:6}}>
       <button onClick={()=>setTab("emoji")} style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:tab==="emoji"?"#8B5CF6":"#8B5CF622",color:tab==="emoji"?"#fff":"#5b21b6"}}>Emojis</button>
       <button onClick={()=>{setTab("letra");setLetraSel(lAtual?lAtual.letra:null);}} style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:tab==="letra"?"#8B5CF6":"#8B5CF622",color:tab==="letra"?"#fff":"#5b21b6"}}>Letras</button>
@@ -9187,7 +9187,7 @@ const prodCatIcon=(c:string)=>_dbIconesProd[c]||ICON_PROD[c]||"📦";
 // pertencer a mais de uma), com fallback pro "cat" legado (produtos ainda não migrados).
 const prodCats=(p:any):string[]=>Array.isArray(p?.cats)&&p.cats.length?p.cats:(p?.cat?[p.cat]:[]);
 function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string[],selected:string[],onToggle:(c:string)=>void,onClose:()=>void,style?:any}){
-  return <div style={{position:"absolute" as const,zIndex:99,background:"#F3E8FF",border:"1px solid #5b21b6",borderRadius:10,padding:8,minWidth:180,maxWidth:260,maxHeight:280,overflowY:"auto" as const,boxShadow:"0 8px 24px #0008",...style}}>
+  return <div style={{position:"absolute" as const,zIndex:99,background:"var(--categoryBg)",border:"1px solid #5b21b6",borderRadius:10,padding:8,minWidth:180,maxWidth:260,maxHeight:280,overflowY:"auto" as const,boxShadow:"0 8px 24px #0008",...style}}>
     {cats.map(c=>{
       const on=selected.includes(c);
       return <label key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 4px",cursor:"pointer",borderRadius:6,background:on?"#8B5CF622":"none"}}>
@@ -9196,7 +9196,7 @@ function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string
         <span style={{fontSize:12,fontWeight:on?700:500,color:on?"#5b21b6":"var(--text)"}}>{c}</span>
       </label>;
     })}
-    <button onClick={onClose} style={{width:"100%",marginTop:6,padding:"5px 0",borderRadius:6,border:"1px solid #8B5CF666",background:"#8B5CF6",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>Fechar</button>
+    <button onClick={onClose} style={{width:"100%",marginTop:6,padding:"5px 0",borderRadius:6,border:"1px solid #8B5CF666",background:"var(--category)",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>Fechar</button>
   </div>;
 }
 
@@ -9766,7 +9766,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     {/* Header */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🏭 Produção</div>
-      {itens.length>0&&<span style={{background:"#7C3AED22",color:"#7C3AED",border:"1px solid #7C3AED44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itens.length} item(ns)</span>}
+      {itens.length>0&&<span style={{background:"#7C3AED22",color:"var(--categoryText)",border:"1px solid #7C3AED44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itens.length} item(ns)</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap" as const}}>
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
@@ -9775,7 +9775,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     {/* Category management (admin) */}
     {showCatMgmt&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
-      <div className="section-title" style={{color:"#8B5CF6"}}>🏷️ Categorias de Produção</div>
+      <div className="section-title" style={{color:"var(--category)"}}>🏷️ Categorias de Produção</div>
       <div style={{marginBottom:10}}>
         {cats.map((c,idx)=>(
           <div key={c} style={{position:"relative" as const,display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)",flexWrap:"wrap" as const}}>
@@ -9801,7 +9801,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                       style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                   </div>
                   <button onClick={()=>marcarTodosNaCategoria(c)} title="Marcar todos os produtos nesta categoria (soma, não substitui)"
-                    style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"#8B5CF6",cursor:"pointer",fontSize:10,padding:"2px 6px",lineHeight:1,whiteSpace:"nowrap" as const}}>🏷️ Marcar todos</button>
+                    style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"var(--category)",cursor:"pointer",fontSize:10,padding:"2px 6px",lineHeight:1,whiteSpace:"nowrap" as const}}>🏷️ Marcar todos</button>
                   <button onClick={()=>toggleCategoriaCliente(c)} title="Categoria é cliente — recebe recibo de entrega com preço fixo"
                     style={{background:isCategoriaCliente(c)?"#22C55E22":"none",border:`1px solid ${isCategoriaCliente(c)?"#22C55E":"var(--border2)"}`,borderRadius:5,color:isCategoriaCliente(c)?"#22C55E":"#888",cursor:"pointer",fontSize:10,padding:"2px 6px",lineHeight:1,whiteSpace:"nowrap" as const,fontWeight:isCategoriaCliente(c)?700:400}}>🏢 {isCategoriaCliente(c)?"Cliente":"É cliente?"}</button>
                   <button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
@@ -9815,7 +9815,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         {iconPicker==="_new"&&<IconPickerPopup value={novaIcone} onPick={(icon)=>{setNovaIcone(icon);setIconPicker(null);}} style={{bottom:42,left:0}}/>}
         <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0,flex:1}}/>
-        <button className="btn" onClick={addCat} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
+        <button className="btn" onClick={addCat} style={{background:"var(--category)",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
       </div>
     </div>}
 
@@ -9850,8 +9850,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
           return <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
             <CatIconBadge icon={prodCatIcon(prodCats(p)[0]||"")} size={14}/>
             <span style={{flex:1,fontSize:13}}>{p.nome}</span>
-            {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
-            {p.precoFixo>0&&<span style={{fontSize:10,color:"#15803D",background:"#22C55E18",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{fmtMoney(p.precoFixo)}</span>}
+            {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"var(--categoryText)",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
+            {p.precoFixo>0&&<span style={{fontSize:10,color:"var(--successText)",background:"#22C55E18",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{fmtMoney(p.precoFixo)}</span>}
             <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
             <button onClick={()=>abrirFichaDoProduto(p.nome)} title={temFicha?"Ver Ficha Técnica":"Criar Ficha Técnica"}
               style={{background:temFicha?"#22C55E12":"none",border:`1px solid ${temFicha?"#22C55E":"#7C3AED55"}`,borderRadius:6,color:temFicha?"#15803D":"#7C3AED",cursor:"pointer",fontSize:11,fontWeight:600,padding:"3px 7px",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap" as const}}>
@@ -9868,7 +9868,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     {showHist&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showHist&&<div className="card" style={{marginBottom:12,border:"1px solid #5b21b6"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap" as const,gap:6}}>
-        <div className="section-title" style={{color:"#7C3AED",margin:0}}>📂 Pedidos Arquivados <span style={{fontSize:11,color:"#555"}}>({(db.pedidosProducao||[]).length})</span></div>
+        <div className="section-title" style={{color:"var(--categoryText)",margin:0}}>📂 Pedidos Arquivados <span style={{fontSize:11,color:"#555"}}>({(db.pedidosProducao||[]).length})</span></div>
         <SortCtrl id="prodHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
       </div>
       {!!(db.pedidosProducao||[]).length&&<div style={{position:"relative",marginBottom:8}}>
@@ -9887,10 +9887,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         const isCollapsed=collapsedPeds.has(ped.id)&&!isEdit;
         return <div key={ped.id} style={{background:"var(--bg4)",borderRadius:8,padding:"10px",marginBottom:8,border:`1px solid ${isEdit?"#7C3AED":"#E5E7EB"}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isCollapsed?0:6}}>
-            <span onClick={()=>setCollapsedPeds(s=>{const n=new Set(s);if(n.has(ped.id))n.delete(ped.id);else n.add(ped.id);return n;})} style={{fontWeight:600,fontSize:12,color:"#7C3AED",cursor:"pointer",flex:1}}>{isCollapsed?"▶":"▼"} {fmtDate(ped.data)} · {(ped.itens||[]).length} produto(s) · {ped.solicitante||"—"}</span>
+            <span onClick={()=>setCollapsedPeds(s=>{const n=new Set(s);if(n.has(ped.id))n.delete(ped.id);else n.add(ped.id);return n;})} style={{fontWeight:600,fontSize:12,color:"var(--categoryText)",cursor:"pointer",flex:1}}>{isCollapsed?"▶":"▼"} {fmtDate(ped.data)} · {(ped.itens||[]).length} produto(s) · {ped.solicitante||"—"}</span>
             <div style={{display:"flex",gap:4}}>
               {isMobile&&<button onClick={()=>{window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhats(ped))}`,"_blank");}} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>}
-              <button onClick={()=>imprimirPedido(ped)} style={{background:"none",border:"1px solid #1D4ED844",borderRadius:5,color:"#1D4ED8",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
+              <button onClick={()=>imprimirPedido(ped)} style={{background:"none",border:"1px solid #1D4ED844",borderRadius:5,color:"var(--infoText)",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
               <button onClick={()=>{
                 if(isEdit){salvarEdicaoPedido(ped.id);}
                 else{const q:Record<string,string>={};const o:Record<string,string>={};(ped.itens||[]).forEach((it:any,i:number)=>{const k=`${ped.id}_${i}`;q[k]=String(it.quantidade);o[k]=it.obs||"";});setEditQtds(q);setEditObs(o);setEditPedId(ped.id);}
@@ -9948,9 +9948,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 return s+q;
               },0):0;
               return <div key={g.cat||`_${gi}`} style={{background:"var(--bg4)",borderRadius:8,padding:"2px 10px 6px",marginBottom:8,border:ehCliente?"1.5px solid #16A34A55":"none"}}>
-                <div style={{fontSize:10,fontWeight:800,color:"#7C3AED",textTransform:"uppercase" as const,letterSpacing:.4,padding:"7px 0 5px",display:"flex",alignItems:"center",gap:5}}>
+                <div style={{fontSize:10,fontWeight:800,color:"var(--categoryText)",textTransform:"uppercase" as const,letterSpacing:.4,padding:"7px 0 5px",display:"flex",alignItems:"center",gap:5}}>
                   <CatIconBadge icon={prodCatIcon(g.cat)} size={12}/>{g.cat||"Sem categoria"}
-                  {ehCliente&&<span style={{background:"#7C3AED",color:"#fff",borderRadius:8,padding:"0px 6px",fontSize:8,fontWeight:800}}>CLIENTE</span>}
+                  {ehCliente&&<span style={{background:"var(--categoryText)",color:"#fff",borderRadius:8,padding:"0px 6px",fontSize:8,fontWeight:800}}>CLIENTE</span>}
                   {ehCliente&&<span style={{marginLeft:"auto",background:isEdit?"#F59E0B":"#16A34A",color:"#fff",borderRadius:8,padding:"1px 7px",fontSize:10,fontWeight:800}}>{totalQtd} un</span>}
                 </div>
                 {g.items.map(({it,idx},ii)=>{
@@ -9961,7 +9961,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                     {isEdit?<input type="number" inputMode="decimal" min="0" step="any"
                       value={editQtds[key]||""} onChange={e=>setEditQtds(q=>({...q,[key]:e.target.value}))}
                       className="inp" style={{width:55,marginBottom:0,textAlign:"center" as const,fontSize:12,padding:"4px"}}/>
-                    :<span style={{fontSize:12,fontWeight:700,color:"#7C3AED"}}>{it.quantidade} {it.unidade||"un"}</span>}
+                    :<span style={{fontSize:12,fontWeight:700,color:"var(--categoryText)"}}>{it.quantidade} {it.unidade||"un"}</span>}
                     {it.obs&&!isEdit&&<span style={{fontSize:10,color:"#888",fontStyle:"italic" as const}}>({it.obs})</span>}
                     {isEdit&&<input placeholder="Obs" value={editObs[key]||""} onChange={e=>setEditObs(o=>({...o,[key]:e.target.value}))}
                       className="inp" style={{width:80,marginBottom:0,fontSize:10,padding:"3px 5px"}}/>}
@@ -9980,7 +9980,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             return <div key={cat} style={{marginTop:8}}>
               {jaGerado
                 ?<>
-                  <div style={{background:"#DCFCE7",color:"#15803D",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>
+                  <div style={{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>
                     ✅ Recibo de {cat} já gerado — {fmtMoney(jaGerado.total)} {jaGerado.recebido?"(recebido)":"(a receber)"}
                   </div>
                   {!jaGerado.recebido&&<button onClick={()=>atualizarValoresRecibo(jaGerado,ped)} className="btn"
@@ -10002,7 +10002,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   </button>}
             </div>;
           })}
-          {addToPedId===ped.id&&<div style={{marginTop:8,padding:"10px",background:"#DCFCE7",borderRadius:8,border:"1px solid #22C55E40"}}>
+          {addToPedId===ped.id&&<div style={{marginTop:8,padding:"10px",background:"var(--successBg)",borderRadius:8,border:"1px solid #22C55E40"}}>
             <div style={{fontSize:11,fontWeight:700,color:"#22C55E",marginBottom:8}}>➕ Adicionar Produto ao Pedido</div>
             <div style={{position:"relative",marginBottom:6}}>
               <input placeholder="Nome do produto..." value={addToPedForm.nome}
@@ -10016,7 +10016,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                     style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
                     <CatIconBadge icon={prodCatIcon(prodCats(p)[0]||"")} size={14}/>
                     <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
-                    {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"#7C3AED",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
+                    {prodCats(p).map(c=><span key={c} style={{fontSize:10,color:"var(--categoryText)",background:"#7C3AED18",borderRadius:4,padding:"1px 5px"}}>{c}</span>)}
                   </div>
                 ))}
               </div>}
@@ -10060,7 +10060,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       const recibos=sortList(db.recibosEntrega||[],db,'recibos','data-desc');
       return <>
         <div className="card" style={{marginBottom:12,border:"1px solid #22C55E40"}}>
-          <div className="section-title" style={{color:"#15803D",margin:0,marginBottom:10}}>📋 Extrato de Entregas</div>
+          <div className="section-title" style={{color:"var(--successText)",margin:0,marginBottom:10}}>📋 Extrato de Entregas</div>
           {!clientesDisponiveis.length&&<div className="muted" style={{fontSize:12}}>Nenhuma categoria marcada como cliente ainda — marque em Categorias.</div>}
           {clientesDisponiveis.length>0&&<>
             <select value={extratoCliente} onChange={e=>setExtratoCliente(e.target.value)} className="inp" style={{marginBottom:8}}>
@@ -10085,7 +10085,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   : <>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 2px 8px",borderBottom:"1px solid var(--border)",marginBottom:6}}>
                         <span style={{fontSize:10,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>{pendentes.length} pendente{pendentes.length>1?"s":""} de recebimento</span>
-                        <span onClick={toggleTodos} style={{fontSize:11,color:"#15803D",fontWeight:700,cursor:"pointer"}}>{todasMarcadas?"Desmarcar todos":"Selecionar todos"}</span>
+                        <span onClick={toggleTodos} style={{fontSize:11,color:"var(--successText)",fontWeight:700,cursor:"pointer"}}>{todasMarcadas?"Desmarcar todos":"Selecionar todos"}</span>
                       </div>
                       {pendentes.map((r:any)=>{
                         const marcado=!extratoDesmarcados.has(r.id);
@@ -10095,12 +10095,12 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                             <div style={{fontSize:12,fontWeight:600}}>{fmtDate(r.data)}</div>
                             <div className="muted" style={{fontSize:10}}>{r.itens.length} item(ns)</div>
                           </div>
-                          <span style={{fontWeight:700,fontSize:12,color:"#15803D"}}>{fmtMoney(r.total)}</span>
+                          <span style={{fontWeight:700,fontSize:12,color:"var(--successText)"}}>{fmtMoney(r.total)}</span>
                         </div>;
                       })}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#DCFCE7",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",marginTop:8}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--successBg)",border:"1px solid #22C55E44",borderRadius:8,padding:"8px 10px",marginTop:8}}>
                         <span style={{fontSize:11,fontWeight:700,color:"#166534"}}>{selecionados.length} selecionada{selecionados.length!==1?"s":""}</span>
-                        <span style={{fontSize:16,fontWeight:800,color:"#15803D"}}>{fmtMoney(totalSelecionado)}</span>
+                        <span style={{fontSize:16,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(totalSelecionado)}</span>
                       </div>
                       <button onClick={()=>{
                         if(!selecionados.length)return;
@@ -10144,9 +10144,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   <div className="muted" style={{fontSize:11}}>{fmtDate(r.data)} · {r.itens.length} item(ns)</div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontWeight:700,color:"#15803D"}}>{fmtMoney(r.total)}</span>
+                  <span style={{fontWeight:700,color:"var(--successText)"}}>{fmtMoney(r.total)}</span>
                   <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>📲</button>
-                  <button onClick={()=>imprimirRecibo(r)} style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"#8B5CF6",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
+                  <button onClick={()=>imprimirRecibo(r)} style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"var(--category)",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
                 </div>
               </div>
             </div>
@@ -10178,7 +10178,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       const todosPedidosIds=new Set<string>();
       clientesComDados.forEach(c=>porCliente[c].pedidos.forEach(id=>todosPedidosIds.add(id)));
       return <div className="card" style={{marginBottom:12,border:"1px solid #7C3AED40"}}>
-        <div className="section-title" style={{color:"#7C3AED",margin:0,marginBottom:10}}>📊 Relatório de Itens por Cliente</div>
+        <div className="section-title" style={{color:"var(--categoryText)",margin:0,marginBottom:10}}>📊 Relatório de Itens por Cliente</div>
         {!clientesDisponiveis.length&&<div className="muted" style={{fontSize:12}}>Nenhuma categoria marcada como cliente ainda — marque em Categorias.</div>}
         {clientesDisponiveis.length>0&&<>
           <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
@@ -10212,18 +10212,18 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             const restantes=produtosOrdenados.length-visiveis.length;
             return <div key={c} style={{background:"var(--bg4)",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <span style={{fontSize:12,fontWeight:800,color:"#7C3AED",textTransform:"uppercase" as const,letterSpacing:.3,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:12,fontWeight:800,color:"var(--categoryText)",textTransform:"uppercase" as const,letterSpacing:.3,display:"flex",alignItems:"center",gap:6}}>
                   <CatIconBadge icon={prodCatIcon(c)} size={13}/>{c}
                 </span>
-                <span style={{background:"#7C3AED",color:"#fff",borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:800}}>{info.total} un</span>
+                <span style={{background:"var(--categoryText)",color:"#fff",borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:800}}>{info.total} un</span>
               </div>
               {visiveis.map(([nome,qtd])=>(
                 <div key={nome} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderTop:"1px solid var(--border)"}}>
-                  <span>{nome}</span><span style={{color:"#7C3AED",fontWeight:700}}>{qtd} un</span>
+                  <span>{nome}</span><span style={{color:"var(--categoryText)",fontWeight:700}}>{qtd} un</span>
                 </div>
               ))}
               {restantes>0&&<div style={{fontSize:11,color:"var(--text2)",fontStyle:"italic" as const,padding:"4px 0"}}>+ {restantes} produto(s)...</div>}
-              {mostrarTodos&&<div style={{display:"flex",justifyContent:"space-between",fontWeight:800,color:"#7C3AED",borderTop:"2px solid #7C3AED",marginTop:4,paddingTop:8,fontSize:12}}>
+              {mostrarTodos&&<div style={{display:"flex",justifyContent:"space-between",fontWeight:800,color:"var(--categoryText)",borderTop:"2px solid #7C3AED",marginTop:4,paddingTop:8,fontSize:12}}>
                 <span>TOTAL</span><span>{info.total} un</span>
               </div>}
               {!mostrarTodos&&<div className="muted" style={{fontSize:10,marginTop:6}}>Em {info.pedidos.size} pedido(s) arquivado(s)</div>}
@@ -10240,7 +10240,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
             <div style={{fontSize:36,marginBottom:10}}>📦</div>
             <div style={{fontSize:14,marginBottom:6,color:"var(--text)"}}>Nenhum produto cadastrado ainda.</div>
             <div style={{fontSize:12,marginBottom:16,color:"#555"}}>Adicione os produtos que serão usados nos pedidos.</div>
-            {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"#8B5CF6",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
+            {isAdmin&&<button className="btn" onClick={()=>setSubTab("produtos")} style={{background:"var(--category)",color:"#fff",padding:"11px 24px",fontSize:14,fontWeight:700}}>➕ Cadastrar Produtos</button>}
           </div>
         : <>
             {/* Resumo diário de produtos — soma o total pedido de cada
@@ -10294,10 +10294,10 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   <span style={{flex:1}}>{label}</span>
                   {(totalPed||totalAtual)&&<span style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
                     {totalAtual&&<span style={{fontSize:10,fontWeight:800,color:"#f59e0b",background:"#f59e0b18",padding:"2px 7px",borderRadius:10,textTransform:"none" as const,letterSpacing:0}}>Atual: {totalAtual}</span>}
-                    {totalPed&&<span style={{fontSize:10,fontWeight:800,color:"#7C3AED",background:"#7C3AED18",padding:"2px 7px",borderRadius:10,textTransform:"none" as const,letterSpacing:0}}>Total: {totalPed}</span>}
+                    {totalPed&&<span style={{fontSize:10,fontWeight:800,color:"var(--categoryText)",background:"#7C3AED18",padding:"2px 7px",borderRadius:10,textTransform:"none" as const,letterSpacing:0}}>Total: {totalPed}</span>}
                   </span>}
                   <span style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginRight:4,width:64,textAlign:"center" as const}}>Atual</span>
-                  <span style={{fontSize:10,color:"#7C3AED",fontWeight:700,width:64,textAlign:"center" as const}}>Pedido</span>
+                  <span style={{fontSize:10,color:"var(--categoryText)",fontWeight:700,width:64,textAlign:"center" as const}}>Pedido</span>
                   <span style={{width:26}}/>
                 </div>
               );
@@ -10386,13 +10386,13 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                   <div style={{fontSize:13,fontWeight:600}}>{it.nome}</div>
                   <div className="muted" style={{fontSize:11}}>{it.quantidade} {it.unidade} × {fmtMoney(it.precoUnit)}</div>
                 </div>
-                <span style={{fontWeight:700,fontSize:13,color:"#15803D",flexShrink:0}}>{fmtMoney(it.subtotal)}</span>
+                <span style={{fontWeight:700,fontSize:13,color:"var(--successText)",flexShrink:0}}>{fmtMoney(it.subtotal)}</span>
               </div>
             ))}
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",background:"#DCFCE7",border:"1px solid #22C55E44",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",background:"var(--successBg)",border:"1px solid #22C55E44",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
             <span style={{fontSize:12,fontWeight:700,color:"#166534"}}>TOTAL</span>
-            <span style={{fontSize:20,fontWeight:800,color:"#15803D"}}>{fmtMoney(reciboPrevia.total)}</span>
+            <span style={{fontSize:20,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(reciboPrevia.total)}</span>
           </div>
           <div className="muted" style={{fontSize:11,marginBottom:12,textAlign:"center" as const}}>Ainda não foi salvo — fica como "a receber" até confirmar.</div>
           <button onClick={confirmarGeracaoRecibo} className="btn"
@@ -10417,7 +10417,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
           <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(reciboGerado))}`,"_blank")} className="btn"
             style={{flex:1,background:"#DCFCE7",color:"#128C4A",border:"1px solid #25d36644",padding:"13px",fontSize:14,fontWeight:700}}>📲 WhatsApp</button>
           <button onClick={()=>imprimirRecibo(reciboGerado)} className="btn"
-            style={{flex:1,background:"#F3E8FF",color:"#8B5CF6",border:"1px solid #8B5CF6",padding:"13px",fontSize:14,fontWeight:700}}>🖨️ Imprimir</button>
+            style={{flex:1,background:"var(--categoryBg)",color:"var(--category)",border:"1px solid #8B5CF6",padding:"13px",fontSize:14,fontWeight:700}}>🖨️ Imprimir</button>
         </div>
         <button onClick={()=>setReciboGerado(null)} className="btn"
           style={{width:"100%",marginTop:8,background:"none",border:"1px solid var(--border)",color:"var(--text2)",padding:"11px",fontSize:13}}>Fechar</button>
@@ -10828,16 +10828,16 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
             </div>
           </div>
         </div>}
-        {(()=>{const s=(db.materiasPrimas||[]).filter((m:any)=>!mpIdsComMov.has(m.id)&&(m.estoqueAtual||0)<=0).length;return s>0?<div style={{background:"#DBEAFE",border:"1px solid #0EA5E940",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#888"}}>{s} produto{s>1?"s":""} do catálogo sem movimentação — visíveis em <span style={{color:"var(--btnPrimary)",fontWeight:700}}>Compras → 🗃️ Produtos</span>.</div>:null;})()}
-        {vencRed.length>0&&<div style={{background:"#FEE2E2",border:"1px solid #EF444455",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+        {(()=>{const s=(db.materiasPrimas||[]).filter((m:any)=>!mpIdsComMov.has(m.id)&&(m.estoqueAtual||0)<=0).length;return s>0?<div style={{background:"var(--infoBg)",border:"1px solid #0EA5E940",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#888"}}>{s} produto{s>1?"s":""} do catálogo sem movimentação — visíveis em <span style={{color:"var(--btnPrimary)",fontWeight:700}}>Compras → 🗃️ Produtos</span>.</div>:null;})()}
+        {vencRed.length>0&&<div style={{background:"var(--dangerBg)",border:"1px solid #EF444455",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
           <span style={{color:"var(--btnDanger)",fontWeight:700}}>🚨 Vencendo em até 3 dias: </span>
           {vencRed.map((m:any)=>m.nome).join(", ")}
         </div>}
-        {vencOrange.length>0&&<div style={{background:"#FEF3C7",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+        {vencOrange.length>0&&<div style={{background:"var(--warningBg)",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
           <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Vencendo em 4–7 dias: </span>
           {vencOrange.map((m:any)=>m.nome).join(", ")}
         </div>}
-        {perdaPercGlobal>3&&<div style={{background:"#FEE2E2",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
+        {perdaPercGlobal>3&&<div style={{background:"var(--dangerBg)",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12}}>
           <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Alto índice de perda: </span>
           <span style={{color:"#ccc"}}>{perdaPercGlobal.toFixed(1)}% do total comprado foi descartado (meta: &lt;3%)</span>
         </div>}
@@ -10887,7 +10887,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap" as const}}>
               <span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{m.categoria}</span>
               {!isCMV&&<span className="tag" style={{background:"#FEF3C7",color:"#f59e0b",fontSize:10,border:"1px solid #f59e0b44"}}>não CMV</span>}
-              {isPerecAlta&&<span className="tag" style={{background:"#F3E8FF",color:"#8B5CF6",fontSize:10}}>perecível</span>}
+              {isPerecAlta&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--category)",fontSize:10}}>perecível</span>}
               <span className="muted" style={{fontSize:11}}>Custo: {fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
               {min>0&&<span className="muted" style={{fontSize:11,color:est<min?"#f59e0b":"#555"}}>Mín: {min} {m.unidade}</span>}
               {est>0&&<span className="muted" style={{fontSize:11,color:"#22C55E"}}>≈ {fmtMoney(est*(m.ultimoValor||0))}</span>}
@@ -10897,19 +10897,19 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
             </div>}
             {fornList.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
               <span style={{fontSize:10,color:"#555",alignSelf:"center"}}>Fornecedor:</span>
-              {fornList.map((f:string,i:number)=><span key={i} className="tag" style={{background:"#DBEAFE",color:"var(--btnPrimary)",fontSize:10,border:"1px solid #0EA5E940"}}>{f}</span>)}
+              {fornList.map((f:string,i:number)=><span key={i} className="tag" style={{background:"var(--infoBg)",color:"var(--btnPrimary)",fontSize:10,border:"1px solid #0EA5E940"}}>{f}</span>)}
             </div>}
-            {min>0&&<div style={{background:"#DBEAFE",borderRadius:4,height:5,marginBottom:8}}>
+            {min>0&&<div style={{background:"var(--infoBg)",borderRadius:4,height:5,marginBottom:8}}>
               <div style={{background:cor,height:5,borderRadius:4,width:`${Math.min(100,min>0?(est/min)*100:0)}%`,transition:"width .3s"}}/>
             </div>}
             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
               <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"var(--border)",color:"var(--btnPrimary)",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
               <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"perda",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"#FEE2E2",color:"#f59e0b",padding:"5px 10px",fontSize:12,border:"1px solid #f59e0b44"}}>🗑️ Perda</button>
-              <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"#8B5CF6",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
+              <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"var(--category)",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <input type="number" min="0" step="0.1" value={m.estoqueMinimo||""} placeholder="0"
                   onChange={e=>{const v=parseFloat(e.target.value)||0;(setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((x:any)=>x.id===m.id?{...x,estoqueMinimo:v,atualizadoEm:new Date().toISOString()}:x)}));}}
-                  style={{width:60,background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 6px",fontSize:12,color:"var(--text1)"}}/>
+                  style={{width:60,background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:8,padding:"5px 6px",fontSize:12,color:"var(--text)"}}/>
                 <span style={{fontSize:11,color:"#555"}}>mín</span>
               </div>
               {movs.length>0&&<button onClick={()=>setVerHistEst(verHistEst===m.id?null:m.id)} style={{background:"none",border:"none",color:"#555",fontSize:11,cursor:"pointer",padding:"5px 0"}}>{verHistEst===m.id?"▼":"▶"} histórico ({movs.length})</button>}
@@ -10983,11 +10983,11 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
               style={{background:periodoAnl===d?"var(--btnPrimary)":"var(--border)",color:periodoAnl===d?"var(--onPrimary,#FFFFFF)":"#666",fontSize:11,padding:"4px 10px"}}>{l}</button>
           ))}
         </div>
-        {cmvPct>30&&receitaBruta>0&&<div style={{background:"#FEE2E2",border:"1px solid #EF444455",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
+        {cmvPct>30&&receitaBruta>0&&<div style={{background:"var(--dangerBg)",border:"1px solid #EF444455",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
           <span style={{color:"var(--btnDanger)",fontWeight:700}}>🚨 CMV alto: {cmvPct.toFixed(1)}% da receita</span>
           <span style={{color:"#ccc"}}> — meta ≤30%. Revise consumos e perdas.</span>
         </div>}
-        {perdaPercPer>3&&comprasPer>0&&<div style={{background:"#FEF3C7",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
+        {perdaPercPer>3&&comprasPer>0&&<div style={{background:"var(--warningBg)",border:"1px solid #f59e0b55",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
           <span style={{color:"#f59e0b",fontWeight:700}}>⚠️ Perdas: {perdaPercPer.toFixed(1)}% das compras</span>
           <span style={{color:"#ccc"}}> — meta &lt;3% ({fmtMoney(perdasPer)} em {periodoAnl}d)</span>
         </div>}
@@ -11028,7 +11028,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
                 <span>{catR?.icon||"📦"} <span style={{textTransform:"capitalize" as const}}>{cat}</span> <span className="muted">({data.items})</span>{!data.isCMV&&<span style={{marginLeft:4,fontSize:10,color:"#f59e0b"}}>não CMV</span>}</span>
                 <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(data.valor)} <span className="muted">({pct.toFixed(0)}%)</span></span>
               </div>
-              <div style={{background:"#DBEAFE",borderRadius:4,height:6}}>
+              <div style={{background:"var(--infoBg)",borderRadius:4,height:6}}>
                 <div style={{background:data.isCMV?"#22C55E":"#f59e0b",height:6,borderRadius:4,width:`${Math.min(100,pct)}%`,transition:"width .5s"}}/>
               </div>
             </div>;
@@ -11053,7 +11053,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
                 <span style={{fontSize:12,fontWeight:600}}>{REGRAS_CAT[m.categoria||""]?.icon||"📦"} {m.nome}</span>
                 <span style={{color:cor,fontWeight:700,fontSize:12}}>{m.diasCob.toFixed(1)}d <span style={{fontSize:10,color:"#555"}}>/ {expected}d esp.</span></span>
               </div>
-              <div style={{background:"#DBEAFE",borderRadius:4,height:4}}>
+              <div style={{background:"var(--infoBg)",borderRadius:4,height:4}}>
                 <div style={{background:cor,height:4,borderRadius:4,width:`${Math.min(100,(m.diasCob/expected)*100)}%`}}/>
               </div>
             </div>;
@@ -11200,7 +11200,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
                     <b style={{fontSize:13}}>{fmtMoney(f.total)}</b>
                   </div>
                   {f.itens.map((i:any)=>
-                    <div key={i.nome} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"var(--txt2)"}}>
+                    <div key={i.nome} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"var(--text2)"}}>
                       <span>{i.nome}</span>
                       <span>{i.comprar.toFixed(1).replace(".0","")} {i.unidade}</span>
                     </div>)}
@@ -11228,7 +11228,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
                       {verHistProj===i.nome?"Ocultar":`${i.qtdCompras} compras em ${i.historico}d`}
                     </button>
                   </div>
-                  {verHistProj===i.nome&&<div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--bd)"}}>
+                  {verHistProj===i.nome&&<div style={{marginTop:6,paddingTop:6,borderTop:"1px solid var(--border)"}}>
                     {i.compras.map((c:any)=>
                       <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11,padding:"3px 0"}}>
                         <span>{fmtDate(c.data)} · {(parseFloat(c.quantidade)||0).toFixed(1).replace(".0","")} {c.unidade||"un"} · {fmtMoney(c.valorUnitario)}</span>
@@ -11241,7 +11241,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
                   </div>}
                 </div>)}
 
-            {!!notasIgnoradas.length&&<div className="card" style={{marginTop:8,fontSize:11,color:"var(--txt2)"}}>
+            {!!notasIgnoradas.length&&<div className="card" style={{marginTop:8,fontSize:11,color:"var(--text2)"}}>
               {notasIgnoradas.length} compra(s) fora do cálculo ·{" "}
               <button onClick={()=>setNotasIgnoradas([])} className="btn-ghost" style={{padding:"2px 8px",fontSize:10.5}}>voltar a incluir todas</button>
             </div>}
@@ -11252,7 +11252,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
                 Comprados uma vez só ou há menos de {MIN_DIAS_HISTORICO} dias. Não dá pra medir ritmo — ficam de fora em vez de gerar um número inventado.
               </div>
               {p.semHistorico.map((s:any)=>
-                <div key={s.nome} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"3px 0",color:"var(--txt2)"}}>
+                <div key={s.nome} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"3px 0",color:"var(--text2)"}}>
                   <span>{s.nome}</span><span>estoque {s.estoque} {s.unidade}</span>
                 </div>)}
             </div>}
@@ -11263,7 +11263,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
                 Sem compra há mais de {DIAS_INATIVO} dias — provavelmente saíram do cardápio.
               </div>
               {p.inativos.map((s:any)=>
-                <div key={s.nome} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"3px 0",color:"var(--txt2)"}}>
+                <div key={s.nome} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"3px 0",color:"var(--text2)"}}>
                   <span>{s.nome}</span><span>{s.diasSemComprar} dias</span>
                 </div>)}
             </div>}
@@ -11547,7 +11547,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
   const contasAtrasadas=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).sort((a:any,b:any)=>a.vencimento.localeCompare(b.vencimento));
 
   return <div>
-    {contasAtrasadas.length>0&&<div style={{background:"#FEE2E2",border:"1px solid #EF444440",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+    {contasAtrasadas.length>0&&<div style={{background:"var(--dangerBg)",border:"1px solid #EF444440",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
         <span style={{fontSize:18}}>🔴</span>
         <span style={{fontWeight:700,color:"var(--btnDanger)",fontSize:14}}>{contasAtrasadas.length} conta{contasAtrasadas.length>1?"s":""} em atraso</span>
@@ -11585,8 +11585,8 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
           </button>
 
           <button className="btn" onClick={()=>excluirCompraInteira(contaCompraExcluir)}
-            style={{width:"100%",textAlign:"left" as const,padding:"11px 13px",marginBottom:9,background:"#FEE2E2",border:"1px solid #EF444455"}}>
-            <div style={{fontWeight:700,fontSize:13,color:"#B91C1C"}}>A compra inteira</div>
+            style={{width:"100%",textAlign:"left" as const,padding:"11px 13px",marginBottom:9,background:"var(--dangerBg)",border:"1px solid #EF444455"}}>
+            <div style={{fontWeight:700,fontSize:13,color:"var(--dangerText)"}}>A compra inteira</div>
             <div style={{fontSize:11,marginTop:3,lineHeight:1.5,color:"#7F1D1D"}}>
               Apaga o lançamento e os {itens.length} item(ns) do histórico
               {temPdv?", e devolve a quantidade no estoque (Gestão e PDV)":", e devolve a quantidade no estoque"}.
@@ -11607,21 +11607,21 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
             <button onClick={()=>setVerConta(null)} style={{background:"none",border:"none",color:"#888",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
           </div>
           <div className="muted" style={{fontSize:12,marginBottom:8}}>{fmtDate(verConta.vencimento)} · {fmtMoney(parseMoney(verConta.valor))} · {verConta.status==="pago"?"✅ Pago":"⏰ Pendente"}</div>
-          {verConta.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#DBEAFE",borderRadius:7,padding:"5px 8px",marginBottom:8}}>
+          {verConta.chNFe&&<div style={{display:"flex",alignItems:"center",gap:6,background:"var(--infoBg)",borderRadius:7,padding:"5px 8px",marginBottom:8}}>
             <span style={{fontSize:9,fontFamily:"monospace",color:"#555",flex:1,wordBreak:"break-all" as const,lineHeight:1.4}}>{verConta.chNFe}</span>
             <button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"none",border:"1px solid #0EA5E940",borderRadius:5,color:"#666",padding:"2px 7px",fontSize:10,cursor:"pointer",whiteSpace:"nowrap" as const}}>📋 Copiar chave</button>
           </div>}
-          {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"#DBEAFE",color:"#1D4ED8",border:"1px solid #0EA5E940",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:8,width:"100%"}}>
+          {verConta.anexo&&<button onClick={()=>abrirAnexo(verConta.anexo)} style={{display:"flex",alignItems:"center",gap:6,background:"var(--infoBg)",color:"var(--infoText)",border:"1px solid #0EA5E940",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",marginBottom:8,width:"100%"}}>
             <span>📎</span><span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{verConta.anexo.nome}</span><span style={{fontSize:11,color:"#888"}}>abrir</span>
           </button>}
           <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
             {itens.length>0&&<button onClick={()=>imprimirNFe(verConta,itens)} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #2a4a2a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               🖨️ Imprimir / PDF
             </button>}
-            {verConta.xmlNFe&&<button onClick={()=>baixarXmlNFe(verConta.xmlNFe,verConta.nNF||"",verConta.fornecedorNome||"")} style={{background:"#DBEAFE",color:"var(--btnPrimary)",border:"1px solid #0EA5E940",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            {verConta.xmlNFe&&<button onClick={()=>baixarXmlNFe(verConta.xmlNFe,verConta.nNF||"",verConta.fornecedorNome||"")} style={{background:"var(--infoBg)",color:"var(--btnPrimary)",border:"1px solid #0EA5E940",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               📥 Baixar XML
             </button>}
-            {verConta.chNFe&&<button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"#DBEAFE",color:"#888",border:"1px solid #0EA5E940",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            {verConta.chNFe&&<button onClick={()=>{if(navigator.clipboard)navigator.clipboard.writeText(verConta.chNFe).then(()=>alert("✅ Chave copiada!"));else{const ta=document.createElement("textarea");ta.value=verConta.chNFe;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave copiada!");}}} style={{background:"var(--infoBg)",color:"#888",border:"1px solid #0EA5E940",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               📋 Copiar chave
             </button>}
           </div>
@@ -11685,12 +11685,12 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
       {/* ── Recurring accounts section ── */}
       {gruposList.length>0&&<div style={{marginBottom:16,border:"1px solid #8B5CF640",borderRadius:12,overflow:"hidden"}}>
         <div onClick={()=>setRecorrenteCollapsed(v=>!v)}
-          style={{padding:"10px 14px",cursor:"pointer",background:"#F3E8FF",display:"flex",alignItems:"center",gap:8}}>
+          style={{padding:"10px 14px",cursor:"pointer",background:"var(--categoryBg)",display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:14,transition:"transform .2s",transform:recorrenteCollapsed?"rotate(-90deg)":"rotate(0deg)"}}>▼</span>
           <span style={{fontSize:15}}>🔄</span>
-          <span style={{fontWeight:700,fontSize:14,color:"#8B5CF6",flex:1}}>Recorrentes</span>
+          <span style={{fontWeight:700,fontSize:14,color:"var(--category)",flex:1}}>Recorrentes</span>
           <span style={{fontSize:11,color:"#888"}}>{gruposList.length} {gruposList.length===1?"série":"séries"}</span>
-          <span style={{fontWeight:700,fontSize:13,color:"#8B5CF6"}}>{fmtMoney(totalRecorrente)}</span>
+          <span style={{fontWeight:700,fontSize:13,color:"var(--category)"}}>{fmtMoney(totalRecorrente)}</span>
         </div>
         {!recorrenteCollapsed&&<div style={{padding:"6px 0"}}>
           {gruposList.map(({gid,items:sorted,totalG,pagasG,descBase,nextPend})=>{
@@ -11702,7 +11702,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:13,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" as const}}>
                     {descBase}
-                    <span style={{fontSize:10,color:"#8B5CF6",background:"#F3E8FF",borderRadius:20,padding:"1px 7px",fontWeight:700}}>{sorted.length}x</span>
+                    <span style={{fontSize:10,color:"var(--category)",background:"var(--categoryBg)",borderRadius:20,padding:"1px 7px",fontWeight:700}}>{sorted.length}x</span>
                   </div>
                   <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap" as const}}>
                     {sorted[0].categoria&&<span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{sorted[0].categoria}</span>}
@@ -11712,7 +11712,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                   </div>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontWeight:700,fontSize:14,color:"#8B5CF6"}}>{fmtMoney(totalG)}</div>
+                  <div style={{fontWeight:700,fontSize:14,color:"var(--category)"}}>{fmtMoney(totalG)}</div>
                   <div style={{fontSize:11,color:pagasG===sorted.length?"#22C55E":"#888"}}>{pagasG}/{sorted.length} pagas</div>
                 </div>
               </div>
@@ -11726,16 +11726,16 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                     <div style={{fontSize:11,color:"#888",marginBottom:6}}>{fmtDate(c.vencimento)}</div>
                     <div style={{display:"flex",gap:5}}>
                       <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#DCFCE7":"#FEF3C7",color:c.status==="pago"?"#22C55E":"#F59E0B",padding:"5px 10px",fontSize:11}}>{c.status==="pago"?"✅":"⏰"}</button>
-                      {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"5px 10px",fontSize:11}}>📎</button>}
+                      {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"5px 10px",fontSize:11}}>📎</button>}
                       <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"5px 10px",fontSize:11}}>✏️</button>
-                      <button className="btn" onClick={()=>del(c.id)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"5px 10px",fontSize:11}}>🗑️</button>
+                      <button className="btn" onClick={()=>del(c.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"5px 10px",fontSize:11}}>🗑️</button>
                     </div>
                   </div>
                 ))}
                 <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:6,flexWrap:"wrap" as const}}>
                   <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#DCFCE7",color:"#22C55E",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
                   <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"var(--btnPrimary)",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
-                  <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
+                  <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
                 </div>
               </div>}
             </div>;
@@ -11758,9 +11758,9 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
             <span style={{fontSize:12,transition:"transform .2s",transform:collapsed?"rotate(-90deg)":"rotate(0deg)"}}>▼</span>
             <span style={{fontSize:13}}>{isToday?"📌":isPast?"⏰":"📅"}</span>
             <span style={{fontWeight:700,fontSize:13,color:isToday?"var(--btnPrimary)":isPast?"var(--btnDanger)":"#e8eaf0"}}>{date==="sem-data"?"Sem data":fmtDate(date)}</span>
-            {isToday&&<span style={{fontSize:9,color:"var(--btnPrimary)",background:"#DBEAFE",borderRadius:20,padding:"1px 7px",fontWeight:700}}>HOJE</span>}
+            {isToday&&<span style={{fontSize:9,color:"var(--btnPrimary)",background:"var(--infoBg)",borderRadius:20,padding:"1px 7px",fontWeight:700}}>HOJE</span>}
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-              {pendDia>0&&<span style={{fontSize:10,color:"var(--btnDanger)",background:"#FEE2E2",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pendDia} pend.</span>}
+              {pendDia>0&&<span style={{fontSize:10,color:"var(--btnDanger)",background:"var(--dangerBg)",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pendDia} pend.</span>}
               {pagasDia>0&&<span style={{fontSize:10,color:"#22C55E",background:"#DCFCE7",borderRadius:20,padding:"1px 6px",fontWeight:700}}>{pagasDia} paga{pagasDia>1?"s":""}</span>}
               <span style={{fontSize:13,color:"#888",fontWeight:700}}>{fmtMoney(totalDia)}</span>
             </div>
@@ -11776,17 +11776,17 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                   {c.categoria&&<span className="tag" style={{background:c.categoria==="Adiantamento"?"#FEF3C7":"var(--border)",color:c.categoria==="Adiantamento"?"#F59E0B":"#888"}}>{c.categoria}</span>}
                   {c.formaPag&&<span>{c.formaPag}</span>}
                   {c.fornecedor&&<span>• {c.fornecedor}</span>}
-                  {c.origem==="compra"&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10}}>compra</span>}
+                  {c.origem==="compra"&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>compra</span>}
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
                   <button className="btn" onClick={()=>toggle(c.id)} style={{background:c.status==="pago"?"#DCFCE7":"#FEF3C7",color:c.status==="pago"?"#22C55E":"#F59E0B",padding:"6px 12px",fontSize:12}}>
                     {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
                   </button>
-                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
+                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
                   {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>🖨️</button>}
-                  {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"6px 12px",fontSize:12}}>📎</button>}
+                  {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:12}}>📎</button>}
                   <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-                  <button className="btn" onClick={()=>del(c.id)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
+                  <button className="btn" onClick={()=>del(c.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
                 </div>
               </div>
             ))}
@@ -11874,7 +11874,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
               </div>
               {!(form.diasSemana||[]).length&&<div style={{fontSize:11,color:"var(--btnDanger)",marginTop:4}}>Selecione pelo menos um dia.</div>}
             </div>}
-            {parseInt(form.parcelas)>1&&<div style={{marginTop:8,fontSize:11,color:"var(--btnPrimary)",background:"#DBEAFE",borderRadius:6,padding:"6px 10px"}}>
+            {parseInt(form.parcelas)>1&&<div style={{marginTop:8,fontSize:11,color:"var(--btnPrimary)",background:"var(--infoBg)",borderRadius:6,padding:"6px 10px"}}>
               {(()=>{
                 const n=parseInt(form.parcelas)||1;
                 const v=parseMoney(form.valor);
@@ -11889,7 +11889,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
           <div style={{fontSize:12,color:"#888",marginBottom:6}}>📎 Documento comprovante (opcional)</div>
           {form.anexo?<div style={{display:"flex",gap:8,alignItems:"center",background:"var(--bg4)",borderRadius:8,padding:"8px 12px",border:"1px solid var(--border)"}}>
             <span style={{fontSize:12,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>📄 {form.anexo.nome}</span>
-            <button type="button" onClick={()=>abrirAnexo(form.anexo)} style={{background:"#DBEAFE",color:"#1D4ED8",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>👁️ Ver</button>
+            <button type="button" onClick={()=>abrirAnexo(form.anexo)} style={{background:"var(--infoBg)",color:"var(--infoText)",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>👁️ Ver</button>
             <button type="button" onClick={()=>setForm((f:any)=>({...f,anexo:null}))} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}}>✕</button>
           </div>:<label style={{display:"block",cursor:"pointer"}}>
             <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{display:"none"}} onChange={handleAnexo}/>
@@ -11920,7 +11920,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
         <div key={c} className="list-item" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span>{c}</span>
           <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:d.categorias.filter((x:string)=>x!==c)}))}
-            style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
+            style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
       ))}
     </div>}
@@ -12187,21 +12187,21 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
               {f.compartilhada&&<span className="tag" style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)"}}>🔗 Compartilhada com {outraEmpresa}</span>}
             </div>
             <div style={{display:"flex",gap:5}}>
-              {por>1&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>{por} porções</span>}
+              {por>1&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>{por} porções</span>}
               <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>CMV {cmv}%</span>
             </div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:80,background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-              <div style={{color:"#1D4ED8",fontWeight:700,fontSize:14}}>{fmtMoney(f.custoTotal)}</div>
+              <div style={{color:"var(--infoText)",fontWeight:700,fontSize:14}}>{fmtMoney(f.custoTotal)}</div>
               <div style={{fontSize:10,color:"var(--text2)"}}>Custo total</div>
             </div>
             {por>1&&<div style={{flex:1,minWidth:80,background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-              <div style={{color:"#7C3AED",fontWeight:700,fontSize:14}}>{fmtMoney(cp)}</div>
+              <div style={{color:"var(--categoryText)",fontWeight:700,fontSize:14}}>{fmtMoney(cp)}</div>
               <div style={{fontSize:10,color:"var(--text2)"}}>Custo/porção</div>
             </div>}
-            <div style={{flex:1,minWidth:80,background:"#DCFCE7",borderRadius:10,padding:"10px",textAlign:"center",border:"1px solid #16A34A55"}}>
-              <div style={{color:"#15803D",fontWeight:700,fontSize:14}}>{fmtMoney(pp)}</div>
+            <div style={{flex:1,minWidth:80,background:"var(--successBg)",borderRadius:10,padding:"10px",textAlign:"center",border:"1px solid #16A34A55"}}>
+              <div style={{color:"var(--successText)",fontWeight:700,fontSize:14}}>{fmtMoney(pp)}</div>
               <div style={{fontSize:10,color:"#166534"}}>Preço/porção</div>
             </div>
           </div>
@@ -12212,7 +12212,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
           ))}
           <div style={{display:"flex",gap:8,marginTop:10}}>
             <button className="btn" onClick={()=>edit(f)} style={{background:"none",border:"1px solid var(--border2)",color:"var(--text2)",padding:"6px 14px",fontSize:12}}>✏️ Editar</button>
-            <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"none",border:"1px solid #1D4ED8",color:"#1D4ED8",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
+            <button className="btn" onClick={()=>{setConcFichaId(concFichaId===f.id?null:f.id);setSubTab("conciliacao");}} style={{background:"none",border:"1px solid #1D4ED8",color:"var(--infoText)",padding:"6px 14px",fontSize:12}}>🔗 Conciliar</button>
             <button className="btn" onClick={()=>del(f)} style={{background:"none",border:"1px solid #EF444455",color:"var(--btnDanger)",padding:"6px 14px",fontSize:12}}>🗑️</button>
           </div>
           {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
@@ -12281,7 +12281,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
             {marcasDoProd.map((m:any)=>{
               const ativa=marcaMaisRecente&&m.id===marcaMaisRecente.id;
-              return <div key={m.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,padding:"5px 8px",borderRadius:7,background:"var(--card,var(--bg))",border:ativa?"1.5px solid #22C55E":"1px solid transparent"}}>
+              return <div key={m.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,padding:"5px 8px",borderRadius:7,background:"var(--bg3,var(--bg))",border:ativa?"1.5px solid #22C55E":"1px solid transparent"}}>
                 <span style={{flex:1}}>{m.nome}{ativa&&<span style={{fontSize:8.5,fontWeight:800,background:"#22C55E",color:"#fff",borderRadius:4,padding:"1px 5px",marginLeft:6}}>USADO NA FICHA</span>}</span>
                 <span style={{fontWeight:700,color:ativa?"#22C55E":"var(--text)"}}>{fmtMoney(m.ultimoValor||0)}</span>
               </div>;
@@ -12289,7 +12289,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
           </div>
         </div>}
 
-        {temPrecoCatalogado?<div style={{background:"var(--card,var(--bg))",border:"2px solid #22C55E",borderRadius:9,padding:"10px 11px",marginBottom:8}}>
+        {temPrecoCatalogado?<div style={{background:"var(--bg3,var(--bg))",border:"2px solid #22C55E",borderRadius:9,padding:"10px 11px",marginBottom:8}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
             <div>
               <div style={{fontSize:9.5,color:"#22C55E",textTransform:"uppercase" as const,letterSpacing:.5,fontWeight:700,marginBottom:4}}>{marcaMaisRecente?"Preço travado (marca mais recente)":"Preço travado (cadastro da matéria-prima)"}</div>
@@ -12299,7 +12299,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
           </div>
           <div style={{fontSize:10.5,color:"var(--text2)",marginTop:4}}>Sempre o preço mais atual do cadastro — se mudar numa próxima compra, atualiza sozinho aqui e em "🔄 Atualizar Fichas".</div>
           {showConvPanel&&<div style={{background:"#F59E0B14",border:"1px solid #F59E0B55",borderRadius:9,padding:"11px 12px",marginTop:10}}>
-            <div style={{fontSize:11.5,fontWeight:700,color:"#B45309",marginBottom:2}}>📦 Este preço é de uma embalagem fechada?</div>
+            <div style={{fontSize:11.5,fontWeight:700,color:"var(--warningText)",marginBottom:2}}>📦 Este preço é de uma embalagem fechada?</div>
             <div style={{fontSize:10.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>Confira também se a unidade cadastrada está certa. Ajuste os dois de uma vez — o sistema recalcula o preço e corrige o cadastro de "{mpAtivo?.nome}" pra sempre.</div>
             <div style={{marginBottom:8}}>
               <label style={{fontSize:10,color:"#666"}}>Unidade de medida correta</label>
@@ -12317,9 +12317,9 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
                 <input type="number" min="0" step="0.01" placeholder="0" value={convForm.rendeQtd} onChange={e=>setConvForm(c=>({...c,rendeQtd:e.target.value}))} className="inp" style={{marginBottom:0}}/>
               </div>
             </div>
-            {rendeQtdNum>0&&precoEmbalagemNum>0&&<div style={{background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"9px 11px",marginTop:10}}>
+            {rendeQtdNum>0&&precoEmbalagemNum>0&&<div style={{background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"9px 11px",marginTop:10}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Cadastro atual</span><span style={{color:"var(--text3)",textDecoration:"line-through"}}>{fmtMoney(mpAtivo?.ultimoValor||0)}/{mpAtivo?.unidade}</span></div>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Cadastro corrigido</span><b style={{color:"#15803D"}}>{fmtMoney(novoValorPorUnd)}/{convForm.unidade}</b></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}><span style={{color:"#166534"}}>Cadastro corrigido</span><b style={{color:"var(--successText)"}}>{fmtMoney(novoValorPorUnd)}/{convForm.unidade}</b></div>
             </div>}
             <div style={{display:"flex",gap:8,marginTop:10}}>
               <button onClick={salvarConversao} style={{flex:1,background:"#22C55E",color:"#fff",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer"}}>💾 Corrigir cadastro{mpAtivo?` de ${mpAtivo.nome}`:""}</button>
@@ -12327,7 +12327,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
             </div>
           </div>}
         </div>:novoIns.nome.trim()&&<div style={{background:"#F59E0B14",border:"1px solid #F59E0B55",borderRadius:9,padding:"10px 11px",marginBottom:8}}>
-          <div style={{fontSize:11,color:"#B45309",fontWeight:700,marginBottom:6}}>⚠️ Produto não encontrado no catálogo</div>
+          <div style={{fontSize:11,color:"var(--warningText)",fontWeight:700,marginBottom:6}}>⚠️ Produto não encontrado no catálogo</div>
           <div style={{fontSize:10.5,color:"var(--text2)",marginBottom:6}}>Informe um preço manual só pra essa ficha, ou cadastre o produto em Compras → Insumos pra ele entrar na conversão automática.</div>
           <label style={{fontSize:10,color:"#666"}}>Preço manual (R$/{novoIns.unidade})</label>
           <input type="number" placeholder="0.00" min="0" step="0.01" value={novoIns.precoManual} onChange={e=>setNovoIns(i=>({...i,precoManual:e.target.value}))}
@@ -12349,7 +12349,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
         </div>
         {insQtdUsada>0&&insValorUnd>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"6px 8px",background:"#1D4ED811",borderRadius:6,marginBottom:8,border:"1px solid #1D4ED822"}}>
           <span style={{color:"#888"}}>Custo na ficha:</span>
-          <span style={{color:"#1D4ED8",fontWeight:700}}>{fmtMoney(insCusto)} <span style={{fontWeight:400,fontSize:10}}>({insQtdUsada}{novoIns.unidade} × {fmtMoney(insValorUnd)})</span></span>
+          <span style={{color:"var(--infoText)",fontWeight:700}}>{fmtMoney(insCusto)} <span style={{fontWeight:400,fontSize:10}}>({insQtdUsada}{novoIns.unidade} × {fmtMoney(insValorUnd)})</span></span>
         </div>}
         <button className="btn" onClick={addIns} style={{background:"var(--border)",color:"var(--text)",padding:"10px",width:"100%"}}>+ Adicionar</button>
       </div>
@@ -12389,7 +12389,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
             :<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontSize:13,fontWeight:600}}>{i.nome}</div><div className="muted" style={{fontSize:11}}>{i.quantidade}{i.unidade} × {fmtMoney(i.valorUnd)}</div></div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontWeight:600,color:"#1D4ED8"}}>{fmtMoney(i.custo)}</span>
+                <span style={{fontWeight:600,color:"var(--infoText)"}}>{fmtMoney(i.custo)}</span>
                 <button onClick={()=>startEditIns(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#F59E0B",fontSize:13,padding:"0 3px"}}>✏️</button>
                 <button className="btn" onClick={()=>remIns(i.id)} style={{background:"transparent",color:"var(--btnDanger)",fontSize:16,padding:"0 4px"}}>✕</button>
               </div>
@@ -12398,11 +12398,11 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
         })}
         <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
           <span style={{fontWeight:700}}>Custo total</span>
-          <span style={{color:"#1D4ED8",fontWeight:700}}>{fmtMoney(custoTotal)}</span>
+          <span style={{color:"var(--infoText)",fontWeight:700}}>{fmtMoney(custoTotal)}</span>
         </div>
         {porcoes>1&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderTop:"1px solid #0EA5E940"}}>
           <span className="muted" style={{fontSize:12}}>Custo/porção ({porcoes} porções)</span>
-          <span style={{color:"#8B5CF6",fontWeight:600,fontSize:13}}>{fmtMoney(custoPorcao)}</span>
+          <span style={{color:"var(--category)",fontWeight:600,fontSize:13}}>{fmtMoney(custoPorcao)}</span>
         </div>}
         <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:"1px solid #0EA5E940"}}>
           <span style={{fontWeight:700}}>Preço/porção ({cmvPct}% CMV)</span>
@@ -12434,7 +12434,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
               </div>
             </div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
-              <span style={{fontSize:11,color:"#1D4ED8"}}>{fmtMoney(f.custoTotal)}</span>
+              <span style={{fontSize:11,color:"var(--infoText)"}}>{fmtMoney(f.custoTotal)}</span>
               <span style={{fontSize:14,color:"#888"}}>{isOpen?"▲":"▼"}</span>
             </div>
           </div>
@@ -12463,7 +12463,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
                 </div>
                 <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
                   <div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#1D4ED8"}}>{fmtMoney(precoFicha)}/{ins.unidade}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--infoText)"}}>{fmtMoney(precoFicha)}/{ins.unidade}</div>
                     <div style={{fontSize:9,color:"#666"}}>Preço ficha</div>
                   </div>
                   <div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
@@ -12471,7 +12471,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
                     <div style={{fontSize:9,color:"#666"}}>{ultimaCompra?`Compra ${fmtDate(ultimaCompra.data)}`:"Sem compra"}</div>
                   </div>
                   {isVinculado&&mp&&<div style={{flex:1,minWidth:80,background:"var(--bg4)",borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#8B5CF6"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--category)"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</div>
                     <div style={{fontSize:9,color:"#666"}}>Matéria-prima</div>
                   </div>}
                   {ultimaCompra&&diff!==0&&<div style={{flex:"0 0 60px",background:diff>0?"#DCFCE7":"#FEE2E2",borderRadius:8,padding:"6px 8px",textAlign:"center",border:`1px solid ${diff>0?"#EF444433":"#22C55E33"}`}}>
@@ -12513,7 +12513,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
                     {comprasMatch.slice(0,10).map((c,idx)=>(
                       <div key={idx} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid #0EA5E94022"}}>
                         <span style={{color:"#888"}}>{fmtDate(c.data)} · {c.fornecedor||"—"}</span>
-                        <span style={{color:"#1D4ED8",cursor:"pointer"}} onClick={()=>{vincularInsumo(f.id,ins.id,c);}}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"} 🔗</span>
+                        <span style={{color:"var(--infoText)",cursor:"pointer"}} onClick={()=>{vincularInsumo(f.id,ins.id,c);}}>{fmtMoney(c.valorUnitario||0)}/{c.unidade||"un"} 🔗</span>
                       </div>
                     ))}
                   </div>
@@ -12818,19 +12818,19 @@ ${detalhesDesc.join("")}
           </div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
             <span className="tag" style={{background:"var(--border)",color:"#888"}}>Sal: {fmtMoney(f.salario)}</span>
-            {totFalt>0&&<span className="tag" style={{background:"#F3E8FF",color:"var(--btnDanger)"}}>-{fmtMoney(totFalt)} falta</span>}
+            {totFalt>0&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--btnDanger)"}}>-{fmtMoney(totFalt)} falta</span>}
             {totAdt>0&&<span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>-{fmtMoney(totAdt)} adt</span>}
             {totBonif>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totBonif)} bonif</span>}
             {totComis>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totComis)} comis</span>}
             {totSalFam>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totSalFam)} sal.fam</span>}
             {totEnc>0&&<span className="tag" style={{background:"#F3E8FF",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} encargos</span>}
-            {totCons>0&&<span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8"}}>-{fmtMoney(totCons)} cons</span>}
+            {totCons>0&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>-{fmtMoney(totCons)} cons</span>}
           </div>
           <div style={{display:"flex",gap:8}}>
             <button className="btn" onClick={()=>gerarHolerite(f)} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"7px 14px",fontSize:12}}>📄 Holerite</button>
             <button className="btn" onClick={()=>{if(confirm(`Lançar folha de ${f.nome} (${relMes}) no Financeiro?`))lancarFolhaFin(f);}} style={{background:"#DCFCE7",color:"#22C55E",padding:"7px 12px",fontSize:12}}>💰 Folha</button>
             <button className="btn" onClick={()=>editFunc(f)} style={{background:"var(--border)",color:"#888",padding:"7px 12px",fontSize:12}}>✏️</button>
-            <button className="btn" onClick={()=>delFunc(f.id)} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"7px 12px",fontSize:12}}>🗑️</button>
+            <button className="btn" onClick={()=>delFunc(f.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"7px 12px",fontSize:12}}>🗑️</button>
           </div>
           {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
         </div>;
@@ -12861,7 +12861,7 @@ ${detalhesDesc.join("")}
         <input type="date" value={faltaForm.data} onChange={e=>setFaltaForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <input type="number" placeholder="Nº de dias" value={faltaForm.dias} onChange={e=>setFaltaForm(f=>({...f,dias:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <input placeholder="Motivo" value={faltaForm.motivo} onChange={e=>setFaltaForm(f=>({...f,motivo:e.target.value}))} className="inp"/>
-        {faltaForm.funcionarioId&&faltaForm.dias&&<div style={{background:"#DBEAFE",borderRadius:10,padding:"10px",marginTop:8}}>
+        {faltaForm.funcionarioId&&faltaForm.dias&&<div style={{background:"var(--infoBg)",borderRadius:10,padding:"10px",marginTop:8}}>
           <span className="muted">Desconto: </span>
           <span style={{color:"var(--btnDanger)",fontWeight:700}}>{fmtMoney(((funcs.find(f=>f.id===faltaForm.funcionarioId)?.salario||0)/30)*parseFloat(faltaForm.dias||0))}</span>
         </div>}
@@ -12879,7 +12879,7 @@ ${detalhesDesc.join("")}
     {subTab==="adiantamentos"&&<div>
       <div className="card" style={{marginBottom:14}}>
         <div className="section-title">Registrar Adiantamento</div>
-        <div style={{background:"#DBEAFE",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #0EA5E940"}}>
+        <div style={{background:"var(--infoBg)",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #0EA5E940"}}>
           <div style={{fontSize:12,color:"var(--btnPrimary)",fontWeight:700,marginBottom:2}}>ℹ️ Integração Financeiro</div>
           <div className="muted" style={{fontSize:12}}>O adiantamento será lançado como conta a pagar (categoria: Adiantamento) no financeiro.</div>
         </div>
@@ -12898,7 +12898,7 @@ ${detalhesDesc.join("")}
         <div className="muted">{fmtDate(a.data)}</div>{a.descricao&&<div className="muted">{a.descricao}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
           <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
-          <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
+          <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {a.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(a.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
@@ -12908,7 +12908,7 @@ ${detalhesDesc.join("")}
     {subTab==="encargos"&&<div>
       <div ref={formRefEnc} className="card" style={{marginBottom:14}}>
         <div className="section-title">{encEdit?"Editar Encargos":"Registrar Encargos"}</div>
-        <div style={{background:"#DBEAFE",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #0EA5E940"}}>
+        <div style={{background:"var(--infoBg)",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #0EA5E940"}}>
           <div style={{fontSize:12,color:"var(--btnPrimary)",fontWeight:700,marginBottom:2}}>ℹ️ Encargos do funcionário</div>
           <div className="muted" style={{fontSize:12}}>Vale Transporte + FGTS + INSS em valor único. Descontado no holerite (não lança no Financeiro).</div>
         </div>
@@ -12947,7 +12947,7 @@ ${detalhesDesc.join("")}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button className="btn" onClick={()=>lancarEncFin(e)} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
           <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-          <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"#F3E8FF",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
+          <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {e.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(e.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
@@ -12968,7 +12968,7 @@ ${detalhesDesc.join("")}
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhCons" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
       {sortList(db.consumacoes||[],db,'rhCons','data-desc').map(c=>{const fn=funcs.find(f=>f.id===c.funcionarioId);return <div key={c.id} className="list-item">
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#1D4ED8",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"var(--infoText)",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span></div>
         <div className="muted">{fmtDate(c.data)}</div>{c.descricao&&<div className="muted">{c.descricao}</div>}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
           <button className="btn" onClick={()=>lancarConsFin(c)} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
@@ -13133,8 +13133,8 @@ function DREComp({db,setDb,empresa}){
     </div>
 
     {/* Ponto de Equilíbrio */}
-    <div className="card" style={{background:"#DBEAFE",border:"1px solid #0EA5E940"}}>
-      <div className="section-title" style={{color:"#1D4ED8"}}>Ponto de Equilíbrio</div>
+    <div className="card" style={{background:"var(--infoBg)",border:"1px solid #0EA5E940"}}>
+      <div className="section-title" style={{color:"var(--infoText)"}}>Ponto de Equilíbrio</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
         <div style={{textAlign:"center"}}>
           <div style={{fontWeight:700,fontSize:14,color:"#F59E0B"}}>{fmtMoney(pe)}</div>
@@ -13150,7 +13150,7 @@ function DREComp({db,setDb,empresa}){
         </div>
       </div>
       {vendasBrutas>0&&<div>
-        <div style={{fontSize:11,fontWeight:700,color:"#1D4ED8",marginBottom:10}}>Para cada R$100,00 vendidos</div>
+        <div style={{fontSize:11,fontWeight:700,color:"var(--infoText)",marginBottom:10}}>Para cada R$100,00 vendidos</div>
         {[
           {label:"Taxas delivery (iFood/99food)",val:(despVendas/vendasBrutas)*100,c:"#f87171"},
           {label:`Impostos Simples Nacional (${sn}%)`,val:sn,c:"#f59e0b"},
@@ -13163,7 +13163,7 @@ function DREComp({db,setDb,empresa}){
               <span style={{fontSize:11,color:bold?"var(--text)":"#888",fontWeight:bold?700:400}}>{label}</span>
               <span style={{fontWeight:bold?800:700,color:c,fontSize:bold?15:13}}>R${Math.abs(val).toFixed(2)}</span>
             </div>
-            <div style={{height:5,background:"#DBEAFE",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:5,background:"var(--infoBg)",borderRadius:3,overflow:"hidden"}}>
               <div style={{height:"100%",borderRadius:3,width:`${Math.min(Math.abs(val),100)}%`,background:c,opacity:bold?1:0.7}}/>
             </div>
           </div>
@@ -13172,11 +13172,11 @@ function DREComp({db,setDb,empresa}){
           <span style={{fontSize:10,color:"#555"}}>Restante não alocado: R${Math.max(100-(despVendas/vendasBrutas*100+sn+totalCMV/vendasBrutas*100+totalDesp/vendasBrutas*100+Math.max(lucroLiq/vendasBrutas*100,0)),0).toFixed(2)}</span>
         </div>
       </div>}
-      <div style={{marginTop:12,padding:"10px",background:"#DCFCE7",borderRadius:8,border:"1px solid #22C55E40",textAlign:"center"}}>
+      <div style={{marginTop:12,padding:"10px",background:"var(--successBg)",borderRadius:8,border:"1px solid #22C55E40",textAlign:"center"}}>
         <div style={{fontSize:10,color:"#888",marginBottom:2}}>Margem de Contribuição (sobra para cobrir fixas)</div>
         <div style={{fontSize:22,fontWeight:800,color:mcPct>=30?"#22C55E":"#f59e0b"}}>{mcPct.toFixed(1)}%</div>
         <div style={{fontSize:11,color:"#888",marginTop:2}}>{fmtMoney(mc)} sobre {fmtMoney(vendasBrutas)}</div>
-        {pe>0&&<div style={{marginTop:8,padding:"6px",background:"#DBEAFE",borderRadius:6}}>
+        {pe>0&&<div style={{marginTop:8,padding:"6px",background:"var(--infoBg)",borderRadius:6}}>
           <div style={{fontSize:10,color:"#888"}}>Ponto de equilíbrio (vendas viram lucro)</div>
           <div style={{fontSize:16,fontWeight:700,color:"#F59E0B"}}>{fmtMoney(pe)}/mês</div>
           <div style={{fontSize:10,color:"#555"}}>≈ {fmtMoney(pe/30)}/dia</div>
@@ -13255,11 +13255,11 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
     <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center"}}>
       <input type="month" value={mes} onChange={e=>{setMes(e.target.value);setSaldoIniStr("");}} className="inp" style={{flex:1}}/>
       <button className="btn" onClick={print}
-        style={{background:"#DBEAFE",border:"1px solid #3b82f6",color:"#1D4ED8",padding:"10px 14px",fontSize:13,flexShrink:0}}>🖨️ Imprimir</button>
+        style={{background:"var(--infoBg)",border:"1px solid #3b82f6",color:"var(--infoText)",padding:"10px 14px",fontSize:13,flexShrink:0}}>🖨️ Imprimir</button>
     </div>
 
     {/* Saldo inicial */}
-    <div className="card" style={{marginBottom:12,background:"#DBEAFE",border:"1px solid #0EA5E940"}}>
+    <div className="card" style={{marginBottom:12,background:"var(--infoBg)",border:"1px solid #0EA5E940"}}>
       <div style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Saldo Inicial do Mês</div>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <MoneyInput value={saldoIniStr} onChange={v=>setSaldoIniStr(v)} placeholder="0,00" className="inp" style={{flex:1}}/>
@@ -13320,7 +13320,7 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
                   return{...prev,[outra]:{...dest,vendas:newVendas,contas:newContas}};
                 });
                 alert(`✅ ${dTxs.length} registro(s) transferido(s) para ${outra}`);
-              }} style={{background:"none",border:"1px solid #8B5CF640",color:"#8B5CF6",borderRadius:6,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>📤 Mover</button>}
+              }} style={{background:"none",border:"1px solid #8B5CF640",color:"var(--category)",borderRadius:6,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>📤 Mover</button>}
             </div>
           </div>
           {dTxs.map(t=>(
@@ -13623,9 +13623,9 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
             <button onClick={()=>delPedido(ped.id)} title="Excluir pedido" style={{background:"transparent",border:"none",cursor:"pointer",color:"#ef4444",fontSize:18,padding:4}}>🗑️</button>
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
-            <button className="btn" onClick={()=>gPedidoPrint(ped)} style={{flex:1,background:"#DBEAFE",color:"var(--btnPrimary)",fontSize:12,padding:"8px 6px",minWidth:80}}>🖨️ PDF</button>
+            <button className="btn" onClick={()=>gPedidoPrint(ped)} style={{flex:1,background:"var(--infoBg)",color:"var(--btnPrimary)",fontSize:12,padding:"8px 6px",minWidth:80}}>🖨️ PDF</button>
             <button className="btn" onClick={()=>gPedidoWhatsApp(ped)} style={{flex:1,background:"#DCFCE7",color:"#22C55E",fontSize:12,padding:"8px 6px",minWidth:80}}>📱 WhatsApp</button>
-            <button className="btn" onClick={()=>gPedidoCSV(ped)} style={{flex:1,background:"#DBEAFE",color:"#1D4ED8",fontSize:12,padding:"8px 6px",minWidth:80}}>📊 CSV</button>
+            <button className="btn" onClick={()=>gPedidoCSV(ped)} style={{flex:1,background:"var(--infoBg)",color:"var(--infoText)",fontSize:12,padding:"8px 6px",minWidth:80}}>📊 CSV</button>
           </div>
         </div>
       ))}
@@ -13770,14 +13770,14 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
     {/* Export / Import */}
     <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
       <button className="btn" onClick={exportarJSON} style={{background:"#DCFCE7",color:"#22C55E",padding:"9px 12px",fontSize:12,flex:1}}>⬇️ Baixar backup JSON</button>
-      <button className="btn" onClick={()=>importRef.current?.click()} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"9px 12px",fontSize:12,flex:1}}>⬆️ Importar JSON</button>
+      <button className="btn" onClick={()=>importRef.current?.click()} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"9px 12px",fontSize:12,flex:1}}>⬆️ Importar JSON</button>
       <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={importarJSON}/>
     </div>
 
     {/* Backups do servidor */}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
       <div style={{fontSize:12,color:"#555"}}>Backups automáticos do servidor</div>
-      <button className="btn" onClick={carregar} style={{background:"#DBEAFE",color:"#1D4ED8",padding:"4px 10px",fontSize:11}} disabled={loading}>{loading?"⏳":"🔄"}</button>
+      <button className="btn" onClick={carregar} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"4px 10px",fontSize:11}} disabled={loading}>{loading?"⏳":"🔄"}</button>
     </div>
     {lista.length===0&&!loading&&<div style={{fontSize:12,color:"#444",textAlign:"center",padding:"10px 0"}}>Nenhum backup do servidor ainda.</div>}
     {lista.map((b:any)=>{
@@ -13789,10 +13789,10 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
           <span style={{fontSize:10,color:"#555"}}>{b.size?`${(b.size/1024).toFixed(0)} KB`:""}</span>
         </div>
         {b.preview&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
-          <span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10}}>{b.preview.contas} contas</span>
-          <span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10}}>{b.preview.vendas} vendas</span>
-          <span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10}}>{b.preview.compras} compras</span>
-          <span className="tag" style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10}}>{b.preview.funcionarios} funcs</span>
+          <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>{b.preview.contas} contas</span>
+          <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>{b.preview.vendas} vendas</span>
+          <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>{b.preview.compras} compras</span>
+          <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>{b.preview.funcionarios} funcs</span>
         </div>}
         <div style={{display:"flex",gap:6}}>
           <button className="btn" onClick={()=>restaurar(b.file)} disabled={restaurando===b.file||excluindo===b.file}
@@ -13800,7 +13800,7 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
             {restaurando===b.file?"⏳ Restaurando...":"♻️ Restaurar"}
           </button>
           <button className="btn" onClick={()=>excluirBackup(b.file)} disabled={excluindo===b.file||restaurando===b.file}
-            style={{background:"#FEE2E2",color:"var(--btnDanger)",padding:"5px 10px",fontSize:11}}>
+            style={{background:"var(--dangerBg)",color:"var(--btnDanger)",padding:"5px 10px",fontSize:11}}>
             {excluindo===b.file?"⏳":"🗑️"}
           </button>
         </div>
@@ -14242,7 +14242,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
                   </div>
                 </td>
                 <td style={{padding:"8px 14px"}}>{p.name}</td>
-                <td><span className="tag" style={{background:"#F3E8FF",color:"#7C3AED"}}>{p.category_name}</span></td>
+                <td><span className="tag" style={{background:"var(--categoryBg)",color:"var(--categoryText)"}}>{p.category_name}</span></td>
                 <td style={{fontFamily:"monospace"}}>{fmtMoney(p.price)}</td>
                 <td><span style={{color:ptColor(p.print_target),fontSize:11,fontWeight:700}}>{ptLabel(p.print_target)}</span></td>
                 <td>
@@ -15805,7 +15805,7 @@ function PdvDestaques(){
       São as fotos que passam na tela do tablet quando ninguém está usando. Ficavam no PDV e agora se configuram por aqui.
     </div>
 
-    {erro&&<div style={{background:"#FEE2E2",color:"#B91C1C",padding:"9px 12px",borderRadius:9,fontSize:12.5,marginBottom:10}}>{erro}</div>}
+    {erro&&<div style={{background:"var(--dangerBg)",color:"var(--dangerText)",padding:"9px 12px",borderRadius:9,fontSize:12.5,marginBottom:10}}>{erro}</div>}
 
     {!form&&<button className="btn" onClick={()=>setForm({title:"",subtitle:"",price_label:"",image_url:""})}
       style={{background:"#6366F1",color:"#fff",padding:"11px 16px",fontSize:13,fontWeight:700,marginBottom:14}}>
@@ -15869,10 +15869,10 @@ function PdvDestaques(){
 
     {ed&&<div style={{position:"fixed",inset:0,background:"rgba(20,16,10,.6)",display:"flex",alignItems:"center",
                       justifyContent:"center",zIndex:200,padding:16}}>
-      <div style={{background:"var(--card)",borderRadius:16,padding:18,maxWidth:700,width:"100%"}}>
+      <div style={{background:"var(--bg3)",borderRadius:16,padding:18,maxWidth:700,width:"100%"}}>
         <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>Enquadrar a foto</div>
         <div style={{fontSize:12,color:"var(--text2)",marginBottom:4}}>Arraste pra escolher o que aparece. Sai em 1600 × 1000.</div>
-        {ed.aviso&&<div style={{color:"#B45309",fontSize:11.5,marginBottom:6}}>⚠️ Essa foto é pequena e vai sair borrada. Se tiver uma versão maior, use ela.</div>}
+        {ed.aviso&&<div style={{color:"var(--warningText)",fontSize:11.5,marginBottom:6}}>⚠️ Essa foto é pequena e vai sair borrada. Se tiver uma versão maior, use ela.</div>}
         <div style={{background:"#14100A",borderRadius:11,overflow:"hidden",display:"flex",justifyContent:"center"}}>
           <canvas ref={canvasRef} width={EDIT_L} height={EDIT_A}
             style={{width:"100%",maxWidth:EDIT_L,height:"auto",display:"block",cursor:"grab",touchAction:"none"}}
@@ -16370,7 +16370,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         {(db.normalizacoes||[]).map((n:any)=>(
           <div key={n.id} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:700,fontSize:12,color:"#1D4ED8",marginBottom:2}}>→ {n.nomePadrao}</div>
+              <div style={{fontWeight:700,fontSize:12,color:"var(--infoText)",marginBottom:2}}>→ {n.nomePadrao}</div>
               <div className="muted" style={{fontSize:11}}>{(n.termos||[]).length?(n.termos as string[]).join(" • "):"(nome exato)"}</div>
             </div>
             <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -16388,7 +16388,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Resumo geral do estoque.</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:100,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center"}}>
-            <div style={{color:"#1D4ED8",fontWeight:700,fontSize:16}}>{(db.materiasPrimas||[]).length}</div>
+            <div style={{color:"var(--infoText)",fontWeight:700,fontSize:16}}>{(db.materiasPrimas||[]).length}</div>
             <div className="muted" style={{fontSize:10}}>Matérias-primas</div>
           </div>
           <div style={{flex:1,minWidth:100,background:"var(--bg4)",borderRadius:10,padding:"10px",textAlign:"center"}}>
@@ -16522,7 +16522,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>O NSU controla a posição da última consulta ao SEFAZ. NF-es com NSU menor que o atual não serão retornadas.</div>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
           <span style={{fontSize:13}}>NSU atual ({empresa}):</span>
-          <span style={{fontWeight:700,color:"#1D4ED8",fontSize:15}}>{sefazNSU??"-"}</span>
+          <span style={{fontWeight:700,color:"var(--infoText)",fontSize:15}}>{sefazNSU??"-"}</span>
         </div>
         {!sefazShowNsuEdit?
           <button className="btn" onClick={()=>setSefazShowNsuEdit(true)}
@@ -16566,7 +16566,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
             fetch("/api/nfe-cache/clear",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa})}),
             fetch(`/api/nsu-status?empresa=${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nsu:0})}),
           ]).then(()=>{setSefazNSU(0);setSefazNsuInput("0");alert("✅ Cache limpo e NSU zerado. A proxima varredura rebaixa tudo.");}).catch(e=>alert("Erro: "+e.message));
-        }} style={{background:"#F3E8FF",color:"var(--btnDanger)",border:"1px solid #EF444440",padding:"10px",width:"100%",fontSize:12,marginBottom:6}}>
+        }} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",border:"1px solid #EF444440",padding:"10px",width:"100%",fontSize:12,marginBottom:6}}>
           🔄 Rebaixar todas as NF-es ({empresa})
         </button>
         <div className="muted" style={{fontSize:11}}>Limpa o cache e volta o NSU para 0, que é o que faz as notas realmente voltarem — a SEFAZ não reenvia NSU já consumido. Antes, limpar sozinho descartava as notas de vez.</div>
@@ -16665,7 +16665,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
             <div className="muted" style={{fontSize:11}}>{iaStatus==="ok"?"A IA está pronta para extrair produtos de cupons fiscais.":iaStatus==="error"?iaStatusDetail||"Erro ao conectar com a API.":"Configure a variável ANTHROPIC_API_KEY no .env do servidor."}</div>
           </div>
         </div>
-        {iaStatus!=="ok"&&<div style={{background:"#DBEAFE",borderRadius:8,padding:"10px",border:"1px solid #0EA5E940"}}>
+        {iaStatus!=="ok"&&<div style={{background:"var(--infoBg)",borderRadius:8,padding:"10px",border:"1px solid #0EA5E940"}}>
           <div style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700,marginBottom:4}}>Como configurar:</div>
           <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
             1. Acesse o .env na VPS<br/>
@@ -16697,11 +16697,11 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           )}
           {notifStatus==="subscribed"&&<>
             <button className="btn" disabled={notifLoading} onClick={()=>testarNotificacao(notifEmpresa||"CONFRARIA")}
-              style={{background:"#DCFCE7",color:"#15803D",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              style={{background:"var(--successBg)",color:"var(--successText)",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
               {notifLoading?"...":"📲 Testar agora"}
             </button>
             <button className="btn" disabled={notifLoading} onClick={desativarNotificacoes}
-              style={{background:"#FEE2E2",color:"#B91C1C",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
+              style={{background:"var(--dangerBg)",color:"var(--dangerText)",padding:"10px 14px",fontSize:13,opacity:notifLoading?0.6:1}}>
               {notifLoading?"...":"🔕 Desativar"}
             </button>
           </>}
@@ -16741,20 +16741,20 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
       );
       const numStepper=(val:number,onPick:(v:number)=>void,min=7,max=20)=>(
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <button onClick={()=>onPick(Math.max(min,val-1))} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"var(--bg4)",color:"#8B5CF6",cursor:"pointer",fontSize:14,fontWeight:700,lineHeight:1}}>−</button>
+          <button onClick={()=>onPick(Math.max(min,val-1))} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"var(--bg4)",color:"var(--category)",cursor:"pointer",fontSize:14,fontWeight:700,lineHeight:1}}>−</button>
           <span style={{fontSize:13,fontWeight:700,color:"var(--text)",minWidth:44,textAlign:"center" as const}}>{val}px</span>
-          <button onClick={()=>onPick(Math.min(max,val+1))} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"var(--bg4)",color:"#8B5CF6",cursor:"pointer",fontSize:14,fontWeight:700,lineHeight:1}}>+</button>
+          <button onClick={()=>onPick(Math.min(max,val+1))} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"var(--bg4)",color:"var(--category)",cursor:"pointer",fontSize:14,fontWeight:700,lineHeight:1}}>+</button>
         </div>
       );
       return <div>
         <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#8B5CF6",marginBottom:4}}>🖨️ Identidade nas impressões</div>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--category)",marginBottom:4}}>🖨️ Identidade nas impressões</div>
           <div className="muted" style={{fontSize:11,marginBottom:14}}>Aplica no cabeçalho de todos os relatórios, NF-e, Encomenda, Lista de Compras e Pedido de Produção — sem precisar de deploy.</div>
 
           {field("Nome para impressão","cabeçalho de tudo",
             <div style={{display:"flex",gap:6}}>
               <input value={impNome} onChange={e=>setImpNome(e.target.value)} placeholder={empresa} className="inp" style={{flex:1,marginBottom:0}}/>
-              <button className="btn" onClick={()=>{setImpCfg("nome",impNome.trim());alert("✅ Salvo!");}} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+              <button className="btn" onClick={()=>{setImpCfg("nome",impNome.trim());alert("✅ Salvo!");}} style={{background:"var(--category)",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
             </div>)}
 
           {field("Logo no cabeçalho","cabeçalho de tudo",
@@ -16777,7 +16777,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           {field("Rodapé personalizado","substitui o \"Gerado em...\"",
             <div style={{display:"flex",gap:6}}>
               <input value={impRodape} onChange={e=>setImpRodape(e.target.value)} placeholder="Ex.: Confraria Café · CNPJ 00.000.000/0001-00 · (92) 90000-0000" className="inp" style={{flex:1,marginBottom:0}}/>
-              <button className="btn" onClick={()=>{setImpCfg("rodape",impRodape.trim());alert("✅ Salvo!");}} style={{background:"#8B5CF6",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+              <button className="btn" onClick={()=>{setImpCfg("rodape",impRodape.trim());alert("✅ Salvo!");}} style={{background:"var(--category)",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
             </div>)}
         </div>
 
@@ -16795,7 +16795,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         </div>
 
         <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#8B5CF6",marginBottom:12}}>🏭 Pedido de Produção</div>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--category)",marginBottom:12}}>🏭 Pedido de Produção</div>
           {field("Colunas por página","imprimirPedido (Produção)",seg([["1","1"],["2","2"]],String(impCfg.producaoColunas),v=>setImpCfg("producaoColunas",parseInt(v,10))))}
           {field("Mostrar \"Qtd Atual\"","imprimirPedido (Produção)",toggle(impCfg.producaoMostrarQtdAtual,v=>setImpCfg("producaoMostrarQtdAtual",v)))}
         </div>
@@ -16886,7 +16886,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
       const apar=dashCfg.aparencia;
       return <div>
         <div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#8B5CF6",marginBottom:4}}>📊 Indicadores do Dashboard</div>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--category)",marginBottom:4}}>📊 Indicadores do Dashboard</div>
           <div className="muted" style={{fontSize:11,marginBottom:0}}>Liga, desliga e reordena o que aparece no Dashboard — sem deploy. Indicadores com 🔒 dependem do PDV externo passar a enviar um dado que hoje não existe (veja detalhes na tela do Dashboard).</div>
         </div>
 
@@ -17325,7 +17325,7 @@ function PainelAoVivoDashboard({state}:{state:any}){
       </div>
       <div style={{display:"flex",gap:6,flexShrink:0}}>
         <button onClick={copiarLinkTv} disabled={!tvToken} className="btn" style={{background:"var(--bg4)",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:11.5,padding:"6px 12px",opacity:tvToken?1:.5}}>📋 Copiar link</button>
-        <button onClick={gerarNovoLinkTv} disabled={gerandoToken} className="btn" style={{background:"none",border:"1px solid #F59E0B55",color:"#B45309",fontSize:11.5,padding:"6px 12px",opacity:gerandoToken?.6:1}}>🔄 Gerar novo</button>
+        <button onClick={gerarNovoLinkTv} disabled={gerandoToken} className="btn" style={{background:"none",border:"1px solid #F59E0B55",color:"var(--warningText)",fontSize:11.5,padding:"6px 12px",opacity:gerandoToken?.6:1}}>🔄 Gerar novo</button>
       </div>
     </div>
 
@@ -17655,7 +17655,7 @@ function CardapioTVPanel({empresa,pendingSub,setPendingSub,state}:{empresa:strin
         <div className="muted" style={{fontSize:11.5,marginTop:4}}>{ativos.length} banner(s) ativo(s) · loop de {ativos.reduce((s,b)=>s+(b.duracaoSeg||15),0)}s no total</div>
         {telaAtiva.pareadaCom
           ?<div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap" as const}}>
-            <span style={{fontSize:11,fontWeight:700,color:"#15803D",background:"#22C55E18",border:"1px solid #22C55E55",borderRadius:20,padding:"4px 10px"}}>
+            <span style={{fontSize:11,fontWeight:700,color:"var(--successText)",background:"#22C55E18",border:"1px solid #22C55E55",borderRadius:20,padding:"4px 10px"}}>
               🔗 Pareada com {telas.find(t=>t.id===telaAtiva.pareadaCom)?.nome||"—"} · {telaAtiva.ladoPar==="esquerda"?"metade esquerda":"metade direita"}
             </span>
             <button onClick={trocarLado} className="btn" style={{background:"none",border:"1px solid var(--border2)",color:"var(--text2)",fontSize:11,padding:"5px 9px"}}>🔄 Trocar lado</button>
@@ -17996,7 +17996,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           <span style={{fontSize:10,fontWeight:700,color:st.color,background:st.bg,borderRadius:10,padding:"2px 8px"}}>{st.label}</span>
           <div style={{display:"flex",gap:3,marginTop:4}}>
             <button onClick={()=>abrirWhatsApp(e,empresa)} title="WhatsApp" style={{...btnAcao,border:"1px solid #25d36644",color:"#25d366"}}>📱</button>
-            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #8B5CF644",color:"#8B5CF6"}}>🖨️</button>
+            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #8B5CF644",color:"var(--category)"}}>🖨️</button>
             <button onClick={()=>startEdit(e)} style={{...btnAcao,border:"1px solid var(--border2)",color:"var(--btnPrimary)"}}>✏️</button>
             <button onClick={()=>del(e.id)} style={{...btnAcao,border:"1px solid #EF444422",color:"var(--btnDanger)",fontSize:14}}>×</button>
           </div>
@@ -18026,7 +18026,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     </div>
 
     {/* Banner pos-cadastro */}
-    {encRecemSalva&&<div className="card" style={{marginBottom:14,border:"1px solid #25d36644",background:"#DCFCE7"}}>
+    {encRecemSalva&&<div className="card" style={{marginBottom:14,border:"1px solid #25d36644",background:"var(--successBg)"}}>
       <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:"#22C55E"}}>Encomenda cadastrada!</div>
       {(encRecemSalva.produtos||[]).length>0&&<div style={{fontSize:11,color:"#a3e635",marginBottom:6}}>🏭 Pedido de producao gerado automaticamente</div>}
       <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Deseja compartilhar os detalhes com o cliente?</div>
@@ -18037,7 +18037,7 @@ function EncomendasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
     </div>}
 
     {/* Banner encomenda finalizada */}
-    {encFinalizada&&<div className="card" style={{marginBottom:14,border:"1px solid #22C55E44",background:"#DCFCE7"}}>
+    {encFinalizada&&<div className="card" style={{marginBottom:14,border:"1px solid #22C55E44",background:"var(--successBg)"}}>
       <div style={{fontWeight:700,fontSize:13,marginBottom:4,color:"#22C55E"}}>Encomenda finalizada e salva em Cadastradas!</div>
       <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Compartilhar confirmacao de entrega com o cliente?</div>
       <div style={{display:"flex",gap:8}}>
@@ -18264,7 +18264,7 @@ function CadastradasPanel({db,setDb,empresa}:{db:any,setDb:any,empresa:string}){
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
             <button onClick={()=>abrirWhatsApp(e,empresa)} title="WhatsApp" style={{...btnAcao,border:"1px solid #25d36644",color:"#25d366"}}>📱</button>
-            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #8B5CF644",color:"#8B5CF6"}}>🖨️</button>
+            <button onClick={()=>imprimirEncomenda(e,empresa)} title="Imprimir" style={{...btnAcao,border:"1px solid #8B5CF644",color:"var(--category)"}}>🖨️</button>
             <button onClick={()=>del(e.id)} style={{...btnAcao,border:"1px solid #EF444422",color:"var(--btnDanger)",fontSize:14}}>×</button>
           </div>
         </div>
