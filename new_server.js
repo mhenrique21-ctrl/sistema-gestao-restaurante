@@ -2520,6 +2520,23 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         }
         const cnpjSync = (process.env[`CNPJ_${empresa}`] || '').replace(/\D/g, '');
         const nsuKeySync = cnpjSync || empresa;
+
+        // A guarda de rate limit existia só no ciclo automático — o botão de
+        // sincronizar manual ia direto pra SEFAZ. Durante a punição de 1 hora,
+        // cada clique era mais uma requisição indevida, e a SEFAZ conta essas
+        // tentativas. Quem tentava resolver o bloqueio era quem o prolongava.
+        const mNsu = getNsuMap();
+        const bloqAte = mNsu[`rateLimitUntil_${empresa}`];
+        if (bloqAte && Date.now() < bloqAte) {
+          const min = Math.ceil((bloqAte - Date.now()) / 60000);
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(429);
+          res.end(JSON.stringify({
+            error: `SEFAZ bloqueou as consultas por consumo indevido. Faltam ${min} min. Tentar antes disso conta como nova tentativa indevida — a varredura automática roda sozinha quando liberar.`,
+            rateLimited: true, minutosRestantes: min,
+          }));
+          return;
+        }
         if (resetNsu) saveNsu(nsuKeySync, 0);
         else if (customNsu !== undefined && !isNaN(parseInt(customNsu))) saveNsu(nsuKeySync, parseInt(customNsu));
         const result = await sefazSync(empresa);
