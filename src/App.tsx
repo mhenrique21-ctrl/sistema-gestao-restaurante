@@ -4982,6 +4982,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const produtosListaTodos=db.produtosLista||[];
   const prodVinculadoDe=(mpId:string)=>produtosListaTodos.find((p:any)=>(p.mpVinculados||[]).includes(mpId));
   const [insumosFiltro,setInsumosFiltro]=useState("");
+  // Grava a conversao na propria materia-prima, entao vale pra qualquer produto
+  // vinculado a ela — nao precisa reinformar em cada vinculo.
+  const setUnidadesEmbalagemInsumo=(mpId:string,valor:number)=>{
+    if(!(valor>0))return;
+    (setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mpId?{...m,unidadesPorEmbalagem:valor}:m)}));
+  };
   const insumosSoltos=(db.materiasPrimas||[]).filter((mp:any)=>!prodVinculadoDe(mp.id));
   // Filtro da fila, no mesmo padrao do Conciliar Tudo: casa nos dois sentidos
   // e ignora acento, pra "acucar" achar "Açúcar".
@@ -6768,6 +6774,22 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   <span style={{fontFamily:"monospace",fontSize:11.5,color:"var(--text2)"}}>{fmtMoney(mp.ultimoValor||0)}/{mp.unidade}</span>
                 </div>
               </div>
+              {/* Quantas unidades individuais vem em 1 embalagem da nota. O campo
+                  existia so na tela da Lista; aqui e onde a decisao acontece, com
+                  a nota na mao. Mostra o preco resultante enquanto digita — e a
+                  unica defesa contra fator errado, que e o que produziu o "Haus
+                  com 905 unidades" no PDV da Seama. */}
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8,fontSize:11.5,color:"var(--text2)",flexWrap:"wrap" as const}}>
+                <span>1 {mp.unidade||"un"} de compra rende</span>
+                <input type="number" min="0" step="any" defaultValue={mp.unidadesPorEmbalagem||1}
+                  onClick={(e:any)=>e.stopPropagation()}
+                  onBlur={(e:any)=>{const v=parseFloat(e.target.value);if(v>0)setUnidadesEmbalagemInsumo(mp.id,v);}}
+                  title="Quantas unidades individuais rende 1 unidade de compra"
+                  style={{width:56,textAlign:"center" as const,fontSize:11.5,padding:"3px 4px",borderRadius:6,border:"1px solid var(--border2)",background:"var(--bg)",color:"var(--text)"}}/>
+                <span>unidade(s)</span>
+                {(mp.unidadesPorEmbalagem||1)>1&&mp.ultimoValor>0&&
+                  <span style={{color:"#B45309",fontWeight:700}}>= {fmtMoney(mp.ultimoValor/mp.unidadesPorEmbalagem)} por unidade</span>}
+              </div>
               {escolha
                 ?<div style={{display:"flex",alignItems:"center",gap:8,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803D",fontWeight:700}}>
                   {escolha.auto&&<span style={{fontSize:9,fontWeight:800,background:"#22C55E",color:"#08240f",borderRadius:5,padding:"2px 6px",flexShrink:0}}>AUTO</span>}
@@ -7280,6 +7302,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(prod?.mpVinculados?.length)return prod.mpVinculados;
     if(prod?.mpVinculadoId)return[prod.mpVinculadoId];
     return[];
+  };
+  // Preço por unidade INDIVIDUAL, aplicando a conversão de embalagem quando
+  // ela existe: "REFRIG PACK 6X350ML" a R$ 21,49 com 1un=6 vale R$ 3,58/un,
+  // não R$ 21,49. Sem o campo preenchido devolve o valor cru, entao ligar isto
+  // nao muda nenhum numero de hoje (0 dos 224 insumos tem embalagem definida).
+  //
+  // Existia so na Estimativa; os outros 5 pontos que mostram preco liam
+  // ultimoValor direto e ficariam 6x acima assim que alguem preenchesse.
+  const precoUnitMp=(mp:any)=>{
+    if(!mp||!(mp.ultimoValor>0))return 0;
+    const emb=parseFloat(mp.unidadesPorEmbalagem)||1;
+    return emb>0?mp.ultimoValor/emb:mp.ultimoValor;
   };
   const getMpByName=(nome:string,prodId?:string)=>{
     const findProd=(p:any)=>{
@@ -7977,7 +8011,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         meta.push(`<span class="who">👤 ${i.adicionadoPor}${hora?` · ${hora}`:""}</span>`);
       }
       if(cfg.listaMostrarPreco){
-        const mpPreco=getMpByName(i.nome)?.ultimoValor||0;
+        const mpPreco=precoUnitMp(getMpByName(i.nome));
         if(mpPreco>0)meta.push(`<span class="price">${fmtMoney(mpPreco)}${i.unidade?`/${i.unidade}`:""}</span>`);
       }
       return `<div class="row${i.urgente?" urgent":""}"><span class="name">${i.nome}</span><span class="qty">${i.quantidade||1} ${i.unidade||"un"}</span></div>${meta.length?`<div class="meta">${meta.join("")}</div>`:""}`;
@@ -8834,7 +8868,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     {/* Valor estimado da compra (soma qtd x ultimo preço pago, itens ainda pendentes) */}
     {(()=>{
-      const estimativaTotal=pendentes.reduce((s:number,i:any)=>s+(getMpByName(i.nome)?.ultimoValor||0)*(i.quantidade||0),0);
+      const estimativaTotal=pendentes.reduce((s:number,i:any)=>s+precoUnitMp(getMpByName(i.nome))*(i.quantidade||0),0);
       return estimativaTotal>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"10px 12px",background:"var(--accLight,#EEF2FF)",borderRadius:10,border:"1px solid #6366F144"}}>
         <span style={{fontSize:12,fontWeight:600,color:"var(--btnPrimary)"}}>💰 Valor estimado da compra</span>
         <span style={{fontSize:15,fontWeight:800,color:"var(--btnPrimary)"}}>{fmtMoney(estimativaTotal)}</span>
@@ -8865,7 +8899,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any,idx:number)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
-          const mpPreco=getMpByName(item.nome)?.ultimoValor||0;
+          const mpPreco=precoUnitMp(getMpByName(item.nome));
           if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
           <div key={item.id}>
@@ -8928,7 +8962,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {itensSorted.map((item:any)=>{
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
-          const mpPreco=getMpByName(item.nome)?.ultimoValor||0;
+          const mpPreco=precoUnitMp(getMpByName(item.nome));
           if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
           <div key={item.id}>
