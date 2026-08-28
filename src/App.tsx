@@ -6737,6 +6737,24 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 .sort((a:any,b:any)=>a.r-b.r||(a.p.nome||"").length-(b.p.nome||"").length)
                 .slice(0,6).map((x:any)=>x.p);
             })();
+            // Item pode existir na LISTA sem existir no CATALOGO — sao colecoes
+            // separadas, e a lista guarda nome/categoria proprios. Quem olha a
+            // tela ve "a lista" como uma coisa so, procura na conciliacao e nao
+            // acha, sem nenhuma pista do porque. Hoje sao 7 itens nessa situacao
+            // (Agua mineral, Energetico, "Chocolate Lquido" sem o i...).
+            // Oferece esses tambem: escolher um cria o produto no catalogo com
+            // aquele nome e vincula, reusando o mesmo caminho do "criar novo".
+            const soNaLista=(()=>{
+              if(!bl)return [];
+              const q=foldNome(bl);
+              const noCatalogo=new Set(produtosListaTodos.map((p:any)=>foldNome(p.nome)));
+              const vistos=new Set<string>();
+              return (db.listaCompras||[]).filter((i:any)=>{
+                const n=foldNome(i.nome);
+                if(!n||noCatalogo.has(n)||vistos.has(n)||!n.includes(q))return false;
+                vistos.add(n);return true;
+              }).slice(0,3);
+            })();
             const escolha=conciliarEscolha[mp.id];
             const sugestaoAuto=(!escolha&&!autoSugestaoDispensada.has(mp.id))?autoMatchInsumo(mp):null;
             const pdvPend=pdvPendenteDe(mp.nome);
@@ -6770,6 +6788,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                       <div key={p.id} onMouseDown={()=>escolherProdConciliar(mp.id,p)} style={{padding:"8px 10px",fontSize:12,borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
                         <span>{p.nome}</span>
                         <span style={{fontSize:9.5,color:"var(--text3)"}}>{(p.mpVinculados||[]).length} marca{(p.mpVinculados||[]).length!==1?"s":""} vinculada{(p.mpVinculados||[]).length!==1?"s":""}</span>
+                      </div>
+                    ))}
+                    {soNaLista.map((i:any)=>(
+                      <div key={"lista-"+i.id} onMouseDown={()=>escolherNovoConciliar(mp.id,i.nome)}
+                        style={{padding:"8px 10px",fontSize:12,borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,cursor:"pointer"}}>
+                        <span>{i.nome}</span>
+                        <span style={{fontSize:9,fontWeight:800,background:"#F59E0B22",color:"#B45309",borderRadius:20,padding:"2px 7px",flexShrink:0}}>só na lista · cadastra ao vincular</span>
                       </div>
                     ))}
                     <div onMouseDown={()=>escolherNovoConciliar(mp.id,mp.nome)} style={{padding:"8px 10px",fontSize:12,fontWeight:700,color:"var(--btnPrimary)",cursor:"pointer"}}>
