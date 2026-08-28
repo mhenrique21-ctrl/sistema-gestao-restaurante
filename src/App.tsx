@@ -8450,9 +8450,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                     style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
                   <div style={{display:"flex",gap:2}}>
                     <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#8B5CF6",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"var(--text3)":"#8B5CF6",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
                     <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"var(--text3)":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                   </div>
                   {c!=="outros"&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
                 </>
@@ -8495,9 +8495,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                       style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
                     <div style={{display:"flex",gap:2}}>
                       <button onClick={()=>moverRua(r,-1)} disabled={idx===0}
-                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#22C55E",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"var(--text3)":"#22C55E",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
                       <button onClick={()=>moverRua(r,1)} disabled={idx===ruas.length-1}
-                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"#333":"#22C55E",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"var(--text3)":"#22C55E",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                     </div>
                     <button onClick={()=>delRua(r)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
                   </>
@@ -9026,9 +9026,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             </div>
             {isAdmin&&<div style={{display:"flex",gap:2,flexShrink:0}}>
               <button onClick={()=>moverItem(item.id,-1)} disabled={idx===0}
-                style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===0?"#333":"#888",cursor:idx===0?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▲</button>
+                style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===0?"var(--text3)":"#888",cursor:idx===0?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▲</button>
               <button onClick={()=>moverItem(item.id,1)} disabled={idx===pendCat.length-1}
-                style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"#333":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
+                style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:idx===pendCat.length-1?"var(--text3)":"#888",cursor:idx===pendCat.length-1?"default":"pointer",fontSize:9,padding:"2px 4px",lineHeight:1}}>▼</button>
             </div>}
           </SwipeRow>
           {estConcItem===item.id&&<ConciliarPanel item={item} prodsCatalog={prodsCatalog} materiasPrimas={db.materiasPrimas||[]} concBusca={concBusca} setConcBusca={setConcBusca} vincularMp={vincularMp} desvincularMp={desvincularMp} getProdVinculados={getProdVinculados} applyBothProd={applyBothProd} onClose={()=>setEstConcItem(null)}/>}
@@ -9796,9 +9796,9 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                     style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
                   <div style={{display:"flex",gap:2}}>
                     <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"#333":"#8B5CF6",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"var(--text3)":"#8B5CF6",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
                     <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
-                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"#333":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"var(--text3)":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
                   </div>
                   <button onClick={()=>marcarTodosNaCategoria(c)} title="Marcar todos os produtos nesta categoria (soma, não substitui)"
                     style={{background:"none",border:"1px solid #8B5CF644",borderRadius:5,color:"var(--category)",cursor:"pointer",fontSize:10,padding:"2px 6px",lineHeight:1,whiteSpace:"nowrap" as const}}>🏷️ Marcar todos</button>
@@ -13607,7 +13607,7 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
           color:"var(--text)",padding:"16px",width:"100%",marginBottom:10,borderRadius:14,textAlign:"left"}}>
         <div style={{width:44,height:44,borderRadius:12,background:`${r.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{r.icon}</div>
         <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:r.color}}>{r.label}</div><div className="muted" style={{fontSize:12}}>{r.desc}</div></div>
-        <span style={{color:"#333",fontSize:20}}>›</span>
+        <span style={{color:"var(--text2)",fontSize:20}}>›</span>
       </button>
     ))}
     <div style={{marginTop:28}}>
@@ -16851,7 +16851,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
       };
       const cadBadge=(k:string)=>{const c=CAD_LABEL[k];return <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:c.bg,color:c.color,flexShrink:0}}>{c.txt}</span>;};
       const moveBtn=(disabled:boolean,dir:string,onClick:()=>void)=>(
-        <button onClick={onClick} disabled={disabled} style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:disabled?"#333":"var(--text2)",cursor:disabled?"default":"pointer",fontSize:9,padding:"2px 5px",lineHeight:1,opacity:disabled?0.3:1}}>{dir}</button>
+        <button onClick={onClick} disabled={disabled} style={{background:"none",border:"1px solid var(--border2)",borderRadius:4,color:disabled?"var(--text3)":"var(--text2)",cursor:disabled?"default":"pointer",fontSize:9,padding:"2px 5px",lineHeight:1,opacity:disabled?0.3:1}}>{dir}</button>
       );
       const simNao=(val:boolean,onPick:(v:boolean)=>void)=>(
         <div style={{display:"flex",border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",flexShrink:0}}>
