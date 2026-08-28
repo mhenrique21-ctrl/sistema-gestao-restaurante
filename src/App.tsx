@@ -4981,7 +4981,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   // recente (Ficha Técnica, Painel Ao Vivo etc.), que resolve tudo por ali.
   const produtosListaTodos=db.produtosLista||[];
   const prodVinculadoDe=(mpId:string)=>produtosListaTodos.find((p:any)=>(p.mpVinculados||[]).includes(mpId));
+  const [insumosFiltro,setInsumosFiltro]=useState("");
   const insumosSoltos=(db.materiasPrimas||[]).filter((mp:any)=>!prodVinculadoDe(mp.id));
+  // Filtro da fila, no mesmo padrao do Conciliar Tudo: casa nos dois sentidos
+  // e ignora acento, pra "acucar" achar "Açúcar".
+  const insumosSoltosVis=(()=>{const f=foldNome(insumosFiltro.trim());if(!f)return insumosSoltos;
+    return insumosSoltos.filter((m:any)=>{const n=foldNome(m.nome||"");return n.includes(f)||f.includes(n);});})();
 
   // ---- Ponte com o PDV (vínculo pendente lá também) ----
   // O mesmo item de compra pode estar esperando vínculo nos dois lados ao
@@ -6691,12 +6696,18 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         {showConciliarInsumos&&<div className="card" style={{marginBottom:14,border:"2px solid var(--btnPrimary)"}}>
           <div style={{fontSize:13.5,fontWeight:800,color:"var(--btnPrimary)",marginBottom:4}}>🔗 Conciliar Insumos ({insumosSoltos.length} pendente{insumosSoltos.length!==1?"s":""})</div>
           <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:14,lineHeight:1.5}}>Pra cada insumo solto, busque o produto da Lista de Compras que ele representa — se já existir um parecido, ele entra como mais uma marca vinculada. Se não existir, cria um produto novo já com esse insumo dentro.</div>
+          <input value={insumosFiltro} onChange={e=>setInsumosFiltro(e.target.value)} className="inp"
+            placeholder={insumosSoltos.length===1?"🔍 Filtrar 1 pendente...":`🔍 Filtrar os ${insumosSoltos.length} pendentes...`} style={{marginBottom:10,width:"100%"}}/>
+          {insumosFiltro.trim()&&<div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
+            {insumosSoltosVis.length} de {insumosSoltos.length}
+            <button onClick={()=>setInsumosFiltro("")} style={{marginLeft:8,background:"none",border:"none",color:"var(--btnPrimary)",textDecoration:"underline",cursor:"pointer",fontSize:11}}>limpar</button>
+          </div>}
           {autoPendentesConciliar.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"#DCFCE7",border:"1px solid #22C55E55",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
             <span style={{fontFamily:"monospace",fontWeight:800,color:"#15803D",fontSize:15}}>{autoPendentesConciliar.length}</span>
             <span style={{fontSize:11.5,color:"#15803D",flex:1,lineHeight:1.4}}>sugestõe{autoPendentesConciliar.length!==1?"s":""} automática{autoPendentesConciliar.length!==1?"s":""} pronta{autoPendentesConciliar.length!==1?"s":""} (nome igual ou muito parecido)</span>
             <button onClick={aplicarAutoTodosConciliar} style={{background:"#22C55E",color:"#08240f",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>✅ Aplicar as {autoPendentesConciliar.length}</button>
           </div>}
-          {insumosSoltos.map((mp:any)=>{
+          {insumosSoltosVis.map((mp:any)=>{
             const bl=(conciliarBusca[mp.id]||"").trim().toLowerCase();
             const sugestoes=bl?produtosListaTodos.filter((p:any)=>(p.nome||"").toLowerCase().includes(bl)).slice(0,6):[];
             const escolha=conciliarEscolha[mp.id];
@@ -7177,6 +7188,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const [showConciliarTudo,setShowConciliarTudo]=useState(false);
   const [ctManualId,setCtManualId]=useState<string|null>(null);
   const [ctBusca,setCtBusca]=useState("");
+  // Filtro da FILA (nao confundir com ctBusca, que procura materia-prima
+  // dentro de um item). Com quase 200 pendentes, achar um especifico rolando
+  // a lista era inviavel.
+  const [ctFiltro,setCtFiltro]=useState("");
   const [buscaProdRua,setBuscaProdRua]=useState<{rua:string,query:string}|null>(null);
   const [travandoIds,setTravandoIds]=useState<Set<string>>(new Set());
   const travar=(id:string)=>{
@@ -7560,6 +7575,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // vinculado (em vez de exigir abrir cada linha manualmente) e sugere o
   // vínculo mais provável por nome parecido, ignorando acento/maiúsculas.
   const ctPendentes=prodsCatalog.filter((p:any)=>!getProdVinculados(p).length&&!p.concRevisado);
+  // Casa nos dois sentidos e sem acento: "acucar" acha "Açúcar", e "acucar
+  // de confeiteiro" tambem acha "Acucar".
+  const ctPendentesVis=(()=>{const f=foldNome(ctFiltro.trim());if(!f)return ctPendentes;
+    return ctPendentes.filter((p:any)=>{const n=foldNome(p.nome);return n.includes(f)||f.includes(n);});})();
   const sugerirParaProduto=(item:any):{tipo:"produto",produto:any,mpIds:string[]}|{tipo:"mp",mp:any}|null=>{
     const alvo=foldNome(item.nome);
     const outroProd=prodsCatalog.find((p:any)=>{
@@ -8546,10 +8565,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           <div className="muted" style={{fontSize:12,marginTop:4,lineHeight:1.5}}>
             Vincule cada produto a uma matéria-prima já comprada, pra herdar o preço automaticamente. "Não conciliar" marca como revisado e some da fila — não impede vincular depois, se mudar de ideia.
           </div>
+          <input value={ctFiltro} onChange={e=>setCtFiltro(e.target.value)} className="inp"
+            placeholder={ctPendentes.length===1?"🔍 Filtrar 1 pendente...":`🔍 Filtrar os ${ctPendentes.length} pendentes...`}
+            style={{marginTop:10,width:"100%"}}/>
+          {ctFiltro.trim()&&<div className="muted" style={{fontSize:11,marginTop:6}}>
+            {ctPendentesVis.length} de {ctPendentes.length}
+            <button onClick={()=>setCtFiltro("")} style={{marginLeft:8,background:"none",border:"none",color:"var(--btnPrimary)",textDecoration:"underline",cursor:"pointer",fontSize:11}}>limpar</button>
+          </div>}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
           {!ctPendentes.length&&<div className="muted" style={{fontSize:13,textAlign:"center" as const,padding:"24px 0"}}>🎉 Nada pendente — todo o catálogo já tem preço vinculado ou foi revisado.</div>}
-          {ctPendentes.map((item:any)=>{
+          {!!ctPendentes.length&&!ctPendentesVis.length&&<div className="muted" style={{fontSize:13,textAlign:"center" as const,padding:"24px 0"}}>Nenhum pendente com "{ctFiltro}".</div>}
+          {ctPendentesVis.map((item:any)=>{
             const sug=sugerirParaProduto(item);
             const isManual=ctManualId===item.id;
             const isNovo=ctNovoId===item.id;
