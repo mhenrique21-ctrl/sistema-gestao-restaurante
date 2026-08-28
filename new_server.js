@@ -856,15 +856,32 @@ const MAX_VARREDURAS_POR_CICLO = 8;
 async function sefazVarrerTudo(emp) {
   const todas = [];
   let ultimo = null;
+  let erroParcial = null;
   for (let i = 0; i < MAX_VARREDURAS_POR_CICLO; i++) {
-    const r = await sefazDistDFe(emp);
+    let r;
+    try {
+      r = await sefazDistDFe(emp);
+    } catch (e) {
+      // O throw abortava a varredura inteira e `todas` era descartado junto —
+      // mas o ultNSU ja tinha sido gravado dentro de sefazDistDFe. Resultado:
+      // documentos consumidos, NSU avancado, nada guardado. E a SEFAZ nao
+      // reenvia NSU ja consumido, entao as notas se perdiam de vez.
+      //
+      // Aconteceu de verdade em 27/08/2026: uma varredura andou de NSU 0 ate
+      // 483 e salvou ZERO notas, porque um lote no meio respondeu cStat 656.
+      //
+      // Agora o erro interrompe o laco mas nao descarta o que ja veio: sobe
+      // como erroParcial pra quem chamou tratar DEPOIS de salvar o cache.
+      erroParcial = e;
+      break;
+    }
     ultimo = r;
     const qtd = (r.nfes || []).length;
     todas.push(...(r.nfes || []));
     if (!qtd) break;                 // cStat 137 ou lote vazio: acabou a fila
     await delay(1500);
   }
-  return { nfes: todas, total: todas.length, ultNSU: ultimo?.ultNSU || 0 };
+  return { nfes: todas, total: todas.length, ultNSU: ultimo?.ultNSU || 0, erroParcial };
 }
 
 async function sefazSync(emp) {
@@ -3679,7 +3696,13 @@ async function autoSyncSEFAZ() {
 
       // FASE B — manifestar o que chegou novo. Sem espera de 5s e sem consulta
       // por chave: o completo virá sozinho numa varredura seguinte.
-      const manif = await manifestarPendentes(emp, notas);
+      //
+      // Se a varredura parou por limite da SEFAZ, nao manifesta neste ciclo:
+      // ja estamos sendo barrados, e insistir so alimenta o bloqueio. O que
+      // veio fica salvo e a manifestacao acontece no proximo ciclo.
+      const manif = result.erroParcial
+        ? { enviadas: 0, aceitas: 0, recusadas: 0 }
+        : await manifestarPendentes(emp, notas);
 
       // Guarda mais que as 50 antigas: nota aguardando XML precisa sobreviver
       // até a varredura que traz o completo, que pode ser horas depois.
@@ -3690,6 +3713,19 @@ async function autoSyncSEFAZ() {
       const porEstado = merged.reduce((a, n) => { a[n.estado || '?'] = (a[n.estado || '?'] || 0) + 1; return a; }, {});
       console.log(`[AutoSync] ${emp}: varredura ultNSU=${result.ultNSU} · ${promovidas} promovida(s) a completa · `
         + `manifestações: ${manif.aceitas} aceita(s), ${manif.recusadas} recusada(s) · estados: ${JSON.stringify(porEstado)}`);
+      // O 656 é tratado aqui, DEPOIS do saveCache: o que a varredura alcançou
+      // antes de ser barrada já está guardado. Antes o erro subia direto pro
+      // catch e levava as notas junto.
+      if (result.erroParcial) {
+        const msg = result.erroParcial.message || "";
+        if (msg.includes("656")) {
+          setRateLimit(emp, 70);
+          console.log(`[AutoSync] ${emp}: varredura interrompida por limite da SEFAZ (656) — `
+            + `${(result.nfes || []).length} nota(s) coletada(s) antes disso foram salvas. Bloqueado por 70min.`);
+        } else {
+          console.error(`[AutoSync] ${emp}: varredura interrompida — ${msg}`);
+        }
+      }
       if (manif.recusadas > 0) {
         console.log(`[AutoSync] ${emp}: ⚠️ manifestação sendo recusada pela SEFAZ — o XML completo não será liberado enquanto isso. Veja o cStat em /api/nfe-cache.`);
       }
