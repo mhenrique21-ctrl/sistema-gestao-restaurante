@@ -7107,7 +7107,15 @@ function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca
         {prod&&<button onClick={()=>desvincularMp(prod.id,m.id)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>}
       </div>)}
     </div>}
-    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
+    {/* A mensagem antiga ("Nenhum resultado — digite acima para buscar") fazia
+        parecer erro de digitação. Na maioria das vezes a causa é outra: o item
+        nunca foi comprado, então não existe matéria-prima com preço pra herdar.
+        Dizer isso evita a caça a um resultado que não existe. */}
+    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0",lineHeight:1.45}}>
+      {concBusca
+        ? <>Nada encontrado para "{concBusca}". Se este item ainda não foi comprado, não há preço pra herdar — use <b>Não conciliar</b> e ele sai da fila.</>
+        : <>Nenhuma matéria-prima parecida. Busque acima por outro nome, ou use <b>Não conciliar</b> se o item ainda não foi comprado.</>}
+    </div>}
     <div style={{maxHeight:150,overflowY:"auto" as const}}>
       {mpOptions.map((mp:any)=>{
         const linked=vIds.includes(mp.id);
@@ -8167,7 +8175,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                         <button onClick={(e)=>{e.stopPropagation();if(l.prodId)desvincularMp(l.prodId,m.id);}} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"0 2px"}}>✕</button>
                       </div>)}
                     </div>}
-                    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0"}}>Nenhum resultado{concBusca?` para "${concBusca}"`:""} — digite acima para buscar</div>}
+                    {/* A mensagem antiga ("Nenhum resultado — digite acima para buscar") fazia
+        parecer erro de digitação. Na maioria das vezes a causa é outra: o item
+        nunca foi comprado, então não existe matéria-prima com preço pra herdar.
+        Dizer isso evita a caça a um resultado que não existe. */}
+    {!mpOptions.length&&<div style={{fontSize:11,color:"#666",padding:"4px 0",lineHeight:1.45}}>
+      {concBusca
+        ? <>Nada encontrado para "{concBusca}". Se este item ainda não foi comprado, não há preço pra herdar — use <b>Não conciliar</b> e ele sai da fila.</>
+        : <>Nenhuma matéria-prima parecida. Busque acima por outro nome, ou use <b>Não conciliar</b> se o item ainda não foi comprado.</>}
+    </div>}
                     <div style={{maxHeight:150,overflowY:"auto" as const}}>
                     {mpOptions.map((mp:any)=>{
                       const linked=vIds.includes(mp.id);
