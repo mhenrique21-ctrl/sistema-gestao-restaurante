@@ -6709,7 +6709,34 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           </div>}
           {insumosSoltosVis.map((mp:any)=>{
             const bl=(conciliarBusca[mp.id]||"").trim().toLowerCase();
-            const sugestoes=bl?produtosListaTodos.filter((p:any)=>(p.nome||"").toLowerCase().includes(bl)).slice(0,6):[];
+            // Antes: includes() cru na string, sem acento dobrado e sem ordem.
+            // Dois problemas. "agua" nao achava "Água Sanitária" — o acento
+            // quebrava a comparacao e metade dos produtos sumia. E buscar "min"
+            // devolvia "Pimenta cuminho" e "Milho pra mingau" junto do que
+            // interessava, porque o slice(0,6) cortava pela ordem do catalogo e
+            // nao por relevancia.
+            //
+            // Agora dobra acento (mesmo foldNome do resto da tela) e ordena:
+            // comeca com o termo > termo no inicio de alguma palavra > contem
+            // em qualquer lugar. Empate resolve pelo nome mais curto, que tende
+            // a ser o generico ("Agua mineral" antes de "Agua mineral c/ gas").
+            const sugestoes=(()=>{
+              if(!bl)return [];
+              const q=foldNome(bl);
+              const pontuar=(nome:string)=>{
+                const n=foldNome(nome);
+                if(!n.includes(q))return -1;
+                if(n===q)return 0;
+                if(n.startsWith(q))return 1;
+                if(n.includes(" "+q))return 2;   // começo de alguma palavra
+                return 3;
+              };
+              return produtosListaTodos
+                .map((p:any)=>({p,r:pontuar(p.nome||"")}))
+                .filter((x:any)=>x.r>=0)
+                .sort((a:any,b:any)=>a.r-b.r||(a.p.nome||"").length-(b.p.nome||"").length)
+                .slice(0,6).map((x:any)=>x.p);
+            })();
             const escolha=conciliarEscolha[mp.id];
             const sugestaoAuto=(!escolha&&!autoSugestaoDispensada.has(mp.id))?autoMatchInsumo(mp):null;
             const pdvPend=pdvPendenteDe(mp.nome);
