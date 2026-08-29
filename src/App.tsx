@@ -15654,7 +15654,7 @@ function PdvConfigTema(){
     (async()=>{
       setCarregando(true);setErro("");
       try{
-        const r=await fetch("/api/pdv-config");
+        const r=await fetch("/api/pdv-config/tema?empresa=CONFRARIA");
         const d=await r.json();
         if(!r.ok)throw new Error(d.error||"Erro ao carregar");
         setTema(d.kiosk_theme==="escuro"?"escuro":"claro");
@@ -15668,7 +15668,7 @@ function PdvConfigTema(){
     const anterior=tema;
     setSalvando(true);setErro("");setTema(novo);
     try{
-      const r=await fetch("/api/pdv-config",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({kiosk_theme:novo})});
+      const r=await fetch("/api/pdv-config/tema?empresa=CONFRARIA",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({kiosk_theme:novo})});
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao salvar");
     }catch(e:any){setTema(anterior);setErro(e.message||"Erro de conexão");}

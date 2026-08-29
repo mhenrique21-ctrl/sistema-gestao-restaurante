@@ -1760,9 +1760,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // string (?empresa=), inclusive em POST/PATCH/DELETE, pra não precisar
   // ler o corpo antes de saber pra qual PDV mandar.
   if (
-    (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/pdv-destaques' || urlPath === '/api/pdv-config')) ||
+    (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/pdv-destaques')) ||
     (req.method === 'POST' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/menu-produtos/upload' || urlPath === '/api/pdv-destaques')) ||
-    (req.method === 'PATCH' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/menu-categorias/') || urlPath.startsWith('/api/pdv-destaques/') || urlPath === '/api/pdv-config')) ||
+    (req.method === 'PATCH' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/menu-categorias/') || urlPath.startsWith('/api/pdv-destaques/'))) ||
     (req.method === 'DELETE' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/pdv-destaques/')))
   ) {
     const isUpload = urlPath === '/api/menu-produtos/upload';
@@ -1778,11 +1778,6 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     // que está ativo, e aqui é preciso ver e editar tudo.
     else if (urlPath === '/api/pdv-destaques') upstreamPath = req.method === 'GET' ? '/api/highlights/admin' : '/api/highlights';
     else if (urlPath.startsWith('/api/pdv-destaques/')) upstreamPath = `/api/highlights/${idFromPath()}`;
-    // Config pública do totem (tema claro/escuro, etc.) — mesma tabela
-    // key/value de /api/settings do delivery-backend. GET é público lá, mas
-    // passa pelo token de serviço igual ao resto: mais simples que ter dois
-    // caminhos de auth diferentes num proxy só.
-    else if (urlPath === '/api/pdv-config') upstreamPath = '/api/settings';
       else if (urlPath === '/api/menu-produtos') upstreamPath = req.method === 'GET' ? '/api/menu/admin' : '/api/menu/products';
       else if (urlPath === '/api/menu-categorias') upstreamPath = '/api/categories';
       else if (req.method === 'PATCH' && urlPath.endsWith('/available')) upstreamPath = `/api/menu/products/${idFromPath()}/available`;
@@ -2465,6 +2460,45 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           enviarJson(404, { error: 'Rota de aparência não encontrada' });
         } catch (e) {
           enviarErro('Erro ao falar com aparência do PDV: ' + e.message);
+        }
+      })();
+      return;
+    }
+
+    // ---- Tema do totem (kiosk.html) — só existe pra Confraria hoje; a
+    // Seama não tem tela de autoatendimento. Mesma tabela settings
+    // (key/value) já usada pelo tempo de descanso de tela do totem. ----
+    if (area === 'tema') {
+      (async () => {
+        try {
+          if (empresa !== 'CONFRARIA') return enviarJson(200, { disponivel: false });
+          const token = await getServiceToken('CONFRARIA');
+          const base = pdvDaEmpresa('CONFRARIA').base;
+          const headers = { Authorization: 'Bearer ' + token };
+
+          if (req.method === 'GET' && partes.length === 3) {
+            const upstream = await fetch(`${base}/api/settings`, { headers });
+            const data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            return enviarJson(200, { disponivel: true, kiosk_theme: data.kiosk_theme === 'escuro' ? 'escuro' : 'claro' });
+          }
+
+          if (req.method === 'PATCH' && partes.length === 3) {
+            const body = await lerBody();
+            const tema = body.kiosk_theme === 'escuro' ? 'escuro' : 'claro';
+            const upstream = await fetch(`${base}/api/settings`, {
+              method: 'PATCH',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ kiosk_theme: tema }),
+            });
+            const data = await upstream.json().catch(() => ({}));
+            if (!upstream.ok) return enviarJson(upstream.status, data);
+            return enviarJson(200, { disponivel: true, kiosk_theme: tema });
+          }
+
+          enviarJson(404, { error: 'Rota de tema do totem não encontrada' });
+        } catch (e) {
+          enviarErro('Erro ao falar com o totem: ' + e.message);
         }
       })();
       return;
