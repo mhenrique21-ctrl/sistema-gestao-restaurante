@@ -476,9 +476,15 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
   // string concatenada à mão — a versão manual anterior travava a SEFAZ com
   // "Object reference not set to an instance of an object" antes de qualquer
   // cStat, indicando rejeição da assinatura em si.
+  //
+  // Ainda assim a SEFAZ continuava devolvendo o mesmo "Object reference not
+  // set to an instance of an object" pra toda manifestação. A assinatura
+  // usava RSA-SHA1/SHA1 — algoritmo que a Nota Técnica 2016.002 depreciou;
+  // o ambiente nacional exige RSA-SHA256/SHA256 pra eventos há anos, e
+  // rejeita SHA1 com esse mesmo erro genérico em vez de um cStat limpo.
   const sig = new SignedXml({
     privateKey: privateKeyPem,
-    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
     canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
   });
   sig.addReference({
@@ -487,7 +493,7 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
       'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
     ],
-    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
     uri: `#${evId}`,
   });
   sig.getKeyInfoContent = () => `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`;
