@@ -4110,16 +4110,15 @@ async function pageComandas() {
     </div>`;
 }
 
+// Sem campo de código: deixar o atendente escolher um valor (curto,
+// previsível) era o elo fraco do QR do cartão. O código sai sempre gerado
+// pelo servidor (ver comentário em POST /api/comandas).
 function modalNovaComanda() {
   openModal('Novo Cartão de Comanda', `
     <div class="form-grid">
-      <div>
-        <label>Código do QR <small style="color:#94a3b8">(opcional)</small></label>
-        <input id="cm-code" placeholder="Deixe em branco para gerar um código seguro automaticamente" />
-      </div>
       <div><label>Nome / identificação</label><input id="cm-label" placeholder="Ex: Mesa 1 ou nome do cliente" /></div>
     </div>`, async () => {
-    await api('POST', '/comandas', { code: v('cm-code').trim() || undefined, label: v('cm-label') || null });
+    await api('POST', '/comandas', { label: v('cm-label') || null });
     toast('Cartão cadastrado!'); closeModal(); pageComandas();
   });
 }

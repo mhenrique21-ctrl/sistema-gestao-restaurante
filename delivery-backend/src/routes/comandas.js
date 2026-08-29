@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
@@ -220,9 +221,13 @@ router.post('/balcao', authMiddleware, requireRole('admin', 'atendente'), async 
 });
 
 // POST /api/comandas — cadastra um cartão físico (admin)
+// Código sempre gerado aqui, nunca aceito do cliente: deixar o atendente
+// digitar um código próprio (ex: "mesa5") era o elo fraco do sistema — um
+// código curto e previsível vale tão pouco quanto não ter QR nenhum,
+// mesmo impresso e escaneado do jeito certo.
 router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { code, label } = req.body;
-  const finalCode = code?.trim() || crypto.randomBytes(8).toString('hex');
+  const { label } = req.body;
+  const finalCode = crypto.randomBytes(8).toString('hex');
 
   try {
     const result = await pool.query(
@@ -237,8 +242,20 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   }
 });
 
+// Até 60 tentativas por IP a cada 5 min. O código já tem 64 bits de entropia
+// (impossível de adivinhar na prática), então isso é uma trava extra contra
+// script varrendo códigos, não a defesa principal — e generosa de propósito,
+// porque várias mesas/tablets do mesmo salão dividem o mesmo IP de saída.
+const resolveLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Aguarde um pouco e tente de novo.' },
+});
+
 // GET /api/comandas/resolve/:code — tablet escaneia o QR e identifica a comanda
-router.get('/resolve/:code', async (req, res) => {
+router.get('/resolve/:code', resolveLimiter, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT c.*, m.numero AS mesa_numero, m.area AS mesa_area
