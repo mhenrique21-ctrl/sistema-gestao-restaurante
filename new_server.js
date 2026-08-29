@@ -483,16 +483,32 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
   // usava RSA-SHA1/SHA1 — algoritmo que a Nota Técnica 2016.002 depreciou;
   // o ambiente nacional exige RSA-SHA256/SHA256 pra eventos há anos, e
   // rejeita SHA1 com esse mesmo erro genérico em vez de um cStat limpo.
+  //
+  // CAUSA RAIZ DE VERDADE (achada comparando com a implementação original,
+  // commit 3ecf9d9 de 21/jun — antes de qualquer uma dessas tentativas —
+  // que assinava com crypto.createSign() puro e USAVA CANONICALIZAÇÃO
+  // EXCLUSIVA): esta versão com xml-crypto trocou pra canonicalização
+  // NORMAL/INCLUSIVA (REC-xml-c14n-20010315). Os dois métodos só divergem
+  // quando o trecho assinado (aqui, <infEvento>) acaba embutido dentro de
+  // um documento maior com namespaces extras herdados de fora — que é
+  // exatamente o nosso caso: assinamos o <evento> isolado, mas ele vai
+  // parar dentro do <soap12:Envelope>, com xmlns:xsi/xsd/soap12 herdados.
+  // Canonicalização inclusiva puxa esses namespaces herdados na hora de
+  // RECONFERIR a assinatura (já dentro do envelope completo) — mudando o
+  // digest calculado e invalidando a assinatura sem qualquer coisa errada
+  // no conteúdo em si. Exclusiva ignora namespace herdado não usado
+  // dentro do próprio trecho, existe EXATAMENTE pra evitar esse problema
+  // em assinatura "enveloped" — e é o que a NF-e exige por especificação.
   const sig = new SignedXml({
     privateKey: privateKeyPem,
     signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
-    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
   });
   sig.addReference({
     xpath: "//*[local-name(.)='infEvento']",
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      'http://www.w3.org/2001/10/xml-exc-c14n#',
     ],
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
     uri: `#${evId}`,
