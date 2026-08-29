@@ -89,12 +89,14 @@
   .mesa-field input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: .95rem; }
 
   /* ── Tela de scan ────────────────────────────────── */
+  /* Sem campo de digitar o código à mão, de propósito: o código do cartão dá
+     acesso a fechar/pedir a conta de outra comanda, e digitar não exige posse
+     física do cartão — alguém que veja ou fotografe o código de outra mesa
+     poderia usá-lo. Escanear o QR exige o cartão físico na mão. */
   .scan-screen { max-width: 480px; margin: 40px auto; padding: 0 20px; text-align: center; }
   .scan-screen h2 { font-size: 1.3rem; margin-bottom: 6px; }
   .scan-screen p.hint { color: var(--muted); font-size: .88rem; margin-bottom: 20px; }
   #qr-reader { border-radius: 16px; overflow: hidden; margin-bottom: 20px; }
-  .manual-entry { display: flex; gap: 8px; margin-top: 12px; }
-  .manual-entry input { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1rem; }
   #scan-error { color: var(--danger); font-size: .85rem; margin-top: 10px; min-height: 20px; }
   .scan-back { margin-top: 16px; }
 
@@ -302,10 +304,6 @@
   <h2>Escaneie seu cartão</h2>
   <p class="hint">Aponte a câmera para o QR do seu cartão para confirmar o pedido.</p>
   <div id="qr-reader"></div>
-  <div class="manual-entry">
-    <input type="text" id="manual-code" placeholder="Código do cartão" autocomplete="off">
-    <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Confirmar</button>
-  </div>
   <div id="scan-error"></div>
   <button class="btn btn-secondary scan-back" onclick="resetToMenu()">← Voltar ao cardápio</button>
 </div>
@@ -323,10 +321,6 @@
   <h2>Escaneie seu cartão</h2>
   <p class="hint">Aponte a câmera para o QR do seu cartão para pedir a conta.</p>
   <div id="qr-reader-checkout"></div>
-  <div class="manual-entry">
-    <input type="text" id="manual-code-checkout" placeholder="Código do cartão" autocomplete="off">
-    <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code-checkout').value)">Confirmar</button>
-  </div>
   <div id="scan-error-checkout"></div>
   <button class="btn btn-secondary scan-back" onclick="resetToMenu()">← Voltar</button>
 </div>
@@ -336,10 +330,6 @@
   <h2>Escaneie seu cartão</h2>
   <p class="hint">Aponte a câmera para o QR do seu cartão para ver o que você já pediu.</p>
   <div id="qr-reader-history"></div>
-  <div class="manual-entry">
-    <input type="text" id="manual-code-history" placeholder="Código do cartão" autocomplete="off">
-    <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code-history').value)">Confirmar</button>
-  </div>
   <div id="scan-error-history"></div>
   <button class="btn btn-secondary scan-back" onclick="resetToMenu()">← Voltar</button>
 </div>
@@ -1158,7 +1148,13 @@ function startScanner() {
   // que trouxe o usuário até aqui (Enviar pedido / Minha conta / Meus pedidos) já
   // conta como o gesto exigido pelo navegador para liberar a câmera.
   qrScanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 240 }, onScanSuccess, () => {})
-    .catch(() => { errEl.textContent = 'Não foi possível abrir a câmera. Digite o código abaixo.'; });
+    .catch(() => {
+      // Sem entrada manual (ver comentário de segurança no topo do <style>),
+      // então a única saída daqui é tentar a câmera de novo — não deixar o
+      // cliente travado numa tela sem nenhuma ação possível.
+      qrScanner = null;
+      errEl.innerHTML = 'Não foi possível abrir a câmera. Verifique a permissão do navegador e toque abaixo.<br><button class="btn btn-primary" style="margin-top:10px" onclick="startScanner()">🔄 Tentar novamente</button>';
+    });
 }
 
 function stopScanner() {
