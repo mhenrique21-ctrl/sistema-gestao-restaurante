@@ -548,8 +548,14 @@ function sefazManifestar(emp, chNFe) {
       hostname: 'www.nfe.fazenda.gov.br',
       path: '/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       method: 'POST',
-      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF', 'Content-Length': bodyBuf.length },
-      ...tlsOpts, rejectUnauthorized: false, timeout: 30000,
+      // SOAP 1.2 leva a action só no parâmetro do Content-Type — mandar TAMBÉM
+      // o header SOAPAction (convenção do SOAP 1.1) é redundante e, testando
+      // contra a Receita, sobra como candidato pra explicar o "Object
+      // reference not set" que a manifestação sempre devolvia mesmo com a
+      // assinatura já em SHA-256. Consulta por chave nunca manda esse header
+      // e funciona normalmente — alinhando aqui com o que já funciona lá.
+      headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"', 'Content-Length': bodyBuf.length },
+      ...tlsOpts, rejectUnauthorized: true, timeout: 30000,
     };
     console.log(`[SEFAZ ${emp}] Manifestando ciência para NF-e ${chNFe.slice(-8)}...`);
     const apiReq = https.request(options, apiRes => {
