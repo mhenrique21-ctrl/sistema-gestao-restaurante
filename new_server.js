@@ -8,6 +8,7 @@ import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import webPush from 'web-push';
 import { SignedXml } from 'xml-crypto';
+import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -501,6 +502,22 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
     location: { reference: "//*[local-name(.)='infEvento']", action: 'after' },
   });
   const eventoAssinado = sig.getSignedXml();
+
+  // Autoverificação: reconfere a própria assinatura antes de mandar pra
+  // SEFAZ, com o MESMO xml-crypto — não pode confiar que "computeSignature
+  // não jogou erro" significa "assinatura válida". Se isto der falso, o
+  // problema é na geração em si, não em como o log/terminal mostrou depois.
+  try {
+    const verifyDoc = new DOMParser().parseFromString(eventoAssinado, 'text/xml');
+    const sigNode = verifyDoc.getElementsByTagNameNS('http://www.w3.org/2000/09/xmldsig#', 'Signature')[0];
+    const verificador = new SignedXml({ publicCert: certPem });
+    verificador.loadSignature(sigNode);
+    const autoOk = verificador.checkSignature(eventoAssinado);
+    console.log(`[SEFAZ] Autoverificação da assinatura (${chNFe.slice(-8)}): ${autoOk ? '✅ válida' : '❌ INVÁLIDA'}`);
+    if (!autoOk) console.log(`[SEFAZ] Autoverificação — erros: ${JSON.stringify(verificador.validationErrors)}`);
+  } catch (ve) {
+    console.log(`[SEFAZ] Autoverificação lançou exceção: ${ve.message}`);
+  }
 
   const envEvento =
     `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">` +
