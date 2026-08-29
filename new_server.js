@@ -510,7 +510,13 @@ function buildManifestacaoSoap(cnpj, uf, chNFe, privateKeyPem, certPem, tpAmb = 
 
   _signDebug = { method: 'xml-crypto', evId };
 
-  const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>91</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
+  // cUF é a UF da empresa que está chamando o serviço (ex: 35 = SP) — igual
+  // buildChaveEnvelope() já faz pra consulta. Estava fixo em "91" (código do
+  // Ambiente Nacional, correto pra cOrgao dentro do evento, mas não pro cUF
+  // do cabeçalho): o parâmetro uf chegava até aqui e nunca era usado —
+  // candidato real pro "Object reference not set" que a manifestação sempre
+  // devolvia mesmo já com assinatura em SHA-256 e sem o header redundante.
+  const cabec = `<nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"><cUF>${uf}</cUF><versaoDados>1.00</versaoDados></nfeCabecMsg>`;
   return (
     `<?xml version="1.0" encoding="utf-8"?>` +
     `<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
