@@ -4527,6 +4527,7 @@ function renderCfgComandas() {
       <div class="estoque-item-actions">
         <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openQRModal('${c.code}')">📱 QR</button>
         ${c.status === 'fechada' ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="reabrirCartao('${c.id}')">🔓 Reabrir</button>` : ''}
+        <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="excluirComanda('${c.id}')">🗑️</button>
       </div>
     </div>
   `).join('');
@@ -4604,6 +4605,20 @@ async function reabrirCartao(id) {
     const res = await fetch(`${API}/api/comandas/${id}/reopen`, { method: 'POST', headers: authHeaders() });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao reabrir'); return; }
+    loadCfgComandas();
+  } catch (e) {
+    alert('Erro de conexão');
+  }
+}
+
+// Servidor recusa (409) se a comanda já tiver pedido ou pagamento lançado —
+// existe pra apagar cartão vazio/de teste, não pra sumir com histórico.
+async function excluirComanda(id) {
+  if (!confirm('Excluir este cartão de comanda? Só funciona se ele nunca teve pedido lançado.')) return;
+  try {
+    const res = await fetch(`${API}/api/comandas/${id}`, { method: 'DELETE', headers: authHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Erro ao excluir'); return; }
     loadCfgComandas();
   } catch (e) {
     alert('Erro de conexão');

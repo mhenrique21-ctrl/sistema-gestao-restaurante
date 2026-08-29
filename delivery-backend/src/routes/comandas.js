@@ -242,6 +242,28 @@ router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
   }
 });
 
+// DELETE /api/comandas/:id — exclui um cartão (admin). Só permite apagar
+// comanda vazia (sem pedido nem pagamento lançado) — uma que já teve
+// movimento tem histórico financeiro, não é lixo pra limpar; nesse caso o
+// caminho certo é fechar, não excluir.
+router.delete('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  try {
+    const [itens, pagamentos] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS n FROM comanda_items WHERE comanda_id = $1`, [req.params.id]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM comanda_payments WHERE comanda_id = $1`, [req.params.id]),
+    ]);
+    if (itens.rows[0].n > 0 || pagamentos.rows[0].n > 0) {
+      return res.status(409).json({ error: 'Esta comanda já tem pedido ou pagamento lançado — feche em vez de excluir, pra manter o histórico.' });
+    }
+    const result = await pool.query(`DELETE FROM comandas WHERE id = $1 RETURNING id`, [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Comanda não encontrada' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[comandas/delete]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // Até 60 tentativas por IP a cada 5 min. O código já tem 64 bits de entropia
 // (impossível de adivinhar na prática), então isso é uma trava extra contra
 // script varrendo códigos, não a defesa principal — e generosa de propósito,
