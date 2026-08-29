@@ -15640,6 +15640,62 @@ const DEST_L = 1600, DEST_A = 1000;   // saída final, 16:10
 const EDIT_L = 640,  EDIT_A = 400;    // prévia na tela, mesma proporção
 const DEST_MAX_ENTRADA = 2400;        // reduz na entrada: editor fluido, giro sem estourar memória
 
+// Tema claro/escuro do totem (kiosk.html) — grava em /api/pdv-config, que o
+// backend proxia pra /api/settings do delivery-backend (mesma tabela
+// key/value já usada pelo tempo de descanso de tela). O kiosk lê isso
+// publicamente ao carregar; aqui só existe a escolha, sem preview.
+function PdvConfigTema(){
+  const [tema,setTema]=useState<"claro"|"escuro">("claro");
+  const [carregando,setCarregando]=useState(true);
+  const [salvando,setSalvando]=useState(false);
+  const [erro,setErro]=useState("");
+
+  useEffect(()=>{
+    (async()=>{
+      setCarregando(true);setErro("");
+      try{
+        const r=await fetch("/api/pdv-config");
+        const d=await r.json();
+        if(!r.ok)throw new Error(d.error||"Erro ao carregar");
+        setTema(d.kiosk_theme==="escuro"?"escuro":"claro");
+      }catch(e:any){setErro(e.message||"Erro de conexão");}
+      setCarregando(false);
+    })();
+  },[]);
+
+  const escolher=async(novo:"claro"|"escuro")=>{
+    if(novo===tema||salvando)return;
+    const anterior=tema;
+    setSalvando(true);setErro("");setTema(novo);
+    try{
+      const r=await fetch("/api/pdv-config",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({kiosk_theme:novo})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao salvar");
+    }catch(e:any){setTema(anterior);setErro(e.message||"Erro de conexão");}
+    setSalvando(false);
+  };
+
+  return <div className="card" style={{marginBottom:12}}>
+    <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:6}}>🎨 Tema do totem</div>
+    <div className="muted" style={{fontSize:11,marginBottom:12}}>
+      Cor de fundo da tela de autoatendimento (kiosk). Claro evita reflexo de vitrine em salão iluminado; escuro é mais parecido com outros totens do mercado.
+    </div>
+    {carregando?<div className="muted" style={{fontSize:12}}>Carregando...</div>:
+    <div style={{display:"flex",gap:8}}>
+      {([["claro","☀️ Claro"],["escuro","🌙 Escuro"]] as [("claro"|"escuro"),string][]).map(([val,label])=>(
+        <button key={val} onClick={()=>escolher(val)} disabled={salvando}
+          style={{flex:1,padding:"11px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer",
+            border:tema===val?"2px solid var(--btnPrimary)":"1px solid var(--border2)",
+            background:tema===val?"var(--btnPrimary)":"var(--bg4)",
+            color:tema===val?"var(--onPrimary,#FFFFFF)":"var(--text)"}}>
+          {label}
+        </button>
+      ))}
+    </div>}
+    {erro&&<div style={{color:"var(--btnDanger)",fontSize:11,marginTop:8}}>{erro}</div>}
+  </div>;
+}
+
 function PdvDestaques(){
   const [lista,setLista]=useState<any[]>([]);
   const [carregando,setCarregando]=useState(true);
@@ -16499,6 +16555,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
 
     {/* ===== NF-e / SEFAZ ===== */}
     {subTab==="pdvdestaques"&&<div>
+      <PdvConfigTema/>
       <PdvDestaques/>
     </div>}
 

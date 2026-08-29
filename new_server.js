@@ -1754,9 +1754,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   // string (?empresa=), inclusive em POST/PATCH/DELETE, pra não precisar
   // ler o corpo antes de saber pra qual PDV mandar.
   if (
-    (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/pdv-destaques')) ||
+    (req.method === 'GET' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/pdv-destaques' || urlPath === '/api/pdv-config')) ||
     (req.method === 'POST' && (urlPath === '/api/menu-produtos' || urlPath === '/api/menu-categorias' || urlPath === '/api/menu-produtos/upload' || urlPath === '/api/pdv-destaques')) ||
-    (req.method === 'PATCH' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/menu-categorias/') || urlPath.startsWith('/api/pdv-destaques/'))) ||
+    (req.method === 'PATCH' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/menu-categorias/') || urlPath.startsWith('/api/pdv-destaques/') || urlPath === '/api/pdv-config')) ||
     (req.method === 'DELETE' && (urlPath.startsWith('/api/menu-produtos/') || urlPath.startsWith('/api/pdv-destaques/')))
   ) {
     const isUpload = urlPath === '/api/menu-produtos/upload';
@@ -1772,6 +1772,11 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     // que está ativo, e aqui é preciso ver e editar tudo.
     else if (urlPath === '/api/pdv-destaques') upstreamPath = req.method === 'GET' ? '/api/highlights/admin' : '/api/highlights';
     else if (urlPath.startsWith('/api/pdv-destaques/')) upstreamPath = `/api/highlights/${idFromPath()}`;
+    // Config pública do totem (tema claro/escuro, etc.) — mesma tabela
+    // key/value de /api/settings do delivery-backend. GET é público lá, mas
+    // passa pelo token de serviço igual ao resto: mais simples que ter dois
+    // caminhos de auth diferentes num proxy só.
+    else if (urlPath === '/api/pdv-config') upstreamPath = '/api/settings';
       else if (urlPath === '/api/menu-produtos') upstreamPath = req.method === 'GET' ? '/api/menu/admin' : '/api/menu/products';
       else if (urlPath === '/api/menu-categorias') upstreamPath = '/api/categories';
       else if (req.method === 'PATCH' && urlPath.endsWith('/available')) upstreamPath = `/api/menu/products/${idFromPath()}/available`;
