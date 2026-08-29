@@ -105,8 +105,7 @@
      vez de 10 botões grandes na lateral — o rail fica raso e o dedo erra menos
      porque só tem 1-2 alvos ali, não 10. */
   #cat-sidebar { width: 96px; min-width: 96px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px 10px; display: flex; flex-direction: column; gap: 4px; }
-  .rail-btn { width: 100%; background: transparent; border: none; color: var(--muted); padding: 14px 4px; border-radius: 14px; font-size: .68rem; font-weight: 700; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; line-height: 1.2; }
-  .rail-btn .rail-emoji { font-size: 1.6rem; line-height: 1; }
+  .rail-btn { width: 100%; background: transparent; border: none; color: var(--muted); padding: 16px 4px; border-radius: 14px; font-size: .78rem; font-weight: 700; text-align: center; display: flex; align-items: center; justify-content: center; line-height: 1.25; }
   .rail-btn.active { background: var(--gold); color: #fff; box-shadow: var(--shadow); }
   /* Pílulas de categoria: só aparecem dentro do Cardápio (não em Destaques),
      igual à referência — Destaques é pra navegação rápida, a lista completa
@@ -658,12 +657,10 @@ function renderCategorySidebar() {
   const emCardapio = activeCategory !== 'ofertas';
   let html = '';
   if (offers.length > 0) {
-    html += `<button class="rail-btn ${!emCardapio ? 'active' : ''}" onclick="selectCategory('ofertas')">
-      <span class="rail-emoji">🔥</span>Destaques</button>`;
+    html += `<button class="rail-btn ${!emCardapio ? 'active' : ''}" onclick="selectCategory('ofertas')">Destaques</button>`;
   }
   if (visibleCategories().length > 0) {
-    html += `<button class="rail-btn ${emCardapio ? 'active' : ''}" onclick="abrirCardapio()">
-      <span class="rail-emoji">📖</span>Cardápio</button>`;
+    html += `<button class="rail-btn ${emCardapio ? 'active' : ''}" onclick="abrirCardapio()">Cardápio</button>`;
   }
   el.innerHTML = html;
 }
@@ -686,7 +683,7 @@ function renderCategoryPills() {
   const emCardapio = activeCategory !== 'ofertas';
   if (!emCardapio || searchQuery) { el.innerHTML = ''; return; }
   el.innerHTML = visibleCategories().map(c => `
-    <button class="cat-pill ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">${iconeDaCategoria(c)} ${c.name}</button>
+    <button class="cat-pill ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">${c.name}</button>
   `).join('');
 }
 
