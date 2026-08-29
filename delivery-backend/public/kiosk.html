@@ -25,6 +25,30 @@
     --shadow: 0 2px 10px rgba(60,40,15,.08);
     --shadow-lg: 0 8px 26px rgba(60,40,15,.16);
   }
+  /* Tema escuro: opcional, ligado pelo dono via Configurações (kiosk_theme).
+     Reaproveita o dourado claro que a tela de descanso já usa em fundo preto —
+     não é cor nova, é o mesmo token que já provou funcionar aqui. Continua
+     existindo o risco de reflexo perto de vitrine descrito acima; é uma
+     escolha consciente do dono, não o padrão. */
+  [data-theme="escuro"] {
+    --bg: #1B1712;
+    --surface: #221D16;
+    --card: #251F17;
+    --card-active: #332A1C;
+    --border: rgba(255,255,255,.10);
+    --gold: #E8B961;
+    --gold-dim: #C99A4A;
+    --text: #F5EFE3;
+    --muted: #B8A88C;
+    --shadow: 0 2px 10px rgba(0,0,0,.35);
+    --shadow-lg: 0 10px 28px rgba(0,0,0,.5);
+  }
+  [data-theme="escuro"] .btn-primary,
+  [data-theme="escuro"] .add-btn { color: #1B1712; }
+  [data-theme="escuro"] .thumb,
+  [data-theme="escuro"] .thumb-fallback,
+  [data-theme="escuro"] .item-thumb,
+  [data-theme="escuro"] .item-thumb-fallback { background: linear-gradient(135deg, #2E2618 0%, #241E15 100%); }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
   input, textarea { -webkit-user-select: text; user-select: text; }
   html, body { overscroll-behavior: none; }
@@ -32,15 +56,24 @@
   button { font-family: inherit; cursor: pointer; }
   .hidden { display: none !important; }
 
-  #header { background: var(--surface); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); height: 61px; box-shadow: var(--shadow); position: relative; z-index: 5; }
-  #header .brand { display: flex; align-items: center; gap: 10px; font-size: 1.15rem; font-weight: 800; color: var(--gold); }
+  #header { background: var(--surface); padding: 12px 20px; display: flex; align-items: center; gap: 16px; justify-content: space-between; border-bottom: 1px solid var(--border); height: 64px; box-shadow: var(--shadow); position: relative; z-index: 5; }
+  #header .brand-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  #header .brand { display: flex; align-items: center; gap: 10px; font-size: 1.15rem; font-weight: 800; color: var(--gold); white-space: nowrap; }
   .btn { border: none; border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: .9rem; }
   .btn-primary { background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: #fff; }
   .btn-primary:disabled { background: var(--border); color: var(--muted); }
   .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
   .btn-danger { background: var(--danger); color: #fff; }
-  #header-actions { display: flex; align-items: center; gap: 10px; }
-  #mesa-tag { background: var(--card); border: 1px solid var(--border); color: var(--muted); font-size: .78rem; font-weight: 700; padding: 6px 12px; border-radius: 999px; }
+  #header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  #mesa-tag { background: var(--card); border: 1px solid var(--border); color: var(--muted); font-size: .78rem; font-weight: 700; padding: 6px 12px; border-radius: 999px; flex-shrink: 0; }
+  /* Busca: filtra o cardápio inteiro por nome, não só a categoria aberta —
+     numa lista grande, digitar é mais rápido que navegar categoria por
+     categoria pra achar um item específico. */
+  #search-box { flex: 1; max-width: 360px; display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 14px; color: var(--muted); }
+  #search-box svg { width: 16px; height: 16px; flex-shrink: 0; }
+  #search-box input { flex: 1; border: none; background: transparent; color: var(--text); font-size: .88rem; outline: none; -webkit-user-select: text; user-select: text; }
+  #search-box input::placeholder { color: var(--muted); }
+  #search-clear { background: none; border: none; color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 0 2px; flex-shrink: 0; }
 
   /* ── Configuração da mesa (uma vez por tablet) ────── */
   #mesa-setup-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -66,15 +99,21 @@
   .scan-back { margin-top: 16px; }
 
   /* ── Cardápio (tela padrão) ───────────────────────── */
-  #app-screen { display: flex; height: calc(100vh - 61px); }
-  /* Lateral mais larga: o dedo do cliente em pé erra alvo de 140px. Cada
-     categoria virou um ícone grande + nome, pra ser reconhecida de relance. */
-  #cat-sidebar { width: 168px; min-width: 168px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px 10px 24px; }
-  .cat-btn { width: 100%; background: transparent; border: 1px solid transparent; color: var(--text); padding: 14px 6px 12px; border-radius: 14px; font-size: .95rem; font-weight: 700; text-align: center; margin-bottom: 6px; display: block; line-height: 1.25; }
-  .cat-btn:active { background: var(--card-active); }
-  .cat-btn .cat-emoji { font-size: 1.7rem; display: block; margin-bottom: 5px; line-height: 1; }
-  .cat-btn .cat-thumb { width: 52px; height: 52px; border-radius: 14px; object-fit: cover; margin: 0 auto 6px; display: block; background: var(--bg); }
-  .cat-btn.active { background: var(--gold); color: #fff; border-color: var(--gold); box-shadow: var(--shadow); }
+  #app-screen { display: flex; height: calc(100vh - 64px); }
+  /* Rail estreito só com "Destaques" e "Cardápio": pra 10 categorias caberem
+     empilhadas e legíveis, viraram pílulas horizontais dentro do Cardápio em
+     vez de 10 botões grandes na lateral — o rail fica raso e o dedo erra menos
+     porque só tem 1-2 alvos ali, não 10. */
+  #cat-sidebar { width: 96px; min-width: 96px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .rail-btn { width: 100%; background: transparent; border: none; color: var(--muted); padding: 14px 4px; border-radius: 14px; font-size: .68rem; font-weight: 700; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; line-height: 1.2; }
+  .rail-btn .rail-emoji { font-size: 1.6rem; line-height: 1; }
+  .rail-btn.active { background: var(--gold); color: #fff; box-shadow: var(--shadow); }
+  /* Pílulas de categoria: só aparecem dentro do Cardápio (não em Destaques),
+     igual à referência — Destaques é pra navegação rápida, a lista completa
+     de categorias só interessa quem já decidiu "quero ver o cardápio". */
+  #cat-pills { display: flex; gap: 10px; padding: 4px 22px 16px; overflow-x: auto; }
+  .cat-pill { flex-shrink: 0; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 10px 18px; border-radius: 999px; font-size: .88rem; font-weight: 700; white-space: nowrap; }
+  .cat-pill.active { background: var(--gold); border-color: var(--gold); color: #fff; }
   #menu-col { flex: 1; overflow-y: auto; background: var(--bg); }
 
   /* Faixa do topo: com foto vira banner; sem foto vira só um título limpo,
@@ -84,48 +123,42 @@
   #cat-banner h2 { font-size: 1.5rem; font-weight: 800; }
   #cat-banner.com-foto h2 { color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
 
-  /* 3 colunas num tablet de 10". Cards altos, foto grande e botão de ação
-     visível — o cliente não precisa descobrir que o card inteiro é clicável. */
-  #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; padding: 18px 22px 120px; }
-  .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; text-align: left; color: var(--text); display: flex; flex-direction: column; box-shadow: var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
-  .product-card:active { transform: scale(.97); box-shadow: var(--shadow-lg); }
-  .thumb-wrap { position: relative; }
-  /* As fotos do cardápio são quadradas (400x400, 1254x1254, 200x200) e estavam
-     num espaço deitado de 249x148 com object-fit: cover — o recorte jogava fora
-     101px de altura, 41% da imagem. O produto perdia topo e base, e o selo de
-     oferta ainda cobria o que restava.
-     Com 4/3 e contain a foto entra inteira: nada é cortado, ela renderiza maior
-     que antes (187px de lado contra 148 recortados) e o card cresce só 39px.
-     As faixas laterais usam o mesmo creme do bloco de "sem foto", então parecem
-     parte do desenho e não sobra. */
-  .product-card .thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; display: block;
+  /* Lista de cards deitados (1 por linha): foto grande do lado, nome+preço no
+     topo, botão de ação no rodapé — o cliente não precisa descobrir que o
+     card inteiro é clicável. */
+  #product-grid { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px 120px; }
+  .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; text-align: left; color: var(--text); display: flex; flex-direction: row; align-items: stretch; gap: 16px; padding: 14px; box-shadow: var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
+  .product-card:active { transform: scale(.99); box-shadow: var(--shadow-lg); }
+  .thumb-wrap { position: relative; width: 160px; min-width: 160px; border-radius: 14px; overflow: hidden; }
+  /* As fotos do cardápio são quadradas (400x400, 1254x1254, 200x200); contain
+     garante que entram inteiras no quadrado do card, sem cortar topo/base. */
+  .product-card .thumb { width: 100%; height: 100%; object-fit: contain; display: block;
     background: linear-gradient(135deg, #F3E9D8 0%, #EADBC2 100%); }
   /* Produto sem foto não fica com buraco branco: recebe um bloco creme com o
      ícone da categoria. Boa parte do cardápio ainda não tem imagem. */
-  .thumb-fallback { width: 100%; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; font-size: 3rem;
+  .thumb-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.6rem;
     background: linear-gradient(135deg, #F3E9D8 0%, #EADBC2 100%); }
-  /* O selo de desconto fica na faixa lateral criada pelo contain, encostado no
-     canto — cobre alguns pixels da foto, não o produto. */
   .off-badge { position: absolute; top: 6px; left: 6px; width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,#ff4d4d,#ff8c00); box-shadow: 0 2px 8px rgba(255,77,77,.55); color: #fff; font-weight: 900; font-size: 10px; line-height: 1.1; text-align: center; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
-  /* "Mais pedido" tem 112px de largura: por cima da foto, tapava o produto.
-     Desceu pro corpo do card, onde informa sem esconder nada. */
   .top-badge { display: inline-block; background: rgba(36,28,19,.9); color: #FFD98A; font-size: .64rem; font-weight: 800;
     letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; margin-bottom: 5px; }
   .esgotado-badge { position: absolute; inset: 0; background: rgba(255,255,255,.72); display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: .9rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .product-card .body { padding: 12px 14px 14px; flex: 1; display: flex; flex-direction: column; }
+  .product-card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .body-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
   .product-card .name { font-size: 1.02rem; font-weight: 800; margin-bottom: 4px; line-height: 1.25; }
-  .product-card .desc { font-size: .78rem; color: var(--muted); margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; line-height: 1.4; }
-  .price-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+  .product-card .desc { font-size: .78rem; color: var(--muted); margin: 6px 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; line-height: 1.4; }
+  .price-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; text-align: right; white-space: nowrap; }
   .price-box { display: flex; flex-direction: column; line-height: 1.2; }
   .price-old { font-size: .74rem; color: var(--muted); text-decoration: line-through; }
   .price-new { font-size: 1.15rem; color: var(--gold); font-weight: 900; }
+  .card-footer { display: flex; justify-content: flex-end; margin-top: auto; }
+  .add-btn { border: none; border-radius: 10px; padding: 10px 20px; font-size: .85rem; font-weight: 700; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: #fff; box-shadow: var(--shadow); }
   .add-pill { width: 40px; height: 40px; min-width: 40px; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%);
     color: #fff; font-size: 1.4rem; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); }
   .card-tag { font-size: .7rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
 
   /* ── Carrinho flutuante ───────────────────────────── */
-  #cart-bar { position: fixed; left: 168px; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -6px 22px rgba(60,40,15,.14); padding: 12px 22px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 16px; transform: translateY(110%); transition: transform .25s ease; z-index: 20; }
+  #cart-bar { position: fixed; left: 96px; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -6px 22px rgba(60,40,15,.14); padding: 12px 22px calc(12px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 16px; transform: translateY(110%); transition: transform .25s ease; z-index: 20; }
   #cart-bar.show { transform: translateY(0); }
   #cart-bar .cart-info { font-size: .92rem; color: var(--muted); }
   #cart-bar .cart-info strong { color: var(--gold); font-size: 1.35rem; display: block; }
@@ -178,7 +211,7 @@
   .close-total { font-size: 1.8rem; font-weight: 800; color: var(--gold); text-align: center; margin: 10px 0; }
 
   /* ── Sucesso ──────────────────────────────────────── */
-  .success-screen { min-height: calc(100vh - 61px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; gap: 12px; }
+  .success-screen { min-height: calc(100vh - 64px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; gap: 12px; }
   .success-screen .icon { font-size: 4rem; }
   .success-screen h2 { font-size: 1.4rem; }
   .success-screen p { color: var(--muted); }
@@ -221,10 +254,17 @@
 <body>
 
 <div id="header">
-  <div class="brand">☕ Confraria Café</div>
-  <button id="mesa-tag" class="hidden"
-    onmousedown="startMesaHold()" onmouseup="cancelMesaHold()" onmouseleave="cancelMesaHold()"
-    ontouchstart="startMesaHold()" ontouchend="cancelMesaHold()" ontouchcancel="cancelMesaHold()"></button>
+  <div class="brand-group">
+    <div class="brand">☕ Confraria Café</div>
+    <button id="mesa-tag" class="hidden"
+      onmousedown="startMesaHold()" onmouseup="cancelMesaHold()" onmouseleave="cancelMesaHold()"
+      ontouchstart="startMesaHold()" ontouchend="cancelMesaHold()" ontouchcancel="cancelMesaHold()"></button>
+  </div>
+  <div id="search-box">
+    🔍
+    <input type="text" id="menu-search" placeholder="Buscar no cardápio" autocomplete="off" oninput="onSearchInput(this.value)">
+    <button id="search-clear" class="hidden" onclick="clearSearch()">✕</button>
+  </div>
   <div id="header-actions">
     <button class="btn btn-secondary" onclick="goHistoryScan()">🧾 Meus pedidos</button>
     <button class="btn btn-primary" onclick="goCheckoutScan()">💳 Minha conta</button>
@@ -248,6 +288,7 @@
   <div id="cat-sidebar"></div>
   <div id="menu-col">
     <div id="cat-banner"><h2 id="cat-banner-title"></h2></div>
+    <div id="cat-pills"></div>
     <div id="product-grid"></div>
   </div>
 </div>
@@ -332,6 +373,7 @@ const API = '';
 
 let menu = [];
 let activeCategory = null;
+let searchQuery = '';
 // "Categoria em cartão único": categoria com dezenas de variações (ex: 35
 // sabores de croissant) pode virar uma lista compacta (nome+preço, sem foto
 // obrigatória por item) em vez da grade de fotos — configurável em
@@ -484,6 +526,7 @@ function showAppScreen() {
   hideSubScreens();
   document.getElementById('app-screen').classList.remove('hidden');
   document.getElementById('header-actions').classList.remove('hidden');
+  document.getElementById('search-box').classList.remove('hidden');
   document.getElementById('back-to-menu-btn').classList.add('hidden');
   renderCartBar();
 }
@@ -492,7 +535,27 @@ function showSubScreen(id) {
   hideSubScreens();
   document.getElementById(id).classList.remove('hidden');
   document.getElementById('header-actions').classList.add('hidden');
+  document.getElementById('search-box').classList.add('hidden');
   document.getElementById('back-to-menu-btn').classList.remove('hidden');
+}
+
+// ── Busca (cabeçalho) ─────────────────────────────────
+function onSearchInput(val) {
+  searchQuery = (val || '').trim();
+  document.getElementById('search-clear').classList.toggle('hidden', !searchQuery);
+  renderCategoryPills();
+  renderCategoryBanner();
+  renderProductGrid();
+}
+
+function clearSearch() {
+  searchQuery = '';
+  const input = document.getElementById('menu-search');
+  if (input) input.value = '';
+  document.getElementById('search-clear').classList.add('hidden');
+  renderCategoryPills();
+  renderCategoryBanner();
+  renderProductGrid();
 }
 
 function resetToMenu() {
@@ -554,7 +617,7 @@ async function recarregarMenuSeOcioso() {
   await loadCondensedConfig();
   await carregarMaisPedidos();
   if (JSON.stringify(menu.map(c => c.products.length)) + JSON.stringify(maisPedidos) !== antes) {
-    renderCategorySidebar(); renderCategoryBanner(); renderProductGrid();
+    renderCategorySidebar(); renderCategoryPills(); renderCategoryBanner(); renderProductGrid();
   }
 }
 
@@ -585,30 +648,62 @@ function visibleCategories() {
   return menu.filter(c => c.name !== 'Ofertas' && (c.products || []).length > 0);
 }
 
+// Rail só com "Destaques" (= Ofertas) e "Cardápio" — a lista de categorias
+// em si virou pílula horizontal (renderCategoryPills), só visível dentro do
+// Cardápio. Com 10 categorias, 10 botões grandes empilhados não cabiam sem
+// rolagem; 2 botões cabem sempre, de relance.
 function renderCategorySidebar() {
   const el = document.getElementById('cat-sidebar');
   const offers = getOffers();
+  const emCardapio = activeCategory !== 'ofertas';
   let html = '';
   if (offers.length > 0) {
-    html += `<button class="cat-btn ${activeCategory === 'ofertas' ? 'active' : ''}" onclick="selectCategory('ofertas')">
-      <span class="cat-emoji">🔥</span>Ofertas</button>`;
+    html += `<button class="rail-btn ${!emCardapio ? 'active' : ''}" onclick="selectCategory('ofertas')">
+      <span class="rail-emoji">🔥</span>Destaques</button>`;
   }
-  // Sem foto de categoria cadastrada, entra o emoji do CAT_ICONS. Um botão só
-  // com texto some no meio dos outros; o ícone é o que o cliente localiza.
-  html += visibleCategories().map(c => `
-    <button class="cat-btn ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">
-      ${c.image_url ? `<img class="cat-thumb" src="${c.image_url}">`
-                    : `<span class="cat-emoji">${iconeDaCategoria(c)}</span>`}
-      ${c.name}
-    </button>
-  `).join('');
+  if (visibleCategories().length > 0) {
+    html += `<button class="rail-btn ${emCardapio ? 'active' : ''}" onclick="abrirCardapio()">
+      <span class="rail-emoji">📖</span>Cardápio</button>`;
+  }
   el.innerHTML = html;
+}
+
+// Lembra a última categoria real vista, pra reabrir nela ao tocar em
+// "Cardápio" de novo em vez de sempre voltar pra primeira da lista.
+let lastRealCategory = null;
+
+function abrirCardapio() {
+  const cats = visibleCategories();
+  if (!cats.length) return;
+  const alvo = cats.some(c => c.id === lastRealCategory) ? lastRealCategory : cats[0].id;
+  selectCategory(alvo);
+}
+
+// Pílulas de categoria: só fazem sentido dentro do Cardápio (não em
+// Destaques nem durante uma busca, que já mostra resultado de todo o menu).
+function renderCategoryPills() {
+  const el = document.getElementById('cat-pills');
+  const emCardapio = activeCategory !== 'ofertas';
+  if (!emCardapio || searchQuery) { el.innerHTML = ''; return; }
+  el.innerHTML = visibleCategories().map(c => `
+    <button class="cat-pill ${c.id === activeCategory ? 'active' : ''}" onclick="selectCategory('${c.id}')">${iconeDaCategoria(c)} ${c.name}</button>
+  `).join('');
 }
 
 function selectCategory(id) {
   activeCategory = id;
+  if (id !== 'ofertas') lastRealCategory = id;
   condensedSearchTerm = '';
+  // Trocar de categoria sai do modo de busca — senão a grade ficaria presa
+  // no resultado da busca mesmo depois de tocar numa pílula.
+  if (searchQuery) {
+    searchQuery = '';
+    const input = document.getElementById('menu-search');
+    if (input) input.value = '';
+    document.getElementById('search-clear').classList.add('hidden');
+  }
   renderCategorySidebar();
+  renderCategoryPills();
   renderCategoryBanner();
   renderProductGrid();
 }
@@ -616,6 +711,12 @@ function selectCategory(id) {
 function renderCategoryBanner() {
   const banner = document.getElementById('cat-banner');
   const title = document.getElementById('cat-banner-title');
+  if (searchQuery) {
+    banner.style.backgroundImage = '';
+    banner.classList.remove('com-foto');
+    title.textContent = `🔍 Resultados para "${searchQuery}"`;
+    return;
+  }
   if (activeCategory === 'ofertas') {
     banner.style.backgroundImage = '';
     banner.classList.remove('com-foto');
@@ -650,17 +751,38 @@ function ordenarCondensado(products, sortMode) {
   return products;
 }
 
+// Busca ignora maiúsculas/minúsculas e varre o menu inteiro (não só a
+// categoria aberta) — numa lista grande, achar um item específico digitando
+// é mais rápido que navegar categoria por categoria. É separada da busca
+// interna do cartão único (condensedSearchTerm), que continua só dentro de
+// uma categoria condensada.
+function buscaNormalizada(s) { return (s || '').toLowerCase().trim(); }
+
 function renderProductGrid() {
   const el = document.getElementById('product-grid');
-  const products = activeCategory === 'ofertas'
-    ? getOffers().filter(p => p.available)
-    : (menu.find(c => c.id === activeCategory)?.products || []).filter(p => p.available);
-  if (!products.length) { el.innerHTML = '<div class="launched-empty">Sem produtos nesta categoria</div>'; return; }
+  let products;
+  let catCfg = null;
+  if (searchQuery) {
+    const q = buscaNormalizada(searchQuery);
+    products = menu.flatMap(c => (c.products || []).map(p => ({ ...p, categoryName: c.name })))
+      .filter(p => p.available && buscaNormalizada(p.name).includes(q));
+  } else if (activeCategory === 'ofertas') {
+    products = getOffers().filter(p => p.available);
+  } else {
+    products = (menu.find(c => c.id === activeCategory)?.products || []).filter(p => p.available);
+    catCfg = condensedConfig.categories[activeCategory] || {};
+  }
 
-  const catCfg = activeCategory !== 'ofertas' ? (condensedConfig.categories[activeCategory] || {}) : {};
-  if (catCfg.condensed) { renderCondensedList(el, products, catCfg); return; }
+  if (!products.length) {
+    el.classList.remove('condensed-mode');
+    el.innerHTML = `<div class="launched-empty">${searchQuery ? 'Nada encontrado' : 'Sem produtos nesta categoria'}</div>`;
+    return;
+  }
+
+  if (catCfg && catCfg.condensed) { renderCondensedList(el, products, catCfg); return; }
   el.classList.remove('condensed-mode');
 
+  const mostraCategoria = activeCategory === 'ofertas' || !!searchQuery;
   el.innerHTML = products.map(p => {
     const img = p.image_url
       ? `<img class="thumb" src="${p.image_url}">`
@@ -675,14 +797,16 @@ function renderProductGrid() {
         ${p.promo_price != null ? `<span class="off-badge">${Math.round((1 - p.promo_price / p.price) * 100)}%<br>OFF</span>` : ''}
       </div>
       <div class="body">
-        ${maisPedidos.includes(p.id) ? '<div class="top-badge">⭐ Mais pedido</div>' : ''}
-        ${activeCategory === 'ofertas' && p.categoryName && p.categoryName !== 'Ofertas' ? `<div class="card-tag">${p.categoryName}</div>` : ''}
-        <div class="name">${p.name}</div>
-        ${p.description ? `<div class="desc">${p.description}</div>` : ''}
-        <div class="price-row">
-          <span class="price-box">${preco}</span>
-          <span class="add-pill">+</span>
+        <div class="body-top">
+          <div>
+            ${maisPedidos.includes(p.id) ? '<div class="top-badge">⭐ Mais pedido</div>' : ''}
+            ${mostraCategoria && p.categoryName && p.categoryName !== 'Ofertas' ? `<div class="card-tag">${p.categoryName}</div>` : ''}
+            <div class="name">${p.name}</div>
+          </div>
+          <div class="price-row"><span class="price-box">${preco}</span></div>
         </div>
+        ${p.description ? `<div class="desc">${p.description}</div>` : '<div style="flex:1"></div>'}
+        <div class="card-footer"><span class="add-btn">Adicionar</span></div>
       </div>
     </button>`;
   }).join('');
@@ -1254,14 +1378,19 @@ async function init() {
   try {
     const s = await fetch(`${API}/api/settings`).then(r => r.json());
     idleSeconds = parseInt(s.kiosk_idle_seconds) || 60;
+    // Tema claro/escuro escolhido pelo dono na Gestão. Padrão é claro — é o
+    // que evita reflexo perto de vitrine (ver comentário no :root acima).
+    document.documentElement.setAttribute('data-theme', s.kiosk_theme === 'escuro' ? 'escuro' : 'claro');
   } catch (e) {}
   await loadMenuIfNeeded();
+  if (activeCategory && activeCategory !== 'ofertas') lastRealCategory = activeCategory;
   await loadCondensedConfig();
   carregarDestaques();
   // Selo depende do ranking: espera antes de desenhar a grade, senão a
   // primeira categoria apareceria sem selo até alguém trocar de aba.
   await carregarMaisPedidos();
   renderCategorySidebar();
+  renderCategoryPills();
   renderCategoryBanner();
   renderProductGrid();
   showAppScreen();
