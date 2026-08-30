@@ -2020,6 +2020,7 @@ async function resolveCode(code) {
 // Venda de balcão: abre uma comanda avulsa na hora (sem cartão físico) pra lançar e
 // fechar direto, sem passar pela fila de fechamento — pro cliente que compra no balcão.
 async function openBalcaoSale() {
+  if (!await exigirCaixaAberto("abrir venda de balcão", openBalcaoSale)) return;
   setScanError('');
   try {
     const res = await fetch(`${API}/api/comandas/balcao`, { method: 'POST', headers: authHeaders() });
@@ -7217,6 +7218,13 @@ async function checkAberturaCaixa() {
     iniciarStatusBar();
       resetToScan();
     } else {
+      // Entrar nao exige caixa: da pra conferir produtos, pedidos e ajustes
+      // sem abrir. O caixa vira obrigatorio so na hora de vender, no
+      // exigirCaixaAberto() chamado por balcao, envio de pedido e fechamento.
+      document.getElementById('header-actions').classList.remove('hidden');
+      document.getElementById('tab-bar').classList.remove('hidden');
+      iniciarStatusBar();
+      resetToScan();
       openAberturaModal();
     }
   } catch (e) {
@@ -7226,6 +7234,36 @@ async function checkAberturaCaixa() {
     iniciarStatusBar();
     resetToScan();
   }
+}
+
+// Caixa e obrigatorio pra VENDER, nao pra entrar. Reconsulta o servidor
+// antes de barrar: CAIXA_SESSION pode estar vencida (a barra de status so
+// atualiza de tempos em tempos) e barrar quem tem caixa aberto seria pior
+// que o problema original. Quando o operador abre o caixa pelo modal, a
+// acao que ele tentou fazer continua sozinha — ver aoAbrirCaixa.
+let acaoPendenteCaixa = null;
+async function exigirCaixaAberto(oQueIaFazer, retomar) {
+  if (CAIXA_SESSION) return true;
+  // Só barra quando o SERVIDOR confirma que não há caixa. Se a consulta nem
+  // chegou lá (sem rede, servidor fora), deixa vender: é a mesma escolha que
+  // checkAberturaCaixa já faz no catch dele. Barrar aqui seria pior que o
+  // problema — o modal de abertura também depende da rede, então a loja
+  // ficaria sem vender e sem conseguir abrir o caixa pra destravar.
+  let servidorRespondeu = false;
+  try {
+    const res = await fetch(`${API}/api/cash-sessions/current`, { headers: authHeaders() });
+    if (res.ok) {
+      const d = await res.json();
+      CAIXA_SESSION = d.session || null;
+      servidorRespondeu = true;
+    }
+  } catch (e) { /* sem rede: segue o baile, ver comentário acima */ }
+  if (CAIXA_SESSION) return true;
+  if (!servidorRespondeu) return true;
+  acaoPendenteCaixa = retomar || null;
+  showToast(`Abra o caixa para ${oQueIaFazer}`);
+  openAberturaModal();
+  return false;
 }
 
 // ── Abertura de caixa ────────────────────────────────
@@ -7286,6 +7324,9 @@ async function submitAbertura() {
     document.getElementById('tab-bar').classList.remove('hidden');
     iniciarStatusBar();
     resetToScan();
+    // Retoma o que o operador tentou fazer antes de ser barrado.
+    const retomar = acaoPendenteCaixa; acaoPendenteCaixa = null;
+    if (retomar) retomar();
   } catch (e) {
     errEl.textContent = 'Erro de conexão';
     btn.disabled = false;
@@ -7693,6 +7734,7 @@ function removeCartItem(i) {
 
 async function sendOrder() {
   if (!cart.length) return;
+  if (!await exigirCaixaAberto("lançar o pedido", sendOrder)) return;
   const btn = document.getElementById('send-order-btn');
   btn.disabled = true;
   btn.textContent = 'Enviando...';
@@ -8077,6 +8119,7 @@ function closeCloseModal() {
 
 async function confirmClose() {
   if (!closePayments.length || closeRestanteCents() !== 0) return;
+  if (!await exigirCaixaAberto("fechar a comanda", confirmClose)) return;
   const payments = buildFinalPayments();
   const btn = document.getElementById('confirm-close-btn');
   btn.disabled = true;
