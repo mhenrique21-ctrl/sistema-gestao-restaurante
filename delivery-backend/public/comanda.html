@@ -2627,7 +2627,7 @@ async function patchCategoria(id, corpo, sucesso) {
 async function alternarCategoria(id, ativar) {
   const c = _categorias.find(x => x.id === id);
   const n = (estoqueCats.find(x => x.id === id)?.products || []).length;
-  if (!ativar && !confirm(`Desativar "${c?.name}"?\n\n${n ? `Os ${n} produtos dela somem do totem e do delivery, mas continuam cadastrados.` : 'Ela não tem produtos.'}\n\nDá pra reativar quando quiser.`)) return;
+  if (!ativar && !confirm(`Desativar "${c?.name}"?\n\n${n ? `Os ${n} produtos dela param de aparecer no PDV, no totem e no delivery — e somem da tela de Produtos também, até você reativar. Nada é apagado.` : 'Ela não tem produtos.'}\n\nDá pra reativar quando quiser.`)) return;
   await patchCategoria(id, { active: ativar }, ativar ? `${c?.name} reativada` : `${c?.name} desativada`);
 }
 
