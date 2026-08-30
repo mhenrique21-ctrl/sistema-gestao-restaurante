@@ -196,7 +196,6 @@ textarea { resize: vertical; min-height: 70px; }
     <p>Painel Administrativo</p>
   </div>
   <nav id="sidebar-nav">
-    <button class="nav-btn" data-page="dashboard" onclick="showPage('dashboard',this)">📊 Dashboard</button>
     <button class="nav-btn" data-page="pedidos" onclick="showPage('pedidos',this)">📋 Pedidos</button>
     <button class="nav-btn" data-page="produtos" onclick="showPage('produtos',this)">🍽 Produtos</button>
     <button class="nav-btn" data-page="categorias" onclick="showPage('categorias',this)">📂 Categorias</button>
@@ -213,8 +212,6 @@ textarea { resize: vertical; min-height: 70px; }
     <button class="nav-btn" data-page="promocoes" onclick="showPage('promocoes',this)">🎉 Promoções</button>
     <button class="nav-btn" data-page="impressoras" onclick="showPage('impressoras',this)">🖨 Impressoras</button>
     <button class="nav-btn" data-page="templates" onclick="showPage('templates',this)">📋 Templates</button>
-    <button class="nav-btn" data-page="grupos" onclick="showPage('grupos',this)">➕ Adicionais e preparo</button>
-    <button class="nav-btn" data-page="estoque" onclick="showPage('estoque',this)">📦 Estoque</button>
     <button class="nav-btn" data-page="financeiro" onclick="showPage('financeiro',this)">💰 Financeiro</button>
     <button class="nav-btn" data-page="comandas" onclick="showPage('comandas',this)">📇 Comandas</button>
     <button class="nav-btn" data-page="arquivo" onclick="showPage('arquivo',this)">🗄 Arquivo</button>
@@ -544,7 +541,6 @@ function mostrarBannerNovoPedido(num, waLinkCliente, waLinkAdmin) {
         }
       }
       if (currentPage === 'pedidos') carregarPedidos();
-      if (currentPage === 'dashboard') showPage('dashboard');
     }
   };
 })();
@@ -555,7 +551,7 @@ if ('Notification' in window && Notification.permission === 'default') {
 }
 
 // ── Router ────────────────────────────────────────────────────────
-let currentPage = 'dashboard';
+let currentPage = 'pedidos';
 let modalCallback = null;
 
 function showPage(page, btn) {
