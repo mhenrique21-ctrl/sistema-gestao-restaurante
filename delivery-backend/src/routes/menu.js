@@ -91,6 +91,12 @@ router.get('/', async (req, res) => {
     // enxergar tudo. O PDV passa ?channel=pdv de propósito.
     const grupoCanalCol = { kiosk: 'show_kiosk', delivery: 'show_delivery', pdv: 'show_pdv' }[req.query.channel];
     const grupoCanalSql = grupoCanalCol ? `AND g.${grupoCanalCol} = true` : '';
+    // A CATEGORIA tambem escolhe onde aparece. Antes so existia c.active,
+    // que era tudo-ou-nada: tirar "Bebidas" do delivery obrigava a tirar do
+    // balcao junto. Mesmo trio de colunas que addon_groups ja usava.
+    // Sem ?channel (admin) nada e filtrado, pra gestao continuar vendo tudo.
+    const catCanalCol = { kiosk: 'show_kiosk', delivery: 'show_delivery', pdv: 'show_pdv' }[req.query.channel];
+    const catCanalSql = catCanalCol ? `AND c.${catCanalCol} = true` : '';
     const result = await pool.query(`
       SELECT
         c.id AS category_id,
@@ -115,7 +121,7 @@ router.get('/', async (req, res) => {
       LEFT JOIN products p ON p.category_id = c.id AND p.available = true
         AND (p.active_days IS NULL OR $1 = ANY(p.active_days))
         ${channelSql}
-      WHERE c.active = true
+      WHERE c.active = true ${catCanalSql}
       ORDER BY c.sort_order, p.sort_order, p.name
     `, [todayJs]);
 

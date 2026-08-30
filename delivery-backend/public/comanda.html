@@ -767,6 +767,11 @@
   .cat-item .ic { font-size: 1.15rem; width: 28px; text-align: center; }
   .cat-item .nm { font-size: .88rem; font-weight: 700; }
   .cat-item .sb { font-size: .72rem; color: var(--c-muted); margin-top: 1px; }
+    .cat-canais { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
+    .cat-item .cat-canal { font-size: .68rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; cursor: pointer;
+      border: 1px solid var(--c-border); background: none; color: var(--c-muted); letter-spacing: .02em; }
+    .cat-item .cat-canal.on { background: var(--gold); border-color: var(--gold); color: #fff; }
+    .cat-item.off .cat-canais { opacity: .4; pointer-events: none; }
   .cat-item .mid { flex: 1; min-width: 0; }
   .cat-item button { border: 1px solid var(--c-border); background: var(--c-bg); border-radius: 7px;
     padding: 5px 8px; font-size: .76rem; }
@@ -2544,6 +2549,11 @@ function renderCategorias() {
       <div class="mid">
         <div class="nm">${c.name}</div>
         <div class="sb">${n} produto(s)${!c.active ? ' · desativada' : ''}${n && semCanal ? ' · não aparece no totem nem no delivery' : ''}</div>
+        <div class="cat-canais">
+          ${CANAIS_CATEGORIA.map(ca => `<button class="cat-canal ${c[ca.campo] === false ? '' : 'on'}"
+            title="${c[ca.campo] === false ? 'Não aparece' : 'Aparece'} em ${ca.rotulo}"
+            onclick="toggleCanalCategoria('${c.id}', '${ca.campo}', ${c[ca.campo] === false})">${ca.rotulo}</button>`).join('')}
+        </div>
         ${c.name === 'Ofertas' ? `<div class="cat-aviso">O totem monta a aba <b>Ofertas</b> sozinho, com quem tem preço
           promocional, e esconde esta categoria da barra lateral. Produto colocado aqui sem promoção fica invisível no totem.</div>` : ''}
       </div>
@@ -2622,6 +2632,31 @@ async function patchCategoria(id, corpo, sucesso) {
     return true;
   } catch (e) { usrErro('Erro de conexão'); return false; }
   finally { if (btn) btn.disabled = false; }
+}
+
+// Onde a categoria aparece. O "Desativar" ao lado continua sendo a chave
+// geral (tira de tudo, inclusive da tela de Produtos); estas três dizem em
+// QUAL canal ela entra, sem obrigar a desligar nos outros. Coluna nova por
+// canal em categories, mesmo trio que addon_groups já usava.
+const CANAIS_CATEGORIA = [
+  { campo: 'show_pdv', rotulo: 'PDV' },
+  { campo: 'show_kiosk', rotulo: 'Totem' },
+  { campo: 'show_delivery', rotulo: 'Delivery' },
+];
+
+async function toggleCanalCategoria(id, campo, ligar) {
+  const c = _categorias.find(x => x.id === id);
+  const rotulo = (CANAIS_CATEGORIA.find(x => x.campo === campo) || {}).rotulo || campo;
+  // Desligar os três é o mesmo que sumir com a categoria, e aí o caminho
+  // certo é o "Desativar" — que também a tira da tela de Produtos e deixa
+  // isso explícito. Sem este aviso, a categoria sumiria das vendas com as
+  // três pastilhas apagadas e nenhuma explicação de onde ela foi parar.
+  if (!ligar) {
+    const restantes = CANAIS_CATEGORIA.filter(x => x.campo !== campo && c && c[x.campo] !== false);
+    if (!restantes.length && !confirm(`"${c?.name}" não vai aparecer em canal nenhum.\n\nEla some das vendas, mas continua na tela de Produtos. Se a ideia é tirar de tudo, use Desativar.\n\nSeguir assim mesmo?`)) return;
+  }
+  await patchCategoria(id, { [campo]: ligar },
+    `${c?.name}: ${ligar ? 'aparece' : 'não aparece'} em ${rotulo}`);
 }
 
 async function alternarCategoria(id, ativar) {
