@@ -1297,9 +1297,13 @@ function resetIdleTimer() {
 }
 
 // Destaques cadastrados pelo dono. Buscados em segundo plano e guardados: o
-// descanso de tela não pode esperar rede pra aparecer.
+// descanso de tela não pode esperar rede pra aparecer. Dono pode desligar sem
+// apagar o cadastro (kiosk_destaques_ativos) — nesse caso nem busca, e a tela
+// de descanso cai direto no comportamento antigo (produto em promoção).
 let destaques = [];
+let destaquesAtivos = true;
 async function carregarDestaques() {
+  if (!destaquesAtivos) { destaques = []; return; }
   try {
     const r = await fetch(`${API}/api/highlights?_=${Date.now()}`, { cache: 'no-store' });
     if (r.ok) { const d = await r.json(); if (Array.isArray(d)) destaques = d.filter(x => x.image_url); }
@@ -1384,6 +1388,7 @@ async function init() {
     // Tema claro/escuro escolhido pelo dono na Gestão. Padrão é claro — é o
     // que evita reflexo perto de vitrine (ver comentário no :root acima).
     document.documentElement.setAttribute('data-theme', s.kiosk_theme === 'escuro' ? 'escuro' : 'claro');
+    destaquesAtivos = s.kiosk_destaques_ativos !== 'false';
   } catch (e) {}
   await loadMenuIfNeeded();
   if (activeCategory && activeCategory !== 'ofertas') lastRealCategory = activeCategory;

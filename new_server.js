@@ -2525,20 +2525,34 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
             const upstream = await fetch(`${base}/api/settings`, { headers });
             const data = await upstream.json().catch(() => ({}));
             if (!upstream.ok) return enviarJson(upstream.status, data);
-            return enviarJson(200, { disponivel: true, kiosk_theme: data.kiosk_theme === 'escuro' ? 'escuro' : 'claro' });
+            return enviarJson(200, {
+              disponivel: true,
+              kiosk_theme: data.kiosk_theme === 'escuro' ? 'escuro' : 'claro',
+              kiosk_idle_seconds: parseInt(data.kiosk_idle_seconds, 10) || 60,
+              kiosk_destaques_ativos: data.kiosk_destaques_ativos !== 'false',
+            });
           }
 
           if (req.method === 'PATCH' && partes.length === 3) {
             const body = await lerBody();
-            const tema = body.kiosk_theme === 'escuro' ? 'escuro' : 'claro';
+            const payload = {};
+            if (body.kiosk_theme !== undefined) payload.kiosk_theme = body.kiosk_theme === 'escuro' ? 'escuro' : 'claro';
+            if (body.kiosk_idle_seconds !== undefined) payload.kiosk_idle_seconds = String(Math.max(10, parseInt(body.kiosk_idle_seconds, 10) || 60));
+            if (body.kiosk_destaques_ativos !== undefined) payload.kiosk_destaques_ativos = body.kiosk_destaques_ativos ? 'true' : 'false';
+            if (!Object.keys(payload).length) return enviarJson(400, { error: 'Nada para salvar' });
             const upstream = await fetch(`${base}/api/settings`, {
               method: 'PATCH',
               headers: { ...headers, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ kiosk_theme: tema }),
+              body: JSON.stringify(payload),
             });
             const data = await upstream.json().catch(() => ({}));
             if (!upstream.ok) return enviarJson(upstream.status, data);
-            return enviarJson(200, { disponivel: true, kiosk_theme: tema });
+            return enviarJson(200, {
+              disponivel: true,
+              kiosk_theme: data.kiosk_theme === 'escuro' ? 'escuro' : 'claro',
+              kiosk_idle_seconds: parseInt(data.kiosk_idle_seconds, 10) || 60,
+              kiosk_destaques_ativos: data.kiosk_destaques_ativos !== 'false',
+            });
           }
 
           enviarJson(404, { error: 'Rota de tema do totem não encontrada' });

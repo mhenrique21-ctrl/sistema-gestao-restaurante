@@ -4254,10 +4254,12 @@ async function pageConfiguracoes() {
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h3>🖥 Autoatendimento (tablet do cliente)</h3>
-      <div style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Depois de quanto tempo parado o tablet mostra a tela de descanso com fotos das ofertas.</div>
+      <h3>🚚 Pedidos por delivery</h3>
+      <!-- "Tempo até a tela de descanso" e as outras configurações do
+           autoatendimento (tablet do cliente) saíram daqui e passaram a
+           viver só no App Gestão (Configurações → Destaques do totem), pra
+           não ter duas telas editando a mesma coisa. -->
       <div class="form-grid">
-        <div><label>Tempo até a tela de descanso (segundos)</label><input id="cfg-idle" type="number" min="10" value="${s.kiosk_idle_seconds || 60}" /></div>
         <div><label>Pedido mínimo para entrega (R$) <span style="color:var(--muted);font-weight:400">— 0 = sem mínimo</span></label><input id="cfg-min-order" type="number" min="0" step="0.01" placeholder="0,00" value="${s.min_order_delivery || ''}" /></div>
       </div>
     </div>
@@ -4592,7 +4594,6 @@ async function salvarConfiguracoes() {
     primary_color: v('cfg-color'),
     business_hours,
     special_dates,
-    kiosk_idle_seconds: parseInt(v('cfg-idle')) || 60,
     min_order_delivery: v('cfg-min-order') ? parseFloat(v('cfg-min-order')) : 0,
   });
   toast('Configurações salvas!');

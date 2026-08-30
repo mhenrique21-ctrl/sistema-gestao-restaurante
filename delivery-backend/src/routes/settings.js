@@ -3,7 +3,7 @@ const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 // Chaves conhecidas expostas publicamente (nada sensível)
-const PUBLIC_KEYS = ['store_whatsapp_number', 'pix_key', 'store_name', 'banner_image_url', 'logo_url', 'primary_color', 'business_hours', 'special_dates', 'free_delivery', 'kiosk_idle_seconds', 'kiosk_theme', 'min_order_delivery', 'store_closed_manual'];
+const PUBLIC_KEYS = ['store_whatsapp_number', 'pix_key', 'store_name', 'banner_image_url', 'logo_url', 'primary_color', 'business_hours', 'special_dates', 'free_delivery', 'kiosk_idle_seconds', 'kiosk_theme', 'kiosk_destaques_ativos', 'min_order_delivery', 'store_closed_manual'];
 const JSON_KEYS = ['business_hours', 'special_dates'];
 
 // Lista fixa (definida no código, não vem de input do usuário) — interpolada direto na

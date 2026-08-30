@@ -15646,54 +15646,90 @@ const DEST_MAX_ENTRADA = 2400;        // reduz na entrada: editor fluido, giro s
 // publicamente ao carregar; aqui só existe a escolha, sem preview.
 function PdvConfigTema(){
   const [tema,setTema]=useState<"claro"|"escuro">("claro");
+  const [idleSeg,setIdleSeg]=useState("60");
+  const [destaquesAtivos,setDestaquesAtivos]=useState(true);
   const [carregando,setCarregando]=useState(true);
   const [salvando,setSalvando]=useState(false);
   const [erro,setErro]=useState("");
 
-  useEffect(()=>{
-    (async()=>{
-      setCarregando(true);setErro("");
-      try{
-        const r=await fetch("/api/pdv-config/tema?empresa=CONFRARIA");
-        const d=await r.json();
-        if(!r.ok)throw new Error(d.error||"Erro ao carregar");
-        setTema(d.kiosk_theme==="escuro"?"escuro":"claro");
-      }catch(e:any){setErro(e.message||"Erro de conexão");}
-      setCarregando(false);
-    })();
-  },[]);
-
-  const escolher=async(novo:"claro"|"escuro")=>{
-    if(novo===tema||salvando)return;
-    const anterior=tema;
-    setSalvando(true);setErro("");setTema(novo);
+  const carregar=async()=>{
+    setCarregando(true);setErro("");
     try{
-      const r=await fetch("/api/pdv-config/tema?empresa=CONFRARIA",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({kiosk_theme:novo})});
+      const r=await fetch("/api/pdv-config/tema?empresa=CONFRARIA");
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||"Erro ao carregar");
+      setTema(d.kiosk_theme==="escuro"?"escuro":"claro");
+      setIdleSeg(String(d.kiosk_idle_seconds??60));
+      setDestaquesAtivos(d.kiosk_destaques_ativos!==false);
+    }catch(e:any){setErro(e.message||"Erro de conexão");}
+    setCarregando(false);
+  };
+  useEffect(()=>{carregar();},[]);
+
+  const salvarCampo=async(campo:string,valor:any,voltar:()=>void)=>{
+    setSalvando(true);setErro("");
+    try{
+      const r=await fetch("/api/pdv-config/tema?empresa=CONFRARIA",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({[campo]:valor})});
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||"Erro ao salvar");
-    }catch(e:any){setTema(anterior);setErro(e.message||"Erro de conexão");}
+    }catch(e:any){voltar();setErro(e.message||"Erro de conexão");}
     setSalvando(false);
   };
 
-  return <div className="card" style={{marginBottom:12}}>
-    <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:6}}>🎨 Tema do totem</div>
-    <div className="muted" style={{fontSize:11,marginBottom:12}}>
-      Cor de fundo da tela de autoatendimento (kiosk). Claro evita reflexo de vitrine em salão iluminado; escuro é mais parecido com outros totens do mercado.
+  const escolherTema=(novo:"claro"|"escuro")=>{
+    if(novo===tema||salvando)return;
+    const anterior=tema;setTema(novo);
+    salvarCampo("kiosk_theme",novo,()=>setTema(anterior));
+  };
+  const trocarDestaques=(v:boolean)=>{
+    const anterior=destaquesAtivos;setDestaquesAtivos(v);
+    salvarCampo("kiosk_destaques_ativos",v,()=>setDestaquesAtivos(anterior));
+  };
+  const salvarIdle=()=>{
+    const n=Math.max(10,parseInt(idleSeg,10)||60);
+    setIdleSeg(String(n));
+    salvarCampo("kiosk_idle_seconds",n,()=>{});
+  };
+
+  if(carregando)return <div className="card" style={{marginBottom:12}}><div className="muted" style={{fontSize:12}}>Carregando...</div></div>;
+
+  return <>
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:6}}>🎨 Tema do totem</div>
+      <div className="muted" style={{fontSize:11,marginBottom:12}}>
+        Cor de fundo da tela de autoatendimento (kiosk). Claro evita reflexo de vitrine em salão iluminado; escuro é mais parecido com outros totens do mercado.
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        {([["claro","☀️ Claro"],["escuro","🌙 Escuro"]] as [("claro"|"escuro"),string][]).map(([val,label])=>(
+          <button key={val} onClick={()=>escolherTema(val)} disabled={salvando}
+            style={{flex:1,padding:"11px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer",
+              border:tema===val?"2px solid var(--btnPrimary)":"1px solid var(--border2)",
+              background:tema===val?"var(--btnPrimary)":"var(--bg4)",
+              color:tema===val?"var(--onPrimary,#FFFFFF)":"var(--text)"}}>
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
-    {carregando?<div className="muted" style={{fontSize:12}}>Carregando...</div>:
-    <div style={{display:"flex",gap:8}}>
-      {([["claro","☀️ Claro"],["escuro","🌙 Escuro"]] as [("claro"|"escuro"),string][]).map(([val,label])=>(
-        <button key={val} onClick={()=>escolher(val)} disabled={salvando}
-          style={{flex:1,padding:"11px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer",
-            border:tema===val?"2px solid var(--btnPrimary)":"1px solid var(--border2)",
-            background:tema===val?"var(--btnPrimary)":"var(--bg4)",
-            color:tema===val?"var(--onPrimary,#FFFFFF)":"var(--text)"}}>
-          {label}
-        </button>
-      ))}
-    </div>}
-    {erro&&<div style={{color:"var(--btnDanger)",fontSize:11,marginTop:8}}>{erro}</div>}
-  </div>;
+
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:6}}>⏱️ Tempo de descanso</div>
+      <div className="muted" style={{fontSize:11,marginBottom:12}}>
+        Depois de quanto tempo parado o tablet mostra a tela de descanso com as fotos das ofertas/destaques.
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <input type="number" min={10} className="inp" value={idleSeg} onChange={e=>setIdleSeg(e.target.value)} style={{marginBottom:0,maxWidth:120}}/>
+        <span className="muted" style={{fontSize:12}}>segundos</span>
+        <button className="btn" disabled={salvando} onClick={salvarIdle} style={{marginLeft:"auto",padding:"8px 14px",fontSize:12,background:"var(--btnPrimary)",color:"#fff"}}>Salvar</button>
+      </div>
+    </div>
+
+    <div className="card" style={{marginBottom:12}}>
+      <ToggleSwitch checked={destaquesAtivos} onChange={trocarDestaques} disabled={salvando}
+        label="Mostrar destaques na tela de descanso" desc="Desligado: a tela de descanso volta a mostrar produto em promoção — os destaques cadastrados abaixo ficam guardados, sem excluir nada."/>
+    </div>
+    {erro&&<div style={{color:"var(--btnDanger)",fontSize:11,marginBottom:12}}>{erro}</div>}
+  </>;
 }
 
 function PdvDestaques(){
