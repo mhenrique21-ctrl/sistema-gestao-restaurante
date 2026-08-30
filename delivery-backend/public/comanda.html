@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Comandas — Confraria</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800;900&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     /* faixas escuras (header + menu lateral) */
@@ -17,7 +20,7 @@
     --gold-dim: #8B6B35;
     --cream: #F8F4ED;
     --muted: #7A6548;
-    --danger: #E05252;
+    --danger: #d22626;
     --green: #4CAF80;
     --orange: #F28C1D;
     --orange-dim: #C96F0F;
@@ -26,11 +29,22 @@
     --c-surface: #FFFFFF;
     --c-border: #E1DACB;
     --c-text: #2A2318;
-    --c-muted: #8A8072;
+    /* --danger e --c-muted escurecidos até 4.5:1 (WCAG AA) sobre --c-bg e
+       --c-surface -- os tons antigos (#E05252 e #8A8072) ficavam em ~3.3:1,
+       abaixo do mínimo pra texto de corpo (era exatamente o texto de erro e
+       a legenda secundária, o que mais precisa ser lido rápido). */
+    --c-muted: #746b60;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { font-family: system-ui, sans-serif; background: var(--c-bg); color: var(--c-text); min-height: 100vh; }
+  body { font-family: 'Karla', system-ui, sans-serif; background: var(--c-bg); color: var(--c-text); min-height: 100vh; }
   button { font-family: inherit; cursor: pointer; }
+  /* Mesmo par usado no kiosk.html (cliente) -- os dois produtos são a mesma
+     marca, não faz sentido ter fontes diferentes. Bitter só na identidade
+     (marca, títulos, total) -- o resto (linha de item, botão, rótulo) é
+     texto operacional demais pra levar serifa sem perder densidade. */
+  h2, h3, .brand-name, #comanda-bar .total {
+    font-family: 'Bitter', Georgia, serif;
+  }
   .hidden { display: none !important; }
 
   #header { background: var(--surface); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
@@ -41,7 +55,17 @@
   .brand-text { display: flex; align-items: baseline; gap: 6px; line-height: 1; }
   .brand-name { font-size: 1.15rem; font-weight: 800; color: var(--gold); letter-spacing: .01em; }
   .brand-tag { font-size: .62rem; font-weight: 800; color: var(--gold-dim); letter-spacing: .14em; border: 1px solid var(--gold-dim); border-radius: 4px; padding: 2px 5px; }
-  .btn { border: none; border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: .9rem; }
+  .btn { border: none; border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: .9rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  /* Ação de linha (QR, editar, reabrir, excluir) -- não cabe 44px cheio numa
+     lista densa com 2-3 botões lado a lado, mas 27px (o padding inline que
+     estava espalhado em cada onclick) era pequeno demais pra um toque
+     confiável, principalmente excluir, que é destrutivo. */
+  .btn-sm { padding: 9px 12px; font-size: .78rem; min-height: 40px; }
+  /* Código de cartão gerado pelo servidor (ex: balcao_885e1ef4275e) não é
+     informação que a equipe lê -- é ruído competindo com o rótulo humano
+     ("Balcão 00:57") bem acima dele. Truncado + apagado, com o valor
+     inteiro disponível no title (tooltip). */
+  .comanda-code { opacity: .65; }
   .btn-primary { background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: var(--surface); }
   .btn-primary:disabled { background: var(--c-border); color: var(--c-muted); }
   .btn-secondary { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-border); }
@@ -652,7 +676,7 @@
     margin-bottom: 8px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; font-size: .83rem; }
   .cat-acao-txt { flex: 1; min-width: 200px; color: var(--c-muted); }
   .cat-acao-btns { display: flex; gap: 6px; flex-wrap: wrap; }
-  .cat-acao-btns .btn { font-size: .78rem; padding: 6px 10px; }
+  .cat-acao-btns .btn { font-size: .78rem; padding: 9px 12px; min-height: 40px; }
 
   /* ── Histórico de fechamentos ─────────────────────── */
   .hist-resumo { font-size: .85rem; color: var(--c-muted); margin-bottom: 12px; }
@@ -705,7 +729,7 @@
   .ins-pend-form span { font-size: .78rem; color: #8A6412; }
   .ins-pend-form input { width: 74px; height: 34px; border-radius: 8px; border: 1px solid var(--c-border);
     background: var(--c-surface); color: var(--c-text); font-size: .84rem; text-align: center; }
-  .ins-pend-form .btn { font-size: .78rem; padding: 7px 12px; }
+  .ins-pend-form .btn { font-size: .78rem; padding: 9px 12px; min-height: 40px; }
 
   .ins-un { border: 2px solid var(--c-border); background: var(--c-bg); border-radius: 10px; padding: 9px 4px; text-align: center; }
   .ins-un.on { border-color: var(--gold); background: rgba(160,109,34,.08); }
@@ -1822,6 +1846,11 @@ function atualizarOpcaoPin() {
   const tem = nome && _operadoresComPin.includes(nome);
   document.getElementById('login-modo-pin')?.classList.toggle('hidden', !tem);
   if (!tem && _modoPin) alternarModoPin();
+  // Quem tem PIN cadastrado usa PIN no dia a dia -- exigir senha longa e
+  // ainda um clique extra no link pra trocar de modo é atrito repetido em
+  // toda troca de turno. Entra em modo PIN sozinho ao reconhecer o nome;
+  // "🔒 Entrar com senha" continua visível pra quem preferir digitar.
+  if (tem && !_modoPin) alternarModoPin();
 }
 
 function alternarModoPin() {
@@ -4523,12 +4552,12 @@ function renderCfgComandas() {
     <div class="estoque-item">
       <div>
         <div class="name">${c.label || '—'} <span class="status-tag ${c.status}">${c.status}</span></div>
-        <small>${c.code} · ${fmt(c.total)} · aberta em ${new Date(c.opened_at).toLocaleString('pt-BR')}</small>
+        <small><span class="comanda-code" title="${c.code}">${c.code.length > 14 ? c.code.slice(0, 10) + '…' : c.code}</span> · ${fmt(c.total)} · aberta em ${new Date(c.opened_at).toLocaleString('pt-BR')}</small>
       </div>
       <div class="estoque-item-actions">
-        <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openQRModal('${c.code}')">📱 QR</button>
-        ${c.status === 'fechada' ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="reabrirCartao('${c.id}')">🔓 Reabrir</button>` : ''}
-        <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="excluirComanda('${c.id}')">🗑️</button>
+        <button class="btn btn-secondary btn-sm" onclick="openQRModal('${c.code}')">📱 QR</button>
+        ${c.status === 'fechada' ? `<button class="btn btn-secondary btn-sm" onclick="reabrirCartao('${c.id}')">🔓 Reabrir</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="excluirComanda('${c.id}')">🗑️</button>
       </div>
     </div>
   `).join('');
@@ -4657,8 +4686,8 @@ function renderMesas() {
             ${Object.entries(MESA_STATUS_LABEL).map(([k, v]) => `<option value="${k}" ${m.status === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
           ${ROLE === 'admin' ? `
-            <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="openEditarMesaModal('${m.id}')">✏️</button>
-            <button class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem" onclick="excluirMesaPDV('${m.id}')">🗑</button>
+            <button class="btn btn-secondary btn-sm" onclick="openEditarMesaModal('${m.id}')">✏️</button>
+            <button class="btn btn-secondary btn-sm" onclick="excluirMesaPDV('${m.id}')">🗑</button>
           ` : ''}
         </div>
       </div>
