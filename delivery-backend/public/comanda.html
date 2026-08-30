@@ -1443,6 +1443,8 @@
   <div id="cfg-subtab-comandas">
     <div class="estoque-toolbar">
       <input type="text" id="cfg-comanda-search" placeholder="🔍 Buscar código ou nome..." oninput="renderCfgComandas()">
+      <button class="btn btn-secondary" onclick="openLoteModal()">📇 Criar em lote</button>
+      <button class="btn btn-secondary" id="cfg-baixar-qr-btn" onclick="baixarQrIndividuais()">⬇ Baixar QR (.zip)</button>
       <button class="btn btn-primary" onclick="openNovoCartaoModal()">+ Novo cartão</button>
     </div>
     <div id="cfg-comandas-list"><div class="cart-empty">Carregando...</div></div>
@@ -4562,6 +4564,266 @@ function renderCfgComandas() {
     </div>
   `).join('');
 }
+
+
+// ── Criar cartões em lote ────────────────────────────────────────────
+// Cadastrar 59 cartões um a um é inviável na mão. Reaproveita o POST
+// /api/comandas existente (que sorteia o código no servidor) em vez de
+// abrir uma rota nova — é a mesma criação, só repetida.
+//
+// Pula rótulo que já existe: se a rede cair no meio, rodar de novo
+// completa o que faltou em vez de duplicar o que já entrou.
+function openLoteModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'lote-backdrop';
+  backdrop.innerHTML = `
+    <div class="close2-sheet" style="max-width:380px">
+      <div class="ab-head"><h3>Criar cartões em lote</h3></div>
+      <p style="font-size:.85rem;color:var(--c-muted);margin:0 0 14px">
+        O nome é o que vai impresso no cartão. O código do QR continua sendo
+        sorteado pelo servidor, um diferente para cada cartão.
+      </p>
+      <label style="font-size:.8rem;font-weight:600">Nome base</label>
+      <input type="text" id="lote-base" value="Comanda" class="inp" style="width:100%;margin-bottom:10px">
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label style="font-size:.8rem;font-weight:600">Começar em</label>
+          <input type="number" id="lote-ini" value="1" min="1" class="inp" style="width:100%">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:.8rem;font-weight:600">Quantos</label>
+          <input type="number" id="lote-qtd" value="59" min="1" max="300" class="inp" style="width:100%">
+        </div>
+      </div>
+      <p id="lote-previa" style="font-size:.8rem;color:var(--c-muted);margin:10px 0 0"></p>
+      <p id="lote-erro" style="font-size:.82rem;color:var(--c-danger);margin:8px 0 0"></p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('lote-backdrop').remove()">Cancelar</button>
+        <button class="btn btn-primary" id="lote-btn" onclick="criarComandasLote()">Criar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  ['lote-base', 'lote-ini', 'lote-qtd'].forEach(id =>
+    document.getElementById(id).addEventListener('input', atualizarPreviaLote));
+  atualizarPreviaLote();
+}
+
+// Largura do zero à esquerda vem do MAIOR número do lote, não de um chute:
+// 1..59 vira "01", e 1..120 vira "001", pra ordenação continuar certa no
+// explorador de arquivos da gráfica.
+function rotulosLote() {
+  const base = (document.getElementById('lote-base').value || 'Comanda').trim();
+  const ini = parseInt(document.getElementById('lote-ini').value, 10) || 1;
+  const qtd = Math.min(parseInt(document.getElementById('lote-qtd').value, 10) || 0, 300);
+  const larg = String(ini + qtd - 1).length;
+  const out = [];
+  for (let n = ini; n < ini + qtd; n++) out.push(base + ' ' + String(n).padStart(larg, '0'));
+  return out;
+}
+
+function atualizarPreviaLote() {
+  const r = rotulosLote();
+  const el = document.getElementById('lote-previa');
+  if (!el) return;
+  el.textContent = r.length
+    ? 'Vai criar ' + r.length + ': ' + r[0] + ', ' + (r[1] || '') + ' … ' + r[r.length - 1]
+    : 'Informe quantos cartões criar.';
+}
+
+async function criarComandasLote() {
+  const rotulos = rotulosLote();
+  const erroEl = document.getElementById('lote-erro');
+  erroEl.textContent = '';
+  if (!rotulos.length) { erroEl.textContent = 'Informe quantos cartões criar'; return; }
+
+  const existentes = new Set((cfgComandasData || []).map(c => (c.label || '').trim().toLowerCase()));
+  const criar = rotulos.filter(r => !existentes.has(r.toLowerCase()));
+  if (!criar.length) { erroEl.textContent = 'Todos esses cartões já existem'; return; }
+
+  const btn = document.getElementById('lote-btn');
+  btn.disabled = true;
+  let feitos = 0, falhas = 0;
+  for (const label of criar) {
+    btn.textContent = 'Criando ' + (feitos + falhas + 1) + '/' + criar.length + '...';
+    try {
+      const res = await fetch(`${API}/api/comandas`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ label }),
+      });
+      if (res.ok) feitos++; else falhas++;
+    } catch (e) { falhas++; }
+  }
+  document.getElementById('lote-backdrop').remove();
+  const pulados = rotulos.length - criar.length;
+  showToast(feitos + ' cartão(ões) criado(s)'
+    + (pulados ? ' · ' + pulados + ' já existia(m)' : '')
+    + (falhas ? ' · ' + falhas + ' falhou(aram)' : ''));
+  loadCfgComandas();
+}
+
+// ── Baixar os QR como imagens soltas ─────────────────────────────────
+// A gráfica faz o design; daqui sai só a matéria-prima: um PNG por cartão,
+// nomeado pelo rótulo. Vão num .zip porque 59 downloads seguidos o
+// navegador bloqueia.
+
+function _crcTabela() {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+}
+const _CRC = _crcTabela();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = _CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+// ZIP sem compressão (método "store"). PNG já vem comprimido, então
+// desinflar de novo não ganharia quase nada — e assim não precisa de
+// biblioteca externa, que a página não pode carregar.
+function montarZip(arquivos) {
+  const enc = new TextEncoder();
+  const locais = [], central = [];
+  let deslocamento = 0;
+
+  for (const { nome, dados } of arquivos) {
+    const nomeBytes = enc.encode(nome);
+    const crc = crc32(dados);
+    const cab = new Uint8Array(30 + nomeBytes.length);
+    const v = new DataView(cab.buffer);
+    v.setUint32(0, 0x04034b50, true);
+    v.setUint16(4, 20, true); v.setUint16(6, 0, true); v.setUint16(8, 0, true);
+    v.setUint16(10, 0, true); v.setUint16(12, 0, true);
+    v.setUint32(14, crc, true);
+    v.setUint32(18, dados.length, true); v.setUint32(22, dados.length, true);
+    v.setUint16(26, nomeBytes.length, true); v.setUint16(28, 0, true);
+    cab.set(nomeBytes, 30);
+    locais.push(cab, dados);
+
+    const cen = new Uint8Array(46 + nomeBytes.length);
+    const w = new DataView(cen.buffer);
+    w.setUint32(0, 0x02014b50, true);
+    w.setUint16(4, 20, true); w.setUint16(6, 20, true);
+    w.setUint16(8, 0, true); w.setUint16(10, 0, true);
+    w.setUint16(12, 0, true); w.setUint16(14, 0, true);
+    w.setUint32(16, crc, true);
+    w.setUint32(20, dados.length, true); w.setUint32(24, dados.length, true);
+    w.setUint16(28, nomeBytes.length, true);
+    w.setUint32(42, deslocamento, true);
+    cen.set(nomeBytes, 46);
+    central.push(cen);
+
+    deslocamento += cab.length + dados.length;
+  }
+
+  const tamCentral = central.reduce((a, b) => a + b.length, 0);
+  const fim = new Uint8Array(22);
+  const f = new DataView(fim.buffer);
+  f.setUint32(0, 0x06054b50, true);
+  f.setUint16(8, arquivos.length, true); f.setUint16(10, arquivos.length, true);
+  f.setUint32(12, tamCentral, true); f.setUint32(16, deslocamento, true);
+
+  return new Blob([...locais, ...central, fim], { type: 'application/zip' });
+}
+
+// Um PNG por cartão: QR grande e o nome embaixo, pra gráfica (e você) não
+// precisar abrir arquivo por arquivo pra saber qual é qual.
+async function pngDoCartao(codigo, rotulo) {
+  const oculto = document.createElement('div');
+  oculto.style.cssText = 'position:absolute;left:-9999px;top:-9999px';
+  document.body.appendChild(oculto);
+  try {
+    new QRCode(oculto, {
+      text: codigo, width: 600, height: 600,
+      correctLevel: QRCode.CorrectLevel.H,
+    });
+    await new Promise(r => setTimeout(r, 0));
+    const origem = oculto.querySelector('canvas');
+    if (!origem) throw new Error('QR não gerou canvas');
+
+    const M = 40, RODAPE = 90;
+    const tela = document.createElement('canvas');
+    tela.width = 600 + M * 2;
+    tela.height = 600 + M * 2 + RODAPE;
+    const c = tela.getContext('2d');
+    c.fillStyle = '#FFFFFF';
+    c.fillRect(0, 0, tela.width, tela.height);
+    c.drawImage(origem, M, M, 600, 600);
+    c.fillStyle = '#000000';
+    c.font = '600 46px Arial, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(rotulo, tela.width / 2, 600 + M * 2 + RODAPE / 2 - 8);
+
+    const blob = await new Promise(r => tela.toBlob(r, 'image/png'));
+    return new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    oculto.remove();
+  }
+}
+
+function nomeArquivoCartao(rotulo) {
+  const limpo = (rotulo || 'comanda')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return limpo + '-qr-code.png';
+}
+
+async function baixarQrIndividuais() {
+  if (!window.QRCode) { showToast('Gerador de QR não carregou — recarregue a página'); return; }
+  const lista = (cfgComandasData || []).filter(c => c.code);
+  if (!lista.length) { showToast('Nenhum cartão cadastrado'); return; }
+
+  const btn = document.getElementById('cfg-baixar-qr-btn');
+  const rotuloBtn = btn.textContent;
+  btn.disabled = true;
+  try {
+    const usados = new Set();
+    const arquivos = [];
+    for (let i = 0; i < lista.length; i++) {
+      const c = lista[i];
+      btn.textContent = 'Gerando ' + (i + 1) + '/' + lista.length + '...';
+      const rotulo = (c.label || '').trim() || c.code.slice(0, 8);
+      let nome = nomeArquivoCartao(rotulo);
+      // Dois cartões com o mesmo nome sobrescreveriam um ao outro dentro do
+      // zip e a gráfica receberia menos arquivos do que cartões.
+      let n = 2;
+      while (usados.has(nome)) nome = nomeArquivoCartao(rotulo).replace(/\.png$/, '') + '-' + (n++) + '.png';
+      usados.add(nome);
+      arquivos.push({ nome, dados: await pngDoCartao(c.code, rotulo) });
+    }
+
+    const enc = new TextEncoder();
+    arquivos.push({
+      nome: 'lista.csv',
+      dados: enc.encode('nome,codigo\n' + lista
+        .map(c => '"' + ((c.label || '').replace(/"/g, '""')) + '",' + c.code).join('\n') + '\n'),
+    });
+
+    const url = URL.createObjectURL(montarZip(arquivos));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'comandas-qr-code.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    showToast(lista.length + ' QR baixados em comandas-qr-code.zip');
+  } catch (e) {
+    showToast('Erro ao gerar os QR: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = rotuloBtn;
+  }
+}
+
 
 // Sem campo de código: deixar o atendente escolher um valor (curto,
 // previsível) era o elo fraco do QR do cartão. O código sai sempre gerado
