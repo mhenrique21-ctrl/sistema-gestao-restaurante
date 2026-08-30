@@ -1,0 +1,16 @@
+{
+  "name": "confraria-app",
+  "version": "1.0.0",
+  "description": "App Android do PDV Confraria (Capacitor + impressao TCP)",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "build": "cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0"
+  }
+}

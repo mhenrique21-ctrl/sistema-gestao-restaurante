@@ -770,6 +770,18 @@
     .cat-canais { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
     /* Mesas em grade quadrada: o salao se le de relance, e cada mesa mostra
        quais comandas estao nela — antes so dizia "ocupada", sem dizer de quem. */
+    .imp-hint { font-size: .8rem; color: var(--c-muted); line-height: 1.5; margin: 0 0 16px; }
+    .imp-card { border: 1px solid var(--c-border); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; background: var(--c-card); }
+    .imp-card h4 { margin: 0 0 3px; font-size: .95rem; }
+    .imp-card .desc { font-size: .74rem; color: var(--c-muted); margin: 0 0 11px; line-height: 1.45; }
+    .imp-linha { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .imp-linha .campo { display: flex; flex-direction: column; gap: 3px; }
+    .imp-linha .campo.ip { flex: 2; min-width: 150px; }
+    .imp-linha .campo.porta { width: 92px; }
+    .imp-linha label { font-size: .7rem; font-weight: 700; color: var(--c-muted); }
+    .imp-linha input { padding: 7px 9px; border: 1px solid var(--c-border); border-radius: 8px;
+      background: var(--c-bg); color: var(--c-text); font-family: ui-monospace, Menlo, monospace; font-size: .82rem; }
+    .imp-card .btn-testar { padding: 7px 13px; font-size: .78rem; white-space: nowrap; }
     .mesas-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
     .mesa-quad { aspect-ratio: 1; border: 1px solid var(--c-border); border-radius: 14px; background: var(--c-card);
       padding: 11px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -1559,7 +1571,14 @@
     <div id="cfg-menu-body"></div>
   </div>
 </div>
-<div id="impressora-screen" class="hidden placeholder-screen"><span class="icon">🖨️</span><h2>Impressora</h2><p>Em construção — em breve por aqui.</p></div>
+<div id="impressora-screen" class="hidden">
+  <div class="cfg-form" style="max-width:620px">
+    <p class="imp-hint">As três impressoras precisam estar na mesma rede do tablet, cada uma com IP fixo. O tablet fala direto com elas — não passa pela internet, então continuam imprimindo mesmo se a rede cair.</p>
+    <div id="imp-estacoes"></div>
+    <div id="imp-erro" style="color:var(--c-danger);font-size:.82rem;min-height:18px;margin-top:8px"></div>
+    <button class="btn btn-primary" onclick="salvarImpressoras()" style="margin-top:10px">Salvar impressoras</button>
+  </div>
+</div>
 
 </div><!-- /#main-content -->
 </div><!-- /#app-layout -->
@@ -2199,6 +2218,7 @@ function showTab(tab) {
   if (tab === 'financeiro') loadFinanceiro();
   if (tab === 'delivery') loadDeliveryOrders();
   if (tab === 'configuracoes') { loadCfgComandas(); }
+  if (tab === 'impressora') loadImpressoras();
   if (tab === 'mesas') loadMesas();
   if (tab === 'adicionais') loadAdicionais();
   if (tab === 'comandas') { clearNotif('comanda'); loadBoard(); }
@@ -7556,6 +7576,161 @@ async function abrirTurno(id) {
   }
 }
 
+
+// ── Impressoras por IP ───────────────────────────────────────────────
+// O navegador nao abre conexao com impressora — quem faz isso e o app do
+// tablet (Capacitor), pelo mesmo caminho que o PDV da Seama ja usa. Fora do
+// app, getImpressora() devolve null e a impressao vira aviso na tela, sem
+// travar a venda: o pedido ja foi gravado de qualquer forma.
+const IMP_ESTACOES = [
+  { chave: 'caixa',   rotulo: '🧾 Caixa',   desc: 'Cupom completo do pedido, com precos e total. Recebe TODOS os itens.' },
+  { chave: 'cozinha', rotulo: '🍳 Cozinha', desc: 'So os produtos com destino "cozinha" no cadastro. Sem precos.' },
+  { chave: 'balcao',  rotulo: '🏪 Balcao',  desc: 'So os produtos com destino "balcao" no cadastro. Sem precos.' },
+];
+const IMP_CACHE_KEY = 'pdv_impressoras';
+let IMPRESSORAS = { caixa: {}, cozinha: {}, balcao: {} };
+
+function getImpressora() {
+  return window.Capacitor?.Plugins?.ConfrariaPrinter || null;
+}
+
+// Guarda copia local: sem isso, uma queda de internet levaria junto o
+// endereco das impressoras, e o tablet pararia de imprimir mesmo com as
+// impressoras ali do lado, na mesma rede.
+async function carregarImpressoras() {
+  try {
+    const cache = JSON.parse(localStorage.getItem(IMP_CACHE_KEY) || 'null');
+    if (cache) IMPRESSORAS = cache;
+  } catch (e) { /* cache corrompido: segue com o que vier do servidor */ }
+  try {
+    const res = await fetch(API + '/api/printers/config', { headers: authHeaders() });
+    if (!res.ok) return;
+    const cfg = await res.json();
+    IMPRESSORAS = {};
+    for (const { chave } of IMP_ESTACOES) {
+      const [ip, porta] = String(cfg['printer_' + chave] || '').split(':');
+      IMPRESSORAS[chave] = { ip: ip || '', port: parseInt(porta, 10) || 9100 };
+    }
+    localStorage.setItem(IMP_CACHE_KEY, JSON.stringify(IMPRESSORAS));
+  } catch (e) { /* offline: fica com o cache */ }
+}
+
+function renderImpressoras() {
+  const el = document.getElementById('imp-estacoes');
+  if (!el) return;
+  el.innerHTML = IMP_ESTACOES.map(e => {
+    const c = IMPRESSORAS[e.chave] || {};
+    return '<div class="imp-card">'
+      + '<h4>' + e.rotulo + '</h4>'
+      + '<p class="desc">' + e.desc + '</p>'
+      + '<div class="imp-linha">'
+      +   '<div class="campo ip"><label>Endereco IP</label>'
+      +     '<input id="imp-' + e.chave + '-ip" value="' + (c.ip || '') + '" placeholder="192.168.0.101"></div>'
+      +   '<div class="campo porta"><label>Porta</label>'
+      +     '<input id="imp-' + e.chave + '-porta" type="number" value="' + (c.port || 9100) + '" placeholder="9100"></div>'
+      +   '<button class="btn btn-secondary btn-testar" onclick="testarImpressora(\'' + e.chave + '\')">Imprimir teste</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+async function loadImpressoras() {
+  await carregarImpressoras();
+  renderImpressoras();
+}
+
+function lerCamposImpressora(chave) {
+  const ip = (document.getElementById('imp-' + chave + '-ip')?.value || '').trim();
+  const port = parseInt(document.getElementById('imp-' + chave + '-porta')?.value, 10) || 9100;
+  return { ip, port };
+}
+
+async function salvarImpressoras() {
+  const erro = document.getElementById('imp-erro');
+  erro.textContent = '';
+  const corpo = {};
+  for (const { chave, rotulo } of IMP_ESTACOES) {
+    const { ip, port } = lerCamposImpressora(chave);
+    // IP em branco = estacao desligada, e isso e valido: nem toda loja usa as
+    // tres. Mas IP escrito errado sai calado no papel, entao barra aqui.
+    if (ip && !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+      erro.textContent = rotulo.replace(/^\S+\s/, '') + ': "' + ip + '" nao e um endereco IP valido';
+      return;
+    }
+    corpo['printer_' + chave] = ip ? ip + ':' + port : '';
+  }
+  try {
+    const res = await fetch(API + '/api/printers/config', {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(corpo),
+    });
+    if (!res.ok) { erro.textContent = 'Erro ao salvar'; return; }
+    await carregarImpressoras();
+    renderImpressoras();
+    showToast('Impressoras salvas');
+  } catch (e) { erro.textContent = 'Sem conexao para salvar'; }
+}
+
+async function testarImpressora(chave) {
+  const est = IMP_ESTACOES.find(e => e.chave === chave);
+  const { ip, port } = lerCamposImpressora(chave);
+  if (!ip) { showToast('Informe o IP de ' + est.rotulo.replace(/^\S+\s/, '') + ' antes de testar'); return; }
+  const imp = getImpressora();
+  if (!imp) { showToast('Teste so funciona no app do tablet — no navegador nao da pra falar com a impressora'); return; }
+  try {
+    await imp.printCupom({
+      ip, port, kitchen: chave !== 'caixa',
+      saleNumber: 'TESTE', operator: USER_NAME || '', total: 0, payment: '',
+      items: [{ name: 'Teste de impressao — ' + est.rotulo.replace(/^\S+\s/, ''), quantity: 1, total: 0 }],
+    });
+    showToast('Saiu o teste em ' + est.rotulo.replace(/^\S+\s/, ''));
+  } catch (e) {
+    showToast('Nao respondeu: ' + (e?.message || 'verifique IP e se a impressora esta ligada'));
+  }
+}
+
+// Mesmo roteamento do servidor (services/stations.js): caixa leva tudo;
+// cozinha e balcao levam so o que tem aquele print_target. Produto sem
+// destino nao sai em estacao nenhuma — sai apenas no cupom do caixa.
+function separarPorEstacao(itens) {
+  const mapa = { caixa: itens.slice() };
+  for (const it of itens) {
+    const t = it.print_target;
+    if (t === 'cozinha' || t === 'balcao') (mapa[t] = mapa[t] || []).push(it);
+  }
+  return mapa;
+}
+
+// Uma chamada por estacao, de proposito: impressora apagada numa estacao nao
+// pode impedir a outra de imprimir.
+async function imprimirPedidoLocal(comanda, itens) {
+  const imp = getImpressora();
+  if (!imp) return;
+  const mapa = separarPorEstacao(itens || []);
+  for (const { chave, rotulo } of IMP_ESTACOES) {
+    const lista = mapa[chave];
+    const cfg = IMPRESSORAS[chave] || {};
+    if (!lista || !lista.length || !cfg.ip) continue;
+    const nome = rotulo.replace(/^\S+\s/, '');
+    try {
+      await imp.printCupom({
+        ip: cfg.ip, port: cfg.port || 9100,
+        kitchen: chave !== 'caixa',
+        saleNumber: comanda?.label || comanda?.code || '',
+        operator: USER_NAME || '',
+        total: lista.reduce((s, i) => s + (parseFloat(i.unit_price || 0) * (i.quantity || 1)), 0),
+        payment: '',
+        items: lista.map(i => ({
+          name: i.product_name || i.name || '',
+          quantity: i.quantity || 1,
+          total: parseFloat(i.unit_price || 0) * (i.quantity || 1),
+        })),
+      });
+    } catch (e) {
+      showToast('Falhou a impressao em ' + nome + ': ' + (e?.message || 'sem resposta'));
+    }
+  }
+}
+
+
 // ── Abertura de caixa (obrigatória ao logar, uma vez por dia) ──
 async function checkAberturaCaixa() {
   try {
@@ -8104,6 +8279,7 @@ async function sendOrder() {
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao enviar pedido'); return; }
+    imprimirPedidoLocal(data, data.items || []);
     comanda.total = data.total;
     comanda.subtotal = data.subtotal;
     cart = [];

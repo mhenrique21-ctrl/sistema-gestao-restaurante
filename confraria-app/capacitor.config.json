@@ -1,0 +1,13 @@
+{
+  "appId": "com.confraria.pdv",
+  "appName": "Confraria PDV",
+  "webDir": "www",
+  "server": {
+    "url": "https://pedidos.confrariacafe.com/comanda.html",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
