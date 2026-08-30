@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Autoatendimento — Confraria</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800;900&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   /* Tema claro. O totem fica num salão iluminado, muitas vezes com luz
      entrando pela vitrine: tela escura vira espelho e a foto do produto some.
@@ -52,8 +55,15 @@
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
   input, textarea { -webkit-user-select: text; user-select: text; }
   html, body { overscroll-behavior: none; }
-  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow: hidden; }
+  body { font-family: 'Karla', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow: hidden; }
   button { font-family: inherit; cursor: pointer; }
+  /* Bitter só nos elementos de identidade/preço — nome de produto, título de
+     categoria, marca. O resto (botão, descrição, rótulo) fica em Karla, senão
+     a tela vira parede de negrito e nada se destaca de verdade. */
+  h2, h3, .brand, .product-card .name, .price-new, .close-total,
+  #screensaver-screen .info .price, .condensed-row-price, .condensed-row-name {
+    font-family: 'Bitter', Georgia, serif;
+  }
   .hidden { display: none !important; }
 
   #header { background: var(--surface); padding: 12px 20px; display: flex; align-items: center; gap: 16px; justify-content: space-between; border-bottom: 1px solid var(--border); height: 64px; box-shadow: var(--shadow); position: relative; z-index: 5; }
