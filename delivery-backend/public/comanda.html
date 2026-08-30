@@ -4533,6 +4533,9 @@ function renderCfgComandas() {
   `).join('');
 }
 
+// Sem campo de código: deixar o atendente escolher um valor (curto,
+// previsível) era o elo fraco do QR do cartão. O código sai sempre gerado
+// pelo servidor (ver comentário em POST /api/comandas).
 function openNovoCartaoModal() {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -4540,10 +4543,6 @@ function openNovoCartaoModal() {
   backdrop.innerHTML = `
     <div class="modal-sheet" style="max-width:420px">
       <h3>Novo cartão de comanda</h3>
-      <div class="field-group">
-        <label>Código do QR (opcional)</label>
-        <input type="text" id="nc-code" placeholder="Deixe em branco para gerar automaticamente">
-      </div>
       <div class="field-group">
         <label>Nome / identificação</label>
         <input type="text" id="nc-label" placeholder="Ex: Mesa 1 ou nome do cliente">
@@ -4559,14 +4558,13 @@ function openNovoCartaoModal() {
 }
 
 async function submitNovoCartao() {
-  const code = document.getElementById('nc-code').value.trim();
   const label = document.getElementById('nc-label').value.trim();
   const errEl = document.getElementById('nc-error');
   try {
     const res = await fetch(`${API}/api/comandas`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ code: code || undefined, label: label || null }),
+      body: JSON.stringify({ label: label || null }),
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error || 'Erro ao cadastrar'; return; }
