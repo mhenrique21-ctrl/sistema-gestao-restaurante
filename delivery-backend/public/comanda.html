@@ -768,6 +768,25 @@
   .cat-item .nm { font-size: .88rem; font-weight: 700; }
   .cat-item .sb { font-size: .72rem; color: var(--c-muted); margin-top: 1px; }
     .cat-canais { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
+    /* Mesas em grade quadrada: o salao se le de relance, e cada mesa mostra
+       quais comandas estao nela — antes so dizia "ocupada", sem dizer de quem. */
+    .mesas-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
+    .mesa-quad { aspect-ratio: 1; border: 1px solid var(--c-border); border-radius: 14px; background: var(--c-card);
+      padding: 11px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .mesa-quad.ocupada { border-color: #E0A63C; background: #FDF7EC; }
+    .mesa-quad.reservada { border-color: #7FA8D8; background: #EEF4FB; }
+    .mesa-quad .topo { display: flex; align-items: center; gap: 6px; }
+    .mesa-quad .num { font-size: 1.02rem; font-weight: 800; flex: 1; min-width: 0; }
+    .mesa-quad .lug { font-size: .68rem; color: var(--c-muted); }
+    .mesa-quad .comandas { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+    .mesa-quad .cmd { font-size: .71rem; font-weight: 700; background: var(--c-bg); border: 1px solid var(--c-border);
+      border-radius: 6px; padding: 2px 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mesa-quad .vazio { font-size: .71rem; color: var(--c-muted); font-style: italic; }
+    .mesa-quad .pe { display: flex; gap: 4px; align-items: center; }
+    .mesa-quad .pe select { flex: 1; min-width: 0; font-size: .7rem; padding: 3px 4px; border-radius: 6px;
+      border: 1px solid var(--c-border); background: var(--c-card); color: var(--c-text); }
+    .mesa-quad .pe button { border: 1px solid var(--c-border); background: var(--c-card); border-radius: 6px;
+      padding: 3px 6px; font-size: .7rem; cursor: pointer; }
     .cat-item .cat-canal { font-size: .68rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; cursor: pointer;
       border: 1px solid var(--c-border); background: none; color: var(--c-muted); letter-spacing: .02em; }
     .cat-item .cat-canal.on { background: var(--gold); border-color: var(--gold); color: #fff; }
@@ -1395,9 +1414,9 @@
     <button class="btn btn-primary" onclick="openNovaMesaModal()">+ Nova mesa</button>
   </div>
   <div class="side-title" style="margin-top:18px">🏠 Área interna</div>
-  <div id="mesas-interna-list"><div class="cart-empty">Carregando...</div></div>
+  <div id="mesas-interna-list" class="mesas-grade"><div class="cart-empty">Carregando...</div></div>
   <div class="side-title" style="margin-top:18px">🌤 Área externa</div>
-  <div id="mesas-externa-list"><div class="cart-empty">Carregando...</div></div>
+  <div id="mesas-externa-list" class="mesas-grade"><div class="cart-empty">Carregando...</div></div>
 </div>
 <!-- ── Aba: Insumos ── -->
 <div id="insumos-screen" class="hidden">
@@ -1586,6 +1605,7 @@
             <button class="ab-suggest-btn" data-cents="30000" onclick="selectSuggestion(30000)">R$ 300,00</button>
             <button class="ab-suggest-btn" data-cents="50000" onclick="selectSuggestion(50000)">R$ 500,00</button>
             <button class="ab-suggest-btn" data-cents="100000" onclick="selectSuggestion(100000)">R$ 1.000,00</button>
+            <button class="ab-suggest-btn" data-cents="0" onclick="selectSuggestion(0)">Sem troco</button>
             <button class="ab-suggest-btn outro" onclick="document.getElementById('ab-valor-input').focus()">Outro valor</button>
           </div>
         </div>
@@ -4972,23 +4992,31 @@ function renderMesas() {
   const grupos = { interna: document.getElementById('mesas-interna-list'), externa: document.getElementById('mesas-externa-list') };
   for (const [area, el] of Object.entries(grupos)) {
     const lista = mesasData.filter(m => m.area === area).sort((a, b) => a.numero - b.numero);
-    el.innerHTML = lista.length ? lista.map(m => `
-      <div class="estoque-item">
-        <div>
-          <div class="name">Mesa ${m.numero} <span class="status-tag ${m.status}">${MESA_STATUS_LABEL[m.status]}</span></div>
-          <small>${m.capacidade} lugares</small>
+    el.innerHTML = lista.length ? lista.map(m => {
+      const cmds = m.comandas || [];
+      return `
+      <div class="mesa-quad ${m.status}">
+        <div class="topo">
+          <span class="num">Mesa ${m.numero}</span>
+          <span class="status-tag ${m.status}">${MESA_STATUS_LABEL[m.status]}</span>
         </div>
-        <div class="estoque-item-actions">
-          <select class="mesa-status-select" onchange="mudarStatusMesa('${m.id}', this.value)">
+        <div class="lug">${m.capacidade} lugares</div>
+        <div class="comandas">
+          ${cmds.length
+            ? cmds.map(c => `<span class="cmd" title="${(c.label || c.code)} · ${fmt(c.total)}">${c.label || c.code}</span>`).join('')
+            : '<span class="vazio">Sem comanda</span>'}
+        </div>
+        <div class="pe">
+          <select onchange="mudarStatusMesa('${m.id}', this.value)">
             ${Object.entries(MESA_STATUS_LABEL).map(([k, v]) => `<option value="${k}" ${m.status === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>
           ${ROLE === 'admin' ? `
-            <button class="btn btn-secondary btn-sm" onclick="openEditarMesaModal('${m.id}')">✏️</button>
-            <button class="btn btn-secondary btn-sm" onclick="excluirMesaPDV('${m.id}')">🗑</button>
+            <button onclick="openEditarMesaModal('${m.id}')" title="Editar mesa">✏️</button>
+            <button onclick="excluirMesaPDV('${m.id}')" title="Excluir mesa">🗑</button>
           ` : ''}
         </div>
-      </div>
-    `).join('') : '<div class="cart-empty">Nenhuma mesa nesta área</div>';
+      </div>`;
+    }).join('') : '<div class="cart-empty">Nenhuma mesa nesta área</div>';
   }
 }
 
@@ -7594,6 +7622,7 @@ async function exigirCaixaAberto(oQueIaFazer, retomar) {
 
 // ── Abertura de caixa ────────────────────────────────
 let abValorInicialCents = 0;
+let abValorEscolhido = false;   // o operador ja informou o valor?
 
 function openAberturaModal() {
   abValorInicialCents = 0;
@@ -7608,6 +7637,7 @@ function openAberturaModal() {
   document.getElementById('abertura-error').textContent = '';
   document.querySelectorAll('.ab-suggest-btn').forEach(b => b.classList.remove('active'));
 
+  abValorEscolhido = false;
   document.getElementById('abertura-submit-btn').disabled = true;
   document.getElementById('abertura-modal-backdrop').classList.remove('hidden');
   document.getElementById('ab-valor-input').focus();
@@ -7619,21 +7649,23 @@ function closeAberturaModal() {
 
 function selectSuggestion(cents) {
   abValorInicialCents = cents;
+  abValorEscolhido = true;
   document.getElementById('ab-valor-input').value = (cents / 100).toFixed(2);
   document.querySelectorAll('.ab-suggest-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.cents) === cents));
-  document.getElementById('abertura-submit-btn').disabled = !(abValorInicialCents > 0);
+  document.getElementById('abertura-submit-btn').disabled = !(abValorEscolhido && abValorInicialCents >= 0);
 }
 
 function onValorInicialInput() {
   abValorInicialCents = parseValueToCents(document.getElementById('ab-valor-input').value);
+  abValorEscolhido = document.getElementById('ab-valor-input').value.trim() !== '';
   document.querySelectorAll('.ab-suggest-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('abertura-submit-btn').disabled = !(abValorInicialCents > 0);
+  document.getElementById('abertura-submit-btn').disabled = !(abValorEscolhido && abValorInicialCents >= 0);
 }
 
 async function submitAbertura() {
   const errEl = document.getElementById('abertura-error');
   errEl.textContent = '';
-  if (!(abValorInicialCents > 0)) { errEl.textContent = 'Informe um valor inicial válido'; return; }
+  if (!(abValorInicialCents >= 0)) { errEl.textContent = 'Informe quanto tem na gaveta, ou toque em "Sem troco"'; return; }
   const btn = document.getElementById('abertura-submit-btn');
   btn.disabled = true;
   btn.textContent = 'Abrindo...';

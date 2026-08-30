@@ -5,7 +5,16 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 // GET /api/mesas — lista todas as mesas (equipe)
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM mesas ORDER BY numero`);
+    // Traz junto as comandas ABERTAS de cada mesa. A tela de Mesas mostrava
+    // so "ocupada", sem dizer de quem — pra saber qual comanda estava na mesa 7
+    // o atendente tinha que abrir a lista de comandas e procurar uma a uma.
+    const result = await pool.query(`
+      SELECT m.*, COALESCE((
+        SELECT json_agg(json_build_object('id', c.id, 'label', c.label, 'code', c.code, 'total', c.total)
+                        ORDER BY c.opened_at)
+          FROM comandas c WHERE c.mesa_id = m.id AND c.status = 'aberta'
+      ), '[]') AS comandas
+        FROM mesas m ORDER BY m.numero`);
     res.json(result.rows);
   } catch (err) {
     console.error('[mesas/GET]', err.message);
