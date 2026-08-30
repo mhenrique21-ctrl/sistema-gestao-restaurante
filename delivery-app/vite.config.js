@@ -45,6 +45,16 @@ export default defineConfig({
           urlPattern: /\/api\/menu/,
           handler: 'StaleWhileRevalidate',
           options: { cacheName: 'menu-cache', expiration: { maxAgeSeconds: 300 } },
+        }, {
+          // As telas do backend (PDV, admin, totem...) nao estao no dist, entao
+          // o precache nao alcanca elas e simplesmente nao abriam offline.
+          // NetworkFirst: com rede, sempre a versao do servidor (o deploy segue
+          // chegando na hora); sem rede, a ultima que abriu. E o que permite o
+          // tablet abrir o PDV numa queda em vez de mostrar tela de erro.
+          urlPattern: ({ url }) =>
+            /^\/(admin|comanda|kiosk|kitchen|retaguarda|home|enderecos|emergencia)\.html$/.test(url.pathname),
+          handler: 'NetworkFirst',
+          options: { cacheName: 'paginas-backend', networkTimeoutSeconds: 4 },
         }],
       },
     }),

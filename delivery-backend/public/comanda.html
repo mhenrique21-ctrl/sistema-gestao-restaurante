@@ -2122,8 +2122,30 @@ async function openBalcaoSale() {
 let menuCarregadoEm = 0;
 const MENU_TTL_MS = 60000;
 
+// Cardapio guardado no tablet. Sem isso, um app aberto sem internet comeca
+// com a tela vazia: o "segue com o cardapio em memoria" do catch so vale se
+// ja tinha carregado UMA vez naquela sessao. Aqui ele sobrevive a fechar e
+// abrir o app, que e o caso real de quem chega na loja com a rede fora.
+const MENU_CACHE_KEY = 'pdv_menu_cache';
+function salvarMenuLocal(dados) {
+  try { localStorage.setItem(MENU_CACHE_KEY, JSON.stringify({ em: Date.now(), menu: dados })); }
+  catch (e) { /* sem espaco: o cardapio online continua funcionando */ }
+}
+function carregarMenuLocal() {
+  try {
+    const c = JSON.parse(localStorage.getItem(MENU_CACHE_KEY) || "null");
+    if (c && Array.isArray(c.menu) && c.menu.length) { menu = c.menu; menuGuardadoEm = c.em || 0; return true; }
+  } catch (e) { /* cache corrompido: ignora */ }
+  return false;
+}
+let menuGuardadoEm = 0;
+
 async function loadMenuIfNeeded(forcar = false) {
   if (!forcar && menu.length && Date.now() - menuCarregadoEm < MENU_TTL_MS) return;
+  // Pinta com o que esta guardado ANTES de ir na rede: com internet, a
+  // resposta chega logo em seguida e substitui; sem internet, e a diferenca
+  // entre a tela abrir com o cardapio e abrir vazia esperando um timeout.
+  if (!menu.length) carregarMenuLocal();
   try {
     // ?channel=pdv: os produtos continuam vindo todos (o balcão vende tudo),
     // mas os grupos de adicional respeitam a marcação de canal.
@@ -2133,8 +2155,13 @@ async function loadMenuIfNeeded(forcar = false) {
     if (!Array.isArray(novo) || !novo.length) return;   // resposta ruim não apaga o que já funciona
     menu = novo;
     menuCarregadoEm = Date.now();
+    salvarMenuLocal(novo);
+    menuGuardadoEm = Date.now();
     if (!activeCategory || !menu.some(c => c.id === activeCategory)) activeCategory = menu[0]?.id || null;
-  } catch (e) { /* offline: segue com o cardápio que já está em memória */ }
+  } catch (e) {
+    // offline: se nao tem nada em memoria, tenta o que ficou guardado
+    if (!menu.length) carregarMenuLocal();
+  }
 }
 
 // Depois de mexer em adicionais, o cardápio em memória está velho por
