@@ -1419,6 +1419,20 @@ const mergeFromServer=(prev:any,updates:any)=>{
       if(sortByCriadoEmDesc)out=out.sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
       return out;
     };
+    // categorias (Financeiro) nao tem id, so nome — e pode ser string solta ou
+    // {nome, apareceNaSangria}. Sem esta fusao, o campo caia no spread cru de
+    // baixo: o poll que roda ~100ms apos qualquer setDb (inclusive o toggle
+    // "Aparece na Sangria" e o renomear) sobrescrevia o array local inteiro
+    // pela copia do servidor, que ainda nao sabia da mudanca — o clique
+    // "retornava" sozinho antes mesmo do POST que devia salva-lo terminar.
+    // Local por cima, mesmo padrao de unionById.
+    const nomeDaCategoria=(c:any):string=>typeof c==="string"?c:c.nome;
+    const unionByNome=(localArr:any[],serverArr:any[])=>{
+      const m=new Map<string,any>();
+      (serverArr||[]).forEach((x:any)=>m.set(nomeDaCategoria(x),x));
+      (localArr||[]).forEach((x:any)=>m.set(nomeDaCategoria(x),x));
+      return [...m.values()];
+    };
     next[emp]={
       ...s,
       // vendas usa a mesma fusão de contas: editar uma venda (save() já carimba
@@ -1476,6 +1490,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // que ia pro POST — o cadastro se apagava a caminho de ser salvo.
       // mergeDocument.js já trata 'usuarios' como campo mesclável.
       usuarios:      mergeArrayById(s.usuarios||[],p.usuarios||[],_listaDeletados),
+      categorias:    unionByNome(p.categorias||[],s.categorias||[]),
       // Mesma fusão de vendas/contas/usuarios, não unionById: unionById dá vitória
       // incondicional ao local, então um aparelho com o catálogo velho aberto
       // desfazia a categoria que outro tinha acabado de marcar — e como o servidor
