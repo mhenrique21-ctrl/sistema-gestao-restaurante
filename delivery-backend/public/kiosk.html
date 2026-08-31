@@ -8,6 +8,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800;900&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- Instalável como app no tablet (ícone na tela inicial, abre sem barra de
+     endereço). De propósito SEM service worker: um já causou incidente neste
+     projeto sequestrando páginas de outras telas (ver git log) -- o manifest
+     sozinho já resolve o ícone e o modo standalone. -->
+<link rel="manifest" href="/kiosk-manifest.json">
+<meta name="theme-color" content="#A06D22">
+<link rel="apple-touch-icon" href="/kiosk-icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Confraria">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
   /* Tema claro. O totem fica num salão iluminado, muitas vezes com luz
      entrando pela vitrine: tela escura vira espelho e a foto do produto some.

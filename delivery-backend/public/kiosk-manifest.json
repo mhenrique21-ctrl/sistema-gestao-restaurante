@@ -1,0 +1,14 @@
+{
+  "name": "Autoatendimento — Confraria Café",
+  "short_name": "Confraria",
+  "description": "Autoatendimento do tablet — cardápio, pedido e conta.",
+  "start_url": "/kiosk.html",
+  "scope": "/kiosk.html",
+  "display": "standalone",
+  "background_color": "#F7F2EA",
+  "theme_color": "#A06D22",
+  "icons": [
+    { "src": "/kiosk-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/kiosk-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
