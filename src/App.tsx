@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
+import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
 
@@ -14320,6 +14321,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
       <button className="pill" onClick={()=>setSubTab("fechamento")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="fechamento"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="fechamento"?"var(--onPrimary,#FFFFFF)":"#777"}}>🔒 Fechamento</button>
       <button className="pill" onClick={()=>setSubTab("aparencia-pdv")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="aparencia-pdv"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="aparencia-pdv"?"var(--onPrimary,#FFFFFF)":"#777"}}>🎨 Aparência</button>
       <button className="pill" onClick={()=>setSubTab("relatorio-pdv")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="relatorio-pdv"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="relatorio-pdv"?"var(--onPrimary,#FFFFFF)":"#777"}}>📊 Relatório</button>
+      <button className="pill" onClick={()=>setSubTab("app-tablet")} style={{flexShrink:0,whiteSpace:"nowrap",background:subTab==="app-tablet"?"var(--btnPrimary)":"var(--bg4)",color:subTab==="app-tablet"?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border2)",padding:"7px 13px",borderRadius:20,fontSize:12.5,fontWeight:600}}>📱 App do Tablet</button>
     </div>
 
     {subTab==="estoque"&&<EstoquePdvPanel key={estoqueView.n} empresa={empresaPdv} db={db} initialView={estoqueView.v}/>}
@@ -14329,6 +14331,7 @@ function ProdutosMenuPanel({pendingSub,setPendingSub,empresa,db}:{pendingSub?:st
     {subTab==="fechamento"&&<FechamentoPdvPanel empresa={empresaPdv}/>}
     {subTab==="aparencia-pdv"&&<AparenciaPdvPanel empresa={empresaPdv}/>}
     {subTab==="relatorio-pdv"&&<RelatorioPdvPanel empresa={empresaPdv} onAbrirEstoque={abrirEstoqueView}/>}
+    {subTab==="app-tablet"&&<AppTabletPdvPanel empresa={empresaPdv}/>}
 
     {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv","relatorio-pdv"].includes(subTab)&&erro&&<div className="card" style={{marginBottom:12,border:"1px solid #EF444455",color:"var(--btnDanger)",fontSize:12}}>⚠️ {erro} <button className="btn" onClick={load} style={{marginLeft:8,padding:"3px 8px",fontSize:11}}>Tentar de novo</button></div>}
     {!["estoque","adicionais","usuarios-pdv","sangria","fechamento","aparencia-pdv","relatorio-pdv"].includes(subTab)&&loading&&<div className="muted" style={{fontSize:12,marginBottom:12}}>Carregando catálogo...</div>}
@@ -15500,6 +15503,52 @@ const CAMADAS_FONTE_PDV:{chave:string,rot:string,desc:string,padrao:number}[]=[
   {chave:"carrinho",rot:"Carrinho",desc:"Nome, quantidade e sinais + −",padrao:14},
 ];
 const FONTE_PDV_MIN=11,FONTE_PDV_MAX=20;
+
+// Endereco fixo (nao versionado): sobrescrever o mesmo arquivo a cada
+// atualizacao do app significa que o QR nunca precisa ser reimpresso.
+const APK_POR_EMPRESA:{[k:string]:{url:string,arquivo:string,rotulo:string,pacote:string,versao:string}|null}={
+  CONFRARIA:{url:"https://pedidos.confrariacafe.com/confraria-pdv.apk",arquivo:"confraria-pdv.apk",rotulo:"Confraria PDV",pacote:"com.confraria.pdv",versao:"1.0"},
+  SEAMA:null,
+};
+
+function AppTabletPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
+  const apk=APK_POR_EMPRESA[empresa];
+  const qrRef=useRef<HTMLCanvasElement>(null);
+  useEffect(()=>{
+    if(!apk||!qrRef.current)return;
+    QRCode.toCanvas(qrRef.current,apk.url,{width:150,margin:1,color:{dark:"#111827",light:"#FFFFFF"}}).catch(()=>{});
+  },[apk?.url]);
+
+  if(!apk)return <div className="card">
+    <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>📱 App do Tablet</div>
+    <div className="muted" style={{fontSize:12}}>Ainda não existe um app do tablet publicado para {empresa==="SEAMA"?"Seama":"Confraria"}.</div>
+  </div>;
+
+  return <div className="card">
+    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>📱 App do Tablet</div>
+    <div className="muted" style={{fontSize:11.5,lineHeight:1.55,marginBottom:18}}>
+      Aponte a câmera do tablet para o QR e toque no link que aparecer — o Android baixa o instalador direto. Ative <b>"instalar de fontes desconhecidas"</b> quando for pedido, só para esse download.
+    </div>
+    <div style={{display:"flex",gap:20,alignItems:"flex-start",flexWrap:"wrap" as const}}>
+      <div>
+        <div style={{width:150,height:150,background:"#fff",borderRadius:12,padding:10,boxShadow:"0 2px 10px rgba(0,0,0,.18)"}}>
+          <canvas ref={qrRef} style={{width:"100%",height:"100%",display:"block"}}/>
+        </div>
+      </div>
+      <div style={{flex:1,minWidth:200}}>
+        <div style={{fontSize:14.5,fontWeight:700,marginBottom:2}}>{apk.rotulo}</div>
+        <div style={{fontSize:11,color:"var(--text3)",fontFamily:"monospace",marginBottom:12}}>{apk.pacote} · versão {apk.versao}</div>
+        <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderTop:"1px solid var(--border)",fontSize:12}}>
+          <span style={{color:"var(--text3)"}}>Arquivo</span><span style={{fontFamily:"monospace",fontSize:11}}>{apk.arquivo}</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderTop:"1px solid var(--border)",fontSize:12}}>
+          <span style={{color:"var(--text3)"}}>Endereço</span>
+          <a href={apk.url} target="_blank" rel="noreferrer" style={{fontFamily:"monospace",fontSize:11,color:"var(--btnPrimary)",textAlign:"right" as const,wordBreak:"break-all" as const}}>{apk.url.replace("https://","")}</a>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
 
 function AparenciaPdvPanel({empresa}:{empresa:"CONFRARIA"|"SEAMA"}){
   const [dados,setDados]=useState<any>(null);
