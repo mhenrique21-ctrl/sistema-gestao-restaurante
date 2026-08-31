@@ -7080,10 +7080,19 @@ async function carregarFinCategorias() {
     const data = await res.json();
     if (!res.ok) return;
     finCategoriasCarregadas = true;
-    const ativas = (data.categorias || []).filter(c => c.ativo);
+    // A lista vem do App Gestão (Financeiro > Categorias), que guarda só o
+    // nome — sem conceito de "ativa/inativa". Formato antigo aqui esperava
+    // objeto {nome, ativo}: nunca existiu de fato (nada nesta tela chamava o
+    // PUT que criaria isso), então o array vinha sempre vazio e o filtro
+    // nunca tinha o que descartar — o bug ficava invisível. Assim que a
+    // ponte passou a devolver nomes de verdade, ".ativo" em string é
+    // undefined e filtrava tudo fora, calado.
+    const nomes = (data.categorias || [])
+      .map(c => (typeof c === 'string' ? c : (c && c.ativo !== false ? c.nome : null)))
+      .filter(n => n && String(n).trim());
     const sel = document.getElementById('fin-categoria');
     sel.innerHTML = '<option value="">— Não é uma despesa —</option>' +
-      ativas.map(c => `<option value="${c.nome}">${c.nome}</option>`).join('');
+      nomes.map(n => `<option value="${n}">${n}</option>`).join('');
   } catch (e) { /* segue sem categoria se a busca falhar */ }
 }
 
