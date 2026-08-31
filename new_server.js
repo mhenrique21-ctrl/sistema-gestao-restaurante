@@ -1746,7 +1746,16 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       if (!['CONFRARIA', 'SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
       const file = path.join(DADOS_DIR, `${empresa.toLowerCase()}.json`);
       const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
-      const categorias = Array.isArray(doc.categorias) ? doc.categorias.filter(c => typeof c === 'string' && c.trim()) : [];
+      // Item antigo (string pura) ja aparecia na sangria antes deste campo
+      // existir — tratar como "apareceNaSangria:true" preserva o que ja
+      // funciona hoje. So categoria criada depois desta mudanca nasce
+      // desligada (ver App.tsx, botao "+ Add" em Financeiro > Categorias).
+      const categorias = Array.isArray(doc.categorias)
+        ? doc.categorias
+            .filter(c => (typeof c === 'string' && c.trim()) || (c && typeof c === 'object' && typeof c.nome === 'string' && c.nome.trim()))
+            .filter(c => typeof c === 'string' || c.apareceNaSangria !== false)
+            .map(c => (typeof c === 'string' ? c : c.nome))
+        : [];
       res.setHeader('Content-Type', 'application/json');
       res.writeHead(200);
       res.end(JSON.stringify({ categorias }));

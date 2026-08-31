@@ -11373,6 +11373,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
   const [sangriaCatsOpts,setSangriaCatsOpts]=useState<string[]>([]);
   const [sangriaCatsCarregadas,setSangriaCatsCarregadas]=useState(false);
   const [carregandoSangriaCats,setCarregandoSangriaCats]=useState(false);
+  const [renomeCatFin,setRenomeCatFin]=useState("");
   const [filtro,setFiltro]=useState("todos");
   const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
   const [verConta,setVerConta]=useState<any>(null);
@@ -11550,6 +11551,36 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
 
   const contasAtrasadas=(db.contas||[]).filter((c:any)=>c.status==="pendente"&&c.vencimento&&c.vencimento<today()).sort((a:any,b:any)=>a.vencimento.localeCompare(b.vencimento));
 
+  // Migra contas ja lancadas e o vinculo de sangria pro nome novo — sem isso
+  // uma conta antiga ficaria com uma categoria que nao existe mais em lugar
+  // nenhum, invisivel em qualquer filtro e sumida do formulario.
+  const renomearCategoriaFin=(nomeAntigo:string,nomeNovo:string)=>{
+    const novo=nomeNovo.trim();
+    if(!novo||novo===nomeAntigo)return;
+    if((db.categorias||[]).some((c:any)=>(typeof c==="string"?c:c.nome)===novo)){alert(`Já existe uma categoria "${novo}"`);return;}
+    setDb((d:any)=>{
+      const categorias=(d.categorias||[]).map((c:any)=>{
+        const nome=typeof c==="string"?c:c.nome;
+        const apareceNaSangria=typeof c==="string"?true:!!c.apareceNaSangria;
+        return nome===nomeAntigo?{nome:novo,apareceNaSangria}:{nome,apareceNaSangria};
+      });
+      const contas=(d.contas||[]).map((cta:any)=>cta.categoria===nomeAntigo?{...cta,categoria:novo}:cta);
+      const catLink=d.categoriaFinanceiroSangria||{};
+      const categoriaFinanceiroSangria=(nomeAntigo in catLink)
+        ?Object.fromEntries(Object.entries(catLink).map(([k,v])=>[k===nomeAntigo?novo:k,v]))
+        :catLink;
+      return{...d,categorias,contas,categoriaFinanceiroSangria};
+    });
+    setEditandoCatFin(novo);
+    setRenomeCatFin(novo);
+  };
+  const alternarApareceNaSangria=(nome:string)=>{
+    setDb((d:any)=>({...d,categorias:(d.categorias||[]).map((c:any)=>{
+      const n=typeof c==="string"?c:c.nome;
+      const ativo=typeof c==="string"?true:!!c.apareceNaSangria;
+      return n===nome?{nome:n,apareceNaSangria:!ativo}:{nome:n,apareceNaSangria:ativo};
+    })}));
+  };
   return <div>
     {contasAtrasadas.length>0&&<div style={{background:"var(--dangerBg)",border:"1px solid #EF444440",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -11809,7 +11840,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
         <div className="row" style={{marginBottom:8}}>
           <select value={form.categoria} onChange={e=>setForm((f:any)=>({...f,categoria:e.target.value}))} className="inp">
             <option value="">Categoria</option>
-            {[...(db.categorias||[])].sort((a,b)=>a.localeCompare(b,'pt-BR')).map((c:string)=><option key={c} value={c}>{c}</option>)}
+            {[...(db.categorias||[])].map((c:any)=>typeof c==='string'?c:c.nome).sort((a,b)=>a.localeCompare(b,'pt-BR')).map((n:string)=><option key={n} value={n}>{n}</option>)}
           </select>
           <select value={form.tipo} onChange={e=>setForm((f:any)=>({...f,tipo:e.target.value}))} className="inp">
             <option value="saida">Saída</option><option value="entrada">Entrada</option>
@@ -11916,22 +11947,26 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
       <div className="card" style={{marginBottom:12}}>
         <div className="row">
           <input placeholder="Nova categoria" value={novacat} onChange={e=>setNovacat(e.target.value)} className="inp"/>
-          <button className="btn" onClick={()=>{if(!novacat)return;setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),novacat]}));setNovacat("");}}
+          <button className="btn" onClick={()=>{if(!novacat)return;if((db.categorias||[]).some((c:any)=>(typeof c==="string"?c:c.nome)===novacat)){alert(`Já existe uma categoria "${novacat}"`);return;}setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),{nome:novacat,apareceNaSangria:false}]}));setNovacat("");}}
             style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"10px 16px",whiteSpace:"nowrap"}}>+ Add</button>
         </div>
       </div>
-      {(db.categorias||[]).map((c:string)=>{
+      {(db.categorias||[]).map((raw:any)=>{
+        const c=typeof raw==="string"?raw:raw.nome;
+        const apareceNaSangria=typeof raw==="string"?true:!!raw.apareceNaSangria;
         const vinculada=(db.categoriaFinanceiroSangria||{})[c]||"";
+        const aberta=editandoCatFin===c;
         return <div key={c} className="card" style={{marginBottom:8,padding:"10px 14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div>{c}</div>
+              <div>{c}{apareceNaSangria&&<span style={{marginLeft:6,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20,background:"var(--accLight,var(--bg4))",color:"var(--acc,var(--btnPrimary))"}}>🔻 na sangria</span>}</div>
               {vinculada&&<div className="muted" style={{fontSize:10.5,marginTop:2}}>💸 Sangria "{vinculada}" cai aqui</div>}
             </div>
             <div style={{display:"flex",gap:6}}>
               <button className="btn" onClick={()=>{
-                setEditandoCatFin(editandoCatFin===c?null:c);
-                if(editandoCatFin!==c&&!sangriaCatsCarregadas){
+                setEditandoCatFin(aberta?null:c);
+                setRenomeCatFin(c);
+                if(!aberta&&!sangriaCatsCarregadas){
                   setCarregandoSangriaCats(true);
                   fetch(`/api/pdv-config/sangria?empresa=${empresa}`).then(r=>r.json()).then(d=>{
                     setSangriaCatsOpts((d.categorias||[]).map((x:any)=>x.nome));
@@ -11939,21 +11974,44 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                   }).catch(()=>{}).finally(()=>setCarregandoSangriaCats(false));
                 }
               }} style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 10px",fontSize:12}}>✏️</button>
-              <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:d.categorias.filter((x:string)=>x!==c)}))}
+              <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:(d.categorias||[]).filter((x:any)=>(typeof x==="string"?x:x.nome)!==c)}))}
                 style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
             </div>
           </div>
-          {editandoCatFin===c&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)"}}>
-            <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Categoria de sangria do PDV que cai aqui</label>
-            {carregandoSangriaCats?<div className="muted" style={{fontSize:12}}>Carregando categorias do PDV...</div>:
-            <select className="inp" value={vinculada} onChange={e=>{
-              const v=e.target.value;
-              setDb((d:any)=>({...d,categoriaFinanceiroSangria:{...(d.categoriaFinanceiroSangria||{}),[c]:v}}));
-            }} style={{marginBottom:0,fontSize:12}}>
-              <option value="">— nenhuma —</option>
-              {sangriaCatsOpts.map(nome=><option key={nome} value={nome}>{nome}</option>)}
-            </select>}
-            <div className="muted" style={{fontSize:10.5,marginTop:6}}>Quando um operador escolher essa categoria numa sangria no PDV, a conta cai automaticamente em "{c}" no Financeiro — mesmo que o nome não seja idêntico.</div>
+          {aberta&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column" as const,gap:12}}>
+            <div>
+              <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Nome da categoria</label>
+              <div className="row" style={{gap:6}}>
+                <input className="inp" value={renomeCatFin} onChange={e=>setRenomeCatFin(e.target.value)} style={{marginBottom:0,flex:1}}/>
+                <button className="btn" disabled={!renomeCatFin.trim()||renomeCatFin.trim()===c} onClick={()=>renomearCategoriaFin(c,renomeCatFin)}
+                  style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"9px 14px",fontSize:12,whiteSpace:"nowrap",opacity:(!renomeCatFin.trim()||renomeCatFin.trim()===c)?.5:1}}>Renomear</button>
+              </div>
+              {renomeCatFin.trim()&&renomeCatFin.trim()!==c&&(db.contas||[]).some((cta:any)=>cta.categoria===c)&&
+                <div style={{fontSize:10.5,color:"var(--warningText,#B45309)",background:"var(--warningBg,#FEF3C7)",borderRadius:8,padding:"7px 9px",marginTop:6,lineHeight:1.5}}>
+                  ⚠️ {(db.contas||[]).filter((cta:any)=>cta.categoria===c).length} conta(s) já lançada(s) como "{c}" — ao renomear, elas passam a valer "{renomeCatFin.trim()}" junto.
+                </div>}
+            </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12.5}}>Aparece na Sangria do PDV</div>
+                <div className="muted" style={{fontSize:10.5,marginTop:2,lineHeight:1.5}}>Some das opções de sangria no caixa (Confraria e Seama). Continua disponível aqui, no lançamento manual de contas.</div>
+              </div>
+              <span onClick={()=>alternarApareceNaSangria(c)} style={{width:38,height:22,borderRadius:20,background:apareceNaSangria?"#22C55E":"var(--border2)",position:"relative" as const,cursor:"pointer",flexShrink:0}}>
+                <span style={{position:"absolute",width:17,height:17,borderRadius:"50%",background:"#fff",top:2.5,left:apareceNaSangria?19:2.5,boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/>
+              </span>
+            </div>
+            <div>
+              <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Categoria de sangria do PDV que cai aqui</label>
+              {carregandoSangriaCats?<div className="muted" style={{fontSize:12}}>Carregando categorias do PDV...</div>:
+              <select className="inp" value={vinculada} onChange={e=>{
+                const v=e.target.value;
+                setDb((d:any)=>({...d,categoriaFinanceiroSangria:{...(d.categoriaFinanceiroSangria||{}),[c]:v}}));
+              }} style={{marginBottom:0,fontSize:12}}>
+                <option value="">— nenhuma —</option>
+                {sangriaCatsOpts.map(nome=><option key={nome} value={nome}>{nome}</option>)}
+              </select>}
+              <div className="muted" style={{fontSize:10.5,marginTop:6}}>Quando um operador escolher essa categoria numa sangria no PDV, a conta cai automaticamente em "{c}" no Financeiro — mesmo que o nome não seja idêntico.</div>
+            </div>
           </div>}
         </div>;
       })}
@@ -16089,7 +16147,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
 
   // ---- Financeiro ----
   const [novaCatFin,setNovaCatFin]=useState("");
-  const categoriasFin:string[]=db.categorias||[];
+  const categoriasFin:string[]=(db.categorias||[]).map((c:any)=>typeof c==="string"?c:c.nome);
 
   // ---- Compras ----
   const [normForm,setNormForm]=useState({nomePadrao:"",termos:""});
@@ -16443,15 +16501,15 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Categorias usadas nas contas a pagar/receber.</div>
         <div style={{display:"flex",gap:6,marginBottom:8}}>
           <input value={novaCatFin} onChange={e=>setNovaCatFin(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}
-            onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...d.categorias,n]}));setNovaCatFin("");}}}/>
-          <button className="btn" onClick={()=>{const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...d.categorias,n]}));setNovaCatFin("");}}
+            onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),{nome:n,apareceNaSangria:false}]}));setNovaCatFin("");}}}/>
+          <button className="btn" onClick={()=>{const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),{nome:n,apareceNaSangria:false}]}));setNovaCatFin("");}}
             style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"8px 14px",fontSize:13}}>+</button>
         </div>
         <div style={{maxHeight:240,overflowY:"auto"}}>
           {[...categoriasFin].sort((a,b)=>a.localeCompare(b,"pt-BR")).map(c=>(
             <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
               <span style={{fontSize:12}}>{c}</span>
-              <button onClick={()=>{if(!confirm(`Excluir categoria "${c}"?`))return;setDb((d:any)=>({...d,categorias:(d.categorias||[]).filter((x:string)=>x!==c)}));}}
+              <button onClick={()=>{if(!confirm(`Excluir categoria "${c}"?`))return;setDb((d:any)=>({...d,categorias:(d.categorias||[]).filter((x:any)=>(typeof x==="string"?x:x.nome)!==c)}));}}
                 style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:13}}>🗑️</button>
             </div>
           ))}
