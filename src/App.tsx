@@ -298,12 +298,43 @@ const foldNome = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\
 // dentro de ListaComprasPanel; virou helper de módulo pra Compras usar
 // também (o painel de Conciliar Insumos gravava só na empresa atual).
 const applyBothProdutos = (setState:any, setDb:any, fn:(d:any)=>any) => {
-  if (setState) setState((prev:any) => {
-    const nx = { ...prev };
-    Object.keys(nx).forEach(e => { if (nx[e] && typeof nx[e] === "object" && "produtosLista" in nx[e]) nx[e] = fn(nx[e]); });
-    return nx;
-  });
-  else setDb(fn);
+  if (setState) {
+    setState((prev:any) => {
+      const nx = { ...prev };
+      Object.keys(nx).forEach(e => { if (nx[e] && typeof nx[e] === "object" && "produtosLista" in nx[e]) nx[e] = fn(nx[e]); });
+      return nx;
+    });
+    // Sem isto, a mudança só existia na memória deste navegador — o efeito
+    // global de auto-save (ver useEffect([state]) mais abaixo) PULA qualquer
+    // mudança que aconteça durante a janela de um setDbAndSave já em
+    // andamento (directSaveRef), sem nunca reagendar. Vincular um insumo
+    // enquanto outra ação salvava por perto tinha uma chance real de nunca
+    // chegar no servidor, silenciosamente — cada aparelho acumulando sua
+    // própria pilha de mudança "fantasma" (visível ali, ausente em todo o
+    // resto). Por isso essa função salva as duas empresas por conta própria,
+    // com o mesmo cuidado de mergeWithServerBeforePost: busca o que há de
+    // mais recente no servidor, funde preservando a mudança que acabou de
+    // aplicar (local vence em caso de conflito de id), só então grava.
+    (["CONFRARIA","SEAMA"] as const).forEach(async (emp) => {
+      try {
+        const r = await fetchSync(`/api/dados/${emp}?_=${Date.now()}`);
+        const serverData = await r.json();
+        if (!serverData) return;
+        let atualizado: any = null;
+        setState((prev: any) => {
+          if (!prev[emp] || typeof prev[emp] !== "object" || !("produtosLista" in prev[emp])) return prev;
+          const merged = mergeFromServer(prev, { [emp]: serverData });
+          atualizado = merged[emp];
+          return merged;
+        });
+        if (atualizado) {
+          await fetchSync(`/api/dados/${emp}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withDeletedIds(atualizado)) });
+        }
+      } catch {}
+    });
+  } else if (setDb) {
+    setDb(fn);
+  }
 };
 // Toda vez que uma compra é lançada (qualquer via — manual, cupom IA, NF-e,
 // SEFAZ), roda em cima das matérias-primas tocadas por ELA: se o nome já
@@ -7444,10 +7475,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       ||(db.materiasPrimas||[]).find((m:any)=>m.nome.toLowerCase().includes(nome.toLowerCase())||nome.toLowerCase().includes(m.nome.toLowerCase()))
       ||null;
   };
-  const applyBothProd=(fn:(d:any)=>any)=>{
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"produtosLista" in nx[e])nx[e]=fn(nx[e]);});return nx;});
-    else setDb(fn);
-  };
+  const applyBothProd=(fn:(d:any)=>any)=>applyBothProdutos(setState,setDb,fn);
 
   const syncProdByName=(nome:string,updater:(p:any)=>any)=>{
     const nl=nome.trim().toLowerCase();
