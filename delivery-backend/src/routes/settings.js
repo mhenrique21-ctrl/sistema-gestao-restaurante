@@ -62,7 +62,45 @@ router.patch('/', authMiddleware, requireRole('admin'), async (req, res) => {
 
 // GET /api/settings/sangria-categories — qualquer usuário autenticado (quem
 // faz sangria no caixa precisa ler a lista, não só o admin que a edita).
+//
+// A lista NÃO é mantida aqui: vem das categorias de despesa do App Gestão
+// (GET /api/categorias-pdv), que é onde elas já são cadastradas e usadas nos
+// relatórios. Antes disso, sangria_categories neste banco ficava vazio pra
+// sempre — nada aqui escrevia nele — e o dropdown do caixa só tinha "Não é
+// uma despesa", então nenhuma sangria categorizada virava conta na Gestão.
+//
+// A cada leitura tenta a Gestão e, se responder, atualiza o cache local
+// (mesma chave 'sangria_categories', agora usada só como cópia de leitura).
+// Se a Gestão estiver fora do ar, serve o cache: uma sangria não pode travar
+// porque a integração caiu.
 router.get('/sangria-categories', authMiddleware, async (req, res) => {
+  const GESTAO_URL = process.env.GESTAO_URL || 'https://gestao.confrariacafe.com';
+  const secret = process.env.SEAMA_SERVICE_SECRET;
+  if (secret) {
+    const gestaoBase = GESTAO_URL.endsWith('/') ? GESTAO_URL.slice(0, -1) : GESTAO_URL;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const r = await fetch(gestaoBase + '/api/categorias-pdv?empresa=CONFRARIA', {
+        headers: { 'x-service-secret': secret },
+        signal: ctrl.signal,
+      });
+      if (r.ok) {
+        const corpo = await r.json();
+        const categorias = Array.isArray(corpo.categorias) ? corpo.categorias : [];
+        await pool.query(
+          `INSERT INTO settings (key, value) VALUES ('sangria_categories', $1)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+          [JSON.stringify(categorias)]
+        );
+        return res.json({ categorias });
+      }
+    } catch (e) {
+      // Gestão fora do ar ou lenta: cai pro cache abaixo, sem quebrar o caixa.
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   try {
     const result = await pool.query(`SELECT value FROM settings WHERE key = 'sangria_categories'`);
     let categorias = [];

@@ -1724,6 +1724,34 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // Categorias de despesa da Gestão, pro PDV (Confraria) oferecer as mesmas
+  // opções na sangria em vez de manter uma lista própria. Sem isso, sangria
+  // categorizada no PDV usava um texto que não batia com nenhuma categoria
+  // real da Gestão — /api/sangria-pdv (acima) exige categoria pra virar conta,
+  // e o PDV Confraria nunca teve nenhuma pra escolher (settings vazio).
+  if (req.method === 'GET' && urlPath === '/api/categorias-pdv') {
+    const secret = process.env.SEAMA_SERVICE_SECRET;
+    if (!secret) { res.writeHead(503); res.end(JSON.stringify({ error: 'Integração não configurada' })); return; }
+    if (req.headers['x-service-secret'] !== secret) {
+      res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
+    }
+    try {
+      const empresa = String(new URL(req.url, 'http://x').searchParams.get('empresa') || '').toUpperCase();
+      if (!['CONFRARIA', 'SEAMA'].includes(empresa)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
+      const file = path.join(DADOS_DIR, `${empresa.toLowerCase()}.json`);
+      const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+      const categorias = Array.isArray(doc.categorias) ? doc.categorias.filter(c => typeof c === 'string' && c.trim()) : [];
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end(JSON.stringify({ categorias }));
+    } catch (e) {
+      console.error('[categorias-pdv]', e.message);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Erro ao buscar categorias' }));
+    }
+    return;
+  }
+
   if (req.method === 'POST' && urlPath === '/api/venda-pdv') {
     let body = '';
     req.on('data', c => body += c);
