@@ -1696,10 +1696,16 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         const id = `pdv-sangria-${movimentoId}`;
         const agora = new Date().toISOString();
         const i = contas.findIndex(c => c && c.id === id);
+        // Categoria de sangria do PDV pode ter nome diferente da categoria
+        // financeira que deveria receber essa conta (vínculo configurado em
+        // Financeiro → Categorias). Sem vínculo, usa o nome da sangria como
+        // veio sempre fez.
+        const mapa = doc.categoriaFinanceiroSangria || {};
+        const catFinanceira = Object.keys(mapa).find((fin) => mapa[fin] === categoria) || categoria;
         const reg = {
           id,
           descricao: motivo || `Sangria PDV — ${categoria}`,
-          categoria,
+          categoria: catFinanceira,
           valor: v,
           vencimento: data || agora.slice(0, 10),
           status: 'pago',

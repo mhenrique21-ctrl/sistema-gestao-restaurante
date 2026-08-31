@@ -11369,6 +11369,10 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
   const [editGrupoRecorr,setEditGrupoRecorr]=useState<string|null>(null);
   const formRef=useRef<HTMLDivElement>(null);
   const [novacat,setNovacat]=useState("");
+  const [editandoCatFin,setEditandoCatFin]=useState<string|null>(null);
+  const [sangriaCatsOpts,setSangriaCatsOpts]=useState<string[]>([]);
+  const [sangriaCatsCarregadas,setSangriaCatsCarregadas]=useState(false);
+  const [carregandoSangriaCats,setCarregandoSangriaCats]=useState(false);
   const [filtro,setFiltro]=useState("todos");
   const [sortDir,setSortDir]=useState<"asc"|"desc">("desc");
   const [verConta,setVerConta]=useState<any>(null);
@@ -11916,13 +11920,43 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
             style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"10px 16px",whiteSpace:"nowrap"}}>+ Add</button>
         </div>
       </div>
-      {(db.categorias||[]).map((c:string)=>(
-        <div key={c} className="list-item" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span>{c}</span>
-          <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:d.categorias.filter((x:string)=>x!==c)}))}
-            style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
-        </div>
-      ))}
+      {(db.categorias||[]).map((c:string)=>{
+        const vinculada=(db.categoriaFinanceiroSangria||{})[c]||"";
+        return <div key={c} className="card" style={{marginBottom:8,padding:"10px 14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div>{c}</div>
+              {vinculada&&<div className="muted" style={{fontSize:10.5,marginTop:2}}>💸 Sangria "{vinculada}" cai aqui</div>}
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button className="btn" onClick={()=>{
+                setEditandoCatFin(editandoCatFin===c?null:c);
+                if(editandoCatFin!==c&&!sangriaCatsCarregadas){
+                  setCarregandoSangriaCats(true);
+                  fetch(`/api/pdv-config/sangria?empresa=${empresa}`).then(r=>r.json()).then(d=>{
+                    setSangriaCatsOpts((d.categorias||[]).map((x:any)=>x.nome));
+                    setSangriaCatsCarregadas(true);
+                  }).catch(()=>{}).finally(()=>setCarregandoSangriaCats(false));
+                }
+              }} style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 10px",fontSize:12}}>✏️</button>
+              <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:d.categorias.filter((x:string)=>x!==c)}))}
+                style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
+            </div>
+          </div>
+          {editandoCatFin===c&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)"}}>
+            <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Categoria de sangria do PDV que cai aqui</label>
+            {carregandoSangriaCats?<div className="muted" style={{fontSize:12}}>Carregando categorias do PDV...</div>:
+            <select className="inp" value={vinculada} onChange={e=>{
+              const v=e.target.value;
+              setDb((d:any)=>({...d,categoriaFinanceiroSangria:{...(d.categoriaFinanceiroSangria||{}),[c]:v}}));
+            }} style={{marginBottom:0,fontSize:12}}>
+              <option value="">— nenhuma —</option>
+              {sangriaCatsOpts.map(nome=><option key={nome} value={nome}>{nome}</option>)}
+            </select>}
+            <div className="muted" style={{fontSize:10.5,marginTop:6}}>Quando um operador escolher essa categoria numa sangria no PDV, a conta cai automaticamente em "{c}" no Financeiro — mesmo que o nome não seja idêntico.</div>
+          </div>}
+        </div>;
+      })}
     </div>}
   </div>;
 }
