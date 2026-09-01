@@ -2079,7 +2079,11 @@ async function abrirComandaResolvida(dados) {
   comanda = dados;
   cart = [];
   await loadMenuIfNeeded();
-  document.querySelector(".modal-backdrop")?.remove();
+  // Todos, não só o primeiro: uma tentativa anterior que travou no meio do
+  // caminho podia deixar um modal velho pra trás, cobrindo a tela por cima
+  // do cardápio na tentativa seguinte -- parecia "a comanda não abre", mas
+  // era um modal fantasma em cima de tudo.
+  document.querySelectorAll(".modal-backdrop").forEach(el => el.remove());
   showComandaScreen();
   if (comandaPrecisaDeMesa()) openMesaPickerModal();
 }
