@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Confraria PDV — Pedidos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@700;800&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0F0F0F;
+    --surface: #1A1208;
+    --card: #221810;
+    --border: #2E2218;
+    --gold: #C9A25E;
+    --gold-dim: #8B6B35;
+    --cream: #F8F4ED;
+    --muted: #7A6548;
+    --danger: #d22626;
+    --green: #4CAF80;
+    --c-bg: #F2EFE9;
+    --c-surface: #FFFFFF;
+    --c-border: #E1DACB;
+    --c-text: #2A2318;
+    --c-muted: #746b60;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Karla', system-ui, sans-serif; background: var(--c-bg); color: var(--c-text); min-height: 100vh; min-height: 100dvh; overscroll-behavior: none; }
+  .brand { font-family: 'Bitter', serif; font-weight: 800; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; }
+  input { font-family: inherit; }
+  .hidden { display: none !important; }
+  .screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+
+  /* ── Login / número da comanda: telas centralizadas, cartão único ── */
+  .center-screen { align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
+  .card-auth { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 28px 24px; }
+  .card-auth h1 { font-size: 22px; color: var(--gold); text-align: center; margin-bottom: 4px; }
+  .card-auth .sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 22px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .field input { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--cream); font-size: 15px; }
+  .field input:focus { outline: none; border-color: var(--gold-dim); }
+  .field input.numero-grande { text-align: center; font-size: 30px; font-weight: 700; padding: 16px; letter-spacing: 0.02em; }
+  .btn-gold { width: 100%; padding: 14px; border-radius: 12px; background: var(--gold); color: #241a0c; font-weight: 700; font-size: 15px; margin-top: 6px; }
+  .btn-gold:active { background: var(--gold-dim); }
+  .btn-gold:disabled { opacity: 0.5; }
+  .erro-msg { font-size: 12.5px; color: #ff8a7a; margin: 10px 0 0; min-height: 16px; text-align: center; }
+  .troca-nome { text-align: center; margin-top: 16px; font-size: 12.5px; color: var(--muted); }
+  .troca-nome button { color: var(--gold); font-weight: 600; text-decoration: underline; }
+
+  /* ── Tela de pedido ── */
+  .ped-header { background: var(--bg); padding: 12px 14px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--border); }
+  .ped-header .badge-num { width: 34px; height: 34px; border-radius: 9px; background: var(--gold); color: #241a0c; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .ped-header .info { flex: 1; min-width: 0; }
+  .ped-header .info .lbl { color: var(--cream); font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ped-header .info .sub { color: var(--muted); font-size: 11px; }
+  .ped-header .btn-trocar { font-size: 12px; color: var(--gold); padding: 6px 10px; border: 1px solid var(--gold-dim); border-radius: 8px; white-space: nowrap; }
+
+  .cat-tabs { display: flex; gap: 8px; padding: 10px 14px; overflow-x: auto; background: var(--c-bg); position: sticky; top: 58px; z-index: 4; border-bottom: 1px solid var(--c-border); -ms-overflow-style: none; scrollbar-width: none; }
+  .cat-tabs::-webkit-scrollbar { display: none; }
+  .cat-pill { flex-shrink: 0; padding: 7px 14px; border-radius: 20px; font-size: 12.5px; font-weight: 600; background: var(--c-surface); color: var(--c-muted); border: 1px solid var(--c-border); white-space: nowrap; }
+  .cat-pill.active { background: var(--gold); color: #241a0c; border-color: var(--gold); }
+
+  .prod-lista { flex: 1; padding: 4px 14px 100px; }
+  .prod-row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--c-border); }
+  .prod-row .nome { flex: 1; min-width: 0; }
+  .prod-row .nome p.n { font-size: 14px; font-weight: 600; line-height: 1.3; }
+  .prod-row .nome p.p { font-size: 12.5px; color: var(--c-muted); margin-top: 2px; }
+  .qtd-add { width: 34px; height: 34px; border-radius: 10px; background: var(--c-surface); border: 1.5px solid var(--gold-dim); color: var(--gold-dim); font-size: 19px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .qtd-stepper { display: flex; align-items: center; gap: 2px; background: var(--c-surface); border: 1.5px solid var(--gold-dim); border-radius: 10px; padding: 2px; flex-shrink: 0; }
+  .qtd-stepper button { width: 28px; height: 28px; font-size: 15px; font-weight: 700; color: var(--gold-dim); border-radius: 7px; }
+  .qtd-stepper button:active { background: var(--c-bg); }
+  .qtd-stepper span { min-width: 22px; text-align: center; font-size: 14px; font-weight: 700; }
+
+  .vazio { text-align: center; padding: 60px 20px; color: var(--c-muted); font-size: 13.5px; }
+
+  .barra-envio { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--border); padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); z-index: 6; }
+  .barra-envio button { width: 100%; padding: 15px; border-radius: 12px; background: var(--gold); color: #241a0c; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .barra-envio button:disabled { opacity: 0.45; }
+
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: var(--card); color: var(--cream); border: 1px solid var(--gold-dim); padding: 12px 18px; border-radius: 12px; font-size: 13.5px; z-index: 20; max-width: 90vw; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+
+  .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(36,26,12,0.3); border-top-color: #241a0c; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="screen center-screen">
+  <div class="card-auth">
+    <h1 class="brand">CONFRARIA</h1>
+    <p class="sub">Pedidos para celular</p>
+    <div class="field">
+      <label>Usuário</label>
+      <input type="text" id="login-nome" autocomplete="username" placeholder="Seu nome de usuário">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" id="login-senha" autocomplete="current-password" placeholder="Sua senha">
+    </div>
+    <button class="btn-gold" id="login-btn" onclick="doLogin()">Entrar</button>
+    <p class="erro-msg" id="login-erro"></p>
+  </div>
+</div>
+
+<div id="numero-screen" class="screen center-screen hidden">
+  <div class="card-auth">
+    <h1 class="brand" style="font-size:18px">Qual comanda?</h1>
+    <p class="sub">Digite o número impresso no cartão da mesa</p>
+    <div class="field">
+      <input type="text" inputmode="numeric" id="numero-input" class="numero-grande" placeholder="00" maxlength="3" autofocus>
+    </div>
+    <button class="btn-gold" id="numero-btn" onclick="buscarComanda()">Abrir comanda</button>
+    <p class="erro-msg" id="numero-erro"></p>
+    <p class="troca-nome">Logado como <strong id="numero-usuario-nome"></strong> · <button onclick="sair()">sair</button></p>
+  </div>
+</div>
+
+<div id="pedido-screen" class="screen hidden" style="background:var(--c-bg)">
+  <div class="ped-header">
+    <div class="badge-num" id="ped-badge">00</div>
+    <div class="info">
+      <p class="lbl" id="ped-label">—</p>
+      <p class="sub" id="ped-sub">—</p>
+    </div>
+    <button class="btn-trocar" onclick="voltarParaNumero()">Trocar</button>
+  </div>
+  <div class="cat-tabs" id="cat-tabs"></div>
+  <div class="prod-lista" id="prod-lista"><div class="vazio">Carregando cardápio…</div></div>
+  <div class="barra-envio">
+    <button id="btn-enviar" onclick="enviarPedido()" disabled>Enviar pedido</button>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+const API = '';
+const TOKEN_KEY = 'mobile_token';
+const NAME_KEY = 'mobile_name';
+let TOKEN = localStorage.getItem(TOKEN_KEY) || null;
+let USER_NAME = localStorage.getItem(NAME_KEY) || null;
+
+let menu = [];
+let activeCategory = null;
+let comanda = null;
+let cart = {}; // product_id -> { produto, qtd }
+
+function authHeaders(extra) {
+  return Object.assign({ Authorization: 'Bearer ' + TOKEN }, extra || {});
+}
+
+function showToast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function mostrarTela(id) {
+  ['login-screen', 'numero-screen', 'pedido-screen'].forEach(s =>
+    document.getElementById(s).classList.toggle('hidden', s !== id));
+}
+
+// ── Login ──────────────────────────────────────────────
+async function doLogin() {
+  const nome = document.getElementById('login-nome').value.trim();
+  const senha = document.getElementById('login-senha').value;
+  const erro = document.getElementById('login-erro');
+  const btn = document.getElementById('login-btn');
+  erro.textContent = '';
+  if (!nome || !senha) { erro.textContent = 'Preencha usuário e senha'; return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nome, password: senha }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
+    if (!['admin', 'atendente'].includes(data.user?.role)) throw new Error('Este login não tem acesso a pedidos');
+    // Senha provisória exige troca — feita pelo PDV completo, não aqui: essa
+    // tela é só pra lançar pedido rápido, não pra reduzir a conta a segurança.
+    if (data.user.must_change_password) throw new Error('Senha provisória — troque no PDV completo antes de usar aqui');
+    TOKEN = data.token;
+    USER_NAME = data.user.name || nome;
+    localStorage.setItem(TOKEN_KEY, TOKEN);
+    localStorage.setItem(NAME_KEY, USER_NAME);
+    document.getElementById('login-senha').value = '';
+    irParaNumero();
+  } catch (err) {
+    erro.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  }
+}
+
+function sair() {
+  TOKEN = null; USER_NAME = null;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(NAME_KEY);
+  document.getElementById('login-nome').value = '';
+  document.getElementById('login-senha').value = '';
+  mostrarTela('login-screen');
+}
+
+function irParaNumero() {
+  document.getElementById('numero-usuario-nome').textContent = USER_NAME || '';
+  document.getElementById('numero-input').value = '';
+  document.getElementById('numero-erro').textContent = '';
+  mostrarTela('numero-screen');
+  setTimeout(() => document.getElementById('numero-input').focus(), 50);
+}
+
+// ── Buscar comanda pelo número ──────────────────────────
+async function buscarComanda() {
+  const valor = document.getElementById('numero-input').value.trim();
+  const erro = document.getElementById('numero-erro');
+  const btn = document.getElementById('numero-btn');
+  erro.textContent = '';
+  if (!/^\d{1,3}$/.test(valor)) { erro.textContent = 'Digite só o número (ex.: 5)'; return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(`${API}/api/comandas/numero/${encodeURIComponent(valor)}`, { headers: authHeaders() });
+    if (res.status === 401) { sair(); return; }
+    const data = await res.json();
+    if (!res.ok) { erro.textContent = data.error || 'Comanda não encontrada'; return; }
+    comanda = data;
+    cart = {};
+    await carregarCardapio();
+    mostrarPedidoScreen();
+  } catch (e) {
+    erro.textContent = 'Erro de conexão';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Abrir comanda';
+  }
+}
+
+// ── Cardápio ─────────────────────────────────────────────
+async function carregarCardapio() {
+  if (menu.length) return; // muda pouco; uma carga por sessão já basta
+  try {
+    const res = await fetch(`${API}/api/menu?channel=pdv`);
+    if (!res.ok) return;
+    menu = await res.json();
+    activeCategory = menu[0]?.id || null;
+  } catch (e) { /* segue com o que tiver (vazio na primeira vez, ou nada) */ }
+}
+
+function mostrarPedidoScreen() {
+  document.getElementById('ped-badge').textContent = (comanda.label || '').replace(/\D/g, '').slice(-2).padStart(2, '0') || '—';
+  document.getElementById('ped-label').textContent = comanda.label || comanda.code;
+  document.getElementById('ped-sub').textContent = comanda.mesa_numero ? `Mesa ${comanda.mesa_numero}` : (comanda.status === 'aberta' ? 'Aberta' : comanda.status);
+  mostrarTela('pedido-screen');
+  renderCatTabs();
+  renderProdutos();
+  renderBarraEnvio();
+}
+
+function voltarParaNumero() {
+  comanda = null;
+  cart = {};
+  irParaNumero();
+}
+
+function renderCatTabs() {
+  const el = document.getElementById('cat-tabs');
+  el.innerHTML = menu.map(c =>
+    `<button class="cat-pill ${c.id === activeCategory ? 'active' : ''}" onclick="selecionarCategoria('${c.id}')">${c.name}</button>`
+  ).join('');
+}
+
+function selecionarCategoria(id) {
+  activeCategory = id;
+  renderCatTabs();
+  renderProdutos();
+}
+
+function fmt(v) {
+  return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+}
+
+function renderProdutos() {
+  const el = document.getElementById('prod-lista');
+  const cat = menu.find(c => c.id === activeCategory);
+  const produtos = (cat?.products || []).filter(p => p.available);
+  if (!produtos.length) { el.innerHTML = '<div class="vazio">Nenhum produto disponível nesta categoria.</div>'; return; }
+  el.innerHTML = produtos.map(p => {
+    const preco = p.promo_price != null ? p.promo_price : p.price;
+    const item = cart[p.id];
+    const qtd = item?.qtd || 0;
+    return `
+      <div class="prod-row">
+        <div class="nome">
+          <p class="n">${p.name}</p>
+          <p class="p">${fmt(preco)}</p>
+        </div>
+        ${qtd > 0
+          ? `<div class="qtd-stepper">
+               <button onclick="mudarQtd('${p.id}', -1)" aria-label="Diminuir">−</button>
+               <span>${qtd}</span>
+               <button onclick="mudarQtd('${p.id}', 1)" aria-label="Aumentar">+</button>
+             </div>`
+          : `<button class="qtd-add" onclick="mudarQtd('${p.id}', 1)" aria-label="Adicionar">+</button>`
+        }
+      </div>`;
+  }).join('');
+}
+
+function mudarQtd(produtoId, delta) {
+  const cat = menu.find(c => c.id === activeCategory);
+  const produto = (cat?.products || []).find(p => p.id === produtoId);
+  if (!produto) return;
+  const atual = cart[produtoId]?.qtd || 0;
+  const nova = Math.max(0, atual + delta);
+  if (nova === 0) delete cart[produtoId];
+  else cart[produtoId] = { produto, qtd: nova };
+  renderProdutos();
+  renderBarraEnvio();
+}
+
+function renderBarraEnvio() {
+  const itens = Object.values(cart);
+  const totalQtd = itens.reduce((s, i) => s + i.qtd, 0);
+  const btn = document.getElementById('btn-enviar');
+  btn.disabled = totalQtd === 0;
+  btn.textContent = totalQtd > 0 ? `Enviar pedido · ${totalQtd} ${totalQtd === 1 ? 'item' : 'itens'}` : 'Enviar pedido';
+}
+
+// ── Enviar pedido ────────────────────────────────────────
+async function enviarPedido() {
+  const itens = Object.values(cart);
+  if (!itens.length || !comanda) return;
+  const btn = document.getElementById('btn-enviar');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(`${API}/api/comandas/${comanda.id}/orders`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        items: itens.map(i => ({ product_id: i.produto.id, quantity: i.qtd })),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro ao enviar pedido'); renderBarraEnvio(); return; }
+    showToast(`Pedido enviado — ${comanda.label || comanda.code}`);
+    cart = {};
+    // Pronto pra próxima mesa: some direto pro número, sem passar de novo
+    // pelo cardápio (já está carregado em memória).
+    voltarParaNumero();
+  } catch (e) {
+    showToast('Erro de conexão — tente de novo');
+    renderBarraEnvio();
+  }
+}
+
+// ── Início ───────────────────────────────────────────────
+if (TOKEN) irParaNumero(); else mostrarTela('login-screen');
+
+document.getElementById('numero-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') buscarComanda(); });
+document.getElementById('login-senha')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>
