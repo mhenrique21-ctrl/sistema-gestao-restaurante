@@ -2075,6 +2075,15 @@ function setScanError(msg) {
   if (msg) showToast(msg);
 }
 
+async function abrirComandaResolvida(dados) {
+  comanda = dados;
+  cart = [];
+  await loadMenuIfNeeded();
+  document.querySelector(".modal-backdrop")?.remove();
+  showComandaScreen();
+  if (comandaPrecisaDeMesa()) openMesaPickerModal();
+}
+
 async function resolveCode(valor) {
   valor = (valor || "").trim();
   if (!valor) return;
@@ -2094,12 +2103,7 @@ async function resolveCode(valor) {
       setScanError(err.error || "Comanda não encontrada");
       return;
     }
-    comanda = await res.json();
-    cart = [];
-    await loadMenuIfNeeded();
-    document.querySelector(".modal-backdrop")?.remove();
-    showComandaScreen();
-    if (comandaPrecisaDeMesa()) openMesaPickerModal();
+    await abrirComandaResolvida(await res.json());
   } catch (e) {
     setScanError("Erro de conexão");
   }
@@ -8083,6 +8087,31 @@ function renderBoard() {
 
 // Modal de "abrir por código" — mantém os ids scan-error/manual-code pra reaproveitar
 // resolveCode()/setScanError() sem duplicar lógica.
+// Cria uma comanda de mesa na hora, sem cartao fisico -- mesmo POST que o
+// admin usa em Configuracoes pra cadastrar cartao, so que aberta direto na
+// tela de venda. Rotulo com hora (mesmo padrao do balcao) pra nao ficar em
+// branco no quadro; segue pro seletor de mesa igual comanda escaneada, ja
+// que nasce sem mesa_id.
+async function criarComandaAgora() {
+  setScanError("");
+  try {
+    const res = await fetch(`${API}/api/comandas`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({}),
+    });
+    if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setScanError(err.error || "Erro ao criar comanda");
+      return;
+    }
+    await abrirComandaResolvida(await res.json());
+  } catch (e) {
+    setScanError("Erro de conexão");
+  }
+}
+
 function openCodeModal() {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -8095,6 +8124,7 @@ function openCodeModal() {
         <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
       </div>
       <div id="scan-error"></div>
+      <button class="btn btn-secondary" style="width:100%;margin-top:10px" onclick="criarComandaAgora()">Sem cartão — abrir comanda agora</button>
       <button class="btn btn-secondary" style="width:100%;margin-top:6px" onclick="this.closest('.modal-backdrop').remove()">Cancelar</button>
     </div>`;
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });

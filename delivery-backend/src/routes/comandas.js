@@ -240,14 +240,21 @@ router.post('/balcao', authMiddleware, requireRole('admin', 'atendente'), async 
 // digitar um código próprio (ex: "mesa5") era o elo fraco do sistema — um
 // código curto e previsível vale tão pouco quanto não ter QR nenhum,
 // mesmo impresso e escaneado do jeito certo.
-router.post('/', authMiddleware, requireRole('admin'), async (req, res) => {
+// Atendente também cria (não só admin): mesmo padrão de permissão da venda de
+// balcão, pra cobrir "estou sem o cartão físico, preciso abrir uma comanda de
+// mesa agora" sem precisar chamar o admin ou ir em Configurações.
+router.post('/', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   const { label } = req.body;
   const finalCode = crypto.randomBytes(8).toString('hex');
+  // Sem label, cai num rótulo com hora (mesmo padrão do balcão) em vez de
+  // ficar em branco no quadro — "—" não ajuda ninguém a identificar depois.
+  const rotulo = (label || '').trim()
+    || `Comanda ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 
   try {
     const result = await pool.query(
       `INSERT INTO comandas (code, label, opened_by) VALUES ($1,$2,$3) RETURNING *`,
-      [finalCode, label || null, req.user.id]
+      [finalCode, rotulo, req.user.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
