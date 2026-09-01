@@ -2009,6 +2009,7 @@ function entrarNoPdv() {
   loadMenuConfigAndApply();
   startTabBarClock();
   connectWS();
+  carregarImpressoras(); // sem isso, so carregava quem visitasse a aba Impressoras -- impressao local rodava com IP vazio a sessao inteira
   checkAberturaCaixa();
 }
 
@@ -8931,6 +8932,7 @@ if (!TOKEN) {
   loadMenuConfigAndApply();
   startTabBarClock();
   connectWS();
+  carregarImpressoras(); // sem isso, so carregava quem visitasse a aba Impressoras -- impressao local rodava com IP vazio a sessao inteira
   checkAberturaCaixa();
 }
 </script>
