@@ -1778,7 +1778,7 @@ function connectWS() {
       handleNewComandaOrder(msg.comanda, msg.items);
     }
     if (msg.type === 'order_update' && msg.event === 'new_order') {
-      handleNewDeliveryOrder(msg.order);
+      handleNewDeliveryOrder(msg.order, msg.items);
     }
   };
   ws.onclose = () => { ws = null; if (TOKEN) setTimeout(connectWS, 3000); };
@@ -1820,9 +1820,14 @@ function handleNewComandaOrder(comandaData, items) {
   if (Date.now() - impressoHaPouco > 8000) imprimirPedidoLocal(comandaData, items);
 }
 
-function handleNewDeliveryOrder(order) {
+function handleNewDeliveryOrder(order, items) {
   showToast(`🛵 Novo pedido delivery — <strong>#${order?.order_number || (order?.id || '').slice(-4)}</strong>${order?.customer_name ? ' — ' + order.customer_name : ''}`);
   bumpNotif('delivery');
+  // Delivery nunca passa por sendOrder deste tablet -- pode imprimir direto,
+  // sem o dedup de IMPRESSOES_LOCAIS_RECENTES que existe pra comanda/kiosk.
+  const numero = order?.order_number || (order?.id || '').slice(-4);
+  const tipo = order?.delivery_type === 'pickup' ? 'RETIRADA' : 'DELIVERY';
+  imprimirPedidoLocal({ label: `${tipo} #${numero}`, code: `delivery_${order?.id || numero}` }, items || []);
 }
 
 async function refreshOpenComanda() {
