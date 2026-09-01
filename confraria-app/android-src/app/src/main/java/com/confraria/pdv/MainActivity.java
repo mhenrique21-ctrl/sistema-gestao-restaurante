@@ -29,6 +29,16 @@ public class MainActivity extends BridgeActivity {
         if (hasFocus) hideSystemBars();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Reforço: em alguns aparelhos (Samsung/OneUI incluso) o foco de janela
+        // não dispara de forma confiável logo na entrada — onResume cobre esse
+        // caso, garantindo tela cheia também ao abrir o app pela primeira vez
+        // e ao voltar de qualquer tela do sistema (trocar de app, notificação).
+        hideSystemBars();
+    }
+
     /** Esconde barra de status e de navegação, deixando o PDV em tela cheia. */
     private void hideSystemBars() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
