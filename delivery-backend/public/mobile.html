@@ -456,8 +456,14 @@ function mudarQtdSimples(produtoId, delta) {
 }
 
 // ── Folha de adicionais ──────────────────────────────────
-let _adicSelecionados = {}; // group_id -> Set(option_id)
+let _adicSelecionados = {}; // group_id -> { option_id: quantidade }
 let _adicProdutoAtual = null;
+
+// Igual ao PDV completo: max_select é o TOTAL somado no grupo, não quantas
+// opções diferentes. "Extras até 10" pode ser 7 de bacon + 3 de queijo.
+function grupoQtdSoma(groupId) {
+  return Object.values(_adicSelecionados[groupId] || {}).reduce((s, n) => s + n, 0);
+}
 
 function abrirAdicionais(produtoId) {
   const cat = menu.find(c => c.id === activeCategory);
@@ -465,7 +471,7 @@ function abrirAdicionais(produtoId) {
   if (!produto) return;
   _adicProdutoAtual = produto;
   _adicSelecionados = {};
-  (produto.addon_groups || []).forEach(g => { _adicSelecionados[g.id] = new Set(); });
+  (produto.addon_groups || []).forEach(g => { _adicSelecionados[g.id] = {}; });
 
   const grupos = (produto.addon_groups || []).filter(g => (g.options || []).length);
   const container = document.getElementById('sheet-container');
@@ -480,20 +486,12 @@ function abrirAdicionais(produtoId) {
           ${grupos.map(g => `
             <div class="grupo-adicional">
               <p class="titulo">${g.name} ${g.required ? '<span class="obrig">Obrigatório</span>' : ''}</p>
-              <p class="regra">${g.max_select > 1 ? `Escolha até ${g.max_select}` : 'Escolha 1'}</p>
-              <div id="grupo-${g.id}">
-                ${g.options.map(o => `
-                  <div class="opcao-linha ${g.max_select > 1 ? 'check' : ''}" id="opcao-${o.id}" onclick="toggleAdicional('${g.id}','${o.id}',${g.max_select})">
-                    <div class="marcador"><div class="ponto"></div></div>
-                    <div class="txt">${o.name}</div>
-                    ${o.price > 0 ? `<div class="preco">+ ${fmt(o.price)}</div>` : ''}
-                  </div>
-                `).join('')}
-              </div>
+              <p class="regra">${g.max_select > 1 ? `Escolha até ${g.max_select} (pode repetir)` : 'Escolha 1'}</p>
+              <div id="grupo-${g.id}">${renderOpcoesGrupo(g)}</div>
             </div>
           `).join('')}
           <div class="qtd-linha">
-            <p class="titulo" style="flex:1">Quantidade</p>
+            <p class="titulo" style="flex:1">Quantidade do item</p>
             <div class="qtd-stepper">
               <button onclick="mudarQtdAdicionalSheet(-1)" aria-label="Diminuir">−</button>
               <span id="adic-qtd">1</span>
@@ -511,20 +509,58 @@ function abrirAdicionais(produtoId) {
   document.getElementById('adic-backdrop').addEventListener('click', e => { if (e.target.id === 'adic-backdrop') fecharAdicionais(); });
 }
 
-function toggleAdicional(groupId, optionId, maxSelect) {
-  const set = _adicSelecionados[groupId];
-  const multi = maxSelect > 1;
-  if (set.has(optionId)) {
-    set.delete(optionId);
-  } else {
-    if (!multi) set.clear();
-    else if (set.size >= maxSelect) return; // já no limite do grupo
-    set.add(optionId);
-  }
-  document.querySelectorAll(`#grupo-${groupId} .opcao-linha`).forEach(el => {
-    const id = el.id.replace('opcao-', '');
-    el.classList.toggle('selecionada', set.has(id));
-  });
+function renderOpcoesGrupo(g) {
+  return g.options.map(o => {
+    const qtd = (_adicSelecionados[g.id] || {})[o.id] || 0;
+    const precoLabel = o.price > 0 ? '+ ' + fmt(o.price) : '';
+    if (g.max_select === 1) {
+      return `
+        <div class="opcao-linha ${qtd > 0 ? 'selecionada' : ''}" onclick="selecionarUnico('${g.id}','${o.id}')">
+          <div class="marcador"><div class="ponto"></div></div>
+          <div class="txt">${o.name}</div>
+          ${precoLabel ? `<div class="preco">${precoLabel}</div>` : ''}
+        </div>`;
+    }
+    return `
+      <div class="opcao-linha">
+        <div class="txt">${o.name}${precoLabel ? ' <span class="preco">' + precoLabel + '</span>' : ''}</div>
+        ${qtd > 0
+          ? `<div class="qtd-stepper">
+               <button onclick="decAdicional('${g.id}','${o.id}')" aria-label="Diminuir">−</button>
+               <span>${qtd}</span>
+               <button onclick="incAdicional('${g.id}','${o.id}',${g.max_select})" aria-label="Aumentar">+</button>
+             </div>`
+          : `<button class="qtd-add" onclick="incAdicional('${g.id}','${o.id}',${g.max_select})" aria-label="Adicionar">+</button>`
+        }
+      </div>`;
+  }).join('');
+}
+
+function selecionarUnico(groupId, optionId) {
+  const ja = (_adicSelecionados[groupId] || {})[optionId] > 0;
+  _adicSelecionados[groupId] = ja ? {} : { [optionId]: 1 };
+  atualizarGrupoNaTela(groupId);
+}
+
+function incAdicional(groupId, optionId, maxSelect) {
+  if (grupoQtdSoma(groupId) >= maxSelect) return;
+  const sel = _adicSelecionados[groupId] || (_adicSelecionados[groupId] = {});
+  sel[optionId] = (sel[optionId] || 0) + 1;
+  atualizarGrupoNaTela(groupId);
+}
+
+function decAdicional(groupId, optionId) {
+  const sel = _adicSelecionados[groupId] || {};
+  if (!sel[optionId]) return;
+  sel[optionId] -= 1;
+  if (sel[optionId] <= 0) delete sel[optionId];
+  atualizarGrupoNaTela(groupId);
+}
+
+function atualizarGrupoNaTela(groupId) {
+  const g = (_adicProdutoAtual.addon_groups || []).find(gr => gr.id === groupId);
+  const el = document.getElementById(`grupo-${groupId}`);
+  if (g && el) el.innerHTML = renderOpcoesGrupo(g);
 }
 
 function mudarQtdAdicionalSheet(delta) {
@@ -538,14 +574,15 @@ function confirmarAdicionais() {
   erro.textContent = '';
   const grupos = (_adicProdutoAtual.addon_groups || []).filter(g => (g.options || []).length);
   for (const g of grupos) {
-    const escolhidos = _adicSelecionados[g.id].size;
+    const escolhidos = grupoQtdSoma(g.id);
     const minimo = g.required ? Math.max(1, g.min_select || 1) : (g.min_select || 0);
     if (escolhidos < minimo) { erro.textContent = `Escolha em "${g.name}" antes de continuar`; return; }
   }
   const addons = [];
   grupos.forEach(g => {
     g.options.forEach(o => {
-      if (_adicSelecionados[g.id].has(o.id)) addons.push({ addon_option_id: o.id, name: o.name, price: o.price });
+      const qtd = (_adicSelecionados[g.id] || {})[o.id] || 0;
+      if (qtd > 0) addons.push({ addon_option_id: o.id, name: o.name, price: o.price, quantity: qtd });
     });
   });
   const qtd = parseInt(document.getElementById('adic-qtd').textContent, 10) || 1;
