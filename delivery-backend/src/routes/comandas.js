@@ -216,7 +216,14 @@ router.get('/balcao-vendas', authMiddleware, requireRole('admin', 'atendente'), 
 router.post('/balcao', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
     const code = `balcao_${crypto.randomBytes(6).toString('hex')}`;
-    const label = `Balcão ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    // Número é opcional (o atendente pode pular pra vender rápido) — sem ele,
+    // cai no rótulo de sempre. Com ele, vira o identificador em todo canto que
+    // usa comanda.label: quadro de vendas, ticket de cozinha, cupom de
+    // fechamento — todos leem esse mesmo campo, então um write aqui já basta.
+    const numero = String(req.body.numero || '').trim().slice(0, 20);
+    const label = numero
+      ? `Balcão ${numero}`
+      : `Balcão ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
     const result = await pool.query(
       `INSERT INTO comandas (code, label, opened_by) VALUES ($1,$2,$3) RETURNING *`,
       [code, label, req.user.id]

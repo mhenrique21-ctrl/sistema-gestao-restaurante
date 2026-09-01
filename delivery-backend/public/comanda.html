@@ -2102,18 +2102,55 @@ async function resolveCode(code) {
 // fechar direto, sem passar pela fila de fechamento — pro cliente que compra no balcão.
 async function openBalcaoSale() {
   if (!await exigirCaixaAberto("abrir venda de balcão", openBalcaoSale)) return;
-  setScanError('');
+  abrirModalNumeroBalcao();
+}
+
+// Numero e opcional: quem so quer vender rapido aperta Abrir com o campo
+// vazio e cai no rotulo de sempre (horario). Preenchendo, vira o rotulo e
+// segue pro cupom de fechamento e pros tickets de cozinha/balcao, porque
+// todos usam comanda.label como identificador.
+function abrirModalNumeroBalcao() {
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.id = "balcao-numero-backdrop";
+  backdrop.innerHTML = `
+    <div class="close2-sheet" style="max-width:340px">
+      <div class="ab-head"><h3>Venda de balcão</h3></div>
+      <label style="font-size:.8rem;font-weight:600">Número do pedido <span style="font-weight:400;color:var(--c-muted)">(opcional)</span></label>
+      <input type="text" id="balcao-numero-input" inputmode="numeric" placeholder="Ex.: 12" class="inp" 
+        style="width:100%;text-align:center;font-size:1.3rem;font-weight:700;margin:6px 0 10px" autofocus>
+      <p style="font-size:.78rem;color:var(--c-muted);margin:0 0 12px">Aparece no lugar do horário — facilita chamar o pedido certo.</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('balcao-numero-backdrop').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarAberturaBalcao()">Abrir</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  const input = document.getElementById("balcao-numero-input");
+  input.focus();
+  input.addEventListener("keydown", e => { if (e.key === "Enter") confirmarAberturaBalcao(); });
+}
+
+async function confirmarAberturaBalcao() {
+  const numero = (document.getElementById("balcao-numero-input")?.value || "").trim();
+  document.getElementById("balcao-numero-backdrop")?.remove();
+  setScanError("");
   try {
-    const res = await fetch(`${API}/api/comandas/balcao`, { method: 'POST', headers: authHeaders() });
+    const res = await fetch(`${API}/api/comandas/balcao`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ numero: numero || undefined }),
+    });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     const data = await res.json();
-    if (!res.ok) { setScanError(data.error || 'Erro ao abrir venda de balcão'); return; }
+    if (!res.ok) { setScanError(data.error || "Erro ao abrir venda de balcão"); return; }
     comanda = data;
     cart = [];
     await loadMenuIfNeeded();
     showComandaScreen();
   } catch (e) {
-    setScanError('Erro de conexão');
+    setScanError("Erro de conexão");
   }
 }
 
