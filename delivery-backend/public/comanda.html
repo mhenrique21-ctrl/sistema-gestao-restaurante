@@ -1812,6 +1812,12 @@ function handleNewComandaOrder(comandaData, items) {
   // Se essa comanda já está aberta na tela, atualiza o "já lançado" sem mexer
   // no carrinho local (não enviado) que o atendente esteja montando.
   if (comanda && comanda.id === comandaData.id) refreshOpenComanda();
+  // Pedido do autoatendimento (kiosk) nunca passa por sendOrder deste
+  // tablet -- este eco de WS e o UNICO lugar onde ele pode disparar
+  // impressao local. So pula se foi ESTE tablet que acabou de mandar (ver
+  // IMPRESSOES_LOCAIS_RECENTES), pra nao imprimir duas vezes o que ja saiu.
+  const impressoHaPouco = (IMPRESSOES_LOCAIS_RECENTES.get(comandaData.id) || 0);
+  if (Date.now() - impressoHaPouco > 8000) imprimirPedidoLocal(comandaData, items);
 }
 
 function handleNewDeliveryOrder(order) {
@@ -7737,6 +7743,13 @@ function separarPorEstacao(itens) {
 
 // Uma chamada por estacao, de proposito: impressora apagada numa estacao nao
 // pode impedir a outra de imprimir.
+// Pedido criado no proprio PDV (sendOrder) e ecoado de volta pelo WS na
+// estacao "caixa" (o servidor manda pra todo mundo com esse station, e a
+// conexao deste tablet abre exatamente com station=caixa). Sem isso, todo
+// pedido lancado aqui imprimiria duas vezes: uma na hora, outra quando o
+// eco chegasse por WS alguns instantes depois.
+const IMPRESSOES_LOCAIS_RECENTES = new Map(); // comanda.id -> timestamp
+
 async function imprimirPedidoLocal(comanda, itens) {
   const imp = getImpressora();
   if (!imp) return;
@@ -8349,6 +8362,7 @@ async function sendOrder() {
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao enviar pedido'); return; }
     imprimirPedidoLocal(data, data.items || []);
+    IMPRESSOES_LOCAIS_RECENTES.set(comanda.id, Date.now());
     comanda.total = data.total;
     comanda.subtotal = data.subtotal;
     cart = [];
