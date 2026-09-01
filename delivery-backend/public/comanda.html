@@ -7766,6 +7766,39 @@ async function imprimirPedidoLocal(comanda, itens) {
   }
 }
 
+// Cupom de fechamento (recibo completo, so no Caixa). Diferente do
+// imprimirPedidoLocal de cima: aquele manda pra cozinha/balcao quando o
+// PEDIDO e lancado; este manda so pro caixa quando a CONTA e fechada -- os
+// itens ja imprimiram na cozinha/balcao na hora do pedido, reimprimir ali
+// de novo aqui duplicaria ficha. O caminho antigo (servidor -> impressora)
+// nunca funcionava pra essa parte: o VPS nao alcanca o IP da rede da loja.
+async function imprimirCupomFechamento(comanda, itens, payments) {
+  const cfg = IMPRESSORAS.caixa;
+  if (!cfg || !cfg.ip) return;
+  const imp = getImpressora();
+  if (!imp) return;
+  const linhaPagamento = (payments || [])
+    .map(p => (PAY_LABELS[p.method] || p.method) + ': R$ ' + Number(p.amount || 0).toFixed(2).replace('.', ','))
+    .join(' + ');
+  try {
+    await imp.printCupom({
+      ip: cfg.ip, port: cfg.port || 9100, kitchen: false,
+      saleNumber: comanda?.label || comanda?.code || '',
+      operator: USER_NAME || '',
+      total: parseFloat(comanda?.total || 0),
+      payment: linhaPagamento,
+      items: (itens || []).map(i => ({
+        name: i.product_name || i.name || '',
+        quantity: i.quantity || 1,
+        total: parseFloat(i.unit_price || 0) * (i.quantity || 1),
+      })),
+    });
+  } catch (e) {
+    showToast('Cupom não saiu no caixa: ' + (e?.message || 'sem resposta'));
+  }
+}
+
+
 
 // ── Abertura de caixa (obrigatória ao logar, uma vez por dia) ──
 async function checkAberturaCaixa() {
@@ -8702,6 +8735,7 @@ async function confirmClose() {
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Erro ao fechar comanda'); btn.disabled = false; btn.textContent = '✓ Finalizar Pagamento'; return; }
+    imprimirCupomFechamento(data, data.items || [], data.payments || payments);
     closeCloseModal();
     resetToScan();
   } catch (e) {
