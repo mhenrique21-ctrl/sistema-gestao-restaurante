@@ -7892,6 +7892,37 @@ async function imprimirCupomFechamento(comanda, itens, payments) {
   }
 }
 
+// Pré-conta: mesma impressora do fechamento, mas NÃO fecha a comanda nem
+// registra pagamento -- só imprime o extrato pro cliente conferir antes de
+// decidir como pagar. Usa os valores já calculados no modal (respeitando o
+// toggle da taxa de serviço), não os itens do fechamento em si.
+async function imprimirPreConta() {
+  const cfg = IMPRESSORAS.caixa;
+  if (!cfg || !cfg.ip) { showToast('Configure a impressora do Caixa em Impressoras'); return; }
+  const imp = getImpressora();
+  if (!imp) { showToast('Impressão só funciona no app do tablet'); return; }
+  try {
+    await imp.printCupom({
+      ip: cfg.ip, port: cfg.port || 9100, kitchen: false,
+      saleNumber: comanda?.label || comanda?.code || '',
+      header: CABECALHO_CUPOM,
+      subtitle: 'CONFERÊNCIA — ' + (comanda?.label || comanda?.code || ''),
+      subtotal: closeSubtotalCents / 100,
+      operator: USER_NAME || '',
+      total: closeTotalCents / 100,
+      payment: '',
+      items: (comanda.items || []).map(i => ({
+        name: i.product_name || i.name || '',
+        quantity: i.quantity || 1,
+        total: parseFloat(i.subtotal != null ? i.subtotal : (parseFloat(i.unit_price || 0) * (i.quantity || 1))),
+      })),
+    });
+    showToast('Pré-conta impressa');
+  } catch (e) {
+    showToast('Pré-conta não saiu: ' + (e?.message || 'sem resposta'));
+  }
+}
+
 
 
 // ── Abertura de caixa (obrigatória ao logar, uma vez por dia) ──
@@ -8669,6 +8700,7 @@ function openCloseModal() {
         <div class="close2-footer-col"><div class="label">Restante</div><div class="value pending" id="close2-restante">${centsToFmt(closeTotalCents)}</div></div>
       </div>
       <div class="close2-actions">
+        <button class="close2-cancel" onclick="imprimirPreConta()">🖨️ Pré-conta</button>
         <button class="close2-cancel" onclick="closeCloseModal()">✕ Cancelar</button>
         <button class="close2-confirm" id="confirm-close-btn" onclick="confirmClose()" disabled>✓ Finalizar Pagamento</button>
       </div>
