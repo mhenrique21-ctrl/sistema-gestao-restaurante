@@ -1168,7 +1168,10 @@ function startScanner() {
   // Abre a câmera direto (sem botão extra de "pedir permissão") — o próprio toque
   // que trouxe o usuário até aqui (Enviar pedido / Minha conta / Meus pedidos) já
   // conta como o gesto exigido pelo navegador para liberar a câmera.
-  qrScanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 240 }, onScanSuccess, () => {})
+  // 'user' pede a câmera frontal — o totem fica de frente pro cliente, e é ela
+  // que enxerga o código que o cliente aponta, não a traseira (que aponta pra
+  // longe de quem está usando o tablet).
+  qrScanner.start({ facingMode: 'user' }, { fps: 10, qrbox: 240 }, onScanSuccess, () => {})
     .catch(() => {
       // Sem entrada manual (ver comentário de segurança no topo do <style>),
       // então a única saída daqui é tentar a câmera de novo — não deixar o
