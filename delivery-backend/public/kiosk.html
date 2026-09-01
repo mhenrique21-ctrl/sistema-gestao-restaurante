@@ -7,7 +7,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800;900&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800;900&family=Karla:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!-- Instalável como app no tablet (ícone na tela inicial, abre sem barra de
      endereço). De propósito SEM service worker: um já causou incidente neste
      projeto sequestrando páginas de outras telas (ver git log) -- o manifest
@@ -38,6 +38,9 @@
     --green: #1F8F5F;
     --shadow: 0 2px 10px rgba(60,40,15,.08);
     --shadow-lg: 0 8px 26px rgba(60,40,15,.16);
+    /* Só pra tela de cardápio (rail + pílulas + grade de produto) — o resto
+       do totem (carrinho, modais, conta) continua no dourado de sempre. */
+    --wine: #7A2E4D;
   }
   /* Tema escuro: opcional, ligado pelo dono via Configurações (kiosk_theme).
      Reaproveita o dourado claro que a tela de descanso já usa em fundo preto —
@@ -56,9 +59,9 @@
     --muted: #B8A88C;
     --shadow: 0 2px 10px rgba(0,0,0,.35);
     --shadow-lg: 0 10px 28px rgba(0,0,0,.5);
+    --wine: #D98CAE;
   }
-  [data-theme="escuro"] .btn-primary,
-  [data-theme="escuro"] .add-btn { color: #1B1712; }
+  [data-theme="escuro"] .btn-primary { color: #1B1712; }
   [data-theme="escuro"] .thumb,
   [data-theme="escuro"] .thumb-fallback,
   [data-theme="escuro"] .item-thumb,
@@ -71,7 +74,7 @@
   /* Bitter só nos elementos de identidade/preço — nome de produto, título de
      categoria, marca. O resto (botão, descrição, rótulo) fica em Karla, senão
      a tela vira parede de negrito e nada se destaca de verdade. */
-  h2, h3, .brand, .product-card .name, .price-new, .close-total,
+  h2, h3, .brand, .price-new, .close-total,
   #screensaver-screen .info .price, .condensed-row-price, .condensed-row-name {
     font-family: 'Bitter', Georgia, serif;
   }
@@ -129,29 +132,36 @@
      porque só tem 1-2 alvos ali, não 10. */
   #cat-sidebar { width: 96px; min-width: 96px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px 10px; display: flex; flex-direction: column; gap: 4px; }
   .rail-btn { width: 100%; background: transparent; border: none; color: var(--muted); padding: 16px 4px; border-radius: 14px; font-size: .78rem; font-weight: 700; text-align: center; display: flex; align-items: center; justify-content: center; line-height: 1.25; }
-  .rail-btn.active { background: var(--gold); color: #fff; box-shadow: var(--shadow); }
+  .rail-btn.active { background: var(--text); color: var(--bg); box-shadow: var(--shadow); }
   /* Pílulas de categoria: só aparecem dentro do Cardápio (não em Destaques),
      igual à referência — Destaques é pra navegação rápida, a lista completa
      de categorias só interessa quem já decidiu "quero ver o cardápio". */
   #cat-pills { display: flex; gap: 10px; padding: 4px 22px 16px; overflow-x: auto; }
   .cat-pill { flex-shrink: 0; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 10px 18px; border-radius: 999px; font-size: .88rem; font-weight: 700; white-space: nowrap; }
-  .cat-pill.active { background: var(--gold); border-color: var(--gold); color: #fff; }
+  .cat-pill.active { background: var(--text); border-color: var(--text); color: var(--bg); }
   #menu-col { flex: 1; overflow-y: auto; background: var(--bg); }
+
+  /* Rail + pílulas + grade de produto ficam em Figtree — o resto do totem
+     (cabeçalho, carrinho, modais) continua em Karla. Só o título de categoria
+     e o preço do card usam a serifada itálica, como marca de destaque. */
+  #cat-sidebar, #cat-pills, #product-grid, #cat-banner {
+    font-family: 'Figtree', system-ui, sans-serif;
+  }
 
   /* Faixa do topo: com foto vira banner; sem foto vira só um título limpo,
      em vez do retângulo cinza vazio que aparecia antes. */
   #cat-banner { min-height: 78px; background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 14px 22px; background-color: var(--surface); border-bottom: 1px solid var(--border); }
   #cat-banner.com-foto { height: 150px; border-bottom: none; }
-  #cat-banner h2 { font-size: 1.5rem; font-weight: 800; }
+  #cat-banner h2 { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; font-size: 2rem; }
   #cat-banner.com-foto h2 { color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
 
-  /* Lista de cards deitados (1 por linha): foto grande do lado, nome+preço no
-     topo, botão de ação no rodapé — o cliente não precisa descobrir que o
-     card inteiro é clicável. */
-  #product-grid { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px 120px; }
-  .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; text-align: left; color: var(--text); display: flex; flex-direction: row; align-items: stretch; gap: 16px; padding: 14px; box-shadow: var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
-  .product-card:active { transform: scale(.99); box-shadow: var(--shadow-lg); }
-  .thumb-wrap { position: relative; width: 160px; min-width: 160px; border-radius: 14px; overflow: hidden; }
+  /* Grade de cards verticais: foto quadrada em cima, nome, preço + botão
+     redondo embaixo — troca a lista deitada de antes por vitrine, igual à
+     direção escolhida (grade modular, serifada itálica no preço). */
+  #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; padding: 18px 22px 120px; }
+  .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 24px; overflow: hidden; text-align: left; color: var(--text); display: flex; flex-direction: column; box-shadow: var(--shadow); transition: transform .12s ease, box-shadow .12s ease; }
+  .product-card:active { transform: scale(.98); box-shadow: var(--shadow-lg); }
+  .thumb-wrap { position: relative; width: 100%; aspect-ratio: 1; }
   /* As fotos do cardápio são quadradas (400x400, 1254x1254, 200x200); contain
      garante que entram inteiras no quadrado do card, sem cortar topo/base. */
   .product-card .thumb { width: 100%; height: 100%; object-fit: contain; display: block;
@@ -165,16 +175,18 @@
     letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; margin-bottom: 5px; }
   .esgotado-badge { position: absolute; inset: 0; background: rgba(255,255,255,.72); display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: .9rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .product-card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .body-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-  .product-card .name { font-size: 1.02rem; font-weight: 800; margin-bottom: 4px; line-height: 1.25; }
+  .product-card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 16px; }
+  .product-card .name { font-size: 1.02rem; font-weight: 700; margin-bottom: 4px; line-height: 1.25; }
   .product-card .desc { font-size: .78rem; color: var(--muted); margin: 6px 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; line-height: 1.4; }
-  .price-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; text-align: right; white-space: nowrap; }
   .price-box { display: flex; flex-direction: column; line-height: 1.2; }
   .price-old { font-size: .74rem; color: var(--muted); text-decoration: line-through; }
   .price-new { font-size: 1.15rem; color: var(--gold); font-weight: 900; }
-  .card-footer { display: flex; justify-content: flex-end; margin-top: auto; }
-  .add-btn { border: none; border-radius: 10px; padding: 10px 20px; font-size: .85rem; font-weight: 700; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%); color: #fff; box-shadow: var(--shadow); }
+  /* Preço do card (não o do modal, que continua dourado/Bitter): itálica +
+     vinho, o único acento de cor na grade. */
+  .product-card .price-new { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; color: var(--wine); font-size: 1.35rem; }
+  .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+  .card-add { width: 40px; height: 40px; min-width: 40px; border-radius: 50%; border: none; background: var(--text);
+    color: var(--bg); font-size: 1.4rem; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; }
   .add-pill { width: 40px; height: 40px; min-width: 40px; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%);
     color: #fff; font-size: 1.4rem; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); }
   .card-tag { font-size: .7rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
@@ -805,16 +817,14 @@ function renderProductGrid() {
         ${p.promo_price != null ? `<span class="off-badge">${Math.round((1 - p.promo_price / p.price) * 100)}%<br>OFF</span>` : ''}
       </div>
       <div class="body">
-        <div class="body-top">
-          <div>
-            ${maisPedidos.includes(p.id) ? '<div class="top-badge">⭐ Mais pedido</div>' : ''}
-            ${mostraCategoria && p.categoryName && p.categoryName !== 'Ofertas' ? `<div class="card-tag">${p.categoryName}</div>` : ''}
-            <div class="name">${p.name}</div>
-          </div>
-          <div class="price-row"><span class="price-box">${preco}</span></div>
-        </div>
+        ${maisPedidos.includes(p.id) ? '<div class="top-badge">⭐ Mais pedido</div>' : ''}
+        ${mostraCategoria && p.categoryName && p.categoryName !== 'Ofertas' ? `<div class="card-tag">${p.categoryName}</div>` : ''}
+        <div class="name">${p.name}</div>
         ${p.description ? `<div class="desc">${p.description}</div>` : '<div style="flex:1"></div>'}
-        <div class="card-footer"><span class="add-btn">Adicionar</span></div>
+        <div class="card-footer">
+          <span class="price-box">${preco}</span>
+          <span class="card-add">+</span>
+        </div>
       </div>
     </button>`;
   }).join('');
