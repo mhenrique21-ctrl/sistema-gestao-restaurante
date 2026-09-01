@@ -8943,6 +8943,32 @@ document.addEventListener('keydown', (e) => {
   else modal.remove();
 });
 
+// ── Auto-atualização do tablet ───────────────────────
+// O app carrega esta página UMA VEZ (é o WebView do Capacitor, não um site
+// normal) -- todo deploy fica "invisível" pro tablet até alguém fechar e
+// reabrir o app manualmente. Isso já causou mais de um "corrigi mas não
+// funcionou" que na verdade era o tablet rodando JS antigo em memória. Aqui
+// a própria tela verifica de tempos em tempos se o servidor tem uma versão
+// mais nova e recarrega sozinha, sem depender de ninguém lembrar disso.
+let VERSAO_PAGINA_ATUAL = null;
+async function verificarAtualizacaoPagina() {
+  try {
+    const res = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+    const versao = res.headers.get('last-modified') || res.headers.get('etag');
+    if (!versao) return;
+    if (VERSAO_PAGINA_ATUAL === null) { VERSAO_PAGINA_ATUAL = versao; return; }
+    if (versao !== VERSAO_PAGINA_ATUAL) {
+      // Só recarrega com a tela ociosa -- nunca no meio de um pedido sendo
+      // montado ou com um modal aberto, pra não derrubar o atendente do nada.
+      if (!cart.length && !document.querySelector('.modal-backdrop:not(.hidden)')) {
+        location.reload();
+      }
+    }
+  } catch (e) { /* offline: tenta de novo no próximo ciclo */ }
+}
+verificarAtualizacaoPagina();
+setInterval(verificarAtualizacaoPagina, 120000);
+
 // ── Atalhos F1-F4 pras abas principais ───────────────
 // F1 Fazer Pedido · F2 Delivery · F3 Comandas · F4 Caixa — só quando os botões
 // já estão visíveis (logado, caixa aberto) e sem modal por cima atrapalhando.
