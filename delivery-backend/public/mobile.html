@@ -33,9 +33,9 @@
   .hidden { display: none !important; }
   .screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
-  /* ── Login / número da comanda: telas centralizadas, cartão único ── */
+  /* ── Login / número da comanda / mesa: telas centralizadas, cartão único ── */
   .center-screen { align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
-  .card-auth { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 28px 24px; }
+  .card-auth { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 28px 24px; }
   .card-auth h1 { font-size: 22px; color: var(--gold); text-align: center; margin-bottom: 4px; }
   .card-auth .sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 22px; }
   .field { margin-bottom: 14px; }
@@ -50,6 +50,14 @@
   .troca-nome { text-align: center; margin-top: 16px; font-size: 12.5px; color: var(--muted); }
   .troca-nome button { color: var(--gold); font-weight: 600; text-decoration: underline; }
 
+  /* ── Seletor de mesa ── */
+  .mesa-area-titulo { font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 16px 0 8px; }
+  .mesa-area-titulo:first-of-type { margin-top: 4px; }
+  .mesa-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 8px; }
+  .mesa-btn { padding: 12px 4px; border-radius: 10px; background: var(--card); border: 1.5px solid var(--border); color: var(--cream); font-size: 15px; font-weight: 700; }
+  .mesa-btn:active { background: var(--gold-dim); }
+  .mesa-vazio { text-align: center; color: var(--muted); font-size: 13px; padding: 20px 0; }
+
   /* ── Tela de pedido ── */
   .ped-header { background: var(--bg); padding: 12px 14px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--border); }
   .ped-header .badge-num { width: 34px; height: 34px; border-radius: 9px; background: var(--gold); color: #241a0c; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -63,12 +71,14 @@
   .cat-pill { flex-shrink: 0; padding: 7px 14px; border-radius: 20px; font-size: 12.5px; font-weight: 600; background: var(--c-surface); color: var(--c-muted); border: 1px solid var(--c-border); white-space: nowrap; }
   .cat-pill.active { background: var(--gold); color: #241a0c; border-color: var(--gold); }
 
-  .prod-lista { flex: 1; padding: 4px 14px 100px; }
+  .prod-lista { flex: 1; padding: 4px 14px 12px; }
   .prod-row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--c-border); }
   .prod-row .nome { flex: 1; min-width: 0; }
   .prod-row .nome p.n { font-size: 14px; font-weight: 600; line-height: 1.3; }
   .prod-row .nome p.p { font-size: 12.5px; color: var(--c-muted); margin-top: 2px; }
+  .prod-row .nome .tem-adicional { font-size: 10.5px; color: var(--gold-dim); font-weight: 700; margin-top: 2px; }
   .qtd-add { width: 34px; height: 34px; border-radius: 10px; background: var(--c-surface); border: 1.5px solid var(--gold-dim); color: var(--gold-dim); font-size: 19px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .qtd-add.com-texto { width: auto; padding: 0 14px; font-size: 12.5px; }
   .qtd-stepper { display: flex; align-items: center; gap: 2px; background: var(--c-surface); border: 1.5px solid var(--gold-dim); border-radius: 10px; padding: 2px; flex-shrink: 0; }
   .qtd-stepper button { width: 28px; height: 28px; font-size: 15px; font-weight: 700; color: var(--gold-dim); border-radius: 7px; }
   .qtd-stepper button:active { background: var(--c-bg); }
@@ -76,11 +86,49 @@
 
   .vazio { text-align: center; padding: 60px 20px; color: var(--c-muted); font-size: 13.5px; }
 
-  .barra-envio { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--border); padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); z-index: 6; }
+  /* ── Seu pedido (linhas com adicional, que não cabem no stepper simples) ── */
+  .pedido-atual { background: var(--c-surface); border-top: 1px solid var(--c-border); padding: 10px 14px; }
+  .pedido-atual-titulo { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-muted); margin-bottom: 6px; }
+  .linha-carrinho { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; }
+  .linha-carrinho .qtd { font-size: 13px; font-weight: 700; color: var(--gold-dim); min-width: 22px; }
+  .linha-carrinho .desc { flex: 1; min-width: 0; }
+  .linha-carrinho .desc .n { font-size: 13px; font-weight: 600; }
+  .linha-carrinho .desc .a { font-size: 11.5px; color: var(--c-muted); margin-top: 1px; }
+  .linha-carrinho .remover { font-size: 11px; color: var(--danger); font-weight: 700; padding: 4px 8px; }
+
+  .barra-envio { background: var(--bg); border-top: 1px solid var(--border); padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); position: sticky; bottom: 0; z-index: 6; }
   .barra-envio button { width: 100%; padding: 15px; border-radius: 12px; background: var(--gold); color: #241a0c; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
   .barra-envio button:disabled { opacity: 0.45; }
 
-  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: var(--card); color: var(--cream); border: 1px solid var(--gold-dim); padding: 12px 18px; border-radius: 12px; font-size: 13.5px; z-index: 20; max-width: 90vw; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  /* ── Folha de adicionais ── */
+  .sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 30; display: flex; align-items: flex-end; }
+  .sheet { width: 100%; max-height: 86vh; background: var(--c-surface); border-radius: 20px 20px 0 0; display: flex; flex-direction: column; overflow: hidden; }
+  .sheet-head { padding: 16px 18px 12px; border-bottom: 1px solid var(--c-border); }
+  .sheet-head .n { font-size: 16px; font-weight: 700; }
+  .sheet-head .p { font-size: 13px; color: var(--c-muted); margin-top: 2px; }
+  .sheet-body { flex: 1; overflow-y: auto; padding: 6px 18px; }
+  .grupo-adicional { padding: 14px 0; border-bottom: 1px solid var(--c-border); }
+  .grupo-adicional:last-child { border-bottom: none; }
+  .grupo-adicional .titulo { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .grupo-adicional .titulo .obrig { font-size: 10px; font-weight: 700; color: var(--danger); background: #fde8e8; padding: 2px 7px; border-radius: 10px; }
+  .grupo-adicional .regra { font-size: 11.5px; color: var(--c-muted); margin: 2px 0 10px; }
+  .opcao-linha { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
+  .opcao-linha .marcador { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--c-border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .opcao-linha.check .marcador { border-radius: 5px; }
+  .opcao-linha.selecionada .marcador { border-color: var(--gold-dim); background: var(--gold-dim); }
+  .opcao-linha .marcador .ponto { width: 8px; height: 8px; border-radius: 50%; background: #fff; display: none; }
+  .opcao-linha.check .marcador .ponto { border-radius: 2px; }
+  .opcao-linha.selecionada .marcador .ponto { display: block; }
+  .opcao-linha .txt { flex: 1; font-size: 13.5px; }
+  .opcao-linha .preco { font-size: 12.5px; color: var(--c-muted); }
+  .qtd-linha { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+  .qtd-linha .qtd-stepper { border-color: var(--c-border); }
+  .sheet-foot { padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--c-border); }
+  .sheet-foot .erro { font-size: 12px; color: var(--danger); margin-bottom: 8px; text-align: center; }
+  .sheet-foot button { width: 100%; padding: 14px; border-radius: 12px; background: var(--gold); color: #241a0c; font-weight: 700; font-size: 14.5px; }
+  .sheet-foot .cancelar { background: none; color: var(--c-muted); font-weight: 600; margin-top: 4px; padding: 8px; font-size: 13px; }
+
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: var(--card); color: var(--cream); border: 1px solid var(--gold-dim); padding: 12px 18px; border-radius: 12px; font-size: 13.5px; z-index: 40; max-width: 90vw; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
 
   .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(36,26,12,0.3); border-top-color: #241a0c; border-radius: 50%; animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -118,6 +166,15 @@
   </div>
 </div>
 
+<div id="mesa-screen" class="screen center-screen hidden">
+  <div class="card-auth" style="max-width:420px">
+    <h1 class="brand" style="font-size:18px">Qual mesa?</h1>
+    <p class="sub" id="mesa-sub">Toda comanda precisa estar vinculada a uma mesa antes de lançar pedidos.</p>
+    <div id="mesa-lista"><p class="mesa-vazio">Carregando…</p></div>
+    <p class="erro-msg" id="mesa-erro"></p>
+  </div>
+</div>
+
 <div id="pedido-screen" class="screen hidden" style="background:var(--c-bg)">
   <div class="ped-header">
     <div class="badge-num" id="ped-badge">00</div>
@@ -129,11 +186,16 @@
   </div>
   <div class="cat-tabs" id="cat-tabs"></div>
   <div class="prod-lista" id="prod-lista"><div class="vazio">Carregando cardápio…</div></div>
+  <div class="pedido-atual hidden" id="pedido-atual">
+    <p class="pedido-atual-titulo">Seu pedido</p>
+    <div id="linhas-carrinho"></div>
+  </div>
   <div class="barra-envio">
     <button id="btn-enviar" onclick="enviarPedido()" disabled>Enviar pedido</button>
   </div>
 </div>
 
+<div id="sheet-container"></div>
 <div id="toast-container"></div>
 
 <script>
@@ -146,7 +208,8 @@ let USER_NAME = localStorage.getItem(NAME_KEY) || null;
 let menu = [];
 let activeCategory = null;
 let comanda = null;
-let cart = {}; // product_id -> { produto, qtd }
+let cartLines = []; // { key, produto, qtd, addons: [{addon_option_id,name,price}] }
+let proximaChave = 1;
 
 function authHeaders(extra) {
   return Object.assign({ Authorization: 'Bearer ' + TOKEN }, extra || {});
@@ -161,7 +224,7 @@ function showToast(msg) {
 }
 
 function mostrarTela(id) {
-  ['login-screen', 'numero-screen', 'pedido-screen'].forEach(s =>
+  ['login-screen', 'numero-screen', 'mesa-screen', 'pedido-screen'].forEach(s =>
     document.getElementById(s).classList.toggle('hidden', s !== id));
 }
 
@@ -184,8 +247,6 @@ async function doLogin() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
     if (!['admin', 'atendente'].includes(data.user?.role)) throw new Error('Este login não tem acesso a pedidos');
-    // Senha provisória exige troca — feita pelo PDV completo, não aqui: essa
-    // tela é só pra lançar pedido rápido, não pra reduzir a conta a segurança.
     if (data.user.must_change_password) throw new Error('Senha provisória — troque no PDV completo antes de usar aqui');
     TOKEN = data.token;
     USER_NAME = data.user.name || nome;
@@ -233,14 +294,66 @@ async function buscarComanda() {
     const data = await res.json();
     if (!res.ok) { erro.textContent = data.error || 'Comanda não encontrada'; return; }
     comanda = data;
-    cart = {};
+    cartLines = [];
     await carregarCardapio();
-    mostrarPedidoScreen();
+    // Mesmo requisito que o PDV completo já aplica no servidor (POST
+    // /:id/orders recusa sem mesa) — checa aqui pra guiar o garçom antes de
+    // ele montar o pedido inteiro e só descobrir o problema ao enviar.
+    if (precisaDeMesa()) abrirSeletorMesa();
+    else mostrarPedidoScreen();
   } catch (e) {
     erro.textContent = 'Erro de conexão';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Abrir comanda';
+  }
+}
+
+function precisaDeMesa() {
+  return comanda && !comanda.mesa_id && !(comanda.code || '').startsWith('balcao_');
+}
+
+// ── Seletor de mesa ──────────────────────────────────────
+async function abrirSeletorMesa() {
+  mostrarTela('mesa-screen');
+  document.getElementById('mesa-erro').textContent = '';
+  const lista = document.getElementById('mesa-lista');
+  lista.innerHTML = '<p class="mesa-vazio">Carregando…</p>';
+  try {
+    const res = await fetch(`${API}/api/mesas`, { headers: authHeaders() });
+    if (res.status === 401) { sair(); return; }
+    const mesas = await res.json();
+    if (!res.ok || !mesas.length) { lista.innerHTML = '<p class="mesa-vazio">Nenhuma mesa cadastrada</p>'; return; }
+    const grupos = {
+      interna: mesas.filter(m => m.area === 'interna').sort((a, b) => a.numero - b.numero),
+      externa: mesas.filter(m => m.area === 'externa').sort((a, b) => a.numero - b.numero),
+    };
+    lista.innerHTML = Object.entries(grupos).map(([area, ms]) => !ms.length ? '' : `
+      <p class="mesa-area-titulo">${area === 'interna' ? 'Interna' : 'Externa'}</p>
+      <div class="mesa-grade">
+        ${ms.map(m => `<button class="mesa-btn" onclick="selecionarMesa('${m.id}')">${m.numero}</button>`).join('')}
+      </div>
+    `).join('');
+  } catch (e) {
+    lista.innerHTML = '<p class="mesa-vazio">Erro de conexão</p>';
+  }
+}
+
+async function selecionarMesa(mesaId) {
+  const erro = document.getElementById('mesa-erro');
+  erro.textContent = '';
+  try {
+    const res = await fetch(`${API}/api/comandas/${comanda.id}/mesa`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ mesa_id: mesaId }),
+    });
+    const data = await res.json();
+    if (!res.ok) { erro.textContent = data.error || 'Erro ao vincular mesa'; return; }
+    comanda = data;
+    mostrarPedidoScreen();
+  } catch (e) {
+    erro.textContent = 'Erro de conexão';
   }
 }
 
@@ -262,12 +375,12 @@ function mostrarPedidoScreen() {
   mostrarTela('pedido-screen');
   renderCatTabs();
   renderProdutos();
-  renderBarraEnvio();
+  renderPedidoAtual();
 }
 
 function voltarParaNumero() {
   comanda = null;
-  cart = {};
+  cartLines = [];
   irParaNumero();
 }
 
@@ -288,6 +401,10 @@ function fmt(v) {
   return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
 }
 
+function temAdicionais(p) {
+  return (p.addon_groups || []).some(g => (g.options || []).length);
+}
+
 function renderProdutos() {
   const el = document.getElementById('prod-lista');
   const cat = menu.find(c => c.id === activeCategory);
@@ -295,50 +412,186 @@ function renderProdutos() {
   if (!produtos.length) { el.innerHTML = '<div class="vazio">Nenhum produto disponível nesta categoria.</div>'; return; }
   el.innerHTML = produtos.map(p => {
     const preco = p.promo_price != null ? p.promo_price : p.price;
-    const item = cart[p.id];
-    const qtd = item?.qtd || 0;
+    const comAdicional = temAdicionais(p);
+    // Item simples: uma linha só, incrementa com +/-. Com adicional: cada
+    // toque abre a folha de escolha e vira uma linha própria (combos podem
+    // ser diferentes a cada vez, então não dá pra só somar a quantidade).
+    const linhaSimples = !comAdicional ? cartLines.find(l => l.produto.id === p.id && !l.addons.length) : null;
+    const qtd = linhaSimples?.qtd || 0;
     return `
       <div class="prod-row">
         <div class="nome">
           <p class="n">${p.name}</p>
           <p class="p">${fmt(preco)}</p>
+          ${comAdicional ? '<p class="tem-adicional">Tem opções</p>' : ''}
         </div>
-        ${qtd > 0
-          ? `<div class="qtd-stepper">
-               <button onclick="mudarQtd('${p.id}', -1)" aria-label="Diminuir">−</button>
-               <span>${qtd}</span>
-               <button onclick="mudarQtd('${p.id}', 1)" aria-label="Aumentar">+</button>
-             </div>`
-          : `<button class="qtd-add" onclick="mudarQtd('${p.id}', 1)" aria-label="Adicionar">+</button>`
+        ${comAdicional
+          ? `<button class="qtd-add com-texto" onclick="abrirAdicionais('${p.id}')">Adicionar</button>`
+          : (qtd > 0
+              ? `<div class="qtd-stepper">
+                   <button onclick="mudarQtdSimples('${p.id}', -1)" aria-label="Diminuir">−</button>
+                   <span>${qtd}</span>
+                   <button onclick="mudarQtdSimples('${p.id}', 1)" aria-label="Aumentar">+</button>
+                 </div>`
+              : `<button class="qtd-add" onclick="mudarQtdSimples('${p.id}', 1)" aria-label="Adicionar">+</button>`)
         }
       </div>`;
   }).join('');
 }
 
-function mudarQtd(produtoId, delta) {
+function mudarQtdSimples(produtoId, delta) {
   const cat = menu.find(c => c.id === activeCategory);
   const produto = (cat?.products || []).find(p => p.id === produtoId);
   if (!produto) return;
-  const atual = cart[produtoId]?.qtd || 0;
-  const nova = Math.max(0, atual + delta);
-  if (nova === 0) delete cart[produtoId];
-  else cart[produtoId] = { produto, qtd: nova };
+  let linha = cartLines.find(l => l.produto.id === produtoId && !l.addons.length);
+  if (!linha && delta > 0) {
+    linha = { key: proximaChave++, produto, qtd: 0, addons: [] };
+    cartLines.push(linha);
+  }
+  if (!linha) return;
+  linha.qtd = Math.max(0, linha.qtd + delta);
+  if (linha.qtd === 0) cartLines = cartLines.filter(l => l !== linha);
   renderProdutos();
-  renderBarraEnvio();
+  renderPedidoAtual();
 }
 
-function renderBarraEnvio() {
-  const itens = Object.values(cart);
-  const totalQtd = itens.reduce((s, i) => s + i.qtd, 0);
+// ── Folha de adicionais ──────────────────────────────────
+let _adicSelecionados = {}; // group_id -> Set(option_id)
+let _adicProdutoAtual = null;
+
+function abrirAdicionais(produtoId) {
+  const cat = menu.find(c => c.id === activeCategory);
+  const produto = (cat?.products || []).find(p => p.id === produtoId);
+  if (!produto) return;
+  _adicProdutoAtual = produto;
+  _adicSelecionados = {};
+  (produto.addon_groups || []).forEach(g => { _adicSelecionados[g.id] = new Set(); });
+
+  const grupos = (produto.addon_groups || []).filter(g => (g.options || []).length);
+  const container = document.getElementById('sheet-container');
+  container.innerHTML = `
+    <div class="sheet-backdrop" id="adic-backdrop">
+      <div class="sheet">
+        <div class="sheet-head">
+          <p class="n">${produto.name}</p>
+          <p class="p">${fmt(produto.promo_price != null ? produto.promo_price : produto.price)}</p>
+        </div>
+        <div class="sheet-body">
+          ${grupos.map(g => `
+            <div class="grupo-adicional">
+              <p class="titulo">${g.name} ${g.required ? '<span class="obrig">Obrigatório</span>' : ''}</p>
+              <p class="regra">${g.max_select > 1 ? `Escolha até ${g.max_select}` : 'Escolha 1'}</p>
+              <div id="grupo-${g.id}">
+                ${g.options.map(o => `
+                  <div class="opcao-linha ${g.max_select > 1 ? 'check' : ''}" id="opcao-${o.id}" onclick="toggleAdicional('${g.id}','${o.id}',${g.max_select})">
+                    <div class="marcador"><div class="ponto"></div></div>
+                    <div class="txt">${o.name}</div>
+                    ${o.price > 0 ? `<div class="preco">+ ${fmt(o.price)}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+          <div class="qtd-linha">
+            <p class="titulo" style="flex:1">Quantidade</p>
+            <div class="qtd-stepper">
+              <button onclick="mudarQtdAdicionalSheet(-1)" aria-label="Diminuir">−</button>
+              <span id="adic-qtd">1</span>
+              <button onclick="mudarQtdAdicionalSheet(1)" aria-label="Aumentar">+</button>
+            </div>
+          </div>
+        </div>
+        <div class="sheet-foot">
+          <p class="erro" id="adic-erro"></p>
+          <button onclick="confirmarAdicionais()">Adicionar ao pedido</button>
+          <button class="cancelar" onclick="fecharAdicionais()">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('adic-backdrop').addEventListener('click', e => { if (e.target.id === 'adic-backdrop') fecharAdicionais(); });
+}
+
+function toggleAdicional(groupId, optionId, maxSelect) {
+  const set = _adicSelecionados[groupId];
+  const multi = maxSelect > 1;
+  if (set.has(optionId)) {
+    set.delete(optionId);
+  } else {
+    if (!multi) set.clear();
+    else if (set.size >= maxSelect) return; // já no limite do grupo
+    set.add(optionId);
+  }
+  document.querySelectorAll(`#grupo-${groupId} .opcao-linha`).forEach(el => {
+    const id = el.id.replace('opcao-', '');
+    el.classList.toggle('selecionada', set.has(id));
+  });
+}
+
+function mudarQtdAdicionalSheet(delta) {
+  const el = document.getElementById('adic-qtd');
+  const nova = Math.max(1, parseInt(el.textContent, 10) + delta);
+  el.textContent = nova;
+}
+
+function confirmarAdicionais() {
+  const erro = document.getElementById('adic-erro');
+  erro.textContent = '';
+  const grupos = (_adicProdutoAtual.addon_groups || []).filter(g => (g.options || []).length);
+  for (const g of grupos) {
+    const escolhidos = _adicSelecionados[g.id].size;
+    const minimo = g.required ? Math.max(1, g.min_select || 1) : (g.min_select || 0);
+    if (escolhidos < minimo) { erro.textContent = `Escolha em "${g.name}" antes de continuar`; return; }
+  }
+  const addons = [];
+  grupos.forEach(g => {
+    g.options.forEach(o => {
+      if (_adicSelecionados[g.id].has(o.id)) addons.push({ addon_option_id: o.id, name: o.name, price: o.price });
+    });
+  });
+  const qtd = parseInt(document.getElementById('adic-qtd').textContent, 10) || 1;
+  cartLines.push({ key: proximaChave++, produto: _adicProdutoAtual, qtd, addons });
+  fecharAdicionais();
+  renderProdutos();
+  renderPedidoAtual();
+  showToast(`${_adicProdutoAtual.name} adicionado`);
+}
+
+function fecharAdicionais() {
+  document.getElementById('sheet-container').innerHTML = '';
+  _adicProdutoAtual = null;
+}
+
+// ── Resumo do pedido em montagem ─────────────────────────
+function renderPedidoAtual() {
+  const wrap = document.getElementById('pedido-atual');
+  const linhasComAdicional = cartLines.filter(l => l.addons.length);
+  wrap.classList.toggle('hidden', !linhasComAdicional.length);
+  document.getElementById('linhas-carrinho').innerHTML = linhasComAdicional.map(l => `
+    <div class="linha-carrinho">
+      <span class="qtd">${l.qtd}x</span>
+      <div class="desc">
+        <p class="n">${l.produto.name}</p>
+        <p class="a">${l.addons.map(a => a.name).join(', ')}</p>
+      </div>
+      <button class="remover" onclick="removerLinha(${l.key})">remover</button>
+    </div>
+  `).join('');
+
+  const totalItens = cartLines.reduce((s, l) => s + l.qtd, 0);
   const btn = document.getElementById('btn-enviar');
-  btn.disabled = totalQtd === 0;
-  btn.textContent = totalQtd > 0 ? `Enviar pedido · ${totalQtd} ${totalQtd === 1 ? 'item' : 'itens'}` : 'Enviar pedido';
+  btn.disabled = totalItens === 0;
+  btn.textContent = totalItens > 0 ? `Enviar pedido · ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}` : 'Enviar pedido';
+}
+
+function removerLinha(key) {
+  cartLines = cartLines.filter(l => l.key !== key);
+  renderProdutos();
+  renderPedidoAtual();
 }
 
 // ── Enviar pedido ────────────────────────────────────────
 async function enviarPedido() {
-  const itens = Object.values(cart);
-  if (!itens.length || !comanda) return;
+  if (!cartLines.length || !comanda) return;
   const btn = document.getElementById('btn-enviar');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
@@ -347,19 +600,23 @@ async function enviarPedido() {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
-        items: itens.map(i => ({ product_id: i.produto.id, quantity: i.qtd })),
+        items: cartLines.map(l => ({
+          product_id: l.produto.id,
+          quantity: l.qtd,
+          addons: l.addons.map(a => ({ addon_option_id: a.addon_option_id })),
+        })),
       }),
     });
     const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Erro ao enviar pedido'); renderBarraEnvio(); return; }
+    if (!res.ok) { showToast(data.error || 'Erro ao enviar pedido'); renderPedidoAtual(); return; }
     showToast(`Pedido enviado — ${comanda.label || comanda.code}`);
-    cart = {};
+    cartLines = [];
     // Pronto pra próxima mesa: some direto pro número, sem passar de novo
     // pelo cardápio (já está carregado em memória).
     voltarParaNumero();
   } catch (e) {
     showToast('Erro de conexão — tente de novo');
-    renderBarraEnvio();
+    renderPedidoAtual();
   }
 }
 
