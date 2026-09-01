@@ -61,8 +61,14 @@ public class PrinterPlugin extends Plugin {
     public void printCupom(PluginCall call) {
         String ip = call.getString("ip", "");
         int port = call.getInt("port", 9100);
-        String saleNumber = String.valueOf(call.getInt("saleNumber", 0));
+        String saleNumber = call.getString("saleNumber", "");
         String operator = call.getString("operator", "");
+        // Nome no topo do cupom e a linha abaixo dele (era fixo "SEAMA" e
+        // "SENHA "+numero, herdados do plugin da Seama -- agora o JS decide os
+        // dois, com valor de reserva pra nao imprimir em branco se faltar.
+        String header = call.getString("header", "CONFRARIA CAFE");
+        String subtitle = call.getString("subtitle", saleNumber);
+        Double subtotal = call.getDouble("subtotal");
         String payment = call.getString("payment", "");
         Double totalObj = call.getDouble("total");
         double total = totalObj == null ? 0 : totalObj;
@@ -104,7 +110,7 @@ public class PrinterPlugin extends Plugin {
                 OutputStream out = socket.getOutputStream();
                 out.write(kitchen
                         ? buildCupomCozinha(items, saleNumber, operator)
-                        : buildCupomBalcao(items, saleNumber, operator, total, payment));
+                        : buildCupomBalcao(items, saleNumber, operator, total, payment, header, subtitle, subtotal));
                 out.flush();
                 JSObject ret = new JSObject();
                 ret.put("printed", 1);
@@ -143,9 +149,10 @@ public class PrinterPlugin extends Plugin {
 
     // ── Cupom do balcão (comprovante do cliente) ────────
     private byte[] buildCupomBalcao(List<Item> items, String saleNumber, String operator,
-                                    double total, String payment) throws Exception {
+                                    double total, String payment, String header,
+                                    String subtitle, Double subtotal) throws Exception {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
-        header(b, "SEAMA", saleNumber);
+        header(b, header, subtitle);
 
         b.write(ALIGN_LEFT);
         b.write(line(dateNow() + " " + timeNow()));
@@ -158,6 +165,10 @@ public class PrinterPlugin extends Plugin {
             b.write(line(cols(String.valueOf(it.quantity), it.name, money(it.total))));
         }
 
+        if (subtotal != null && subtotal < total - 0.001) {
+            b.write(line(pad("Subtotal", "R$ " + money(subtotal), COLS)));
+            b.write(line(pad("Taxa de servico", "R$ " + money(total - subtotal), COLS)));
+        }
         b.write(line(rule('-')));
         b.write(BOLD_ON);
         b.write(textSize(1, 2));
@@ -176,7 +187,11 @@ public class PrinterPlugin extends Plugin {
     // ── Via da cozinha (produção) ───────────────────────
     private byte[] buildCupomCozinha(List<Item> items, String saleNumber, String operator) throws Exception {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
-        header(b, "COZINHA", saleNumber);
+        // "SENHA "+numero preservado aqui de propósito: era o comportamento
+        // desta via antes da mudança, e continua fazendo sentido — a cozinha
+        // casa o pedido pela senha. Só o cupom do cliente parou de usar essa
+        // palavra (ver buildCupomBalcao).
+        header(b, "COZINHA", "SENHA " + saleNumber);
 
         b.write(ALIGN_LEFT);
         b.write(line(pad(timeNow(), operator == null ? "" : operator, COLS)));
@@ -198,7 +213,7 @@ public class PrinterPlugin extends Plugin {
         return b.toByteArray();
     }
 
-    private void header(ByteArrayOutputStream b, String title, String saleNumber) throws Exception {
+    private void header(ByteArrayOutputStream b, String title, String subtitle) throws Exception {
         b.write(INIT);
         b.write(CODEPAGE_850);
         b.write(ALIGN_CENTER);
@@ -208,11 +223,12 @@ public class PrinterPlugin extends Plugin {
         b.write(textSize(1, 1));
         b.write(BOLD_OFF);
         b.write(line(rule('=')));
-        // Senha em destaque: é por ela que o cliente é chamado e a cozinha
-        // casa o pedido com o balcão.
+        // Linha de identificação em destaque, texto completo decidido por quem
+        // chama — "SENHA 42" faz sentido pra cozinha achar o pedido, mas
+        // "Comanda 05" (sem "SENHA") é o que cabe no cupom de fechar mesa.
         b.write(BOLD_ON);
         b.write(textSize(2, 2));
-        b.write(line("SENHA " + saleNumber));
+        b.write(line(subtitle));
         b.write(textSize(1, 1));
         b.write(BOLD_OFF);
         b.write(line(rule('=')));

@@ -52,11 +52,15 @@ router.get('/config', requireRole('admin'), async (req, res) => {
 
 // POST /api/printers/config — salva config de impressoras no banco
 router.post('/config', requireRole('admin'), async (req, res) => {
-  const { printer_caixa, printer_cozinha, printer_balcao } = req.body;
+  const { printer_caixa, printer_cozinha, printer_balcao, printer_header } = req.body;
   const entries = [
     ['printer_caixa', printer_caixa || ''],
     ['printer_cozinha', printer_cozinha || ''],
     ['printer_balcao', printer_balcao || ''],
+    // Nome que sai no topo do cupom -- configuravel aqui pra nao depender de
+    // recompilar o APK toda vez que o texto precisar mudar (era fixo "SEAMA"
+    // no plugin nativo, copiado do outro restaurante).
+    ['printer_header', printer_header || ''],
   ];
   try {
     for (const [key, value] of entries) {
