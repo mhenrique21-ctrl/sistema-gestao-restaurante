@@ -2075,26 +2075,33 @@ function setScanError(msg) {
   if (msg) showToast(msg);
 }
 
-async function resolveCode(code) {
-  code = (code || '').trim();
-  if (!code) return;
-  setScanError('');
+async function resolveCode(valor) {
+  valor = (valor || "").trim();
+  if (!valor) return;
+  setScanError("");
+  // So digitos e curto (numero impresso no cartao, ex. "5" ou "05") usa a
+  // busca de equipe (autenticada); qualquer outra coisa e tratado como o
+  // codigo longo do QR, na rota publica de sempre.
+  const ehNumero = /^d{1,3}$/.test(valor);
+  const url = ehNumero
+    ? `${API}/api/comandas/numero/${encodeURIComponent(valor)}`
+    : `${API}/api/comandas/resolve/${encodeURIComponent(valor)}`;
   try {
-    const res = await fetch(`${API}/api/comandas/resolve/${encodeURIComponent(code)}`, { headers: authHeaders() });
+    const res = await fetch(url, { headers: authHeaders() });
     if (res.status === 401) { TOKEN = null; localStorage.removeItem(TOKEN_KEY); showLoginScreen(); return; }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      setScanError(err.error || 'Comanda não encontrada');
+      setScanError(err.error || "Comanda não encontrada");
       return;
     }
     comanda = await res.json();
     cart = [];
     await loadMenuIfNeeded();
-    document.querySelector('.modal-backdrop')?.remove();
+    document.querySelector(".modal-backdrop")?.remove();
     showComandaScreen();
     if (comandaPrecisaDeMesa()) openMesaPickerModal();
   } catch (e) {
-    setScanError('Erro de conexão');
+    setScanError("Erro de conexão");
   }
 }
 
@@ -8081,10 +8088,10 @@ function openCodeModal() {
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
     <div class="modal-sheet" style="max-width:380px">
-      <h3>Abrir por código</h3>
-      <p class="hint" style="color:var(--c-muted);font-size:.82rem;margin:4px 0 14px">Digite o código do cartão da comanda.</p>
+      <h3>Abrir comanda</h3>
+      <p class="hint" style="color:var(--c-muted);font-size:.82rem;margin:4px 0 14px">Digite o número impresso no cartão (ex.: 5) ou o código do QR.</p>
       <div class="manual-entry">
-        <input type="text" id="manual-code" placeholder="Código da comanda" autocomplete="off" autofocus>
+        <input type="text" id="manual-code" placeholder="Número (5) ou código do QR" autocomplete="off" autofocus>
         <button class="btn btn-primary" onclick="resolveCode(document.getElementById('manual-code').value)">Buscar</button>
       </div>
       <div id="scan-error"></div>

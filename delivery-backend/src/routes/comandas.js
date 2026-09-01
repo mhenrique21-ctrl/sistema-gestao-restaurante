@@ -311,6 +311,35 @@ router.get('/resolve/:code', resolveLimiter, async (req, res) => {
   }
 });
 
+// GET /api/comandas/numero/:numero — abre comanda de MESA pelo número impresso no
+// cartão ("Comanda 05"), sem precisar escanear o QR. Só equipe logada (authMiddleware):
+// diferente de /resolve/:code (pública, pro cliente escanear), o número é curto e
+// sequencial — se essa busca fosse pública, qualquer um digitando 1, 2, 3... abriria
+// qualquer mesa sem ter o cartão físico na mão. NOT LIKE 'balcao_%' exclui venda de
+// balcão, que já tem o próprio fluxo (abrir por numero ali é decisão do atendente na
+// hora de criar, não uma busca depois).
+router.get('/numero/:numero', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
+  const numero = parseInt(String(req.params.numero).replace(/\D/g, ''), 10);
+  if (!Number.isFinite(numero)) return res.status(400).json({ error: 'Número inválido' });
+  try {
+    const result = await pool.query(
+      `SELECT c.*, m.numero AS mesa_numero, m.area AS mesa_area
+       FROM comandas c LEFT JOIN mesas m ON m.id = c.mesa_id
+       WHERE c.code NOT LIKE 'balcao_%'
+         AND NULLIF(regexp_replace(c.label, '\\D', '', 'g'), '')::int = $1`,
+      [numero]
+    );
+    const comanda = result.rows[0];
+    if (!comanda) return res.status(404).json({ error: 'Nenhuma comanda com esse número' });
+
+    const items = await loadComandaItems(comanda.id);
+    res.json({ ...comanda, items });
+  } catch (err) {
+    console.error('[comandas/numero]', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PATCH /api/comandas/:id/mesa — vincula a comanda a uma mesa cadastrada (equipe).
 // Obrigatório pra qualquer comanda aberta por cartão físico antes de lançar pedido —
 // só venda balcão (código começando com "balcao_") fica isenta.
