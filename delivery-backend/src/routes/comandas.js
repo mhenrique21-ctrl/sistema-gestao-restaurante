@@ -8,6 +8,7 @@ const { broadcastOrderUpdate, broadcastToStation } = require('../websocket/hub')
 const { getStationsForOrder, STATION_ROUTES } = require('../services/stations');
 const { printOrderTicket } = require('../services/printer');
 const { lancar: lancarFiado } = require('./fiado');
+const { getOpenSession } = require('../services/cashSummary');
 
 // O id do produto entra inline como literal SQL: os ids das opções já ocupam
 // $1..$N e, acima de $9, o wrapper do pool casa "$1" dentro de "$10". Só passa
@@ -21,11 +22,6 @@ const sqlUuid = (v) => (UUID_RE.test(String(v || '')) ? `'${v}'::uuid` : `NULL`)
 // Usa left() em vez de LIKE 'balcao_%' porque "_" é curinga de um caractere no LIKE:
 // com o prefixo terminando em underscore, o match precisa ser literal.
 const SQL_IS_BALCAO = `left(c.code, 7) = 'balcao_'`;
-
-// Em atividade hoje: aberta com pedido lançado (de qualquer dia — venda aberta é
-// dinheiro a receber, não pode sumir da tela na virada) ou fechada hoje.
-const SQL_ATIVIDADE_HOJE = `((c.status = 'aberta' AND c.total > 0)
-          OR (c.status = 'fechada' AND c.closed_at >= CURRENT_DATE))`;
 
 // Rotas usadas pelo cliente direto (sem login): resolve/orders/close ficam públicas —
 // o code da comanda (aleatório e imprevisível quando gerado automaticamente) é o que
@@ -148,6 +144,13 @@ router.get('/pending-close', authMiddleware, requireRole('admin', 'atendente'), 
 // que têm aba própria (ver GET /balcao-vendas).
 router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
+    // Painel reflete o TURNO de caixa, nao o dia calendario: comanda fechada
+    // as 10h fica visivel a manha inteira se o filtro fosse por data, mesmo
+    // ja resolvida ha horas. Com caixa fechado, o turno anterior acabou -- o
+    // painel some ate o proximo abrir (mesmo raciocinio de getSessionSummary,
+    // que ja separa por JANELA de turno em vez de por data em cashSummary.js).
+    const sessao = await getOpenSession();
+    if (!sessao) return res.json([]);
     const result = await pool.query(
       `SELECT c.id, c.code, c.label, c.status, c.total, c.opened_at, c.closed_at,
               (SELECT ci.mesa FROM comanda_items ci
@@ -159,9 +162,10 @@ router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (r
                 WHERE ci.comanda_id = c.id
               ), '[]') AS items
        FROM comandas c
-       WHERE NOT (${SQL_IS_BALCAO}) AND ${SQL_ATIVIDADE_HOJE}
+       WHERE NOT (${SQL_IS_BALCAO}) AND ((c.status = 'aberta' AND c.total > 0) OR (c.status = 'fechada' AND c.closed_at >= $1))
        ORDER BY COALESCE(c.closed_at, c.opened_at) DESC
-       LIMIT 60`
+       LIMIT 60`,
+      [sessao.opened_at]
     );
     res.json(result.rows);
   } catch (err) {
@@ -177,6 +181,9 @@ router.get('/board', authMiddleware, requireRole('admin', 'atendente'), async (r
 // (ver POST /:id/close), que preserva o prefixo e continua batendo no filtro.
 router.get('/balcao-vendas', authMiddleware, requireRole('admin', 'atendente'), async (req, res) => {
   try {
+    // Mesmo raciocinio do board: painel por turno, nao por dia (ver comentario la).
+    const sessao = await getOpenSession();
+    if (!sessao) return res.json([]);
     const result = await pool.query(
       `SELECT c.id, c.code, c.label, c.status, c.total, c.opened_at, c.closed_at,
               u.name AS closed_by_name,
@@ -191,9 +198,10 @@ router.get('/balcao-vendas', authMiddleware, requireRole('admin', 'atendente'), 
               ), '[]') AS items
        FROM comandas c
        LEFT JOIN users u ON u.id = c.closed_by
-       WHERE ${SQL_IS_BALCAO} AND ${SQL_ATIVIDADE_HOJE}
+       WHERE ${SQL_IS_BALCAO} AND ((c.status = 'aberta' AND c.total > 0) OR (c.status = 'fechada' AND c.closed_at >= $1))
        ORDER BY c.status ASC, COALESCE(c.closed_at, c.opened_at) DESC
-       LIMIT 200`
+       LIMIT 200`,
+      [sessao.opened_at]
     );
     res.json(result.rows);
   } catch (err) {
