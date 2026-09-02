@@ -58,14 +58,25 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
-// erpdelivery.confrariacafe.com é o mesmo app, só que a "porta de entrada" já
-// é o painel admin em vez do cardápio do cliente (pedidos.confrariacafe.com
-// continua servindo tudo igual — isso é só um hostname alternativo, não uma
-// rota nova). Sem isso, "/" cairia no index.html (loja do cliente) do
-// express.static, mesmo vindo por esse domínio.
+// erpdelivery.confrariacafe.com substitui pedidos.confrariacafe.com/admin.html
+// como endereço do painel de Gestão de Delivery — "/" nesse domínio já abre
+// o admin direto, sem precisar do caminho.
 app.get('/', (req, res, next) => {
   if (req.hostname === 'erpdelivery.confrariacafe.com') {
     return res.sendFile(require('path').join(__dirname, '../public/admin.html'));
+  }
+  next();
+});
+
+// Quem digitar/tiver salvo o endereço antigo é redirecionado pro novo domínio.
+// Exceto ?embed=1: é a aba "Delivery" do comanda.html carregando o admin
+// dentro de um iframe no MESMO host (pedidos.confrariacafe.com) — redirecionar
+// isso quebraria o iframe (o navegador bloqueia navegação cross-origin dentro
+// dele) sem trazer benefício nenhum, já que ninguém está "acessando o
+// endereço" ali, é uso interno.
+app.get('/admin.html', (req, res, next) => {
+  if (req.hostname !== 'erpdelivery.confrariacafe.com' && req.query.embed !== '1') {
+    return res.redirect(301, 'https://erpdelivery.confrariacafe.com/');
   }
   next();
 });
