@@ -28,6 +28,7 @@ app.use(rateLimit({
 // padrão — CORS_ORIGIN (separada por vírgula) continua tendo prioridade.
 const DEFAULT_CORS_ORIGINS = [
   'https://pedidos.confrariacafe.com',
+  'https://erpdelivery.confrariacafe.com',
   'https://gestao.confrariacafe.com',
   'http://localhost:5173',
   'http://localhost:5174',
@@ -56,6 +57,18 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true }));
+
+// erpdelivery.confrariacafe.com é o mesmo app, só que a "porta de entrada" já
+// é o painel admin em vez do cardápio do cliente (pedidos.confrariacafe.com
+// continua servindo tudo igual — isso é só um hostname alternativo, não uma
+// rota nova). Sem isso, "/" cairia no index.html (loja do cliente) do
+// express.static, mesmo vindo por esse domínio.
+app.get('/', (req, res, next) => {
+  if (req.hostname === 'erpdelivery.confrariacafe.com') {
+    return res.sendFile(require('path').join(__dirname, '../public/admin.html'));
+  }
+  next();
+});
 
 // Serve páginas estáticas sem cache
 app.use(express.static(require('path').join(__dirname, '../public'), {
