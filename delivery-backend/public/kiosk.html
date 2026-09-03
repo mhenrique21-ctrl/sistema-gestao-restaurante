@@ -25,22 +25,25 @@
      Fundo creme + foto grande é o padrão de totem de praça de alimentação, e
      é o que faz o cliente escolher pelo olho em vez de ler lista. */
   :root {
-    --bg: #F7F2EA;
+    /* Paleta "Cantina Colonial" — telha/terra/milho. Trocada a pedido do
+       dono; mantém a mesma lógica de contraste do tema original (fundo
+       creme claro pra não virar espelho perto da vitrine, ver nota abaixo). */
+    --bg: #EFE3C8;
     --surface: #FFFFFF;
     --card: #FFFFFF;
-    --card-active: #F1E8DA;
-    --border: #E6DCCB;
-    --gold: #A06D22;          /* escurecido pra ter contraste em fundo claro */
-    --gold-dim: #7E5518;
-    --text: #241C13;
-    --muted: #8A7B67;
+    --card-active: #F2E4C4;
+    --border: #E2D3AE;
+    --gold: #B4482A;          /* telha — CTA principal, marca, busca */
+    --gold-dim: #8B3820;
+    --text: #3A2415;          /* terra */
+    --muted: #8A7358;
     --danger: #D33A3A;
     --green: #1F8F5F;
-    --shadow: 0 2px 10px rgba(60,40,15,.08);
-    --shadow-lg: 0 8px 26px rgba(60,40,15,.16);
+    --shadow: 0 2px 10px rgba(58,36,21,.10);
+    --shadow-lg: 0 8px 26px rgba(58,36,21,.18);
     /* Só pra tela de cardápio (rail + pílulas + grade de produto) — o resto
-       do totem (carrinho, modais, conta) continua no dourado de sempre. */
-    --wine: #7A2E4D;
+       do totem (carrinho, modais, conta) continua no acento principal. */
+    --wine: #6E2A1D;
   }
   /* Tema escuro: opcional, ligado pelo dono via Configurações (kiosk_theme).
      Reaproveita o dourado claro que a tela de descanso já usa em fundo preto —
@@ -53,13 +56,13 @@
     --card: #251F17;
     --card-active: #332A1C;
     --border: rgba(255,255,255,.10);
-    --gold: #E8B961;
-    --gold-dim: #C99A4A;
+    --gold: #E28A5E;
+    --gold-dim: #C96B45;
     --text: #F5EFE3;
     --muted: #B8A88C;
     --shadow: 0 2px 10px rgba(0,0,0,.35);
     --shadow-lg: 0 10px 28px rgba(0,0,0,.5);
-    --wine: #D98CAE;
+    --wine: #D9A96F;
   }
   [data-theme="escuro"] .btn-primary { color: #1B1712; }
   [data-theme="escuro"] .thumb,
@@ -283,6 +286,17 @@
   .condensed-row-name { font-size: 1rem; font-weight: 700; }
   .condensed-row-desc { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .condensed-row-price { flex-shrink: 0; font-weight: 800; }
+
+  /* Estado de erro do cardápio — separado de "categoria vazia de verdade".
+     Antes, /api/menu falhando (500, sem rede) e uma categoria sem produtos
+     caíam na mesma mensagem "Sem produtos nesta categoria", e o cliente não
+     tinha como saber que era instabilidade, nem um jeito de tentar de novo. */
+  .menu-error { display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 60px 24px; gap: 10px; }
+  .menu-error .badge { width: 44px; height: 44px; border-radius: 12px; background: #F5D5C4; color: #8A3018;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.3rem; margin-bottom: 4px; }
+  .menu-error h3 { font-size: 1.1rem; }
+  .menu-error p { color: var(--muted); font-size: .88rem; max-width: 320px; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -610,23 +624,36 @@ const CAT_ICONS = {
 // está no meio de um pedido (ver iniciarRecargaMenu abaixo).
 let menuCarregadoEm = 0;
 const MENU_TTL_MS = 120000;
+// true só quando o totem NUNCA conseguiu carregar cardápio nenhum — é o que
+// distingue "API caiu" de "esta categoria não tem produto mesmo". Uma vez que
+// o cardápio carrega com sucesso ao menos uma vez, o pior caso de uma falha
+// seguinte é ficar com o cardápio antigo (comportamento de sempre), não essa
+// tela de erro.
+let menuLoadFailed = false;
 
 async function loadMenuIfNeeded(forcar = false) {
   if (!forcar && menu.length && Date.now() - menuCarregadoEm < MENU_TTL_MS) return;
   try {
     const res = await fetch(`${API}/api/menu?channel=kiosk&_=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) return;
+    if (!res.ok) { if (!menu.length) menuLoadFailed = true; return; }
     const novo = await res.json();
     // Resposta ruim não apaga o cardápio bom: um totem sem cardápio é um
     // totem inútil, e ninguém está lá pra perceber e reiniciar.
-    if (!Array.isArray(novo) || !novo.length) return;
+    if (!Array.isArray(novo) || !novo.length) { if (!menu.length) menuLoadFailed = true; return; }
     menu = novo;
+    menuLoadFailed = false;
     menuCarregadoEm = Date.now();
     const offers = getOffers();
     if (!activeCategory || (activeCategory !== 'ofertas' && !menu.some(c => c.id === activeCategory))) {
       activeCategory = offers.length > 0 ? 'ofertas' : (visibleCategories()[0]?.id || null);
     }
-  } catch (e) { /* offline: segue com o que está em memória */ }
+  } catch (e) { if (!menu.length) menuLoadFailed = true; /* offline: segue com o que está em memória */ }
+}
+
+// Chamado pelo botão "Tentar novamente" da tela de erro.
+async function retryLoadMenu() {
+  await loadMenuIfNeeded(true);
+  renderCategorySidebar(); renderCategoryPills(); renderCategoryBanner(); renderProductGrid();
 }
 
 // Recarrega quando o cliente NÃO está no meio de um pedido: ao entrar no
@@ -795,6 +822,19 @@ function renderProductGrid() {
 
   if (!products.length) {
     el.classList.remove('condensed-mode');
+    // Cardápio nunca carregou (API fora do ar) é erro de sistema, não
+    // categoria vazia — o cliente precisa saber que não é "aqui não tem
+    // nada", e ter como tentar de novo sem chamar ninguém.
+    if (!searchQuery && !menu.length && menuLoadFailed) {
+      el.innerHTML = `
+        <div class="menu-error">
+          <div class="badge">!</div>
+          <h3>Cardápio indisponível</h3>
+          <p>Estamos com uma instabilidade no sistema. Chame um atendente ou toque para tentar de novo.</p>
+          <button class="btn btn-primary" onclick="retryLoadMenu()">🔄 Tentar novamente</button>
+        </div>`;
+      return;
+    }
     el.innerHTML = `<div class="launched-empty">${searchQuery ? 'Nada encontrado' : 'Sem produtos nesta categoria'}</div>`;
     return;
   }
