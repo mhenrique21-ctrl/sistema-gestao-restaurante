@@ -7,7 +7,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800;900&family=Karla:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <!-- Instalável como app no tablet (ícone na tela inicial, abre sem barra de
      endereço). De propósito SEM service worker: um já causou incidente neste
      projeto sequestrando páginas de outras telas (ver git log) -- o manifest
@@ -25,25 +25,26 @@
      Fundo creme + foto grande é o padrão de totem de praça de alimentação, e
      é o que faz o cliente escolher pelo olho em vez de ler lista. */
   :root {
-    /* Paleta "Cantina Colonial" — telha/terra/milho. Trocada a pedido do
-       dono; mantém a mesma lógica de contraste do tema original (fundo
-       creme claro pra não virar espelho perto da vitrine, ver nota abaixo). */
-    --bg: #EFE3C8;
+    /* Paleta espelhada do site de referência (table-pdv.preview.emergentagent.com):
+       quase monocromática — creme + tinta café, sem um "dourado" separado.
+       O preço, o botão e o texto usam a MESMA cor de tinta; o único acento
+       de cor de verdade (#E0A96D) aparece só no texto dos selos. */
+    --bg: #FAF6F0;
     --surface: #FFFFFF;
     --card: #FFFFFF;
-    --card-active: #F2E4C4;
-    --border: #E2D3AE;
-    --gold: #B4482A;          /* telha — CTA principal, marca, busca */
-    --gold-dim: #8B3820;
-    --text: #3A2415;          /* terra */
-    --muted: #8A7358;
+    --card-active: #F1E6D8;
+    --border: #E8DDD1;
+    --gold: #4A2E1B;           /* tinta — CTA, marca, busca, preço */
+    --gold-dim: #3A2415;
+    --text: #4A2E1B;
+    --muted: #7C6B5E;
     --danger: #D33A3A;
     --green: #1F8F5F;
-    --shadow: 0 2px 10px rgba(58,36,21,.10);
-    --shadow-lg: 0 8px 26px rgba(58,36,21,.18);
-    /* Só pra tela de cardápio (rail + pílulas + grade de produto) — o resto
-       do totem (carrinho, modais, conta) continua no acento principal. */
-    --wine: #6E2A1D;
+    --shadow: 0 2px 10px rgba(74,46,27,.10);
+    --shadow-lg: 0 8px 26px rgba(74,46,27,.18);
+    /* Preço do card usa a mesma tinta agora (ver .product-card .price-new) —
+       a variável fica só por compatibilidade com o resto do arquivo. */
+    --wine: #4A2E1B;
   }
   /* Tema escuro: opcional, ligado pelo dono via Configurações (kiosk_theme).
      Reaproveita o dourado claro que a tela de descanso já usa em fundo preto —
@@ -72,14 +73,16 @@
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
   input, textarea { -webkit-user-select: text; user-select: text; }
   html, body { overscroll-behavior: none; }
-  body { font-family: 'Karla', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow: hidden; }
+  body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow: hidden; }
   button { font-family: inherit; cursor: pointer; }
-  /* Bitter só nos elementos de identidade/preço — nome de produto, título de
-     categoria, marca. O resto (botão, descrição, rótulo) fica em Karla, senão
-     a tela vira parede de negrito e nada se destaca de verdade. */
-  h2, h3, .brand, .price-new, .close-total,
-  #screensaver-screen .info .price, .condensed-row-price, .condensed-row-name {
-    font-family: 'Bitter', Georgia, serif;
+  /* Playfair só em marca/título — os "momentos grandes". O resto do texto
+     (produto, botão, descrição) fica em Plus Jakarta Sans. */
+  h2, h3, .brand { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; }
+  /* Preço e selo em mono — números alinhados, ar de precisão, igual à
+     referência (não é itálico nem serifado). */
+  .price-new, .close-total, #screensaver-screen .info .price,
+  .condensed-row-price, .off-badge, .top-badge {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
   .hidden { display: none !important; }
 
@@ -144,18 +147,11 @@
   .cat-pill.active { background: var(--text); border-color: var(--text); color: var(--bg); }
   #menu-col { flex: 1; overflow-y: auto; background: var(--bg); }
 
-  /* Rail + pílulas + grade de produto ficam em Figtree — o resto do totem
-     (cabeçalho, carrinho, modais) continua em Karla. Só o título de categoria
-     e o preço do card usam a serifada itálica, como marca de destaque. */
-  #cat-sidebar, #cat-pills, #product-grid, #cat-banner {
-    font-family: 'Figtree', system-ui, sans-serif;
-  }
-
   /* Faixa do topo: com foto vira banner; sem foto vira só um título limpo,
      em vez do retângulo cinza vazio que aparecia antes. */
   #cat-banner { min-height: 78px; background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 14px 22px; background-color: var(--surface); border-bottom: 1px solid var(--border); }
   #cat-banner.com-foto { height: 150px; border-bottom: none; }
-  #cat-banner h2 { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; font-size: 2rem; }
+  #cat-banner h2 { font-size: 2rem; }
   #cat-banner.com-foto h2 { color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
 
   /* Grade de cards verticais: foto quadrada em cima, nome, preço + botão
@@ -173,9 +169,19 @@
      ícone da categoria. Boa parte do cardápio ainda não tem imagem. */
   .thumb-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.6rem;
     background: linear-gradient(135deg, #F3E9D8 0%, #EADBC2 100%); }
-  .off-badge { position: absolute; top: 6px; left: 6px; width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,#ff4d4d,#ff8c00); box-shadow: 0 2px 8px rgba(255,77,77,.55); color: #fff; font-weight: 900; font-size: 10px; line-height: 1.1; text-align: center; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
-  .top-badge { display: inline-block; background: rgba(36,28,19,.9); color: #FFD98A; font-size: .64rem; font-weight: 800;
-    letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; margin-bottom: 5px; }
+  /* Selos ficam sobre a foto (pílula escura, texto claro), igual à
+     referência — não competem mais com nome/descrição no corpo do card. */
+  .off-badge { position: absolute; top: 10px; left: 10px; background: var(--text); color: #E0A96D; font-weight: 700; font-size: .62rem;
+    letter-spacing: .03em; line-height: 1; text-align: center; padding: 5px 9px; border-radius: 999px; }
+  /* Fica à direita (o off-badge já ocupa a esquerda) -- os dois podem
+     aparecer juntos num promo que também é "mais pedido". */
+  .top-badge { position: absolute; top: 10px; right: 10px; background: var(--text); color: #E0A96D; font-size: .6rem; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; }
+  /* Botão de adicionar rápido flutua sobre a foto, canto inferior direito —
+     abre o mesmo modal de sempre (com os adicionais obrigatórios, se tiver). */
+  .card-quick-add { position: absolute; bottom: 10px; right: 10px; width: 40px; height: 40px; min-width: 40px; border-radius: 50%; border: none;
+    background: var(--text); color: var(--bg); font-size: 1.4rem; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); }
   .esgotado-badge { position: absolute; inset: 0; background: rgba(255,255,255,.72); display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: .9rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
   .product-card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 16px; }
@@ -183,13 +189,11 @@
   .product-card .desc { font-size: .78rem; color: var(--muted); margin: 6px 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; line-height: 1.4; }
   .price-box { display: flex; flex-direction: column; line-height: 1.2; }
   .price-old { font-size: .74rem; color: var(--muted); text-decoration: line-through; }
-  .price-new { font-size: 1.15rem; color: var(--gold); font-weight: 900; }
-  /* Preço do card (não o do modal, que continua dourado/Bitter): itálica +
-     vinho, o único acento de cor na grade. */
-  .product-card .price-new { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; color: var(--wine); font-size: 1.35rem; }
+  .price-new { font-size: 1.15rem; color: var(--gold); font-weight: 700; }
+  /* Preço do card: mono + tinta, igual à referência (nada de itálico/vinho). */
+  .product-card .price-new { font-weight: 700; color: var(--text); font-size: 1.1rem; }
   .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
-  .card-add { width: 40px; height: 40px; min-width: 40px; border-radius: 50%; border: none; background: var(--text);
-    color: var(--bg); font-size: 1.4rem; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .card-personalizar { font-size: .72rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
   .add-pill { width: 40px; height: 40px; min-width: 40px; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dim) 100%);
     color: #fff; font-size: 1.4rem; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); }
   .card-tag { font-size: .7rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
@@ -855,15 +859,16 @@ function renderProductGrid() {
       <div class="thumb-wrap">
         ${img}
         ${p.promo_price != null ? `<span class="off-badge">${Math.round((1 - p.promo_price / p.price) * 100)}%<br>OFF</span>` : ''}
+        ${maisPedidos.includes(p.id) ? '<span class="top-badge">⭐ Mais pedido</span>' : ''}
+        <span class="card-quick-add">+</span>
       </div>
       <div class="body">
-        ${maisPedidos.includes(p.id) ? '<div class="top-badge">⭐ Mais pedido</div>' : ''}
         ${mostraCategoria && p.categoryName && p.categoryName !== 'Ofertas' ? `<div class="card-tag">${p.categoryName}</div>` : ''}
         <div class="name">${p.name}</div>
         ${p.description ? `<div class="desc">${p.description}</div>` : '<div style="flex:1"></div>'}
         <div class="card-footer">
           <span class="price-box">${preco}</span>
-          <span class="card-add">+</span>
+          <span class="card-personalizar">Personalizar →</span>
         </div>
       </div>
     </button>`;
