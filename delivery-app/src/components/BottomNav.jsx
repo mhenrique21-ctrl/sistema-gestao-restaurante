@@ -41,7 +41,7 @@ export default function BottomNav() {
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 safe-bottom"
       style={{
         background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        borderTop: '1px solid var(--border)', boxShadow: '0 -4px 20px rgba(93,64,55,0.06)',
+        borderTop: '1px solid var(--border)', boxShadow: '0 -4px 20px rgba(61,42,26,0.07)',
         transform: hidden ? 'translateY(100%)' : 'translateY(0)',
         transition: 'transform 0.28s cubic-bezier(0.32,0.72,0,1)',
       }}>

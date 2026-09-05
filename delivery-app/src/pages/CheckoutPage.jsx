@@ -85,7 +85,7 @@ function PixBox({ pixKey, total }) {
     navigator.clipboard.writeText(pixKey).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000) })
   }
   return (
-    <div style={{ background: 'rgba(201,162,94,0.08)', border: '1px solid rgba(201,162,94,0.25)', borderRadius: 12, padding: 14, marginTop: 12 }}>
+    <div style={{ background: 'rgba(138,82,39,0.09)', border: '1px solid rgba(138,82,39,0.28)', borderRadius: 12, padding: 14, marginTop: 12 }}>
       <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 6 }}>⚡ Chave PIX para pagamento</p>
       {total && <p style={{ fontSize: 18, fontWeight: 900, color: 'var(--gold)', marginBottom: 10 }}>{brl(total)}</p>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', borderRadius: 10, padding: '8px 12px', border: '1px solid var(--border)' }}>
@@ -105,7 +105,7 @@ function StripePixBox({ qrCodeUrl, qrCodeData, total }) {
     navigator.clipboard.writeText(qrCodeData).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000) })
   }
   return (
-    <div style={{ background: 'rgba(201,162,94,0.08)', border: '1px solid rgba(201,162,94,0.25)', borderRadius: 12, padding: 14, marginTop: 12 }}>
+    <div style={{ background: 'rgba(138,82,39,0.09)', border: '1px solid rgba(138,82,39,0.28)', borderRadius: 12, padding: 14, marginTop: 12 }}>
       <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 6 }}>⚡ Pague com PIX</p>
       {total && <p style={{ fontSize: 18, fontWeight: 900, color: 'var(--gold)', marginBottom: 10 }}>{brl(total)}</p>}
       {qrCodeUrl && (
@@ -524,7 +524,7 @@ export default function CheckoutPage() {
   return (
     <div className="flex flex-col min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* Header */}
-      <div className="safe-top flex-shrink-0" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+      <div className="safe-top flex-shrink-0" style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3 px-4 pt-4 pb-4">
           <button onClick={() => navigate('/cart')} className="press w-11 h-11 rounded-xl flex items-center justify-center"
             style={{ background: 'var(--card)', color: 'var(--cream)' }}>
@@ -586,7 +586,7 @@ export default function CheckoutPage() {
               <button key={opt.id} onClick={() => setDeliveryType(opt.id)} className="press"
                 style={{
                   padding: 12, borderRadius: 12, textAlign: 'left', cursor: 'pointer',
-                  background: deliveryType === opt.id ? 'rgba(201,162,94,0.12)' : 'var(--surface)',
+                  background: deliveryType === opt.id ? 'var(--gold-soft)' : 'var(--surface)',
                   border: `2px solid ${deliveryType === opt.id ? 'var(--gold)' : 'var(--border)'}`,
                 }}>
                 <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{opt.label}</p>
@@ -605,7 +605,7 @@ export default function CheckoutPage() {
                 {savedAddresses.map(addr => (
                   <button key={addr.id} onClick={() => applyAddress(addr)} className="press w-full"
                     style={{ textAlign: 'left', padding: 12, borderRadius: 12, marginBottom: 6, cursor: 'pointer',
-                      background: selectedAddressId === addr.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
+                      background: selectedAddressId === addr.id ? 'var(--gold-soft)' : 'var(--surface)',
                       border: `2px solid ${selectedAddressId === addr.id ? 'var(--gold)' : 'var(--border)'}` }}>
                     <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--cream)' }}>{addr.street}{addr.number ? `, ${addr.number}` : ''}</p>
                     <p style={{ fontSize: 11, color: 'var(--muted)' }}>{[addr.neighborhood, addr.complement].filter(Boolean).join(' · ')}</p>
@@ -693,8 +693,8 @@ export default function CheckoutPage() {
                 )}
                 <button onClick={() => setPayment(m.id)} className="press"
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, cursor: 'pointer', textAlign: 'left', width: '100%',
-                    background: payment === m.id ? 'rgba(201,162,94,0.1)' : 'var(--surface)',
-                    border: `2px solid ${m.id === 'pix' ? '#C89B5A' : (payment === m.id ? 'var(--gold)' : 'var(--border)')}` }}>
+                    background: payment === m.id ? 'var(--gold-soft)' : 'var(--surface)',
+                    border: `2px solid ${m.id === 'pix' ? 'var(--gold)' : (payment === m.id ? 'var(--gold)' : 'var(--border)')}` }}>
                   <span style={{ display: 'flex', color: payment === m.id ? 'var(--gold)' : 'var(--muted)', flexShrink: 0 }}>
                     <PaymentIcon id={m.id} />
                   </span>
@@ -790,8 +790,8 @@ export default function CheckoutPage() {
             return (
               <div key={p.id} style={{
                 borderRadius: 14, padding: '12px 14px', marginBottom: 4,
-                background: applied ? 'rgba(22,163,74,0.1)' : 'rgba(201,162,94,0.07)',
-                border: `1px solid ${applied ? 'rgba(22,163,74,0.4)' : 'rgba(201,162,94,0.25)'}`,
+                background: applied ? 'rgba(22,163,74,0.1)' : 'rgba(138,82,39,0.08)',
+                border: `1px solid ${applied ? 'rgba(22,163,74,0.4)' : 'rgba(138,82,39,0.28)'}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 20 }}>🎉</span>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import ProductModal from '../components/ProductModal'
+import FlavorSheet from '../components/FlavorSheet'
 import { useCart, itemLineTotal } from '../store/cart'
 import { useNavigate } from 'react-router-dom'
 import { checkStoreOpen } from '../utils/storeStatus'
@@ -11,6 +12,14 @@ const CAT_ICONS = {
   'Tortas': '🍰', 'Salgados': '🥐', 'Doces': '🍬', 'Tapiocas': '🫓',
   'Crepiocas': '🥞', 'Croissant': '🥐', 'Cuscuz': '🌽', 'Sanduíches': '🥪',
   'Coffee Shake': '🥤', 'Adicionais': '🍽', 'Ofertas': '🔥', 'Lanches': '🍕', 'Refeições': '🍽',
+}
+
+// Categorias vendidas por sabor: em vez de um card por sabor, o cardapio mostra
+// um unico card da categoria e abre a lista de sabores ao toque.
+const GROUPED_CATS = ['croissant', 'tapioca', 'crepioca']
+function isGroupedCat(name) {
+  const n = (name || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim()
+  return GROUPED_CATS.some((g) => n === g || n === g + 's')
 }
 
 function money(v) {
@@ -70,10 +79,62 @@ function ProductCard({ product, catName, onClick }) {
         )}
         <div className="absolute -bottom-2 -right-2 w-11 h-11 rounded-full flex items-center justify-center press"
           style={{
-            background: 'linear-gradient(135deg,#C89B5A,#A97142)', color: '#fff',
-            boxShadow: '0 4px 12px rgba(169,113,66,0.4)',
+            background: 'var(--gold)', color: '#fff',
+            border: '3px solid var(--bg)',
+            boxShadow: '0 4px 12px rgba(138,82,39,0.32)',
           }}>
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// Card único de uma categoria vendida por sabor (Croissant, Tapioca, Crepioca).
+// Mostra uma foto representativa, a contagem de sabores e o menor preço.
+function CategoryCard({ category, onClick }) {
+  const [broken, setBroken] = useState(false)
+  const products = category.products || []
+  const cover = products.find((p) => p.image_url)?.image_url
+  const hasImg = cover && !broken
+  const from = products.length
+    ? Math.min(...products.map((p) => p.promo_price ?? p.price))
+    : null
+
+  return (
+    <button onClick={onClick}
+      className="press card-soft w-full text-left flex gap-4 p-4 mb-3">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <p className="font-bold text-[15px] leading-snug" style={{ color: 'var(--espresso)' }}>
+          {category.name}
+        </p>
+        <p className="text-xs mt-1" style={{ color: 'var(--tan)' }}>
+          {products.length} {products.length === 1 ? 'sabor' : 'sabores'}
+          {from != null && <> · a partir de {money(from)}</>}
+        </p>
+        <span className="inline-flex items-center gap-1 mt-auto pt-2 text-xs font-black" style={{ color: 'var(--gold)' }}>
+          Ver sabores
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+        </span>
+      </div>
+      <div className="relative flex-shrink-0 self-center">
+        {hasImg ? (
+          <img src={cover} alt={category.name} onError={() => setBroken(true)} loading="lazy"
+            className="w-24 h-24 rounded-2xl object-cover"
+            style={{ border: '1px solid var(--border)' }} />
+        ) : (
+          <div className="w-24 h-24 rounded-2xl flex items-center justify-center text-3xl"
+            style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+            {CAT_ICONS[category.name] || '🍽'}
+          </div>
+        )}
+        <div className="absolute -bottom-2 -right-2 px-2.5 h-11 rounded-full flex items-center justify-center press"
+          style={{
+            background: 'var(--surface-3)', color: 'var(--espresso)',
+            border: '3px solid var(--bg)',
+            fontSize: 12, fontWeight: 900,
+          }}>
+          {products.length}
         </div>
       </div>
     </button>
@@ -87,6 +148,7 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [flavorCat, setFlavorCat] = useState(null)
   const [search, setSearch] = useState('')
   const [storeStatus, setStoreStatus] = useState({ open: true })
   const [todayHours, setTodayHours] = useState(null)
@@ -139,7 +201,7 @@ export default function MenuPage() {
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'var(--bg)' }}>
 
       {/* ── Header premium ── */}
-      <div className="flex-shrink-0 safe-top" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+      <div className="flex-shrink-0 safe-top" style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
         <div className="px-5 pt-4 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {logoUrl ? (
@@ -257,16 +319,27 @@ export default function MenuPage() {
                 ))}
               </div>
             )}
-            {filtered.map((cat) => (
-              <div key={cat.id} ref={(el) => (catRefs.current[cat.id] = el)} className="px-5 pt-6">
-                <h2 className="font-display text-lg font-bold mb-3" style={{ color: 'var(--brown)' }}>
-                  {cat.name}
-                </h2>
-                {cat.products.map((p) => (
-                  <ProductCard key={p.id} product={p} catName={cat.name} onClick={() => setSelected({ product: p, category: cat.name })} />
-                ))}
-              </div>
-            ))}
+            {filtered.map((cat) => {
+              // Na busca o cliente procura um sabor específico, então a categoria
+              // agrupada se abre em cards individuais.
+              const grouped = !search && isGroupedCat(cat.name)
+              return (
+                <div key={cat.id} ref={(el) => (catRefs.current[cat.id] = el)} className="px-5 pt-6">
+                  {!grouped && (
+                    <h2 className="font-display text-lg font-bold mb-3" style={{ color: 'var(--espresso)' }}>
+                      {cat.name}
+                    </h2>
+                  )}
+                  {grouped ? (
+                    <CategoryCard category={cat} onClick={() => setFlavorCat(cat)} />
+                  ) : (
+                    cat.products.map((p) => (
+                      <ProductCard key={p.id} product={p} catName={cat.name} onClick={() => setSelected({ product: p, category: cat.name })} />
+                    ))
+                  )}
+                </div>
+              )
+            })}
           </>
         )}
       </div>
@@ -296,8 +369,22 @@ export default function MenuPage() {
         </div>
       )}
 
+      {/* Lista de sabores de uma categoria agrupada */}
+      {flavorCat && !selected && (
+        <FlavorSheet
+          category={flavorCat}
+          onClose={() => setFlavorCat(null)}
+          onPick={(p) => setSelected({ product: p, category: flavorCat.name })}
+        />
+      )}
+
       {selected && (
-        <ProductModal product={selected.product} category={selected.category} onClose={() => setSelected(null)} />
+        <ProductModal
+          product={selected.product}
+          category={selected.category}
+          onClose={() => { setSelected(null); setFlavorCat(null) }}
+          onBack={flavorCat ? () => setSelected(null) : undefined}
+        />
       )}
     </div>
   )

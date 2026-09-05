@@ -4,12 +4,12 @@ import { api } from '../api'
 import { useAuth } from '../store/auth'
 
 const STATUS = {
-  aguardando_pagamento: { label: 'Aguardando', color: '#C9A25E', bg: 'rgba(201,162,94,0.12)' },
+  aguardando_pagamento: { label: 'Aguardando', color: '#C9A25E', bg: 'var(--gold-soft)' },
   pago:                 { label: 'Pago', color: '#4CAF80', bg: 'rgba(76,175,128,0.12)' },
   confirmado:           { label: 'Confirmado', color: '#4CAF80', bg: 'rgba(76,175,128,0.12)' },
   em_preparo:           { label: 'Em preparo', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)' },
   pronto:               { label: 'Pronto!', color: '#4CAF80', bg: 'rgba(76,175,128,0.12)' },
-  saiu_para_entrega:    { label: 'A caminho 🛵', color: '#C9A25E', bg: 'rgba(201,162,94,0.12)' },
+  saiu_para_entrega:    { label: 'A caminho 🛵', color: '#C9A25E', bg: 'var(--gold-soft)' },
   entregue:             { label: 'Entregue ✓', color: '#4CAF80', bg: 'rgba(76,175,128,0.12)' },
   cancelado:            { label: 'Cancelado', color: '#E05252', bg: 'rgba(224,82,82,0.12)' },
 }
@@ -101,7 +101,7 @@ export default function OrdersPage() {
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="safe-top flex-shrink-0 px-4 pt-4 pb-4" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+      <div className="safe-top flex-shrink-0 px-4 pt-4 pb-4" style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-black" style={{ color: 'var(--cream)' }}>Meus Pedidos</h1>

@@ -75,7 +75,7 @@ export default function OrderStatusPage() {
   return (
     <div className="flex flex-col min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* Header dourado */}
-      <div className="safe-top px-4 pt-4 pb-6" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+      <div className="safe-top px-4 pt-4 pb-6" style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3 mb-4">
           <button onClick={() => navigate('/orders')} className="press w-11 h-11 rounded-xl flex items-center justify-center"
             style={{ background: 'var(--card)', color: 'var(--cream)' }}>
@@ -84,7 +84,7 @@ export default function OrderStatusPage() {
           <h1 className="flex-1 text-lg font-black" style={{ color: 'var(--cream)' }}>Acompanhar Pedido</h1>
         </div>
 
-        <div className="rounded-2xl p-4" style={{ background: 'rgba(201,162,94,0.1)', border: '1px solid rgba(201,162,94,0.25)' }}>
+        <div className="rounded-2xl p-4" style={{ background: 'var(--gold-soft)', border: '1px solid rgba(138,82,39,0.28)' }}>
           <p className="text-xs font-semibold mb-1" style={{ color: 'var(--gold-dim)' }}>
             Pedido #{id.slice(-6).toUpperCase()}
           </p>
@@ -115,7 +115,7 @@ export default function OrderStatusPage() {
                         style={{
                           background: done ? 'var(--gold)' : 'var(--surface)',
                           color: done ? '#FFFFFF' : 'var(--muted)',
-                          boxShadow: current ? '0 0 0 4px rgba(201,162,94,0.2)' : 'none',
+                          boxShadow: current ? '0 0 0 4px rgba(138,82,39,0.22)' : 'none',
                         }}>
                         {done ? step.icon : '○'}
                       </div>
@@ -130,7 +130,7 @@ export default function OrderStatusPage() {
                       </p>
                       {current && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block"
-                          style={{ background: 'rgba(201,162,94,0.15)', color: 'var(--gold)' }}>
+                          style={{ background: 'var(--gold-soft)', color: 'var(--gold)' }}>
                           Agora
                         </span>
                       )}

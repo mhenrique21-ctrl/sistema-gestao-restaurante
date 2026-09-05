@@ -89,7 +89,7 @@ export default function LoginPage() {
 
       {/* Hero da marca */}
       <div className="safe-top relative overflow-hidden px-6 pt-10 pb-12"
-        style={{ background: 'linear-gradient(160deg, #5D4037 0%, #3E2723 100%)' }}>
+        style={{ background: 'linear-gradient(160deg, #4a3421 0%, #2b1c10 100%)' }}>
 
         {/* Voltar — alvo de toque 44px */}
         <button onClick={() => navigate(-1)} aria-label="Voltar"
@@ -100,14 +100,14 @@ export default function LoginPage() {
 
         {/* Ornamentos */}
         <div className="absolute rounded-full pointer-events-none"
-          style={{ top: -40, right: -40, width: 180, height: 180, background: 'rgba(200,155,90,0.12)' }} />
+          style={{ top: -40, right: -40, width: 180, height: 180, background: 'var(--gold-soft)' }} />
         <div className="absolute rounded-full pointer-events-none"
-          style={{ bottom: -20, right: 40, width: 80, height: 80, background: 'rgba(200,155,90,0.08)' }} />
+          style={{ bottom: -20, right: 40, width: 80, height: 80, background: 'rgba(138,82,39,0.09)' }} />
 
         <div className="flex flex-col items-center text-center mt-3">
           <div className="flex items-center justify-center mb-4"
-            style={{ width: 72, height: 72, borderRadius: 22, background: 'rgba(200,155,90,0.18)', border: '1px solid rgba(200,155,90,0.35)' }}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C89B5A" strokeWidth="1.5" strokeLinecap="round">
+            style={{ width: 72, height: 72, borderRadius: 22, background: 'rgba(138,82,39,0.20)', border: '1px solid rgba(138,82,39,0.35)' }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round">
               <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
               <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
             </svg>
@@ -120,7 +120,7 @@ export default function LoginPage() {
       {/* Card do formulário, elevado sobre o hero */}
       <div className="flex-1 flex flex-col" style={{ marginTop: -24 }}>
         <div className="flex-1 px-5 pt-7 pb-6"
-          style={{ background: 'var(--card)', borderRadius: '28px 28px 0 0', boxShadow: '0 -8px 32px rgba(62,39,35,0.12)' }}>
+          style={{ background: 'var(--card)', borderRadius: '28px 28px 0 0', boxShadow: '0 -8px 32px rgba(61,42,26,0.12)' }}>
 
           <div className="mb-4">
             <label style={LABEL}>WhatsApp *</label>

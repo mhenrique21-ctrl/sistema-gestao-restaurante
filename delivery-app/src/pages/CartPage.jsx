@@ -37,7 +37,7 @@ export default function CartPage() {
   return (
     <div className="flex flex-col min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* Header */}
-      <div className="safe-top flex-shrink-0" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+      <div className="safe-top flex-shrink-0" style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3 px-5 pt-4 pb-4">
           <button onClick={() => navigate('/')} className="press w-11 h-11 rounded-full flex items-center justify-center"
             style={{ background: 'var(--card)', color: 'var(--brown)', boxShadow: 'var(--shadow-soft)' }}>
