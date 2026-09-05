@@ -2934,6 +2934,15 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   const [editId,setEditId]=useState(null);
   const formRef=useRef<HTMLDivElement>(null);
   const [busca,setBusca]=useState("");
+  // Feedback de "✓ Salvo" no próprio botão: salvar não muda de tela, e sem
+  // isso não havia nenhum sinal visível de que gravou.
+  const [saved,setSaved]=useState(false);
+  // Valor do dia anterior por canal, só pra conferência visual ao lado do
+  // rótulo. Soma todos os registros daquela data (manual + PDV + recibo),
+  // igual o Painel faz — o número tem que bater com o que o dia fechou.
+  // Usa o valor BRUTO de iFood/99Food, que é o que se digita no campo.
+  const ontemData=(()=>{const d=new Date(form.data+"T12:00:00");d.setDate(d.getDate()-1);return d.toISOString().split("T")[0];})();
+  const ontem=(campo:string)=>(db.vendas||[]).filter((v:any)=>v.data===ontemData).reduce((s:number,v:any)=>s+(v[campo]||0),0);
   const ifoodBruto=parseMoney(form.ifood||0);
   const nfoodBruto=parseMoney(form["99food"]||0);
   const ifoodTaxaPct=parseFloat(form.ifoodTaxa)||0;
@@ -3037,6 +3046,8 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
     });
     setEditId(null);
     setForm(emptyForm());
+    setSaved(true);
+    setTimeout(()=>setSaved(false),1800);
   };
   const edit=(v)=>{setEditId(v.id);setForm(formDeRegistro(v));setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{
@@ -3235,16 +3246,13 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
         </div>}
       </div>
-      <div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legMaquininha}</label>
+      <LinhaCanal Icone={IconMaquininha} label={aj.legMaquininha} ontem={ontem("maquininha")} preenchido={parseMoney(form.maquininha||0)>0}>
         <MoneyInput value={form.maquininha} onChange={v=>setForm(f=>({...f,maquininha:v}))} className="inp"/>
-      </div>
-      {aj.canalDinheiro&&<div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legDinheiro}</label>
+      </LinhaCanal>
+      {aj.canalDinheiro&&<LinhaCanal Icone={IconDinheiro} label={aj.legDinheiro} ontem={ontem("dinheiro")} preenchido={parseMoney(form.dinheiro||0)>0}>
         <MoneyInput value={form.dinheiro} onChange={v=>setForm(f=>({...f,dinheiro:v}))} className="inp"/>
-      </div>}
-      {aj.canalIfood&&<div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legIfood}</label>
+      </LinhaCanal>}
+      {aj.canalIfood&&<LinhaCanal Icone={IconIfood} label={aj.legIfood} ontem={ontem("ifood")} preenchido={ifoodBruto>0}>
         <div style={{display:"flex",gap:6}}>
           <MoneyInput value={form.ifood} onChange={v=>setForm(f=>({...f,ifood:v}))} className="inp" style={{flex:1}}/>
           <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
@@ -3255,9 +3263,8 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
         </div>
         {ifoodTaxaPct>0&&ifoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(ifoodLiq)} (desc. {fmtMoney(ifoodBruto-ifoodLiq)})</div>}
-      </div>}
-      {aj.canal99food&&<div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.leg99food}</label>
+      </LinhaCanal>}
+      {aj.canal99food&&<LinhaCanal Icone={Icon99Food} label={aj.leg99food} ontem={ontem("99food")} preenchido={nfoodBruto>0}>
         <div style={{display:"flex",gap:6}}>
           <MoneyInput value={form["99food"]} onChange={v=>setForm(f=>({...f,"99food":v}))} className="inp" style={{flex:1}}/>
           <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
@@ -3268,9 +3275,8 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
         </div>
         {nfoodTaxaPct>0&&nfoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(nfoodLiq)} (desc. {fmtMoney(nfoodBruto-nfoodLiq)})</div>}
-      </div>}
-      {aj.canalVendasExtras&&<div style={{marginBottom:8}}>
-        <label style={{fontSize:12,color:"#666",marginBottom:3,display:"block"}}>{aj.legVendasExtras}</label>
+      </LinhaCanal>}
+      {aj.canalVendasExtras&&<LinhaCanal Icone={IconDelivery} label={aj.legVendasExtras} ontem={ontem("delivery")} preenchido={deliveryValorExibir>0}>
         {deliverySincronizado?<>
           <div style={{display:"flex",alignItems:"center",gap:6,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"7px 10px",marginBottom:6,fontSize:11,color:"var(--successText)",fontWeight:700}}>
             🔄 Sincronizado automaticamente do delivery
@@ -3282,12 +3288,12 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           {deliveryManual&&vendaSincronizada&&(vendaSincronizada.delivery||0)>0&&
             <button onClick={()=>setDeliveryManual(false)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"underline",padding:0,marginTop:4}}>🔄 usar valor sincronizado</button>}
         </>}
-      </div>}
+      </LinhaCanal>}
       <hr className="divider"/>
       <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 10px",fontWeight:700,fontSize:16}}>
         <span>{aj.legTotalLiquido}</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
       </div>
-      <button className="btn" onClick={save} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",fontSize:15}}>{editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
+      <button className="btn" onClick={save} style={{background:saved?"#22C55E":"var(--btnPrimary)",color:saved?"#051208":"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",fontSize:15,transition:"background .15s ease"}}>{saved?"✓ Salvo":editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
       {editId&&<div style={{display:"flex",gap:8,marginTop:8}}>
         <button className="btn" onClick={()=>{
           const existente=editId&&(db.vendas||[]).find((v:any)=>v.id===editId);
@@ -3407,6 +3413,32 @@ const imprimirReciboVenda=(recibo:any,cfg:any,aj?:any,empresa?:string)=>{
   </body></html>`);
   w.document.close();w.focus();
 };
+
+// Linha de canal do formulário de Vendas: ícone + rótulo (com o valor de ontem
+// pra conferência) + o campo em si. O ícone acende quando o campo tem valor,
+// então dá pra ver de relance o que já foi lançado. Cores vêm das variáveis de
+// tema — o app tem claro e escuro, valor fixo ficaria ilegível num dos dois.
+function LinhaCanal({Icone,label,ontem,preenchido,children}:{Icone:any,label:string,ontem:number,preenchido:boolean,children:any}){
+  return <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,marginTop:17,display:"flex",alignItems:"center",justifyContent:"center",
+      background:preenchido?"var(--infoBg)":"var(--bg3)",color:preenchido?"var(--infoText)":"#888",transition:"background .15s ease,color .15s ease"}}>
+      <Icone/>
+    </div>
+    <div style={{flex:1,minWidth:0}}>
+      <label style={{fontSize:12,color:"#666",marginBottom:3,display:"flex",gap:6,flexWrap:"wrap",alignItems:"baseline"}}>
+        {label}
+        {ontem>0&&<span style={{fontSize:11,color:"#888"}}>· ontem {fmtMoney(ontem)}</span>}
+      </label>
+      {children}
+    </div>
+  </div>;
+}
+
+function IconMaquininha(){ return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="2.5" stroke="currentColor" strokeWidth="1.8"/><rect x="7" y="6.5" width="10" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.6"/><line x1="7" y1="14.5" x2="10.5" y2="14.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="13.5" y1="14.5" x2="17" y2="14.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="7" y1="17.5" x2="10.5" y2="17.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>; }
+function IconDinheiro(){ return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="6.5" width="19" height="11" rx="2" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.8"/></svg>; }
+function IconIfood(){ return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9.5h12l-1.2 9.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8L6 9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M9 9.5a3 3 0 0 1 6 0" stroke="currentColor" strokeWidth="1.8"/></svg>; }
+function Icon99Food(){ return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="7" cy="18" r="1.8" stroke="currentColor" strokeWidth="1.7"/><circle cx="16.5" cy="18" r="1.8" stroke="currentColor" strokeWidth="1.7"/><path d="M3.5 18h1.7L7 10.5h7.5L17 15h2.3M9 10.5V7h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
+function IconDelivery(){ return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 8l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M4 8v8l8 4 8-4V8" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/></svg>; }
 
 function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,empresa:string,login?:any,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const [subTab,setSubTab]=useState(pendingSub||"lancamentos");
