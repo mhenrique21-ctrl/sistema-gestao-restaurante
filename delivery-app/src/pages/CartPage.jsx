@@ -76,7 +76,9 @@ export default function CartPage() {
                     {money(itemLineTotal(item))}
                   </p>
                 </div>
-                <button onClick={() => removeItem(item.key)} className="press flex-shrink-0" style={{ color: 'var(--muted)' }}>
+                <button onClick={() => removeItem(item.key)} aria-label="Remover item"
+                  className="press flex-shrink-0 w-11 h-11 -mt-1.5 -mr-1.5 rounded-full flex items-center justify-center"
+                  style={{ color: 'var(--muted)' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                 </button>
               </div>
@@ -84,9 +86,9 @@ export default function CartPage() {
               <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>{money(itemUnitPrice(item))} cada</span>
                 <div className="flex items-center gap-2 px-1.5 rounded-full"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', height: 40 }}>
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', height: 44 }}>
                   <button onClick={() => updateQty(item.key, item.qty - 1)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center press text-lg font-bold"
+                    className="w-11 h-11 rounded-full flex items-center justify-center press text-lg font-bold"
                     style={{ color: 'var(--muted)' }}>−</button>
                   <span className="w-5 text-center font-black text-sm" style={{ color: 'var(--brown)' }}>{item.qty}</span>
                   {(() => {
@@ -98,7 +100,7 @@ export default function CartPage() {
                     return (
                       <button onClick={() => { if (!atLimit) updateQty(item.key, item.qty + 1) }}
                         disabled={atLimit}
-                        className="w-8 h-8 rounded-full flex items-center justify-center press text-lg font-bold"
+                        className="w-11 h-11 rounded-full flex items-center justify-center press text-lg font-bold"
                         style={{ color: atLimit ? 'var(--muted)' : 'var(--gold-dim)', opacity: atLimit ? 0.4 : 1 }}>+</button>
                     )
                   })()}

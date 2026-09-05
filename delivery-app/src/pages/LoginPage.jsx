@@ -4,6 +4,27 @@ import { useAuth } from '../store/auth'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
+const INPUT = {
+  background: 'var(--card)',
+  border: '1px solid var(--border)',
+  color: 'var(--cream)',
+  borderRadius: 14,
+  padding: '14px 16px',
+  fontSize: 15,
+  outline: 'none',
+  width: '100%',
+  fontFamily: 'inherit',
+}
+const LABEL = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'var(--muted)',
+  display: 'block',
+  marginBottom: 6,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+}
+
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
@@ -64,19 +85,45 @@ export default function LoginPage() {
   const phoneReady = digits.length >= 10
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <div className="bg-red-700 safe-top text-white px-4 pt-4 pb-8 text-center">
-        <button onClick={() => navigate(-1)} className="absolute left-4 top-4 text-red-200 press safe-top" style={{ marginTop: 'env(safe-area-inset-top)' }}>← Voltar</button>
-        <div className="text-5xl mt-2 mb-2">☕</div>
-        <h1 className="text-2xl font-bold">Confraria Café</h1>
-        <p className="text-red-200 text-sm mt-1">Informe seus dados para continuar</p>
+    <div className="flex flex-col min-h-screen" style={{ background: 'var(--bg)' }}>
+
+      {/* Hero da marca */}
+      <div className="safe-top relative overflow-hidden px-6 pt-10 pb-12"
+        style={{ background: 'linear-gradient(160deg, #5D4037 0%, #3E2723 100%)' }}>
+
+        {/* Voltar — alvo de toque 44px */}
+        <button onClick={() => navigate(-1)} aria-label="Voltar"
+          className="press absolute left-4 w-11 h-11 rounded-2xl flex items-center justify-center z-10"
+          style={{ background: 'rgba(255,255,255,0.12)', top: 'calc(16px + env(safe-area-inset-top))' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+        </button>
+
+        {/* Ornamentos */}
+        <div className="absolute rounded-full pointer-events-none"
+          style={{ top: -40, right: -40, width: 180, height: 180, background: 'rgba(200,155,90,0.12)' }} />
+        <div className="absolute rounded-full pointer-events-none"
+          style={{ bottom: -20, right: 40, width: 80, height: 80, background: 'rgba(200,155,90,0.08)' }} />
+
+        <div className="flex flex-col items-center text-center mt-3">
+          <div className="flex items-center justify-center mb-4"
+            style={{ width: 72, height: 72, borderRadius: 22, background: 'rgba(200,155,90,0.18)', border: '1px solid rgba(200,155,90,0.35)' }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C89B5A" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+              <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
+            </svg>
+          </div>
+          <h1 className="font-display font-bold" style={{ fontSize: 28, color: '#FFFFFF' }}>Confraria Café</h1>
+          <p className="mt-1.5 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>Informe seus dados para continuar</p>
+        </div>
       </div>
 
-      <div className="flex-1 px-4 -mt-4">
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 space-y-4">
+      {/* Card do formulário, elevado sobre o hero */}
+      <div className="flex-1 flex flex-col" style={{ marginTop: -24 }}>
+        <div className="flex-1 px-5 pt-7 pb-6"
+          style={{ background: 'var(--card)', borderRadius: '28px 28px 0 0', boxShadow: '0 -8px 32px rgba(62,39,35,0.12)' }}>
 
-          <div>
-            <label className="text-xs text-gray-500 font-medium">📱 WhatsApp *</label>
+          <div className="mb-4">
+            <label style={LABEL}>WhatsApp *</label>
             <div className="relative">
               <input
                 type="tel"
@@ -84,54 +131,81 @@ export default function LoginPage() {
                 onChange={e => {
                   const d = e.target.value.replace(/\D/g, '').slice(0, 11)
                   let masked = d
-                  if (d.length > 2) masked = `(${d.slice(0,2)}) ${d.slice(2)}`
-                  if (d.length > 7) masked = `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`
+                  if (d.length > 2) masked = `(${d.slice(0, 2)}) ${d.slice(2)}`
+                  if (d.length > 7) masked = `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
                   setPhone(masked)
                   setFoundCustomer(null)
                   setName('')
                   if (d.length >= 10) lookupByPhone(d)
                 }}
+                onFocus={e => { e.target.style.borderColor = 'var(--gold)' }}
+                onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
                 placeholder="(96) 99999-0000"
                 maxLength={15}
-                className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm mt-1 focus:outline-none focus:border-red-400"
+                style={INPUT}
               />
-              {lookingUp && <span className="absolute right-3 top-4 text-xs text-gray-400">🔍</span>}
+              {lookingUp && (
+                <span className="absolute text-xs" style={{ right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }}>
+                  Buscando…
+                </span>
+              )}
             </div>
           </div>
 
           {phoneReady && !lookingUp && (
             foundCustomer ? (
-              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3">
-                <span className="text-emerald-600 text-xl">✅</span>
-                <div>
-                  <p className="text-emerald-700 font-bold text-sm">{foundCustomer.name}</p>
-                  <p className="text-emerald-600 text-xs">Bem-vindo de volta!</p>
+              <div className="flex items-center gap-3 mb-5 px-4 py-3.5 fade-in"
+                style={{ background: 'rgba(67,160,71,0.08)', border: '1px solid rgba(67,160,71,0.25)', borderRadius: 16 }}>
+                <div className="flex items-center justify-center flex-shrink-0"
+                  style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(67,160,71,0.15)' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
                 </div>
-                <button onClick={() => { setFoundCustomer(null); setPhone(''); setName('') }} className="ml-auto text-gray-400 press">✕</button>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm truncate" style={{ color: '#2E7D32' }}>{foundCustomer.name}</p>
+                  <p className="text-xs" style={{ color: 'var(--green)' }}>Bem-vindo de volta!</p>
+                </div>
+                <button onClick={() => { setFoundCustomer(null); setPhone(''); setName('') }} aria-label="Trocar número"
+                  className="press w-11 h-11 -mr-2 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
               </div>
             ) : (
-              <div>
-                <label className="text-xs text-gray-500 font-medium">👤 Nome completo *</label>
+              <div className="mb-5 fade-in">
+                <label style={LABEL}>Nome completo *</label>
                 <input
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
+                  onFocus={e => { e.target.style.borderColor = 'var(--gold)' }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
                   placeholder="João Silva"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm mt-1 focus:outline-none focus:border-red-400"
+                  style={INPUT}
                 />
               </div>
             )
           )}
 
-          {error && <p className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
+          {error && (
+            <p className="text-sm px-4 py-3 mb-4"
+              style={{ background: 'rgba(216,67,67,0.10)', color: 'var(--danger)', borderRadius: 14 }}>
+              {error}
+            </p>
+          )}
 
+          {/* CTA — full-width, 56px */}
           <button
             onClick={handleSubmit}
             disabled={loading || !phoneReady}
-            className="w-full bg-red-700 text-white rounded-2xl py-4 font-bold text-base press active:bg-red-800 disabled:opacity-50 mt-2"
+            className="btn-gold w-full"
+            style={{ height: 56, fontSize: 16 }}
           >
-            {loading ? '⏳ Aguarde...' : foundCustomer ? 'Continuar' : 'Entrar'}
+            {loading ? 'Aguarde…' : foundCustomer ? 'Continuar' : 'Entrar'}
           </button>
+
+          <p className="text-center text-xs mt-4 leading-relaxed" style={{ color: 'var(--muted)' }}>
+            Ao continuar você aceita nossos<br />
+            <span style={{ color: 'var(--gold-dim)', fontWeight: 600 }}>termos de uso e privacidade</span>
+          </p>
         </div>
       </div>
     </div>

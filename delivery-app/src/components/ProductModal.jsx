@@ -101,7 +101,7 @@ export default function ProductModal({ product, onClose }) {
           {/* Title + price */}
           <div className="flex items-start justify-between gap-3 mb-1">
             <h2 className="font-display text-2xl font-bold leading-tight flex-1" style={{ color: 'var(--brown)' }}>{product.name}</h2>
-            <button onClick={onClose} className="press w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            <button onClick={onClose} className="press w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
               style={{ background: 'var(--bg)', color: 'var(--muted)', border: '1px solid var(--border)' }}>✕</button>
           </div>
 
@@ -196,12 +196,12 @@ export default function ProductModal({ product, onClose }) {
                 <div className="flex items-center gap-2 px-2 rounded-full"
                   style={{ background: 'var(--bg)', border: '1px solid var(--border)', height: 52 }}>
                   <button onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    className="w-11 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-bold press"
                     style={{ color: 'var(--muted)' }}>−</button>
                   <span className="w-8 text-center font-black text-base" style={{ color: 'var(--brown)' }}>{qty}</span>
                   <button onClick={() => setQty((q) => Math.min(remainingPromo, q + 1))}
                     disabled={qty >= remainingPromo}
-                    className="w-11 h-10 rounded-full flex items-center justify-center text-xl font-bold press"
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-bold press"
                     style={{ color: qty >= remainingPromo ? 'var(--muted)' : 'var(--gold-dim)', opacity: qty >= remainingPromo ? 0.4 : 1 }}>+</button>
                 </div>
               </div>

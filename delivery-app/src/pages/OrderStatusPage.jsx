@@ -77,7 +77,7 @@ export default function OrderStatusPage() {
       {/* Header dourado */}
       <div className="safe-top px-4 pt-4 pb-6" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => navigate('/orders')} className="press w-9 h-9 rounded-xl flex items-center justify-center"
+          <button onClick={() => navigate('/orders')} className="press w-11 h-11 rounded-xl flex items-center justify-center"
             style={{ background: 'var(--card)', color: 'var(--cream)' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
