@@ -95,6 +95,7 @@ async function buildCaixa(order, items) {
   // Nome do cliente (maior)
   if (order.customer_name) {
     p.bold(true); p.setTextSize(1,0); p.println(`Cliente: ${order.customer_name}`); p.setTextSize(0,0); p.bold(false);
+    if (order.customer_phone) p.println(`Tel: ${order.customer_phone}`);
     p.println('');
   }
 
