@@ -2014,6 +2014,16 @@ export default function App() {
         .camera-zone{border:2px dashed var(--border2);border-radius:14px;padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .2s}
         .camera-zone:hover{border-color:var(--acc)}
         textarea.inp{min-height:110px;resize:vertical}
+        /* Nova Entrada de Compras: alvo de toque maior, é preenchida em pé no
+           balcão recebendo mercadoria. Escopado nesta aba de propósito — .inp
+           é usada no app inteiro e crescer a altura em todo lugar quebraria
+           telas densas (tabelas de itens da NF-e, por exemplo). */
+        .compras-novo .inp,.compras-novo .btn,.compras-novo .chip{min-height:48px}
+        .compras-novo textarea.inp{min-height:110px}
+        .chip{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:9px 13px;border-radius:11px;font-size:13px;font-weight:600;
+          cursor:pointer;border:1.5px solid var(--border2);background:var(--bg4);color:var(--text2);transition:background .15s,border-color .15s,color .15s}
+        .chip[aria-pressed="true"]{background:var(--infoBg);border-color:var(--btnPrimary);color:var(--btnPrimary)}
+        .chip-row{display:flex;flex-wrap:wrap;gap:7px}
         .divider{border:none;border-top:1px solid var(--border);margin:10px 0}
         .app-sidebar{display:none;position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--bg2);border-right:1px solid var(--border);flex-direction:column;z-index:100;overflow:visible;transition:width .2s ease}
         .app-sidebar.colapsada{width:64px}
@@ -5030,6 +5040,50 @@ function ConsumoInsumos({db,setSubTab}:{db:any,setSubTab:(s:string)=>void}){
   </div>;
 }
 
+// Seletor de uma opção em linha (categoria, unidade, forma de pagamento):
+// um toque em vez de abrir o <select> nativo e rolar a lista. Guarda o mesmo
+// valor de antes — quem consome o estado não vê diferença.
+function ChipSelect({opcoes,valor,onChange,rotulo}:{opcoes:{v:string,label:string}[],valor:string,onChange:(v:string)=>void,rotulo?:string}){
+  return <div>
+    {rotulo&&<label style={{fontSize:11,color:"#666",display:"block",marginBottom:5}}>{rotulo}</label>}
+    <div className="chip-row">
+      {opcoes.map(o=>(
+        <button key={o.v} type="button" className="chip" aria-pressed={valor===o.v} onClick={()=>onChange(o.v)}>{o.label}</button>
+      ))}
+    </div>
+  </div>;
+}
+
+// Etiqueta de "esse nome já existe no cadastro?" ao lado do campo. Puramente
+// informativa: o cadastro automático de fornecedor/matéria-prima ao finalizar
+// a compra continua exatamente igual, com ou sem ela.
+function TagCadastro({existe,textoNovo}:{existe:boolean,textoNovo:string}){
+  return <span className="tag" style={{
+    background:existe?"var(--infoBg)":"var(--warningBg)",
+    color:existe?"var(--infoText)":"var(--warningText)",
+    whiteSpace:"nowrap",flexShrink:0}}>
+    {existe?"já cadastrado":textoNovo}
+  </span>;
+}
+
+// Aviso flutuante que some sozinho — substitui alert() em confirmação de
+// sucesso, que trava a tela e exige um clique a mais no meio do balcão.
+function Toast({msg,onClose}:{msg:string|null,onClose:()=>void}){
+  useEffect(()=>{
+    if(!msg)return;
+    const t=setTimeout(onClose,4000);
+    return ()=>clearTimeout(t);
+  },[msg,onClose]);
+  if(!msg)return null;
+  return <div role="status" aria-live="polite" onClick={onClose} style={{
+    position:"fixed",left:"50%",bottom:88,transform:"translateX(-50%)",zIndex:9999,cursor:"pointer",
+    background:"var(--successBg)",border:"1px solid #22C55E77",color:"var(--successText)",
+    borderRadius:12,padding:"12px 18px",fontSize:13,fontWeight:600,maxWidth:"min(92vw,420px)",
+    boxShadow:"0 6px 24px rgba(0,0,0,.18)",whiteSpace:"pre-line",textAlign:"center"}}>
+    {msg}
+  </div>;
+}
+
 function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,empresa:string,state?:any,setState?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const [subTab,setSubTab]=useState(pendingSub||"novo");
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -5043,6 +5097,8 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
   const [sugestoes,setSugestoes]=useState([]);
   const [sugestoesForn,setSugestoesForn]=useState([]);
+  const [toastMsg,setToastMsg]=useState<string|null>(null);
+  const [lancado,setLancado]=useState(false);
   const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""});
   const [prodEdit,setProdEdit]=useState<string|null>(null);
   const [novaMarca,setNovaMarca]=useState("");
@@ -5280,6 +5336,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     const u=parseMoney(unit),q=parseFloat(qtd)||0;
     return u>0&&q>0?String((u*q).toFixed(2)).replace(".",","):"";
   };
+  // Só pra camada visual (etiquetas e selo) — nenhuma dessas decide gravação.
+  // O cadastro automático de fornecedor e de matéria-prima ao finalizar segue
+  // sendo decidido lá dentro de finalizarCompra, exatamente como antes.
+  const fornecedorJaCadastrado=(db.fornecedores||[]).some((f:any)=>foldNome(f.nome)===foldNome(fornecedor));
+  const pagamentoAVista=["dinheiro","pix","cartão débito"].includes(formaPag);
+  const subtotalItemAtual=parseMoney(itemAtual.valorTotal||0);
 
   const addItem=()=>{
     if(!itemAtual.nomeProduto||!itemAtual.valorTotal)return alert("Preencha produto e valor total.");
@@ -5364,16 +5426,22 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     });
     // reset
     setCarrinho([]);setFornecedor("");setDataCom(today());setFormaPag("dinheiro");setVencimento(today());
-    let msg=`✅ Entrada finalizada!\n${carrinho.length} produto(s) registrado(s) no estoque e financeiro.`;
+    // Confirmação some sozinha em vez de travar a tela num alert(): quem
+    // recebe mercadoria costuma lançar várias entradas seguidas. Os detalhes
+    // de conciliação continuam com tela própria (quadro azul e modal abaixo),
+    // então o aviso só precisa dizer que gravou e apontar pra elas.
+    let msg=`✅ Estoque, ficha técnica e financeiro atualizados\n${carrinho.length} produto(s) nesta entrada.`;
     if(resultoConcilia.autoVinculados.length){
       setAvisoAuto(resultoConcilia.autoVinculados);
-      msg+=`\n\n🔗 ${resultoConcilia.autoVinculados.length} insumo(s) vinculado(s) automaticamente — confira no quadro azul de Compras (da pra desfazer).`;
+      msg+=`\n🔗 ${resultoConcilia.autoVinculados.length} insumo(s) vinculado(s) automaticamente — confira no quadro azul (dá pra desfazer).`;
     }
     if(resultoConcilia.pendentes.length){
-      msg+=`\n\n⚠️ ${resultoConcilia.pendentes.length} insumo(s) com nome parecido aguardando aprovação:\n`+resultoConcilia.pendentes.map(p=>`• "${p.mp}" → parece com "${p.prod}"?`).join("\n");
+      msg+=`\n⚠️ ${resultoConcilia.pendentes.length} insumo(s) com nome parecido aguardando sua aprovação.`;
       setShowConciliarInsumos(true);
     }
-    alert(msg);
+    setToastMsg(msg);
+    setLancado(true);
+    setTimeout(()=>setLancado(false),2000);
   };
 
   // ---- IA ----
@@ -6057,19 +6125,23 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   };
 
   return <div>
+    <Toast msg={toastMsg} onClose={()=>setToastMsg(null)}/>
 
     {/* ===== NOVA ENTRADA (multi-produto) ===== */}
-    {subTab==="novo"&&<div>
+    {subTab==="novo"&&<div className="compras-novo">
       <div className="section-title">Nova Entrada de Estoque</div>
 
       {/* cabeçalho da compra */}
       <div className="card" style={{marginBottom:10}}>
         <div className="section-title" style={{marginBottom:8}}>Dados da Compra</div>
         <div style={{position:"relative",marginBottom:8}}>
-          <input placeholder="Fornecedor *" value={fornecedor}
-            onChange={e=>{setFornecedor(e.target.value);buscarForn(e.target.value);}}
-            onBlur={()=>setTimeout(()=>setSugestoesForn([]),200)}
-            className="inp"/>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <input placeholder="Fornecedor *" value={fornecedor}
+              onChange={e=>{setFornecedor(e.target.value);buscarForn(e.target.value);}}
+              onBlur={()=>setTimeout(()=>setSugestoesForn([]),200)}
+              className="inp"/>
+            {fornecedor.trim()&&<TagCadastro existe={fornecedorJaCadastrado} textoNovo="+ novo fornecedor"/>}
+          </div>
           {sugestoesForn.length>0&&(
             <div style={{background:"var(--border)",border:"1px solid #0EA5E940",borderRadius:"0 0 10px 10px",position:"absolute",width:"100%",zIndex:10,top:"42px"}}>
               {sugestoesForn.map(f=>(
@@ -6082,17 +6154,18 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             </div>
           )}
         </div>
-        <div className="row" style={{marginBottom:8}}>
-          <div style={{flex:1}}>
-            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Data</label>
-            <input type="date" value={dataCom} onChange={e=>setDataCom(e.target.value)} className="inp"/>
+        <div style={{marginBottom:8}}>
+          <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Data</label>
+          <input type="date" value={dataCom} onChange={e=>setDataCom(e.target.value)} className="inp"/>
+        </div>
+        <div style={{marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,flexWrap:"wrap"}}>
+            <label style={{fontSize:11,color:"#666"}}>Forma de Pagamento</label>
+            <span className="tag" style={{background:pagamentoAVista?"var(--successBg)":"var(--warningBg)",color:pagamentoAVista?"var(--successText)":"var(--warningText)"}}>
+              {pagamentoAVista?"🟢 Pago":"🟡 A Pagar"}
+            </span>
           </div>
-          <div style={{flex:1}}>
-            <label style={{fontSize:11,color:"#666",display:"block",marginBottom:3}}>Forma de Pagamento</label>
-            <select value={formaPag} onChange={e=>setFormaPag(e.target.value)} className="inp">
-              {formasPag.map(f=><option key={f} value={f}>{f.charAt(0).toUpperCase()+f.slice(1)}</option>)}
-            </select>
-          </div>
+          <ChipSelect opcoes={formasPag.map(f=>({v:f,label:f.charAt(0).toUpperCase()+f.slice(1)}))} valor={formaPag} onChange={setFormaPag}/>
         </div>
         {["boleto","fiado","cartão crédito"].includes(formaPag)&&(
           <div>
@@ -6106,9 +6179,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       <div className="card" style={{marginBottom:10}}>
         <div className="section-title" style={{marginBottom:8}}>Adicionar Produto</div>
         <div style={{position:"relative"}}>
-          <input placeholder="Nome do produto / matéria-prima" value={itemAtual.nomeProduto}
-            onChange={e=>{setItemAtual(i=>({...i,nomeProduto:e.target.value}));buscarMP(e.target.value);}}
-            className="inp" style={{marginBottom:sugestoes.length?0:8}}/>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sugestoes.length?0:8}}>
+            <input placeholder="Nome do produto / matéria-prima" value={itemAtual.nomeProduto}
+              onChange={e=>{setItemAtual(i=>({...i,nomeProduto:e.target.value}));buscarMP(e.target.value);}}
+              className="inp"/>
+            {itemAtual.nomeProduto.trim()&&<TagCadastro existe={!!mpDoItemAtual} textoNovo="+ novo item"/>}
+          </div>
           {sugestoes.length>0&&(
             <div style={{background:"var(--border)",border:"1px solid #0EA5E940",borderRadius:"0 0 10px 10px",position:"absolute",width:"100%",zIndex:10,top:"42px"}}>
               {sugestoes.map(mp=>(
@@ -6121,13 +6197,15 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             </div>
           )}
         </div>
-        <div className="row" style={{marginBottom:8,marginTop:sugestoes.length?44:0}}>
-          <select value={itemAtual.categoria} onChange={e=>setItemAtual(i=>({...i,categoria:e.target.value}))} className="inp">
-            {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
-          </select>
-          <select value={itemAtual.unidade} onChange={e=>setItemAtual(i=>({...i,unidade:e.target.value,qtdPorPacote:""}))} className="inp">
-            {unds.map(u=><option key={u} value={u}>{u==="kg"?"kg (quilograma)":u==="un"?"un (unidade)":u==="L"?"L (litro)":u==="g"?"g (grama)":u==="ml"?"ml (mililitro)":"pct (pacote)"}</option>)}
-          </select>
+        <div style={{marginBottom:8,marginTop:sugestoes.length?44:0}}>
+          <ChipSelect rotulo="Categoria" valor={itemAtual.categoria}
+            onChange={v=>setItemAtual(i=>({...i,categoria:v}))}
+            opcoes={cats.map(c=>({v:c,label:`${catIcon(c)} ${c.charAt(0).toUpperCase()+c.slice(1)}`}))}/>
+        </div>
+        <div style={{marginBottom:8}}>
+          <ChipSelect rotulo="Unidade" valor={itemAtual.unidade}
+            onChange={v=>setItemAtual(i=>({...i,unidade:v,qtdPorPacote:""}))}
+            opcoes={unds.map(u=>({v:u,label:u==="kg"?"kg (quilograma)":u==="un"?"un (unidade)":u==="L"?"L (litro)":u==="g"?"g (grama)":u==="ml"?"ml (mililitro)":"pct (pacote)"}))}/>
         </div>
         {temConversaoEmbalagem&&<label style={{display:"flex",alignItems:"center",gap:9,padding:"9px 10px",background:itemAtual.comprarEmbalagem?"var(--btnPrimary)22":"var(--bg4)",border:`1px solid ${itemAtual.comprarEmbalagem?"var(--btnPrimary)":"var(--border2)"}`,borderRadius:9,marginBottom:8,cursor:"pointer"}}>
           <input type="checkbox" checked={itemAtual.comprarEmbalagem} onChange={e=>setItemAtual(i=>({...i,comprarEmbalagem:e.target.checked,qtdEmbalagemComprada:""}))} style={{width:16,height:16,flexShrink:0}}/>
@@ -6168,6 +6246,15 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             <MoneyInput value={itemAtual.valorTotal} onChange={v=>setItemAtual(i=>({...i,valorTotal:v}))} className="inp"/>
           </div>
         </>}
+        {subtotalItemAtual>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,
+          background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+          <span style={{fontSize:12,color:"var(--text2)"}}>
+            {itemAtual.comprarEmbalagem&&temConversaoEmbalagem
+              ?`${itemAtual.qtdEmbalagemComprada||0} ${mpDoItemAtual.unidadeEmbalagem}`
+              :`${itemAtual.quantidade||0} ${itemAtual.unidade}${itemAtual.valorUnit?` × ${fmtMoney(parseMoney(itemAtual.valorUnit))}`:""}`}
+          </span>
+          <b style={{fontSize:16,color:"#22C55E"}}>{fmtMoney(subtotalItemAtual)}</b>
+        </div>}
         <button className="btn" onClick={addItem} style={{background:"var(--border2)",color:"var(--text)",padding:"11px",width:"100%",fontSize:14}}>
           + Adicionar ao Carrinho
         </button>
@@ -6198,9 +6285,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           </div>
         ))}
         <hr className="divider"/>
-        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 12px",fontWeight:700,fontSize:16}}>
-          <span>Total da Compra</span>
-          <span style={{color:"#22C55E"}}>{fmtMoney(totalCarrinho)}</span>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,
+          background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:12,padding:"14px 16px",margin:"4px 0 12px"}}>
+          <span style={{fontWeight:700,fontSize:14}}>Total da Compra</span>
+          <span style={{color:"#22C55E",fontWeight:800,fontSize:24,letterSpacing:"-0.5px"}}>{fmtMoney(totalCarrinho)}</span>
         </div>
         {/* Budget de Compras — avisa ANTES de confirmar, não só depois no Dashboard */}
         {vendasDiaAnteriorCompra>0&&<div style={{background:"var(--bg4)",borderRadius:10,padding:"12px",marginBottom:12,border:`1px solid ${pctProjetadoNoDia>100?"var(--btnDanger)66":"var(--border)"}`}}>
@@ -6234,16 +6322,23 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             <span style={{fontWeight:600}}>{fmtDate(vencimento)}</span>
           </div>}
         </div>
-        <button className="btn" onClick={finalizarCompra}
-          style={{background:"linear-gradient(135deg,#22C55E,#22c55e)",color:"#051208",padding:"14px",width:"100%",fontSize:15,fontWeight:700}}>
-          ✅ Finalizar Entrada — {fmtMoney(totalCarrinho)}
+        <button className="btn" onClick={finalizarCompra} disabled={lancado}
+          style={{background:lancado?"#16A34A":"linear-gradient(135deg,#22C55E,#22c55e)",color:"#051208",padding:"14px",width:"100%",fontSize:15,fontWeight:700,transition:"background .15s ease"}}>
+          {lancado?"✓ Lançado":`✅ Finalizar Entrada — ${fmtMoney(totalCarrinho)}`}
         </button>
       </div>}
 
-      {carrinho.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:"var(--text3)"}}>
-        <div style={{fontSize:32,marginBottom:6}}>🧺</div>
-        <div style={{fontSize:13}}>Carrinho vazio — adicione produtos acima</div>
-      </div>}
+      {/* Finalizar esvazia o carrinho, então o botão verde de confirmação
+          desmontaria junto — o "✓ Lançado" aparece aqui, no lugar do estado
+          vazio, pelos mesmos ~2s. */}
+      {carrinho.length===0&&(lancado
+        ?<div style={{textAlign:"center",padding:"18px 0"}}>
+          <div className="btn" style={{background:"#16A34A",color:"#051208",padding:"14px",width:"100%",fontSize:15,fontWeight:700,borderRadius:12}}>✓ Lançado</div>
+        </div>
+        :<div style={{textAlign:"center",padding:"24px 0",color:"var(--text3)"}}>
+          <div style={{fontSize:32,marginBottom:6}}>🧺</div>
+          <div style={{fontSize:13}}>Carrinho vazio — adicione produtos acima</div>
+        </div>)}
     </div>}
 
     {/* ===== CUPOM IA ===== */}
