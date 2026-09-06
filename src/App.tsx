@@ -1938,6 +1938,7 @@ export default function App() {
       {id:"compras-forn",label:"Fornecedores",icon:"🏭",sub:"forn"},
       {id:"compras-prod",label:"Insumos",icon:"📦",sub:"produtos"},
       {id:"compras-cons",label:"Consumo",icon:"📊",sub:"consumo"},
+      {id:"compras-migracao",label:"Reclassificar",icon:"🔀",sub:"migracao"},
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
       {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
@@ -5114,12 +5115,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [formaPag,setFormaPag]=useState("dinheiro");
   const [vencimento,setVencimento]=useState(today());
   const [carrinho,setCarrinho]=useState([]);
-  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
+  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:CATS_CMV[0],unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
   const [sugestoes,setSugestoes]=useState([]);
   const [sugestoesForn,setSugestoesForn]=useState([]);
   const [toastMsg,setToastMsg]=useState<string|null>(null);
   const [lancado,setLancado]=useState(false);
-  const [prodForm,setProdForm]=useState({nome:"",categoria:"insumos",unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""});
+  const [prodForm,setProdForm]=useState({nome:"",categoria:CATS_CMV[0],unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""});
   const [prodEdit,setProdEdit]=useState<string|null>(null);
   const [novaMarca,setNovaMarca]=useState("");
   const [gruposSugeridos,setGruposSugeridos]=useState<null|{nomeSugerido:string,ids:string[],motivo?:string}[]>(null);
@@ -5306,11 +5307,28 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   // Categoria da compra vem da mesma lista rica que "Lista → Categorias"
   // gerencia (db.listaCategorias) — antes eram 12 categorias genéricas fixas,
   // divorciadas da lista de verdade que o usuário já mantém pra outra tela.
-  const catsListaRica:string[]=db.listaCategorias||[];
-  const catsListaOrdem:string[]=db.listaCatOrdem||[];
-  const catsListaDel:string[]=db.listaCatDeleted||[];
-  const catsAllRica=[...CATS_DEFAULT,...catsListaRica.filter((c:string)=>!CATS_DEFAULT.includes(c))].filter((c:string)=>!catsListaDel.includes(c));
-  const cats=catsListaOrdem.length>0?[...catsListaOrdem.filter((c:string)=>catsAllRica.includes(c)),...catsAllRica.filter((c:string)=>!catsListaOrdem.includes(c))]:catsAllRica;
+  // A categoria da COMPRA passou a ser contábil (as 6 do CMV + as de fora
+  // dele) — antes vinha da mesma lista da Lista de Compras, que serve pra
+  // organizar o corredor, não pra medir custo de mercadoria. A Lista continua
+  // com a lista rica dela, intocada (campo "cat" do item, outro campo).
+  const cats=CATS_COMPRA;
+  // Compras antigas guardam categoria da lista antiga: aparecem na tela de
+  // revisão (subTab "migracao") até serem reclassificadas, e seguem contando
+  // no histórico normalmente enquanto isso.
+  const comprasLegado=(db.compras||[]).filter((c:any)=>c.categoria&&!CATS_COMPRA.includes(c.categoria));
+  const catsLegado=[...new Set(comprasLegado.map((c:any)=>c.categoria))] as string[];
+  const [migracaoDestinos,setMigracaoDestinos]=useState<{[k:string]:string}>({});
+  // Reescreve a categoria das compras de UM grupo, guardando a original em
+  // categoriaOriginal — a spec pede pra não perder rastreabilidade, e sem isso
+  // não haveria como auditar (nem desfazer) uma reclassificação errada.
+  const migrarCategoria=(antiga:string,destino:string)=>{
+    const qtd=(db.compras||[]).filter((c:any)=>c.categoria===antiga).length;
+    if(!confirm(`Reclassificar ${qtd} compra(s) de "${antiga}" para "${destino}"?\n\nA categoria original fica guardada em cada registro.`))return;
+    (setDbAndSave||setDb)((d:any)=>({...d,compras:(d.compras||[]).map((c:any)=>
+      c.categoria===antiga?{...c,categoria:destino,categoriaOriginal:c.categoriaOriginal||antiga,atualizadoEm:new Date().toISOString()}:c
+    )}));
+    setToastMsg(`✅ ${qtd} compra(s) reclassificada(s) como “${destino}”`);
+  };
   const unds=["kg","un","L","g","ml","pct"];
   const formasPag=["dinheiro","cartão débito","cartão crédito","pix","boleto","fiado"];
 
@@ -5374,7 +5392,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       ?{...itemAtual,unidade:mpDoItemAtual.unidade,quantidade:String(qtdEmbalConvertida),valorUnit:String(valorUnitEmbalConvertido.toFixed(4))}
       :itemAtual;
     setCarrinho(c=>[...c,{...itemFinal,id:uid(),valorTotal:itemFinal.valorTotal,valorUnit:itemFinal.valorUnit}]);
-    setItemAtual({nomeProduto:"",categoria:"insumos",unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
+    setItemAtual({nomeProduto:"",categoria:CATS_CMV[0],unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
     setSugestoes([]);
   };
   const remItem=(id)=>setCarrinho(c=>c.filter(i=>i.id!==id));
@@ -6779,6 +6797,51 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       })()}
     </div>}
 
+    {/* ===== RECLASSIFICAR CATEGORIAS ANTIGAS (migração pro CMV) ===== */}
+    {subTab==="migracao"&&<div>
+      <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
+      <div className="section-title">Reclassificar categorias antigas</div>
+      {catsLegado.length===0
+        ?<div className="card" style={{textAlign:"center",padding:"28px 16px"}}>
+          <div style={{fontSize:32,marginBottom:8}}>✅</div>
+          <div style={{fontWeight:700,marginBottom:4}}>Nada pendente</div>
+          <div className="muted" style={{fontSize:12}}>Todas as compras já usam as categorias contábeis novas.</div>
+        </div>
+        :<>
+          <div className="card" style={{marginBottom:10,border:"1px solid #F59E0B55",background:"var(--warningBg)"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--warningText)",marginBottom:4}}>
+              {comprasLegado.length} compra(s) em {catsLegado.length} categoria(s) antiga(s)
+            </div>
+            <div style={{fontSize:11.5,color:"var(--warningText)"}}>
+              A categoria da compra agora é contábil: só as 6 de matéria-prima entram no CMV.
+              Escolha o destino de cada categoria antiga e confirme — nada é reescrito antes disso,
+              e a categoria original fica guardada em cada registro para rastreabilidade.
+              As compras continuam aparecendo normalmente no histórico enquanto você não migra.
+            </div>
+          </div>
+          {catsLegado.map((antiga:string)=>{
+            const doGrupo=comprasLegado.filter((c:any)=>c.categoria===antiga);
+            const total=doGrupo.reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+            const destino=migracaoDestinos[antiga]??sugerirCategoriaCmv(antiga);
+            return <div key={antiga} className="card" style={{marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                <span style={{fontWeight:700,fontSize:14}}>{catIcon(antiga)} {antiga}</span>
+                <span className="muted" style={{fontSize:12}}>{doGrupo.length} compra(s) · {fmtMoney(total)}</span>
+              </div>
+              <label style={{fontSize:11,color:"#666",display:"block",marginBottom:4}}>Passa a contar como</label>
+              <select value={destino} onChange={e=>setMigracaoDestinos(m=>({...m,[antiga]:e.target.value}))} className="inp" style={{marginBottom:8}}>
+                {CATS_CMV.map(c=><option key={c} value={c}>{catIcon(c)} {c} — entra no CMV</option>)}
+                {CATS_NAO_CMV.map(c=><option key={c} value={c}>{catIcon(c)} {c} — fora do CMV</option>)}
+              </select>
+              <button className="btn" onClick={()=>migrarCategoria(antiga,destino)}
+                style={{background:"var(--btnPrimary)",color:"#fff",padding:"10px",width:"100%",fontSize:13}}>
+                Reclassificar {doGrupo.length} compra(s) como “{destino}”
+              </button>
+            </div>;
+          })}
+        </>}
+    </div>}
+
     {subTab==="forn"&&<div>
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -6921,12 +6984,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 }
                 return{...d,materiasPrimas:mps};
               });
-              setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""});
+              setProdForm({nome:"",categoria:CATS_CMV[0],unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""});
               setProdEdit(null);
             }} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"11px",flex:1,fontSize:13}}>
               {prodEdit?"💾 Atualizar":"➕ Cadastrar"}
             </button>
-            {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:"insumos",unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""}); }}
+            {prodEdit&&<button className="btn" onClick={()=>{setProdEdit(null);setProdForm({nome:"",categoria:CATS_CMV[0],unidade:"kg",valor:"",unidadeEmbalagem:"",equivaleEm:""}); }}
               style={{background:"var(--border2)",color:"var(--text2)",padding:"11px",fontSize:13}}>Cancelar</button>}
           </div>
         </div>
@@ -7303,8 +7366,39 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 }
 
 // ===================== LISTA DE COMPRAS =====================
+// ── Categorias contábeis da COMPRA (base do CMV) ─────────────────────────────
+// Não confundir com as categorias da Lista de Compras (CATS_DEFAULT, abaixo):
+// aquelas organizam o que comprar por tipo/corredor (carnes, polpas, temperos)
+// e continuam como estão — a compra guarda "categoria", o item da lista guarda
+// "cat", campos separados desde sempre.
+// Só estas 6 entram no CMV. As de fora existem pra despesa continuar
+// rastreável (fornecedor, nota) sem poluir o custo de mercadoria vendida.
+const CATS_CMV=["Proteínas","Hortifruti","Laticínios","Mercearia/Secos","Bebidas para revenda","Descartáveis de consumo do produto"];
+const CATS_NAO_CMV=["Material de limpeza e higiene","Outros"];
+const CATS_COMPRA=[...CATS_CMV,...CATS_NAO_CMV];
+const ehCategoriaCmv=(cat:string)=>CATS_CMV.includes(cat);
+// Sugestão de destino ao migrar uma categoria antiga. Só sugere — quem decide
+// é o usuário na tela de revisão, e nada é reescrito sem ele confirmar.
+const SUGESTAO_MIGRACAO:{[k:string]:string}={
+  "carnes":"Proteínas","proteína":"Proteínas","hortifruti":"Hortifruti","laticínios":"Laticínios",
+  "grãos":"Mercearia/Secos","temperos":"Mercearia/Secos","farinhas":"Mercearia/Secos",
+  "mercearia básica":"Mercearia/Secos","polpas":"Mercearia/Secos","molhos":"Mercearia/Secos",
+  "massas":"Mercearia/Secos","chocolates":"Mercearia/Secos","cafés e complementos":"Mercearia/Secos",
+  "latas, caixas e temperos":"Mercearia/Secos","insumos":"Mercearia/Secos",
+  "bebidas":"Bebidas para revenda",
+  "embalagens":"Descartáveis de consumo do produto","descartáveis":"Descartáveis de consumo do produto",
+  "material de limpeza":"Material de limpeza e higiene",
+  "outros":"Outros",
+};
+const sugerirCategoriaCmv=(antiga:string)=>SUGESTAO_MIGRACAO[String(antiga||"").trim().toLowerCase()]||"Outros";
+
 const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","polpas","mercearia básica","farinhas","cafés e complementos","chocolates","latas, caixas e temperos","molhos","massas","outros"];
 const CAT_ICONS:Record<string,string>={
+  // Categorias contábeis da compra (CATS_COMPRA)
+  "Proteínas":"🥩","Hortifruti":"🥦","Laticínios":"🧀","Mercearia/Secos":"🛒",
+  "Bebidas para revenda":"🍺","Descartáveis de consumo do produto":"🥤",
+  "Material de limpeza e higiene":"🧹","Outros":"📋",
+  // Categorias da Lista de Compras (organização por tipo/corredor)
   "carnes":"🥩","hortifruti":"🥦","laticínios":"🧀","grãos":"🌾","temperos":"🧂",
   "proteína":"🍖","bebidas":"🍺","embalagens":"📦","descartáveis":"🥤",
   "material de limpeza":"🧹","limpeza":"🧹",
@@ -13287,16 +13381,31 @@ function DREComp({db,setDb,empresa}){
   },0);
   const vendasLiq=vendasBrutas-despVendas;
 
-  // CMV by category
+  // CMV por categoria — só as 6 categorias de matéria-prima entram. Compra
+  // fora delas (limpeza/higiene, outros) é despesa, não custo de mercadoria:
+  // aparece separada abaixo, sem inflar o CMV nem a margem.
+  // Categoria antiga ainda não reclassificada (ver Compras → Reclassificar)
+  // cai no balde "A reclassificar", visível de propósito: some sozinha da
+  // linha conforme o usuário migra, e não some do relatório sem aviso.
   const cmvCats:{[k:string]:number}={};
-  const catLabel=(c)=>{const m={"proteína":"Alimentos (Proteínas)","insumos":"Alimentos (Insumos)","descartáveis":"Embalagens e Descartáveis","material de limpeza":"Material de Limpeza"};return m[c]||"Outros CMV";};
-  compras.forEach(c=>{const l=catLabel(c.categoria);cmvCats[l]=(cmvCats[l]||0)+parseMoney(c.valor);});
+  const foraCmvCats:{[k:string]:number}={};
+  compras.forEach(c=>{
+    const cat=c.categoria||"Outros";
+    const v=parseMoney(c.valor);
+    if(ehCategoriaCmv(cat))cmvCats[cat]=(cmvCats[cat]||0)+v;
+    else foraCmvCats[CATS_COMPRA.includes(cat)?cat:"A reclassificar"]=(foraCmvCats[CATS_COMPRA.includes(cat)?cat:"A reclassificar"]||0)+v;
+  });
   const totalCMV=Object.values(cmvCats).reduce((s,v)=>s+v,0);
+  const totalForaCmv=Object.values(foraCmvCats).reduce((s,v)=>s+v,0);
   const lucroBruto=vendasLiq-totalCMV;
 
   // Despesas (by category)
   const despCats:{[k:string]:number}={};
   contasPagas.forEach(c=>{const k=c.categoria||"Outros";despCats[k]=(despCats[k]||0)+parseMoney(c.valor);});
+  // As compras fora do CMV (limpeza/higiene, outros) saíram do custo de
+  // mercadoria mas continuam sendo dinheiro que saiu: entram aqui, nas
+  // despesas operacionais. Sem isso, tirá-las do CMV inflaria o resultado.
+  Object.entries(foraCmvCats).forEach(([k,v])=>{despCats[k]=(despCats[k]||0)+v;});
   const totalDesp=Object.values(despCats).reduce((s,v)=>s+v,0);
   const resultadoOp=lucroBruto-totalDesp;
 
