@@ -998,8 +998,15 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
   const nome=impressaoNome(cfg,empresa);
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${titulo} - ${empresa}</title>
   <style>body{font-family:'Segoe UI',sans-serif;margin:0;padding:20px;color:#1a1a2e;background:#f8f9fc;font-size:${fpx}px}
-  .header{background:${cfg.relatorioCabecalho==="linha"?"transparent":"#DBEAFE"};color:${cfg.relatorioCabecalho==="linha"?"#1a1a2e":"#fff"};padding:${cfg.relatorioCabecalho==="linha"?"0 0 14px":"24px"};border-radius:${cfg.relatorioCabecalho==="linha"?"0":"12px"};border-bottom:${cfg.relatorioCabecalho==="linha"?`3px solid ${cfg.cor}`:"none"};margin-bottom:24px}
-  .header h1{margin:0;font-size:22px;font-weight:700;color:${cfg.relatorioCabecalho==="linha"?cfg.cor:"inherit"}}.header p{margin:4px 0 0;opacity:.7;font-size:${Math.max(fpx-1,11)}px}
+  /* Texto do cabeçalho é SEMPRE escuro. Era branco sobre #DBEAFE (azul bem
+     claro): ilegível na tela, e invisível no papel, porque o navegador não
+     imprime fundo colorido por padrão — virava branco no branco. Escuro
+     funciona nos dois casos, com ou sem o fundo. */
+  .header{background:${cfg.relatorioCabecalho==="linha"?"transparent":"#DBEAFE"};color:#132038;padding:${cfg.relatorioCabecalho==="linha"?"0 0 14px":"24px"};border-radius:${cfg.relatorioCabecalho==="linha"?"0":"12px"};border-bottom:${cfg.relatorioCabecalho==="linha"?`3px solid ${cfg.cor}`:"none"};margin-bottom:24px}
+  .header h1{margin:0;font-size:22px;font-weight:700;color:${cfg.relatorioCabecalho==="linha"?cfg.cor:"#132038"}}
+  /* opacity .7 sobre fundo claro apagava o subtítulo; cinza escuro explícito
+     mantém a hierarquia sem sumir. */
+  .header p{margin:4px 0 0;font-size:${Math.max(fpx-1,11)}px;color:#3d4a63}
   .header .logo-wrap{margin-bottom:8px}
   .section{background:#fff;border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
   .section h2{font-size:${Math.max(fpx+1,14)}px;font-weight:700;color:#4a5568;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px}
@@ -1011,12 +1018,16 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
   .green{color:#166534;background:#dcfce7}.red{color:#B91C1C;background:#fee2e2}.yellow{color:#92400e;background:#fef3c7}
   .summary-grid{display:${cfg.relatorioCards?"grid":"none"};grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
   .summary-card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06);text-align:center}
-  .summary-card .val{font-size:20px;font-weight:700;color:#2d3a6b}.summary-card .lbl{font-size:12px;color:#888;margin-top:4px}
-  .footer{text-align:center;margin-top:24px;font-size:12px;color:#aaa}
+  .summary-card .val{font-size:20px;font-weight:700;color:#2d3a6b}.summary-card .lbl{font-size:12px;color:#555;margin-top:4px}
+  .footer{text-align:center;margin-top:24px;font-size:12px;color:#666}
   /* Uma seção não deve nascer no fim da página e continuar na seguinte; e a
      tabela repete o cabeçalho em cada página que ocupar, senão a partir da
      segunda folha as colunas ficam sem identificação. */
   @media print{
+    /* Sem isto o navegador descarta todo fundo colorido pra economizar tinta,
+       e as barras de status do budget somem — sobra a barra vazia. O rótulo
+       escrito ao lado continua sendo a informação principal, isto é reforço. */
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .section{break-inside:avoid;page-break-inside:avoid}
     thead{display:table-header-group}
     tr{break-inside:avoid;page-break-inside:avoid}
@@ -1029,7 +1040,7 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
     <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
     <button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar PDF</button>
   </div>
-  <div class="header">${cfg.logo?`<div class="logo-wrap">${impressaoLogoHtml(cfg,`height:36px;max-width:150px;object-fit:contain;${cfg.relatorioCabecalho==="linha"?"":"filter:brightness(0) invert(1)"}`)}</div>`:""}<h1>${titulo} — ${nome}</h1>
+  <div class="header">${cfg.logo?`<div class="logo-wrap">${impressaoLogoHtml(cfg,"height:36px;max-width:150px;object-fit:contain")}</div>`:""}<h1>${titulo} — ${nome}</h1>
   ${impressaoDadosHtml(cfg,`margin:4px 0 0;opacity:.7;font-size:${Math.max(fpx-2,10)}px;line-height:1.5`)}
   <p>Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} | ${new Date().toLocaleDateString("pt-BR",{timeZone:TZ,month:"long",year:"numeric"})}</p></div>
   ${conteudo}
@@ -12009,7 +12020,7 @@ function imprimirNFe(conta:any,itens:any[]){
       tfoot td{border-top:2px solid ${cfg.cor};padding:12px 10px;font-size:18px;font-weight:900;text-align:right}
       .no-print-bar{display:flex;gap:8px;margin-bottom:18px}
       .no-print-bar button{padding:10px 22px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
-      .footer{margin-top:24px;font-size:11px;color:#aaa;text-align:center}
+      .footer{margin-top:24px;font-size:11px;color:#666;text-align:center}
       @media print{.no-print-bar{display:none!important}body{padding:12px}${impressaoPageCss(cfg)}}</style></head>
   <body>
     <div class="no-print-bar">
@@ -13842,9 +13853,9 @@ function DREComp({db,setDb,empresa}){
 
   const printDRE=()=>{
     const rows=(obj:{[k:string]:number},prefix:string,colFn:(v:number)=>string)=>
-      Object.entries(obj).filter(([,v])=>v>0).map(([k,v])=>`<tr><td style="padding:6px 8px 6px 24px;color:#666;font-size:12px">${k}</td><td style="text-align:right;color:#999;font-size:11px">${vendasBrutas>0?((v/vendasBrutas)*100).toFixed(1)+"%" : ""}</td><td style="text-align:right;font-weight:600;color:${colFn(v)};white-space:nowrap;padding:6px 8px">${fmtMoney(v)}</td></tr>`).join("");
+      Object.entries(obj).filter(([,v])=>v>0).map(([k,v])=>`<tr><td style="padding:6px 8px 6px 24px;color:#666;font-size:12px">${k}</td><td style="text-align:right;color:#5b6472;font-size:11px">${vendasBrutas>0?((v/vendasBrutas)*100).toFixed(1)+"%" : ""}</td><td style="text-align:right;font-weight:600;color:${colFn(v)};white-space:nowrap;padding:6px 8px">${fmtMoney(v)}</td></tr>`).join("");
     const tr=(l:string,v:number,bold=false,color=col(v),indent=false)=>
-      `<tr style="${bold?"font-weight:700;font-size:14px;background:#f8f9fe":""}"><td style="padding:${indent?"6px 8px 6px 24px":"8px"};color:${indent?"#666":"inherit"}">${l}</td><td style="text-align:right;color:#999;font-size:11px">${pct(v)}</td><td style="text-align:right;font-weight:${bold?700:600};color:${color};white-space:nowrap;padding:8px">${fmtMoney(v)}</td></tr>`;
+      `<tr style="${bold?"font-weight:700;font-size:14px;background:#f8f9fe":""}"><td style="padding:${indent?"6px 8px 6px 24px":"8px"};color:${indent?"#666":"inherit"}">${l}</td><td style="text-align:right;color:#5b6472;font-size:11px">${pct(v)}</td><td style="text-align:right;font-weight:${bold?700:600};color:${color};white-space:nowrap;padding:8px">${fmtMoney(v)}</td></tr>`;
     // Tabela de budget por categoria. O status vai com barra + rótulo escrito,
     // nunca só cor: boa parte dessas impressões sai em térmica ou laser P&B,
     // onde verde e vermelho viram o mesmo cinza.
@@ -14368,19 +14379,19 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
         <tr class="total-row"><td>TOTAL</td><td>${fmtMoney(folha)}</td><td style="color:#166534">+${fmtMoney(totAcres)}</td><td style="color:#B91C1C">-${fmtMoney(totAdt+totCons+totDesc+totEncDesc)}</td><td>${fmtMoney(totLiq)}</td></tr>
       </table></div>
       <div class="section"><h2>Adiantamentos (${adts.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th>Valor</th></tr>
-        ${adts.length?adts.map((a:any)=>{const fn=funcs.find((f:any)=>f.id===a.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(a.data)}</td><td>${a.descricao||"—"}</td><td style="color:#92400e">-${fmtMoney(parseMoney(a.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#999">Nenhum adiantamento no período</td></tr>`}
+        ${adts.length?adts.map((a:any)=>{const fn=funcs.find((f:any)=>f.id===a.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(a.data)}</td><td>${a.descricao||"—"}</td><td style="color:#92400e">-${fmtMoney(parseMoney(a.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#5b6472">Nenhum adiantamento no período</td></tr>`}
         ${adts.length?`<tr class="total-row"><td colspan="3">Total</td><td>-${fmtMoney(totAdt)}</td></tr>`:""}
       </table></div>
       <div class="section"><h2>Acréscimos e Encargos (${encs.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th style="color:#166534">Bonificação</th><th style="color:#166534">Comissão</th><th style="color:#166534">Sal. Família</th><th style="color:#B91C1C">Desconto</th></tr>
-        ${encs.length?encRows:`<tr><td colspan="7" style="text-align:center;color:#999">Nenhum encargo/acréscimo no período</td></tr>`}
+        ${encs.length?encRows:`<tr><td colspan="7" style="text-align:center;color:#5b6472">Nenhum encargo/acréscimo no período</td></tr>`}
         ${encs.length?`<tr class="total-row"><td colspan="3">Total</td><td style="color:#166534">+${fmtMoney(totBonif)}</td><td style="color:#166534">+${fmtMoney(totComis)}</td><td style="color:#166534">+${fmtMoney(totSalFam)}</td><td style="color:#B91C1C">-${fmtMoney(totEncDesc)}</td></tr>`:""}
       </table></div>
       <div class="section"><h2>Consumações (${cons.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Descrição</th><th>Valor</th></tr>
-        ${cons.length?cons.map((c:any)=>{const fn=funcs.find((f:any)=>f.id===c.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(c.data)}</td><td>${c.descricao||"—"}</td><td style="color:#1e40af">-${fmtMoney(parseMoney(c.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#999">Nenhuma consumação no período</td></tr>`}
+        ${cons.length?cons.map((c:any)=>{const fn=funcs.find((f:any)=>f.id===c.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(c.data)}</td><td>${c.descricao||"—"}</td><td style="color:#1e40af">-${fmtMoney(parseMoney(c.valor))}</td></tr>`;}).join(""):`<tr><td colspan="4" style="text-align:center;color:#5b6472">Nenhuma consumação no período</td></tr>`}
         ${cons.length?`<tr class="total-row"><td colspan="3">Total</td><td>-${fmtMoney(totCons)}</td></tr>`:""}
       </table></div>
       <div class="section"><h2>Faltas e Descontos (${faltas.length})</h2><table><tr><th>Funcionário</th><th>Data</th><th>Dias</th><th>Motivo</th><th>Desconto</th></tr>
-        ${faltas.length?faltas.map((f:any)=>{const fn=funcs.find((x:any)=>x.id===f.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(f.data)}</td><td>${f.dias}</td><td>${f.motivo||"—"}</td><td style="color:#B91C1C">-${fmtMoney(f.desconto)}</td></tr>`;}).join(""):`<tr><td colspan="5" style="text-align:center;color:#999">Nenhuma falta no período</td></tr>`}
+        ${faltas.length?faltas.map((f:any)=>{const fn=funcs.find((x:any)=>x.id===f.funcionarioId);return`<tr><td>${fn?.nome||"—"}</td><td>${fmtDate(f.data)}</td><td>${f.dias}</td><td>${f.motivo||"—"}</td><td style="color:#B91C1C">-${fmtMoney(f.desconto)}</td></tr>`;}).join(""):`<tr><td colspan="5" style="text-align:center;color:#5b6472">Nenhuma falta no período</td></tr>`}
         ${faltas.length?`<tr class="total-row"><td colspan="4">Total</td><td>-${fmtMoney(totDesc)}</td></tr>`:""}
       </table></div>`));
   };
