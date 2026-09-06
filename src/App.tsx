@@ -1013,6 +1013,15 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
   .summary-card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06);text-align:center}
   .summary-card .val{font-size:20px;font-weight:700;color:#2d3a6b}.summary-card .lbl{font-size:12px;color:#888;margin-top:4px}
   .footer{text-align:center;margin-top:24px;font-size:12px;color:#aaa}
+  /* Uma seção não deve nascer no fim da página e continuar na seguinte; e a
+     tabela repete o cabeçalho em cada página que ocupar, senão a partir da
+     segunda folha as colunas ficam sem identificação. */
+  @media print{
+    .section{break-inside:avoid;page-break-inside:avoid}
+    thead{display:table-header-group}
+    tr{break-inside:avoid;page-break-inside:avoid}
+    .footer{position:fixed;bottom:6mm;left:0;right:0}
+  }
   .no-print-bar{display:flex;gap:8px;margin-bottom:16px}
   .no-print-bar button{padding:10px 22px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
   @media print{body{padding:0}.section{box-shadow:none}.no-print-bar{display:none!important}${impressaoPageCss(cfg)}}</style></head><body>
@@ -13825,12 +13834,64 @@ function DREComp({db,setDb,empresa}){
       Object.entries(obj).filter(([,v])=>v>0).map(([k,v])=>`<tr><td style="padding:6px 8px 6px 24px;color:#666;font-size:12px">${k}</td><td style="text-align:right;color:#999;font-size:11px">${vendasBrutas>0?((v/vendasBrutas)*100).toFixed(1)+"%" : ""}</td><td style="text-align:right;font-weight:600;color:${colFn(v)};white-space:nowrap;padding:6px 8px">${fmtMoney(v)}</td></tr>`).join("");
     const tr=(l:string,v:number,bold=false,color=col(v),indent=false)=>
       `<tr style="${bold?"font-weight:700;font-size:14px;background:#f8f9fe":""}"><td style="padding:${indent?"6px 8px 6px 24px":"8px"};color:${indent?"#666":"inherit"}">${l}</td><td style="text-align:right;color:#999;font-size:11px">${pct(v)}</td><td style="text-align:right;font-weight:${bold?700:600};color:${color};white-space:nowrap;padding:8px">${fmtMoney(v)}</td></tr>`;
-    abrirRelatorio(gerarRelatorioHTML(`DRE – ${de} a ${ate}`,empresa,`
+    // Tabela de budget por categoria. O status vai com barra + rótulo escrito,
+    // nunca só cor: boa parte dessas impressões sai em térmica ou laser P&B,
+    // onde verde e vermelho viram o mesmo cinza.
+    const budgetTabela=budgetDre&&budgetDre.orcadoTotal>0?`
+      <div class="section">
+        <h2>Budget de Compras — ${periodoLabel("mes",de)}</h2>
+        <table>
+          <thead><tr><th>Categoria</th><th style="text-align:right">Orçado</th><th style="text-align:right">Realizado</th><th style="text-align:right">Projeção</th><th>Status</th></tr></thead>
+          <tbody>${budgetDre.linhas.map(l=>{
+            const info=PACE_INFO[l.status];
+            const pctBarra=l.orcado>0?Math.min((l.projecao/l.orcado)*100,100):0;
+            return `<tr>
+              <td>${l.cat}</td>
+              <td style="text-align:right;white-space:nowrap">${fmtMoney(l.orcado)}</td>
+              <td style="text-align:right;white-space:nowrap">${fmtMoney(l.realizado)}</td>
+              <td style="text-align:right;white-space:nowrap;font-weight:600">${fmtMoney(l.projecao)}</td>
+              <td style="min-width:110px">
+                <div style="height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin-bottom:3px">
+                  <div style="height:100%;width:${pctBarra}%;background:${info.cor};border-radius:3px"></div>
+                </div>
+                <span style="font-size:10px;color:#555">${info.label}</span>
+              </td></tr>`;
+          }).join("")}
+          <tr class="total-row">
+            <td>Total</td>
+            <td style="text-align:right;white-space:nowrap">${fmtMoney(budgetDre.orcadoTotal)}</td>
+            <td style="text-align:right;white-space:nowrap">${fmtMoney(budgetDre.realizadoTotal)}</td>
+            <td style="text-align:right;white-space:nowrap">${fmtMoney(budgetDre.projecaoTotal)}</td>
+            <td style="font-size:10px">${PACE_INFO[statusPace(budgetDre.projecaoTotal,budgetDre.orcadoTotal)].label}</td>
+          </tr>
+          </tbody>
+        </table>
+        <p style="font-size:10.5px;color:#888;margin:8px 0 0">Projeção = realizado esticado pro período no ritmo atual (${budgetDre.ritmo.decorridos} de ${budgetDre.ritmo.total} dias).</p>
+      </div>`:"";
+
+    // Mesma função do motor da tela — a lista impressa nunca diverge da que o
+    // usuário viu antes de mandar imprimir.
+    const indicativos=budgetDre?limitarIndicativos(gerarIndicativos(db,"mes",de,today()),db):[];
+    const indicativosHtml=indicativos.length?`
+      <div class="section">
+        <h2>Indicativos</h2>
+        <ol style="margin:0;padding-left:20px">${indicativos.map(i=>`
+          <li style="margin-bottom:8px">
+            <b>${i.titulo}</b>${i.impacto!=null?` — <span style="color:#92400e;font-weight:700;white-space:nowrap">${fmtMoney(i.impacto)}</span>`:` — <span style="color:#666">Monitorar</span>`}
+            <div style="font-size:11.5px;color:#555;margin-top:2px">${i.texto}</div>
+          </li>`).join("")}
+        </ol>
+      </div>`:"";
+
+    abrirRelatorio(gerarRelatorioHTML(`DRE – ${fmtDate(de)} a ${fmtDate(ate)}`,empresa,`
+      <p style="margin:-8px 0 16px;font-size:12px;color:#666">
+        Documento ${`DRE-${de.slice(0,4)}-${periodoKey("mes",de).slice(5)}`} · Período de ${fmtDate(de)} a ${fmtDate(ate)}
+      </p>
       <div class="summary-grid">
-        <div class="summary-card"><div class="val">${fmtMoney(vendasBrutas)}</div><div class="lbl">Vendas Brutas</div></div>
-        <div class="summary-card"><div class="val" style="color:${col(lucroBruto)}">${fmtMoney(lucroBruto)}</div><div class="lbl">Lucro Bruto</div></div>
-        <div class="summary-card"><div class="val" style="color:${col(lucroLiq)}">${fmtMoney(lucroLiq)}</div><div class="lbl">Lucro Líquido</div></div>
-        <div class="summary-card"><div class="val" style="color:${mcPct>=30?"#166534":"#B91C1C"}">${mcPct.toFixed(1)}%</div><div class="lbl">Margem Contrib.</div></div>
+        <div class="summary-card"><div class="val" style="color:${col(lucroLiq)}">${fmtMoney(lucroLiq)}</div><div class="lbl">Resultado do período</div></div>
+        <div class="summary-card"><div class="val" style="color:${vendasBrutas>0&&(lucroLiq/vendasBrutas)*100>=10?"#166534":"#B91C1C"}">${vendasBrutas>0?((lucroLiq/vendasBrutas)*100).toFixed(1):"0,0"}%</div><div class="lbl">Margem Líquida</div></div>
+        <div class="summary-card"><div class="val" style="color:#B91C1C">${fmtMoney(totalCMV)}</div><div class="lbl">CMV Realizado</div></div>
+        <div class="summary-card"><div class="val">${budgetDre&&budgetDre.orcadoTotal>0?fmtMoney(budgetDre.orcadoTotal):"—"}</div><div class="lbl">CMV Orçado</div></div>
       </div>
       <div class="section"><table style="border-collapse:collapse;width:100%">
         <colgroup><col style="width:60%"><col style="width:15%"><col style="width:25%"></colgroup>
@@ -13849,7 +13910,9 @@ function DREComp({db,setDb,empresa}){
           ${tr("= Lucro Líquido",lucroLiq,true,col(lucroLiq))}
           <tr style="background:#f0f8f0"><td colspan="2" style="padding:8px;font-weight:700">Ponto de Equilíbrio</td><td style="text-align:right;font-weight:700;color:#1e40af;padding:8px">${fmtMoney(pe)}</td></tr>
         </tbody>
-      </table></div>`));
+      </table></div>
+      ${budgetTabela}
+      ${indicativosHtml}`));
   };
 
   return <div>
