@@ -5062,6 +5062,153 @@ function ConsumoInsumos({db,setSubTab}:{db:any,setSubTab:(s:string)=>void}){
   </div>;
 }
 
+// Anda um período pra trás/frente. Em modo mês ancora no dia 1 de propósito:
+// setMonth a partir do dia 31 transborda pro mês seguinte (31/mar −1 mês vira
+// 3/mar), e o período sairia errado.
+const deslocarPeriodo=(modo:string,dataRef:string,passo:number)=>{
+  if(modo==="mes"){
+    const [y,m]=dataRef.split("-").map(Number);
+    const d=new Date(y,m-1+passo,1);
+    return _ymd(d);
+  }
+  const d=_dia(dataRef); d.setDate(d.getDate()+passo*7);
+  return _ymd(d);
+};
+
+// Números do período que os indicativos leem. Em modo semanal, folha é rateada
+// proporcionalmente (§5): salário é mensal, comparar uma semana de receita
+// contra um mês de folha diria que toda semana está no vermelho.
+const resumoPeriodo=(db:any,modo:string,dataRef:string,hoje:string)=>{
+  const range=periodoRange(modo,dataRef);
+  const dias=diasEntre(range.inicio,range.fim)+1;
+  const vendas=(db.vendas||[]).filter((v:any)=>v.data>=range.inicio&&v.data<=range.fim);
+  const receita=vendas.reduce((s:number,v:any)=>s+(v.total||0),0);
+  const taxas=vendas.reduce((s:number,v:any)=>
+    s+((v.ifood||0)-(v.ifoodLiq??v.ifood??0))+((v["99food"]||0)-(v.nfoodLiq??v["99food"]??0)),0);
+  const cmv=CATS_CMV.reduce((s,cat)=>s+gastoCategoria(db.compras,cat,range.inicio,range.fim),0);
+  const despesas=(db.contas||[]).filter((c:any)=>c.vencimento>=range.inicio&&c.vencimento<=range.fim
+    &&c.status==="pago"&&c.tipo==="saida"&&c.origem!=="adiantamento_rh")
+    .reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+  const folhaMensal=(db.funcionarios||[]).reduce((s:number,f:any)=>s+(parseMoney(f.salario)||0),0);
+  const [y,m]=dataRef.split("-").map(Number);
+  const folha=modo==="mes"?folhaMensal:folhaMensal/new Date(y,m,0).getDate()*dias;
+  const resultado=receita-taxas-cmv-despesas;
+  return {range,dias,receita,taxas,cmv,despesas,folha,resultado,
+    margemPct:receita>0?(resultado/receita)*100:0,
+    taxasPct:receita>0?(taxas/receita)*100:0,
+    rhPct:receita>0?(folha/receita)*100:0};
+};
+
+// Motor de indicativos (§7). Função pura: a tela e o relatório impresso
+// chamam esta mesma função, então nunca mostram listas diferentes.
+const gerarIndicativos=(db:any,modo:string,dataRef:string,hoje:string)=>{
+  const b=calcularBudget(db,modo,dataRef,hoje);
+  const r=resumoPeriodo(db,modo,dataRef,hoje);
+  const out:any[]=[];
+
+  // R1 — CMV projetado acima do orçado: aponta a categoria de maior desvio.
+  let catR1:string|null=null;
+  if(b.orcadoTotal>0&&b.projecaoTotal>b.orcadoTotal*1.02){
+    const comDesvio=b.linhas.filter(l=>l.orcado>0&&l.projecao>l.orcado)
+      .map(l=>({...l,desvioPct:((l.projecao-l.orcado)/l.orcado)*100}))
+      .sort((a,b2)=>b2.desvioPct-a.desvioPct);
+    const pior=comDesvio[0];
+    if(pior){
+      catR1=pior.cat;
+      out.push({regra:"R1",titulo:"CMV acima do orçado",
+        texto:`A projeção do período (${fmtMoney(b.projecaoTotal)}) passa o orçado (${fmtMoney(b.orcadoTotal)}). O maior desvio está em ${pior.cat}: ${pior.desvioPct.toFixed(0)}% acima.`,
+        impacto:pior.projecao-pior.orcado});
+    }
+  }
+
+  // R2 — taxas de cartão/delivery altas.
+  if(r.taxasPct>7&&r.receita>0){
+    out.push({regra:"R2",titulo:"Taxas de cartão/delivery altas",
+      texto:`As taxas consomem ${r.taxasPct.toFixed(1)}% da receita. Incentivar Pix reduz essa mordida — a referência de mercado fica perto de 5%.`,
+      impacto:r.receita*((r.taxasPct-5)/100)});
+  }
+
+  // R4 — folha acima da referência.
+  if(r.rhPct>30&&r.receita>0){
+    out.push({regra:"R4",titulo:"Folha acima da referência",
+      texto:`A folha representa ${r.rhPct.toFixed(1)}% da receita do período. Vale revisar o dimensionamento da equipe — a referência usada aqui é 28%.`,
+      impacto:r.receita*((r.rhPct-28)/100)});
+  }
+
+  // R5 — demais categorias estourando, que a R1 não citou.
+  b.linhas.filter(l=>l.status==="over"&&l.cat!==catR1).forEach(l=>{
+    out.push({regra:"R5",titulo:`${l.cat} estourando o orçamento`,
+      texto:`Projeção de ${fmtMoney(l.projecao)} contra ${fmtMoney(l.orcado)} orçados no período.`,
+      impacto:l.projecao-l.orcado});
+  });
+
+  // R3 — margem abaixo da média histórica. Sem valor em R$ de propósito: é
+  // sinal de tendência, não uma conta a economizar. Vai pro fim da lista.
+  const anteriores=[1,2,3].map(i=>resumoPeriodo(db,modo,deslocarPeriodo(modo,dataRef,-i),hoje))
+    .filter(p=>p.receita>0);
+  if(anteriores.length&&r.receita>0){
+    const media=anteriores.reduce((s,p)=>s+p.margemPct,0)/anteriores.length;
+    if(r.margemPct<media-1){
+      out.push({regra:"R3",titulo:"Margem abaixo da média",
+        texto:`Margem de ${r.margemPct.toFixed(1)}% contra média de ${media.toFixed(1)}% nos ${anteriores.length} período(s) anteriores.`,
+        impacto:null});
+    }
+  }
+
+  // Ordena por impacto decrescente; os sem valor numérico ficam no fim.
+  // Sem o teste de nulo primeiro, dois impactos null virariam -Inf − (-Inf) =
+  // NaN, e um comparador que devolve NaN embaralha a lista em vez de ordenar.
+  return out.sort((a,b2)=>{
+    if(a.impacto==null&&b2.impacto==null)return 0;
+    if(a.impacto==null)return 1;
+    if(b2.impacto==null)return -1;
+    return b2.impacto-a.impacto;
+  });
+};
+const limitarIndicativos=(lista:any[],db:any)=>{
+  const lim=db?.config?.quantidadeIndicativos;
+  return (lim==null||lim<=0)?lista:lista.slice(0,lim);
+};
+
+// Lista de indicativos, compartilhada pelo Budget e pela DRE.
+function IndicativosPanel({db,modo,dataRef,titulo="Indicativos"}:{db:any,modo:string,dataRef:string,titulo?:string}){
+  const todos=gerarIndicativos(db,modo,dataRef,today());
+  const lista=limitarIndicativos(todos,db);
+  if(!todos.length)return <div className="card" style={{marginBottom:10}}>
+    <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <span style={{fontSize:20}}>✅</span>
+      <div>
+        <div style={{fontWeight:700,fontSize:13}}>Nada fora da curva</div>
+        <div className="muted" style={{fontSize:11.5}}>CMV, taxas, folha e margem dentro das referências neste período.</div>
+      </div>
+    </div>
+  </div>;
+  return <div className="card" style={{marginBottom:10}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+      <div className="section-title" style={{margin:0}}>{titulo}</div>
+      {lista.length<todos.length&&<span className="muted" style={{fontSize:10.5}}>mostrando {lista.length} de {todos.length}</span>}
+    </div>
+    {lista.map((ind,i)=>(
+      <div key={ind.regra+i} style={{display:"flex",gap:10,padding:"9px 0",borderBottom:i<lista.length-1?"1px solid var(--border)":"none"}}>
+        <div style={{width:22,height:22,borderRadius:7,flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",
+          background:"var(--infoBg)",color:"var(--infoText)",fontSize:11,fontWeight:700}}>{i+1}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"baseline",flexWrap:"wrap"}}>
+            <span style={{fontWeight:700,fontSize:13}}>{ind.titulo}</span>
+            {ind.impacto!=null
+              ?<span style={{fontWeight:700,fontSize:13,color:"#F59E0B",whiteSpace:"nowrap"}}>{fmtMoney(ind.impacto)}</span>
+              :<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)",fontSize:10}}>Monitorar</span>}
+          </div>
+          <div className="muted" style={{fontSize:11.5,marginTop:2}}>{ind.texto}</div>
+        </div>
+      </div>
+    ))}
+    <div className="muted" style={{fontSize:10.5,marginTop:8}}>
+      Valor em laranja é o impacto estimado no período, não uma cobrança. Quantos aparecem se ajusta em Configurações → Impressão.
+    </div>
+  </div>;
+}
+
 // Budget de compras por categoria de CMV, com toggle Semanal/Mensal.
 // Diferente do budget diário do Dashboard (teto de hoje = % das vendas de
 // ontem), que continua existindo e serve pra decisão na hora de comprar: este
@@ -5135,6 +5282,8 @@ function BudgetComprasPanel({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSa
         {b.receitaPeriodo>0&&` Receita no período: ${fmtMoney(b.receitaPeriodo)}.`}
       </div>
     </div>
+
+    <IndicativosPanel db={db} modo={modo} dataRef={dataRef}/>
 
     {/* Por categoria */}
     {b.linhas.map(l=>{
@@ -13774,6 +13923,8 @@ function DREComp({db,setDb,empresa}){
       <Row label="= Lucro Bruto" value={lucroBruto} color={col(lucroBruto)} bold border={false}/>
     </div>
 
+    {budgetDre&&<IndicativosPanel db={db} modo="mes" dataRef={de}/>}
+
     <div className="card" style={{marginBottom:12}}>
       <div style={{padding:"0 0 8px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>Despesas</div>
       {Object.entries(despCats).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
@@ -17570,6 +17721,18 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
             <div style={{display:"flex",gap:6}}>
               <input value={impNome} onChange={e=>setImpNome(e.target.value)} placeholder={empresa} className="inp" style={{flex:1,marginBottom:0}}/>
               <button className="btn" onClick={()=>{setImpCfg("nome",impNome.trim());alert("✅ Salvo!");}} style={{background:"var(--category)",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
+
+          {field("Indicativos no relatório","DRE e Budget",
+            <div>
+              <div className="muted" style={{fontSize:10.5,marginBottom:8}}>Quantos indicativos aparecem, do maior impacto pro menor. Em branco ou 0 mostra todos.</div>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input type="number" min="0" max="20" className="inp" style={{width:100,marginBottom:0}}
+                  value={db.config?.quantidadeIndicativos??""} placeholder="todos"
+                  onChange={e=>{const v=e.target.value===""?null:Math.max(0,parseInt(e.target.value,10)||0);
+                    (setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),quantidadeIndicativos:v}}));}}/>
+                <span className="muted" style={{fontSize:11}}>{db.config?.quantidadeIndicativos?`top ${db.config.quantidadeIndicativos}`:"todos"}</span>
+              </div>
             </div>)}
 
           {field("Dados cadastrais","timbre de todo relatório",
