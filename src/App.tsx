@@ -745,6 +745,16 @@ function MoneyInput({value,onChange,placeholder,className,style}) {
 const IMPRESSAO_DEFAULTS={
   nome:"",                    // vazio = usa o nome da empresa (CONFRARIA/SEAMA)
   logo:"",                    // data URL, opcional
+  // Dados cadastrais que compõem o timbre. Ficam aqui junto de nome/logo, e
+  // não numa estrutura separada, porque o timbre precisa de UMA fonte só —
+  // com dois lugares guardando "o nome da empresa" é questão de tempo até um
+  // relatório sair com o nome antigo. Todos opcionais: em branco, a linha
+  // simplesmente não é impressa.
+  razaoSocial:"",
+  cnpj:"",
+  endereco:"",
+  telefone:"",
+  email:"",
   cor:"#8B5CF6",
   fonte:"padrao",             // compacta | padrao | grande
   orientacao:"retrato",       // retrato | paisagem
@@ -778,6 +788,15 @@ const impressaoPageCss=(cfg:any)=>`@page{size:A4 ${cfg.orientacao==="paisagem"?"
 const impressaoNome=(cfg:any,fallback:string)=>cfg.nome||fallback;
 const impressaoLogoHtml=(cfg:any,style?:string)=>cfg.logo?`<img src="${cfg.logo}" style="${style||"height:36px;max-width:150px;object-fit:contain;display:block;margin-bottom:6px"}"/>`:"";
 const impressaoRodapeTxt=(cfg:any)=>cfg.rodape||`Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})}`;
+// Linha de dados cadastrais do timbre (razão social · CNPJ · endereço · contato).
+// Só entra o que estiver preenchido — sem nenhum campo, devolve "" e o cabeçalho
+// fica exatamente como era antes.
+const impressaoDadosHtml=(cfg:any,style?:string)=>{
+  const l1=[cfg.razaoSocial,cfg.cnpj&&`CNPJ ${cfg.cnpj}`].filter(Boolean).join(" · ");
+  const l2=[cfg.endereco,cfg.telefone,cfg.email].filter(Boolean).join(" · ");
+  if(!l1&&!l2)return "";
+  return `<p style="${style||""}">${[l1,l2].filter(Boolean).join("<br/>")}</p>`;
+};
 const impressaoRodapeRecibo=(cfg:any)=>cfg.reciboRodape||impressaoRodapeTxt(cfg);
 
 // ===================== DASHBOARD PDV (config) =====================
@@ -1002,6 +1021,7 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
     <button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar PDF</button>
   </div>
   <div class="header">${cfg.logo?`<div class="logo-wrap">${impressaoLogoHtml(cfg,`height:36px;max-width:150px;object-fit:contain;${cfg.relatorioCabecalho==="linha"?"":"filter:brightness(0) invert(1)"}`)}</div>`:""}<h1>${titulo} — ${nome}</h1>
+  ${impressaoDadosHtml(cfg,`margin:4px 0 0;opacity:.7;font-size:${Math.max(fpx-2,10)}px;line-height:1.5`)}
   <p>Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} | ${new Date().toLocaleDateString("pt-BR",{timeZone:TZ,month:"long",year:"numeric"})}</p></div>
   ${conteudo}
   <div class="footer">${impressaoRodapeTxt(cfg)}</div>
@@ -16321,6 +16341,23 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   const impCfg=getImpressaoCfg(db);
   const setImpCfg=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),impressao:{...(d.config?.impressao||{}),[key]:val}}}));
   const [impNome,setImpNome]=useState(impCfg.nome);
+  // Dados cadastrais do timbre — um rascunho local por campo, gravado no db só
+  // ao clicar em salvar (mesmo padrão do nome acima), pra não disparar uma
+  // gravação no servidor a cada tecla digitada.
+  const [impDados,setImpDados]=useState({
+    razaoSocial:impCfg.razaoSocial||"",cnpj:impCfg.cnpj||"",endereco:impCfg.endereco||"",
+    telefone:impCfg.telefone||"",email:impCfg.email||"",
+  });
+  const [impDadosSalvo,setImpDadosSalvo]=useState(false);
+  const salvarImpDados=()=>{
+    (setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),impressao:{
+      ...(d.config?.impressao||{}),
+      razaoSocial:impDados.razaoSocial.trim(),cnpj:impDados.cnpj.trim(),endereco:impDados.endereco.trim(),
+      telefone:impDados.telefone.trim(),email:impDados.email.trim(),
+    }}}));
+    setImpDadosSalvo(true);
+    setTimeout(()=>setImpDadosSalvo(false),1800);
+  };
   const [impRodape,setImpRodape]=useState(impCfg.rodape);
   const [reciboTitulo,setReciboTitulo]=useState(impCfg.reciboTitulo);
   const [reciboTituloExtrato,setReciboTituloExtrato]=useState(impCfg.reciboTituloExtrato);
@@ -17159,6 +17196,22 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
             <div style={{display:"flex",gap:6}}>
               <input value={impNome} onChange={e=>setImpNome(e.target.value)} placeholder={empresa} className="inp" style={{flex:1,marginBottom:0}}/>
               <button className="btn" onClick={()=>{setImpCfg("nome",impNome.trim());alert("✅ Salvo!");}} style={{background:"var(--category)",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+            </div>)}
+
+          {field("Dados cadastrais","timbre de todo relatório",
+            <div>
+              <div className="muted" style={{fontSize:10.5,marginBottom:8}}>Entram logo abaixo do nome, no cabeçalho de todo relatório impresso. Campo em branco não aparece — nada quebra se deixar tudo vazio.</div>
+              <input value={impDados.razaoSocial} onChange={e=>setImpDados(v=>({...v,razaoSocial:e.target.value}))} placeholder="Razão social (opcional)" className="inp" style={{marginBottom:6}}/>
+              <input value={impDados.cnpj} onChange={e=>setImpDados(v=>({...v,cnpj:e.target.value}))} placeholder="CNPJ" className="inp" style={{marginBottom:6}}/>
+              <input value={impDados.endereco} onChange={e=>setImpDados(v=>({...v,endereco:e.target.value}))} placeholder="Endereço" className="inp" style={{marginBottom:6}}/>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                <input value={impDados.telefone} onChange={e=>setImpDados(v=>({...v,telefone:e.target.value}))} placeholder="Telefone (opcional)" className="inp" style={{flex:1,marginBottom:0}}/>
+                <input value={impDados.email} onChange={e=>setImpDados(v=>({...v,email:e.target.value}))} placeholder="E-mail (opcional)" className="inp" style={{flex:1,marginBottom:0}}/>
+              </div>
+              <button className="btn" onClick={salvarImpDados}
+                style={{background:impDadosSalvo?"#22C55E":"var(--category)",color:impDadosSalvo?"#051208":"#fff",padding:"9px 16px",fontSize:12,transition:"background .15s ease"}}>
+                {impDadosSalvo?"✓ Salvo":"💾 Salvar dados"}
+              </button>
             </div>)}
 
           {field("Logo no cabeçalho","cabeçalho de tudo",
