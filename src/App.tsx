@@ -1938,6 +1938,7 @@ export default function App() {
       {id:"compras-forn",label:"Fornecedores",icon:"🏭",sub:"forn"},
       {id:"compras-prod",label:"Insumos",icon:"📦",sub:"produtos"},
       {id:"compras-cons",label:"Consumo",icon:"📊",sub:"consumo"},
+      {id:"compras-budget",label:"Budget",icon:"🎯",sub:"budget"},
       {id:"compras-migracao",label:"Reclassificar",icon:"🔀",sub:"migracao"},
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
@@ -5061,6 +5062,121 @@ function ConsumoInsumos({db,setSubTab}:{db:any,setSubTab:(s:string)=>void}){
   </div>;
 }
 
+// Budget de compras por categoria de CMV, com toggle Semanal/Mensal.
+// Diferente do budget diário do Dashboard (teto de hoje = % das vendas de
+// ontem), que continua existindo e serve pra decisão na hora de comprar: este
+// é o planejamento do período, comparado contra o ritmo real de gasto.
+function BudgetComprasPanel({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
+  const [modo,setModo]=useState("mes");
+  const [dataRef,setDataRef]=useState(today());
+  const [rascunho,setRascunho]=useState<{[k:string]:string}>({});
+  const b=calcularBudget(db,modo,dataRef,today());
+
+  const salvarOrcado=(cat:string,valor:number)=>{
+    (setDbAndSave||setDb)((d:any)=>({...d,budgetCompras:{...(d.budgetCompras||{}),
+      [b.chave]:{...(d.budgetCompras?.[b.chave]||{}),categorias:{...(d.budgetCompras?.[b.chave]?.categorias||{}),
+        [cat]:{orcado:valor,sugerido:b.linhas.find(l=>l.cat===cat)?.sugerido||0,ajustadoManualmente:true}}}}}));
+    setRascunho(r=>{const n={...r};delete n[cat];return n;});
+  };
+  const voltarPraSugestao=(cat:string)=>{
+    (setDbAndSave||setDb)((d:any)=>{
+      const cats={...(d.budgetCompras?.[b.chave]?.categorias||{})};
+      delete cats[cat];
+      return {...d,budgetCompras:{...(d.budgetCompras||{}),[b.chave]:{...(d.budgetCompras?.[b.chave]||{}),categorias:cats}}};
+    });
+    setRascunho(r=>{const n={...r};delete n[cat];return n;});
+  };
+  const mover=(passo:number)=>{
+    const d=_dia(dataRef);
+    if(modo==="mes")d.setMonth(d.getMonth()+passo); else d.setDate(d.getDate()+passo*7);
+    setDataRef(_ymd(d));
+  };
+
+  const pctTotal=b.orcadoTotal>0?(b.projecaoTotal/b.orcadoTotal)*100:0;
+  const statusTotal=statusPace(b.projecaoTotal,b.orcadoTotal);
+
+  return <div>
+    <div className="section-title">Budget de Compras</div>
+
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{display:"flex",gap:7,marginBottom:10}}>
+        <button className="chip" aria-pressed={modo==="mes"} onClick={()=>setModo("mes")} style={{flex:1}}>Mensal</button>
+        <button className="chip" aria-pressed={modo==="semana"} onClick={()=>setModo("semana")} style={{flex:1}}>Semanal</button>
+      </div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+        <button className="btn" onClick={()=>mover(-1)} style={{background:"var(--bg4)",color:"var(--text)",padding:"8px 14px",fontSize:16}}>‹</button>
+        <div style={{textAlign:"center",flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:13,textTransform:"capitalize"}}>{periodoLabel(modo,dataRef)}</div>
+          <div className="muted" style={{fontSize:11}}>dia {b.ritmo.decorridos} de {b.ritmo.total} · {(b.ritmo.fator*100).toFixed(0)}% do período</div>
+        </div>
+        <button className="btn" onClick={()=>mover(1)} style={{background:"var(--bg4)",color:"var(--text)",padding:"8px 14px",fontSize:16}}>›</button>
+      </div>
+    </div>
+
+    {/* Resumo do período */}
+    <div className="card" style={{marginBottom:10,border:`1px solid ${PACE_INFO[statusTotal].cor}55`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8,gap:8,flexWrap:"wrap"}}>
+        <span style={{fontWeight:700,fontSize:14}}>CMV do período</span>
+        <span className="tag" style={{background:`${PACE_INFO[statusTotal].cor}22`,color:PACE_INFO[statusTotal].cor}}>{PACE_INFO[statusTotal].label}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+        {[["Realizado",b.realizadoTotal,"var(--text)"],["Projeção",b.projecaoTotal,PACE_INFO[statusTotal].cor],["Orçado",b.orcadoTotal,"var(--text2)"]].map(([lbl,val,cor]:any)=>(
+          <div key={lbl} style={{textAlign:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:cor}}>{fmtMoney(val)}</div>
+            <div className="muted" style={{fontSize:10.5}}>{lbl}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{height:7,background:"var(--border2)",borderRadius:4,overflow:"hidden"}}>
+        <div style={{height:"100%",borderRadius:4,width:`${Math.min(pctTotal,100)}%`,background:PACE_INFO[statusTotal].cor,transition:"width .3s"}}/>
+      </div>
+      <div className="muted" style={{fontSize:11,marginTop:6}}>
+        Projeção é o realizado esticado pro período inteiro no ritmo atual ({(b.ritmo.fator*100).toFixed(0)}% decorrido).
+        {b.receitaPeriodo>0&&` Receita no período: ${fmtMoney(b.receitaPeriodo)}.`}
+      </div>
+    </div>
+
+    {/* Por categoria */}
+    {b.linhas.map(l=>{
+      const info=PACE_INFO[l.status];
+      const pct=l.orcado>0?(l.projecao/l.orcado)*100:0;
+      const emEdicao=rascunho[l.cat]!==undefined;
+      return <div key={l.cat} className="card" style={{marginBottom:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+          <span style={{fontWeight:700,fontSize:13.5}}>{catIcon(l.cat)} {l.cat}</span>
+          <span className="tag" style={{background:`${info.cor}22`,color:info.cor}}>{info.label}</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
+          <span className="muted">Realizado <b style={{color:"var(--text)"}}>{fmtMoney(l.realizado)}</b></span>
+          <span className="muted">Projeção <b style={{color:info.cor}}>{fmtMoney(l.projecao)}</b></span>
+        </div>
+        <div style={{height:5,background:"var(--border2)",borderRadius:3,overflow:"hidden",marginBottom:8}}>
+          <div style={{height:"100%",borderRadius:3,width:`${Math.min(pct,100)}%`,background:info.cor,transition:"width .3s"}}/>
+        </div>
+        <label style={{fontSize:11,color:"#666",display:"flex",gap:6,alignItems:"baseline",flexWrap:"wrap",marginBottom:4}}>
+          Orçado para o período
+          {l.ajustadoManualmente
+            ?<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>ajustado à mão</span>
+            :<span style={{fontSize:10.5,color:"#888"}}>· sugerido: {fmtMoney(l.sugerido)}</span>}
+        </label>
+        <div style={{display:"flex",gap:6}}>
+          <MoneyInput className="inp" style={{flex:1,marginBottom:0}}
+            value={emEdicao?rascunho[l.cat]:String(l.orcado.toFixed(2)).replace(".",",")}
+            onChange={(v:string)=>setRascunho(r=>({...r,[l.cat]:v}))}/>
+          {emEdicao&&<button className="btn" onClick={()=>salvarOrcado(l.cat,parseMoney(rascunho[l.cat]))}
+            style={{background:"var(--btnPrimary)",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>}
+          {l.ajustadoManualmente&&!emEdicao&&<button className="btn" onClick={()=>voltarPraSugestao(l.cat)}
+            style={{background:"var(--bg4)",color:"var(--text2)",padding:"8px 12px",fontSize:11}}>↺ sugestão</button>}
+        </div>
+      </div>;
+    })}
+
+    <div className="muted" style={{fontSize:11,padding:"4px 2px 16px"}}>
+      Sem orçamento ajustado à mão, o valor vem da média dos 3 meses anteriores nessa categoria — ou, sem histórico, do rateio padrão sobre {(CMV_ALVO_PADRAO*100).toFixed(0)}% da receita projetada. Ajustar à mão não muda a sugestão dos próximos períodos.
+    </div>
+  </div>;
+}
+
 // Seletor de uma opção em linha (categoria, unidade, forma de pagamento):
 // um toque em vez de abrir o <select> nativo e rolar a lista. Guarda o mesmo
 // valor de antes — quem consome o estado não vê diferença.
@@ -6797,6 +6913,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       })()}
     </div>}
 
+    {/* ===== BUDGET DE COMPRAS POR CATEGORIA ===== */}
+    {subTab==="budget"&&<div>
+      <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
+      <BudgetComprasPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave}/>
+    </div>}
+
     {/* ===== RECLASSIFICAR CATEGORIAS ANTIGAS (migração pro CMV) ===== */}
     {subTab==="migracao"&&<div>
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
@@ -7391,6 +7513,122 @@ const SUGESTAO_MIGRACAO:{[k:string]:string}={
   "outros":"Outros",
 };
 const sugerirCategoriaCmv=(antiga:string)=>SUGESTAO_MIGRACAO[String(antiga||"").trim().toLowerCase()]||"Outros";
+
+// ── Períodos de budget / DRE: mês ("2026-09") e semana ISO ("2026-W38") ──────
+// Semana é sempre segunda a domingo, mesmo atravessando a virada do mês — uma
+// semana de 29/set a 05/out é uma unidade só, contada no mês em que começou.
+const _ymd=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const _dia=(s:string)=>new Date(s+"T12:00:00");   // meio-dia: imune a horário de verão
+// Mesma diasEntre que projetarCompras já usava mais abaixo — subiu pra cá pra
+// servir aos dois, em vez de existir duas vezes com a mesma fórmula.
+const diasEntre=(a:string,b:string)=>Math.round((_dia(b).getTime()-_dia(a).getTime())/86400000);
+const isoWeekInfo=(dataRef:string)=>{
+  const d=_dia(dataRef);
+  const seg=new Date(d); seg.setDate(d.getDate()-((d.getDay()+6)%7));
+  const dom=new Date(seg); dom.setDate(seg.getDate()+6);
+  const qui=new Date(seg); qui.setDate(seg.getDate()+3);  // quinta define o ano ISO
+  const jan1=new Date(qui.getFullYear(),0,1);
+  const semana=Math.ceil((((qui.getTime()-jan1.getTime())/86400000)+1)/7);
+  return {inicio:_ymd(seg),fim:_ymd(dom),ano:qui.getFullYear(),semana};
+};
+const periodoKey=(modo:string,dataRef:string)=>{
+  if(modo==="mes")return dataRef.slice(0,7);
+  const w=isoWeekInfo(dataRef);
+  return `${w.ano}-W${String(w.semana).padStart(2,"0")}`;
+};
+const periodoRange=(modo:string,dataRef:string)=>{
+  if(modo==="mes"){
+    const [y,m]=dataRef.split("-").map(Number);
+    return {inicio:`${dataRef.slice(0,7)}-01`,fim:`${dataRef.slice(0,7)}-${String(new Date(y,m,0).getDate()).padStart(2,"0")}`};
+  }
+  const w=isoWeekInfo(dataRef);
+  return {inicio:w.inicio,fim:w.fim};
+};
+const periodoLabel=(modo:string,dataRef:string)=>{
+  if(modo==="mes")return _dia(dataRef+"").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+  const w=isoWeekInfo(dataRef);
+  return `Semana ${w.semana} · ${fmtDate(w.inicio)} a ${fmtDate(w.fim)}`;
+};
+// Quanto do período já passou. Sem isso não dá pra projetar: gastar 60% do
+// budget é ótimo no dia 25 e alarmante no dia 3.
+const ritmoDoPeriodo=(range:{inicio:string,fim:string},hoje:string)=>{
+  const total=diasEntre(range.inicio,range.fim)+1;
+  const decorridos=hoje<range.inicio?0:hoje>range.fim?total:diasEntre(range.inicio,hoje)+1;
+  return {decorridos,total,fator:total>0?decorridos/total:0};
+};
+const statusPace=(projecao:number,orcado:number)=>{
+  if(!(orcado>0))return "sem";
+  if(projecao<=orcado*1.02)return "ok";
+  if(projecao<=orcado*1.10)return "warn";
+  return "over";
+};
+const PACE_INFO:Record<string,{cor:string,label:string}>={
+  ok:{cor:"#22C55E",label:"No ritmo"},
+  warn:{cor:"#F59E0B",label:"Atenção"},
+  over:{cor:"#EF4444",label:"Estourando"},
+  sem:{cor:"var(--text3)",label:"Sem orçamento"},
+};
+// Rateio do CMV alvo por categoria, usado só quando não há histórico pra fazer
+// média móvel (primeiro uso do budget).
+const RATEIO_CMV_PADRAO:Record<string,number>={
+  "Proteínas":0.30,"Mercearia/Secos":0.25,"Laticínios":0.15,
+  "Bebidas para revenda":0.15,"Hortifruti":0.10,"Descartáveis de consumo do produto":0.05,
+};
+const CMV_ALVO_PADRAO=0.30;  // 30% da receita — usado só sem histórico
+
+// Gasto real numa categoria dentro de um intervalo.
+const gastoCategoria=(compras:any[],cat:string,inicio:string,fim:string)=>
+  (compras||[]).filter((c:any)=>c.categoria===cat&&c.data>=inicio&&c.data<=fim)
+    .reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+
+// Sugestão híbrida por categoria (§4.1 da spec):
+// com histórico, média móvel dos 3 meses fechados anteriores; sem histórico,
+// rateio do CMV alvo sobre a receita projetada. Em modo semanal a média mensal
+// é convertida pro tamanho da semana, senão sugeriria um mês inteiro de gasto
+// para 7 dias.
+const sugerirBudget=(db:any,cat:string,modo:string,dataRef:string,receitaProjetada:number)=>{
+  const compras=db.compras||[];
+  const meses:number[]=[];
+  for(let i=1;i<=3;i++){
+    const d=_dia(dataRef.slice(0,7)+"-01"); d.setMonth(d.getMonth()-i);
+    const ini=_ymd(new Date(d.getFullYear(),d.getMonth(),1));
+    const fim=_ymd(new Date(d.getFullYear(),d.getMonth()+1,0));
+    const g=gastoCategoria(compras,cat,ini,fim);
+    if(g>0)meses.push(g);
+  }
+  const diasDoPeriodo=(()=>{const r=periodoRange(modo,dataRef);return diasEntre(r.inicio,r.fim)+1;})();
+  if(meses.length){
+    const mediaMensal=meses.reduce((s,v)=>s+v,0)/meses.length;
+    const diasMes=(()=>{const [y,m]=dataRef.split("-").map(Number);return new Date(y,m,0).getDate();})();
+    return modo==="mes"?mediaMensal:mediaMensal/diasMes*diasDoPeriodo;
+  }
+  return receitaProjetada*CMV_ALVO_PADRAO*(RATEIO_CMV_PADRAO[cat]||0);
+};
+
+// Linha de budget por categoria, pronta pra tela e pro relatório impresso —
+// os dois leem daqui pra nunca divergirem.
+const calcularBudget=(db:any,modo:string,dataRef:string,hoje:string)=>{
+  const range=periodoRange(modo,dataRef);
+  const ritmo=ritmoDoPeriodo(range,hoje);
+  const chave=periodoKey(modo,dataRef);
+  const salvo=db.budgetCompras?.[chave]?.categorias||{};
+  const receitaPeriodo=(db.vendas||[]).filter((v:any)=>v.data>=range.inicio&&v.data<=range.fim)
+    .reduce((s:number,v:any)=>s+(v.total||0),0);
+  const receitaProjetada=ritmo.fator>0?receitaPeriodo/ritmo.fator:receitaPeriodo;
+  const linhas=CATS_CMV.map(cat=>{
+    const sugerido=sugerirBudget(db,cat,modo,dataRef,receitaProjetada);
+    const reg=salvo[cat];
+    const orcado=reg&&reg.ajustadoManualmente?(reg.orcado||0):sugerido;
+    const realizado=gastoCategoria(db.compras,cat,range.inicio,range.fim);
+    const projecao=ritmo.fator>0?realizado/ritmo.fator:realizado;
+    return {cat,orcado,sugerido,realizado,projecao,
+      ajustadoManualmente:!!reg?.ajustadoManualmente,
+      status:statusPace(projecao,orcado)};
+  });
+  const tot=(k:"orcado"|"realizado"|"projecao")=>linhas.reduce((s,l)=>s+l[k],0);
+  return {range,ritmo,chave,linhas,receitaPeriodo,receitaProjetada,
+    orcadoTotal:tot("orcado"),realizadoTotal:tot("realizado"),projecaoTotal:tot("projecao")};
+};
 
 const CATS_DEFAULT=["carnes","hortifruti","laticínios","grãos","temperos","proteína","bebidas","embalagens","descartáveis","material de limpeza","polpas","mercearia básica","farinhas","cafés e complementos","chocolates","latas, caixas e temperos","molhos","massas","outros"];
 const CAT_ICONS:Record<string,string>={
@@ -10721,8 +10959,6 @@ const JANELA_PROJECAO=90;   // compra de insumo é esporádica; 30 dias pegaria
 const MIN_DIAS_HISTORICO=14;
 const DIAS_INATIVO=60;      // sem comprar há tanto tempo, saiu do cardápio
 
-const diasEntre=(a:string,b:string)=>Math.round((new Date(b+"T12:00:00").getTime()-new Date(a+"T12:00:00").getTime())/86400000);
-
 function projetarCompras(db:any,dias:number,ignoradas:string[]=[]){
   const hoje=today();
   const limite=new Date(hoje+"T12:00:00");limite.setDate(limite.getDate()-JANELA_PROJECAO);
@@ -13397,6 +13633,12 @@ function DREComp({db,setDb,empresa}){
   });
   const totalCMV=Object.values(cmvCats).reduce((s,v)=>s+v,0);
   const totalForaCmv=Object.values(foraCmvCats).reduce((s,v)=>s+v,0);
+  // Comparação com o orçado só faz sentido dentro de um mês: o budget é por
+  // período fechado, e num intervalo livre atravessando meses "o orçado do
+  // período" não existe. Fora disso, a DRE segue mostrando só o realizado.
+  const budgetDre=de.slice(0,7)===ate.slice(0,7)
+    ?calcularBudget(db,"mes",de,ate<today()?ate:today())
+    :null;
   const lucroBruto=vendasLiq-totalCMV;
 
   // Despesas (by category)
@@ -13506,6 +13748,29 @@ function DREComp({db,setDb,empresa}){
         <Row key={k} label={k} value={v} color="var(--btnDanger)" indent/>
       ))}
       <Row label="Total CMV" value={totalCMV} color="var(--btnDanger)" bold/>
+      {/* Realizado e Orçado/Projeção lado a lado, nunca um valor só (§6 da
+          spec): sozinho, o realizado não diz se o período vai fechar dentro
+          do orçamento — depende de quanto do período já passou. */}
+      {budgetDre&&budgetDre.orcadoTotal>0&&(()=>{
+        const st=statusPace(budgetDre.projecaoTotal,budgetDre.orcadoTotal);
+        return <div style={{background:"var(--bg4)",border:`1px solid ${PACE_INFO[st].cor}44`,borderRadius:10,padding:"10px 12px",margin:"8px 0 4px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6,gap:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:11,fontWeight:700,color:"var(--text2)",textTransform:"uppercase",letterSpacing:.6}}>CMV vs. orçado</span>
+            <span className="tag" style={{background:`${PACE_INFO[st].cor}22`,color:PACE_INFO[st].cor,fontSize:10}}>{PACE_INFO[st].label}</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+            {[["Realizado",budgetDre.realizadoTotal,"var(--text)"],["Projeção",budgetDre.projecaoTotal,PACE_INFO[st].cor],["Orçado",budgetDre.orcadoTotal,"var(--text2)"]].map(([lbl,val,cor]:any)=>(
+              <div key={lbl} style={{textAlign:"center"}}>
+                <div style={{fontSize:13.5,fontWeight:700,color:cor}}>{fmtMoney(val)}</div>
+                <div className="muted" style={{fontSize:10}}>{lbl}</div>
+              </div>
+            ))}
+          </div>
+          <div className="muted" style={{fontSize:10.5,marginTop:6}}>
+            {periodoLabel("mes",de)} · {budgetDre.ritmo.decorridos} de {budgetDre.ritmo.total} dias. Ajuste o orçado em Compras → Budget.
+          </div>
+        </div>;
+      })()}
       <Row label="= Lucro Bruto" value={lucroBruto} color={col(lucroBruto)} bold border={false}/>
     </div>
 
