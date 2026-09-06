@@ -1036,7 +1036,18 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
   <div class="footer">${impressaoRodapeTxt(cfg)}</div>
   </body></html>`;
 }
-function abrirRelatorio(html){const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();}}
+// Pop-up bloqueado devolve null. Antes a função saía calada: no celular, onde
+// o bloqueio é comum, tocar em "Imprimir" não fazia absolutamente nada e não
+// dava pra saber se era bloqueio ou defeito.
+function abrirRelatorio(html){
+  const w=window.open("","_blank");
+  if(!w){
+    alert("O navegador bloqueou a abertura do relatório.\n\nLibere pop-ups para este site e toque em Imprimir de novo.\n\nNo Chrome do Android: ícone à direita da barra de endereço → Sempre permitir.\nNo Safari do iPhone: Ajustes → Safari → desligar \"Bloquear Pop-ups\".");
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+}
 
 // ===================== HEADER EMPRESA =====================
 function LogoEmpresa({empresa}) {
