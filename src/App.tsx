@@ -1991,6 +1991,7 @@ export default function App() {
     {id:"contas",label:"Financeiro",icon:"📋",children:[
       {id:"fin-contas",label:"Contas",icon:"📋",sub:"lista"},
       {id:"fin-novo",label:"+ Novo",icon:"➕",sub:"novo"},
+      {id:"fin-dre",label:"DRE",icon:"📈",sub:"dre"},
       {id:"fin-cat",label:"Categorias",icon:"🏷️",sub:"config"},
     ]},
     {id:"estoque",label:"Estoque",icon:"📦",children:[
@@ -2003,7 +2004,6 @@ export default function App() {
     {id:"fluxo",label:"Fluxo de Caixa",icon:"💵"},
     {id:"gestao",label:"Gestão",icon:"⚙️",children:[
       {id:"gest-rh",label:"RH",icon:"👥",sub:"rh"},
-      {id:"gest-dre",label:"DRE",icon:"📈",sub:"dre"},
       {id:"gest-rel",label:"Relatórios",icon:"📄",sub:"relatorios"},
       {id:"gest-vs",label:"Versus",icon:"⚖️",sub:"versus"},
       {id:"gest-bkp",label:"Backups",icon:"💾",sub:"backups"},
@@ -12382,6 +12382,11 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
       </div>;
     })()}
 
+    {subTab==="dre"&&<div>
+      <BackBar label="Contas" onClick={()=>setSubTab("lista")}/>
+      <DREComp db={db} setDb={setDb} empresa={empresa}/>
+    </div>}
+
     {subTab==="lista"&&<div>
       {/* Month tabs */}
       <div style={{overflowX:"auto",marginBottom:12,paddingBottom:4}}>
@@ -14731,7 +14736,8 @@ function Gestao({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPend
   useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
   return <div>
     {sub==="rh"         && <RH db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave}/>}
-    {sub==="dre"        && <><BackBar label="RH" onClick={()=>setSub("rh")}/><DREComp db={db} setDb={setDb} empresa={empresa}/></>}
+    {/* DRE saiu daqui pra Financeiro (aba "contas", sub "dre") — é uma peça
+        contábil, e ficava longe das contas que ela mesma soma. */}
     {sub==="relatorios" && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/></>}
     {sub==="versus"     && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Comparativo state={state}/></>}
     {sub==="backups"    && <><BackBar label="RH" onClick={()=>setSub("rh")}/><BackupsPanel empresaAtual={empresa} state={state} setState={setState}/></>}
