@@ -1638,6 +1638,10 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // Perecível/seco por insumo. Mesma fusão, mesmo motivo dos dois acima:
       // sem ela, classificar o giro seria revertido pelo poll seguinte.
       giroInsumo: {...(s.giroInsumo||{}),...(p.giroInsumo||{})},
+      // Projeções salvas: array com id e atualizadoEm carimbado ao salvar,
+      // então usa a mesma fusão de vendas/contas — quem salvou por último
+      // vence, e projeção de outra semana feita noutro aparelho não some.
+      projecoesCompra: mergeArrayById(s.projecoesCompra||[],p.projecoesCompra||[],_listaDeletados),
       categoriasDeleted:[...catsDeletadas],
     };
     // budgetCompras é mapa de período -> {categorias:{cat:{...}}}. Precisa de
@@ -11516,6 +11520,40 @@ function projetarComprasSemanal(db:any,opts:{semanas?:number,dataRef?:string,lim
     comprasNoDomingo};
 }
 
+// Confere uma projeção salva contra o que foi comprado de fato na semana que
+// ela projetou. O snapshot guarda o que foi PREVISTO; o realizado é lido das
+// compras na hora, então corrigir uma compra lançada errada corrige a
+// conferência sozinha — congelar os dois lados esconderia o erro.
+function conferirProjecao(db:any,proj:any){
+  const {inicio,fim}=proj.semanaProjetada;
+  const realizadoPorChave:Record<string,{qtd:number,valor:number}>={};
+  (db.compras||[]).forEach((c:any)=>{
+    if(c.excluido||!c.data||c.data<inicio||c.data>fim)return;
+    const k=foldNome(c.nomeProduto||"");
+    if(!k)return;
+    const r=realizadoPorChave[k]||(realizadoPorChave[k]={qtd:0,valor:0});
+    r.qtd+=parseFloat(c.quantidade)||0;
+    r.valor+=parseMoney(c.valor);
+  });
+  const linhas=(proj.itens||[]).map((i:any)=>{
+    const r=realizadoPorChave[i.chave]||{qtd:0,valor:0};
+    const desvioQtd=i.qtdSugerida>0?((r.qtd-i.qtdSugerida)/i.qtdSugerida)*100:(r.qtd>0?100:0);
+    return {...i,realizadoQtd:r.qtd,realizadoValor:r.valor,
+      desvioQtd,naoComprado:r.qtd<=0};
+  });
+  // Comprado na semana sem estar na projeção — é o lado que mais ensina:
+  // ou faltou histórico, ou foi compra não planejada.
+  const previstos=new Set((proj.itens||[]).map((i:any)=>i.chave));
+  const foraDaProjecao=Object.entries(realizadoPorChave)
+    .filter(([k])=>!previstos.has(k))
+    .map(([k,r])=>({chave:k,...r}))
+    .sort((a,b)=>b.valor-a.valor);
+  const totalRealizado=Object.values(realizadoPorChave).reduce((s,r)=>s+r.valor,0);
+  return {linhas,foraDaProjecao,totalRealizado,
+    totalPrevisto:proj.totalEstimado||0,
+    naoComprados:linhas.filter(l=>l.naoComprado).length};
+}
+
 // ===================== PROJEÇÃO DE COMPRAS =====================
 // Estima quanto vai ser preciso comprar de cada matéria-prima num período,
 // a partir do RITMO DE COMPRA passado. Não é consumo medido (isso só a ficha
@@ -11821,6 +11859,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
   // versus a lista da próxima semana.
   const [modoProj,setModoProj]=useState("semanal");
   const [semanasProj,setSemanasProj]=useState(2);
+  const [verSalvas,setVerSalvas]=useState(false);
   const [verPorForn,setVerPorForn]=useState(false);
   const [verHistProj,setVerHistProj]=useState<string|null>(null);
   const [notasIgnoradas,setNotasIgnoradas]=useState<string[]>([]);
@@ -12287,7 +12326,85 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
             <span style={{fontWeight:800,fontSize:20,color:"#22C55E"}}>{fmtMoney(p.totalEstimado)}</span>
           </div>
           {p.comVariacao>0&&<div className="muted" style={{fontSize:11,marginTop:4}}>{p.comVariacao} item(ns) com variação atípica entre as semanas.</div>}
+          {(p.pereciveis.length>0||p.secos.length>0)&&<button className="btn" onClick={()=>{
+            const jaSalva=(db.projecoesCompra||[]).find((x:any)=>x.semanaProjetada?.inicio===p.proximaSemana.inicio);
+            if(jaSalva&&!confirm(`Já existe uma projeção salva para essa semana (${fmtDate(p.proximaSemana.inicio)}).\n\nSubstituir pela atual?`))return;
+            const reg={
+              id:jaSalva?.id||uid(),
+              semanaProjetada:p.proximaSemana,
+              janelasBase:p.janelas,
+              semanasBase:semanasProj,
+              geradaEm:new Date().toISOString(),
+              atualizadoEm:new Date().toISOString(),
+              totalEstimado:p.totalEstimado,
+              // Só o que a conferência precisa — guardar o item inteiro
+              // engordaria o documento a cada semana sem serventia.
+              itens:[...p.pereciveis,...p.secos].map((i:any)=>({
+                chave:i.chave,nome:i.nomeExibicao,unidade:i.unidade,giro:i.giro,
+                mediaQtd:i.mediaQtd,qtdSugerida:i.qtdSugerida,preco:i.preco,
+                variacaoAtipica:i.variacaoAtipica,percentualVariacao:i.percentualVariacao,
+              })),
+            };
+            (setDbAndSave||setDb)((d:any)=>({...d,projecoesCompra:[reg,...(d.projecoesCompra||[]).filter((x:any)=>x.id!==reg.id)]}));
+            alert(`✅ Projeção da semana de ${fmtDate(p.proximaSemana.inicio)} salva.\n\nDepois da semana passar, abra "Projeções salvas" pra comparar com o que foi comprado de fato.`);
+          }} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",fontSize:14,marginTop:10}}>
+            💾 Salvar projeção desta semana
+          </button>}
         </div>
+
+        {(db.projecoesCompra||[]).length>0&&<div className="card" style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+            <div style={{fontWeight:700,fontSize:13}}>📌 Projeções salvas ({(db.projecoesCompra||[]).length})</div>
+            <button className="btn" onClick={()=>setVerSalvas(v=>!v)} style={{background:"var(--bg4)",color:"var(--text2)",padding:"7px 13px",fontSize:12}}>
+              {verSalvas?"Ocultar":"Conferir"}
+            </button>
+          </div>
+          {verSalvas&&[...(db.projecoesCompra||[])]
+            .sort((a:any,b:any)=>(b.semanaProjetada?.inicio||"").localeCompare(a.semanaProjetada?.inicio||""))
+            .map((proj:any)=>{
+              const c=conferirProjecao(db,proj);
+              const passou=proj.semanaProjetada.fim<today();
+              const dif=c.totalRealizado-c.totalPrevisto;
+              return <div key={proj.id} style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,flexWrap:"wrap" as const}}>
+                  <span style={{fontWeight:700,fontSize:13}}>{fmtDate(proj.semanaProjetada.inicio)} a {fmtDate(proj.semanaProjetada.fim)}</span>
+                  <span className="tag" style={{background:passou?"var(--successBg)":"var(--infoBg)",color:passou?"var(--successText)":"var(--infoText)",fontSize:10}}>
+                    {passou?"semana fechada":"em andamento"}
+                  </span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,margin:"8px 0"}}>
+                  {[["Previsto",c.totalPrevisto,"var(--text2)"],["Comprado",c.totalRealizado,"var(--text)"],
+                    ["Diferença",dif,dif>0?"var(--btnDanger)":"#22C55E"]].map(([l,v,cor]:any)=>(
+                    <div key={l} style={{textAlign:"center" as const}}>
+                      <div style={{fontSize:14,fontWeight:700,color:cor}}>{l==="Diferença"&&dif>0?"+":""}{fmtMoney(v)}</div>
+                      <div className="muted" style={{fontSize:10}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                {c.linhas.map((l:any)=>(
+                  <div key={l.chave} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11.5,padding:"4px 0",flexWrap:"wrap" as const}}>
+                    <span style={{flex:1,minWidth:110,color:l.naoComprado?"var(--btnDanger)":"var(--text)"}}>
+                      {l.naoComprado?"✗ ":""}{l.nome}
+                    </span>
+                    <span className="muted" style={{whiteSpace:"nowrap" as const}}>
+                      previsto {l.qtdSugerida.toFixed(2)} · comprado {l.realizadoQtd.toFixed(2)} {l.unidade}
+                      {!l.naoComprado&&Math.abs(l.desvioQtd)>=10&&<b style={{marginLeft:6,color:l.desvioQtd>0?"var(--btnDanger)":"#22C55E"}}>
+                        {l.desvioQtd>0?"+":""}{l.desvioQtd.toFixed(0)}%
+                      </b>}
+                    </span>
+                  </div>
+                ))}
+                {c.foraDaProjecao.length>0&&<div className="muted" style={{fontSize:11,marginTop:6,paddingTop:6,borderTop:"1px dashed var(--border)"}}>
+                  <b>{c.foraDaProjecao.length} item(ns) comprado(s) fora da projeção</b> ({fmtMoney(c.foraDaProjecao.reduce((s:number,x:any)=>s+x.valor,0))}) — faltou histórico ou foi compra não planejada.
+                </div>}
+                <button className="btn" onClick={()=>{
+                  if(!confirm(`Excluir a projeção de ${fmtDate(proj.semanaProjetada.inicio)}?`))return;
+                  _listaDeletados.add(proj.id);
+                  (setDbAndSave||setDb)((d:any)=>({...d,projecoesCompra:(d.projecoesCompra||[]).filter((x:any)=>x.id!==proj.id)}));
+                }} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:11,marginTop:8}}>🗑️ Excluir</button>
+              </div>;
+            })}
+        </div>}
 
         {p.comprasNoDomingo>0&&<div className="card" style={{marginBottom:10,background:"var(--warningBg)",border:"1px solid #F59E0B55"}}>
           <div style={{fontSize:12,color:"var(--warningText)"}}>

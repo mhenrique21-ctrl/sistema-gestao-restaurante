@@ -11,6 +11,10 @@ export const MERGEABLE_FIELDS = [
   'consumacoes', 'encargos', 'normalizacoes', 'movEstoque', 'usuarios',
   'produtosProducao', 'pedidosProducao', 'encomendas', 'anotacoes',
   'clientesEncomenda', 'produtosLista', 'itensProducaoPendentes', 'recibosVenda',
+  // Projeções semanais de compra salvas. Array com id e atualizadoEm, então
+  // entra na fusão por id como os demais — regravar a projeção da semana num
+  // aparelho não pode apagar a que outro salvou pra outra semana.
+  'projecoesCompra',
 ];
 
 const TS_FIELDS = ['updatedAt', 'atualizadoEm'];
