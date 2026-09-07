@@ -239,6 +239,29 @@ describe('mergeDocument', () => {
     assert.equal(final.budgetCompras['2026-09'].categorias['Hortifruti'].orcado, 3000);
   });
 
+  test('categoria do Financeiro excluída não ressuscita pelo POST de outro aparelho', () => {
+    // "apago e ela volta": o outro aparelho ainda tem a categoria na lista e a
+    // reenvia; como o documento mesclado nasce do incoming, sem o tombstone
+    // ela voltava pra todo mundo.
+    const noServidor = { categorias: [{ nome: 'Gás' }, { nome: 'Aluguel' }], categoriasDeleted: ['Gás'] };
+    const postDoOutroAparelho = { categorias: [{ nome: 'Gás' }, { nome: 'Aluguel' }] };
+
+    const final = mergeDocument(noServidor, postDoOutroAparelho);
+    const nomes = final.categorias.map((c) => c.nome);
+    assert.ok(!nomes.includes('Gás'), 'categoria excluída não pode voltar');
+    assert.ok(nomes.includes('Aluguel'), 'as outras continuam');
+  });
+
+  test('recriar categoria com nome de uma excluída antes funciona', () => {
+    // criarCategoriaFin tira o nome do tombstone; sem isso a categoria recém
+    // criada sumiria sozinha na fusão seguinte.
+    const noServidor = { categorias: [], categoriasDeleted: ['Gás'] };
+    const postRecriando = { categorias: [{ nome: 'Gás' }], categoriasDeleted: [] };
+
+    const final = mergeDocument(noServidor, postRecriando);
+    assert.ok(final.categorias.map((c) => c.nome).includes('Gás'), 'recriada não pode ser apagada pelo tombstone antigo');
+  });
+
   test('budgetCompras: voltar pra sugestão marca em vez de apagar, e a marcação vence', () => {
     // Apagar a chave faria o valor manual ressuscitar na fusão seguinte,
     // porque nenhuma das duas pontas tem lista de removidos pra este campo.

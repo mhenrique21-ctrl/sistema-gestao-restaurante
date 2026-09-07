@@ -157,6 +157,38 @@ export function mergeDocument(existing, incoming) {
     ...(afterLista.mapaCategoriaDre || {}),
   };
 
+  // Categorias do Financeiro excluídas. Sem o tombstone unido aqui, o aparelho
+  // que ainda não sabe da exclusão reenvia a categoria no próximo POST e ela
+  // ressuscita pra todo mundo — o documento mesclado nasce do incoming.
+  const catsDeletadas = new Set([
+    ...(existing.categoriasDeleted || []),
+    ...(afterLista.categoriasDeleted || []),
+  ]);
+  // Recriar uma categoria com o nome de uma excluída antes precisa limpar o
+  // tombstone, senão ela some sozinha na fusão seguinte. O problema é que
+  // "estou recriando" e "estou desatualizado e reenviando" chegam com o mesmo
+  // formato: a categoria na lista e nada em categoriasDeleted.
+  //
+  // O que separa os dois é o campo existir: o cliente atual SEMPRE manda
+  // categoriasDeleted (criarCategoriaFin tira o nome de lá antes de postar),
+  // então omitir um nome ali é intenção explícita de ressuscitar. Cliente
+  // antigo não manda o campo — aí o tombstone do servidor prevalece e a
+  // exclusão é preservada.
+  if (Array.isArray(afterLista.categoriasDeleted)) {
+    const nomeDaCategoria = (c) => (typeof c === 'string' ? c : c?.nome);
+    const recriadas = (afterLista.categorias || [])
+      .map(nomeDaCategoria)
+      .filter((n) => n && !afterLista.categoriasDeleted.includes(n));
+    for (const n of recriadas) catsDeletadas.delete(n);
+  }
+  if (catsDeletadas.size || Array.isArray(afterLista.categoriasDeleted)) {
+    merged.categoriasDeleted = [...catsDeletadas];
+    const nomeDaCategoria = (c) => (typeof c === 'string' ? c : c?.nome);
+    merged.categorias = (merged.categorias || []).filter(
+      (c) => !catsDeletadas.has(nomeDaCategoria(c))
+    );
+  }
+
   // budgetCompras aninha período -> categorias -> categoria, então precisa de
   // união nos dois níveis: união rasa deixaria o período inteiro do incoming
   // sobrescrever o do existing, perdendo uma categoria orçada em outro

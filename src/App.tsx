@@ -1510,11 +1510,26 @@ const mergeFromServer=(prev:any,updates:any)=>{
     // "retornava" sozinho antes mesmo do POST que devia salva-lo terminar.
     // Local por cima, mesmo padrao de unionById.
     const nomeDaCategoria=(c:any):string=>typeof c==="string"?c:c.nome;
+    // A união só sabe ADICIONAR: sem descontar os excluídos, a categoria que o
+    // usuário acabou de apagar voltava do servidor no poll seguinte ("apago e
+    // ela volta"). Tombstone unido dos dois lados, igual listaCatDeleted.
+    const catsDeletadas=new Set([...(s.categoriasDeleted||[]),...(p.categoriasDeleted||[])]);
+    // Recriar uma categoria com nome de uma excluída antes: o servidor ainda
+    // tem o nome no tombstone e a união o traria de volta, apagando de novo a
+    // que acabou de ser criada. O local é a versão que o usuário está usando
+    // agora — categoria presente nele e ausente do tombstone dele é intenção
+    // explícita de ressuscitar. Mesma regra do mergeDocument no servidor.
+    if(Array.isArray(p.categoriasDeleted)){
+      (p.categorias||[]).forEach((c:any)=>{
+        const n=typeof c==="string"?c:c?.nome;
+        if(n&&!p.categoriasDeleted.includes(n))catsDeletadas.delete(n);
+      });
+    }
     const unionByNome=(localArr:any[],serverArr:any[])=>{
       const m=new Map<string,any>();
       (serverArr||[]).forEach((x:any)=>m.set(nomeDaCategoria(x),x));
       (localArr||[]).forEach((x:any)=>m.set(nomeDaCategoria(x),x));
-      return [...m.values()];
+      return [...m.values()].filter((x:any)=>!catsDeletadas.has(nomeDaCategoria(x)));
     };
     next[emp]={
       ...s,
@@ -1620,6 +1635,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // Mesma fusão, mesmo motivo: sem ela, classificar uma categoria na DRE
       // seria revertido pelo poll antes do POST confirmar.
       mapaCategoriaDre: {...(s.mapaCategoriaDre||{}),...(p.mapaCategoriaDre||{})},
+      categoriasDeleted:[...catsDeletadas],
     };
     // budgetCompras é mapa de período -> {categorias:{cat:{...}}}. Precisa de
     // fusão em DOIS níveis: um spread raso faria o período inteiro do local
@@ -7897,6 +7913,24 @@ const resolverDestinoDre=(db:any,nomeCategoria:string):"folha"|"despesa"|"fora"|
   return MAPA_DRE_PADRAO[k]||"pendente";
 };
 // Categorias cadastradas no Financeiro que ninguém classificou ainda.
+// Excluir categoria do Financeiro precisa de tombstone: a fusão com o servidor
+// é união por nome (unionByNome), e união só sabe ADICIONAR — a categoria
+// apagada só localmente volta do servidor no poll seguinte. Mesmo problema que
+// listaCatDeleted e categoriasProducaoDeleted já tinham resolvido assim.
+const excluirCategoriaFin=(nome:string)=>(d:any)=>({
+  ...d,
+  categorias:(d.categorias||[]).filter((x:any)=>(typeof x==="string"?x:x.nome)!==nome),
+  categoriasDeleted:[...new Set([...(d.categoriasDeleted||[]),nome])],
+});
+// Criar uma categoria tira o nome do tombstone: sem isso, recriar uma
+// categoria com o mesmo nome de uma apagada antes faria a fusão apagá-la de
+// novo no poll seguinte — ela some sozinha segundos depois de ser criada.
+const criarCategoriaFin=(nome:string)=>(d:any)=>({
+  ...d,
+  categorias:[...(d.categorias||[]),{nome,apareceNaSangria:false}],
+  categoriasDeleted:(d.categoriasDeleted||[]).filter((x:string)=>x!==nome),
+});
+
 const categoriasDrePendentes=(db:any)=>(db?.categorias||[])
   .map((c:any)=>typeof c==="string"?c:c?.nome)
   .filter(Boolean)
@@ -12885,7 +12919,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
       <div className="card" style={{marginBottom:12}}>
         <div className="row">
           <input placeholder="Nova categoria" value={novacat} onChange={e=>setNovacat(e.target.value)} className="inp"/>
-          <button className="btn" onClick={()=>{if(!novacat)return;if((db.categorias||[]).some((c:any)=>(typeof c==="string"?c:c.nome)===novacat)){alert(`Já existe uma categoria "${novacat}"`);return;}setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),{nome:novacat,apareceNaSangria:false}]}));setNovacat("");}}
+          <button className="btn" onClick={()=>{if(!novacat)return;if((db.categorias||[]).some((c:any)=>(typeof c==="string"?c:c.nome)===novacat)){alert(`Já existe uma categoria "${novacat}"`);return;}(setDbAndSave||setDb)(criarCategoriaFin(novacat));setNovacat("");}}
             style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"10px 16px",whiteSpace:"nowrap"}}>+ Add</button>
         </div>
       </div>
@@ -12922,7 +12956,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                   }).catch(()=>{}).finally(()=>setCarregandoSangriaCats(false));
                 }
               }} style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 10px",fontSize:12}}>✏️</button>
-              <button className="btn" onClick={()=>setDb((d:any)=>({...d,categorias:(d.categorias||[]).filter((x:any)=>(typeof x==="string"?x:x.nome)!==c)}))}
+              <button className="btn" onClick={()=>(setDbAndSave||setDb)(excluirCategoriaFin(c))}
                 style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
             </div>
           </div>
@@ -17702,15 +17736,15 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         <div style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>Categorias usadas nas contas a pagar/receber.</div>
         <div style={{display:"flex",gap:6,marginBottom:8}}>
           <input value={novaCatFin} onChange={e=>setNovaCatFin(e.target.value)} placeholder="Nova categoria..." className="inp" style={{flex:1,marginBottom:0}}
-            onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),{nome:n,apareceNaSangria:false}]}));setNovaCatFin("");}}}/>
-          <button className="btn" onClick={()=>{const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;setDb((d:any)=>({...d,categorias:[...(d.categorias||[]),{nome:n,apareceNaSangria:false}]}));setNovaCatFin("");}}
+            onKeyDown={e=>{if(e.key==="Enter"){const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;(setDbAndSave||setDb)(criarCategoriaFin(n));setNovaCatFin("");}}}/>
+          <button className="btn" onClick={()=>{const n=novaCatFin.trim();if(!n||categoriasFin.includes(n))return;(setDbAndSave||setDb)(criarCategoriaFin(n));setNovaCatFin("");}}
             style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"8px 14px",fontSize:13}}>+</button>
         </div>
         <div style={{maxHeight:240,overflowY:"auto"}}>
           {[...categoriasFin].sort((a,b)=>a.localeCompare(b,"pt-BR")).map(c=>(
             <div key={c} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
               <span style={{fontSize:12}}>{c}</span>
-              <button onClick={()=>{if(!confirm(`Excluir categoria "${c}"?`))return;setDb((d:any)=>({...d,categorias:(d.categorias||[]).filter((x:any)=>(typeof x==="string"?x:x.nome)!==c)}));}}
+              <button onClick={()=>{if(!confirm(`Excluir categoria "${c}"?`))return;(setDbAndSave||setDb)(excluirCategoriaFin(c));}}
                 style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:13}}>🗑️</button>
             </div>
           ))}
