@@ -1617,6 +1617,9 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // antes mesmo do POST confirmar. Local vence por chave — classificar de
       // novo é só gravar por cima, nunca remover.
       dicionarioClassificacao: {...(s.dicionarioClassificacao||{}),...(p.dicionarioClassificacao||{})},
+      // Mesma fusão, mesmo motivo: sem ela, classificar uma categoria na DRE
+      // seria revertido pelo poll antes do POST confirmar.
+      mapaCategoriaDre: {...(s.mapaCategoriaDre||{}),...(p.mapaCategoriaDre||{})},
     };
     // budgetCompras é mapa de período -> {categorias:{cat:{...}}}. Precisa de
     // fusão em DOIS níveis: um spread raso faria o período inteiro do local
@@ -7849,6 +7852,57 @@ const RATEIO_CMV_PADRAO:Record<string,number>={
 };
 const CMV_ALVO_PADRAO=0.30;  // 30% da receita — usado só sem histórico
 
+// ── Categoria do Financeiro → linha da DRE ──────────────────────────────────
+// Mapa separado, ligado por foldNome — mesmo padrão do resto do app, já que
+// db.categorias não tem campo de classificação. Montado sobre as categorias
+// que existem de fato nas duas empresas, não sobre nomes genéricos.
+//   "folha"   → soma na linha única "Folha e encargos"
+//   "despesa" → linha própria na DRE, como sempre foi
+//   "fora"    → NÃO soma: ou já é contada em outro lugar, ou não é despesa
+//               operacional do período
+// Categoria ausente do mapa não soma em nada e aparece em Financeiro →
+// Categorias para o usuário decidir. Incluir por padrão seria pior: infla o
+// resultado sem ninguém perceber.
+const MAPA_DRE_PADRAO:{[k:string]:"folha"|"despesa"|"fora"}={
+  // Folha — estavam espalhadas em 8 linhas, dificultando ver o custo de
+  // pessoal como um número só (que é o que a regra dos 30% compara).
+  "salarios":"folha","vale transporte":"folha","transporte":"folha","fgts":"folha",
+  "bonificacao":"folha","comissao":"folha","comissao semanal":"folha","diarista":"folha",
+  // Custos operacionais — cada um na sua linha
+  "aluguel":"despesa","energia":"despesa","agua":"despesa","internet":"despesa",
+  "contabilidade":"despesa","seguranca e monitoramento":"despesa","dedetizacao":"despesa",
+  "gas":"despesa","encomenda":"despesa","encomendas":"despesa","outros":"despesa",
+  // Fora da DRE, com motivo:
+  // - simples: a DRE já calcula o Simples pela alíquota (snAliquota) e desconta
+  //   em linha própria; somar a categoria contaria o imposto duas vezes.
+  "simples":"fora",
+  // - alimentação/bebidas/limpeza: já entram pelo lado de Compras (CMV e
+  //   material de limpeza). Compras é a fonte única desses gastos.
+  "alimentacao":"fora","bebidas":"fora","limpeza":"fora",
+  // - adiantamento: antecipação de salário, não despesa nova — o valor cheio
+  //   já aparece em Salários.
+  "adiantamento":"fora",
+  // - empréstimo/negociação de dívida: financiamento e amortização, não
+  //   despesa operacional do período.
+  "emprestimo":"fora","negociacao de divida":"fora",
+  // - máquinas e equipamentos: CAPEX. Lançar o valor cheio no mês distorce o
+  //   resultado; tratar como depreciação está fora do escopo.
+  "maquinas e equipamentos":"fora",
+};
+const resolverDestinoDre=(db:any,nomeCategoria:string):"folha"|"despesa"|"fora"|"pendente"=>{
+  const k=foldNome(nomeCategoria);
+  if(!k)return "pendente";
+  const override=db?.mapaCategoriaDre?.[k];
+  if(override==="folha"||override==="despesa"||override==="fora")return override;
+  return MAPA_DRE_PADRAO[k]||"pendente";
+};
+// Categorias cadastradas no Financeiro que ninguém classificou ainda.
+const categoriasDrePendentes=(db:any)=>(db?.categorias||[])
+  .map((c:any)=>typeof c==="string"?c:c?.nome)
+  .filter(Boolean)
+  .filter((n:string)=>resolverDestinoDre(db,n)==="pendente");
+const LINHA_FOLHA="Folha e encargos";
+
 // ── Classificação automática de item de compra ──────────────────────────────
 // Regras duras: nome que contém uma destas palavras é limpeza/higiene, ponto —
 // nem o dicionário aprendido sobrepõe. É o caso em que errar sai caro: item de
@@ -12442,7 +12496,13 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
       const categoriaFinanceiroSangria=(nomeAntigo in catLink)
         ?Object.fromEntries(Object.entries(catLink).map(([k,v])=>[k===nomeAntigo?novo:k,v]))
         :catLink;
-      return{...d,categorias,contas,categoriaFinanceiroSangria};
+      // A classificação da DRE é chaveada por foldNome, então renomear
+      // orfanaria o mapeamento e a categoria voltaria a "sem classificação",
+      // deixando de somar sem ninguém notar. Carrega a escolha pro nome novo.
+      const mapaDre={...(d.mapaCategoriaDre||{})};
+      const kAntigo=foldNome(nomeAntigo), kNovo=foldNome(novo);
+      if(kAntigo!==kNovo&&kAntigo in mapaDre){mapaDre[kNovo]=mapaDre[kAntigo];delete mapaDre[kAntigo];}
+      return{...d,categorias,contas,categoriaFinanceiroSangria,mapaCategoriaDre:mapaDre};
     });
     setEditandoCatFin(novo);
     setRenomeCatFin(novo);
@@ -12839,6 +12899,16 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
             <div>
               <div>{c}{apareceNaSangria&&<span style={{marginLeft:6,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20,background:"var(--accLight,var(--bg4))",color:"var(--acc,var(--btnPrimary))"}}>🔻 na sangria</span>}</div>
               {vinculada&&<div className="muted" style={{fontSize:10.5,marginTop:2}}>💸 Sangria "{vinculada}" cai aqui</div>}
+              {(()=>{
+                const dst=resolverDestinoDre(db,c);
+                const info:any={folha:["Folha e encargos","var(--infoBg)","var(--infoText)"],
+                  despesa:["Linha própria na DRE","var(--successBg)","var(--successText)"],
+                  fora:["Fora da DRE","var(--bg4)","var(--text2)"],
+                  pendente:["⚠️ Sem classificação na DRE","var(--warningBg)","var(--warningText)"]}[dst];
+                return <div style={{marginTop:4}}>
+                  <span className="tag" style={{background:info[1],color:info[2],fontSize:10}}>{info[0]}</span>
+                </div>;
+              })()}
             </div>
             <div style={{display:"flex",gap:6}}>
               <button className="btn" onClick={()=>{
@@ -12857,6 +12927,18 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
             </div>
           </div>
           {aberta&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column" as const,gap:12}}>
+            <div>
+              <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Como entra na DRE</label>
+              <div className="chip-row">
+                {([["despesa","Linha própria"],["folha","Folha e encargos"],["fora","Não entra na DRE"]] as const).map(([v,lbl])=>(
+                  <button key={v} type="button" className="chip" aria-pressed={resolverDestinoDre(db,c)===v}
+                    onClick={()=>(setDbAndSave||setDb)((d:any)=>({...d,mapaCategoriaDre:{...(d.mapaCategoriaDre||{}),[foldNome(c)]:v}}))}>{lbl}</button>
+                ))}
+              </div>
+              <div className="muted" style={{fontSize:10.5,marginTop:5}}>
+                “Não entra” é pra gasto que já é contado em outro lugar (comida e limpeza vêm de Compras; o Simples é calculado pela alíquota) ou que não é despesa do período (empréstimo, dívida, compra de equipamento).
+              </div>
+            </div>
             <div>
               <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Nome da categoria</label>
               <div className="row" style={{gap:6}}>
@@ -14037,7 +14119,20 @@ function DREComp({db,setDb,empresa}){
 
   // Despesas (by category)
   const despCats:{[k:string]:number}={};
-  contasPagas.forEach(c=>{const k=c.categoria||"Outros";despCats[k]=(despCats[k]||0)+parseMoney(c.valor);});
+  // Cada conta vai pro destino do seu mapa: linha própria, agrupada na folha,
+  // ou fora da DRE. O que ficou fora é somado à parte e mostrado abaixo da
+  // tabela — some do resultado, mas não some da vista.
+  let foraDaDre=0, pendenteDaDre=0;
+  contasPagas.forEach(c=>{
+    const cat=c.categoria||"Outros";
+    const v=parseMoney(c.valor);
+    const destino=resolverDestinoDre(db,cat);
+    if(destino==="fora"){foraDaDre+=v;return;}
+    if(destino==="pendente"){pendenteDaDre+=v;return;}
+    const k=destino==="folha"?LINHA_FOLHA:cat;
+    despCats[k]=(despCats[k]||0)+v;
+  });
+  const catsPendentesDre=categoriasDrePendentes(db);
   // As compras fora do CMV (limpeza/higiene, outros) saíram do custo de
   // mercadoria mas continuam sendo dinheiro que saiu: entram aqui, nas
   // despesas operacionais. Sem isso, tirá-las do CMV inflaria o resultado.
@@ -14246,6 +14341,16 @@ function DREComp({db,setDb,empresa}){
       ))}
       {!Object.keys(despCats).length&&<div className="muted" style={{fontSize:12,paddingBottom:8}}>Nenhuma conta paga no período.</div>}
       <Row label="Total Despesas" value={totalDesp} color="var(--btnDanger)" bold/>
+      {(foraDaDre>0||pendenteDaDre>0)&&<div style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:9,padding:"9px 11px",margin:"8px 0",fontSize:11,color:"var(--text2)"}}>
+        {foraDaDre>0&&<div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:pendenteDaDre>0?4:0}}>
+          <span>Fora da DRE (imposto, empréstimo, CAPEX, já contado em Compras)</span>
+          <b style={{whiteSpace:"nowrap"}}>{fmtMoney(foraDaDre)}</b>
+        </div>}
+        {pendenteDaDre>0&&<div style={{display:"flex",justifyContent:"space-between",gap:8,color:"var(--warningText)"}}>
+          <span>⚠️ Categoria sem classificação ({catsPendentesDre.length}) — defina em Financeiro → Categorias</span>
+          <b style={{whiteSpace:"nowrap"}}>{fmtMoney(pendenteDaDre)}</b>
+        </div>}
+      </div>}
       <Row label="= Resultado Operacional" value={resultadoOp} color={col(resultadoOp)} bold border={false}/>
     </div>
 

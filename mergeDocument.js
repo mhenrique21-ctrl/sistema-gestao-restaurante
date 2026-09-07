@@ -151,6 +151,12 @@ export function mergeDocument(existing, incoming) {
     ...(afterLista.dicionarioClassificacao || {}),
   };
 
+  // Categoria do Financeiro -> linha da DRE. Mesmo tratamento e mesmo motivo.
+  merged.mapaCategoriaDre = {
+    ...(existing.mapaCategoriaDre || {}),
+    ...(afterLista.mapaCategoriaDre || {}),
+  };
+
   // budgetCompras aninha período -> categorias -> categoria, então precisa de
   // união nos dois níveis: união rasa deixaria o período inteiro do incoming
   // sobrescrever o do existing, perdendo uma categoria orçada em outro
