@@ -209,4 +209,43 @@ describe('mergeDocument', () => {
 
     assert.equal(final.produtosLista.find((p) => p.id === 'prod-1').rua, 'Rua 3', 'edição carimbada não pode ser revertida por um POST sem carimbo');
   });
+
+  test('dicionarioClassificacao: aparelho com bundle antigo não apaga o que já foi ensinado', () => {
+    // O documento mesclado nasce do incoming; sem tratamento explícito, um
+    // POST vindo de uma aba que não conhece o campo o removeria do servidor.
+    const noServidor = { dicionarioClassificacao: { 'queijo mussarela': { categoria: 'Laticínios', origemAprendizado: 'usuario' } } };
+    const postAntigo = { vendas: [] };  // bundle velho: nem sabe que o campo existe
+
+    const final = mergeDocument(noServidor, postAntigo);
+    assert.deepEqual(final.dicionarioClassificacao['queijo mussarela'].categoria, 'Laticínios');
+  });
+
+  test('dicionarioClassificacao: reclassificação nova vence a antiga', () => {
+    const noServidor = { dicionarioClassificacao: { 'polpa acai': { categoria: 'Outros' } } };
+    const incoming = { dicionarioClassificacao: { 'polpa acai': { categoria: 'Mercearia/Secos' } } };
+
+    const final = mergeDocument(noServidor, incoming);
+    assert.equal(final.dicionarioClassificacao['polpa acai'].categoria, 'Mercearia/Secos');
+  });
+
+  test('budgetCompras: categorias orçadas em aparelhos diferentes no mesmo período coexistem', () => {
+    // União rasa perderia uma das duas — o período inteiro do incoming
+    // sobrescreveria o do existing.
+    const noServidor = { budgetCompras: { '2026-09': { categorias: { 'Proteínas': { orcado: 10000, ajustadoManualmente: true } } } } };
+    const incoming = { budgetCompras: { '2026-09': { categorias: { 'Hortifruti': { orcado: 3000, ajustadoManualmente: true } } } } };
+
+    const final = mergeDocument(noServidor, incoming);
+    assert.equal(final.budgetCompras['2026-09'].categorias['Proteínas'].orcado, 10000, 'orçamento do outro aparelho não pode sumir');
+    assert.equal(final.budgetCompras['2026-09'].categorias['Hortifruti'].orcado, 3000);
+  });
+
+  test('budgetCompras: voltar pra sugestão marca em vez de apagar, e a marcação vence', () => {
+    // Apagar a chave faria o valor manual ressuscitar na fusão seguinte,
+    // porque nenhuma das duas pontas tem lista de removidos pra este campo.
+    const noServidor = { budgetCompras: { '2026-09': { categorias: { 'Laticínios': { orcado: 8000, ajustadoManualmente: true } } } } };
+    const incoming = { budgetCompras: { '2026-09': { categorias: { 'Laticínios': { orcado: 8000, ajustadoManualmente: false } } } } };
+
+    const final = mergeDocument(noServidor, incoming);
+    assert.equal(final.budgetCompras['2026-09'].categorias['Laticínios'].ajustadoManualmente, false);
+  });
 });

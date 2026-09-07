@@ -1610,8 +1610,27 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // por um poll no meio do caminho. syncProdByName/saveProd já carimbam
       // atualizadoEm, então a fusão por id+timestamp resolve certo.
       produtosLista: byIdDedup(mergeArrayById(s.produtosLista||[],p.produtosLista||[],_listaDeletados)),
-      pedidosLista:  unionById(p.pedidosLista||[],s.pedidosLista||[],true)
+      pedidosLista:  unionById(p.pedidosLista||[],s.pedidosLista||[],true),
+      // Mapa nome->categoria aprendida. Mesmo bug do iconesProducao: vinha cru
+      // do spread {...s} acima, então classificar um item era revertido pelo
+      // poll seguinte, e ele reaparecia na fila de "Pendente de Classificação"
+      // antes mesmo do POST confirmar. Local vence por chave — classificar de
+      // novo é só gravar por cima, nunca remover.
+      dicionarioClassificacao: {...(s.dicionarioClassificacao||{}),...(p.dicionarioClassificacao||{})},
     };
+    // budgetCompras é mapa de período -> {categorias:{cat:{...}}}. Precisa de
+    // fusão em DOIS níveis: um spread raso faria o período inteiro do local
+    // sobrescrever o do servidor, perdendo uma categoria que outro aparelho
+    // orçou no mesmo período. Mesma razão do impressao/sortPrefs em config.
+    {
+      const periodos=new Set([...Object.keys(s.budgetCompras||{}),...Object.keys(p.budgetCompras||{})]);
+      const bc:any={};
+      periodos.forEach(per=>{
+        bc[per]={...(s.budgetCompras?.[per]||{}),...(p.budgetCompras?.[per]||{}),
+          categorias:{...(s.budgetCompras?.[per]?.categorias||{}),...(p.budgetCompras?.[per]?.categorias||{})}};
+      });
+      next[emp].budgetCompras=bc;
+    }
     // listaCompras: merge por ID, versão mais recente (updatedAt) vence
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
     const localMap=new Map<string,any>();
@@ -5254,11 +5273,19 @@ function BudgetComprasPanel({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSa
         [cat]:{orcado:valor,sugerido:b.linhas.find(l=>l.cat===cat)?.sugerido||0,ajustadoManualmente:true}}}}}));
     setRascunho(r=>{const n={...r};delete n[cat];return n;});
   };
+  // Marca como "não ajustado" em vez de apagar a chave. Apagando, a fusão com
+  // o servidor (local vence por chave, sem lista de removidos) traria a chave
+  // de volta no poll seguinte e o valor manual ressuscitaria sozinho — mesmo
+  // problema que categoriasProducaoDeleted precisou resolver com tombstone.
+  // calcularBudget já ignora o registro quando ajustadoManualmente é falso.
   const voltarPraSugestao=(cat:string)=>{
     (setDbAndSave||setDb)((d:any)=>{
-      const cats={...(d.budgetCompras?.[b.chave]?.categorias||{})};
-      delete cats[cat];
-      return {...d,budgetCompras:{...(d.budgetCompras||{}),[b.chave]:{...(d.budgetCompras?.[b.chave]||{}),categorias:cats}}};
+      const atual=d.budgetCompras?.[b.chave]?.categorias?.[cat];
+      if(!atual)return d;
+      return {...d,budgetCompras:{...(d.budgetCompras||{}),
+        [b.chave]:{...(d.budgetCompras?.[b.chave]||{}),
+          categorias:{...(d.budgetCompras?.[b.chave]?.categorias||{}),
+            [cat]:{...atual,ajustadoManualmente:false}}}}};
     });
     setRascunho(r=>{const n={...r};delete n[cat];return n;});
   };

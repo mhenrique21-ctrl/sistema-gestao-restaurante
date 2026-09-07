@@ -139,5 +139,35 @@ export function mergeDocument(existing, incoming) {
   for (const field of MERGEABLE_FIELDS) {
     merged[field] = mergeArrayById(existing[field], afterLista[field], deletedIds, field === 'vendas');
   }
+
+  // Mapas (não arrays com id), que por isso não passam por mergeArrayById.
+  // Como o documento mesclado nasce do incoming, um aparelho com o bundle
+  // antigo aberto — que não conhece esses campos e posta sem eles — apagaria
+  // do servidor o que outro acabou de gravar. União com incoming vencendo por
+  // chave: quem postou agora é quem mexeu, e nada aqui é removido por
+  // ausência, só sobrescrito por valor.
+  merged.dicionarioClassificacao = {
+    ...(existing.dicionarioClassificacao || {}),
+    ...(afterLista.dicionarioClassificacao || {}),
+  };
+
+  // budgetCompras aninha período -> categorias -> categoria, então precisa de
+  // união nos dois níveis: união rasa deixaria o período inteiro do incoming
+  // sobrescrever o do existing, perdendo uma categoria orçada em outro
+  // aparelho no mesmo período.
+  const periodos = new Set([
+    ...Object.keys(existing.budgetCompras || {}),
+    ...Object.keys(afterLista.budgetCompras || {}),
+  ]);
+  if (periodos.size) {
+    const bc = {};
+    for (const per of periodos) {
+      const e = existing.budgetCompras?.[per] || {};
+      const i = afterLista.budgetCompras?.[per] || {};
+      bc[per] = { ...e, ...i, categorias: { ...(e.categorias || {}), ...(i.categorias || {}) } };
+    }
+    merged.budgetCompras = bc;
+  }
+
   return merged;
 }
