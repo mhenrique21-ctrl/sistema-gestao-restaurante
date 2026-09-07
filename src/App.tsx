@@ -1970,6 +1970,7 @@ export default function App() {
       {id:"compras-prod",label:"Insumos",icon:"📦",sub:"produtos"},
       {id:"compras-cons",label:"Consumo",icon:"📊",sub:"consumo"},
       {id:"compras-budget",label:"Budget",icon:"🎯",sub:"budget"},
+      {id:"compras-classificar",label:"Classificar",icon:"🏷️",sub:"classificar",badge:"classificacaoPendente"},
       {id:"compras-migracao",label:"Reclassificar",icon:"🔀",sub:"migracao"},
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
@@ -2122,7 +2123,12 @@ export default function App() {
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden"}}>
           {(()=>{
             const estoqueBaixo=(db.materiasPrimas||[]).filter(m=>(m.estoqueMinimo||0)>0&&(m.estoqueAtual||0)<(m.estoqueMinimo||0)).length;
-            const badge=(id:string)=>id==="estoque"&&estoqueBaixo>0?<span className="sb-hide" style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{estoqueBaixo}</span>
+            // Compra cuja categoria o sistema não soube decidir sozinho: caiu
+            // em "Outros" sem nada ensinado no dicionário. Enquanto estiver
+            // assim, ela não conta em nenhuma categoria de CMV.
+            const classifPendentes=contarClassificacaoPendente(db);
+            const contagens:{[id:string]:number}={estoque:estoqueBaixo,compras:classifPendentes};
+            const badge=(id:string)=>contagens[id]>0?<span className="sb-hide" style={{background:"#f59e0b",color:"#fff",borderRadius:20,fontSize:9,fontWeight:800,minWidth:14,height:14,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 3px",marginLeft:"auto"}}>{contagens[id]}</span>
               :null;
             return menuFiltered.map(m=>{
               const hasKids=!!m.children?.length;
@@ -4580,7 +4586,9 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
 }
 
 // ===================== NF-e XML PARSER =====================
-function parseNFe(xmlString) {
+// db é opcional só por segurança: sem ele a classificação ainda funciona pelas
+// regras duras e palavras-chave, perdendo apenas o que o usuário já ensinou.
+function parseNFe(xmlString, db?:any) {
   let cleanXml=xmlString.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g,'');
   cleanXml=cleanXml.replace(/<(\/?)([a-zA-Z0-9]+):/g,'<$1');
   const parser=new DOMParser();
@@ -4609,21 +4617,9 @@ function parseNFe(xmlString) {
     endereco: emit?(()=>{const e=emit.querySelector("enderEmit"); return e?[ga(e,"xLgr"),ga(e,"nro"),ga(e,"xBairro"),ga(e,"xMun"),ga(e,"UF")].filter(Boolean).join(", "):""})():"",
   };
 
-  const CATEGORIAS_NFe:{[k:string]:string}={
-    carne:"proteína",frango:"proteína",peixe:"proteína",atum:"proteína",presunto:"proteína",salame:"proteína",bacon:"proteína",linguiça:"proteína",
-    farinha:"insumos",arroz:"insumos",feijão:"insumos",açúcar:"insumos",sal:"insumos",oleo:"insumos",óleo:"insumos",azeite:"insumos",molho:"insumos",
-    leite:"insumos",manteiga:"insumos",queijo:"insumos",creme:"insumos",iogurte:"insumos",café:"insumos",caldo:"insumos",tempero:"insumos",
-    saco:"descartáveis",sacola:"descartáveis",copo:"descartáveis",prato:"descartáveis",talher:"descartáveis",embalagem:"descartáveis",
-    bandeja:"descartáveis","papel alumínio":"descartáveis","filme pvc":"descartáveis",guardanapo:"descartáveis",canudo:"descartáveis",
-    detergente:"material de limpeza",desinfetante:"material de limpeza","água sanitária":"material de limpeza",
-    "sabão":"material de limpeza",sabonete:"material de limpeza",esponja:"material de limpeza",vassoura:"material de limpeza",
-    rodo:"material de limpeza",pano:"material de limpeza","álcool":"material de limpeza",luva:"material de limpeza",
-  };
-  const categorizarProduto=(nome:string):string=>{
-    const n=nome.toLowerCase();
-    for(const[k,v] of Object.entries(CATEGORIAS_NFe)){if(n.includes(k))return v;}
-    return "insumos";
-  };
+  // CATEGORIAS_NFe/categorizarProduto removidos: devolviam nomes da lista de
+  // categorias operacional ("insumos","proteína"), fora de CATS_COMPRA — toda
+  // NF-e importada caía em "A reclassificar". Agora usa classificarItem.
   const unidadeNFe=(uCom:string):string=>{
     const u=uCom.toUpperCase();
     if(u==="KG"||u==="G"||u==="GR"||u==="KGS")return "kg";
@@ -4640,7 +4636,9 @@ function parseNFe(xmlString) {
     const vUnit=parseFloat(ga(prod,"vUnCom"))||0;
     const vTotal=parseFloat(ga(prod,"vProd"))||0;
     const uCom=ga(prod,"uCom")||"un";
-    return{nome,categoria:categorizarProduto(nome),unidade:unidadeNFe(uCom),quantidade:qtd,valorUnitario:vUnit,valorTotal:vTotal};
+    const cls=classificarItem(db,nome);
+    return{nome,categoria:cls.categoria,origemClassificacao:cls.origem,
+      unidade:unidadeNFe(uCom),quantidade:qtd,valorUnitario:vUnit,valorTotal:vTotal};
   }).filter(Boolean);
 
   const icmsTot=doc.querySelector("ICMSTot");
@@ -5411,7 +5409,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [formaPag,setFormaPag]=useState("dinheiro");
   const [vencimento,setVencimento]=useState(today());
   const [carrinho,setCarrinho]=useState([]);
-  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:CATS_CMV[0],unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
+  const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:CATS_CMV[0],unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:"",categoriaManual:false});
   const [sugestoes,setSugestoes]=useState([]);
   const [sugestoesForn,setSugestoesForn]=useState([]);
   const [toastMsg,setToastMsg]=useState<string|null>(null);
@@ -5654,7 +5652,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setSugestoesForn(found);
   };
   const selecionarMP=(mp)=>{
-    setItemAtual(i=>({...i,nomeProduto:mp.nome,categoria:mp.categoria,unidade:mp.unidade,comprarEmbalagem:false,qtdEmbalagemComprada:""}));
+    setItemAtual(i=>({...i,nomeProduto:mp.nome,categoria:mp.categoria,unidade:mp.unidade,comprarEmbalagem:false,qtdEmbalagemComprada:"",categoriaManual:false}));
     setSugestoes([]);
   };
   // Matéria-prima do nome digitado/selecionado agora — usada pra saber se
@@ -5687,8 +5685,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     const itemFinal=usarConversao
       ?{...itemAtual,unidade:mpDoItemAtual.unidade,quantidade:String(qtdEmbalConvertida),valorUnit:String(valorUnitEmbalConvertido.toFixed(4))}
       :itemAtual;
+    // Categoria escolhida à mão vira aprendizado: da próxima vez esse nome já
+    // entra classificado sozinho, aqui e na importação de NF-e.
+    if(itemAtual.categoriaManual&&itemAtual.nomeProduto.trim()){
+      (setDbAndSave||setDb)(aprenderClassificacao(itemAtual.nomeProduto,itemFinal.categoria));
+    }
     setCarrinho(c=>[...c,{...itemFinal,id:uid(),valorTotal:itemFinal.valorTotal,valorUnit:itemFinal.valorUnit}]);
-    setItemAtual({nomeProduto:"",categoria:CATS_CMV[0],unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:""});
+    setItemAtual({nomeProduto:"",categoria:CATS_CMV[0],unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:"",categoriaManual:false});
     setSugestoes([]);
   };
   const remItem=(id)=>setCarrinho(c=>c.filter(i=>i.id!==id));
@@ -5794,7 +5797,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     reader.onload=()=>{
       try{
         const xml=reader.result as string;
-        const parsed=parseNFe(xml);
+        const parsed=parseNFe(xml,db);
         setNfeXml(xml);
         setIaResult(parsed);
         setImgPreview(null);setImgBase64(null);setIaText("");
@@ -6038,7 +6041,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       try{
         const xml=reader.result as string;
         setNfeXml(xml);
-        const parsed=parseNFe(xml);
+        const parsed=parseNFe(xml,db);
         setNfeResult(parsed);
         if(parsed.formaPag&&formasPag.includes(parsed.formaPag))setNfeFormaPag(parsed.formaPag);
         if(parsed.dVenc)setNfeVenc(parsed.dVenc);
@@ -6344,7 +6347,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(!nfe.rawXml)return alert("XML não disponível para esta NF-e.");
     setNfeXml(nfe.rawXml);
     try{
-      const parsed=parseNFe(nfe.rawXml);
+      const parsed=parseNFe(nfe.rawXml,db);
       setNfeResult(parsed);
       if(parsed.formaPag&&formasPag.includes(parsed.formaPag))setNfeFormaPag(parsed.formaPag);
       if(parsed.dVenc)setNfeVenc(parsed.dVenc);
@@ -6515,7 +6518,18 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         <div style={{position:"relative"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sugestoes.length?0:8}}>
             <input placeholder="Nome do produto / matéria-prima" value={itemAtual.nomeProduto}
-              onChange={e=>{setItemAtual(i=>({...i,nomeProduto:e.target.value}));buscarMP(e.target.value);}}
+              onChange={e=>{
+                const nome=e.target.value;
+                // Sugere a categoria enquanto digita, mas só enquanto o usuário
+                // ainda não escolheu uma à mão nesse item — sobrescrever a
+                // escolha dele a cada tecla seria pior que não sugerir nada.
+                setItemAtual(i=>{
+                  if(i.categoriaManual)return {...i,nomeProduto:nome};
+                  const cls=classificarItem(db,nome);
+                  return {...i,nomeProduto:nome,categoria:cls.origem==="nenhuma"?i.categoria:cls.categoria};
+                });
+                buscarMP(nome);
+              }}
               className="inp"/>
             {itemAtual.nomeProduto.trim()&&<TagCadastro existe={!!mpDoItemAtual} textoNovo="+ novo item"/>}
           </div>
@@ -6533,7 +6547,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         </div>
         <div style={{marginBottom:8,marginTop:sugestoes.length?44:0}}>
           <ChipSelect rotulo="Categoria" valor={itemAtual.categoria}
-            onChange={v=>setItemAtual(i=>({...i,categoria:v}))}
+            onChange={v=>setItemAtual(i=>({...i,categoria:v,categoriaManual:true}))}
             opcoes={cats.map(c=>({v:c,label:`${catIcon(c)} ${c.charAt(0).toUpperCase()+c.slice(1)}`}))}/>
         </div>
         <div style={{marginBottom:8}}>
@@ -7092,6 +7106,58 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         </>;
       })()}
     </div>}
+
+    {/* ===== PENDENTE DE CLASSIFICAÇÃO ===== */}
+    {subTab==="classificar"&&(()=>{
+      const pendentes=itensClassificacaoPendente(db);
+      return <div>
+        <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
+        <div className="section-title">Pendente de classificação</div>
+        {!pendentes.length
+          ?<div className="card" style={{textAlign:"center",padding:"28px 16px"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontWeight:700,marginBottom:4}}>Nada pendente</div>
+            <div className="muted" style={{fontSize:12}}>Todo item comprado já tem categoria contábil definida.</div>
+          </div>
+          :<>
+            <div className="card" style={{marginBottom:10,border:"1px solid #F59E0B55",background:"var(--warningBg)"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"var(--warningText)",marginBottom:4}}>{pendentes.length} item(ns) sem categoria definida</div>
+              <div style={{fontSize:11.5,color:"var(--warningText)"}}>
+                Estão em “Outros”, então não contam em nenhuma categoria do CMV.
+                Classifique uma vez: toda compra futura com o mesmo nome já entra classificada sozinha.
+              </div>
+            </div>
+            {pendentes.map((p:any)=>(
+              <div key={p.chave} className="card" style={{marginBottom:8}}>
+                <div style={{fontWeight:700,fontSize:13.5,marginBottom:2}}>{p.nome}</div>
+                <div className="muted" style={{fontSize:11,marginBottom:8}}>
+                  {p.fornecedor?`${p.fornecedor} · `:""}{p.data?fmtDate(p.data):""}
+                  {p.sugestao.origem==="palpite"&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10,marginLeft:6}}>sugestão: {p.sugestao.categoria}</span>}
+                </div>
+                <div className="chip-row">
+                  {CATS_COMPRA.map(cat=>(
+                    <button key={cat} type="button" className="chip"
+                      aria-pressed={p.sugestao.origem==="palpite"&&p.sugestao.categoria===cat}
+                      onClick={()=>{
+                        (setDbAndSave||setDb)((d:any)=>{
+                          const comAprendizado=aprenderClassificacao(p.nome,cat)(d);
+                          // Reclassifica também o que já foi comprado com esse
+                          // nome: sem isso o item continuaria em "Outros" no
+                          // histórico e seguiria fora do CMV do período.
+                          return {...comAprendizado,compras:(comAprendizado.compras||[]).map((c:any)=>
+                            (c.categoria==="Outros"&&foldNome(c.nomeProduto||"")===p.chave)
+                              ?{...c,categoria:cat,categoriaOriginal:c.categoriaOriginal||"Outros",atualizadoEm:new Date().toISOString()}
+                              :c)};
+                        });
+                        setToastMsg(`✅ “${p.nome}” classificado como ${cat}`);
+                      }}>{catIcon(cat)} {cat}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>}
+      </div>;
+    })()}
 
     {/* ===== BUDGET DE COMPRAS POR CATEGORIA ===== */}
     {subTab==="budget"&&<div>
@@ -7755,6 +7821,85 @@ const RATEIO_CMV_PADRAO:Record<string,number>={
   "Bebidas para revenda":0.15,"Hortifruti":0.10,"Descartáveis de consumo do produto":0.05,
 };
 const CMV_ALVO_PADRAO=0.30;  // 30% da receita — usado só sem histórico
+
+// ── Classificação automática de item de compra ──────────────────────────────
+// Regras duras: nome que contém uma destas palavras é limpeza/higiene, ponto —
+// nem o dicionário aprendido sobrepõe. É o caso em que errar sai caro: item de
+// limpeza classificado como matéria-prima infla o CMV e distorce a margem.
+// Comparadas contra foldNome (sem acento, minúsculo), então "álcool" entra
+// como "alcool" e "água sanitária" como "agua sanitaria".
+const REGRAS_LIMPEZA=["detergente","sabao","sabonete","alcool 70","alcool","desinfetante",
+  "esponja","agua sanitaria","vassoura","rodo","luva","amaciante","limpador","multiuso","desengordurante"];
+// Palavras-chave por categoria contábil, para o primeiro palpite quando o item
+// nunca foi visto. Substitui o CATEGORIAS_NFe antigo, que devolvia nomes da
+// lista de categorias operacional ("insumos", "proteína") — fora de
+// CATS_COMPRA, esses caíam todos em "A reclassificar" depois da migração.
+const PALAVRAS_CATEGORIA:{[k:string]:string}={
+  carne:"Proteínas",frango:"Proteínas",peixe:"Proteínas",atum:"Proteínas",presunto:"Proteínas",
+  salame:"Proteínas",bacon:"Proteínas",linguica:"Proteínas",file:"Proteínas",costela:"Proteínas",
+  picanha:"Proteínas",alcatra:"Proteínas",patinho:"Proteínas",coxa:"Proteínas",ovo:"Proteínas",
+  leite:"Laticínios",manteiga:"Laticínios",queijo:"Laticínios",mussarela:"Laticínios",
+  requeijao:"Laticínios",creme:"Laticínios",iogurte:"Laticínios",nata:"Laticínios",
+  alface:"Hortifruti",tomate:"Hortifruti",cebola:"Hortifruti",batata:"Hortifruti",cenoura:"Hortifruti",
+  banana:"Hortifruti",laranja:"Hortifruti",limao:"Hortifruti",maca:"Hortifruti",abacaxi:"Hortifruti",
+  mamao:"Hortifruti",manga:"Hortifruti",pimentao:"Hortifruti",couve:"Hortifruti",verdura:"Hortifruti",
+  fruta:"Hortifruti",legume:"Hortifruti",
+  refrigerante:"Bebidas para revenda",cerveja:"Bebidas para revenda",suco:"Bebidas para revenda",
+  agua:"Bebidas para revenda",energetico:"Bebidas para revenda",vinho:"Bebidas para revenda",
+  saco:"Descartáveis de consumo do produto",sacola:"Descartáveis de consumo do produto",
+  copo:"Descartáveis de consumo do produto",prato:"Descartáveis de consumo do produto",
+  talher:"Descartáveis de consumo do produto",embalagem:"Descartáveis de consumo do produto",
+  bandeja:"Descartáveis de consumo do produto","papel aluminio":"Descartáveis de consumo do produto",
+  "filme pvc":"Descartáveis de consumo do produto",guardanapo:"Descartáveis de consumo do produto",
+  canudo:"Descartáveis de consumo do produto",marmita:"Descartáveis de consumo do produto",
+  farinha:"Mercearia/Secos",arroz:"Mercearia/Secos",feijao:"Mercearia/Secos",acucar:"Mercearia/Secos",
+  sal:"Mercearia/Secos",oleo:"Mercearia/Secos",azeite:"Mercearia/Secos",molho:"Mercearia/Secos",
+  cafe:"Mercearia/Secos",caldo:"Mercearia/Secos",tempero:"Mercearia/Secos",macarrao:"Mercearia/Secos",
+  massa:"Mercearia/Secos",chocolate:"Mercearia/Secos",polpa:"Mercearia/Secos",vinagre:"Mercearia/Secos",
+};
+// Classifica um item. Devolve a categoria e de onde ela veio, porque a tela
+// precisa saber se pode confiar sozinha (dicionário/regra) ou se deve mandar
+// pra fila de conferência (palpite por palavra-chave, ou nada).
+const classificarItem=(db:any,nome:string):{categoria:string,origem:"regra"|"dicionario"|"palpite"|"nenhuma"}=>{
+  const n=foldNome(nome);
+  if(!n)return {categoria:"Outros",origem:"nenhuma"};
+  if(REGRAS_LIMPEZA.some(p=>n.includes(p)))return {categoria:"Material de limpeza e higiene",origem:"regra"};
+  const aprendido=db?.dicionarioClassificacao?.[n];
+  if(aprendido?.categoria&&CATS_COMPRA.includes(aprendido.categoria))return {categoria:aprendido.categoria,origem:"dicionario"};
+  // O dicionário casa por nome exato (após foldNome). "Queijo Mussarela Tirol"
+  // não reaproveita o que foi ensinado pra "Queijo Mussarela" — cai no palpite
+  // por palavra-chave abaixo, que acerta esse caso. Casamento parcial foi
+  // deixado de fora de propósito: "leite" casaria com "leite de coco" e
+  // classificaria como Laticínios uma mercearia.
+  for(const [palavra,cat] of Object.entries(PALAVRAS_CATEGORIA)){
+    if(n.includes(palavra))return {categoria:cat,origem:"palpite"};
+  }
+  return {categoria:"Outros",origem:"nenhuma"};
+};
+// Grava o que o usuário decidiu. A chave é foldNome, então "Queijo Mussarela
+// Tirol 1kg" e "queijo  mussarela tirol 1kg" aprendem a mesma coisa.
+// Compras que ficaram em "Outros" sem o usuário ter ensinado nada sobre elas.
+// Só conta uma vez por nome: cinco compras do mesmo item são uma decisão só.
+const itensClassificacaoPendente=(db:any)=>{
+  const dic=db?.dicionarioClassificacao||{};
+  const vistos=new Map<string,any>();
+  (db?.compras||[]).forEach((c:any)=>{
+    if(c.categoria!=="Outros")return;
+    const n=foldNome(c.nomeProduto||"");
+    if(!n||dic[n]||vistos.has(n))return;
+    vistos.set(n,{chave:n,nome:c.nomeProduto,data:c.data,fornecedor:c.fornecedor,
+      sugestao:classificarItem(db,c.nomeProduto)});
+  });
+  return [...vistos.values()];
+};
+const contarClassificacaoPendente=(db:any)=>itensClassificacaoPendente(db).length;
+
+const aprenderClassificacao=(nome:string,categoria:string)=>(d:any)=>{
+  const n=foldNome(nome);
+  if(!n||!CATS_COMPRA.includes(categoria))return d;
+  return {...d,dicionarioClassificacao:{...(d.dicionarioClassificacao||{}),
+    [n]:{categoria,origemAprendizado:"usuario",ultimaAtualizacao:new Date().toISOString()}}};
+};
 
 // Gasto real numa categoria dentro de um intervalo.
 const gastoCategoria=(compras:any[],cat:string,inicio:string,fim:string)=>
@@ -13783,13 +13928,50 @@ ${detalhesDesc.join("")}
 function DREComp({db,setDb,empresa}){
   const [de,setDe]=useState(today().slice(0,8)+"01");
   const [ate,setAte]=useState(today());
+  // Modo "livre" preserva o comportamento antigo (escolher de/até na mão);
+  // semana e mês apenas CALCULAM de/até a partir de uma data de referência.
+  // Todo o resto da DRE segue lendo de/ate pelo mesmo inPer de sempre, então
+  // nenhuma fórmula precisou ser duplicada por período.
+  const [modoPeriodo,setModoPeriodo]=useState("livre");
+  const [refPeriodo,setRefPeriodo]=useState(today());
+  useEffect(()=>{
+    if(modoPeriodo==="livre")return;
+    const r=periodoRange(modoPeriodo==="semana"?"semana":"mes",refPeriodo);
+    setDe(r.inicio); setAte(r.fim);
+  },[modoPeriodo,refPeriodo]);
+  const andarPeriodo=(passo:number)=>setRefPeriodo(p=>deslocarPeriodo(modoPeriodo==="semana"?"semana":"mes",p,passo));
   const inPer=(dt)=>!dt||(dt>=de&&dt<=ate);
   const sn=db.config?.snAliquota??6;
   const setSn=(v)=>setDb(d=>({...d,config:{...(d.config||{}),snAliquota:parseFloat(v)||0}}));
 
   const vendas=(db.vendas||[]).filter(v=>inPer(v.data));
   const compras=(db.compras||[]).filter(c=>inPer(c.data));
-  const contasPagas=(db.contas||[]).filter(c=>inPer(c.vencimento)&&c.status==="pago"&&c.tipo==="saida"&&c.origem!=="adiantamento_rh");
+  // Em janela semanal, uma conta mensal (aluguel, folha) cairia inteira na
+  // semana do vencimento e zerada nas outras três — a leitura semanal ficaria
+  // inútil. Então conta de grupo recorrente MENSAL entra rateada por dia:
+  // valor / dias do mês do vencimento × dias que a janela cobre daquele mês.
+  // Numa janela de mês inteiro o rateio dá exatamente o valor cheio, então o
+  // modo mensal e o livre continuam idênticos ao que eram.
+  // Conta avulsa não é rateada: ela é um gasto real daquele dia, não a fatia
+  // de um custo mensal.
+  const ratearMensais=modoPeriodo==="semana";
+  const fatiaNaJanela=(c:any)=>{
+    const venc=c.vencimento;
+    if(!venc)return 0;
+    const [y,m]=venc.split("-").map(Number);
+    const priMes=`${venc.slice(0,7)}-01`;
+    const ultMes=`${venc.slice(0,7)}-${String(new Date(y,m,0).getDate()).padStart(2,"0")}`;
+    const ini=de>priMes?de:priMes, fim=ate<ultMes?ate:ultMes;
+    const cobertos=diasEntre(ini,fim)+1;
+    if(cobertos<=0)return 0;
+    return parseMoney(c.valor)/(diasEntre(priMes,ultMes)+1)*cobertos;
+  };
+  const ehMensalRecorrente=(c:any)=>!!c.grupoRecorr&&(c.periodo||"mes")==="mes";
+  const contasBase=(db.contas||[]).filter(c=>c.status==="pago"&&c.tipo==="saida"&&c.origem!=="adiantamento_rh");
+  const contasPagas=ratearMensais
+    ? contasBase.filter(c=>ehMensalRecorrente(c)?fatiaNaJanela(c)>0:inPer(c.vencimento))
+        .map(c=>ehMensalRecorrente(c)?{...c,valor:fatiaNaJanela(c),_rateada:true}:c)
+    : contasBase.filter(c=>inPer(c.vencimento));
 
   // Vendas Brutas (gross incl. delivery fees)
   const vendasBrutas=vendas.reduce((s,v)=>{
@@ -13950,9 +14132,24 @@ function DREComp({db,setDb,empresa}){
 
     {/* Período */}
     <div className="card" style={{marginBottom:12}}>
+      <div className="chip-row" style={{marginBottom:10}}>
+        {[["semana","Semanal"],["mes","Mensal"],["livre","Período livre"]].map(([k,lbl])=>(
+          <button key={k} type="button" className="chip" aria-pressed={modoPeriodo===k} onClick={()=>setModoPeriodo(k)} style={{flex:1}}>{lbl}</button>
+        ))}
+      </div>
+      {modoPeriodo!=="livre"&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:10}}>
+        <button className="btn" onClick={()=>andarPeriodo(-1)} style={{background:"var(--bg4)",color:"var(--text)",padding:"8px 14px",fontSize:16}}>‹</button>
+        <div style={{textAlign:"center",flex:1,minWidth:0,fontWeight:700,fontSize:13,textTransform:"capitalize"}}>
+          {periodoLabel(modoPeriodo==="semana"?"semana":"mes",refPeriodo)}
+        </div>
+        <button className="btn" onClick={()=>andarPeriodo(1)} style={{background:"var(--bg4)",color:"var(--text)",padding:"8px 14px",fontSize:16}}>›</button>
+      </div>}
+      {modoPeriodo==="semana"&&<div style={{background:"var(--infoBg)",border:"1px solid #0EA5E940",borderRadius:8,padding:"8px 10px",marginBottom:10,fontSize:11,color:"var(--infoText)"}}>
+        Contas mensais recorrentes (aluguel, folha) entram rateadas por dia nesta semana — senão cairiam inteiras numa semana e zeradas nas outras. Compras, vendas e taxas usam o valor real do período.
+      </div>}
       <div style={{display:"flex",gap:8,marginBottom:10}}>
-        <div style={{flex:1}}><div style={{fontSize:11,color:"#666",marginBottom:3}}>De</div><input type="date" value={de} onChange={e=>setDe(e.target.value)} className="inp"/></div>
-        <div style={{flex:1}}><div style={{fontSize:11,color:"#666",marginBottom:3}}>Até</div><input type="date" value={ate} onChange={e=>setAte(e.target.value)} className="inp"/></div>
+        <div style={{flex:1}}><div style={{fontSize:11,color:"#666",marginBottom:3}}>De</div><input type="date" value={de} onChange={e=>{setModoPeriodo("livre");setDe(e.target.value);}} className="inp"/></div>
+        <div style={{flex:1}}><div style={{fontSize:11,color:"#666",marginBottom:3}}>Até</div><input type="date" value={ate} onChange={e=>{setModoPeriodo("livre");setAte(e.target.value);}} className="inp"/></div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <span style={{fontSize:12,color:"#888",flex:1}}>Simples Nacional (%)</span>
