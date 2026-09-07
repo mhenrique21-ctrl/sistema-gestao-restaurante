@@ -213,6 +213,14 @@ export function mergeDocument(existing, incoming) {
     const e = existing.config?.[sub], i = afterLista.config?.[sub];
     if (e || i) merged.config[sub] = { ...(e || {}), ...(i || {}) };
   }
+  // sessoesValidasApos ("desconectar todos") vence pelo MAIOR, não pelo
+  // incoming: um aparelho postando sua cópia anterior desfaria a ordem de
+  // desconexão que o admin acabou de dar, e todo mundo continuaria logado.
+  const maiorCarimbo = Math.max(
+    existing.config?.sessoesValidasApos || 0,
+    afterLista.config?.sessoesValidasApos || 0
+  );
+  if (maiorCarimbo) merged.config.sessoesValidasApos = maiorCarimbo;
 
 
   // Categorias do Financeiro excluídas. Sem o tombstone unido aqui, o aparelho

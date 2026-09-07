@@ -1320,6 +1320,33 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
   }
 
   // IA status — test API key with a real call
+  // Versão do build servido agora. O app compara com a versão que carregou e
+  // avisa quando há uma nova — sem isso, um aparelho com a aba aberta fica na
+  // versão antiga indefinidamente, mesmo depois do deploy, e continua postando
+  // sem os campos que a versão nova conhece.
+  //
+  // A identidade vem do nome dos arquivos com hash que o Vite gera
+  // (App-XXXX.js muda a cada build), lido do index.html. Não usa mtime: um
+  // "git pull" que não altere o bundle mexeria na data e faria todo mundo ver
+  // aviso de atualização à toa.
+  if (req.method === 'GET' && urlPath === '/api/versao') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+      const assets = (html.match(/assets\/[A-Za-z0-9._-]+/g) || []).sort().join('|');
+      const versao = crypto.createHash('sha1').update(assets || html).digest('hex').slice(0, 12);
+      res.writeHead(200);
+      res.end(JSON.stringify({ versao }));
+    } catch (e) {
+      // Sem dist/ (dev), devolve null em vez de erro — o app trata como
+      // "não sei a versão" e simplesmente não mostra aviso nenhum.
+      res.writeHead(200);
+      res.end(JSON.stringify({ versao: null }));
+    }
+    return;
+  }
+
   if (req.method === 'GET' && urlPath === '/api/ia-status') {
     res.setHeader('Content-Type', 'application/json');
     if (!API_KEY) {

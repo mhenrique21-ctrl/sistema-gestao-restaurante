@@ -176,6 +176,22 @@ describe('mergeDocument', () => {
     assert.equal(result.config.impressao.cnpj, '12.345.678/0001-90', 'timbre do outro aparelho não pode sumir');
   });
 
+  test('desconectar todos: o carimbo mais recente vence, venha de que lado vier', () => {
+    // Se o incoming vencesse por ser incoming, um aparelho postando sua cópia
+    // anterior desfaria a ordem de desconexão e todo mundo seguiria logado.
+    const ordemNova = mergeDocument(
+      { config: { sessoesValidasApos: 2000 } },
+      { config: { sessoesValidasApos: 1000 } },   // aparelho com a cópia velha
+    );
+    assert.equal(ordemNova.config.sessoesValidasApos, 2000, 'carimbo antigo não pode desfazer o novo');
+
+    const admin = mergeDocument(
+      { config: { sessoesValidasApos: 1000 } },
+      { config: { sessoesValidasApos: 3000 } },   // admin acabou de clicar
+    );
+    assert.equal(admin.config.sessoesValidasApos, 3000);
+  });
+
   test('config sem sub-objetos não ganha impressao/sortPrefs vazios', () => {
     const result = mergeDocument({ config: { snAliquota: 6 } }, { config: { snAliquota: 8 } });
     assert.deepEqual(result.config, { snAliquota: 8 });

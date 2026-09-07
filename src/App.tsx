@@ -22,6 +22,11 @@ const lerLoginSalvo = () => {
   } catch {}
   return null;
 };
+// Quando o login salvo neste aparelho foi criado. Sessão antiga (gravada antes
+// deste campo existir) não tem criadoEm — deduz de exp, que é criadoEm + 24h.
+// Sem essa dedução, "desconectar todos" ignoraria justamente quem está logado
+// há mais tempo.
+const inicioDaSessao = (s:any) => s?.criadoEm || (s?.exp ? s.exp - SESSAO_HORAS*3600*1000 : 0);
 
 const PRODS_SEED=[
   // laticínios
@@ -1736,6 +1741,14 @@ const mergeFromServer=(prev:any,updates:any)=>{
       impressao:{...(s.config?.impressao||{}),...(p.config?.impressao||{})},
       sortPrefs:{...(s.config?.sortPrefs||{}),...(p.config?.sortPrefs||{})},
     };
+    // sessoesValidasApos é a ÚNICA chave de config em que o local não pode
+    // vencer: é uma ordem do admin pra derrubar todo mundo, e um aparelho com
+    // carimbo antigo guardado ignoraria o novo pra sempre — justamente o
+    // aparelho que se quer desconectar. Vence o mais recente dos dois lados.
+    {
+      const maior=Math.max(s.config?.sessoesValidasApos||0,p.config?.sessoesValidasApos||0);
+      if(maior)next[emp].config.sessoesValidasApos=maior;
+    }
   });
   return migrateDb(next);
 };
@@ -1765,6 +1778,7 @@ export default function App() {
     return migrateDb(loaded?{...loaded}:{...initialState});
   });
   const [login,setLogin]   = useState<{role:string,label:string,empresa?:string}|null>(()=>lerLoginSalvo());
+  const [versaoNova,setVersaoNova] = useState(false);
   const [tab,setTab]       = useState("dashboard");
   const [pendingSub,setPendingSub]=useState<string|null>(null);
   const [expandedMenu,setExpandedMenu]=useState<string|null>(null);
@@ -2019,7 +2033,7 @@ export default function App() {
   const loginCorTexto=(()=>{if(!login?.label)return"#e8eaf0";const u=(state.CONFRARIA?.usuarios||[]).find((u:any)=>u.nome===login.label);return u?.corTexto||login?.corTexto||"#e8eaf0";})();
 
   const doLogin=(info:any)=>{
-    localStorage.setItem("app_login",JSON.stringify({...info,exp:Date.now()+SESSAO_HORAS*3600*1000}));
+    localStorage.setItem("app_login",JSON.stringify({...info,criadoEm:Date.now(),exp:Date.now()+SESSAO_HORAS*3600*1000}));
     setLogin(info);
     if(info.empresa)setEmpresa(info.empresa);
     if(info.role==="op"||info.role==="op_lista")setTab("lista");
@@ -2033,6 +2047,45 @@ export default function App() {
     setTab("dashboard");
     window.location.href="https://confrariacafe.com/";
   };
+
+  // "Desconectar todos": o admin grava um carimbo e todo aparelho cuja sessão
+  // começou ANTES dele cai na tela de senha no poll seguinte.
+  //
+  // Lê o MAIOR carimbo das duas empresas, não o de uma só: o botão grava na
+  // empresa que estiver ativa no momento do clique, e a intenção ("derrubar
+  // todo mundo") é do sistema inteiro. Olhar só uma empresa faria o botão não
+  // funcionar quando clicado do outro lado.
+  const carimboSessao=Math.max(
+    state.CONFRARIA?.config?.sessoesValidasApos||0,
+    state.SEAMA?.config?.sessoesValidasApos||0);
+  useEffect(()=>{
+    if(!carimboSessao||!login)return;
+    const salvo=lerLoginSalvo();
+    if(salvo&&inicioDaSessao(salvo)<carimboSessao){
+      localStorage.removeItem("app_login");
+      setLogin(null);
+    }
+  },[carimboSessao,login]);
+
+  // Aviso de versão nova. Guarda a versão que este aparelho carregou e compara
+  // com a do servidor de tempo em tempo; se mudou, houve deploy e esta aba está
+  // rodando código velho. Só avisa — recarregar sozinho no meio de um
+  // lançamento faria o usuário perder o que estava digitando.
+  useEffect(()=>{
+    let carregada:string|null=null, vivo=true;
+    const checar=async()=>{
+      try{
+        const r=await fetch(`/api/versao?_=${Date.now()}`);
+        const {versao}=await r.json();
+        if(!versao||!vivo)return;
+        if(carregada===null)carregada=versao;
+        else if(versao!==carregada)setVersaoNova(true);
+      }catch{}
+    };
+    checar();
+    const t=setInterval(checar,120000);   // 2 min: deploy não é evento frequente
+    return ()=>{vivo=false;clearInterval(t);};
+  },[]);
 
   if(!login)return <LoginScreen onLogin={doLogin} usuarios={state.CONFRARIA?.usuarios||[]}/>;
 
@@ -2128,6 +2181,16 @@ export default function App() {
     <>
       <ConfigStyleInjector config={config}/>
       <div className="app-root" data-theme={theme} data-rounded={aparenciaApp.bordasArredondadas?"on":"off"} data-motion={aparenciaApp.animacoesReduzidas?"reduced":"normal"} data-tabular={aparenciaApp.numerosTabulares?"on":"off"} data-contraste={aparenciaApp.altoContraste?"alto":"normal"} style={{fontFamily:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,zoom:String((TAMANHOS_LETRA[aparenciaApp.tamanhoLetra]||TAMANHOS_LETRA.padrao).zoom),background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo,["--onPrimary" as any]:textoSobre(coresBotoes.corPrimaria),["--onDanger" as any]:textoSobre(coresBotoes.corPerigo)}}>
+      {/* Barra de versão nova. Fica no topo, acima de tudo, mas não bloqueia:
+          quem está no meio de um lançamento continua o que estava fazendo e
+          atualiza quando puder. */}
+      {versaoNova&&<div onClick={()=>window.location.reload()} role="button" tabIndex={0}
+        onKeyDown={(e:any)=>{if(e.key==="Enter"||e.key===" ")window.location.reload();}}
+        style={{position:"sticky",top:0,zIndex:500,cursor:"pointer",display:"flex",alignItems:"center",
+          justifyContent:"center",gap:8,padding:"10px 14px",background:"var(--acc)",color:"#FFFFFF",
+          fontSize:13,fontWeight:700,textAlign:"center" as const}}>
+        ⬆️ Versão nova disponível — toque para atualizar
+      </div>}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&family=Inter:wght@400;500;600;700;800&family=Quicksand:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
         /* Paleta "Confraria": cognac sobre creme, a mesma identidade dos
@@ -18379,6 +18442,24 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
 
     {/* ===== USUÁRIOS / SEGURANÇA ===== */}
     {subTab==="usuarios"&&<div>
+      <div className="card" style={{marginBottom:12,border:"1px solid var(--dangerBg)"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--dangerText)",marginBottom:4}}>🚪 Desconectar todos</div>
+        <div className="muted" style={{fontSize:11.5,marginBottom:10}}>
+          Derruba a sessão de todos os aparelhos, inclusive este: quem estiver logado cai na tela de senha em segundos.
+          Não afeta os PDVs, que têm login próprio. Aparelho com uma versão antiga do app aberta só sai quando recarregar
+          a página ou a sessão vencer (24 h).
+        </div>
+        <button className="btn" onClick={()=>{
+          if(!confirm("Desconectar TODOS os aparelhos, inclusive este?\n\nTodo mundo vai precisar digitar a senha de novo."))return;
+          const agora=Date.now();
+          (setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),sessoesValidasApos:agora}}));
+        }} style={{background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",padding:"11px",width:"100%",fontSize:13,fontWeight:700}}>
+          Desconectar todos os aparelhos
+        </button>
+        {db.config?.sessoesValidasApos&&<div className="muted" style={{fontSize:10.5,marginTop:7}}>
+          Última vez: {new Date(db.config.sessoesValidasApos).toLocaleString("pt-BR",{timeZone:TZ})}
+        </div>}
+      </div>
       <div ref={formRefUser} className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>{editUserId?"✏️ Editar Usuário":"➕ Novo Usuário"}</div>
         <input placeholder="Nome do usuário" value={userForm.nome} onChange={e=>setUserForm(f=>({...f,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
