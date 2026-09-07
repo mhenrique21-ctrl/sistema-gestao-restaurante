@@ -2090,10 +2090,25 @@ export default function App() {
       <div className="app-root" data-theme={theme} data-rounded={aparenciaApp.bordasArredondadas?"on":"off"} data-motion={aparenciaApp.animacoesReduzidas?"reduced":"normal"} data-tabular={aparenciaApp.numerosTabulares?"on":"off"} data-contraste={aparenciaApp.altoContraste?"alto":"normal"} style={{fontFamily:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,zoom:String((TAMANHOS_LETRA[aparenciaApp.tamanhoLetra]||TAMANHOS_LETRA.padrao).zoom),background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo,["--onPrimary" as any]:textoSobre(coresBotoes.corPrimaria),["--onDanger" as any]:textoSobre(coresBotoes.corPerigo)}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&family=Inter:wght@400;500;600;700;800&family=Quicksand:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-        .app-root{--btnPrimary:#6366F1;--btnDanger:#EF4444;--bg:#F7F8FC;--bg2:#1E293B;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F1F5F9;--sidebarHover:#334155;--border:#E6EAF2;--border2:#D5DBE8;--text:#1E2330;--text2:#70798F;--text3:#9AA3B5;--acc:#5B5CEB;--accHover:#4A4BD4;--accLight:#EEF2FF;--success:#16C172;--successBg:#DCFCE7;--successText:#15803D;--danger:#F04438;--dangerBg:#FEE2E2;--dangerText:#B91C1C;--warning:#F4B400;--warningBg:#FEF3C7;--warningText:#B45309;--info:#3B82F6;--infoBg:#DBEAFE;--infoText:#1D4ED8;--category:#8B5CF6;--categoryBg:#F3E8FF;--categoryText:#7C3AED;--pink:#EC4899;--radiusCard:18px;--radiusControl:14px;--shadowCard:0 8px 24px rgba(18,38,63,0.08)}
-        .app-root[data-theme="dark"]{--bg:#0D1117;--bg2:#161B22;--bg3:#161B22;--bg4:#1C2128;--bg5:#161B22;--sidebarHover:#22282F;--border:#2D333B;--border2:#3A414C;--text:#FFFFFF;--text2:#9CA3AF;--text3:#6B7280;--acc:#F6C453;--accHover:#E7B336;--accLight:rgba(246,196,83,0.14);--success:#22C55E;--successBg:#0F2E1C;--successText:#4ADE80;--danger:#FF5A5F;--dangerBg:#3A1518;--dangerText:#FF8A8F;--warning:#F6C453;--warningBg:#3A2E12;--warningText:#F6C453;--info:#3B82F6;--infoBg:#122A47;--infoText:#7DB0FF;--category:#A78BFA;--categoryBg:#2A1F47;--categoryText:#C4B5FD;--pink:#F472B6;--shadowCard:0 12px 30px rgba(0,0,0,0.45)}
-        .app-root[data-contraste="alto"]{--border:#8890A5;--border2:#7B8494;--text2:#3A4152}
-        .app-root[data-theme="dark"][data-contraste="alto"]{--border:#565E6E;--border2:#7B8494;--text2:#C7CCDA}
+        /* Paleta "Confraria": cognac sobre creme, a mesma identidade dos
+           relatórios impressos. Regra que vale pra todos os tokens abaixo:
+           cor saturada só vive em PREENCHIMENTO (barra, ícone, botão); tudo
+           que é TEXTO usa a versão escurecida da mesma cor. A paleta antiga
+           usava a cor viva como texto, e por isso o valor em dinheiro
+           (#16C172 sobre branco) media 2.36:1 — metade do mínimo legível.
+           Cada par texto/fundo aqui foi medido pela fórmula do WCAG contra os
+           DOIS fundos reais do app (card branco e creme da página); o mínimo
+           obtido é 5.12:1. */
+        .app-root{--btnPrimary:#8A5227;--btnDanger:#A32B24;--bg:#FAF6F0;--bg2:#2E241C;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F5EEE4;--sidebarHover:#3D3025;--border:#E2D6C7;--border2:#D3C3AF;--text:#2A211B;--text2:#63544A;--text3:#75665B;--acc:#8A5227;--accHover:#74441F;--accLight:#F3E7DA;--success:#146B42;--successBg:#E3F3E9;--successText:#0F5A37;--danger:#A32B24;--dangerBg:#FBEAE8;--dangerText:#8F241E;--warning:#8A5A00;--warningBg:#F7EBD4;--warningText:#744C00;--info:#1C5A9E;--infoBg:#E4EEF8;--infoText:#174B85;--category:#6D4C8C;--categoryBg:#F0E8F5;--categoryText:#5B3E75;--pink:#B03E6F;--radiusCard:18px;--radiusControl:14px;--shadowCard:0 8px 24px rgba(64,42,24,0.10)}
+        /* Escuro: passou em 14 das 15 medições, então muda pouco — neutros com
+           leve viés quente pra conversar com o cognac do tema claro, e a borda
+           corrigida (era #2D333B, 1.36:1 contra o card: sumia). */
+        .app-root[data-theme="dark"]{--bg:#12100E;--bg2:#1B1815;--bg3:#1B1815;--bg4:#221E1A;--bg5:#1B1815;--sidebarHover:#2A2521;--border:#3A342E;--border2:#4A423A;--text:#FFFFFF;--text2:#9CA3AF;--text3:#918879;--acc:#F6C453;--accHover:#E7B336;--accLight:rgba(246,196,83,0.14);--success:#22C55E;--successBg:#0F2E1C;--successText:#4ADE80;--danger:#FF5A5F;--dangerBg:#3A1518;--dangerText:#FF8A8F;--warning:#F6C453;--warningBg:#3A2E12;--warningText:#F6C453;--info:#3B82F6;--infoBg:#122A47;--infoText:#7DB0FF;--category:#A78BFA;--categoryBg:#2A1F47;--categoryText:#C4B5FD;--pink:#F472B6;--shadowCard:0 12px 30px rgba(0,0,0,0.45)}
+        /* Alto contraste vira REFORÇO, não muleta: com a base já legível, ele
+           agora endurece também o texto de apoio e as bordas, em vez de ser o
+           único jeito de enxergar. Tons quentes pra não brigar com o cognac. */
+        .app-root[data-contraste="alto"]{--border:#A08A6E;--border2:#8C7355;--text2:#443930;--text3:#544539}
+        .app-root[data-theme="dark"][data-contraste="alto"]{--border:#6B6154;--border2:#8C8172;--text2:#D6CFC4;--text3:#B8AE9F}
         .app-root[data-rounded="off"] *{border-radius:0!important}
         .app-root[data-motion="reduced"] *{transition:none!important;animation:none!important}
         .app-root[data-tabular="on"] *{font-variant-numeric:tabular-nums}
