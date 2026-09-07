@@ -166,10 +166,18 @@ describe('mergeDocument', () => {
     assert.deepEqual(result.deletedIds, ['a']);
   });
 
-  test('campos não listados em MERGEABLE_FIELDS (ex: config) vêm direto do incoming', () => {
-    const existing = { config: { snAliquota: 6 } };
+  test('config: incoming vence campo a campo, sem apagar o que o outro salvou', () => {
+    // Antes o config inteiro vinha do incoming, então trocar a alíquota num
+    // aparelho apagava o timbre que outro tinha acabado de salvar.
+    const existing = { config: { snAliquota: 6, impressao: { cnpj: '12.345.678/0001-90' } } };
     const incoming = { config: { snAliquota: 8 } };
     const result = mergeDocument(existing, incoming);
+    assert.equal(result.config.snAliquota, 8, 'quem postou por último vence no campo que mexeu');
+    assert.equal(result.config.impressao.cnpj, '12.345.678/0001-90', 'timbre do outro aparelho não pode sumir');
+  });
+
+  test('config sem sub-objetos não ganha impressao/sortPrefs vazios', () => {
+    const result = mergeDocument({ config: { snAliquota: 6 } }, { config: { snAliquota: 8 } });
     assert.deepEqual(result.config, { snAliquota: 8 });
   });
 
@@ -260,6 +268,62 @@ describe('mergeDocument', () => {
 
     const final = mergeDocument(noServidor, postRecriando);
     assert.ok(final.categorias.map((c) => c.nome).includes('Gás'), 'recriada não pode ser apagada pelo tombstone antigo');
+  });
+
+  test('mapas: cada aparelho classificando coisa diferente não apaga o do outro', () => {
+    // Substituir o mapa inteiro (comportamento antigo de campo sem fusão) faria
+    // o último POST vencer e a classificação do outro sumir.
+    const noServidor = { iconesProducao: { BOLOS: '🎂' }, giroInsumo: { 'file de frango': 'perecivel' } };
+    const incoming = { iconesProducao: { TORTAS: '🥧' }, giroInsumo: { arroz: 'seco' } };
+    const f = mergeDocument(noServidor, incoming);
+    assert.deepEqual(f.iconesProducao, { BOLOS: '🎂', TORTAS: '🥧' });
+    assert.deepEqual(f.giroInsumo, { 'file de frango': 'perecivel', arroz: 'seco' });
+  });
+
+  test('listaCategorias: cadastro num aparelho sobrevive ao POST do outro', () => {
+    // O cenário do sintoma relatado: cadastro some sozinho porque o outro
+    // aparelho posta a lista dele, sem a categoria recém-criada.
+    const noServidor = { listaCategorias: ['polpas', 'farinhas'] };
+    const postDoOutro = { listaCategorias: ['polpas'] };
+    const f = mergeDocument(noServidor, postDoOutro);
+    assert.ok(f.listaCategorias.includes('farinhas'), 'categoria criada no outro aparelho não pode sumir');
+    assert.ok(f.listaCategorias.includes('polpas'));
+  });
+
+  test('listaCategorias: exclusão não ressuscita, mas recriar funciona', () => {
+    const excluida = mergeDocument(
+      { listaCategorias: ['polpas', 'farinhas'], listaCatDeleted: ['farinhas'] },
+      { listaCategorias: ['polpas', 'farinhas'] },          // aparelho desatualizado
+    );
+    assert.ok(!excluida.listaCategorias.includes('farinhas'), 'excluída não pode voltar');
+
+    const recriada = mergeDocument(
+      { listaCategorias: ['polpas'], listaCatDeleted: ['farinhas'] },
+      { listaCategorias: ['polpas', 'farinhas'], listaCatDeleted: [] },  // recriou de fato
+    );
+    assert.ok(recriada.listaCategorias.includes('farinhas'), 'recriada não pode ser apagada pelo tombstone antigo');
+  });
+
+  test('categoriasProducao: mesma regra de tombstone da Lista', () => {
+    const f = mergeDocument(
+      { categoriasProducao: ['BOLOS', 'TORTAS'], categoriasProducaoDeleted: ['TORTAS'] },
+      { categoriasProducao: ['BOLOS', 'TORTAS'] },
+    );
+    assert.deepEqual(f.categoriasProducao, ['BOLOS']);
+  });
+
+  test('listaCatOrdem: incoming vence inteiro — ordem não se une', () => {
+    // Unir duas ordens produziria uma terceira que não é a de ninguém.
+    const f = mergeDocument({ listaCatOrdem: ['a', 'b', 'c'] }, { listaCatOrdem: ['c', 'a', 'b'] });
+    assert.deepEqual(f.listaCatOrdem, ['c', 'a', 'b']);
+  });
+
+  test('recibosEntrega: dois aparelhos emitindo recibo, nenhum se perde', () => {
+    const f = mergeDocument(
+      { recibosEntrega: [{ id: 'r1', cliente: 'Padaria A' }] },
+      { recibosEntrega: [{ id: 'r2', cliente: 'Padaria B' }] },
+    );
+    assert.equal(f.recibosEntrega.length, 2);
   });
 
   test('budgetCompras: voltar pra sugestão marca em vez de apagar, e a marcação vence', () => {

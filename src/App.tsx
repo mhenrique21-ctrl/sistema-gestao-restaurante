@@ -1474,6 +1474,33 @@ const withDeletedIds=(doc:any)=>({...doc,deletedIds:[..._listaDeletados].slice(-
 
 // Merge listaCompras por ID: versão com updatedAt mais recente vence.
 // Itens novos do servidor são adicionados. Deletados são filtrados.
+// ─────────────────────────────────────────────────────────────────────────────
+// AO ADICIONAR UM CAMPO NOVO EM db, SIGA ISTO — não é burocracia, é a origem
+// dos seis bugs de "cadastro e some sozinho" que este sistema já teve.
+//
+// 1. Registre nos DOIS lados: aqui e em mergeDocument.js. Só num lado não
+//    resolve: aqui a base do merge é o SERVIDOR (next[emp]={...s,...}), então
+//    campo sem entrada explícita é sobrescrito pelo poll antes do POST
+//    confirmar; lá o documento nasce do INCOMING, então um aparelho com bundle
+//    antigo apaga do disco o que outro acabou de gravar.
+// 2. Escolha a fusão pelo FORMATO REAL do dado:
+//      array com id           → mergeArrayById (+ MERGEABLE_FIELDS no servidor)
+//      mapa {chave:valor}     → união chave a chave, local vencendo
+//      mapa aninhado          → união em DOIS níveis (ex.: budgetCompras)
+//      lista de nomes         → união + TOMBSTONE (*Deleted), senão o item
+//                               excluído ressuscita quando o outro aparelho
+//                               posta a lista dele
+//      ordenação              → incoming/local vence INTEIRO, nunca unir:
+//                               unir duas ordens dá uma terceira que não é a
+//                               de ninguém (ex.: listaCatOrdem)
+// 3. Se a gravação precisa persistir, use setDbAndSave, não setDb — setDb
+//    depende do auto-save genérico, que pula a gravação quando coincide com
+//    outro save em andamento.
+// 4. Carimbe atualizadoEm em quem grava, pra fusão desempatar por timestamp.
+// 5. Escreva o teste em mergeDocument.test.js nos dois cenários: cadastro num
+//    aparelho + POST do outro (não pode sumir), e exclusão + recriação (o
+//    tombstone não pode ressuscitar nem engolir o novo).
+// ─────────────────────────────────────────────────────────────────────────────
 const mergeFromServer=(prev:any,updates:any)=>{
   const next={...prev};
   Object.keys(updates).forEach(emp=>{
@@ -1681,6 +1708,19 @@ const mergeFromServer=(prev:any,updates:any)=>{
     // listaCategorias, listaRuas, ruaCatMap: unir
     next[emp].listaCategorias=[...new Set([...(s.listaCategorias||[]),...(p.listaCategorias||[])])];
     next[emp].listaRuas=[...new Set([...(s.listaRuas||[]),...(p.listaRuas||[])])];
+    // listaCatOrdem é ORDENAÇÃO: vinha crua do spread {...s}, então arrastar
+    // uma categoria era revertido pelo poll antes do POST confirmar. Local
+    // vence inteiro — quem acabou de arrastar é quem está olhando a tela, e
+    // unir duas ordens daria uma terceira que não é a de ninguém.
+    if(p.listaCatOrdem!==undefined)next[emp].listaCatOrdem=p.listaCatOrdem;
+    // anotacoes: array com id que não tinha fusão nenhuma — vinha cru do
+    // servidor, então escrever uma anotação e receber o poll no meio do
+    // caminho apagava o que acabou de ser digitado.
+    next[emp].anotacoes=mergeArrayById(s.anotacoes||[],p.anotacoes||[],_listaDeletados);
+    // categoriaFinanceiroSangria: mapa categoria->categoria. Mesma fusão dos
+    // outros mapas, mesmo motivo — sem ela, vincular uma categoria à sangria
+    // era revertido no poll seguinte.
+    next[emp].categoriaFinanceiroSangria={...(s.categoriaFinanceiroSangria||{}),...(p.categoriaFinanceiroSangria||{})};
     const mergedRuaCatMap={...(s.ruaCatMap||{}),...(p.ruaCatMap||{})};
     next[emp].ruaCatMap=mergedRuaCatMap;
     // config (nome da empresa, WhatsApp, aliquota, config.impressao/sortPrefs...) vinha
@@ -2341,7 +2381,7 @@ export default function App() {
             ? <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={false} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
             : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} login={login} setDbAndSave={setDbAndSave}/>)
           : <>
-              {tab==="dashboard"  && <Dashboard db={db} setDb={setDb} empresa={empresa} onNavigate={setTab} setPendingSub={setPendingSub}/>}
+              {tab==="dashboard"  && <Dashboard db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} onNavigate={setTab} setPendingSub={setPendingSub}/>}
               {tab==="vendas"     && <VendasPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -2425,7 +2465,7 @@ export default function App() {
 }
 
 // ===================== DASHBOARD =====================
-function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa?:string,onNavigate:(t:string)=>void,setPendingSub:(v:string|null)=>void}) {
+function Dashboard({db,setDb,setDbAndSave,onNavigate,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa?:string,onNavigate:(t:string)=>void,setPendingSub:(v:string|null)=>void}) {
   const [periodo,setPeriodo]=useState<"semana"|"mes"|"custom">("mes");
   const [customIni,setCustomIni]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return d.toISOString().split("T")[0];});
   const [customFim,setCustomFim]=useState(today());
@@ -2480,7 +2520,7 @@ function Dashboard({db,setDb,onNavigate,setPendingSub}:{db:any,setDb:any,empresa
   const contasDash=[...contasAtrasadas,...contasHoje];
 
   const marcarPago=(id:string)=>{
-    setDb((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.id===id?{...c,status:"pago",atualizadoEm:new Date().toISOString()}:c)}));
+    (setDbAndSave||setDb)((d:any)=>({...d,contas:(d.contas||[]).map((c:any)=>c.id===id?{...c,status:"pago",atualizadoEm:new Date().toISOString()}:c)}));
   };
   const irParaFinanceiro=()=>{setPendingSub("contas");onNavigate("financeiro");};
   const irParaAgenda=()=>{setPendingSub("anotacoes");onNavigate("agenda");};
@@ -7383,7 +7423,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               setNovaMarca("");
             };
             const remMarca=(t:string)=>{
-              setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).map((n:any)=>(n.nomePadrao||"").toLowerCase().trim()===nomeKey?{...n,termos:(n.termos||[]).filter((x:string)=>x!==t)}:n)}));
+              (setDbAndSave||setDb)((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).map((n:any)=>(n.nomePadrao||"").toLowerCase().trim()===nomeKey?{...n,termos:(n.termos||[]).filter((x:string)=>x!==t)}:n)}));
             };
             return <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
               <div style={{fontSize:12,fontWeight:700,color:"var(--acc)",marginBottom:4}}>🏷️ Marcas vinculadas ({termos.length})</div>
@@ -7784,7 +7824,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               <div style={{display:"flex",gap:4,flexShrink:0}}>
                 <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
                   style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"var(--btnPrimary)"}}>✏️</button>
-                <button onClick={()=>{if(confirm("Excluir substituição?")){_listaDeletados.add(n.id);setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
+                <button onClick={()=>{if(confirm("Excluir substituição?")){_listaDeletados.add(n.id);(setDbAndSave||setDb)((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
                   style={{background:"none",border:"1px solid #EF444433",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"var(--btnDanger)"}}>🗑️</button>
               </div>
             </div>
@@ -8487,7 +8527,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     if(editId){
       const editNome=form.nome.trim();
-      setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
+      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
       if(pendingMpLinks!==null){
         syncProdByName(editNome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
       }
@@ -8511,11 +8551,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         (i.adicionadoPor||"").trim().toLowerCase()===quem);
       if(pendenteExistente){
         const ts=Date.now();
-        setDb((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)}));
+        (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)}));
       }else{
         const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
         const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
-        setDb((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
+        (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
       }
       if(pendingMpLinks!==null){
         const prodExiste=(db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl);
@@ -8958,7 +8998,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const delPedido=(id:string)=>{
     if(!confirm("Excluir este pedido do histórico?"))return;
     _listaDeletados.add(id);
-    setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));
+    (setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));
     if(expandedPedido===id)setExpandedPedido(null);
   };
 
@@ -9212,7 +9252,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               <span style={{fontSize:15}}>{aberto?"📂":"📁"}</span>
               <span style={{flex:1,fontSize:13,fontWeight:700,color:"var(--warningText)"}}>{label}</span>
               <span style={{fontSize:11,color:"#888",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,padding:"1px 8px"}}>{pedidos.length} lista{pedidos.length>1?"s":""}</span>
-              {isAdmin&&<button onClick={e=>{e.stopPropagation();if(!confirm(`Excluir todas as ${pedidos.length} lista(s) arquivada(s) de ${label}?`))return;const ids=pedidos.map((p:any)=>p.id);ids.forEach((id:string)=>_listaDeletados.add(id));setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>!ids.includes(p.id))}));}}
+              {isAdmin&&<button onClick={e=>{e.stopPropagation();if(!confirm(`Excluir todas as ${pedidos.length} lista(s) arquivada(s) de ${label}?`))return;const ids=pedidos.map((p:any)=>p.id);ids.forEach((id:string)=>_listaDeletados.add(id));(setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>!ids.includes(p.id))}));}}
                 style={{background:"var(--dangerBg)",border:"1px solid #EF444444",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700,flexShrink:0}}>🗑️ Apagar mês</button>}
               <span style={{fontSize:11,color:"#555"}}>{aberto?"▲":"▼"}</span>
             </div>
@@ -10193,7 +10233,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const [novaIcone,setNovaIcone]=useState("📦");
   // Seed default categories once
   if(!db.pedidosProducaoSeedCats){
-    setTimeout(()=>setDb((d:any)=>({...d,pedidosProducaoSeedCats:true,categoriasProducao:d.categoriasProducao?.length?d.categoriasProducao:[...CATS_PRODUCAO_DEFAULT]})),0);
+    setTimeout(()=>(setDbAndSave||setDb)((d:any)=>({...d,pedidosProducaoSeedCats:true,categoriasProducao:d.categoriasProducao?.length?d.categoriasProducao:[...CATS_PRODUCAO_DEFAULT]})),0);
   }
   const catsProdDel:string[]=db.categoriasProducaoDeleted||[];
   const cats:string[]=((db.categoriasProducao||[]).length?db.categoriasProducao:CATS_PRODUCAO_DEFAULT).filter((c:string)=>!catsProdDel.includes(c));
@@ -10251,13 +10291,13 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     setProdForm({nome:"",cats:[],unidade:"un",precoFixo:""});
   };
   const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cats:prodCats(p),unidade:p.unidade||"un",precoFixo:p.precoFixo?String(p.precoFixo).replace(".",","):""});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
-  const delProd=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).filter((p:any)=>p.id!==id)}));};
+  const delProd=(id:string)=>{if(!confirm("Excluir produto?"))return;_listaDeletados.add(id);(setDbAndSave||setDb)((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).filter((p:any)=>p.id!==id)}));};
 
   // Category management
   const [novaCat,setNovaCat]=useState("");
   const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
 
-  const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;setDb((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c],categoriasProducaoDeleted:(d.categoriasProducaoDeleted||[]).filter((x:string)=>x!==c),iconesProducao:{...(d.iconesProducao||{}),[c]:novaIcone}}));setNovaCat("");setNovaIcone("📦");};
+  const addCat=()=>{const c=novaCat.trim().toUpperCase();if(!c||cats.includes(c))return;(setDbAndSave||setDb)((d:any)=>({...d,categoriasProducao:[...(d.categoriasProducao||[]),c],categoriasProducaoDeleted:(d.categoriasProducaoDeleted||[]).filter((x:string)=>x!==c),iconesProducao:{...(d.iconesProducao||{}),[c]:novaIcone}}));setNovaCat("");setNovaIcone("📦");};
   const delCat=(c:string)=>{
     if(!confirm(`Excluir categoria "${c}"? Produtos ficarão sem essa categoria.`))return;
     setDb((d:any)=>{const icons={...(d.iconesProducao||{})};delete icons[c];return{...d,categoriasProducao:(d.categoriasProducao||[]).filter((x:string)=>x!==c),categoriasProducaoDeleted:[...new Set([...(d.categoriasProducaoDeleted||[]),c])],produtosProducao:(d.produtosProducao||[]).map((p:any)=>{const pc=prodCats(p);return pc.includes(c)?{...p,cats:pc.filter((x:string)=>x!==c),cat:pc.filter((x:string)=>x!==c)[0]||"",atualizadoEm:new Date().toISOString()}:p;}),iconesProducao:icons};});
@@ -10284,8 +10324,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   const [showSugg,setShowSugg]=useState(false);
   const itens:any[]=db.itensProducaoPendentes||[];
   const setItens=(fn:any)=>{
-    if(typeof fn==="function"){setDb((d:any)=>({...d,itensProducaoPendentes:fn(d.itensProducaoPendentes||[])}));}
-    else{setDb((d:any)=>({...d,itensProducaoPendentes:fn}));}
+    if(typeof fn==="function"){(setDbAndSave||setDb)((d:any)=>({...d,itensProducaoPendentes:fn(d.itensProducaoPendentes||[])}));}
+    else{(setDbAndSave||setDb)((d:any)=>({...d,itensProducaoPendentes:fn}));}
   };
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
 
@@ -10727,14 +10767,14 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     const nome=addToPedForm.nome.trim();if(!nome)return alert("Produto obrigatório.");
     const qtd=parseFloat(addToPedForm.qtd)||0;
     const agora=new Date().toISOString();
-    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:[...(p.itens||[]),{nome,quantidade:qtd,qtdAtual:addToPedForm.qtdAtual||"",unidade:addToPedForm.unidade,categoria:addToPedForm.cat||"",obs:addToPedForm.obs||""}],atualizadoEm:agora}:p)}));
+    (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:[...(p.itens||[]),{nome,quantidade:qtd,qtdAtual:addToPedForm.qtdAtual||"",unidade:addToPedForm.unidade,categoria:addToPedForm.cat||"",obs:addToPedForm.obs||""}],atualizadoEm:agora}:p)}));
     setAddToPedForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
   };
   const delItemFromPedido=(pedId:string,idx:number)=>{
-    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:(p.itens||[]).filter((_:any,i:number)=>i!==idx),atualizadoEm:new Date().toISOString()}:p)}));
+    (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>p.id===pedId?{...p,itens:(p.itens||[]).filter((_:any,i:number)=>i!==idx),atualizadoEm:new Date().toISOString()}:p)}));
   };
   const salvarEdicaoPedido=(pedId:string)=>{
-    setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>{
+    (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).map((p:any)=>{
       if(p.id!==pedId)return p;
       const novosItens=(p.itens||[]).map((it:any,i:number)=>{
         const key=`${pedId}_${i}`;
@@ -10886,7 +10926,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
               <button onClick={()=>{
                 if(!confirm("Excluir este pedido?"))return;
                 _listaDeletados.add(ped.id);
-                setDb((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).filter((p:any)=>p.id!==ped.id)}));
+                (setDbAndSave||setDb)((d:any)=>({...d,pedidosProducao:(d.pedidosProducao||[]).filter((p:any)=>p.id!==ped.id)}));
               }} style={{background:"none",border:"1px solid #EF444433",borderRadius:5,color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🗑️</button>
             </div>
           </div>
@@ -11140,7 +11180,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       </>;
     })()}
 
-    {showFicha&&<><BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/><FichaTecnica db={db} setDb={setDb} state={state} setState={setState} empresa={empresa} prefillNome={fichaPrefill} onConsumedPrefill={()=>setFichaPrefill(null)}/></>}
+    {showFicha&&<><BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/><FichaTecnica db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} setState={setState} empresa={empresa} prefillNome={fichaPrefill} onConsumedPrefill={()=>setFichaPrefill(null)}/></>}
 
     {showRelatorio&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
     {showRelatorio&&(()=>{
@@ -12886,7 +12926,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
     setRenomeCatFin(novo);
   };
   const alternarApareceNaSangria=(nome:string)=>{
-    setDb((d:any)=>({...d,categorias:(d.categorias||[]).map((c:any)=>{
+    (setDbAndSave||setDb)((d:any)=>({...d,categorias:(d.categorias||[]).map((c:any)=>{
       const n=typeof c==="string"?c:c.nome;
       const ativo=typeof c==="string"?true:!!c.apareceNaSangria;
       return n===nome?{nome:n,apareceNaSangria:!ativo}:{nome:n,apareceNaSangria:ativo};
@@ -13343,7 +13383,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
               {carregandoSangriaCats?<div className="muted" style={{fontSize:12}}>Carregando categorias do PDV...</div>:
               <select className="inp" value={vinculada} onChange={e=>{
                 const v=e.target.value;
-                setDb((d:any)=>({...d,categoriaFinanceiroSangria:{...(d.categoriaFinanceiroSangria||{}),[c]:v}}));
+                (setDbAndSave||setDb)((d:any)=>({...d,categoriaFinanceiroSangria:{...(d.categoriaFinanceiroSangria||{}),[c]:v}}));
               }} style={{marginBottom:0,fontSize:12}}>
                 <option value="">— nenhuma —</option>
                 {sangriaCatsOpts.map(nome=><option key={nome} value={nome}>{nome}</option>)}
@@ -13358,7 +13398,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
 }
 
 // ===================== FICHA TÉCNICA =====================
-function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPrefill}:{db:any,setDb:any,state?:any,setState?:any,empresa?:string,prefillNome?:string|null,onConsumedPrefill?:()=>void}){
+function FichaTecnica({db,setDb,setDbAndSave,state,setState,empresa,prefillNome,onConsumedPrefill}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,setState?:any,empresa?:string,prefillNome?:string|null,onConsumedPrefill?:()=>void}){
   const outraEmpresa=empresa==="CONFRARIA"?"SEAMA":"CONFRARIA";
   const podeCompartilhar=!!(state&&setState&&empresa);
   const [subTab,setSubTab]=useState("lista");
@@ -13424,7 +13464,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
     if(!mpAtivo)return;
     if(rendeQtdNum<=0)return alert(`Informe quantos ${convForm.unidade} a embalagem rende.`);
     if(precoEmbalagemNum<=0)return alert("Informe o preço pago pela embalagem.");
-    setDb((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mpAtivo.id?{...m,unidade:convForm.unidade,unidadeEmbalagem:m.unidadeEmbalagem||"embalagem",equivaleEm:rendeQtdNum,ultimoValor:novoValorPorUnd,atualizadoEm:new Date().toISOString()}:m)}));
+    (setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mpAtivo.id?{...m,unidade:convForm.unidade,unidadeEmbalagem:m.unidadeEmbalagem||"embalagem",equivaleEm:rendeQtdNum,ultimoValor:novoValorPorUnd,atualizadoEm:new Date().toISOString()}:m)}));
     setNovoIns(i=>({...i,unidade:convForm.unidade}));
     setShowConvPanel(false);
   };
@@ -13507,8 +13547,8 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
           return{...s,[outraEmpresa]:{...dThere,fichasTecnicas:(dThere.fichasTecnicas||[]).map((f:any)=>f.id===idFinal?{...f,compartilhada:false}:f)}};
         });
       }
-      if(editId)setDb((d:any)=>({...d,fichasTecnicas:d.fichasTecnicas.map((f:any)=>f.id===editId?{...ft,criadoEm:f.criadoEm||now,atualizadoEm:now}:f)}));
-      else setDb((d:any)=>({...d,fichasTecnicas:[{...ft,criadoEm:now},...(d.fichasTecnicas||[])]}));
+      if(editId)(setDbAndSave||setDb)((d:any)=>({...d,fichasTecnicas:d.fichasTecnicas.map((f:any)=>f.id===editId?{...ft,criadoEm:f.criadoEm||now,atualizadoEm:now}:f)}));
+      else (setDbAndSave||setDb)((d:any)=>({...d,fichasTecnicas:[{...ft,criadoEm:now},...(d.fichasTecnicas||[])]}));
     }
     setEditId(null);
     setForm({nome:"",insumos:[],porcoes:"1",cmv:"30",compartilhada:false});
@@ -13538,7 +13578,7 @@ function FichaTecnica({db,setDb,state,setState,empresa,prefillNome,onConsumedPre
     }
     if(!confirm(`Excluir "${f.nome}"?`))return;
     _listaDeletados.add(f.id);
-    setDb((d:any)=>({...d,fichasTecnicas:d.fichasTecnicas.filter((x:any)=>x.id!==f.id)}));
+    (setDbAndSave||setDb)((d:any)=>({...d,fichasTecnicas:d.fichasTecnicas.filter((x:any)=>x.id!==f.id)}));
   };
   const atualizar=()=>{
     setDb(d=>{
@@ -14956,7 +14996,7 @@ function FluxoCaixa({db,setDb,empresa,state,setState}:{db:any,setDb:any,empresa:
 }
 
 
-function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,state:any}){
+function Relatorios({db,setDb,setDbAndSave,empresa,state}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any}){
   const [relDe,setRelDe]=useState(today().slice(0,8)+"01");
   const [relAte,setRelAte]=useState(today());
   const inPer=(dt)=>!dt||(dt>=relDe&&dt<=relAte);
@@ -15177,7 +15217,7 @@ function Relatorios({db,setDb,empresa,state}:{db:any,setDb:any,empresa:string,st
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");a.href=url;a.download=`pedido_${ped.data}.csv`;a.click();URL.revokeObjectURL(url);
   };
-  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);setDb((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
+  const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);(setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
   const pedidos=(db.pedidosLista||[]);
 
   const rels=[
@@ -15445,7 +15485,7 @@ function Gestao({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPend
     {sub==="rh"         && <RH db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave}/>}
     {/* DRE saiu daqui pra Financeiro (aba "contas", sub "dre") — é uma peça
         contábil, e ficava longe das contas que ela mesma soma. */}
-    {sub==="relatorios" && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Relatorios db={db} setDb={setDb} empresa={empresa} state={state}/></>}
+    {sub==="relatorios" && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Relatorios db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} state={state}/></>}
     {sub==="versus"     && <><BackBar label="RH" onClick={()=>setSub("rh")}/><Comparativo state={state}/></>}
     {sub==="backups"    && <><BackBar label="RH" onClick={()=>setSub("rh")}/><BackupsPanel empresaAtual={empresa} state={state} setState={setState}/></>}
   </div>;
@@ -18139,7 +18179,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
             <div style={{display:"flex",gap:4,flexShrink:0}}>
               <button onClick={()=>{setNormEdit(n.id);setNormForm({nomePadrao:n.nomePadrao,termos:(n.termos||[]).join(", ")});}}
                 style={{background:"none",border:"1px solid var(--border)",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"var(--btnPrimary)"}}>✏️</button>
-              <button onClick={()=>{if(confirm("Excluir?")){_listaDeletados.add(n.id);setDb((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
+              <button onClick={()=>{if(confirm("Excluir?")){_listaDeletados.add(n.id);(setDbAndSave||setDb)((d:any)=>({...d,normalizacoes:(d.normalizacoes||[]).filter((x:any)=>x.id!==n.id)}));}}}
                 style={{background:"none",border:"1px solid #EF444433",borderRadius:8,cursor:"pointer",padding:"4px 8px",fontSize:12,color:"var(--btnDanger)"}}>🗑️</button>
             </div>
           </div>

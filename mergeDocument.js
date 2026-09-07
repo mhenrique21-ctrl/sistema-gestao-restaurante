@@ -15,6 +15,28 @@ export const MERGEABLE_FIELDS = [
   // entra na fusão por id como os demais — regravar a projeção da semana num
   // aparelho não pode apagar a que outro salvou pra outra semana.
   'projecoesCompra',
+  // Recibos de entrega: array com id, tinha fusão no cliente e não aqui.
+  // Sem isto, dois aparelhos emitindo recibo perto um do outro faziam o
+  // último POST apagar o recibo do outro.
+  'recibosEntrega',
+];
+
+// Mapas {chave: valor}: união chave a chave, incoming vencendo. Nada é removido
+// por ausência — some só quem for sobrescrito por valor. Campo que representa
+// escolha por chave (ícone, giro, classificação) nunca deve ser substituído em
+// bloco: dois aparelhos classificando coisas diferentes perderiam um dos dois.
+const MAPAS = [
+  'dicionarioClassificacao', 'mapaCategoriaDre', 'giroInsumo',
+  'categoriaFinanceiroSangria', 'iconesProducao', 'categoriasClientes', 'ruaCatMap',
+];
+
+// Listas de NOMES (sem id), que crescem por união. Cada uma com seu tombstone,
+// porque união sozinha só sabe adicionar: sem descontar os excluídos, o nome
+// apagado num aparelho volta do outro no próximo POST.
+const LISTAS_NOME = [
+  { campo: 'listaCategorias', tombstone: 'listaCatDeleted' },
+  { campo: 'listaRuas', tombstone: null },
+  { campo: 'categoriasProducao', tombstone: 'categoriasProducaoDeleted' },
 ];
 
 const TS_FIELDS = ['updatedAt', 'atualizadoEm'];
@@ -150,22 +172,48 @@ export function mergeDocument(existing, incoming) {
   // do servidor o que outro acabou de gravar. União com incoming vencendo por
   // chave: quem postou agora é quem mexeu, e nada aqui é removido por
   // ausência, só sobrescrito por valor.
-  merged.dicionarioClassificacao = {
-    ...(existing.dicionarioClassificacao || {}),
-    ...(afterLista.dicionarioClassificacao || {}),
-  };
+  for (const campo of MAPAS) {
+    merged[campo] = { ...(existing[campo] || {}), ...(afterLista[campo] || {}) };
+  }
 
-  // Categoria do Financeiro -> linha da DRE. Mesmo tratamento e mesmo motivo.
-  merged.mapaCategoriaDre = {
-    ...(existing.mapaCategoriaDre || {}),
-    ...(afterLista.mapaCategoriaDre || {}),
-  };
+  // Listas de nomes + tombstone. O tombstone é unido dos dois lados e depois
+  // descontado da lista, senão o nome excluído num aparelho ressuscita quando
+  // o outro — que ainda não sabe da exclusão — posta a lista dele.
+  for (const { campo, tombstone } of LISTAS_NOME) {
+    const nomes = new Set([...(existing[campo] || []), ...(afterLista[campo] || [])]);
+    if (tombstone) {
+      const apagados = new Set([...(existing[tombstone] || []), ...(afterLista[tombstone] || [])]);
+      // Mesma regra de categoriasDeleted: o cliente atual sempre manda o
+      // tombstone, então omitir um nome ali é intenção de ressuscitar; cliente
+      // antigo não manda o campo e aí a exclusão do servidor prevalece.
+      if (Array.isArray(afterLista[tombstone])) {
+        for (const n of afterLista[campo] || []) {
+          if (!afterLista[tombstone].includes(n)) apagados.delete(n);
+        }
+      }
+      merged[tombstone] = [...apagados];
+      for (const n of apagados) nomes.delete(n);
+    }
+    merged[campo] = [...nomes];
+  }
 
-  // Giro do insumo (perecível/seco), usado pela projeção semanal de compras.
-  merged.giroInsumo = {
-    ...(existing.giroInsumo || {}),
-    ...(afterLista.giroInsumo || {}),
-  };
+  // listaCatOrdem é ORDENAÇÃO, não conjunto: unir duas ordens diferentes
+  // produziria uma terceira que não é a de ninguém. Quem postou por último é
+  // quem acabou de arrastar, então o incoming vence inteiro — de propósito.
+  if (afterLista.listaCatOrdem !== undefined) merged.listaCatOrdem = afterLista.listaCatOrdem;
+
+  // config: união rasa com incoming vencendo, mas impressao e sortPrefs
+  // fundidos à parte — são sub-objetos editados em telas diferentes, e trocar
+  // um campo do timbre não pode apagar a preferência de ordenação salva noutro
+  // aparelho (nem o contrário).
+  merged.config = { ...(existing.config || {}), ...(afterLista.config || {}) };
+  // Só cria o sub-objeto se algum dos lados tiver — senão o documento ganharia
+  // impressao:{} e sortPrefs:{} vazios em toda gravação, sem servir pra nada.
+  for (const sub of ['impressao', 'sortPrefs']) {
+    const e = existing.config?.[sub], i = afterLista.config?.[sub];
+    if (e || i) merged.config[sub] = { ...(e || {}), ...(i || {}) };
+  }
+
 
   // Categorias do Financeiro excluídas. Sem o tombstone unido aqui, o aparelho
   // que ainda não sabe da exclusão reenvia a categoria no próximo POST e ela
