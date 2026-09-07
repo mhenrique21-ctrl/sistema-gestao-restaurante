@@ -3,7 +3,8 @@ const listeners = new Set()
 
 export function connectWS(token) {
   if (socket?.readyState === WebSocket.OPEN) return
-  socket = new WebSocket(`ws://${location.host}/ws?token=${token}`)
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  socket = new WebSocket(`${protocol}//${location.host}/ws?token=${token}`)
 
   socket.onmessage = (e) => {
     try {
