@@ -1635,6 +1635,9 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // Mesma fusão, mesmo motivo: sem ela, classificar uma categoria na DRE
       // seria revertido pelo poll antes do POST confirmar.
       mapaCategoriaDre: {...(s.mapaCategoriaDre||{}),...(p.mapaCategoriaDre||{})},
+      // Perecível/seco por insumo. Mesma fusão, mesmo motivo dos dois acima:
+      // sem ela, classificar o giro seria revertido pelo poll seguinte.
+      giroInsumo: {...(s.giroInsumo||{}),...(p.giroInsumo||{})},
       categoriasDeleted:[...catsDeletadas],
     };
     // budgetCompras é mapa de período -> {categorias:{cat:{...}}}. Precisa de
@@ -11389,6 +11392,130 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
   </div>;
 }
 
+// ── Semana OPERACIONAL DE COMPRAS: segunda a sábado ─────────────────────────
+// Não confundir com isoWeekInfo (segunda a DOMINGO), usada pela DRE e pelo
+// Budget: são conceitos diferentes de propósito. Aqui domingo fica de fora
+// porque a loja não abre — incluí-lo diluiria a média por um dia sem compra.
+const semanaComprasSegSab=(dataRef:string)=>{
+  const d=_dia(dataRef);
+  const seg=new Date(d); seg.setDate(d.getDate()-((d.getDay()+6)%7));
+  const sab=new Date(seg); sab.setDate(seg.getDate()+5);
+  return {inicio:_ymd(seg),fim:_ymd(sab)};
+};
+// As N semanas seg–sáb já FECHADAS antes da data de referência. A semana
+// corrente fica de fora: ela ainda está sendo comprada, e entrar na média
+// puxaria o número pra baixo só por estar incompleta.
+const semanasComprasFechadas=(dataRef:string,n:number)=>{
+  const atual=semanaComprasSegSab(dataRef);
+  const out:{inicio:string,fim:string}[]=[];
+  for(let i=1;i<=n;i++){
+    const d=_dia(atual.inicio); d.setDate(d.getDate()-7*i);
+    out.push(semanaComprasSegSab(_ymd(d)));
+  }
+  return out.reverse();   // da mais antiga pra mais recente
+};
+const LIMIAR_VARIACAO_PADRAO=30;   // % de diferença entre as duas semanas
+
+// Projeção da próxima semana por insumo, a partir da média das últimas N
+// semanas fechadas. Reaproveita a leitura de db.compras e o desconto de
+// estoque de projetarCompras — sugerir comprar o que já está na câmara é o
+// erro mais caro que uma lista de compras pode ter.
+function projetarComprasSemanal(db:any,opts:{semanas?:number,dataRef?:string,limiar?:number}={}){
+  const semanas=opts.semanas??2;
+  const dataRef=opts.dataRef||today();
+  const limiar=opts.limiar??LIMIAR_VARIACAO_PADRAO;
+  const janelas=semanasComprasFechadas(dataRef,semanas);
+  const proximaSemana=(()=>{
+    const d=_dia(semanaComprasSegSab(dataRef).inicio); d.setDate(d.getDate()+7);
+    return semanaComprasSegSab(_ymd(d));
+  })();
+
+  // Quantidade comprada de cada insumo em cada janela, separadas — a variação
+  // atípica compara as janelas entre si, então não dá pra somar antes.
+  const porNome:Record<string,{nome:string,unidades:Set<string>,preco:number,fornecedor:string,qtdPorJanela:number[],valorPorJanela:number[]}>={};
+  // Compra lançada num domingo cai fora de toda janela (a semana termina no
+  // sábado) e sumiria do cálculo sem deixar rastro. Conta pra avisar na tela:
+  // ou a data está errada, ou houve compra em dia de loja fechada — os dois
+  // casos o usuário precisa saber.
+  let comprasNoDomingo=0;
+  const inicioJanela=janelas[0]?.inicio||"", fimJanela=janelas[janelas.length-1]?.fim||"";
+  (db.compras||[]).forEach((c:any)=>{
+    if(c.excluido)return;
+    const nome=(c.nomeProduto||"").trim();
+    const k=foldNome(nome);
+    if(!k||!c.data)return;
+    const idx=janelas.findIndex(j=>c.data>=j.inicio&&c.data<=j.fim);
+    if(idx<0){
+      if(c.data>=inicioJanela&&c.data<=fimJanela&&_dia(c.data).getDay()===0)comprasNoDomingo++;
+      return;
+    }
+    const q=parseFloat(c.quantidade)||0;
+    if(q<=0)return;
+    const reg=porNome[k]||(porNome[k]={nome,unidades:new Set(),preco:0,fornecedor:"",
+      qtdPorJanela:janelas.map(()=>0),valorPorJanela:janelas.map(()=>0)});
+    reg.qtdPorJanela[idx]+=q;
+    reg.valorPorJanela[idx]+=parseMoney(c.valor);
+    if(c.unidade)reg.unidades.add(String(c.unidade).trim().toLowerCase());
+    const pu=parseFloat(c.valorUnitario)||0;
+    if(pu>0)reg.preco=pu;              // último preço visto vence
+    if(c.fornecedor)reg.fornecedor=c.fornecedor;
+  });
+
+  const mps=db.materiasPrimas||[];
+  const giro=db.giroInsumo||{};
+  const itens:any[]=[];
+  const semGiro:any[]=[];
+  Object.entries(porNome).forEach(([k,reg])=>{
+    const comCompra=reg.qtdPorJanela.filter(q=>q>0);
+    if(!comCompra.length)return;
+    const mp=mps.find((m:any)=>foldNome(m.nome||"")===k);
+    const unidade=mp?.unidade||[...reg.unidades][0]||"un";
+    const preco=reg.preco||mp?.ultimoValor||0;
+    const estoque=mp?.estoqueAtual||0;
+    // Média sobre as janelas COM compra, não sobre todas: um insumo comprado
+    // quinzenalmente teria a média cortada pela metade se a semana sem compra
+    // entrasse como zero.
+    const mediaQtd=comCompra.reduce((s,q)=>s+q,0)/comCompra.length;
+    const valoresComCompra=reg.valorPorJanela.filter((_,i)=>reg.qtdPorJanela[i]>0);
+    const mediaValor=valoresComCompra.reduce((s,v)=>s+v,0)/valoresComCompra.length;
+    // Variação atípica: só faz sentido com as duas janelas preenchidas.
+    let variacaoAtipica=false,percentualVariacao:number|null=null;
+    if(comCompra.length>=2){
+      const menor=Math.min(...comCompra),maior=Math.max(...comCompra);
+      if(menor>0){
+        const pct=((maior-menor)/menor)*100;
+        if(pct>limiar){variacaoAtipica=true;percentualVariacao=pct;}
+      }
+    }
+    const item={
+      chave:k,nome:reg.nome,nomeExibicao:mp?.nome||reg.nome,
+      giro:giro[k]||null,unidade,preco,estoque,
+      mediaQtd,mediaValor,
+      // Desconta o que já está em estoque (decisão mantida da projeção por
+      // ritmo que já existia aqui).
+      qtdSugerida:Math.max(0,mediaQtd-estoque),
+      variacaoAtipica,percentualVariacao,
+      janelas:reg.qtdPorJanela,
+      baseIncompleta:comCompra.length<semanas,
+      conflitoUnidade:reg.unidades.size>1,unidades:[...reg.unidades],
+      fornecedor:reg.fornecedor||(mp?.fornecedores||[])[0]||"",
+      categoria:mp?.categoria||"",
+    };
+    if(!item.giro)semGiro.push(item); else itens.push(item);
+  });
+
+  const ordena=(a:any,b:any)=>b.qtdSugerida*b.preco-a.qtdSugerida*a.preco;
+  const pereciveis=itens.filter(i=>i.giro==="perecivel").sort(ordena);
+  const secos=itens.filter(i=>i.giro==="seco").sort(ordena);
+  const custo=(l:any[])=>l.reduce((s,i)=>s+i.qtdSugerida*i.preco,0);
+  return {janelas,proximaSemana,pereciveis,secos,semGiro:semGiro.sort(ordena),
+    totalEstimado:custo(pereciveis)+custo(secos),
+    totalPereciveis:custo(pereciveis),totalSecos:custo(secos),
+    comVariacao:[...pereciveis,...secos].filter(i=>i.variacaoAtipica).length,
+    baseIncompleta:[...pereciveis,...secos].some(i=>i.baseIncompleta),
+    comprasNoDomingo};
+}
+
 // ===================== PROJEÇÃO DE COMPRAS =====================
 // Estima quanto vai ser preciso comprar de cada matéria-prima num período,
 // a partir do RITMO DE COMPRA passado. Não é consumo medido (isso só a ficha
@@ -11688,6 +11815,12 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
   const [buscaMov,setBuscaMov]=useState("");
   const [filtroMov,setFiltroMov]=useState("todos");
   const [diasProj,setDiasProj]=useState(30);
+  // "ritmo": a projeção que já existia (janela de 90 dias, consumo/dia × N dias).
+  // "semanal": média das últimas N semanas seg–sáb, separada por giro.
+  // As duas convivem porque respondem perguntas diferentes: reposição contínua
+  // versus a lista da próxima semana.
+  const [modoProj,setModoProj]=useState("semanal");
+  const [semanasProj,setSemanasProj]=useState(2);
   const [verPorForn,setVerPorForn]=useState(false);
   const [verHistProj,setVerHistProj]=useState<string|null>(null);
   const [notasIgnoradas,setNotasIgnoradas]=useState<string[]>([]);
@@ -12113,7 +12246,82 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
 
     {/* ===== PROJEÇÃO DE COMPRAS ===== */}
     {sub==="projecao"&&<BackBar label="Inventário" onClick={()=>setSub("inventario")}/>}
-    {sub==="projecao"&&(()=>{
+    {sub==="projecao"&&modoProj==="semanal"&&(()=>{
+      const p=projetarComprasSemanal(db,{semanas:semanasProj});
+      const linha=(i:any)=>(
+        <div key={i.chave} className="card" style={{marginBottom:8,padding:"11px 13px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"baseline",flexWrap:"wrap" as const}}>
+            <span style={{fontWeight:700,fontSize:13.5}}>{i.nomeExibicao}</span>
+            <span style={{fontWeight:700,fontSize:14,color:"#22C55E",whiteSpace:"nowrap" as const}}>{fmtMoney(i.qtdSugerida*i.preco)}</span>
+          </div>
+          <div className="muted" style={{fontSize:11.5,marginTop:3}}>
+            Comprar <b style={{color:"var(--text)"}}>{i.qtdSugerida.toFixed(2)} {i.unidade}</b>
+            {" · "}média {i.mediaQtd.toFixed(2)} {i.unidade}
+            {i.estoque>0&&` · em estoque ${i.estoque}`}
+          </div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginTop:6}}>
+            {i.variacaoAtipica&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",fontSize:10}}>⚠ Variação de {i.percentualVariacao.toFixed(0)}%</span>}
+            {i.baseIncompleta&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>só 1 semana de histórico</span>}
+            {i.conflitoUnidade&&<span className="tag" style={{background:"var(--dangerBg)",color:"var(--dangerText)",fontSize:10}}>unidade inconsistente: {i.unidades.join(", ")}</span>}
+          </div>
+        </div>
+      );
+      return <div>
+        <div className="chip-row" style={{marginBottom:10}}>
+          <button type="button" className="chip" aria-pressed={false} onClick={()=>setModoProj("ritmo")} style={{flex:1}}>Por ritmo</button>
+          <button type="button" className="chip" aria-pressed={true} onClick={()=>setModoProj("semanal")} style={{flex:1}}>Semanal</button>
+        </div>
+
+        <div className="card" style={{marginBottom:10}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>Semana de {fmtDate(p.proximaSemana.inicio)} a {fmtDate(p.proximaSemana.fim)}</div>
+          <div className="muted" style={{fontSize:11.5}}>
+            Base: {p.janelas.map(j=>`${fmtDate(j.inicio)}–${fmtDate(j.fim)}`).join(" e ")} · segunda a sábado (domingo fora)
+          </div>
+          <div style={{display:"flex",gap:7,marginTop:8,flexWrap:"wrap" as const}}>
+            {[2,4,6].map(n=>(
+              <button key={n} type="button" className="chip" aria-pressed={semanasProj===n} onClick={()=>setSemanasProj(n)}>{n} semanas</button>
+            ))}
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)"}}>
+            <span style={{fontWeight:700}}>Total estimado</span>
+            <span style={{fontWeight:800,fontSize:20,color:"#22C55E"}}>{fmtMoney(p.totalEstimado)}</span>
+          </div>
+          {p.comVariacao>0&&<div className="muted" style={{fontSize:11,marginTop:4}}>{p.comVariacao} item(ns) com variação atípica entre as semanas.</div>}
+        </div>
+
+        {p.comprasNoDomingo>0&&<div className="card" style={{marginBottom:10,background:"var(--warningBg)",border:"1px solid #F59E0B55"}}>
+          <div style={{fontSize:12,color:"var(--warningText)"}}>
+            <b>{p.comprasNoDomingo} compra(s) lançada(s) num domingo</b> ficaram de fora do cálculo — a semana operacional vai de segunda a sábado. Se a data estiver errada, corrija em Compras → Histórico.
+          </div>
+        </div>}
+
+        {p.semGiro.length>0&&<div className="card" style={{marginBottom:10,border:"1px solid #0EA5E940"}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>🏷️ {p.semGiro.length} insumo(s) sem classificação de giro</div>
+          <div className="muted" style={{fontSize:11.5,marginBottom:8}}>Ficam fora das duas listas até você dizer se são perecíveis (giro curto) ou secos (compra única cobre a semana).</div>
+          {p.semGiro.map((i:any)=>(
+            <div key={i.chave} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)",flexWrap:"wrap" as const}}>
+              <span style={{fontSize:13,flex:1,minWidth:120}}>{i.nomeExibicao}</span>
+              <div className="chip-row">
+                {([["perecivel","Perecível"],["seco","Seco"]] as const).map(([v,lbl])=>(
+                  <button key={v} type="button" className="chip" style={{minHeight:36,fontSize:12}}
+                    onClick={()=>(setDbAndSave||setDb)((d:any)=>({...d,giroInsumo:{...(d.giroInsumo||{}),[i.chave]:v}}))}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>}
+
+        <div className="section-title">🥬 Perecíveis — {fmtMoney(p.totalPereciveis)}</div>
+        <div className="muted" style={{fontSize:11,marginBottom:8}}>Giro curto: considere repor no meio da semana.</div>
+        {p.pereciveis.length?p.pereciveis.map(linha):<EmptyState msg="Nenhum perecível projetado."/>}
+
+        <div className="section-title" style={{marginTop:14}}>📦 Secos — {fmtMoney(p.totalSecos)}</div>
+        <div className="muted" style={{fontSize:11,marginBottom:8}}>Giro longo: uma compra cobre a semana.</div>
+        {p.secos.length?p.secos.map(linha):<EmptyState msg="Nenhum seco projetado."/>}
+      </div>;
+    })()}
+
+    {sub==="projecao"&&modoProj==="ritmo"&&(()=>{
       const p=projetarCompras(db,diasProj,notasIgnoradas);
       const porFornecedor:Record<string,any[]>={};
       p.itens.filter(i=>i.comprar>0).forEach(i=>{
@@ -12125,6 +12333,10 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
         .sort((a,b)=>b.total-a.total);
 
       return <div>
+        <div className="chip-row" style={{marginBottom:10}}>
+          <button type="button" className="chip" aria-pressed={true} onClick={()=>setModoProj("ritmo")} style={{flex:1}}>Por ritmo</button>
+          <button type="button" className="chip" aria-pressed={false} onClick={()=>setModoProj("semanal")} style={{flex:1}}>Semanal</button>
+        </div>
         <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
           {[7,15,21,30].map(d=>
             <button key={d} onClick={()=>setDiasProj(d)} className={diasProj===d?"btn":"btn-ghost"}

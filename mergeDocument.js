@@ -157,6 +157,12 @@ export function mergeDocument(existing, incoming) {
     ...(afterLista.mapaCategoriaDre || {}),
   };
 
+  // Giro do insumo (perecível/seco), usado pela projeção semanal de compras.
+  merged.giroInsumo = {
+    ...(existing.giroInsumo || {}),
+    ...(afterLista.giroInsumo || {}),
+  };
+
   // Categorias do Financeiro excluídas. Sem o tombstone unido aqui, o aparelho
   // que ainda não sabe da exclusão reenvia a categoria no próximo POST e ela
   // ressuscita pra todo mundo — o documento mesclado nasce do incoming.
