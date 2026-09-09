@@ -14,11 +14,11 @@ const server = http.createServer(app);
 // Fora dos buscadores. Este backend serve DUAS coisas muito diferentes:
 // as telas internas (admin, comanda, cozinha, retaguarda) e a LOJA DO CLIENTE.
 //
-// BLOQUEAR_LOJA_DO_CLIENTE controla só a loja. Deixado em true porque foi o
-// pedido — mas tem consequência comercial: com ele ligado, quem procurar
-// "Confraria Café delivery" no Google não acha a loja. Trocar pra false volta
-// a permitir que a loja apareça, mantendo as telas internas escondidas.
-const BLOQUEAR_LOJA_DO_CLIENTE = true;
+// BLOQUEAR_LOJA_DO_CLIENTE controla só a loja. Fica em false por decisão do
+// dono: a loja é a vitrine do delivery e precisa ser encontrada por quem
+// procura "Confraria Café" — bloqueá-la custaria cliente. As telas internas
+// abaixo continuam fora do índice de qualquer jeito.
+const BLOQUEAR_LOJA_DO_CLIENTE = false;
 // Telas internas: sempre fora do índice, sem discussão.
 const PAGINAS_INTERNAS = /^\/(admin|comanda|kitchen|retaguarda|home|enderecos|emergencia|mobile|kiosk)(\.html)?$/;
 app.use((req, res, next) => {
@@ -77,6 +77,16 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true }));
+
+// O robots.txt de public/ libera "/" porque em pedidos.confrariacafe.com a
+// raiz é a loja do cliente. Mas os dois domínios servem o MESMO arquivo, e em
+// erpdelivery a raiz é o admin — ali a resposta precisa ser o oposto. O
+// X-Robots-Tag acima já garantiria o não-indexamento; isto evita o convite
+// pra visitar.
+app.get('/robots.txt', (req, res, next) => {
+  if (req.hostname !== 'erpdelivery.confrariacafe.com') return next();
+  res.type('text/plain').send('# Painel administrativo — fora de qualquer buscador.\nUser-agent: *\nDisallow: /\n');
+});
 
 // erpdelivery.confrariacafe.com substitui pedidos.confrariacafe.com/admin.html
 // como endereço do painel de Gestão de Delivery — "/" nesse domínio já abre

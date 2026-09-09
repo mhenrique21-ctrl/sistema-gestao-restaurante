@@ -1,11 +1,19 @@
-# Confraria Café — fora dos buscadores.
+# Confraria Café — delivery.
 #
-# As telas internas (admin, comanda, cozinha, retaguarda) nunca devem aparecer.
-# A loja do cliente está bloqueada junto, por decisão do dono: quem procurar
-# "Confraria Café delivery" não vai encontrar por busca. Para liberar só a
-# loja, troque BLOQUEAR_LOJA_DO_CLIENTE para false em src/server.js e remova
-# o "Disallow: /" daqui.
+# A LOJA DO CLIENTE (/) fica liberada de propósito: é a vitrine do delivery e
+# precisa ser encontrada por quem procura "Confraria Café".
 #
-# O bloqueio real é o X-Robots-Tag do servidor; isto é reforço.
+# As telas internas abaixo nunca devem aparecer em buscador. O bloqueio real
+# delas é o X-Robots-Tag enviado pelo servidor (ver src/server.js); esta lista
+# é reforço, e evita que o buscador gaste visita nelas.
 User-agent: *
-Disallow: /
+Disallow: /admin.html
+Disallow: /comanda.html
+Disallow: /kitchen.html
+Disallow: /retaguarda.html
+Disallow: /home.html
+Disallow: /enderecos.html
+Disallow: /emergencia.html
+Disallow: /mobile.html
+Disallow: /kiosk.html
+Disallow: /api/
