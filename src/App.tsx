@@ -298,6 +298,19 @@ const uid       = () => Math.random().toString(36).slice(2)+Date.now().toString(
 // (Insumos, Lista de Produtos, vínculo do PDV) tinha sua própria versão
 // disso, com critério ligeiramente diferente.
 const foldNome = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim().toLowerCase();
+// Normaliza\u00e7\u00e3o S\u00d3 PRA BUSCA EM TELA \u2014 trata pontua\u00e7\u00e3o como espa\u00e7o, ent\u00e3o
+// "coca cola" acha "Coca-Cola" e "agua c/ gas" acha "agua c gas".
+//
+// N\u00c3O \u00e9 substituta de foldNome, e a diferen\u00e7a \u00e9 importante: foldNome \u00e9 CHAVE
+// de dado j\u00e1 gravado (dicionarioClassificacao, mapaCategoriaDre, giroInsumo).
+// Mudar aquele significaria invalidar tudo que o usu\u00e1rio j\u00e1 ensinou ao sistema.
+// Esta aqui s\u00f3 afeta o que aparece na tela, e pode ser t\u00e3o agressiva quanto
+// precisar sem migrar nada.
+//
+// O bug que ela resolve: insumo vem da nota sem h\u00edfen ("refrigerante coca cola
+// 220ml") e o produto do cat\u00e1logo tem ("Coca-Cola 220 ml") \u2014 a busca n\u00e3o
+// achava, e a Lista parecia n\u00e3o ter o produto.
+const foldBusca = (s:string) => foldNome(s).replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();
 // produtosLista é compartilhado entre as empresas (mesmo catálogo de compras
 // pras duas) — gravar só na empresa atual (setDb puro) deixa a outra
 // desatualizada até o próximo poll trazer por cima. applyBothProd já existia
@@ -5675,8 +5688,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const insumosSoltos=(db.materiasPrimas||[]).filter((mp:any)=>!prodVinculadoDe(mp.id));
   // Filtro da fila, no mesmo padrao do Conciliar Tudo: casa nos dois sentidos
   // e ignora acento, pra "acucar" achar "Açúcar".
-  const insumosSoltosVis=(()=>{const f=foldNome(insumosFiltro.trim());if(!f)return insumosSoltos;
-    return insumosSoltos.filter((m:any)=>{const n=foldNome(m.nome||"");return n.includes(f)||f.includes(n);});})();
+  // foldBusca: é filtro de tela, mesmo motivo da busca de produto — digitar
+  // "coca cola" precisa achar insumo escrito "Coca-Cola".
+  const insumosSoltosVis=(()=>{const f=foldBusca(insumosFiltro.trim());if(!f)return insumosSoltos;
+    return insumosSoltos.filter((m:any)=>{const n=foldBusca(m.nome||"");return n.includes(f)||f.includes(n);});})();
 
   // ---- Ponte com o PDV (vínculo pendente lá também) ----
   // O mesmo item de compra pode estar esperando vínculo nos dois lados ao
@@ -7611,22 +7626,32 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
             // comeca com o termo > termo no inicio de alguma palavra > contem
             // em qualquer lugar. Empate resolve pelo nome mais curto, que tende
             // a ser o generico ("Agua mineral" antes de "Agua mineral c/ gas").
-            const sugestoes=(()=>{
-              if(!bl)return [];
-              const q=foldNome(bl);
+            // O corte era em 6 resultados, calado. Com o catálogo grande, o
+            // produto certo caía fora e não havia como chegar nele: nem
+            // paginação, nem aviso de que existia mais — a Lista parecia
+            // "incompleta" na hora de conciliar. Agora mostra bem mais e, quando
+            // ainda assim sobra, diz quantos ficaram de fora em vez de sumir com
+            // eles em silêncio.
+            const LIMITE_SUGESTOES=25;
+            const {sugestoes,totalAchados}=(()=>{
+              if(!bl)return {sugestoes:[],totalAchados:0};
+              // foldBusca, não foldNome: o insumo vem da nota sem hífen e o
+              // produto do catálogo tem. Com foldNome, "coca cola" não achava
+              // "Coca-Cola 220 ml" e a Lista parecia estar sem o produto.
+              const q=foldBusca(bl);
               const pontuar=(nome:string)=>{
-                const n=foldNome(nome);
+                const n=foldBusca(nome);
                 if(!n.includes(q))return -1;
                 if(n===q)return 0;
                 if(n.startsWith(q))return 1;
                 if(n.includes(" "+q))return 2;   // começo de alguma palavra
                 return 3;
               };
-              return produtosListaTodos
+              const ordenados=produtosListaTodos
                 .map((p:any)=>({p,r:pontuar(p.nome||"")}))
                 .filter((x:any)=>x.r>=0)
-                .sort((a:any,b:any)=>a.r-b.r||(a.p.nome||"").length-(b.p.nome||"").length)
-                .slice(0,6).map((x:any)=>x.p);
+                .sort((a:any,b:any)=>a.r-b.r||(a.p.nome||"").length-(b.p.nome||"").length);
+              return {sugestoes:ordenados.slice(0,LIMITE_SUGESTOES).map((x:any)=>x.p),totalAchados:ordenados.length};
             })();
             // Item pode existir na LISTA sem existir no CATALOGO — sao colecoes
             // separadas, e a lista guarda nome/categoria proprios. Quem olha a
@@ -7690,7 +7715,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 </div>
                 :<div style={{position:"relative"}}>
                   <input placeholder="Buscar produto na Lista de Compras..." value={conciliarBusca[mp.id]||""} onChange={e=>setConciliarBusca(b=>({...b,[mp.id]:e.target.value}))} className="inp" style={{marginBottom:0,fontSize:12.5}}/>
-                  {bl&&<div style={{background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:8,marginTop:4,overflow:"hidden"}}>
+                  {bl&&<div style={{background:"var(--bg)",border:"1px solid var(--border2)",borderRadius:8,marginTop:4,overflow:"hidden",maxHeight:320,overflowY:"auto" as const}}>
+                    {totalAchados>sugestoes.length&&<div style={{padding:"7px 10px",fontSize:10.5,color:"var(--warningText)",background:"var(--warningBg)",borderBottom:"1px solid var(--border)"}}>
+                      Mostrando {sugestoes.length} de {totalAchados} produtos que casam — escreva mais pra estreitar a busca.
+                    </div>}
+                    {bl&&totalAchados===0&&<div style={{padding:"8px 10px",fontSize:11.5,color:"var(--text2)"}}>
+                      Nenhum produto da Lista de Compras casa com “{bl}”.
+                    </div>}
                     {sugestoes.map((p:any)=>(
                       <div key={p.id} onMouseDown={()=>escolherProdConciliar(mp.id,p)} style={{padding:"8px 10px",fontSize:12,borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
                         <span>{p.nome}</span>
