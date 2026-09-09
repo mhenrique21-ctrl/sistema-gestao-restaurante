@@ -9045,6 +9045,76 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     });
     return{uniq:[...porChave.values()],vinculosSalvos:vinculosSalvos};
   };
+  // ── Sincronizar catálogo deste aparelho ─────────────────────────────────
+  // Existe pro caso "o produto aparece no celular e não no PC". Cobre os DOIS
+  // mecanismos possíveis, porque eles pedem ações opostas:
+  //
+  //  (a) o produto está só neste aparelho e nunca subiu → precisa ENVIAR
+  //  (b) o produto está no servidor mas este aparelho o esconde, porque o id
+  //      caiu na lista de exclusão local (_delIds no localStorage, que filtra
+  //      o que a tela mostra) → precisa DESOCULTAR
+  //
+  // União, nunca substituição: nada é apagado do servidor. Substituir pelo que
+  // este aparelho tem apagaria produto criado em outro, que é justamente o
+  // problema que estamos tentando resolver, só que ao contrário.
+  const [sincronizando,setSincronizando]=useState(false);
+  const sincronizarCatalogo=async()=>{
+    setSincronizando(true);
+    try{
+      const local=db.produtosLista||[];
+      const idsLocais=new Set(local.map((p:any)=>p.id));
+      let faltandoNoServidor=0, ocultosAqui:any[]=[], banidos:any[]=[];
+      const delServidor=new Set<string>();
+      for(const emp of ["CONFRARIA","SEAMA"]){
+        try{
+          const r=await fetchSync(`/api/dados/${emp}?_=${Date.now()}`);
+          const sv=await r.json();
+          const noServidor=sv?.produtosLista||[];
+          const idsServidor=new Set(noServidor.map((p:any)=>p.id));
+          faltandoNoServidor=Math.max(faltandoNoServidor,local.filter((p:any)=>!idsServidor.has(p.id)).length);
+          (sv?.deletedIds||[]).forEach((id:string)=>delServidor.add(id));
+          // Produto que existe no servidor, não está na tela, e está na lista
+          // de exclusão local: é o caso (b).
+          noServidor.forEach((p:any)=>{
+            if(!idsLocais.has(p.id)&&_listaDeletados.has(p.id)&&!ocultosAqui.some(x=>x.id===p.id))ocultosAqui.push(p);
+          });
+        }catch{}
+      }
+      // Caso (c), o mais traiçoeiro: o id do produto está na lista de excluídos
+      // DO SERVIDOR, que é uma união que nunca encolhe. Enviar não adianta —
+      // mergeArrayById descarta o item no servidor toda vez, e o produto some
+      // de novo em segundos, sem erro nenhum. A saída é reemitir com id novo:
+      // mesmo produto, identidade limpa, fora da lista negra.
+      banidos=local.filter((p:any)=>delServidor.has(p.id));
+      const linhas=[
+        `Catálogo deste aparelho: ${local.length} produtos.`,
+        faltandoNoServidor>0?`\n📤 ${faltandoNoServidor} produto(s) daqui ainda não estão no servidor — serão enviados.`:`\n✓ Todos os produtos daqui já estão no servidor.`,
+        ocultosAqui.length>0?`\n👁️ ${ocultosAqui.length} produto(s) existem no servidor mas estão ESCONDIDOS neste aparelho por uma exclusão antiga feita aqui:\n`+ocultosAqui.slice(0,8).map((p:any)=>`   • ${p.nome}`).join("\n")+(ocultosAqui.length>8?`\n   ... e mais ${ocultosAqui.length-8}`:"")+`\n\nEles serão trazidos de volta.`:"",
+        banidos.length>0?`\n♻️ ${banidos.length} produto(s) daqui estão numa lista de excluídos do servidor e por isso somem toda vez que sobem:\n`+banidos.slice(0,8).map((p:any)=>`   • ${p.nome}`).join("\n")+(banidos.length>8?`\n   ... e mais ${banidos.length-8}`:"")+`\n\nSerão recadastrados com identidade nova pra parar de sumir.`:"",
+        `\n\nNada é apagado do servidor.`,
+      ].filter(Boolean).join("");
+      if(faltandoNoServidor===0&&ocultosAqui.length===0&&banidos.length===0){
+        alert(linhas+"\n\nNada a fazer — este aparelho já está igual ao servidor.");
+        return;
+      }
+      if(!confirm(linhas+"\n\nContinuar?"))return;
+      // Desocultar: tira da lista de exclusão local e persiste no localStorage.
+      if(ocultosAqui.length){
+        ocultosAqui.forEach((p:any)=>_listaDeletados.delete(p.id));
+        try{localStorage.setItem("_delIds",JSON.stringify([..._listaDeletados].slice(-5000)));}catch{}
+      }
+      // Enviar. Sem produto banido, a identidade basta: applyBothProdutos busca
+      // o servidor, funde (local vence por id, então o que só existe aqui
+      // sobrevive) e grava. Com banidos, troca o id deles no mesmo passo.
+      const idsBanidos=new Set(banidos.map((p:any)=>p.id));
+      applyBothProdutos(setState,setDb,(d:any)=>idsBanidos.size
+        ?{...d,produtosLista:(d.produtosLista||[]).map((p:any)=>
+            idsBanidos.has(p.id)?{...p,id:uid(),atualizadoEm:new Date().toISOString()}:p)}
+        :d);
+      alert(`✅ Sincronizado.${faltandoNoServidor?`\n\n${faltandoNoServidor} produto(s) enviados ao servidor.`:""}${ocultosAqui.length?`\n${ocultosAqui.length} produto(s) desocultados aqui.`:""}${banidos.length?`\n${banidos.length} produto(s) recadastrados com identidade nova.`:""}\n\nConfira no outro aparelho em alguns segundos.`);
+    }finally{setSincronizando(false);}
+  };
+
   const removerDuplicatas=()=>{
     const total=(db.produtosLista||[]).length;
     const{uniq,vinculosSalvos}=mesclarEUniq(db.produtosLista||[]);
@@ -9797,6 +9867,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:11,fontWeight:700}}>
             🛣️ Preencher rua de {semRuaPreenchiveis.length}
           </button>}
+          <button className="btn" onClick={sincronizarCatalogo} disabled={sincronizando}
+            style={{background:"var(--successBg)",color:"var(--successText)",padding:"6px 12px",fontSize:11,fontWeight:700,opacity:sincronizando?.6:1}}>
+            {sincronizando?"⏳ Sincronizando...":"🔄 Sincronizar este aparelho"}
+          </button>
           <button className="btn" onClick={removerDuplicatas} style={{background:"#F3E8FF",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
         </div>
       </div>
