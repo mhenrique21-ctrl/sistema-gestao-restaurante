@@ -1527,10 +1527,35 @@ const mergeFromServer=(prev:any,updates:any)=>{
     const byId=(sArr:any[])=>{
       return sArr.filter((i:any)=>!_listaDeletados.has(i.id));
     };
+    // Dedupe por nome. O primeiro da ordem vencia e o outro era DESCARTADO em
+    // silêncio — e como esta lista é a que vai no POST (ver
+    // mergeWithServerBeforePost), o descartado nunca chegava ao servidor.
+    //
+    // Bug real: produto criado no celular com o mesmo nome de um existente,
+    // mudando só a caixa das letras, aparecia no celular (estado local) até o
+    // poll seguinte e NUNCA no computador. Sumia sem deixar rastro.
+    //
+    // Agora quem vence é o mais recente, e os vínculos do descartado são
+    // carregados pro sobrevivente — vínculo de conciliação não pode morrer
+    // junto com o registro que perdeu a disputa.
+    //
+    // A regra de casamento continua a mesma (trim + minúsculas) de propósito:
+    // alargar pra foldNome faria MAIS produtos se fundirem, que é o oposto do
+    // que o usuário precisa aqui.
     const byIdDedup=(sArr:any[])=>{
       const merged=byId(sArr);
-      const seen=new Set<string>();
-      return merged.filter((p:any)=>{const k=(p.nome||"").trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true;});
+      const quando=(x:any)=>Date.parse(x?.atualizadoEm||x?.criadoEm||"")||0;
+      const porNome=new Map<string,any>();
+      merged.forEach((p:any)=>{
+        const k=(p.nome||"").trim().toLowerCase();
+        const atual=porNome.get(k);
+        if(!atual){porNome.set(k,p);return;}
+        const novo=quando(p)>=quando(atual);
+        const vencedor=novo?p:atual, perdedor=novo?atual:p;
+        const vinculos=[...new Set([...(vencedor.mpVinculados||[]),...(perdedor.mpVinculados||[])])];
+        porNome.set(k,vinculos.length?{...vencedor,mpVinculados:vinculos}:vencedor);
+      });
+      return [...porNome.values()];
     };
     // Union por ID entre local (p) e servidor (s): preserva edições locais que ainda não
     // chegaram ao servidor. server primeiro, local por cima — Map.set com a mesma chave
