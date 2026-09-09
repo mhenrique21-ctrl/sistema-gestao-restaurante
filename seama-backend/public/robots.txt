@@ -1,0 +1,4 @@
+# PDV Seama — sistema interno, fora de qualquer buscador.
+# O bloqueio real é o X-Robots-Tag enviado pelo servidor; isto é reforço.
+User-agent: *
+Disallow: /

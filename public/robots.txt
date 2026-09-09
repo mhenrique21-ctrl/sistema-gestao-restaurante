@@ -1,0 +1,11 @@
+# App Gestão — sistema interno. Não deve aparecer em nenhum buscador.
+#
+# Isto sozinho NÃO é segurança: robots.txt é um pedido que buscadores sérios
+# respeitam, e que qualquer um pode ler e ignorar. A proteção de verdade é a
+# tela de senha. Isto só evita que o sistema apareça numa busca por
+# "Confraria Café".
+#
+# O bloqueio real vem do cabeçalho X-Robots-Tag: noindex enviado pelo servidor
+# em toda resposta (ver new_server.js) — este arquivo é reforço.
+User-agent: *
+Disallow: /

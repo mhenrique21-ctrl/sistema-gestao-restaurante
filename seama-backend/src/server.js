@@ -14,6 +14,16 @@ const server = http.createServer(app);
 // avisar. "1" = confia só no primeiro hop (o próprio Nginx local).
 app.set('trust proxy', 1);
 
+// PDV é sistema interno: fora de qualquer buscador. Em toda resposta, não só
+// no HTML — buscador indexa PDF, JSON e imagem solta também. O robots.txt em
+// public/ é reforço: ele só impede a VISITA, e um endereço linkado de fora
+// pode ser listado mesmo sem nunca ter sido visitado. Isto não é segurança,
+// é etiqueta — quem protege o PDV é o login.
+app.use((req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+  next();
+});
+
 app.use(compression());
 
 app.use(rateLimit({

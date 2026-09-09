@@ -11,6 +11,26 @@ const { initWebSocket } = require('./websocket/hub');
 const app = express();
 const server = http.createServer(app);
 
+// Fora dos buscadores. Este backend serve DUAS coisas muito diferentes:
+// as telas internas (admin, comanda, cozinha, retaguarda) e a LOJA DO CLIENTE.
+//
+// BLOQUEAR_LOJA_DO_CLIENTE controla só a loja. Deixado em true porque foi o
+// pedido — mas tem consequência comercial: com ele ligado, quem procurar
+// "Confraria Café delivery" no Google não acha a loja. Trocar pra false volta
+// a permitir que a loja apareça, mantendo as telas internas escondidas.
+const BLOQUEAR_LOJA_DO_CLIENTE = true;
+// Telas internas: sempre fora do índice, sem discussão.
+const PAGINAS_INTERNAS = /^\/(admin|comanda|kitchen|retaguarda|home|enderecos|emergencia|mobile|kiosk)(\.html)?$/;
+app.use((req, res, next) => {
+  const interna = PAGINAS_INTERNAS.test(req.path)
+    || req.path.startsWith('/api/')
+    || req.hostname === 'erpdelivery.confrariacafe.com';
+  if (interna || BLOQUEAR_LOJA_DO_CLIENTE) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+  }
+  next();
+});
+
 app.use(compression());
 
 // Baseline de defesa contra abuso — bem generoso pra não afetar uso normal

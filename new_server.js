@@ -1085,6 +1085,17 @@ function anthropicComplete({ system, userText, maxTokens = 2048 }) {
 // ---- HTTP Server ----
 
 const server = http.createServer((req, res) => {
+  // Sistema interno: fora de qualquer buscador. Vai em TODA resposta, não só
+  // no HTML — buscador também indexa PDF, JSON e imagem solta.
+  //
+  // Este cabeçalho é o que realmente tira do índice; o robots.txt é reforço.
+  // A diferença importa: robots.txt só impede a VISITA, e uma página que o
+  // buscador nunca visita mas que alguém linkou de fora pode ser indexada só
+  // pelo endereço. O noindex é a instrução de não listar.
+  //
+  // Nada disso é segurança — é etiqueta que buscador sério respeita e qualquer
+  // um pode ignorar. Quem protege o sistema é a tela de senha.
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

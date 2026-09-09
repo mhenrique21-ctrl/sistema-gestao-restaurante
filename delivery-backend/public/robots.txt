@@ -1,0 +1,11 @@
+# Confraria Café — fora dos buscadores.
+#
+# As telas internas (admin, comanda, cozinha, retaguarda) nunca devem aparecer.
+# A loja do cliente está bloqueada junto, por decisão do dono: quem procurar
+# "Confraria Café delivery" não vai encontrar por busca. Para liberar só a
+# loja, troque BLOQUEAR_LOJA_DO_CLIENTE para false em src/server.js e remova
+# o "Disallow: /" daqui.
+#
+# O bloqueio real é o X-Robots-Tag do servidor; isto é reforço.
+User-agent: *
+Disallow: /
