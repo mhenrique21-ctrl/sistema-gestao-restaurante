@@ -9061,8 +9061,43 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   // === RUAS ===
   const ruas:string[]=db.listaRuas||[];
+
   const ruaCatMap:Record<string,string>=db.ruaCatMap||{};
   const getRuaDaCat=(cat:string):string=>ruaCatMap[cat]||"";
+  // ── Preencher rua em lote, a partir da categoria ────────────────────────
+  // Existe porque metade do catálogo ficou sem rua enquanto a rua definida na
+  // lista não chegava ao catálogo (bug corrigido). A correção vale daqui pra
+  // frente; isto resolve o acumulado de uma vez.
+  //
+  // Divide em dois grupos de propósito: dá pra preencher só quem tem categoria
+  // COM rua mapeada. Quem não tem fica de fora e é contado à parte — inventar
+  // uma rua seria pior que deixar em branco, e o usuário precisa saber que
+  // esses existem pra ir mapear a categoria.
+  const semRua=(db.produtosLista||[]).filter((p:any)=>!(p.rua||"").trim());
+  const semRuaPreenchiveis=semRua.filter((p:any)=>!!getRuaDaCat(p.cat||""));
+  const semRuaSemMapa=semRua.filter((p:any)=>!getRuaDaCat(p.cat||""));
+  const preencherRuasEmLote=()=>{
+    if(!semRuaPreenchiveis.length)return;
+    // Mostra por rua de destino antes de aplicar — é uma alteração em massa, e
+    // o usuário precisa reconhecer o resultado antes, não descobrir depois.
+    const porRuaDestino=new Map<string,number>();
+    semRuaPreenchiveis.forEach((p:any)=>{
+      const r=getRuaDaCat(p.cat||"");
+      porRuaDestino.set(r,(porRuaDestino.get(r)||0)+1);
+    });
+    const resumo=[...porRuaDestino.entries()].sort((a,b)=>b[1]-a[1])
+      .map(([r,n])=>`  • ${r}: ${n} produto(s)`).join("\n");
+    const exemplos=semRuaPreenchiveis.slice(0,3)
+      .map((p:any)=>`  ${p.nome} → ${getRuaDaCat(p.cat||"")}`).join("\n");
+    if(!confirm(`Preencher a rua de ${semRuaPreenchiveis.length} produto(s), usando a rua da categoria de cada um?\n\n${resumo}\n\nExemplos:\n${exemplos}\n\nProduto que já tem rua não é tocado.`))return;
+    const ts=new Date().toISOString();
+    applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>{
+      if((p.rua||"").trim())return p;                    // já tem rua: não mexe
+      const r=getRuaDaCat(p.cat||"");
+      return r?{...p,rua:r,atualizadoEm:ts}:p;
+    })}));
+    alert(`✅ Rua preenchida em ${semRuaPreenchiveis.length} produto(s).${semRuaSemMapa.length?`\n\n${semRuaSemMapa.length} ficaram sem rua porque a categoria deles não tem rua definida — defina em Lista → Ruas e rode de novo.`:""}`);
+  };
   const setRuaCat=(cat:string,rua:string)=>{
     const apply=(d:any)=>{
       const m={...(d.ruaCatMap||{})};
@@ -9758,9 +9793,21 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <div className="section-title" style={{color:"#22C55E",margin:0}}>📦 Catálogo de Produtos <span style={{fontSize:11,color:"#555"}}>({(db.produtosLista||[]).length})</span></div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
           {ctPendentes.length>0&&<button className="btn" onClick={()=>setShowConciliarTudo(true)} style={{background:"var(--warningBg)",color:"var(--warningText)",padding:"6px 12px",fontSize:11,fontWeight:700}}>🔗 Conciliar Tudo ({ctPendentes.length} pendente{ctPendentes.length!==1?"s":""})</button>}
+          {semRuaPreenchiveis.length>0&&<button className="btn" onClick={preencherRuasEmLote}
+            style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:11,fontWeight:700}}>
+            🛣️ Preencher rua de {semRuaPreenchiveis.length}
+          </button>}
           <button className="btn" onClick={removerDuplicatas} style={{background:"#F3E8FF",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
         </div>
       </div>
+      {/* Só aparece quando há o que fazer: produto sem rua cuja categoria já
+          tem rua definida. Produto sem rua de categoria não mapeada não entra —
+          não há de onde tirar a rua, e inventar uma seria pior que deixar em
+          branco. */}
+      {semRuaPreenchiveis.length>0&&<div className="muted" style={{fontSize:11,marginBottom:8,background:"var(--infoBg)",border:"1px solid #0EA5E940",borderRadius:8,padding:"8px 10px",color:"var(--infoText)"}}>
+        <b>{semRuaPreenchiveis.length} produto(s) sem rua</b> podem receber a rua da própria categoria.
+        {semRuaSemMapa.length>0&&<> Outros {semRuaSemMapa.length} ficam de fora porque a categoria deles ainda não tem rua definida (ajuste em <b>Lista → Ruas</b>).</>}
+      </div>}
       {/* Form adicionar/editar */}
       <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap" as const}}>
         <input placeholder="Nome do produto..." value={prodForm.nome} onChange={e=>setProdForm(f=>({...f,nome:e.target.value}))}
