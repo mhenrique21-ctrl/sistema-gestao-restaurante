@@ -352,6 +352,21 @@ const applyBothProdutos = (setState:any, setDb:any, fn:(d:any)=>any) => {
       } catch {}
     });
   } else if (setDb) {
+    // CAMINHO DE PERDA DE DADO. Sem setState não há como gravar no servidor
+    // (a gravação acima precisa dele pra reler e fundir as duas empresas), e
+    // este setDb sozinho depende do auto-save genérico — que PULA a gravação
+    // quando coincide com outro save em andamento.
+    //
+    // Bug real que passou meses despercebido: ListaComprasPanel não recebia
+    // setState no call site, embora a assinatura aceitasse. As 10 escritas de
+    // produtosLista da tela Lista de Compras caíam aqui — o produto aparecia
+    // no aparelho de quem cadastrou e nunca chegava ao servidor nem aos outros
+    // aparelhos. Sintoma relatado: "só aparece no celular, no computador não
+    // consta".
+    //
+    // Quem chamar sem setState precisa saber que está perdendo dado, em vez de
+    // descobrir semanas depois pelo produto que sumiu.
+    console.warn("[applyBothProdutos] chamado sem setState — a alteração em produtosLista NÃO será salva no servidor. Passe setState no componente que chamou.");
     setDb(fn);
   }
 };
@@ -2480,12 +2495,12 @@ export default function App() {
             ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState}/>
             : tab==="agenda"
             ? <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={false} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
-            : <ListaComprasPanel db={db} setDb={setDb} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} login={login} setDbAndSave={setDbAndSave}/>)
+            : <ListaComprasPanel db={db} setDb={setDb} setState={setState} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} login={login} setDbAndSave={setDbAndSave}/>)
           : <>
               {tab==="dashboard"  && <Dashboard db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} onNavigate={setTab} setPendingSub={setPendingSub}/>}
               {tab==="vendas"     && <VendasPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} setState={setState} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab} empresa={empresa} state={state} setState={setState}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
