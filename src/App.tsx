@@ -8694,7 +8694,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       if(pendingMpLinks!==null){
         const prodExiste=(db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl);
         if(prodExiste){
-          syncProdByName(nome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
+          // Grava a rua junto do vínculo — ver o comentário do bloco abaixo.
+          syncProdByName(nome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined,...(ruaVal?{rua:ruaVal}:{})}));
         }else{
           applyBothProd((d:any)=>{
             if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl))return d;
@@ -8703,7 +8704,23 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         }
       }else{
         applyBothProd((d:any)=>{
-          if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl))return d;
+          // Produto já no catálogo: antes saía com `return d` e a rua escolhida
+          // aqui MORRIA. Ela ficava só no item desta lista, enquanto o catálogo
+          // — que é quem alimenta as próximas listas, via getRuaProd —
+          // continuava sem rua. Sintoma: "defino a rua e na lista seguinte o
+          // produto volta sem rua".
+          //
+          // Regravar é inócuo quando o usuário não escolheu nada: ruaVal já é
+          // form.rua || rua do próprio catálogo || rua da categoria. Por isso
+          // só grava quando há valor E ele muda — assim não carimba
+          // atualizadoEm à toa em todo salvamento de lista.
+          if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl)){
+            if(!ruaVal)return d;
+            const precisa=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl&&(p.rua||"")!==ruaVal);
+            if(!precisa)return d;
+            return{...d,produtosLista:(d.produtosLista||[]).map((p:any)=>
+              p.nome.toLowerCase()===nl?{...p,rua:ruaVal,atualizadoEm:new Date().toISOString()}:p)};
+          }
           return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal}]};
         });
       }
