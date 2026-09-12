@@ -19,10 +19,14 @@ import path from 'node:path';
 import { DOMParser } from '@xmldom/xmldom';
 
 // ── Configuração ────────────────────────────────────────────────────────────
-// Sim, "XmlVenda2" com o 2 no fim — é assim na instalação real. Existe um
-// "XmlVenda" sem o 2 na documentação do Eclética, mas não é onde o sistema
-// grava; apontar pra lá dá "caminho não encontrado" e silêncio.
-const RAIZ_XML   = process.env.ECLETICA_XML || 'C:\\WinecIt\\ArquivosSistema\\XmlVenda2';
+// A instalação real tem DUAS árvores de XML lado a lado — "XmlVenda" e
+// "XmlVenda2" — e as duas têm ano/mês. Qual recebe a nota do dia não é
+// previsível de fora, então o agente lê as duas e deduplica por chave da NFC-e.
+// Apontar pra uma só faz a venda sumir em silêncio quando o Eclética escreve na
+// outra. Aceita vários caminhos separados por ";".
+const RAIZES_XML = (process.env.ECLETICA_XML
+  || 'C:\\Wineclt\\ArquivosSistema\\XmlVenda;C:\\Wineclt\\ArquivosSistema\\XmlVenda2')
+  .split(';').map((t) => t.trim()).filter(Boolean);
 const GESTAO_URL = (process.env.GESTAO_URL || 'https://gestao.confrariacafe.com').replace(/\/$/, '');
 const SECRET     = process.env.SEAMA_SERVICE_SECRET || '';
 const INTERVALO  = (parseInt(process.env.INTERVALO_MIN, 10) || 2) * 60 * 1000;
@@ -155,8 +159,8 @@ function lerVenda(caminho) {
 }
 
 // ── Varredura do mês ────────────────────────────────────────────────────────
-function pastaDoMes(d) {
-  return path.join(RAIZ_XML, String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0'));
+function pastaDoMes(raiz, d) {
+  return path.join(raiz, String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0'));
 }
 
 // Percorre o mês INTEIRO, não só "Emitidos". O layout de pastas do Eclética
@@ -198,31 +202,46 @@ function motivoDescarte(caminho) {
 }
 
 function apurarDia(dataAlvo, diag) {
-  const dir = pastaDoMes(new Date(dataAlvo + 'T12:00:00'));
-  if (diag) { diag.pasta = dir; diag.pastaExiste = fs.existsSync(dir); diag.motivos = {}; diag.datas = {}; diag.arquivos = 0; }
-  if (!fs.existsSync(dir)) return {};
+  const mes = new Date(dataAlvo + 'T12:00:00');
+  const dirs = RAIZES_XML.map((raiz) => pastaDoMes(raiz, mes));
+  const existentes = dirs.filter((d) => fs.existsSync(d));
+  if (diag) {
+    diag.pastas = dirs; diag.pasta = dirs.join(' ; ');
+    diag.pastaExiste = existentes.length > 0; diag.pastasExistentes = existentes;
+    diag.motivos = {}; diag.datas = {}; diag.arquivos = 0; diag.repetidas = 0;
+  }
+  if (!existentes.length) return {};
 
   const vendas = [];
   const cancelados = new Set();
-  let ignorados = 0;
-  for (const caminho of xmlsDaArvore(dir)) {
-    if (diag) diag.arquivos++;
-    let r = null;
-    try { r = lerArquivo(caminho); } catch (e) {
-      ignorados++;
-      if (diag) diag.motivos[`erro de leitura: ${e.message}`] = (diag.motivos[`erro de leitura: ${e.message}`] || 0) + 1;
-      continue;
+  // A MESMA nota aparece em mais de um lugar: nas duas árvores de XML, e ainda
+  // numa cópia do destinatário. Sem deduplicar por chave da NFC-e, ler as duas
+  // pastas dobraria o faturamento — o erro exato que ler uma só evitava.
+  const vistas = new Set();
+  let ignorados = 0, repetidas = 0;
+  for (const dir of existentes) {
+    for (const caminho of xmlsDaArvore(dir)) {
+      if (diag) diag.arquivos++;
+      let r = null;
+      try { r = lerArquivo(caminho); } catch (e) {
+        ignorados++;
+        if (diag) diag.motivos[`erro de leitura: ${e.message}`] = (diag.motivos[`erro de leitura: ${e.message}`] || 0) + 1;
+        continue;
+      }
+      if (!r) {
+        ignorados++;
+        if (diag) { const m = motivoDescarte(caminho); diag.motivos[m] = (diag.motivos[m] || 0) + 1; }
+        continue;
+      }
+      if (r.tipo === 'cancelamento') { cancelados.add(r.chave); continue; }
+      if (r.chave && vistas.has(r.chave)) { repetidas++; continue; }
+      if (r.chave) vistas.add(r.chave);
+      if (diag) diag.datas[r.data] = (diag.datas[r.data] || 0) + 1;
+      if (r.data !== dataAlvo) continue;           // outro dia do mesmo mês
+      vendas.push(r);
     }
-    if (!r) {
-      ignorados++;
-      if (diag) { const m = motivoDescarte(caminho); diag.motivos[m] = (diag.motivos[m] || 0) + 1; }
-      continue;
-    }
-    if (r.tipo === 'cancelamento') { cancelados.add(r.chave); continue; }
-    if (diag) diag.datas[r.data] = (diag.datas[r.data] || 0) + 1;
-    if (r.data !== dataAlvo) continue;             // outro dia do mesmo mês
-    vendas.push(r);
   }
+  if (diag) diag.repetidas = repetidas;
 
   // O cancelamento só é conhecido depois de varrer tudo — por isso o filtro
   // vem aqui, e não dentro do laço: a nota costuma ser lida antes do evento.
@@ -268,8 +287,8 @@ async function ciclo() {
       // Distinguir os dois casos aqui é o que evita a tarde perdida: "a pasta
       // nem existe" e "existe mas nada passou nos filtros" parecem idênticos
       // na tela e têm soluções opostas.
-      if (!diag.pastaExiste) log(`⚠️  a pasta do mês não existe: ${diag.pasta} — confira ECLETICA_XML no iniciar.bat`);
-      else if (!diag.arquivos) log(`⚠️  ${diag.pasta} existe mas está vazia`);
+      if (!diag.pastaExiste) log(`⚠️  nenhuma pasta do mês existe (${diag.pasta}) — confira ECLETICA_XML no iniciar.bat`);
+      else if (!diag.arquivos) log(`⚠️  ${diag.pastasExistentes.join(' ; ')} existe mas está vazia`);
       else log(`nenhuma venda em ${hoje} ainda (${diag.arquivos} XML no mês; rode "node agent.js --diagnostico" pra ver o porquê)`);
       return;
     }
@@ -286,8 +305,8 @@ function diagnostico(dataAlvo) {
   const diag = {};
   const porEmpresa = apurarDia(dataAlvo, diag);
   console.log(`\n=== Diagnóstico do dia ${dataAlvo} ===`);
-  console.log(`Pasta do mês : ${diag.pasta}`);
-  console.log(`Existe?      : ${diag.pastaExiste ? 'SIM' : 'NÃO — é por isso que não aparece venda nenhuma'}`);
+  diag.pastas.forEach((d) => console.log(`Pasta do mês : ${d}   ${fs.existsSync(d) ? '[existe]' : '[NÃO existe]'}`));
+  console.log(`Alguma existe: ${diag.pastaExiste ? 'SIM' : 'NÃO — é por isso que não aparece venda nenhuma'}`);
   if (!diag.pastaExiste) {
     console.log('\nAbra o Explorador de Arquivos nesse caminho. Se ele não existir, o');
     console.log('Eclética grava os XML em outro lugar — ache a pasta certa e ajuste a');
@@ -295,6 +314,7 @@ function diagnostico(dataAlvo) {
     return;
   }
   console.log(`XML na árvore: ${diag.arquivos}`);
+  if (diag.repetidas) console.log(`Notas repetidas entre as pastas, contadas uma vez só: ${diag.repetidas}`);
   const datas = Object.entries(diag.datas).sort();
   console.log(`\nVendas válidas por data (as 10 mais recentes):`);
   if (!datas.length) console.log('  nenhuma — todos os arquivos foram descartados, ver abaixo');
@@ -326,7 +346,7 @@ if (executadoDireto) {
     console.error('SEAMA_SERVICE_SECRET não configurado — veja iniciar.bat');
     process.exit(1);
   }
-  log(`Ponte Eclética → Gestão iniciada. Lendo ${RAIZ_XML} a cada ${INTERVALO / 60000} min.`);
+  log(`Ponte Eclética → Gestão iniciada. Lendo ${RAIZES_XML.join(' e ')} a cada ${INTERVALO / 60000} min.`);
   ciclo();
   setInterval(ciclo, INTERVALO);
 }

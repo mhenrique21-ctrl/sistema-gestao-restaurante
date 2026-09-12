@@ -10,7 +10,8 @@ REM TROQUE a linha abaixo pelo valor real antes de usar.
 set SEAMA_SERVICE_SECRET=COLE_O_SEGREDO_AQUI
 
 REM Onde o Ecletica grava os XML. Mude so se a instalacao for em outro lugar.
-set ECLETICA_XML=C:\WinecIt\ArquivosSistema\XmlVenda2
+REM As duas arvores de XML da instalacao real, separadas por ";".
+set ECLETICA_XML=C:\Wineclt\ArquivosSistema\XmlVenda;C:\Wineclt\ArquivosSistema\XmlVenda2
 
 REM De quanto em quanto tempo reenvia o total do dia.
 set INTERVALO_MIN=2

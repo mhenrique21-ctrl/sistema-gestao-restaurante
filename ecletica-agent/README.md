@@ -23,7 +23,7 @@ Para conferir se chegou: no servidor, `pm2 logs app-gestao` mostra uma linha
 | Variável | Padrão | Para quê |
 |---|---|---|
 | `SEAMA_SERVICE_SECRET` | — | **Obrigatória.** Mesmo segredo do `.env` do servidor |
-| `ECLETICA_XML` | `C:\WinecIt\ArquivosSistema\XmlVenda2` | Raiz dos XML |
+| `ECLETICA_XML` | `...\XmlVenda;...\XmlVenda2` | Raízes dos XML, separadas por `;` |
 | `GESTAO_URL` | `https://gestao.confrariacafe.com` | Servidor do Gestão |
 | `INTERVALO_MIN` | `2` | De quanto em quanto tempo reenvia o dia |
 | `CNPJ_SEAMA` | — | Só se o mesmo PC emitir pela Seama também |
@@ -42,6 +42,17 @@ venda do mesmo dia: o `delivery-backend` (origem `pdv`) e este agente (origem
 se apagariam a cada ciclo e o faturamento do dia ficaria alternando entre um
 número e outro — sem erro nenhum em log, porque cada gravação isolada está
 certa. Na tela de Vendas aparecem duas linhas no dia, e o total soma as duas.
+
+**Ele lê DUAS pastas e deduplica por chave.** A instalação real tem
+`C:\Wineclt\ArquivosSistema\XmlVenda` e `...\XmlVenda2` lado a lado, as duas com
+árvore `ano\mês`, e não dá pra prever qual recebe a nota do dia — apontar pra
+uma só faz venda sumir em silêncio. Como a mesma nota aparece em mais de um
+arquivo (nas duas árvores, e ainda em `NFCe\XmlDestinatario`), a soma é
+deduplicada pela chave da NFC-e: ler duas pastas sem isso dobraria o
+faturamento. Para acrescentar outra pasta, separe por `;`.
+
+⚠️ Nunca aponte para uma pasta de **backup** (ex.: `Desktop\BKP Cafeteria\...`):
+notas antigas entrariam no faturamento de hoje.
 
 **O total sai de `<total><ICMSTot><vNF>`.** Existe um `<vProd>` dentro de cada
 item também; pegar "o primeiro do documento" traria o valor do primeiro produto

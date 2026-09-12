@@ -146,6 +146,40 @@ test('venda cancelada fica fora do faturamento', async (t) => {
     assert.equal(apurar('2026-09-11').CONFRARIA.total, 50);
   });
 
+  await t.test('a mesma nota nas duas árvores de XML conta uma vez só', async () => {
+    // A instalação real tem XmlVenda e XmlVenda2 lado a lado, e ainda uma cópia
+    // do destinatário — a mesma venda aparece em mais de um arquivo. Ler as duas
+    // pastas sem deduplicar por chave dobraria o faturamento do dia.
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ecletica-2raizes-'));
+    const a = path.join(base, 'XmlVenda', '2026', '09', 'Emitidos');
+    const b = path.join(base, 'XmlVenda2', '2026', '09', 'Emitidos');
+    fs.mkdirSync(a, { recursive: true });
+    fs.mkdirSync(b, { recursive: true });
+    const nota = (chave, vNF) => nfce({ vNF, infCpl: 'sem gorjeta', pags: [{ tPag: '01', vPag: vNF }], vTroco: '0.00' }).replace(CHAVE, chave);
+
+    // A MESMA nota (mesma chave) escrita nas duas pastas.
+    fs.writeFileSync(path.join(a, 'n1.xml'), nota('7'.repeat(44), '40.00'));
+    fs.writeFileSync(path.join(b, 'n1-copia.xml'), nota('7'.repeat(44), '40.00'));
+    // E uma que só existe na segunda — essa não pode ser perdida.
+    fs.writeFileSync(path.join(b, 'n2.xml'), nota('8'.repeat(44), '10.00'));
+
+    const envAntes = process.env.ECLETICA_XML;
+    try {
+      process.env.ECLETICA_XML = `${path.join(base, 'XmlVenda')};${path.join(base, 'XmlVenda2')}`;
+      const { apurarDia: apurar } = await import(`./agent.js?raizes=${Date.now()}`);
+      const diag = {};
+      const r = apurar('2026-09-11', diag);
+
+      assert.equal(r.CONFRARIA.total, 50, '40 + 10 — a cópia da primeira não pode somar de novo');
+      assert.equal(r.CONFRARIA.vendas, 2);
+      assert.equal(diag.repetidas, 1, 'a repetida foi contada como repetida, não descartada em silêncio');
+    } finally {
+      // O módulo lê ECLETICA_XML no import; deixar o valor trocado faria o
+      // próximo teste (que reimporta) olhar pra árvore errada.
+      process.env.ECLETICA_XML = envAntes;
+    }
+  });
+
   await t.test('o diagnóstico separa "pasta não existe" de "nada passou nos filtros"', async () => {
     // Os dois casos produzem exatamente a mesma tela ("nenhuma venda hoje") e
     // pedem soluções opostas: um é caminho errado no iniciar.bat, o outro é
