@@ -2877,7 +2877,7 @@ function Dashboard({db,setDb,setDbAndSave,onNavigate,setPendingSub}:{db:any,setD
       // --- Supervisão do PDV ---
       const diasSemRegistro=vendasDiarias.filter(d=>d.total===0&&d.data<=hj);
       const anomalias=vendasDiarias.filter(d=>d.total>0&&fatMedioDia>0&&d.total<fatMedioDia*0.5).sort((a,b)=>a.total-b.total);
-      const comOrigemPdv=vendasPeriodo.filter(v=>v.origem==="pdv").length;
+      const comOrigemPdv=vendasPeriodo.filter(v=>ehOrigemPdv(v)).length;
       const totalRegistrosVendas=vendasPeriodo.length;
       const pctOrigemPdv=totalRegistrosVendas>0?(comOrigemPdv/totalRegistrosVendas)*100:0;
 
@@ -3616,7 +3616,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
       return <div key={v.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-          <span style={{fontWeight:700}}>{fmtDate(v.data)}{v.origem&&v.origem!=="manual"&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>({v.origem==="pdv"?"PDV":v.origem==="recibo_venda"?"recibo de venda":v.origem==="recibo"?"recibo de entrega":v.origem})</span>}</span>
+          <span style={{fontWeight:700}}>{fmtDate(v.data)}{v.origem&&v.origem!=="manual"&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>({rotuloOrigem(v.origem)})</span>}</span>
           <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(v.total)}</span>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
@@ -19254,6 +19254,14 @@ const mergeVendasDoDia=(vendas:any[],data:string):any=>{
 // origem (ex.: a busca do recibo caindo no registro manual do dia), fazendo
 // o valor "não aparecer" onde devia ou sumir de onde estava.
 const origemVenda=(v:any)=>v.origem||"manual";
+// Vendas sincronizadas de fora chegam como "pdv" (delivery-backend/PDV Seama)
+// ou "pdv_<fonte>" quando há mais de um emissor na mesma empresa — hoje
+// "pdv_ecletica", o caixa do Eclética Food da cafeteria. Cada fonte tem
+// registro próprio de propósito (o endpoint SUBSTITUI o registro do dia, então
+// duas fontes na mesma origem se apagariam); quem quer saber "veio de sistema,
+// não foi digitado" tem que aceitar as duas formas.
+const ehOrigemPdv=(v:any)=>origemVenda(v)==="pdv"||origemVenda(v).startsWith("pdv_");
+const rotuloOrigem=(o:string)=>o==="pdv"?"PDV":o==="recibo_venda"?"recibo de venda":o==="recibo"?"recibo de entrega":o.startsWith("pdv_")?`PDV ${o.slice(4).replace(/^./,c=>c.toUpperCase())}`:o;
 const vendaDoDia=(vendas:any[],data:string,origem?:string)=>(vendas||[]).find((v:any)=>v.data===data&&origemVenda(v)===(origem||"manual"));
 // Junta duplicatas do dia DENTRO da mesma origem (duas entradas manuais pro
 // mesmo dia, por exemplo) antes de escrever — nunca junta origens

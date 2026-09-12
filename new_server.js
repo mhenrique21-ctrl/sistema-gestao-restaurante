@@ -1822,10 +1822,21 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
         }
 
-        const { empresa, data, dinheiro, maquininha, delivery, total, porHora } = JSON.parse(body);
+        const { empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte } = JSON.parse(body);
         const emp = String(empresa || '').toUpperCase();
         if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
+
+        // Mais de um sistema manda venda da MESMA empresa no MESMO dia: o
+        // delivery-backend da Confraria (comanda/balcão/delivery) e o agente do
+        // Eclética Food (caixa da cafeteria). Como este endpoint SUBSTITUI o
+        // registro inteiro, os dois com a mesma origem se sobrescreveriam a cada
+        // ciclo — o faturamento do dia ficaria alternando entre um número e
+        // outro, sem erro visível em lugar nenhum. "fonte" dá uma origem própria
+        // a cada emissor; quem não manda fonte continua sendo "pdv", exatamente
+        // como antes (o delivery-backend e o PDV Seama não precisam mudar).
+        const fonteLimpa = String(fonte || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+        const origem = fonteLimpa && fonteLimpa !== 'pdv' ? `pdv_${fonteLimpa}` : 'pdv';
 
         const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
         // Opcional — só o PDV Seama manda isso por enquanto. Item fora do
@@ -1846,9 +1857,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         // dobrariam o faturamento do mês em silêncio.
         // origem:"pdv" separa o que veio daqui do que foi digitado à mão — uma
         // venda lançada manualmente na tela nunca é sobrescrita por este envio.
-        const i = vendas.findIndex(v => v && v.data === data && v.origem === 'pdv');
+        const i = vendas.findIndex(v => v && v.data === data && v.origem === origem);
         const reg = {
-          id: i >= 0 ? vendas[i].id : `pdv-${emp.toLowerCase()}-${data}`,
+          id: i >= 0 ? vendas[i].id : `${origem.replace('_', '-')}-${emp.toLowerCase()}-${data}`,
           data,
           total: num(total),
           maquininha: num(maquininha),
@@ -1859,7 +1870,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           // o PDV Seama não separa delivery, então chega undefined e cai no 0.
           delivery: num(delivery),
           porHora: porHoraLimpo,
-          origem: 'pdv',
+          origem,
           criadoEm: i >= 0 ? (vendas[i].criadoEm || agora) : agora,
           atualizadoEm: agora,
         };
@@ -1867,7 +1878,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
 
         doc.vendas = vendas;
         fs.writeFileSync(file, JSON.stringify(doc));
-        console.log(`[venda-pdv] OK — ${emp} ${data}: total=${reg.total} (${i >= 0 ? 'atualizado' : 'criado'})`);
+        console.log(`[venda-pdv] OK — ${emp} ${data} [${origem}]: total=${reg.total} (${i >= 0 ? 'atualizado' : 'criado'})`);
         res.setHeader('Content-Type', 'application/json');
         res.writeHead(200);
         res.end(JSON.stringify({ ok: true, acao: i >= 0 ? 'atualizado' : 'criado', data, total: reg.total }));

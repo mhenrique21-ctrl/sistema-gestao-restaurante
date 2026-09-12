@@ -131,6 +131,23 @@ describe('mergeArrayById', () => {
     assert.equal(resultOrdem2[0].id, 'frag-recente', 'trocar a ordem do array não pode trocar o vencedor');
   });
 
+  test('duas fontes automáticas no mesmo dia e na mesma empresa coexistem', () => {
+    // A Confraria tem DOIS emissores mandando venda pro mesmo dia: o
+    // delivery-backend (comanda/balcão/delivery, origem "pdv") e o agente do
+    // Eclética Food, o caixa da cafeteria (origem "pdv_ecletica"). /api/venda-pdv
+    // SUBSTITUI o registro do dia, então se os dois usassem a mesma origem um
+    // apagaria o outro a cada ciclo e o faturamento do dia ficaria oscilando —
+    // sem erro em log nenhum, porque cada gravação isolada está "correta".
+    const delivery = venda('pdv-confraria-2026-08-24', { origem: 'pdv', delivery: 200, atualizadoEm: '2026-08-24T09:05:00.000Z' });
+    const caixa = venda('pdv-ecletica-confraria-2026-08-24', { origem: 'pdv_ecletica', maquininha: 700, atualizadoEm: '2026-08-24T09:06:00.000Z' });
+
+    const result = mergeArrayById([delivery], [caixa], new Set(), true);
+
+    assert.equal(result.length, 2, 'origens diferentes são entidades diferentes, mesmo as duas sendo automáticas');
+    assert.equal(result.find((v) => v.origem === 'pdv').delivery, 200);
+    assert.equal(result.find((v) => v.origem === 'pdv_ecletica').maquininha, 700);
+  });
+
   test('vendas: reenvio do PDV pro mesmo dia atualiza a própria linha, sem duplicar nem afetar a manual', () => {
     const manual = venda('manual-1', { atualizadoEm: '2026-08-24T09:00:00.000Z' });
     const pdvAntigo = venda('pdv-confraria-2026-08-24', { origem: 'pdv', delivery: 30, atualizadoEm: '2026-08-24T09:05:00.000Z' });
