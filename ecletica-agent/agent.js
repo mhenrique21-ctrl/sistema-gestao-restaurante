@@ -174,18 +174,49 @@ function* xmlsDaArvore(dir) {
   }
 }
 
-function apurarDia(dataAlvo) {
+// Por que cada arquivo foi descartado. Sem isso, "nenhuma venda hoje" é
+// indistinguível de "a pasta do mês nem existe" e de "li 300 notas e recusei
+// todas por CNPJ" — três problemas com soluções completamente diferentes, e o
+// mesmo silêncio na tela. Perder uma tarde nisso é o padrão.
+function motivoDescarte(caminho) {
+  let texto = '';
+  try { texto = fs.readFileSync(caminho, 'utf8'); } catch (e) { return `ilegível (${e.code || e.message})`; }
+  const doc = new DOMParser({ errorHandler: {} }).parseFromString(texto, 'text/xml');
+  const t = (n) => { const e = doc.getElementsByTagName(n)[0]; return e && e.textContent ? e.textContent.trim() : ''; };
+  if (t('tpEvento')) return `evento ${t('tpEvento')} (não é venda)`;
+  const mod = t('mod');
+  if (!mod) return 'sem <mod> — não parece uma NF';
+  if (mod !== '65') return `modelo ${mod} (só modelo 65 é venda do caixa)`;
+  const cStat = t('cStat');
+  if (cStat !== '100') return `cStat ${cStat || '(ausente)'} — nota não autorizada`;
+  const cnpj = (() => { const e = doc.getElementsByTagName('emit')[0]; return e ? (e.getElementsByTagName('CNPJ')[0]?.textContent || '').trim() : ''; })();
+  if (!CNPJ_EMPRESA[cnpj]) return `CNPJ ${cnpj || '(ausente)'} não está no mapa de empresas`;
+  return 'motivo desconhecido';
+}
+
+function apurarDia(dataAlvo, diag) {
   const dir = pastaDoMes(new Date(dataAlvo + 'T12:00:00'));
+  if (diag) { diag.pasta = dir; diag.pastaExiste = fs.existsSync(dir); diag.motivos = {}; diag.datas = {}; diag.arquivos = 0; }
   if (!fs.existsSync(dir)) return {};
 
   const vendas = [];
   const cancelados = new Set();
   let ignorados = 0;
   for (const caminho of xmlsDaArvore(dir)) {
+    if (diag) diag.arquivos++;
     let r = null;
-    try { r = lerArquivo(caminho); } catch { ignorados++; continue; }
-    if (!r) { ignorados++; continue; }
+    try { r = lerArquivo(caminho); } catch (e) {
+      ignorados++;
+      if (diag) diag.motivos[`erro de leitura: ${e.message}`] = (diag.motivos[`erro de leitura: ${e.message}`] || 0) + 1;
+      continue;
+    }
+    if (!r) {
+      ignorados++;
+      if (diag) { const m = motivoDescarte(caminho); diag.motivos[m] = (diag.motivos[m] || 0) + 1; }
+      continue;
+    }
     if (r.tipo === 'cancelamento') { cancelados.add(r.chave); continue; }
+    if (diag) diag.datas[r.data] = (diag.datas[r.data] || 0) + 1;
     if (r.data !== dataAlvo) continue;             // outro dia do mesmo mês
     vendas.push(r);
   }
@@ -228,8 +259,17 @@ async function enviar(empresa, data, acc) {
 async function ciclo() {
   const hoje = new Date().toLocaleDateString('sv-SE');   // YYYY-MM-DD local
   try {
-    const porEmpresa = apurarDia(hoje);
-    if (!Object.keys(porEmpresa).length) { log(`nenhuma venda em ${hoje} ainda`); return; }
+    const diag = {};
+    const porEmpresa = apurarDia(hoje, diag);
+    if (!Object.keys(porEmpresa).length) {
+      // Distinguir os dois casos aqui é o que evita a tarde perdida: "a pasta
+      // nem existe" e "existe mas nada passou nos filtros" parecem idênticos
+      // na tela e têm soluções opostas.
+      if (!diag.pastaExiste) log(`⚠️  a pasta do mês não existe: ${diag.pasta} — confira ECLETICA_XML no iniciar.bat`);
+      else if (!diag.arquivos) log(`⚠️  ${diag.pasta} existe mas está vazia`);
+      else log(`nenhuma venda em ${hoje} ainda (${diag.arquivos} XML no mês; rode "node agent.js --diagnostico" pra ver o porquê)`);
+      return;
+    }
     for (const [empresa, acc] of Object.entries(porEmpresa)) {
       try { await enviar(empresa, hoje, acc); }
       catch (e) { log(`❌ falha ao enviar ${empresa}: ${e.message}`); }
@@ -237,12 +277,48 @@ async function ciclo() {
   } catch (e) { log(`❌ erro no ciclo: ${e.message}`); }
 }
 
-export { lerArquivo, lerVenda, apurarDia, ciclo };
+// Responde "por que não apareceu nada" sem precisar de mais nenhuma ferramenta
+// no computador do caixa: node agent.js --diagnostico [AAAA-MM-DD]
+function diagnostico(dataAlvo) {
+  const diag = {};
+  const porEmpresa = apurarDia(dataAlvo, diag);
+  console.log(`\n=== Diagnóstico do dia ${dataAlvo} ===`);
+  console.log(`Pasta do mês : ${diag.pasta}`);
+  console.log(`Existe?      : ${diag.pastaExiste ? 'SIM' : 'NÃO — é por isso que não aparece venda nenhuma'}`);
+  if (!diag.pastaExiste) {
+    console.log('\nAbra o Explorador de Arquivos nesse caminho. Se ele não existir, o');
+    console.log('Eclética grava os XML em outro lugar — ache a pasta certa e ajuste a');
+    console.log('linha "set ECLETICA_XML=" dentro do iniciar.bat.');
+    return;
+  }
+  console.log(`XML na árvore: ${diag.arquivos}`);
+  const datas = Object.entries(diag.datas).sort();
+  console.log(`\nVendas válidas por data (as 10 mais recentes):`);
+  if (!datas.length) console.log('  nenhuma — todos os arquivos foram descartados, ver abaixo');
+  datas.slice(-10).forEach(([d, n]) => console.log(`  ${d}: ${n} venda(s)${d === dataAlvo ? '   <-- o dia procurado' : ''}`));
+  const motivos = Object.entries(diag.motivos).sort((a, b) => b[1] - a[1]);
+  if (motivos.length) {
+    console.log(`\nArquivos descartados, por motivo:`);
+    motivos.forEach(([m, n]) => console.log(`  ${n}x  ${m}`));
+  }
+  console.log(`\nTotal que seria enviado:`);
+  const linhas = Object.entries(porEmpresa);
+  if (!linhas.length) console.log('  nada');
+  linhas.forEach(([emp, a]) => console.log(`  ${emp}: R$ ${a.total.toFixed(2)} em ${a.vendas} venda(s)`));
+  console.log('');
+}
+
+export { lerArquivo, lerVenda, apurarDia, ciclo, diagnostico };
 
 // Só sobe o laço quando executado direto (node agent.js). Importado pelos
 // testes, apenas expõe as funções — senão a suíte ficaria postando de verdade.
 const executadoDireto = process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]));
 if (executadoDireto) {
+  if (process.argv.includes('--diagnostico')) {
+    const arg = process.argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
+    diagnostico(arg || new Date().toLocaleDateString('sv-SE'));
+    process.exit(0);
+  }
   if (!SECRET) {
     console.error('SEAMA_SERVICE_SECRET não configurado — veja iniciar.bat');
     process.exit(1);

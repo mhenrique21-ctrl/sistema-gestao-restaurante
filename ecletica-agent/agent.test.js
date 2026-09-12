@@ -146,6 +146,32 @@ test('venda cancelada fica fora do faturamento', async (t) => {
     assert.equal(apurar('2026-09-11').CONFRARIA.total, 50);
   });
 
+  await t.test('o diagnóstico separa "pasta não existe" de "nada passou nos filtros"', async () => {
+    // Os dois casos produzem exatamente a mesma tela ("nenhuma venda hoje") e
+    // pedem soluções opostas: um é caminho errado no iniciar.bat, o outro é
+    // filtro barrando nota boa. Sem essa distinção a busca começa do zero.
+    const { apurarDia: apurar } = await import(`./agent.js?diag=${Date.now()}`);
+
+    const vazio = {};
+    apurar('2019-01-01', vazio);
+    assert.equal(vazio.pastaExiste, false, 'mês sem pasta');
+
+    const cheio = {};
+    apurar('2026-09-11', cheio);
+    assert.equal(cheio.pastaExiste, true);
+    assert.ok(cheio.arquivos > 0, 'contou os XML da árvore');
+    assert.ok(cheio.datas['2026-09-11'] > 0, 'registrou as datas encontradas');
+
+    // Uma nota de outro CNPJ tem que aparecer com o motivo dito por extenso —
+    // é o erro mais provável na instalação (loja com mais de um emitente).
+    fs.writeFileSync(path.join(raiz, 'Emitidos', 'outra-empresa.xml'), nfce({ cnpj: '99999999999999' }));
+    const comOutro = {};
+    apurar('2026-09-11', comOutro);
+    const motivo = Object.keys(comOutro.motivos).find((m) => m.includes('99999999999999'));
+    assert.ok(motivo, `o motivo devia citar o CNPJ recusado, veio: ${JSON.stringify(comOutro.motivos)}`);
+    fs.unlinkSync(path.join(raiz, 'Emitidos', 'outra-empresa.xml'));
+  });
+
   await t.test('lerArquivo distingue os dois tipos de documento', () => {
     assert.equal(lerArquivo(escrever('ev.xml', evento())).tipo, 'cancelamento');
     assert.equal(lerArquivo(escrever('vd.xml', nfce())).tipo, 'venda');

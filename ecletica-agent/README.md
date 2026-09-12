@@ -62,6 +62,22 @@ formas diferentes e não dá pra saber de antemão qual o seu usa:
 Por isso a varredura percorre o **mês inteiro**, não só `Emitidos`: o evento de
 cancelamento não fica junto da nota, e o layout de pastas muda com a versão.
 
+## "Não aparece venda nenhuma"
+
+Dê dois cliques em `diagnostico.bat` (ou rode `node agent.js --diagnostico`).
+Ele não envia nada — só lê e mostra:
+
+- se a pasta do mês existe (se não existe, o `ECLETICA_XML` está errado);
+- quantos XML tem na árvore;
+- quais datas ele encontrou, com quantas vendas em cada;
+- **por que cada arquivo foi descartado**, contado por motivo.
+
+Para um dia específico: `diagnostico.bat 2026-09-11`.
+
+Isso existe porque "nenhuma venda hoje", "a pasta nem existe" e "li 300 notas e
+recusei todas por CNPJ" davam a mesma mensagem na tela — três problemas com
+soluções completamente diferentes.
+
 ## Testes
 
 ```bash
