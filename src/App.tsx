@@ -3267,6 +3267,28 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
 
   const outros=["maquininha","dinheiro"].reduce((s,m)=>s+parseMoney(form[m]||0),0)+deliveryValorExibir;
   const total=outros+ifoodLiq+nfoodLiq;
+
+  // O que JÁ foi lançado hoje por fonte automática (delivery-backend, Eclética).
+  // Esses registros são linhas separadas do dia — não aparecem nos campos deste
+  // formulário, que é só do lançamento manual. Sem avisar aqui, a tela mostra
+  // "Maquininha 0,00" enquanto existe dinheiro no dia: quem olha conclui que
+  // não sincronizou e digita o valor à mão, e aí o dia conta DUAS vezes (as
+  // linhas somam no Dashboard). O campo de Vendas Extras já tinha esse aviso
+  // pelo mesmo motivo; faltava para os outros canais.
+  const vendasAutomaticas=(db.vendas||[]).filter((v:any)=>v.data===form.data&&ehOrigemPdv(v)&&v.id!==editId);
+  const autoNoCampo=(campo:string)=>vendasAutomaticas.reduce((s:number,v:any)=>s+(v[campo]||0),0);
+  // O delivery sincronizado já é exibido no campo de Vendas Extras, então sai
+  // daqui pra não ser somado duas vezes na prévia.
+  const totalAutomatico=vendasAutomaticas.reduce((s:number,v:any)=>s+(v.total||0),0)
+    -(deliverySincronizado?(vendaSincronizada.delivery||0):0);
+  const avisoAutomatico=(campo:string)=>{
+    const v=autoNoCampo(campo);
+    if(v<=0)return null;
+    const fontes=Array.from(new Set(vendasAutomaticas.filter((x:any)=>(x[campo]||0)>0).map((x:any)=>rotuloOrigem(origemVenda(x)))));
+    return <div style={{fontSize:11,color:"var(--successText)",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 9px",marginTop:5,fontWeight:700}}>
+      🔄 {fontes.join(" + ")} já lançou {fmtMoney(v)} hoje, em linha própria — não repita aqui, os dois somam.
+    </div>;
+  };
   const totalRegistroManual=total-deliveryValorExibir+deliveryValorSalvar;
 
   const formDeRegistro=(v:any)=>({data:v.data,
@@ -3531,11 +3553,13 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </div>
         </div>}
       </div>
-      <LinhaCanal Icone={IconMaquininha} label={aj.legMaquininha} ontem={ontem("maquininha")} preenchido={parseMoney(form.maquininha||0)>0}>
+      <LinhaCanal Icone={IconMaquininha} label={aj.legMaquininha} ontem={ontem("maquininha")} preenchido={parseMoney(form.maquininha||0)>0||autoNoCampo("maquininha")>0}>
         <MoneyInput value={form.maquininha} onChange={v=>setForm(f=>({...f,maquininha:v}))} className="inp"/>
+        {avisoAutomatico("maquininha")}
       </LinhaCanal>
-      {aj.canalDinheiro&&<LinhaCanal Icone={IconDinheiro} label={aj.legDinheiro} ontem={ontem("dinheiro")} preenchido={parseMoney(form.dinheiro||0)>0}>
+      {aj.canalDinheiro&&<LinhaCanal Icone={IconDinheiro} label={aj.legDinheiro} ontem={ontem("dinheiro")} preenchido={parseMoney(form.dinheiro||0)>0||autoNoCampo("dinheiro")>0}>
         <MoneyInput value={form.dinheiro} onChange={v=>setForm(f=>({...f,dinheiro:v}))} className="inp"/>
+        {avisoAutomatico("dinheiro")}
       </LinhaCanal>}
       {aj.canalIfood&&<LinhaCanal Icone={IconIfood} label={aj.legIfood} ontem={ontem("ifood")} preenchido={ifoodBruto>0}>
         <div style={{display:"flex",gap:6}}>
@@ -3578,6 +3602,14 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 10px",fontWeight:700,fontSize:16}}>
         <span>{aj.legTotalLiquido}</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
       </div>
+      {totalAutomatico>0&&<div style={{margin:"-4px 0 10px",padding:"8px 10px",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text2)"}}>
+          <span>🔄 Lançado automaticamente (linhas próprias)</span><span>{fmtMoney(totalAutomatico)}</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:14,marginTop:4,color:"var(--successText)"}}>
+          <span>Total do dia</span><span>{fmtMoney(total+totalAutomatico)}</span>
+        </div>
+      </div>}
       <button className="btn" onClick={save} style={{background:saved?"#22C55E":"var(--btnPrimary)",color:saved?"#051208":"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",fontSize:15,transition:"background .15s ease"}}>{saved?"✓ Salvo":editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
       {editId&&<div style={{display:"flex",gap:8,marginTop:8}}>
         <button className="btn" onClick={()=>{
