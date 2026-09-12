@@ -1822,7 +1822,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
         }
 
-        const { empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte } = JSON.parse(body);
+        const { empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte, formas } = JSON.parse(body);
         const emp = String(empresa || '').toUpperCase();
         if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
@@ -1842,6 +1842,19 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         // Opcional — só o PDV Seama manda isso por enquanto. Item fora do
         // formato esperado (hora 0-23, valor numérico) é descartado em vez
         // de derrubar a requisição inteira.
+        // Detalhamento por forma de pagamento (hoje só o agente do Eclética manda).
+        // "pendura" é venda fiada: soma no total do dia, mas de propósito NÃO
+        // entra em dinheiro nem em maquininha — não é dinheiro na gaveta nem
+        // valor a conferir no extrato do cartão. Mesma regra do delivery-backend.
+        const FORMAS_PGTO = ['dinheiro', 'credito', 'debito', 'pix', 'pendura', 'outros'];
+        const formasLimpas = formas && typeof formas === 'object'
+          ? FORMAS_PGTO.reduce((acc, f) => {
+              const n = parseFloat(formas[f]);
+              if (Number.isFinite(n) && n > 0) acc[f] = n;
+              return acc;
+            }, {})
+          : null;
+
         const porHoraLimpo = Array.isArray(porHora)
           ? porHora
               .filter(h => h && Number.isInteger(h.hora) && h.hora >= 0 && h.hora <= 23)
@@ -1870,6 +1883,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           // o PDV Seama não separa delivery, então chega undefined e cai no 0.
           delivery: num(delivery),
           porHora: porHoraLimpo,
+          // Só grava quando veio algo — assim um emissor que não manda formas
+          // não apaga o detalhamento de quem manda ao reenviar o dia.
+          ...(formasLimpas && Object.keys(formasLimpas).length ? { formas: formasLimpas } : {}),
           origem,
           criadoEm: i >= 0 ? (vendas[i].criadoEm || agora) : agora,
           atualizadoEm: agora,

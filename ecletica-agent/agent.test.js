@@ -75,6 +75,65 @@ test('ponte Eclética → Gestão', async (t) => {
       'venda de outra empresa não pode entrar no faturamento desta');
   });
 
+  await t.test('cada forma de pagamento cai na sua coluna', () => {
+    const caso = (tPag) => lerVenda(escrever(`f-${tPag}.xml`, nfce({
+      vNF: '100.00', infCpl: 'sem gorjeta', vTroco: '0.00', pags: [{ tPag, vPag: '100.00' }],
+    })));
+    assert.equal(caso('01').formas.dinheiro, 100, 'dinheiro');
+    assert.equal(caso('03').formas.credito, 100, 'cartão de crédito');
+    assert.equal(caso('04').formas.debito, 100, 'cartão de débito');
+    assert.equal(caso('17').formas.pix, 100, 'PIX dinâmico');
+    assert.equal(caso('20').formas.pix, 100, 'PIX estático');
+  });
+
+  await t.test('pendura entra no total mas fica fora de dinheiro e maquininha', () => {
+    // Regra herdada do delivery-backend: fiado é venda faturada com recebimento
+    // adiado. Está no número que o caixa vê ao fechar, mas não é dinheiro na
+    // gaveta nem valor a conferir no extrato do cartão — jogá-lo na maquininha
+    // estouraria a conferência contra a operadora todo mês.
+    const v = lerVenda(escrever('pendura.xml', nfce({
+      vNF: '30.00', infCpl: 'sem gorjeta', vTroco: '0.00', pags: [{ tPag: '05', vPag: '30.00' }],
+    })));
+    assert.equal(v.total, 30, 'a venda aconteceu: entra no total do dia');
+    assert.equal(v.formas.pendura, 30);
+    assert.equal(v.canais.dinheiro, 0, 'não entrou na gaveta');
+    assert.equal(v.canais.maquininha, 0, 'não vai aparecer no extrato do cartão');
+  });
+
+  await t.test('venda parte no cartão e parte na pendura divide certo', () => {
+    const v = lerVenda(escrever('misto.xml', nfce({
+      vNF: '100.00', infCpl: 'sem gorjeta', vTroco: '0.00',
+      pags: [{ tPag: '04', vPag: '60.00' }, { tPag: '05', vPag: '40.00' }],
+    })));
+    assert.equal(v.formas.debito, 60);
+    assert.equal(v.formas.pendura, 40);
+    assert.equal(v.canais.maquininha, 60, 'só os 60 do débito vão pro extrato');
+    assert.equal(v.canais.dinheiro, 0);
+    assert.equal(v.total, 100, 'o total do dia continua sendo a venda inteira');
+  });
+
+  await t.test('ECLETICA_TPAG reconfigura um código sem mexer no código-fonte', async () => {
+    // O Eclética pode usar um tPag fora do óbvio pra alguma forma da tela do
+    // caixa. Descobrir isso não pode exigir alterar o agente e reinstalar.
+    const antes = process.env.ECLETICA_TPAG;
+    try {
+      process.env.ECLETICA_TPAG = '05=credito,99=pendura';
+      const { lerVenda: ler } = await import(`./agent.js?tpag=${Date.now()}`);
+      const v = ler(escrever('tpag-05.xml', nfce({
+        vNF: '50.00', infCpl: 'sem gorjeta', vTroco: '0.00', pags: [{ tPag: '05', vPag: '50.00' }],
+      })));
+      assert.equal(v.formas.credito, 50, '05 passou a ser crédito');
+      assert.equal(v.canais.maquininha, 50, 'e agora entra no balde eletrônico');
+      const w = ler(escrever('tpag-99.xml', nfce({
+        vNF: '50.00', infCpl: 'sem gorjeta', vTroco: '0.00', pags: [{ tPag: '99', vPag: '50.00' }],
+      })));
+      assert.equal(w.formas.pendura, 50, '99 passou a ser pendura');
+      assert.equal(w.canais.maquininha, 0);
+    } finally {
+      if (antes === undefined) delete process.env.ECLETICA_TPAG; else process.env.ECLETICA_TPAG = antes;
+    }
+  });
+
   await t.test('a data vem do dhEmi local, sem conversão de fuso', () => {
     // Venda às 23h com fuso -03:00: new Date().toISOString() jogaria pro dia
     // seguinte e o faturamento cairia na data errada.

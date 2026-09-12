@@ -3281,12 +3281,17 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   // daqui pra não ser somado duas vezes na prévia.
   const totalAutomatico=vendasAutomaticas.reduce((s:number,v:any)=>s+(v.total||0),0)
     -(deliverySincronizado?(vendaSincronizada.delivery||0):0);
+  const penduraAutomatica=vendasAutomaticas.reduce((s:number,v:any)=>s+((v.formas&&v.formas.pendura)||0),0);
   const avisoAutomatico=(campo:string)=>{
     const v=autoNoCampo(campo);
     if(v<=0)return null;
     const fontes=Array.from(new Set(vendasAutomaticas.filter((x:any)=>(x[campo]||0)>0).map((x:any)=>rotuloOrigem(origemVenda(x)))));
+    const detalhe=vendasAutomaticas.flatMap((x:any)=>formasDaVenda(x))
+      .filter(f=>BALDE_DA_FORMA[f[0]]===campo)
+      .map(f=>`${f[1]} ${fmtMoney(f[2])}`).join(" + ");
     return <div style={{fontSize:11,color:"var(--successText)",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 9px",marginTop:5,fontWeight:700}}>
       🔄 {fontes.join(" + ")} já lançou {fmtMoney(v)} hoje, em linha própria — não repita aqui, os dois somam.
+      {detalhe&&<div style={{fontWeight:400,marginTop:2}}>{detalhe}</div>}
     </div>;
   };
   const totalRegistroManual=total-deliveryValorExibir+deliveryValorSalvar;
@@ -3606,6 +3611,9 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text2)"}}>
           <span>🔄 Lançado automaticamente (linhas próprias)</span><span>{fmtMoney(totalAutomatico)}</span>
         </div>
+        {penduraAutomatica>0.005&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--warningText)",marginTop:2}}>
+          <span>dos quais pendura (a receber)</span><span>{fmtMoney(penduraAutomatica)}</span>
+        </div>}
         <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:14,marginTop:4,color:"var(--successText)"}}>
           <span>Total do dia</span><span>{fmtMoney(total+totalAutomatico)}</span>
         </div>
@@ -3662,6 +3670,16 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </span>}
           {v.delivery>0&&<span className="tag" style={{background:"#F3E8DC",color:"#78350F"}}>vendas extras: {fmtMoney(v.delivery)}</span>}
         </div>
+        {formasDaVenda(v).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8,alignItems:"center"}}>
+          <span style={{fontSize:10,color:"var(--text3)",fontWeight:700}}>FORMAS:</span>
+          {formasDaVenda(v).map(([k,label,val])=>
+            <span key={k} className="tag" style={k==="pendura"
+              ?{background:"var(--warningBg)",color:"var(--warningText)",fontWeight:700}
+              :{background:"var(--bg)",color:"var(--text2)"}}>{label}: {fmtMoney(val)}</span>)}
+          {(v.formas?.pendura||0)>0.005&&<span style={{fontSize:10,color:"var(--warningText)"}}>
+            a receber — no total, fora de dinheiro/maquininha
+          </span>}
+        </div>}
         {cDia>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
           <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>
         </div>}
@@ -19293,6 +19311,15 @@ const origemVenda=(v:any)=>v.origem||"manual";
 // duas fontes na mesma origem se apagariam); quem quer saber "veio de sistema,
 // não foi digitado" tem que aceitar as duas formas.
 const ehOrigemPdv=(v:any)=>origemVenda(v)==="pdv"||origemVenda(v).startsWith("pdv_");
+// Detalhamento por forma de pagamento vindo do PDV (hoje o agente do Eclética).
+// "pendura" é venda fiada: está no total do dia, mas de propósito NÃO está em
+// maquininha nem em dinheiro — não é dinheiro na gaveta nem valor a conferir no
+// extrato do cartão. É o que faz a soma das etiquetas parecer "faltar" um
+// pedaço, e por isso ela vem com aviso escrito em vez de só uma cor.
+const FORMAS_PGTO:[string,string][]=[["dinheiro","dinheiro"],["credito","crédito"],["debito","débito"],["pix","PIX"],["pendura","pendura"],["outros","outros"]];
+const BALDE_DA_FORMA:Record<string,string|null>={dinheiro:"dinheiro",credito:"maquininha",debito:"maquininha",pix:"maquininha",outros:"maquininha",pendura:null};
+const formasDaVenda=(v:any):[string,string,number][]=>
+  FORMAS_PGTO.map(([k,label])=>[k,label,(v&&v.formas&&v.formas[k])||0] as [string,string,number]).filter(f=>f[2]>0.005);
 const rotuloOrigem=(o:string)=>o==="pdv"?"PDV":o==="recibo_venda"?"recibo de venda":o==="recibo"?"recibo de entrega":o.startsWith("pdv_")?`PDV ${o.slice(4).replace(/^./,c=>c.toUpperCase())}`:o;
 const vendaDoDia=(vendas:any[],data:string,origem?:string)=>(vendas||[]).find((v:any)=>v.data===data&&origemVenda(v)===(origem||"manual"));
 // Junta duplicatas do dia DENTRO da mesma origem (duas entradas manuais pro

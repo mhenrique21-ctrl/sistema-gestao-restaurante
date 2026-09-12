@@ -28,6 +28,7 @@ Para conferir se chegou: no servidor, `pm2 logs app-gestao` mostra uma linha
 | `INTERVALO_MIN` | `2` | De quanto em quanto tempo reenvia o dia |
 | `CNPJ_SEAMA` | — | Só se o mesmo PC emitir pela Seama também |
 | `ECLETICA_FONTE` | `ecletica` | Etiqueta da origem (ver abaixo) |
+| `ECLETICA_TPAG` | — | Corrige o mapa de formas, ex.: `05=credito,99=pendura` |
 
 ## Decisões que não são óbvias
 
@@ -53,6 +54,26 @@ faturamento. Para acrescentar outra pasta, separe por `;`.
 
 ⚠️ Nunca aponte para uma pasta de **backup** (ex.: `Desktop\BKP Cafeteria\...`):
 notas antigas entrariam no faturamento de hoje.
+
+**Formas de pagamento em duas camadas.** O `tPag` da NFC-e vira uma **forma**
+(dinheiro, crédito, débito, PIX, pendura, outros) — que é o detalhe que aparece
+no Gestão — e a forma vira um **balde** (dinheiro × maquininha), que é o que os
+cálculos antigos usam. Separar as duas coisas é o que evita o erro do mapa
+anterior, que jogava "crédito da loja" na maquininha.
+
+**Pendura fica fora dos baldes.** É venda faturada com recebimento adiado: entra
+no **total** do dia (é o número que o caixa vê ao fechar), mas não em dinheiro
+nem em maquininha — não é dinheiro na gaveta nem valor a conferir no extrato do
+cartão. Mesma regra que o `delivery-backend` já aplica, para as duas fontes
+contarem igual.
+
+PIX entra no balde *maquininha* porque a distinção que importa ali é
+gaveta × eletrônico, e é assim que o `delivery-backend` já classifica. O valor
+de PIX continua visível separado na linha de formas.
+
+`diagnostico.bat` lista os códigos `tPag` realmente encontrados no mês. Se uma
+forma da tela do caixa estiver caindo na coluna errada, corrija com
+`ECLETICA_TPAG` no `iniciar.bat` — sem tocar no código.
 
 **O total sai de `<total><ICMSTot><vNF>`.** Existe um `<vProd>` dentro de cada
 item também; pegar "o primeiro do documento" traria o valor do primeiro produto

@@ -47,26 +47,50 @@ const CNPJ_EMPRESA = {
   ...(process.env.CNPJ_SEAMA ? { [process.env.CNPJ_SEAMA]: 'SEAMA' } : {}),
 };
 
-// tPag da NFC-e → canal do Gestão. O Gestão separa em dinheiro / maquininha /
-// delivery; não tem coluna de PIX, então PIX entra em maquininha — é dinheiro
-// eletrônico, cai na conta e não na gaveta, que é a distinção que importa pro
-// fechamento de caixa.
-const CANAL_POR_TPAG = {
-  '01': 'dinheiro',                                   // dinheiro
-  '02': 'dinheiro',                                   // cheque
-  '03': 'maquininha', '04': 'maquininha',             // crédito, débito
-  '05': 'maquininha',                                 // crédito da loja
-  '10': 'maquininha', '11': 'maquininha',             // vale alimentação/refeição
-  '12': 'maquininha', '13': 'maquininha',             // vale presente/combustível
-  '15': 'maquininha',                                 // boleto
-  '16': 'maquininha', '17': 'maquininha', '18': 'maquininha', // PIX
-  '19': 'maquininha', '20': 'maquininha',             // fidelidade, PIX dinâmico
-  '90': 'dinheiro',                                   // sem pagamento
-  '99': 'dinheiro',                                   // outros
+// tPag da NFC-e → forma de pagamento, e forma → balde do Gestão.
+//
+// Duas camadas de propósito. A FORMA é o detalhe que o dono quer ver (dinheiro,
+// crédito, débito, PIX, pendura); o BALDE é o que a Gestão usa nos cálculos que
+// já existem (dinheiro na gaveta × valor eletrônico a conferir com o extrato).
+// Misturar as duas coisas numa tabela só foi o que fez o mapa antigo jogar
+// "crédito da loja" na maquininha.
+const FORMA_POR_TPAG = {
+  '01': 'dinheiro',
+  '02': 'dinheiro',                                   // cheque: entra em caixa
+  '03': 'credito',
+  '04': 'debito',
+  '05': 'pendura',                                    // "crédito da loja" — é a conta do cliente
+  '10': 'outros', '11': 'outros',                     // vale alimentação/refeição
+  '12': 'outros', '13': 'outros',                     // vale presente/combustível
+  '15': 'outros',                                     // boleto
+  '16': 'pix', '17': 'pix', '18': 'pix', '20': 'pix', // depósito, PIX, transferência
+  '19': 'outros',                                     // fidelidade
+  '90': 'pendura',                                    // sem pagamento
+  '99': 'outros',
 };
 
-// Evento de cancelamento de NFC-e. 110111 é o código da SEFAZ; 135/155 é o
-// retorno de "evento registrado" (155 = registrado fora do prazo, vale igual).
+// Ajuste sem mexer no código, para quando o Eclética usar um código fora do
+// óbvio: ECLETICA_TPAG="05=credito,99=pendura".
+(process.env.ECLETICA_TPAG || '').split(',').map((p) => p.trim()).filter(Boolean).forEach((par) => {
+  const [cod, forma] = par.split('=').map((t) => t.trim());
+  if (cod && forma) FORMA_POR_TPAG[cod] = forma;
+});
+
+// Pendura (fiado) fica FORA dos dois baldes: é venda faturada com recebimento
+// adiado, não é dinheiro na gaveta nem valor a conferir no extrato do cartão.
+// Entra no total do dia, que é o número que o caixa vê ao fechar. Essa é a
+// mesma regra que o delivery-backend já aplica (FORA_DOS_BALDES lá) — as duas
+// fontes precisam contar igual, senão a DRE soma maçã com laranja.
+const BALDE_POR_FORMA = {
+  dinheiro: 'dinheiro',
+  credito: 'maquininha',
+  debito: 'maquininha',
+  pix: 'maquininha',                                  // eletrônico: cai na conta, não na gaveta
+  outros: 'maquininha',
+  pendura: null,                                      // no total, fora dos baldes
+};
+const FORMAS = ['dinheiro', 'credito', 'debito', 'pix', 'pendura', 'outros'];
+
 const TP_EVENTO_CANCELAMENTO = '110111';
 const CSTAT_EVENTO_OK = ['135', '155'];
 
@@ -135,21 +159,28 @@ function lerArquivo(caminho) {
   // cartão e metade em dinheiro tem dois <detPag>; ratear pelo peso de cada um
   // mantém a soma exata mesmo quando a gorjeta entra no meio.
   const detPags = Array.from(doc.getElementsByTagName('detPag'));
-  const pagos = detPags.map((d) => ({
-    canal: CANAL_POR_TPAG[tag(d, 'tPag')] || 'dinheiro',
-    valor: parseFloat(tag(d, 'vPag')) || 0,
-  })).filter((p) => p.valor > 0);
+  const pagos = detPags.map((d) => {
+    const tPag = tag(d, 'tPag');
+    return { tPag, forma: FORMA_POR_TPAG[tPag] || 'outros', valor: parseFloat(tag(d, 'vPag')) || 0 };
+  }).filter((p) => p.valor > 0);
 
   const totalVenda = vNF + gorjeta;
   const somaPagos = pagos.reduce((s, p) => s + p.valor, 0);
+  const formas = Object.fromEntries(FORMAS.map((f) => [f, 0]));
   const canais = { dinheiro: 0, maquininha: 0 };
   if (!pagos.length || somaPagos <= 0) {
-    canais.dinheiro = totalVenda;                  // sem forma declarada
+    formas.dinheiro = totalVenda;                  // sem forma declarada
+    canais.dinheiro = totalVenda;
   } else {
-    pagos.forEach((p) => { canais[p.canal] += totalVenda * (p.valor / somaPagos); });
+    pagos.forEach((p) => {
+      const parte = totalVenda * (p.valor / somaPagos);
+      formas[p.forma] += parte;
+      const balde = BALDE_POR_FORMA[p.forma];
+      if (balde) canais[balde] += parte;           // pendura não entra em balde
+    });
   }
 
-  return { tipo: 'venda', empresa, data, total: totalVenda, canais, chave: tag(null, 'chNFe') };
+  return { tipo: 'venda', empresa, data, total: totalVenda, canais, formas, chave: tag(null, 'chNFe'), tPags: pagos.map((p) => p.tPag) };
 }
 
 // Compatibilidade com quem só quer a venda (e com os testes).
@@ -236,7 +267,17 @@ function apurarDia(dataAlvo, diag) {
       if (r.tipo === 'cancelamento') { cancelados.add(r.chave); continue; }
       if (r.chave && vistas.has(r.chave)) { repetidas++; continue; }
       if (r.chave) vistas.add(r.chave);
-      if (diag) diag.datas[r.data] = (diag.datas[r.data] || 0) + 1;
+      if (diag) {
+        diag.datas[r.data] = (diag.datas[r.data] || 0) + 1;
+        // Censo dos códigos de pagamento realmente usados: é a única forma de
+        // saber qual tPag o Eclética escreve pra cada forma da tela do caixa,
+        // em vez de supor pela tabela da SEFAZ.
+        diag.tPags = diag.tPags || {};
+        (r.tPags || []).forEach((c) => {
+          const k = `${c} (${FORMA_POR_TPAG[c] || 'outros'})`;
+          diag.tPags[k] = (diag.tPags[k] || 0) + 1;
+        });
+      }
       if (r.data !== dataAlvo) continue;           // outro dia do mesmo mês
       vendas.push(r);
     }
@@ -249,10 +290,14 @@ function apurarDia(dataAlvo, diag) {
   let cancelados_no_dia = 0;
   for (const v of vendas) {
     if (v.chave && cancelados.has(v.chave)) { cancelados_no_dia++; continue; }
-    const acc = porEmpresa[v.empresa] || (porEmpresa[v.empresa] = { total: 0, dinheiro: 0, maquininha: 0, vendas: 0 });
+    const acc = porEmpresa[v.empresa] || (porEmpresa[v.empresa] = {
+      total: 0, dinheiro: 0, maquininha: 0, vendas: 0,
+      formas: Object.fromEntries(FORMAS.map((f) => [f, 0])),
+    });
     acc.total += v.total;
     acc.dinheiro += v.canais.dinheiro;
     acc.maquininha += v.canais.maquininha;
+    FORMAS.forEach((f) => { acc.formas[f] += v.formas[f] || 0; });
     acc.vendas++;
   }
   if (cancelados_no_dia) log(`  (${cancelados_no_dia} venda(s) cancelada(s) fora do faturamento)`);
@@ -268,6 +313,7 @@ async function enviar(empresa, data, acc) {
     dinheiro: r2(acc.dinheiro),
     maquininha: r2(acc.maquininha),
     total: r2(acc.total),
+    formas: Object.fromEntries(FORMAS.map((f) => [f, r2(acc.formas[f])])),
   };
   const r = await fetch(`${GESTAO_URL}/api/venda-pdv`, {
     method: 'POST',
@@ -275,7 +321,8 @@ async function enviar(empresa, data, acc) {
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(() => '')}`);
-  log(`✅ ${empresa} ${data}: ${acc.vendas} venda(s), total R$ ${body.total.toFixed(2)} (dinheiro ${body.dinheiro.toFixed(2)} | maquininha ${body.maquininha.toFixed(2)})`);
+  const detalhe = FORMAS.filter((f) => body.formas[f] > 0).map((f) => `${f} ${body.formas[f].toFixed(2)}`).join(' | ');
+  log(`✅ ${empresa} ${data}: ${acc.vendas} venda(s), total R$ ${body.total.toFixed(2)}  →  ${detalhe}`);
 }
 
 async function ciclo() {
@@ -319,6 +366,13 @@ function diagnostico(dataAlvo) {
   console.log(`\nVendas válidas por data (as 10 mais recentes):`);
   if (!datas.length) console.log('  nenhuma — todos os arquivos foram descartados, ver abaixo');
   datas.slice(-10).forEach(([d, n]) => console.log(`  ${d}: ${n} venda(s)${d === dataAlvo ? '   <-- o dia procurado' : ''}`));
+  const tp = Object.entries(diag.tPags || {}).sort((a, b) => b[1] - a[1]);
+  if (tp.length) {
+    console.log(`\nCódigos de pagamento (tPag) encontrados no mês:`);
+    tp.forEach(([c, n]) => console.log(`  ${n}x  tPag ${c}`));
+    console.log('  Se alguma forma da tela do caixa estiver caindo no lugar errado,');
+    console.log('  ajuste com ECLETICA_TPAG no iniciar.bat (ex.: ECLETICA_TPAG=05=credito).');
+  }
   const motivos = Object.entries(diag.motivos).sort((a, b) => b[1] - a[1]);
   if (motivos.length) {
     console.log(`\nArquivos descartados, por motivo:`);
@@ -327,7 +381,11 @@ function diagnostico(dataAlvo) {
   console.log(`\nTotal que seria enviado:`);
   const linhas = Object.entries(porEmpresa);
   if (!linhas.length) console.log('  nada');
-  linhas.forEach(([emp, a]) => console.log(`  ${emp}: R$ ${a.total.toFixed(2)} em ${a.vendas} venda(s)`));
+  linhas.forEach(([emp, a]) => {
+    console.log(`  ${emp}: R$ ${a.total.toFixed(2)} em ${a.vendas} venda(s)`);
+    FORMAS.filter((f) => a.formas[f] > 0.005).forEach((f) => console.log(`      ${f.padEnd(9)} R$ ${a.formas[f].toFixed(2)}`));
+    if (a.formas.pendura > 0.005) console.log('      (pendura entra no total, mas fora de dinheiro e maquininha)');
+  });
   console.log('');
 }
 
