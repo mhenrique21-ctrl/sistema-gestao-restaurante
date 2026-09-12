@@ -23,7 +23,7 @@ Para conferir se chegou: no servidor, `pm2 logs app-gestao` mostra uma linha
 | Variável | Padrão | Para quê |
 |---|---|---|
 | `SEAMA_SERVICE_SECRET` | — | **Obrigatória.** Mesmo segredo do `.env` do servidor |
-| `ECLETICA_XML` | `C:\WinecIt\ArquivosSistema\XmlVenda` | Raiz dos XML |
+| `ECLETICA_XML` | `C:\WinecIt\ArquivosSistema\XmlVenda2` | Raiz dos XML |
 | `GESTAO_URL` | `https://gestao.confrariacafe.com` | Servidor do Gestão |
 | `INTERVALO_MIN` | `2` | De quanto em quanto tempo reenvia o dia |
 | `CNPJ_SEAMA` | — | Só se o mesmo PC emitir pela Seama também |

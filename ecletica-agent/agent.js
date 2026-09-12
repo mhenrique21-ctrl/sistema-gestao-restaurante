@@ -19,7 +19,10 @@ import path from 'node:path';
 import { DOMParser } from '@xmldom/xmldom';
 
 // ── Configuração ────────────────────────────────────────────────────────────
-const RAIZ_XML   = process.env.ECLETICA_XML || 'C:\\WinecIt\\ArquivosSistema\\XmlVenda';
+// Sim, "XmlVenda2" com o 2 no fim — é assim na instalação real. Existe um
+// "XmlVenda" sem o 2 na documentação do Eclética, mas não é onde o sistema
+// grava; apontar pra lá dá "caminho não encontrado" e silêncio.
+const RAIZ_XML   = process.env.ECLETICA_XML || 'C:\\WinecIt\\ArquivosSistema\\XmlVenda2';
 const GESTAO_URL = (process.env.GESTAO_URL || 'https://gestao.confrariacafe.com').replace(/\/$/, '');
 const SECRET     = process.env.SEAMA_SERVICE_SECRET || '';
 const INTERVALO  = (parseInt(process.env.INTERVALO_MIN, 10) || 2) * 60 * 1000;
