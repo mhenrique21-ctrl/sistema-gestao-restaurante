@@ -325,25 +325,71 @@ async function enviar(empresa, data, acc) {
   log(`✅ ${empresa} ${data}: ${acc.vendas} venda(s), total R$ ${body.total.toFixed(2)}  →  ${detalhe}`);
 }
 
+// Quais dias reenviar a cada ciclo. O agente só mandava o dia corrente e nunca
+// voltava atrás: se o PC do caixa fosse desligado antes do último ciclo, as
+// notas finais do dia ficavam no disco e não subiam NUNCA MAIS — em silêncio, e
+// só apareceria como uma diferença inexplicável no fechamento do mês. Reenviar
+// ontem junto fecha esse buraco, e é seguro porque /api/venda-pdv SUBSTITUI o
+// registro do dia em vez de somar.
+//
+// Recebe a data de referência em vez de chamar new Date() lá dentro: é o que
+// torna a virada de mês testável.
+function diasParaEnviar(ref = new Date()) {
+  // `parseInt('0') || 1` daria 1: zero é falsy, e ECLETICA_DIAS_ATRAS=0
+  // (voltar ao comportamento antigo, só o dia corrente) seria ignorado.
+  const bruto = parseInt(process.env.ECLETICA_DIAS_ATRAS, 10);
+  const atras = Math.min(Math.max(Number.isFinite(bruto) ? bruto : 1, 0), 31);
+  const dias = [];
+  for (let i = atras; i >= 0; i--) {
+    const d = new Date(ref);
+    d.setDate(d.getDate() - i);                    // setDate vira o mês sozinho
+    dias.push(d.toLocaleDateString('sv-SE'));
+  }
+  return dias;
+}
+
+// Último valor enviado por empresa+data, pra não repetir POST idêntico a cada 2
+// minutos. É memória de processo: reiniciar o agente reenvia tudo uma vez, o
+// que é inofensivo (o registro é substituído) e ainda serve de reconciliação.
+const ultimoEnvio = new Map();
+
 async function ciclo() {
-  const hoje = new Date().toLocaleDateString('sv-SE');   // YYYY-MM-DD local
-  try {
-    const diag = {};
-    const porEmpresa = apurarDia(hoje, diag);
-    if (!Object.keys(porEmpresa).length) {
-      // Distinguir os dois casos aqui é o que evita a tarde perdida: "a pasta
-      // nem existe" e "existe mas nada passou nos filtros" parecem idênticos
-      // na tela e têm soluções opostas.
-      if (!diag.pastaExiste) log(`⚠️  nenhuma pasta do mês existe (${diag.pasta}) — confira ECLETICA_XML no iniciar.bat`);
-      else if (!diag.arquivos) log(`⚠️  ${diag.pastasExistentes.join(' ; ')} existe mas está vazia`);
-      else log(`nenhuma venda em ${hoje} ainda (${diag.arquivos} XML no mês; rode "node agent.js --diagnostico" pra ver o porquê)`);
-      return;
-    }
-    for (const [empresa, acc] of Object.entries(porEmpresa)) {
-      try { await enviar(empresa, hoje, acc); }
-      catch (e) { log(`❌ falha ao enviar ${empresa}: ${e.message}`); }
-    }
-  } catch (e) { log(`❌ erro no ciclo: ${e.message}`); }
+  const dias = diasParaEnviar();
+  const hoje = dias[dias.length - 1];
+  let mexeu = false, totalHoje = null;
+
+  for (const data of dias) {
+    try {
+      const diag = {};
+      const porEmpresa = apurarDia(data, diag);
+      if (!Object.keys(porEmpresa).length) {
+        // Dia passado sem venda não vira aviso: a loja pode ter fechado. Só o
+        // dia corrente merece explicação, e distinguir os casos aqui é o que
+        // evita a tarde perdida — "a pasta nem existe" e "existe mas nada
+        // passou nos filtros" parecem idênticos na tela e têm soluções opostas.
+        if (data !== hoje) continue;
+        if (!diag.pastaExiste) log(`⚠️  nenhuma pasta do mês existe (${diag.pasta}) — confira ECLETICA_XML no iniciar.bat`);
+        else if (!diag.arquivos) log(`⚠️  ${diag.pastasExistentes.join(' ; ')} existe mas está vazia`);
+        else log(`nenhuma venda em ${hoje} ainda (${diag.arquivos} XML no mês; rode "node agent.js --diagnostico" pra ver o porquê)`);
+        continue;
+      }
+      for (const [empresa, acc] of Object.entries(porEmpresa)) {
+        const chave = `${empresa}|${data}`;
+        const assinatura = `${acc.total.toFixed(2)}|${acc.vendas}`;
+        if (data === hoje) totalHoje = acc.total;
+        if (ultimoEnvio.get(chave) === assinatura) continue;   // nada mudou
+        try {
+          await enviar(empresa, data, acc);
+          ultimoEnvio.set(chave, assinatura);
+          mexeu = true;
+        } catch (e) { log(`❌ falha ao enviar ${empresa} ${data}: ${e.message}`); }
+      }
+    } catch (e) { log(`❌ erro no ciclo (${data}): ${e.message}`); }
+  }
+
+  // Batimento de vida: sem isso a janela fica parada por horas num dia movimentado
+  // sem venda nova, e não dá pra distinguir "tudo certo" de "travou".
+  if (!mexeu && totalHoje !== null) log(`· ${hoje}: sem venda nova (total R$ ${totalHoje.toFixed(2)})`);
 }
 
 // Responde "por que não apareceu nada" sem precisar de mais nenhuma ferramenta
@@ -389,7 +435,7 @@ function diagnostico(dataAlvo) {
   console.log('');
 }
 
-export { lerArquivo, lerVenda, apurarDia, ciclo, diagnostico };
+export { lerArquivo, lerVenda, apurarDia, ciclo, diagnostico, diasParaEnviar };
 
 // Só sobe o laço quando executado direto (node agent.js). Importado pelos
 // testes, apenas expõe as funções — senão a suíte ficaria postando de verdade.
@@ -404,7 +450,9 @@ if (executadoDireto) {
     console.error('SEAMA_SERVICE_SECRET não configurado — veja iniciar.bat');
     process.exit(1);
   }
+  const dias = diasParaEnviar();
   log(`Ponte Eclética → Gestão iniciada. Lendo ${RAIZES_XML.join(' e ')} a cada ${INTERVALO / 60000} min.`);
+  log(`Mantendo atualizado${dias.length > 1 ? ` de ${dias[0]} até ${dias[dias.length - 1]}` : ` o dia ${dias[0]}`} (ECLETICA_DIAS_ATRAS=${dias.length - 1}).`);
   ciclo();
   setInterval(ciclo, INTERVALO);
 }

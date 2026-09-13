@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 process.env.SEAMA_SERVICE_SECRET = 'teste';
-const { lerVenda, lerArquivo, apurarDia } = await import('./agent.js');
+const { lerVenda, lerArquivo, apurarDia, diasParaEnviar } = await import('./agent.js');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ecletica-'));
 const escrever = (nome, xml) => { const p = path.join(tmp, nome); fs.writeFileSync(p, xml); return p; };
@@ -268,5 +268,44 @@ test('venda cancelada fica fora do faturamento', async (t) => {
   await t.test('lerArquivo distingue os dois tipos de documento', () => {
     assert.equal(lerArquivo(escrever('ev.xml', evento())).tipo, 'cancelamento');
     assert.equal(lerArquivo(escrever('vd.xml', nfce())).tipo, 'venda');
+  });
+});
+
+test('janela de dias reenviados', async (t) => {
+  await t.test('por padrão manda ontem e hoje, nessa ordem', () => {
+    const dias = diasParaEnviar(new Date('2026-09-13T12:00:00'));
+    assert.deepEqual(dias, ['2026-09-12', '2026-09-13'],
+      'o dia corrente por último: é o que sobrescreve por último e o que o log usa');
+  });
+
+  await t.test('vira o mês sem inventar dia 00', () => {
+    // Dia 1º: "ontem" está no mês anterior, e o agente procura a pasta do mês
+    // por data — se isso quebrasse, o primeiro dia de cada mês perderia o
+    // fechamento do mês anterior, que é justamente quando ninguém confere.
+    assert.deepEqual(diasParaEnviar(new Date('2026-10-01T12:00:00')), ['2026-09-30', '2026-10-01']);
+  });
+
+  await t.test('vira o ano também', () => {
+    assert.deepEqual(diasParaEnviar(new Date('2027-01-01T12:00:00')), ['2026-12-31', '2027-01-01']);
+  });
+
+  await t.test('ECLETICA_DIAS_ATRAS amplia a janela, com teto', () => {
+    const antes = process.env.ECLETICA_DIAS_ATRAS;
+    try {
+      process.env.ECLETICA_DIAS_ATRAS = '3';
+      assert.deepEqual(diasParaEnviar(new Date('2026-09-13T12:00:00')),
+        ['2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13']);
+
+      // Sem teto, um valor digitado errado faria o agente varrer meses de XML a
+      // cada 2 minutos.
+      process.env.ECLETICA_DIAS_ATRAS = '9999';
+      assert.equal(diasParaEnviar(new Date('2026-09-13T12:00:00')).length, 32);
+
+      process.env.ECLETICA_DIAS_ATRAS = '0';
+      assert.deepEqual(diasParaEnviar(new Date('2026-09-13T12:00:00')), ['2026-09-13'],
+        'zero volta ao comportamento antigo: só o dia corrente');
+    } finally {
+      if (antes === undefined) delete process.env.ECLETICA_DIAS_ATRAS; else process.env.ECLETICA_DIAS_ATRAS = antes;
+    }
   });
 });

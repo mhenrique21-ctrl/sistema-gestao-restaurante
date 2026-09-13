@@ -21,6 +21,11 @@ REM set ECLETICA_TPAG=
 REM De quanto em quanto tempo reenvia o total do dia.
 set INTERVALO_MIN=2
 
+REM Quantos dias ANTERIORES manter atualizados junto com o dia de hoje.
+REM 1 = ontem + hoje (padrao). Protege contra o PC desligar antes do ultimo
+REM ciclo e as notas finais do dia nunca subirem. 0 = so o dia de hoje.
+set ECLETICA_DIAS_ATRAS=1
+
 REM Descomente e preencha se o MESMO computador tambem emitir pela Seama.
 REM set CNPJ_SEAMA=00000000000000
 

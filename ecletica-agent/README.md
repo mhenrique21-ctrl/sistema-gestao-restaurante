@@ -26,11 +26,23 @@ Para conferir se chegou: no servidor, `pm2 logs app-gestao` mostra uma linha
 | `ECLETICA_XML` | `...\XmlVenda;...\XmlVenda2` | Raízes dos XML, separadas por `;` |
 | `GESTAO_URL` | `https://gestao.confrariacafe.com` | Servidor do Gestão |
 | `INTERVALO_MIN` | `2` | De quanto em quanto tempo reenvia o dia |
+| `ECLETICA_DIAS_ATRAS` | `1` | Dias anteriores mantidos atualizados junto com hoje |
 | `CNPJ_SEAMA` | — | Só se o mesmo PC emitir pela Seama também |
 | `ECLETICA_FONTE` | `ecletica` | Etiqueta da origem (ver abaixo) |
 | `ECLETICA_TPAG` | — | Corrige o mapa de formas, ex.: `05=credito,99=pendura` |
 
 ## Decisões que não são óbvias
+
+**Ele mantém ontem atualizado, não só hoje.** Antes mandava só o dia corrente e
+nunca voltava atrás: se o PC do caixa fosse desligado antes do último ciclo, as
+notas finais do dia ficavam no disco e não subiam nunca mais — em silêncio, e a
+diferença só apareceria no fechamento do mês. Como o envio substitui o registro
+do dia, reenviar ontem é inofensivo. `ECLETICA_DIAS_ATRAS` amplia a janela (teto
+de 31); `0` volta ao comportamento antigo.
+
+Um POST idêntico não é repetido a cada ciclo — o agente guarda o último valor
+enviado por dia e só manda de novo quando muda. Essa memória é do processo:
+reiniciar reenvia tudo uma vez, o que serve de reconciliação.
 
 **Reprocessar não duplica.** `/api/venda-pdv` *substitui* o registro do dia
 (chaveado por data + origem), não soma. O agente relê todos os XML do dia e
