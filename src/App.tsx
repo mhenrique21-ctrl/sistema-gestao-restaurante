@@ -3633,9 +3633,13 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       <div className="section-title" style={{margin:0}}>{aj.legHistorico}</div>
       <SortCtrl id="vendas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["valor-desc","Maior valor"],["valor-asc","Menor valor"]]}/>
       <button className="btn" onClick={()=>{
+        // A data aparece repetida quando o dia tem mais de uma origem (caixa,
+        // delivery, manual). No papel isso lê como duplicata — foi exatamente o
+        // que aconteceu na tela antes do agrupamento —, então a coluna de
+        // origem vem junto pra dizer que são partes diferentes do mesmo dia.
         const rows=(db.vendas||[]).sort((a,b)=>a.data<b.data?1:-1).map(v=>`
           <tr>
-            <td>${fmtDate(v.data)}</td>
+            <td>${fmtDate(v.data)}${origemVenda(v)!=="manual"?` <span style="color:#75665B;font-size:10px">${rotuloOrigem(origemVenda(v))}</span>`:""}</td>
             <td style="text-align:right">${v.maquininha>0?fmtMoney(v.maquininha):"—"}</td>
             <td style="text-align:right">${v.dinheiro>0?fmtMoney(v.dinheiro):"—"}</td>
             <td style="text-align:right">${v.ifood>0?fmtMoney(v.ifoodLiq??v.ifood)+(v.ifoodTaxa>0?` (-${v.ifoodTaxa}%)`:""):"—"}</td>
@@ -3652,13 +3656,26 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           </table>`));
       }} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:12}}>🖨️ {aj.legBotaoImprimir}</button>
     </div>
-    {(()=>{const q=busca.toLowerCase();const sortKey=(db.config?.sortPrefs||{})['vendas']||'data-desc';const vendasFiltradas=sortList((db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))),db,'vendas','data-desc');return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{vendasFiltradas.map(v=>{
-      const cDia=(db.compras||[]).filter(c=>c.data===v.data).reduce((s,c)=>s+parseMoney(c.valor),0);
-      return <div key={v.id} className="list-item">
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-          <span style={{fontWeight:700}}>{fmtDate(v.data)}{v.origem&&v.origem!=="manual"&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>({rotuloOrigem(v.origem)})</span>}</span>
-          <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(v.total)}</span>
+    {(()=>{const q=busca.toLowerCase();const sortKey=(db.config?.sortPrefs||{})['vendas']||'data-desc';const vendasFiltradas=sortList((db.vendas||[]).filter(v=>!q||fmtDate(v.data).toLowerCase().includes(q)||["maquininha","dinheiro","ifood","99food","delivery"].some(m=>(v[m]||0)>0&&m.includes(q))),db,'vendas','data-desc');const gruposDia=(()=>{const m=new Map<string,any[]>();vendasFiltradas.forEach((v:any)=>{const g=m.get(v.data);if(g)g.push(v);else m.set(v.data,[v]);});return Array.from(m,([data,itens])=>({data,itens}));})();return<><div style={{position:"relative",marginBottom:12}}><input placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>{gruposDia.map(g=>{
+      const cDia=(db.compras||[]).filter(c=>c.data===g.data).reduce((s,c)=>s+parseMoney(c.valor),0);
+      const totalDia=g.itens.reduce((s:number,v:any)=>s+(v.total||0),0);
+      const varias=g.itens.length>1;
+      return <div key={g.data} className="list-item">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+          <span style={{fontWeight:700}}>{fmtDate(g.data)}
+            {varias&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>{g.itens.length} lançamentos no dia</span>}
+            {!varias&&g.itens[0].origem&&g.itens[0].origem!=="manual"&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>({rotuloOrigem(g.itens[0].origem)})</span>}
+          </span>
+          <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(totalDia)}</span>
         </div>
+        {cDia>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+          <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>
+        </div>}
+        {g.itens.map((v:any,i:number)=>
+        <div key={v.id} style={varias&&i>0?{borderTop:"1px solid var(--border)",paddingTop:10,marginTop:10}:undefined}>
+        {varias&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12,fontWeight:700,color:"var(--text2)"}}>
+          <span>{rotuloOrigem(origemVenda(v))}</span><span>{fmtMoney(v.total)}</span>
+        </div>}
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
           {v.maquininha>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
           {v.dinheiro>0&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
@@ -3680,14 +3697,12 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
             a receber — no total, fora de dinheiro/maquininha
           </span>}
         </div>}
-        {cDia>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-          <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>
-        </div>}
         <div style={{display:"flex",gap:8}}>
           <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>del(v.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {v.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(v.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+        </div>)}
       </div>;
     })}{!vendasFiltradas.length&&<EmptyState msg="Nenhum registro de venda"/>}</>;})()}
   </div>;
