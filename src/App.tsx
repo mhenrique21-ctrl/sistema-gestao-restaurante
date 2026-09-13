@@ -272,7 +272,7 @@ const PRODS_SEED_V6=[
 ];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
-  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[], itensVendidos:[] as any[],
+  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[], itensVendidos:[] as any[], mapaProdutoFicha:{} as any,
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
@@ -1722,6 +1722,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // antes mesmo do POST confirmar. Local vence por chave — classificar de
       // novo é só gravar por cima, nunca remover.
       dicionarioClassificacao: {...(s.dicionarioClassificacao||{}),...(p.dicionarioClassificacao||{})},
+      // Produto do PDV -> ficha técnica. Mesmo formato e mesma fusão do
+      // dicionário acima: mapa com local vencendo por chave. Desvincular NÃO
+      // apaga a chave — grava modo:"auto" ou "ignorar", porque a união só sabe
+      // adicionar e a chave removida voltaria do servidor no próximo poll.
+      mapaProdutoFicha: {...(s.mapaProdutoFicha||{}),...(p.mapaProdutoFicha||{})},
       // Mesma fusão, mesmo motivo: sem ela, classificar uma categoria na DRE
       // seria revertido pelo poll antes do POST confirmar.
       mapaCategoriaDre: {...(s.mapaCategoriaDre||{}),...(p.mapaCategoriaDre||{})},
@@ -3808,7 +3813,7 @@ function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPe
   if(subTab==="recibo")content=<EmitirReciboPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} login={login} aj={aj} empresa={empresa} onVoltar={voltar}/>;
   else if(subTab==="historico")content=<RecibosVendaHistPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} aj={aj} empresa={empresa} onVoltar={voltar}/>;
   else if(subTab==="clientes")content=<><BackBar label="Vendas" onClick={voltar}/><ClientesEncPanel db={db} setDb={setDb} empresa={empresa} aj={aj}/></>;
-  else if(subTab==="relatorio")content=<RecibosVendaRelatorioPanel db={db} state={state} empresa={empresa} aj={aj} onVoltar={voltar}/>;
+  else if(subTab==="relatorio")content=<RecibosVendaRelatorioPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} aj={aj} onVoltar={voltar}/>;
   else if(subTab==="ajustes")content=<VendasAjustesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
   else content=<Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} aj={aj}/>;
   return Object.keys(wrapStyle).length?<div style={wrapStyle}>{content}</div>:content;
@@ -4591,11 +4596,13 @@ function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,on
   </div>;
 }
 
-function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state?:any,empresa?:string,aj?:any,onVoltar:()=>void}){
+function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVoltar}:{db:any,setDb?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,empresa?:string,aj?:any,onVoltar:()=>void}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"empresas">(aj.abaRelatorioPadrao||"cliente");
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
+  const [buscaVinc,setBuscaVinc]=useState("");
+  const [soPendentes,setSoPendentes]=useState(true);
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
 
@@ -4638,7 +4645,7 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
     ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
     ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
     ["mensal","Evolução Mensal"],["canal","Por Canal"],["sazonal","Sazonalidade"],
-    ["margem","Margem por Produto"],["empresas","Confraria × Seama"],
+    ["margem","Margem por Produto"],["vinculos","Vincular Fichas"],["empresas","Confraria × Seama"],
   ];
 
   const RowBar=({label,sub,qty,val,pct,color}:{label:string,sub?:string,qty?:string,val:number,pct:number,color?:string})=>(
@@ -4850,17 +4857,13 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
     })()}
 
     {relTab==="margem"&&(()=>{
-      const fichas=db.fichasTecnicas||[];
-      // Casa por foldNome, não por texto exato: o PDV escreve "PAO DE QUEIJO GD"
-      // e a ficha diz "Pão de queijo gd". Comparar cru só acertaria por acaso.
-      const porFold=new Map<string,any>();
-      fichas.forEach((f:any)=>{if(f?.nome)porFold.set(foldNome(f.nome),f);});
       const linhas=agruparItens().map((p:any)=>{
-        const ficha=porFold.get(foldNome(p.nome));
+        // fichaDoProduto: vínculo confirmado > nome batendo por foldNome > nada.
+        const {ficha,vinculo}=fichaDoProduto(db,p.nome);
         const custo=ficha?(ficha.custoPorcao||0)*p.qtd:null;
         const margem=custo!=null?p.total-custo:null;
         const margemPct=margem!=null&&p.total?margem/p.total*100:null;
-        return{...p,receita:p.total,custo,margem,margemPct};
+        return{...p,receita:p.total,custo,margem,margemPct,vinculo};
       }).sort((a:any,b:any)=>{
         if(a.margem==null&&b.margem==null)return 0;
         if(a.margem==null)return 1;
@@ -4874,8 +4877,8 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Margem por produto</div>
         {avisoFontePdv}
         {semFicha.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
-          ⚠️ {semFicha.length} produto(s) sem ficha técnica com nome correspondente — {receitaTotal?Math.round(receitaSemFicha/receitaTotal*100):0}% da receita do período fica sem margem calculada.
-          O nome no PDV precisa bater com o da ficha técnica (acentos e maiúsculas não importam).
+          ⚠️ {semFicha.filter((l:any)=>l.vinculo!=="ignorado").length} produto(s) sem ficha técnica — {receitaTotal?Math.round(receitaSemFicha/receitaTotal*100):0}% da receita do período fica sem margem calculada.
+          <button onClick={()=>setRelTab("vinculos")} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontWeight:700,textDecoration:"underline",padding:0,marginLeft:4,fontSize:11}}>vincular agora</button>
         </div>}
         {!linhas.length&&<EmptyState msg="Nenhum item vendido no período."/>}
         {linhas.map((l:any)=><div key={l.nome} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
@@ -4884,6 +4887,111 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
             ?<span style={{fontWeight:700,fontFamily:"monospace",color:l.margem>=0?"#15803D":"#dc2626"}}>{fmtMoney(l.margem)} <span style={{fontSize:10,opacity:.75}}>({l.margemPct.toFixed(0)}%)</span></span>
             :<span style={{fontSize:11,color:"var(--text2)",fontStyle:"italic" as const}}>sem dado de custo</span>}
         </div>)}
+      </>;
+    })()}
+
+    {relTab==="vinculos"&&(()=>{
+      const fichas=[...(db.fichasTecnicas||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
+      // A lista vem de TODO o histórico, não só do período escolhido: um
+      // produto vendido mês passado precisa poder ser vinculado, senão a tela
+      // muda de conteúdo conforme o filtro de datas e o trabalho nunca acaba.
+      const tudo=new Map<string,{nome:string,qtd:number,total:number}>();
+      const somar=(nome:string,qtd:number,valor:number)=>{
+        if(!nome)return;
+        const k=foldNome(nome);
+        const cur=tudo.get(k)||{nome,qtd:0,total:0};
+        cur.qtd+=qtd; cur.total+=valor; cur.nome=nome;
+        tudo.set(k,cur);
+      };
+      (db.itensVendidos||[]).forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
+      (db.recibosVenda||[]).forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
+
+      const todos=Array.from(tudo.values())
+        .map(p=>({...p,...fichaDoProduto(db,p.nome)}))
+        .sort((a,b)=>b.total-a.total);
+      const receitaTotal=todos.reduce((s,p)=>s+p.total,0);
+      const comFicha=todos.filter(p=>p.ficha);
+      const cobertura=receitaTotal?comFicha.reduce((s,p)=>s+p.total,0)/receitaTotal*100:0;
+      const pendentes=todos.filter(p=>p.vinculo==="nenhum");
+
+      const q=foldBusca(buscaVinc);
+      const lista=todos
+        .filter(p=>!soPendentes||p.vinculo==="nenhum")
+        .filter(p=>!q||foldBusca(p.nome).includes(q));
+
+      const vincular=(nome:string,valor:string)=>{
+        const k=foldNome(nome);
+        const agora=new Date().toISOString();
+        const reg=valor==="__auto"?{modo:"auto"}
+          :valor==="__ignorar"?{modo:"ignorar"}
+          :{modo:"ficha",fichaId:valor,fichaNome:(fichas.find((f:any)=>f.id===valor)||{}).nome||""};
+        // setDbAndSave (e não setDb): o auto-save genérico PODE pular a
+        // gravação se coincidir com outro save em andamento, e aí o vínculo
+        // some no próximo poll — o clássico "eu marco e volta sozinho".
+        (setDbAndSave||setDb)((d:any)=>({...d,mapaProdutoFicha:{...(d.mapaProdutoFicha||{}),
+          [k]:{...reg,origemAprendizado:"usuario",ultimaAtualizacao:agora}}}));
+      };
+
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Produto vendido → ficha técnica</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
+          Vincular é o que faz a Margem por Produto e o custo por venda funcionarem. Quem já casa pelo nome aparece como <strong>automático</strong> e não precisa de nada.
+        </div>
+
+        <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
+            <span style={{color:"var(--text2)"}}>Receita com ficha vinculada</span>
+            <strong style={{color:cobertura>=80?"var(--successText)":cobertura>=40?"var(--warningText)":"var(--dangerText)"}}>{cobertura.toFixed(0)}%</strong>
+          </div>
+          <div style={{height:8,background:"var(--border)",borderRadius:4,overflow:"hidden"}}>
+            <div style={{width:`${Math.min(100,cobertura)}%`,height:"100%",background:cobertura>=80?"#16A34A":cobertura>=40?"#B45309":"#A32B24"}}/>
+          </div>
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:6}}>
+            {comFicha.length} de {todos.length} produtos vinculados · {pendentes.length} pendente(s)
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+          <input placeholder="🔍 Buscar produto..." value={buscaVinc} onChange={e=>setBuscaVinc(e.target.value)} className="inp" style={{flex:1,minWidth:160,marginBottom:0}}/>
+          <button onClick={()=>setSoPendentes(v=>!v)} className="pill"
+            style={{background:soPendentes?"var(--btnPrimary)":"var(--bg3)",color:soPendentes?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>
+            {soPendentes?"Só pendentes":"Todos"}
+          </button>
+        </div>
+
+        {!fichas.length&&<div style={{fontSize:12,color:"var(--warningText)",marginBottom:10}}>
+          ⚠️ Nenhuma ficha técnica cadastrada ainda. Cadastre em Produção → Fichas Técnicas antes de vincular.
+        </div>}
+        {!lista.length&&<EmptyState msg={soPendentes?"Nenhum produto pendente — tudo vinculado.":"Nenhum produto vendido ainda."}/>}
+
+        {lista.slice(0,200).map(p=>{
+          const reg=(db.mapaProdutoFicha||{})[foldNome(p.nome)];
+          const valorSel=reg?.modo==="ficha"&&p.ficha?p.ficha.id:reg?.modo==="ignorar"?"__ignorar":"__auto";
+          const pesoPct=receitaTotal?p.total/receitaTotal*100:0;
+          return <div key={p.nome} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
+              <span style={{fontSize:13,fontWeight:600}}>{p.nome}</span>
+              <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>{fmtMoney(p.total)} · {pesoPct.toFixed(1)}%</span>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+              <select className="inp" value={valorSel} onChange={e=>vincular(p.nome,e.target.value)} style={{flex:1,minWidth:180,marginBottom:0,fontSize:12}}>
+                <option value="__auto">— automático (pelo nome) —</option>
+                {fichas.map((f:any)=><option key={f.id} value={f.id}>{f.nome}</option>)}
+                <option value="__ignorar">Ignorar — não tem ficha</option>
+              </select>
+              <span style={{fontSize:10,fontWeight:700,padding:"4px 8px",borderRadius:6,whiteSpace:"nowrap" as const,
+                ...(p.vinculo==="manual"?{background:"var(--successBg)",color:"var(--successText)"}
+                  :p.vinculo==="auto"?{background:"var(--infoBg)",color:"var(--infoText)"}
+                  :p.vinculo==="ignorado"?{background:"var(--border)",color:"var(--text3)"}
+                  :{background:"var(--warningBg)",color:"var(--warningText)"})}}>
+                {p.vinculo==="manual"?`✓ ${p.ficha.nome}`:p.vinculo==="auto"?`automático: ${p.ficha.nome}`:p.vinculo==="ignorado"?"ignorado":"sem ficha"}
+              </span>
+            </div>
+          </div>;
+        })}
+        {lista.length>200&&<div style={{fontSize:11,color:"var(--text2)",padding:"10px 0"}}>
+          Mostrando os 200 maiores de {lista.length}. Use a busca para achar os demais.
+        </div>}
       </>;
     })()}
 
@@ -19371,6 +19479,27 @@ const ehOrigemPdv=(v:any)=>origemVenda(v)==="pdv"||origemVenda(v).startsWith("pd
 // extrato do cartão. É o que faz a soma das etiquetas parecer "faltar" um
 // pedaço, e por isso ela vem com aviso escrito em vez de só uma cor.
 const FORMAS_PGTO:[string,string][]=[["dinheiro","dinheiro"],["credito","crédito"],["debito","débito"],["pix","PIX"],["pendura","pendura"],["outros","outros"]];
+// Resolve qual ficha técnica corresponde a um produto vendido. Três camadas,
+// nesta ordem: o vínculo que a pessoa confirmou, depois o nome batendo por
+// foldNome, depois nada. A camada do meio existe porque a maioria dos produtos
+// casa sozinha — obrigar confirmação de todos transformaria a tela num
+// cadastro de centenas de linhas e ninguém terminaria.
+const fichaDoProduto=(db:any,nomeProduto:string)=>{
+  const k=foldNome(nomeProduto||"");
+  if(!k)return{ficha:null,vinculo:"nenhum" as const};
+  const mapa=db?.mapaProdutoFicha||{};
+  const fichas=db?.fichasTecnicas||[];
+  const reg=mapa[k];
+  if(reg?.modo==="ignorar")return{ficha:null,vinculo:"ignorado" as const};
+  if(reg?.modo==="ficha"&&reg.fichaId){
+    const f=fichas.find((x:any)=>x.id===reg.fichaId);
+    // Ficha apagada depois de vinculada: cai pro automático em vez de sumir
+    // em silêncio, e a tela de vínculos mostra o produto como pendente.
+    if(f)return{ficha:f,vinculo:"manual" as const};
+  }
+  const auto=fichas.find((x:any)=>x?.nome&&foldNome(x.nome)===k);
+  return auto?{ficha:auto,vinculo:"auto" as const}:{ficha:null,vinculo:"nenhum" as const};
+};
 const BALDE_DA_FORMA:Record<string,string|null>={dinheiro:"dinheiro",credito:"maquininha",debito:"maquininha",pix:"maquininha",outros:"maquininha",pendura:null};
 const formasDaVenda=(v:any):[string,string,number][]=>
   FORMAS_PGTO.map(([k,label])=>[k,label,(v&&v.formas&&v.formas[k])||0] as [string,string,number]).filter(f=>f[2]>0.005);

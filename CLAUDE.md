@@ -119,7 +119,27 @@ budgetCompras            {periodo: {categorias: {cat: {orcado, sugerido, ajustad
 projecoesCompra          [{id, semanaProjetada, janelasBase, itens[], totalEstimado}]
 categoriaFinanceiroSangria  {categoriaFinanceiro: categoriaSangriaPDV}
 categoriasDeleted        tombstone das categorias do Financeiro
+itensVendidos            [{id, data, origem, itens:[{cod,nome,un,qtd,valor}]}] — produtos
+                         vendidos por dia, AGREGADOS por produto. Fora de `vendas`
+                         de propósito: não entra em nenhum cálculo de faturamento
+mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"auto"|"ignorar", fichaId,
+                         fichaNome, origemAprendizado, ultimaAtualizacao}}
 ```
+
+### Ponte Eclética Food (`ecletica-agent/`)
+
+Roda no PC do caixa da Confraria, lê os XML de NFC-e do Eclética e envia pro
+`/api/venda-pdv`. Sem API. Os detalhes que não são óbvios estão no README de lá;
+o que importa saber daqui:
+
+- venda do caixa entra com **origem `pdv_ecletica`**, separada do `pdv` do
+  `delivery-backend` — o endpoint SUBSTITUI o registro do dia, então duas fontes
+  na mesma origem se apagariam a cada ciclo
+- `formas` (dinheiro/credito/debito/pix/pendura/outros) acompanha o dia;
+  **pendura entra no total e fica FORA de dinheiro e maquininha**, mesma regra
+  do fiado no `delivery-backend`
+- itens do dia alimentam Vendas → Relatório (Produtos, ABC, Margem), que antes
+  liam só `recibosVenda` e nunca tinham visto a venda do balcão
 
 ---
 

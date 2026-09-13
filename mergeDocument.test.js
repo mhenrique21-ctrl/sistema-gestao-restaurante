@@ -408,3 +408,45 @@ describe('itensVendidos', () => {
     assert.equal(r.itensVendidos.length, 2, 'ids diferentes por origem: nenhuma apaga a outra');
   });
 });
+
+describe('mapaProdutoFicha (de-para produto → ficha técnica)', () => {
+  test('vínculo feito num aparelho sobrevive ao poll do outro', () => {
+    // O bug de sempre: campo novo que não entra na fusão vem cru do servidor, e
+    // o poll de ~100ms reverte a gravação antes do POST confirmar.
+    const servidor = { mapaProdutoFicha: { 'pao de queijo': { modo: 'ficha', fichaId: 'f1' } } };
+    const chegando = { mapaProdutoFicha: { 'cafe expresso': { modo: 'ficha', fichaId: 'f2' } } };
+
+    const r = mergeDocument(servidor, chegando);
+
+    assert.equal(Object.keys(r.mapaProdutoFicha).length, 2, 'vínculos de aparelhos diferentes se somam');
+    assert.equal(r.mapaProdutoFicha['pao de queijo'].fichaId, 'f1');
+    assert.equal(r.mapaProdutoFicha['cafe expresso'].fichaId, 'f2');
+  });
+
+  test('revincular por cima vence: o local ganha na mesma chave', () => {
+    const servidor = { mapaProdutoFicha: { 'pao de queijo': { modo: 'ficha', fichaId: 'antiga' } } };
+    const chegando = { mapaProdutoFicha: { 'pao de queijo': { modo: 'ficha', fichaId: 'nova' } } };
+
+    assert.equal(mergeDocument(servidor, chegando).mapaProdutoFicha['pao de queijo'].fichaId, 'nova');
+  });
+
+  test('"ignorar" e "auto" persistem como valor, não como chave removida', () => {
+    // Desvincular apagando a chave não funcionaria: a união só sabe adicionar,
+    // e a chave removida num aparelho voltaria do servidor no poll seguinte.
+    const servidor = { mapaProdutoFicha: { 'agua': { modo: 'ficha', fichaId: 'f9' } } };
+    const chegando = { mapaProdutoFicha: { 'agua': { modo: 'ignorar' } } };
+
+    const r = mergeDocument(servidor, chegando);
+
+    assert.equal(r.mapaProdutoFicha['agua'].modo, 'ignorar');
+    assert.equal(r.mapaProdutoFicha['agua'].fichaId, undefined);
+  });
+
+  test('POST que não fala de vínculos não apaga os existentes', () => {
+    const servidor = { mapaProdutoFicha: { 'pao de queijo': { modo: 'ficha', fichaId: 'f1' } } };
+
+    const r = mergeDocument(servidor, { vendas: [] });
+
+    assert.equal(r.mapaProdutoFicha['pao de queijo'].fichaId, 'f1');
+  });
+});

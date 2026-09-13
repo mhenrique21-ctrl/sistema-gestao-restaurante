@@ -33,6 +33,10 @@ export const MERGEABLE_FIELDS = [
 const MAPAS = [
   'dicionarioClassificacao', 'mapaCategoriaDre', 'giroInsumo',
   'categoriaFinanceiroSangria', 'iconesProducao', 'categoriasClientes', 'ruaCatMap',
+  // Produto vendido no PDV -> ficha técnica. Desvincular grava fichaId:null em
+  // vez de remover a chave: a união só sabe adicionar, então a chave removida
+  // num aparelho voltaria do outro no próximo POST.
+  'mapaProdutoFicha',
 ];
 
 // Listas de NOMES (sem id), que crescem por união. Cada uma com seu tombstone,
