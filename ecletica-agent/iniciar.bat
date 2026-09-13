@@ -13,10 +13,13 @@ REM Onde o Ecletica grava os XML. Mude so se a instalacao for em outro lugar.
 REM As duas arvores de XML da instalacao real, separadas por ";".
 set ECLETICA_XML=C:\Wineclt\ArquivosSistema\XmlVenda;C:\Wineclt\ArquivosSistema\XmlVenda2
 
-REM Formas de pagamento: so preencha se alguma forma da tela do caixa estiver
-REM caindo na coluna errada no Gestao. Rode diagnostico.bat para ver quais
-REM codigos (tPag) o Ecletica usa. Ex.: ECLETICA_TPAG=05=credito,99=pendura
-REM set ECLETICA_TPAG=
+REM Formas de pagamento. O 99 e "Outros" na tabela da SEFAZ, entao o codigo
+REM sozinho nao diz nada; nesta instalacao o proprio Ecletica escreve a
+REM descricao "PENDURA" junto dele (confirmado pelo diagnostico em 13/09/2026).
+REM Sem esta linha a pendura cairia no balde maquininha e a conferencia com a
+REM operadora de cartao nao fecharia.
+REM Rode diagnostico.bat para ver os codigos usados e suas descricoes.
+set ECLETICA_TPAG=99=pendura
 
 REM De quanto em quanto tempo reenvia o total do dia.
 set INTERVALO_MIN=2

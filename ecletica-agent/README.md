@@ -83,6 +83,11 @@ PIX entra no balde *maquininha* porque a distinção que importa ali é
 gaveta × eletrônico, e é assim que o `delivery-backend` já classifica. O valor
 de PIX continua visível separado na linha de formas.
 
+Nesta instalação (confirmado pelo diagnóstico): o Eclética emite **todo cartão
+como `03`** — não existe `04`, então crédito e débito não são separáveis pelo
+XML; a coluna "crédito" é, na prática, "cartão". E usa **`99` com a descrição
+`"PENDURA"`**, por isso o `iniciar.bat` já vem com `ECLETICA_TPAG=99=pendura`.
+
 `diagnostico.bat` lista os códigos `tPag` realmente encontrados no mês. Se uma
 forma da tela do caixa estiver caindo na coluna errada, corrija com
 `ECLETICA_TPAG` no `iniciar.bat` — sem tocar no código.
