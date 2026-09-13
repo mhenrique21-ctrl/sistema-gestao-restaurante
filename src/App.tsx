@@ -3290,7 +3290,7 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
       .filter(f=>BALDE_DA_FORMA[f[0]]===campo)
       .map(f=>`${f[1]} ${fmtMoney(f[2])}`).join(" + ");
     return <div style={{fontSize:11,color:"var(--successText)",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 9px",marginTop:5,fontWeight:700}}>
-      🔄 {fontes.join(" + ")} já lançou {fmtMoney(v)} hoje, em linha própria — não repita aqui, os dois somam.
+      🔄 {fontes.join(" + ")} já lançou {fmtMoney(v)} em {fmtDate(form.data)}, em linha própria — não repita aqui, os dois somam.
       {detalhe&&<div style={{fontWeight:400,marginTop:2}}>{detalhe}</div>}
     </div>;
   };
