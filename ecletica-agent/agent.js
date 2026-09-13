@@ -40,6 +40,16 @@ const INTERVALO  = (parseInt(process.env.INTERVALO_MIN, 10) || 2) * 60 * 1000;
 // linha e o dia soma as duas.
 const FONTE = process.env.ECLETICA_FONTE || 'ecletica';
 
+// Onde procurar EVENTO DE CANCELAMENTO. O Eclética não grava o evento junto da
+// nota: o diagnóstico de setembro mostrou 764 arquivos em XmlVenda/XmlVenda2 e
+// ZERO descartados, ou seja, nenhum evento ali. Os documentos de transmissão
+// ficam em ArquivosSistema\NFCe, então é lá que o cancelamento deve estar.
+// Daqui só sai cancelamento — a fonte da verdade das VENDAS continua sendo
+// XmlVenda*, pra uma cópia do destinatário não virar venda extra.
+const RAIZES_EVENTOS = (process.env.ECLETICA_EVENTOS
+  || Array.from(new Set(RAIZES_XML.map((r) => path.join(path.dirname(r), 'NFCe')))).join(';'))
+  .split(';').map((t) => t.trim()).filter(Boolean);
+
 // De qual empresa do Gestão é cada CNPJ emitente. Um PC pode emitir por mais de
 // um CNPJ; sem esse mapa, venda de uma empresa entraria na outra.
 const CNPJ_EMPRESA = {
@@ -114,7 +124,11 @@ const log = (...a) => console.log(new Date().toLocaleTimeString('pt-BR'), ...a);
 // ── Leitura de um XML ───────────────────────────────────────────────────────
 // Devolve { tipo: 'venda', ... } | { tipo: 'cancelamento', chave } | null.
 function lerArquivo(caminho) {
-  const doc = new DOMParser({ errorHandler: {} }).parseFromString(fs.readFileSync(caminho, 'utf8'), 'text/xml');
+  return lerTexto(fs.readFileSync(caminho, 'utf8'));
+}
+
+function lerTexto(texto) {
+  const doc = new DOMParser({ errorHandler: {} }).parseFromString(texto, 'text/xml');
   const tag = (pai, nome) => {
     const e = (pai || doc).getElementsByTagName(nome)[0];
     return e && e.textContent ? e.textContent.trim() : '';
@@ -298,6 +312,26 @@ function apurarDia(dataAlvo, diag) {
   }
   if (diag) diag.repetidas = repetidas;
 
+  // Eventos de cancelamento, numa árvore separada. Dois cuidados: só arquivos
+  // com "tpEvento" no texto são parseados (a pasta de Log tem milhares de
+  // envelopes de transmissão que não interessam), e só os recentes em relação
+  // ao mês procurado — senão cada ciclo de 2 min releria o histórico inteiro.
+  const limite = new Date(mes.getFullYear(), mes.getMonth(), 1).getTime() - 7 * 864e5;
+  let eventos = 0;
+  for (const dir of RAIZES_EVENTOS) {
+    if (!fs.existsSync(dir)) continue;
+    for (const caminho of xmlsDaArvore(dir)) {
+      try {
+        if (fs.statSync(caminho).mtimeMs < limite) continue;
+        const texto = fs.readFileSync(caminho, 'utf8');
+        if (texto.indexOf('tpEvento') < 0) continue;
+        const r = lerTexto(texto);
+        if (r && r.tipo === 'cancelamento') { cancelados.add(r.chave); eventos++; }
+      } catch { /* arquivo em uso / ilegível: não pode derrubar a apuração */ }
+    }
+  }
+  if (diag) { diag.eventosCancelamento = eventos; diag.raizesEventos = RAIZES_EVENTOS; }
+
   // O cancelamento só é conhecido depois de varrer tudo — por isso o filtro
   // vem aqui, e não dentro do laço: a nota costuma ser lida antes do evento.
   const porEmpresa = {};
@@ -406,6 +440,54 @@ async function ciclo() {
   if (!mexeu && totalHoje !== null) log(`· ${hoje}: sem venda nova (total R$ ${totalHoje.toFixed(2)})`);
 }
 
+// Envia um intervalo de dias de uma vez. Serve pra preencher o histórico que
+// ficou no disco antes de a ponte existir, e pra refazer um período depois de
+// corrigir o mapa de formas de pagamento.
+//
+// É seguro reexecutar: /api/venda-pdv SUBSTITUI o registro do dia. Mandar o
+// mesmo período duas vezes dá o mesmo resultado, não o dobro.
+async function enviarPeriodo(ini, fim, simular) {
+  const valido = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!valido(ini) || !valido(fim)) { console.error('Datas devem estar no formato AAAA-MM-DD.'); return; }
+  if (fim < ini) { console.error(`Data final (${fim}) é anterior à inicial (${ini}).`); return; }
+
+  const dias = [];
+  for (const d = new Date(ini + 'T12:00:00'); d.toLocaleDateString('sv-SE') <= fim; d.setDate(d.getDate() + 1)) {
+    dias.push(d.toLocaleDateString('sv-SE'));
+    if (dias.length > 400) break;                  // trava contra intervalo digitado errado
+  }
+
+  console.log(`\n=== ${simular ? 'SIMULAÇÃO' : 'Envio'} de ${ini} a ${fim} (${dias.length} dia(s)) ===`);
+  if (simular) console.log('Nada será enviado ao servidor — só leitura.\n');
+
+  const somas = {};
+  let comVenda = 0;
+  for (const data of dias) {
+    const diag = {};
+    let porEmpresa;
+    try { porEmpresa = apurarDia(data, diag); }
+    catch (e) { console.log(`  ${data}  ❌ ${e.message}`); continue; }
+    const linhas = Object.entries(porEmpresa);
+    if (!linhas.length) { console.log(`  ${data}  —`); continue; }
+    comVenda++;
+    for (const [empresa, acc] of linhas) {
+      somas[empresa] = (somas[empresa] || 0) + acc.total;
+      const detalhe = FORMAS.filter((f) => acc.formas[f] > 0.005).map((f) => `${f} ${acc.formas[f].toFixed(2)}`).join(' | ');
+      if (simular) {
+        console.log(`  ${data}  ${empresa}  R$ ${acc.total.toFixed(2).padStart(10)}  (${acc.vendas} vendas)  ${detalhe}`);
+      } else {
+        try { await enviar(empresa, data, acc); }
+        catch (e) { console.log(`  ${data}  ❌ falha ao enviar ${empresa}: ${e.message}`); }
+      }
+    }
+  }
+
+  console.log(`\n${comVenda} dia(s) com venda.`);
+  Object.entries(somas).forEach(([emp, t]) => console.log(`  ${emp}: R$ ${t.toFixed(2)} no período`));
+  if (simular) console.log('\nConfira os números acima. Para enviar de verdade, rode de novo sem --simular.');
+  console.log('');
+}
+
 // Responde "por que não apareceu nada" sem precisar de mais nenhuma ferramenta
 // no computador do caixa: node agent.js --diagnostico [AAAA-MM-DD]
 function diagnostico(dataAlvo) {
@@ -421,6 +503,8 @@ function diagnostico(dataAlvo) {
     return;
   }
   console.log(`XML na árvore: ${diag.arquivos}`);
+  (diag.raizesEventos || []).forEach((d) => console.log(`Eventos em   : ${d}   ${fs.existsSync(d) ? '[existe]' : '[NÃO existe]'}`));
+  console.log(`Cancelamentos encontrados: ${diag.eventosCancelamento || 0}`);
   if (diag.repetidas) console.log(`Notas repetidas entre as pastas, contadas uma vez só: ${diag.repetidas}`);
   const datas = Object.entries(diag.datas).sort();
   console.log(`\nVendas válidas por data (as 10 mais recentes):`);
@@ -449,19 +533,30 @@ function diagnostico(dataAlvo) {
   console.log('');
 }
 
-export { lerArquivo, lerVenda, apurarDia, ciclo, diagnostico, diasParaEnviar };
+export { lerArquivo, lerTexto, lerVenda, apurarDia, ciclo, diagnostico, diasParaEnviar, enviarPeriodo };
 
 // Só sobe o laço quando executado direto (node agent.js). Importado pelos
 // testes, apenas expõe as funções — senão a suíte ficaria postando de verdade.
 const executadoDireto = process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]));
 if (executadoDireto) {
+  if (process.argv.includes('--enviar')) {
+    const datas = process.argv.filter((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
+    const simular = process.argv.includes('--simular');
+    if (!datas.length) {
+      console.error('Uso: node agent.js --enviar AAAA-MM-DD [AAAA-MM-DD] [--simular]');
+      process.exit(1);
+    }
+    if (!simular && !SECRET) { console.error('SEAMA_SERVICE_SECRET não configurado — veja config.bat'); process.exit(1); }
+    await enviarPeriodo(datas[0], datas[1] || datas[0], simular);
+    process.exit(0);
+  }
   if (process.argv.includes('--diagnostico')) {
     const arg = process.argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
     diagnostico(arg || new Date().toLocaleDateString('sv-SE'));
     process.exit(0);
   }
   if (!SECRET) {
-    console.error('SEAMA_SERVICE_SECRET não configurado — veja iniciar.bat');
+    console.error('SEAMA_SERVICE_SECRET não configurado — veja config.bat');
     process.exit(1);
   }
   const dias = diasParaEnviar();

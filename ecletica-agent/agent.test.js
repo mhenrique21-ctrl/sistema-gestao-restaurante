@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 process.env.SEAMA_SERVICE_SECRET = 'teste';
-const { lerVenda, lerArquivo, apurarDia, diasParaEnviar } = await import('./agent.js');
+const { lerVenda, lerArquivo, apurarDia, diasParaEnviar, enviarPeriodo } = await import('./agent.js');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ecletica-'));
 const escrever = (nome, xml) => { const p = path.join(tmp, nome); fs.writeFileSync(p, xml); return p; };
@@ -330,4 +330,94 @@ test('janela de dias reenviados', async (t) => {
       if (antes === undefined) delete process.env.ECLETICA_DIAS_ATRAS; else process.env.ECLETICA_DIAS_ATRAS = antes;
     }
   });
+});
+
+test('cancelamento numa árvore separada (NFCe), fora dos XML de venda', async (t) => {
+  // O Eclética não grava o evento junto da nota: o diagnóstico de setembro
+  // mostrou 764 arquivos em XmlVenda/XmlVenda2 e ZERO descartados. Se o agente
+  // só olhasse ali, uma venda cancelada seguiria contando pra sempre.
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ecletica-ev-'));
+  const vendas = path.join(base, 'XmlVenda', '2026', '09', 'Emitidos');
+  const eventos = path.join(base, 'NFCe', 'Log');
+  fs.mkdirSync(vendas, { recursive: true });
+  fs.mkdirSync(eventos, { recursive: true });
+  const nota = (chave, vNF) => nfce({ vNF, infCpl: 'sem gorjeta', vTroco: '0.00', pags: [{ tPag: '01', vPag: vNF }] }).replace(CHAVE, chave);
+  fs.writeFileSync(path.join(vendas, 'a.xml'), nota('4'.repeat(44), '70.00'));
+  fs.writeFileSync(path.join(vendas, 'b.xml'), nota('5'.repeat(44), '30.00'));
+  // Envelope de transmissão, que é o que enche a pasta de Log de verdade.
+  fs.writeFileSync(path.join(eventos, 'ruido-env-sinc-lot.xml'), '<enviNFe><idLote>1</idLote></enviNFe>');
+
+  const envXml = process.env.ECLETICA_XML, envEv = process.env.ECLETICA_EVENTOS;
+  try {
+    process.env.ECLETICA_XML = path.join(base, 'XmlVenda');
+    process.env.ECLETICA_EVENTOS = path.join(base, 'NFCe');
+    const { apurarDia: apurar } = await import(`./agent.js?ev=${Date.now()}`);
+
+    await t.test('sem evento, as duas contam', () => {
+      assert.equal(apurar('2026-09-11').CONFRARIA.total, 100);
+    });
+
+    await t.test('evento em NFCe cancela a venda que está em XmlVenda', () => {
+      fs.writeFileSync(path.join(eventos, 'canc.xml'), evento({ chave: '5'.repeat(44) }));
+      const diag = {};
+      const r = apurar('2026-09-11', diag);
+      assert.equal(r.CONFRARIA.total, 70, 'os 30 cancelados saem do faturamento');
+      assert.equal(diag.eventosCancelamento, 1, 'e o diagnóstico diz que achou 1');
+    });
+
+    await t.test('envelope de transmissão não é confundido com evento', () => {
+      // Sem o pré-filtro por "tpEvento", cada ciclo parsearia milhares desses.
+      assert.equal(apurar('2026-09-11').CONFRARIA.vendas, 1);
+    });
+  } finally {
+    if (envXml === undefined) delete process.env.ECLETICA_XML; else process.env.ECLETICA_XML = envXml;
+    if (envEv === undefined) delete process.env.ECLETICA_EVENTOS; else process.env.ECLETICA_EVENTOS = envEv;
+  }
+});
+
+test('backfill de um período', async (t) => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ecletica-bf-'));
+  const dir = path.join(base, 'XmlVenda', '2026', '09', 'Emitidos');
+  fs.mkdirSync(dir, { recursive: true });
+  const emDia = (chave, dia, vNF) => nfce({
+    vNF, infCpl: 'sem gorjeta', vTroco: '0.00', pags: [{ tPag: '01', vPag: vNF }],
+    dhEmi: `2026-09-${dia}T10:00:00-03:00`,
+  }).replace(CHAVE, chave);
+  fs.writeFileSync(path.join(dir, 'd09.xml'), emDia('a'.repeat(44), '09', '10.00'));
+  fs.writeFileSync(path.join(dir, 'd11.xml'), emDia('b'.repeat(44), '11', '20.00'));
+
+  const envXml = process.env.ECLETICA_XML;
+  const linhas = [];
+  const origLog = console.log;
+  try {
+    process.env.ECLETICA_XML = path.join(base, 'XmlVenda');
+    const { enviarPeriodo: periodo } = await import(`./agent.js?bf=${Date.now()}`);
+
+    await t.test('--simular não envia nada e mostra dia a dia', async () => {
+      console.log = (...a) => linhas.push(a.join(' '));
+      // Sem rede: se tentasse enviar de verdade, o fetch falharia e apareceria
+      // no relatório. O teste prova que a simulação não chega a esse ponto.
+      await periodo('2026-09-09', '2026-09-11', true);
+      console.log = origLog;
+      const txt = linhas.join('\n');
+      assert.match(txt, /2026-09-09/);
+      assert.match(txt, /2026-09-11/);
+      assert.match(txt, /2 dia\(s\) com venda/, 'o dia 10 não tem venda e não conta');
+      assert.match(txt, /R\$ 30\.00 no período/, '10 + 20');
+      assert.ok(!txt.includes('❌'), 'simulação não tenta enviar');
+    });
+
+    await t.test('intervalo invertido é recusado em vez de rodar vazio', async () => {
+      const erros = [];
+      const origErr = console.error;
+      console.error = (...a) => erros.push(a.join(' '));
+      console.log = () => {};
+      await periodo('2026-09-11', '2026-09-09', true);
+      console.error = origErr; console.log = origLog;
+      assert.match(erros.join(' '), /anterior/);
+    });
+  } finally {
+    console.log = origLog;
+    if (envXml === undefined) delete process.env.ECLETICA_XML; else process.env.ECLETICA_XML = envXml;
+  }
 });

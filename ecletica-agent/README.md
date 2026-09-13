@@ -4,11 +4,24 @@ Lê os XML de NFC-e que o Eclética já grava no disco do computador do caixa e
 manda o faturamento do dia pro App Gestão. **Sem API e sem tocar no banco do
 Eclética** — só leitura de arquivo.
 
+## Arquivos
+
+| Arquivo | Para quê |
+|---|---|
+| `config.bat` | **O único que você edita.** Segredo, caminhos, formas de pagamento |
+| `iniciar.bat` | Sobe a ponte e deixa rodando |
+| `diagnostico.bat` | Responde "por que não apareceu venda nenhuma" |
+| `backfill.bat` | Envia um período inteiro que já está no disco |
+| `agent.js` | O agente |
+
+Ao atualizar: substitua tudo **menos o `config.bat`**. Ele existe exatamente por
+isso — antes, cada atualização apagava o segredo junto com o resto.
+
 ## Instalação (no computador do caixa)
 
 1. Instale o Node.js LTS: <https://nodejs.org> (marque "Add to PATH").
 2. Copie a pasta `ecletica-agent` inteira para `C:\ecletica-agent`.
-3. Abra `iniciar.bat` no Bloco de Notas e troque `COLE_O_SEGREDO_AQUI` pelo
+3. Abra `config.bat` no Bloco de Notas e troque `COLE_O_SEGREDO_AQUI` pelo
    valor de `SEAMA_SERVICE_SECRET` que está no `.env` do servidor.
 4. Dê dois cliques em `iniciar.bat`. Na primeira vez ele instala a dependência
    sozinho e começa a enviar.
@@ -18,11 +31,21 @@ Eclética** — só leitura de arquivo.
 Para conferir se chegou: no servidor, `pm2 logs app-gestao` mostra uma linha
 `[venda-pdv] OK — CONFRARIA <data> [pdv_ecletica]` a cada envio.
 
-## Variáveis (todas no `iniciar.bat`)
+## Preencher o histórico
+
+`backfill.bat` envia um período inteiro que já está no disco — o que aconteceu
+antes da ponte existir, ou um período a refazer depois de corrigir o mapa de
+formas. Ele **simula primeiro**, mostra dia a dia, e só grava se você digitar
+`ENVIAR`. Repetir é seguro: o Gestão substitui o registro de cada dia, não soma.
+
+Pela linha de comando: `node agent.js --enviar 2026-09-01 2026-09-12 [--simular]`.
+
+## Variáveis (todas no `config.bat`)
 
 | Variável | Padrão | Para quê |
 |---|---|---|
 | `SEAMA_SERVICE_SECRET` | — | **Obrigatória.** Mesmo segredo do `.env` do servidor |
+| `ECLETICA_EVENTOS` | `...\NFCe` | Onde procurar evento de cancelamento |
 | `ECLETICA_XML` | `...\XmlVenda;...\XmlVenda2` | Raízes dos XML, separadas por `;` |
 | `GESTAO_URL` | `https://gestao.confrariacafe.com` | Servidor do Gestão |
 | `INTERVALO_MIN` | `2` | De quanto em quanto tempo reenvia o dia |
@@ -101,6 +124,15 @@ gorjeta nos dois lugares, mas `vTroco` é ambíguo: numa venda em dinheiro ele �
 o troco de verdade, e somá-lo contaria como faturamento o dinheiro que voltou
 pro cliente. Por decisão do dono, a gorjeta entra **dentro do faturamento**
 (venda de R$ 84,00 + R$ 8,40 de gorjeta sobe como R$ 92,40).
+
+**O cancelamento mora noutra árvore.** O Eclética não grava o evento junto da
+nota: o diagnóstico de setembro mostrou 764 arquivos em `XmlVenda`/`XmlVenda2` e
+**zero** descartados. Os documentos de transmissão ficam em
+`ArquivosSistema\NFCe`, então é lá que o agente procura o cancelamento — e dali
+só sai cancelamento, nunca venda, para uma cópia do destinatário não virar
+faturamento extra. Dois cuidados de desempenho: só arquivos que contêm
+`tpEvento` são interpretados (a pasta de Log tem milhares de envelopes que não
+interessam), e só os recentes em relação ao mês procurado.
 
 **Venda cancelada fica de fora**, por dois caminhos — porque emissores fazem de
 formas diferentes e não dá pra saber de antemão qual o seu usa:
