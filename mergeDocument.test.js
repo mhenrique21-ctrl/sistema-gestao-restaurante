@@ -369,3 +369,42 @@ describe('mergeDocument', () => {
     assert.equal(final.budgetCompras['2026-09'].categorias['Laticínios'].ajustadoManualmente, false);
   });
 });
+
+describe('itensVendidos', () => {
+  const dia = (origem, itens, quando) => ({
+    id: `itens-${origem}-confraria-2026-09-12`, data: '2026-09-12', origem, itens,
+    atualizadoEm: quando,
+  });
+
+  test('campo novo sobrevive à fusão — não volta cru do servidor', () => {
+    // A armadilha do §3 do CLAUDE.md: mergeDocument monta o documento a partir
+    // do incoming, então um campo que não esteja na lista de fusão seria
+    // apagado por um aparelho com bundle antigo, ou revertido pelo poll.
+    const servidor = { itensVendidos: [dia('pdv_ecletica', [{ nome: 'PAO', qtd: 10, valor: 50 }], '2026-09-12T10:00:00.000Z')] };
+    const chegando = { vendas: [] };
+
+    const r = mergeDocument(servidor, chegando);
+
+    assert.equal(r.itensVendidos.length, 1, 'um POST que não fala de itensVendidos não pode apagá-lo');
+    assert.equal(r.itensVendidos[0].itens[0].nome, 'PAO');
+  });
+
+  test('reenvio do mesmo dia substitui a lista de itens, sem duplicar', () => {
+    const antigo = dia('pdv_ecletica', [{ nome: 'PAO', qtd: 10, valor: 50 }], '2026-09-12T10:00:00.000Z');
+    const novo = dia('pdv_ecletica', [{ nome: 'PAO', qtd: 42, valor: 210 }], '2026-09-12T18:00:00.000Z');
+
+    const r = mergeDocument({ itensVendidos: [antigo] }, { itensVendidos: [novo] });
+
+    assert.equal(r.itensVendidos.length, 1);
+    assert.equal(r.itensVendidos[0].itens[0].qtd, 42, 'o dia inteiro é reapurado a cada envio: vence o mais recente');
+  });
+
+  test('duas origens no mesmo dia coexistem, como nas vendas', () => {
+    const caixa = dia('pdv_ecletica', [{ nome: 'PAO', qtd: 10, valor: 50 }], '2026-09-12T10:00:00.000Z');
+    const outro = dia('pdv_seama', [{ nome: 'CAFE', qtd: 3, valor: 15 }], '2026-09-12T10:00:00.000Z');
+
+    const r = mergeDocument({ itensVendidos: [caixa] }, { itensVendidos: [outro] });
+
+    assert.equal(r.itensVendidos.length, 2, 'ids diferentes por origem: nenhuma apaga a outra');
+  });
+});

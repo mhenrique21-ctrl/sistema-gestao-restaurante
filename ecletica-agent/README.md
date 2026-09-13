@@ -115,6 +115,21 @@ XML; a coluna "crédito" é, na prática, "cartão". E usa **`99` com a descriç
 forma da tela do caixa estiver caindo na coluna errada, corrija com
 `ECLETICA_TPAG` no `iniciar.bat` — sem tocar no código.
 
+**Manda também os produtos vendidos.** O `<det>` da nota traz código, descrição,
+quantidade, unidade e valor de cada item — o dado que os relatórios de Produtos,
+Curva ABC e Margem do Gestão sempre souberam usar e nunca tiveram da venda do
+balcão. Vai **agregado por dia e por produto**, não item a item: o Gestão
+sincroniza o documento inteiro entre os aparelhos a cada ~100ms, e guardar cada
+linha de cada cupom engordaria esse tráfego todo dia, para sempre.
+
+O agrupamento é pelo **código** do produto quando ele existe: reeditar o cadastro
+no Eclética muda o nome, e o mesmo item viraria dois no ranking.
+
+⚠️ A soma dos itens **não fecha** com o total da venda: `vProd` é antes de
+desconto e sem gorjeta. É de propósito — para ranking e margem o que importa é o
+peso relativo de cada produto, e ratear gorjeta por item inventaria um número
+que não está na nota. O faturamento continua saindo do `vNF`.
+
 **O total sai de `<total><ICMSTot><vNF>`.** Existe um `<vProd>` dentro de cada
 item também; pegar "o primeiro do documento" traria o valor do primeiro produto
 em vez do total da venda.

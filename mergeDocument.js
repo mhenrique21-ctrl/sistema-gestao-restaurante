@@ -15,6 +15,11 @@ export const MERGEABLE_FIELDS = [
   // entra na fusão por id como os demais — regravar a projeção da semana num
   // aparelho não pode apagar a que outro salvou pra outra semana.
   'projecoesCompra',
+  // Itens vendidos por dia, agregados por produto (hoje vindos do agente do
+  // Eclética). Array com id e atualizadoEm — fusão por id como os demais.
+  // Fica FORA de `vendas` de propósito: não participa de nenhum cálculo de
+  // faturamento, então um erro aqui não pode contaminar a receita.
+  'itensVendidos',
   // Recibos de entrega: array com id, tinha fusão no cliente e não aqui.
   // Sem isto, dois aparelhos emitindo recibo perto um do outro faziam o
   // último POST apagar o recibo do outro.

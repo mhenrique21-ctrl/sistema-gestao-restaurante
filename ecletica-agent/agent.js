@@ -179,6 +179,28 @@ function lerTexto(texto) {
   const mg = infCpl.match(/GORJETA[^R]*R\$\s*([\d.,]+)/i);
   const gorjeta = mg ? (parseFloat(mg[1].replace(/\./g, '').replace(',', '.')) || 0) : 0;
 
+  // Itens vendidos. O <det> traz código, descrição, quantidade, unidade e valor
+  // de cada produto — é o dado que os relatórios de Produtos, Curva ABC e
+  // Margem do Gestão sempre souberam usar e nunca tiveram da venda do balcão.
+  //
+  // vProd é o valor do item ANTES de desconto e sem rateio de gorjeta, então a
+  // soma dos itens não fecha exatamente com o total da venda. É de propósito:
+  // para ranking e margem o que importa é o peso relativo de cada produto, e
+  // distribuir gorjeta por item inventaria um número que não existe na nota.
+  const itens = Array.from(doc.getElementsByTagName('det')).map((d) => {
+    const prod = d.getElementsByTagName('prod')[0];
+    if (!prod) return null;
+    const nome = tag(prod, 'xProd');
+    if (!nome) return null;
+    return {
+      cod: tag(prod, 'cProd'),
+      nome,
+      qtd: parseFloat(tag(prod, 'qCom')) || 0,
+      un: tag(prod, 'uCom') || 'un',
+      valor: parseFloat(tag(prod, 'vProd')) || 0,
+    };
+  }).filter(Boolean);
+
   // Divide entre os canais pelas formas de pagamento. Venda paga metade no
   // cartão e metade em dinheiro tem dois <detPag>; ratear pelo peso de cada um
   // mantém a soma exata mesmo quando a gorjeta entra no meio.
@@ -206,7 +228,7 @@ function lerTexto(texto) {
     });
   }
 
-  return { tipo: 'venda', empresa, data, total: totalVenda, canais, formas, chave: tag(null, 'chNFe'),
+  return { tipo: 'venda', empresa, data, total: totalVenda, canais, formas, itens, chave: tag(null, 'chNFe'),
     tPags: pagos.map((p) => ({ tPag: p.tPag, xPag: p.xPag, valor: p.valor })) };
 }
 
@@ -341,11 +363,26 @@ function apurarDia(dataAlvo, diag) {
     const acc = porEmpresa[v.empresa] || (porEmpresa[v.empresa] = {
       total: 0, dinheiro: 0, maquininha: 0, vendas: 0,
       formas: Object.fromEntries(FORMAS.map((f) => [f, 0])),
+      // Agregado por PRODUTO, não item a item. O Gestão sincroniza o documento
+      // inteiro entre os aparelhos a cada ~100ms; guardar cada linha de cada
+      // cupom engordaria esse tráfego todo dia, pra sempre. Por dia e por
+      // produto é o suficiente pra ranking, ABC e margem.
+      itens: new Map(),
     });
     acc.total += v.total;
     acc.dinheiro += v.canais.dinheiro;
     acc.maquininha += v.canais.maquininha;
     FORMAS.forEach((f) => { acc.formas[f] += v.formas[f] || 0; });
+    // Chave pelo CÓDIGO quando existe: o nome muda quando alguém reedita o
+    // cadastro ("PAO DE QUEIJO" → "PÃO DE QUEIJO GD") e o produto viraria dois
+    // no ranking. Sem código, o nome é o que há.
+    (v.itens || []).forEach((it) => {
+      const k = it.cod || it.nome.toUpperCase();
+      const cur = acc.itens.get(k) || { cod: it.cod, nome: it.nome, un: it.un, qtd: 0, valor: 0 };
+      cur.qtd += it.qtd; cur.valor += it.valor;
+      cur.nome = it.nome;                            // o mais recente vence
+      acc.itens.set(k, cur);
+    });
     acc.vendas++;
   }
   if (cancelados_no_dia) log(`  (${cancelados_no_dia} venda(s) cancelada(s) fora do faturamento)`);
@@ -362,6 +399,12 @@ async function enviar(empresa, data, acc) {
     maquininha: r2(acc.maquininha),
     total: r2(acc.total),
     formas: Object.fromEntries(FORMAS.map((f) => [f, r2(acc.formas[f])])),
+    // Teto pra um cardápio gigante não virar um POST desproporcional. Ordenado
+    // por valor, então o que for cortado é a cauda irrelevante do ranking.
+    itens: Array.from(acc.itens.values())
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 300)
+      .map((it) => ({ cod: it.cod, nome: it.nome, un: it.un, qtd: Math.round(it.qtd * 1000) / 1000, valor: r2(it.valor) })),
   };
   const r = await fetch(`${GESTAO_URL}/api/venda-pdv`, {
     method: 'POST',
@@ -370,7 +413,7 @@ async function enviar(empresa, data, acc) {
   });
   if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(() => '')}`);
   const detalhe = FORMAS.filter((f) => body.formas[f] > 0).map((f) => `${f} ${body.formas[f].toFixed(2)}`).join(' | ');
-  log(`✅ ${empresa} ${data}: ${acc.vendas} venda(s), total R$ ${body.total.toFixed(2)}  →  ${detalhe}`);
+  log(`✅ ${empresa} ${data}: ${acc.vendas} venda(s), ${body.itens.length} produto(s), total R$ ${body.total.toFixed(2)}  →  ${detalhe}`);
 }
 
 // Quais dias reenviar a cada ciclo. O agente só mandava o dia corrente e nunca
@@ -529,6 +572,11 @@ function diagnostico(dataAlvo) {
     console.log(`  ${emp}: R$ ${a.total.toFixed(2)} em ${a.vendas} venda(s)`);
     FORMAS.filter((f) => a.formas[f] > 0.005).forEach((f) => console.log(`      ${f.padEnd(9)} R$ ${a.formas[f].toFixed(2)}`));
     if (a.formas.pendura > 0.005) console.log('      (pendura entra no total, mas fora de dinheiro e maquininha)');
+    const top = Array.from(a.itens.values()).sort((x, y) => y.valor - x.valor);
+    if (top.length) {
+      console.log(`      ${top.length} produto(s) diferentes. Os 5 maiores:`);
+      top.slice(0, 5).forEach((it) => console.log(`        ${it.qtd.toFixed(0).padStart(4)} ${String(it.un).padEnd(3)} R$ ${it.valor.toFixed(2).padStart(9)}  ${it.nome}`));
+    }
   });
   console.log('');
 }

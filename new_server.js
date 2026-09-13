@@ -1822,7 +1822,7 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
         }
 
-        const { empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte, formas } = JSON.parse(body);
+        const { empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte, formas, itens } = JSON.parse(body);
         const emp = String(empresa || '').toUpperCase();
         if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
@@ -1891,6 +1891,35 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           atualizadoEm: agora,
         };
         if (i >= 0) vendas[i] = reg; else vendas.unshift(reg);
+
+        // Itens vendidos no dia, AGREGADOS por produto — vive fora de `vendas`
+        // de propósito: nada aqui participa do cálculo de faturamento, e um
+        // erro no ranking não pode contaminar a receita. Mesma chave (data +
+        // origem) e mesma regra de substituição do registro do dia.
+        if (Array.isArray(itens) && itens.length) {
+          const limpos = itens
+            .filter(it => it && typeof it.nome === 'string' && it.nome.trim())
+            .slice(0, 500)
+            .map(it => ({
+              cod: String(it.cod || '').slice(0, 40),
+              nome: String(it.nome).trim().slice(0, 120),
+              un: String(it.un || 'un').slice(0, 10),
+              qtd: num(it.qtd),
+              valor: num(it.valor),
+            }));
+          if (limpos.length) {
+            const lista = Array.isArray(doc.itensVendidos) ? doc.itensVendidos : [];
+            const j = lista.findIndex(x => x && x.data === data && x.origem === origem);
+            const regItens = {
+              id: j >= 0 ? lista[j].id : `itens-${origem.replace('_', '-')}-${emp.toLowerCase()}-${data}`,
+              data, origem, itens: limpos,
+              criadoEm: j >= 0 ? (lista[j].criadoEm || agora) : agora,
+              atualizadoEm: agora,
+            };
+            if (j >= 0) lista[j] = regItens; else lista.unshift(regItens);
+            doc.itensVendidos = lista;
+          }
+        }
 
         doc.vendas = vendas;
         fs.writeFileSync(file, JSON.stringify(doc));

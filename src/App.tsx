@@ -272,7 +272,7 @@ const PRODS_SEED_V6=[
 ];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
-  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[],
+  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[], itensVendidos:[] as any[],
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
@@ -1693,6 +1693,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // unionById: todo write aqui carimba atualizadoEm desde o início (ver
       // bug de produtosProducao perdendo categoria por falta desse carimbo).
       recibosVenda: mergeArrayById(s.recibosVenda||[],p.recibosVenda||[],_listaDeletados),
+      // Itens vendidos por dia, agregados por produto (agente do Eclética).
+      // Campo novo: registrado AQUI e em mergeDocument.js, senão o poll de
+      // ~100ms traria o valor cru do servidor e reverteria a gravação antes
+      // do POST confirmar — o sintoma clássico de "marco e volta sozinho".
+      itensVendidos:mergeArrayById(s.itensVendidos||[],p.itensVendidos||[],_listaDeletados),
       // iconesProducao não tinha fusão nenhuma — vinha cru do spread {...s} acima,
       // então trocar o ícone de uma categoria era revertido pelo poll seguinte
       // (300ms) sempre que ele chegasse antes do POST confirmar no servidor.
@@ -4594,6 +4599,41 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
 
+  // Linhas de item do período, de DUAS fontes. Os relatórios por produto
+  // (Produtos, Curva ABC, Margem) existiam desde sempre lendo só recibosVenda —
+  // a ferramenta de venda avulsa. A venda do balcão nunca passava por ali, então
+  // a aba Margem sabia calcular custo por ficha técnica e nunca tinha visto um
+  // produto. itensVendidos traz o que o PDV vendeu de verdade.
+  //
+  // O PDV chega AGREGADO por dia (um registro por dia e produto, não item a
+  // item): o documento inteiro trafega entre os aparelhos a cada ~100ms, e
+  // guardar cada linha de cada cupom engordaria isso todo dia, pra sempre.
+  const itensPdvPeriodo=(db.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim);
+  const itensPeriodo=(()=>{
+    const linhas:{nome:string,qtd:number,valor:number,un:string}[]=[];
+    recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>
+      linhas.push({nome:it.nome||"",qtd:it.quantidade||0,valor:it.subtotal||0,un:it.unidade||"un"})));
+    itensPdvPeriodo.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>
+      linhas.push({nome:it.nome||"",qtd:it.qtd||0,valor:it.valor||0,un:it.un||"un"})));
+    return linhas.filter(l=>l.nome);
+  })();
+  // Agrupa por foldNome: o PDV escreve "PAO DE QUEIJO" e o recibo "Pão de
+  // queijo" — agrupar pelo texto cru faria o mesmo produto virar dois no
+  // ranking. foldNome é a normalização única do sistema (§5 do CLAUDE.md).
+  const agruparItens=()=>{
+    const m=new Map<string,{nome:string,qtd:number,total:number,unidade:string}>();
+    itensPeriodo.forEach(l=>{
+      const k=foldNome(l.nome);
+      const cur=m.get(k)||{nome:l.nome,qtd:0,total:0,unidade:l.un};
+      cur.qtd+=l.qtd; cur.total+=l.valor;
+      m.set(k,cur);
+    });
+    return Array.from(m.values()).sort((a,b)=>b.total-a.total);
+  };
+  const avisoFontePdv=itensPdvPeriodo.length>0
+    ?<div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Inclui {itensPdvPeriodo.length} dia(s) de venda do PDV, agregados por produto.</div>
+    :null;
+
   const TABS:[typeof relTab,string][]=[
     ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
     ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
@@ -4656,35 +4696,25 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
     })()}
 
     {relTab==="produtos"&&(()=>{
-      const porProduto:Record<string,{nome:string,qtd:number,total:number,unidade:string}>={};
-      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>{
-        if(!porProduto[it.nome])porProduto[it.nome]={nome:it.nome,qtd:0,total:0,unidade:it.unidade||"un"};
-        porProduto[it.nome].qtd+=it.quantidade||0;
-        porProduto[it.nome].total+=it.subtotal||0;
-      }));
-      const ranking=Object.values(porProduto).sort((a,b)=>b.total-a.total);
+      const ranking=agruparItens();
       const max=ranking[0]?.total||1;
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Ranking de produtos — por receita</div>
+        {avisoFontePdv}
         {!ranking.length&&<EmptyState msg="Nenhum item vendido no período."/>}
         {ranking.map((p:any)=><RowBar key={p.nome} label={p.nome} qty={`${p.qtd} ${p.unidade}`} val={p.total} pct={p.total/max*100}/>)}
       </>;
     })()}
 
     {relTab==="abc"&&(()=>{
-      const porProduto:Record<string,{nome:string,qtd:number,total:number}>={};
-      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>{
-        if(!porProduto[it.nome])porProduto[it.nome]={nome:it.nome,qtd:0,total:0};
-        porProduto[it.nome].qtd+=it.quantidade||0;
-        porProduto[it.nome].total+=it.subtotal||0;
-      }));
-      const ranking=Object.values(porProduto).sort((a,b)=>b.total-a.total);
+      const ranking=agruparItens();
       const totalRank=ranking.reduce((s,p)=>s+p.total,0)||1;
       let acc=0;
       const classes={A:"#15803D",B:"#B45309",C:"#6b7085"};
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Curva ABC — quem sustenta a receita</div>
         <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>A = até 80% acumulado · B = até 95% · C = resto</div>
+        {avisoFontePdv}
         {!ranking.length&&<EmptyState msg="Nenhum item vendido no período."/>}
         {ranking.map((p:any)=>{
           acc+=p.total;
@@ -4821,23 +4851,32 @@ function RecibosVendaRelatorioPanel({db,state,empresa,aj,onVoltar}:{db:any,state
 
     {relTab==="margem"&&(()=>{
       const fichas=db.fichasTecnicas||[];
-      const porProduto:Record<string,{nome:string,qtd:number,receita:number}>={};
-      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>{
-        if(!porProduto[it.nome])porProduto[it.nome]={nome:it.nome,qtd:0,receita:0};
-        porProduto[it.nome].qtd+=it.quantidade||0;
-        porProduto[it.nome].receita+=it.subtotal||0;
-      }));
-      const linhas=Object.values(porProduto).map((p:any)=>{
-        const ficha=fichas.find((f:any)=>f.nome===p.nome);
+      // Casa por foldNome, não por texto exato: o PDV escreve "PAO DE QUEIJO GD"
+      // e a ficha diz "Pão de queijo gd". Comparar cru só acertaria por acaso.
+      const porFold=new Map<string,any>();
+      fichas.forEach((f:any)=>{if(f?.nome)porFold.set(foldNome(f.nome),f);});
+      const linhas=agruparItens().map((p:any)=>{
+        const ficha=porFold.get(foldNome(p.nome));
         const custo=ficha?(ficha.custoPorcao||0)*p.qtd:null;
-        const margem=custo!=null?p.receita-custo:null;
-        const margemPct=margem!=null&&p.receita?margem/p.receita*100:null;
-        return{...p,custo,margem,margemPct};
-      }).sort((a:any,b:any)=>(b.margem??-Infinity)-(a.margem??-Infinity));
-      const semFicha=linhas.filter((l:any)=>l.custo==null).length;
+        const margem=custo!=null?p.total-custo:null;
+        const margemPct=margem!=null&&p.total?margem/p.total*100:null;
+        return{...p,receita:p.total,custo,margem,margemPct};
+      }).sort((a:any,b:any)=>{
+        if(a.margem==null&&b.margem==null)return 0;
+        if(a.margem==null)return 1;
+        if(b.margem==null)return -1;
+        return b.margem-a.margem;
+      });
+      const semFicha=linhas.filter((l:any)=>l.custo==null);
+      const receitaSemFicha=semFicha.reduce((s:number,l:any)=>s+l.total,0);
+      const receitaTotal=linhas.reduce((s:number,l:any)=>s+l.total,0);
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Margem por produto</div>
-        {semFicha>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>⚠️ {semFicha} produto(s) sem ficha técnica cadastrada — margem não calculada pra eles</div>}
+        {avisoFontePdv}
+        {semFicha.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
+          ⚠️ {semFicha.length} produto(s) sem ficha técnica com nome correspondente — {receitaTotal?Math.round(receitaSemFicha/receitaTotal*100):0}% da receita do período fica sem margem calculada.
+          O nome no PDV precisa bater com o da ficha técnica (acentos e maiúsculas não importam).
+        </div>}
         {!linhas.length&&<EmptyState msg="Nenhum item vendido no período."/>}
         {linhas.map((l:any)=><div key={l.nome} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
           <span style={{fontSize:13}}>{l.nome} <span style={{color:"var(--text2)",fontSize:11}}>({l.qtd})</span></span>

@@ -17,8 +17,8 @@ const nfce = ({ cnpj = '58564214000170', mod = '65', cStat = '100', dhEmi = '202
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe>
 <ide><mod>${mod}</mod><dhEmi>${dhEmi}</dhEmi></ide>
 <emit><CNPJ>${cnpj}</CNPJ></emit>
-<det nItem="1"><prod><xProd>ITEM A</xProd><vProd>20.00</vProd></prod></det>
-<det nItem="2"><prod><xProd>ITEM B</xProd><vProd>64.00</vProd></prod></det>
+<det nItem="1"><prod><cProd>7</cProd><xProd>ITEM A</xProd><uCom>UN</uCom><qCom>2.0000</qCom><vProd>20.00</vProd></prod></det>
+<det nItem="2"><prod><cProd>9</cProd><xProd>ITEM B</xProd><uCom>UN</uCom><qCom>1.0000</qCom><vProd>64.00</vProd></prod></det>
 <total><ICMSTot><vProd>84.00</vProd><vNF>${vNF}</vNF></ICMSTot></total>
 <pag>${pags.map((p) => `<detPag><tPag>${p.tPag}</tPag><vPag>${p.vPag}</vPag></detPag>`).join('')}<vTroco>${vTroco}</vTroco></pag>
 <infAdic><infCpl>${infCpl}</infCpl></infAdic>
@@ -290,6 +290,68 @@ test('venda cancelada fica fora do faturamento', async (t) => {
   await t.test('lerArquivo distingue os dois tipos de documento', () => {
     assert.equal(lerArquivo(escrever('ev.xml', evento())).tipo, 'cancelamento');
     assert.equal(lerArquivo(escrever('vd.xml', nfce())).tipo, 'venda');
+  });
+});
+
+test('itens vendidos', async (t) => {
+  await t.test('lê código, nome, quantidade, unidade e valor de cada item', () => {
+    const v = lerVenda(escrever('itens.xml', nfce()));
+    assert.deepEqual(v.itens, [
+      { cod: '7', nome: 'ITEM A', qtd: 2, un: 'UN', valor: 20 },
+      { cod: '9', nome: 'ITEM B', qtd: 1, un: 'UN', valor: 64 },
+    ]);
+  });
+
+  await t.test('o total NÃO sai da soma dos itens', () => {
+    // vProd é antes de desconto e sem gorjeta: 20+64=84, e a venda é 92,40.
+    // Se algum dia alguém "simplificar" somando os itens, o faturamento cai.
+    const v = lerVenda(escrever('itens2.xml', nfce()));
+    assert.equal(v.itens.reduce((s, i) => s + i.valor, 0), 84);
+    assert.equal(v.total, 92.40);
+  });
+
+  await t.test('agrega por dia somando quantidade e valor', async () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ecletica-itens-'));
+    const dir = path.join(base, 'XmlVenda', '2026', '09', 'Emitidos');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, '1.xml'), nfce().replace(CHAVE, '1'.repeat(44)));
+    fs.writeFileSync(path.join(dir, '2.xml'), nfce().replace(CHAVE, '2'.repeat(44)));
+
+    const antes = process.env.ECLETICA_XML;
+    try {
+      process.env.ECLETICA_XML = path.join(base, 'XmlVenda');
+      const { apurarDia: apurar } = await import(`./agent.js?itens=${Date.now()}`);
+      const itens = apurar('2026-09-11').CONFRARIA.itens;
+      assert.equal(itens.size, 2, 'dois produtos distintos, não quatro linhas');
+      assert.equal(itens.get('7').qtd, 4, '2 + 2');
+      assert.equal(itens.get('7').valor, 40);
+      assert.equal(itens.get('9').valor, 128);
+    } finally {
+      if (antes === undefined) delete process.env.ECLETICA_XML; else process.env.ECLETICA_XML = antes;
+    }
+  });
+
+  await t.test('agrupa pelo CÓDIGO quando o nome muda entre as notas', async () => {
+    // Reeditar o cadastro do produto no Eclética ("PAO" → "PÃO DE QUEIJO GD")
+    // faria o mesmo item virar dois no ranking se a chave fosse o nome.
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ecletica-cod-'));
+    const dir = path.join(base, 'XmlVenda', '2026', '09', 'Emitidos');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, '1.xml'), nfce().replace(CHAVE, '3'.repeat(44)));
+    fs.writeFileSync(path.join(dir, '2.xml'),
+      nfce().replace(CHAVE, '4'.repeat(44)).replace('<xProd>ITEM A</xProd>', '<xProd>ITEM A GRANDE</xProd>'));
+
+    const antes = process.env.ECLETICA_XML;
+    try {
+      process.env.ECLETICA_XML = path.join(base, 'XmlVenda');
+      const { apurarDia: apurar } = await import(`./agent.js?cod=${Date.now()}`);
+      const itens = apurar('2026-09-11').CONFRARIA.itens;
+      assert.equal(itens.size, 2, 'continua sendo dois produtos');
+      assert.equal(itens.get('7').qtd, 4, 'as duas grafias somaram no mesmo código');
+      assert.equal(itens.get('7').nome, 'ITEM A GRANDE', 'e exibe o nome mais recente');
+    } finally {
+      if (antes === undefined) delete process.env.ECLETICA_XML; else process.env.ECLETICA_XML = antes;
+    }
   });
 });
 
