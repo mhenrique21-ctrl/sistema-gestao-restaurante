@@ -134,6 +134,28 @@ test('ponte Eclética → Gestão', async (t) => {
     }
   });
 
+  await t.test('ECLETICA_TPAG com forma inexistente é recusado, não vira NaN', async () => {
+    // formas["cartao"] não existe; somar nele daria undefined + número = NaN, e
+    // o dia inteiro subiria como NaN sem erro nenhum aparecer.
+    const antes = process.env.ECLETICA_TPAG;
+    const erros = [];
+    const origErr = console.error;
+    console.error = (...a) => erros.push(a.join(' '));
+    try {
+      process.env.ECLETICA_TPAG = '03=cartao';
+      const { lerVenda: ler } = await import(`./agent.js?ruim=${Date.now()}`);
+      const v = ler(escrever('tpag-ruim.xml', nfce({
+        vNF: '20.00', infCpl: 'sem gorjeta', vTroco: '0.00', pags: [{ tPag: '03', vPag: '20.00' }],
+      })));
+      assert.equal(v.formas.credito, 20, 'mantém o mapa padrão em vez de aceitar a forma inválida');
+      assert.ok(Object.values(v.formas).every(Number.isFinite), 'nenhuma forma pode ser NaN');
+      assert.ok(erros.some((e) => e.includes('cartao')), 'e avisa em voz alta');
+    } finally {
+      console.error = origErr;
+      if (antes === undefined) delete process.env.ECLETICA_TPAG; else process.env.ECLETICA_TPAG = antes;
+    }
+  });
+
   await t.test('a data vem do dhEmi local, sem conversão de fuso', () => {
     // Venda às 23h com fuso -03:00: new Date().toISOString() jogaria pro dia
     // seguinte e o faturamento cairia na data errada.

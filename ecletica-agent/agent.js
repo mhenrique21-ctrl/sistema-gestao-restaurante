@@ -71,9 +71,17 @@ const FORMA_POR_TPAG = {
 
 // Ajuste sem mexer no código, para quando o Eclética usar um código fora do
 // óbvio: ECLETICA_TPAG="05=credito,99=pendura".
-(process.env.ECLETICA_TPAG || '').split(',').map((p) => p.trim()).filter(Boolean).forEach((par) => {
+const APLICAR_TPAG = () => (process.env.ECLETICA_TPAG || '').split(',').map((p) => p.trim()).filter(Boolean).forEach((par) => {
   const [cod, forma] = par.split('=').map((t) => t.trim());
-  if (cod && forma) FORMA_POR_TPAG[cod] = forma;
+  if (!cod || !forma) return;
+  // Nome de forma inventado (ex.: "cartao") somaria em formas[forma], que não
+  // existe: undefined + número = NaN, e o dia inteiro subiria como NaN sem
+  // erro nenhum. Melhor recusar em voz alta do que aceitar e corromper.
+  if (!FORMAS.includes(forma)) {
+    console.error(`⚠️  ECLETICA_TPAG: "${forma}" não é uma forma válida. Use uma de: ${FORMAS.join(', ')}. Ignorando "${par}".`);
+    return;
+  }
+  FORMA_POR_TPAG[cod] = forma;
 });
 
 // Pendura (fiado) fica FORA dos dois baldes: é venda faturada com recebimento
@@ -81,6 +89,8 @@ const FORMA_POR_TPAG = {
 // Entra no total do dia, que é o número que o caixa vê ao fechar. Essa é a
 // mesma regra que o delivery-backend já aplica (FORA_DOS_BALDES lá) — as duas
 // fontes precisam contar igual, senão a DRE soma maçã com laranja.
+const FORMAS = ['dinheiro', 'credito', 'debito', 'pix', 'pendura', 'outros'];
+
 const BALDE_POR_FORMA = {
   dinheiro: 'dinheiro',
   credito: 'maquininha',
@@ -89,7 +99,7 @@ const BALDE_POR_FORMA = {
   outros: 'maquininha',
   pendura: null,                                      // no total, fora dos baldes
 };
-const FORMAS = ['dinheiro', 'credito', 'debito', 'pix', 'pendura', 'outros'];
+APLICAR_TPAG();
 
 const TP_EVENTO_CANCELAMENTO = '110111';
 const CSTAT_EVENTO_OK = ['135', '155'];
@@ -161,7 +171,9 @@ function lerArquivo(caminho) {
   const detPags = Array.from(doc.getElementsByTagName('detPag'));
   const pagos = detPags.map((d) => {
     const tPag = tag(d, 'tPag');
-    return { tPag, forma: FORMA_POR_TPAG[tPag] || 'outros', valor: parseFloat(tag(d, 'vPag')) || 0 };
+    // xPag é a descrição em texto que acompanha tPag 99 ("Outros"). É o único
+    // lugar do XML que diz o que o caixa chamou aquela forma na tela.
+    return { tPag, xPag: tag(d, 'xPag'), forma: FORMA_POR_TPAG[tPag] || 'outros', valor: parseFloat(tag(d, 'vPag')) || 0 };
   }).filter((p) => p.valor > 0);
 
   const totalVenda = vNF + gorjeta;
@@ -180,7 +192,8 @@ function lerArquivo(caminho) {
     });
   }
 
-  return { tipo: 'venda', empresa, data, total: totalVenda, canais, formas, chave: tag(null, 'chNFe'), tPags: pagos.map((p) => p.tPag) };
+  return { tipo: 'venda', empresa, data, total: totalVenda, canais, formas, chave: tag(null, 'chNFe'),
+    tPags: pagos.map((p) => ({ tPag: p.tPag, xPag: p.xPag, valor: p.valor })) };
 }
 
 // Compatibilidade com quem só quer a venda (e com os testes).
@@ -273,9 +286,10 @@ function apurarDia(dataAlvo, diag) {
         // saber qual tPag o Eclética escreve pra cada forma da tela do caixa,
         // em vez de supor pela tabela da SEFAZ.
         diag.tPags = diag.tPags || {};
-        (r.tPags || []).forEach((c) => {
-          const k = `${c} (${FORMA_POR_TPAG[c] || 'outros'})`;
-          diag.tPags[k] = (diag.tPags[k] || 0) + 1;
+        (r.tPags || []).forEach((p) => {
+          const k = `${p.tPag} (${FORMA_POR_TPAG[p.tPag] || 'outros'})${p.xPag ? ` "${p.xPag}"` : ''}`;
+          const acc = diag.tPags[k] || (diag.tPags[k] = { n: 0, valor: 0 });
+          acc.n++; acc.valor += p.valor;
         });
       }
       if (r.data !== dataAlvo) continue;           // outro dia do mesmo mês
@@ -412,10 +426,10 @@ function diagnostico(dataAlvo) {
   console.log(`\nVendas válidas por data (as 10 mais recentes):`);
   if (!datas.length) console.log('  nenhuma — todos os arquivos foram descartados, ver abaixo');
   datas.slice(-10).forEach(([d, n]) => console.log(`  ${d}: ${n} venda(s)${d === dataAlvo ? '   <-- o dia procurado' : ''}`));
-  const tp = Object.entries(diag.tPags || {}).sort((a, b) => b[1] - a[1]);
+  const tp = Object.entries(diag.tPags || {}).sort((a, b) => b[1].valor - a[1].valor);
   if (tp.length) {
     console.log(`\nCódigos de pagamento (tPag) encontrados no mês:`);
-    tp.forEach(([c, n]) => console.log(`  ${n}x  tPag ${c}`));
+    tp.forEach(([c, a]) => console.log(`  ${String(a.n).padStart(4)}x  R$ ${a.valor.toFixed(2).padStart(10)}  tPag ${c}`));
     console.log('  Se alguma forma da tela do caixa estiver caindo no lugar errado,');
     console.log('  ajuste com ECLETICA_TPAG no iniciar.bat (ex.: ECLETICA_TPAG=05=credito).');
   }
