@@ -122,8 +122,9 @@ categoriasDeleted        tombstone das categorias do Financeiro
 itensVendidos            [{id, data, origem, itens:[{cod,nome,un,qtd,valor}]}] — produtos
                          vendidos por dia, AGREGADOS por produto. Fora de `vendas`
                          de propósito: não entra em nenhum cálculo de faturamento
-mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"auto"|"ignorar", fichaId,
-                         fichaNome, origemAprendizado, ultimaAtualizacao}}
+mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"insumo"|"auto"|"ignorar",
+                         fichaId|mpId, fichaNome|mpNome, origemAprendizado,
+                         ultimaAtualizacao}}  — ver §6, "Produto vendido → compra"
 ```
 
 ### Ponte Eclética Food (`ecletica-agent/`)
@@ -216,6 +217,29 @@ Inventário · Contagem · Análise · Movimentações · Projeção de compras,
 - **Por ritmo**: janela de 90 dias, `consumo/dia × N dias − estoque`
 - **Semanal**: média das últimas N semanas **segunda a sábado**, separada por giro
   (perecível/seco), flag de variação > 30% e snapshot conferível depois
+
+### Produto vendido → compra: dois caminhos, não um
+
+Tratar os dois como a mesma coisa é o que faz o CMV não fechar.
+
+```
+PRODUZIDO   venda ─ mapaProdutoFicha ─► ficha técnica ─ insumos[].mpId ─►
+            matéria-prima ─ produtosLista.mpVinculados ─► compra
+REVENDA     venda ─ mapaProdutoFicha (modo "insumo") ─► matéria-prima ─► compra
+```
+
+A corrente do PRODUZIDO já existe elo a elo (`autoVincularInsumosCompra` casa
+matéria-prima com produto da lista sozinho quando o nome bate). **O cálculo que
+a percorre — consumo teórico de insumos a partir das vendas — ainda NÃO existe.**
+
+REVENDA (água, refrigerante, cerveja, industrializado) não tem ficha e não é
+"ignorar": o que se vende é o que se compra. Comparação em
+Vendas → Relatório → **Revenda × Compras**.
+
+⚠️ Quantidade vendida é em unidade individual; compra costuma ser em embalagem.
+A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar
+"40 vendidas" com "7 compradas" inventa um rombo — por isso a tela avisa em vez
+de mostrar o número quando a conversão não está configurada.
 
 ### Outros
 Lista de Compras · Produção (fichas técnicas) · Encomendas · RH · Fluxo de Caixa ·

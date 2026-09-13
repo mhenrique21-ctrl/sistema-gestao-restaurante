@@ -4600,7 +4600,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"revenda"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
   const [buscaVinc,setBuscaVinc]=useState("");
   const [soPendentes,setSoPendentes]=useState(true);
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
@@ -4645,7 +4645,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
     ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
     ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
     ["mensal","Evolução Mensal"],["canal","Por Canal"],["sazonal","Sazonalidade"],
-    ["margem","Margem por Produto"],["vinculos","Vincular Fichas"],["empresas","Confraria × Seama"],
+    ["margem","Margem por Produto"],["revenda","Revenda × Compras"],["vinculos","Vincular Produtos"],["empresas","Confraria × Seama"],
   ];
 
   const RowBar=({label,sub,qty,val,pct,color}:{label:string,sub?:string,qty?:string,val:number,pct:number,color?:string})=>(
@@ -4858,8 +4858,8 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
 
     {relTab==="margem"&&(()=>{
       const linhas=agruparItens().map((p:any)=>{
-        // fichaDoProduto: vínculo confirmado > nome batendo por foldNome > nada.
-        const {ficha,vinculo}=fichaDoProduto(db,p.nome);
+        // vinculoDoProduto: vínculo confirmado > nome batendo por foldNome > nada.
+        const {ficha,vinculo}=vinculoDoProduto(db,p.nome);
         const custo=ficha?(ficha.custoPorcao||0)*p.qtd:null;
         const margem=custo!=null?p.total-custo:null;
         const margemPct=margem!=null&&p.total?margem/p.total*100:null;
@@ -4890,6 +4890,78 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       </>;
     })()}
 
+    {relTab==="revenda"&&(()=>{
+      // Só produtos de REVENDA: o que se vende é literalmente o que se compra,
+      // então dá pra comparar quantidade contra quantidade. Produto produzido
+      // não entra aqui — vendê-lo consome insumos, e comparar "pão de queijo
+      // vendido" com "pão de queijo comprado" não significaria nada.
+      const movs=db.movEstoque||[];
+      const porMp=new Map<string,{nome:string,mp:any,vendido:number,receita:number}>();
+      const somar=(nome:string,qtd:number,valor:number)=>{
+        const {mp,vinculo}=vinculoDoProduto(db,nome);
+        if(vinculo!=="insumo"||!mp)return;
+        const cur=porMp.get(mp.id)||{nome:mp.nome,mp,vendido:0,receita:0};
+        cur.vendido+=qtd; cur.receita+=valor;
+        porMp.set(mp.id,cur);
+      };
+      itensPdvPeriodo.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
+      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
+
+      const linhas=Array.from(porMp.values()).map(l=>{
+        const entradas=movs.filter((mv:any)=>mv.mpId===l.mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
+        const embalagens=entradas.reduce((s:number,mv:any)=>s+(mv.quantidade||0),0);
+        // 1 caixa comprada = 6 latas vendidas. Sem essa conversão, comparar
+        // "40 vendidas" com "7 compradas" produziria um rombo inventado.
+        const porEmb=parseFloat(l.mp.unidadesPorEmbalagem)||1;
+        const compradoUn=embalagens*porEmb;
+        const estoque=parseFloat(l.mp.estoque)||0;
+        const unCompra=(entradas[0]?.unidade)||l.mp.unidade||"un";
+        // Conversão não configurada E unidade de compra diferente da de venda:
+        // o comparativo não vale, e dizer isso é melhor que mostrar um número
+        // errado com cara de certo.
+        const conversaoDuvidosa=porEmb===1&&foldNome(unCompra)!=="un"&&foldNome(unCompra)!=="und"&&foldNome(unCompra)!=="unidade";
+        const impossivel=!conversaoDuvidosa&&l.vendido>compradoUn+estoque+0.001;
+        return{...l,embalagens,porEmb,compradoUn,estoque,unCompra,conversaoDuvidosa,impossivel,dif:compradoUn-l.vendido};
+      }).sort((a,b)=>b.receita-a.receita);
+
+      const alertas=linhas.filter(l=>l.conversaoDuvidosa||l.impossivel).length;
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Revenda — vendido × comprado</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
+          Só produtos vinculados como <strong>revenda</strong> em Vincular Produtos. Quantidades convertidas para unidade individual pelo campo "unidades por embalagem" do insumo.
+        </div>
+        {!linhas.length&&<EmptyState msg="Nenhum produto de revenda vinculado ainda. Vincule em 'Vincular Produtos'."/>}
+        {alertas>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
+          ⚠️ {alertas} item(ns) com número não confiável — veja o aviso em cada linha antes de tirar conclusão.
+        </div>}
+        {linhas.map(l=><div key={l.mp.id} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
+            <span style={{fontSize:13,fontWeight:600}}>{l.nome}</span>
+            <span style={{fontSize:11,color:"var(--text2)"}}>{fmtMoney(l.receita)}</span>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>vendido: {l.vendido.toFixed(0)} un</span>
+            <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>
+              comprado: {l.compradoUn.toFixed(0)} un{l.porEmb>1?` (${l.embalagens.toFixed(0)} × ${l.porEmb})`:""}
+            </span>
+            <span className="tag" style={{background:"var(--bg)",color:"var(--text2)"}}>estoque hoje: {l.estoque.toFixed(0)}</span>
+            {!l.conversaoDuvidosa&&<span className="tag" style={{background:l.dif>=0?"var(--bg)":"var(--dangerBg)",color:l.dif>=0?"var(--text2)":"var(--dangerText)",fontWeight:700}}>
+              {l.dif>=0?"+":""}{l.dif.toFixed(0)} un no período
+            </span>}
+          </div>
+          {l.conversaoDuvidosa&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>
+            ⚠️ Compra em "{l.unCompra}" e venda por unidade, sem conversão configurada. Preencha "unidades por embalagem" em Compras → Insumos, senão este comparativo não vale.
+          </div>}
+          {l.impossivel&&<div style={{fontSize:11,color:"var(--dangerText)",marginTop:5}}>
+            ⚠️ Vendeu mais do que comprou + estoque atual. Ou falta lançar compra no período, ou o vínculo aponta para o insumo errado.
+          </div>}
+        </div>)}
+        {linhas.length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:10,lineHeight:1.5}}>
+          A diferença é o quanto o estoque <em>deveria</em> ter variado no período — não é sobra nem falta, porque não considera o que já havia antes. Para virar contagem de verdade, compare com o inventário em Estoque.
+        </div>}
+      </>;
+    })()}
+
     {relTab==="vinculos"&&(()=>{
       const fichas=[...(db.fichasTecnicas||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
       // A lista vem de TODO o histórico, não só do período escolhido: um
@@ -4907,10 +4979,10 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       (db.recibosVenda||[]).forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
 
       const todos=Array.from(tudo.values())
-        .map(p=>({...p,...fichaDoProduto(db,p.nome)}))
+        .map(p=>({...p,...vinculoDoProduto(db,p.nome)}))
         .sort((a,b)=>b.total-a.total);
       const receitaTotal=todos.reduce((s,p)=>s+p.total,0);
-      const comFicha=todos.filter(p=>p.ficha);
+      const comFicha=todos.filter(p=>p.ficha||p.mp);
       const cobertura=receitaTotal?comFicha.reduce((s,p)=>s+p.total,0)/receitaTotal*100:0;
       const pendentes=todos.filter(p=>p.vinculo==="nenhum");
 
@@ -4919,12 +4991,17 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         .filter(p=>!soPendentes||p.vinculo==="nenhum")
         .filter(p=>!q||foldBusca(p.nome).includes(q));
 
+      const mps=[...(db.materiasPrimas||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
       const vincular=(nome:string,valor:string)=>{
         const k=foldNome(nome);
         const agora=new Date().toISOString();
+        // Prefixo no value porque ficha e matéria-prima são listas diferentes
+        // com ids gerados pelo mesmo uid() — sem ele, um id igual nas duas
+        // apontaria pro destino errado sem nenhum sintoma visível.
         const reg=valor==="__auto"?{modo:"auto"}
           :valor==="__ignorar"?{modo:"ignorar"}
-          :{modo:"ficha",fichaId:valor,fichaNome:(fichas.find((f:any)=>f.id===valor)||{}).nome||""};
+          :valor.startsWith("m:")?{modo:"insumo",mpId:valor.slice(2),mpNome:(mps.find((m:any)=>m.id===valor.slice(2))||{}).nome||""}
+          :{modo:"ficha",fichaId:valor.slice(2),fichaNome:(fichas.find((f:any)=>f.id===valor.slice(2))||{}).nome||""};
         // setDbAndSave (e não setDb): o auto-save genérico PODE pular a
         // gravação se coincidir com outro save em andamento, e aí o vínculo
         // some no próximo poll — o clássico "eu marco e volta sozinho".
@@ -4935,7 +5012,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Produto vendido → ficha técnica</div>
         <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
-          Vincular é o que faz a Margem por Produto e o custo por venda funcionarem. Quem já casa pelo nome aparece como <strong>automático</strong> e não precisa de nada.
+          Produto <strong>produzido</strong> aponta para a ficha técnica; produto de <strong>revenda</strong> (água, refrigerante, cerveja) aponta direto para o produto de compra — o que se vende é o que se compra. Quem já casa pelo nome com uma ficha aparece como <strong>automático</strong>.
         </div>
 
         <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
@@ -4948,6 +5025,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
           </div>
           <div style={{fontSize:11,color:"var(--text2)",marginTop:6}}>
             {comFicha.length} de {todos.length} produtos vinculados · {pendentes.length} pendente(s)
+            {todos.filter(p=>p.vinculo==="insumo").length>0&&` · ${todos.filter(p=>p.vinculo==="insumo").length} de revenda`}
           </div>
         </div>
 
@@ -4959,14 +5037,16 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
           </button>
         </div>
 
-        {!fichas.length&&<div style={{fontSize:12,color:"var(--warningText)",marginBottom:10}}>
-          ⚠️ Nenhuma ficha técnica cadastrada ainda. Cadastre em Produção → Fichas Técnicas antes de vincular.
+        {!fichas.length&&!mps.length&&<div style={{fontSize:12,color:"var(--warningText)",marginBottom:10}}>
+          ⚠️ Nenhuma ficha técnica cadastrada ainda. Produtos de revenda podem ser vinculados mesmo assim.
         </div>}
         {!lista.length&&<EmptyState msg={soPendentes?"Nenhum produto pendente — tudo vinculado.":"Nenhum produto vendido ainda."}/>}
 
         {lista.slice(0,200).map(p=>{
           const reg=(db.mapaProdutoFicha||{})[foldNome(p.nome)];
-          const valorSel=reg?.modo==="ficha"&&p.ficha?p.ficha.id:reg?.modo==="ignorar"?"__ignorar":"__auto";
+          const valorSel=reg?.modo==="ficha"&&p.ficha?`f:${p.ficha.id}`
+            :reg?.modo==="insumo"&&p.mp?`m:${p.mp.id}`
+            :reg?.modo==="ignorar"?"__ignorar":"__auto";
           const pesoPct=receitaTotal?p.total/receitaTotal*100:0;
           return <div key={p.nome} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
             <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
@@ -4976,15 +5056,23 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
               <select className="inp" value={valorSel} onChange={e=>vincular(p.nome,e.target.value)} style={{flex:1,minWidth:180,marginBottom:0,fontSize:12}}>
                 <option value="__auto">— automático (pelo nome) —</option>
-                {fichas.map((f:any)=><option key={f.id} value={f.id}>{f.nome}</option>)}
-                <option value="__ignorar">Ignorar — não tem ficha</option>
+                <optgroup label="Produzido — ficha técnica">
+                  {fichas.map((f:any)=><option key={f.id} value={`f:${f.id}`}>{f.nome}</option>)}
+                </optgroup>
+                <optgroup label="Revenda — produto de compra">
+                  {mps.map((m:any)=><option key={m.id} value={`m:${m.id}`}>{m.nome}</option>)}
+                </optgroup>
+                <option value="__ignorar">Ignorar — fora da análise</option>
               </select>
               <span style={{fontSize:10,fontWeight:700,padding:"4px 8px",borderRadius:6,whiteSpace:"nowrap" as const,
                 ...(p.vinculo==="manual"?{background:"var(--successBg)",color:"var(--successText)"}
                   :p.vinculo==="auto"?{background:"var(--infoBg)",color:"var(--infoText)"}
                   :p.vinculo==="ignorado"?{background:"var(--border)",color:"var(--text3)"}
                   :{background:"var(--warningBg)",color:"var(--warningText)"})}}>
-                {p.vinculo==="manual"?`✓ ${p.ficha.nome}`:p.vinculo==="auto"?`automático: ${p.ficha.nome}`:p.vinculo==="ignorado"?"ignorado":"sem ficha"}
+                {p.vinculo==="manual"?`✓ ${p.ficha.nome}`
+                  :p.vinculo==="insumo"?`🛒 ${p.mp.nome}`
+                  :p.vinculo==="auto"?`automático: ${p.ficha.nome}`
+                  :p.vinculo==="ignorado"?"ignorado":"sem vínculo"}
               </span>
             </div>
           </div>;
@@ -19484,21 +19572,38 @@ const FORMAS_PGTO:[string,string][]=[["dinheiro","dinheiro"],["credito","crédit
 // foldNome, depois nada. A camada do meio existe porque a maioria dos produtos
 // casa sozinha — obrigar confirmação de todos transformaria a tela num
 // cadastro de centenas de linhas e ninguém terminaria.
-const fichaDoProduto=(db:any,nomeProduto:string)=>{
+// Produto vendido pode desaguar em DOIS lugares diferentes, e tratar os dois
+// como um só é o que faz o CMV não fechar:
+//
+//   PRODUZIDO  venda → ficha técnica → insumos → matéria-prima → compra
+//   REVENDA    venda → matéria-prima (o que se vende É o que se compra)
+//
+// Água, refrigerante, cerveja e industrializado não têm ficha e não são
+// "ignorar": são o caso MAIS fácil de conciliar, e some da análise quem os
+// trata como produto sem custo conhecido.
+const vinculoDoProduto=(db:any,nomeProduto:string)=>{
+  const vazio={ficha:null,mp:null,vinculo:"nenhum" as const};
   const k=foldNome(nomeProduto||"");
-  if(!k)return{ficha:null,vinculo:"nenhum" as const};
+  if(!k)return vazio;
   const mapa=db?.mapaProdutoFicha||{};
   const fichas=db?.fichasTecnicas||[];
+  const mps=db?.materiasPrimas||[];
   const reg=mapa[k];
-  if(reg?.modo==="ignorar")return{ficha:null,vinculo:"ignorado" as const};
+  if(reg?.modo==="ignorar")return{...vazio,vinculo:"ignorado" as const};
   if(reg?.modo==="ficha"&&reg.fichaId){
     const f=fichas.find((x:any)=>x.id===reg.fichaId);
-    // Ficha apagada depois de vinculada: cai pro automático em vez de sumir
-    // em silêncio, e a tela de vínculos mostra o produto como pendente.
-    if(f)return{ficha:f,vinculo:"manual" as const};
+    // Ficha apagada depois de vinculada: cai pro automático em vez de sumir em
+    // silêncio, e a tela de vínculos mostra o produto como pendente de novo.
+    if(f)return{ficha:f,mp:null,vinculo:"manual" as const};
   }
+  if(reg?.modo==="insumo"&&reg.mpId){
+    const m=mps.find((x:any)=>x.id===reg.mpId);
+    if(m)return{ficha:null,mp:m,vinculo:"insumo" as const};
+  }
+  // Automático só para ficha: casar venda com matéria-prima por nome sozinho
+  // erraria feio (o "Café" da venda é a bebida pronta, não o pacote de grão).
   const auto=fichas.find((x:any)=>x?.nome&&foldNome(x.nome)===k);
-  return auto?{ficha:auto,vinculo:"auto" as const}:{ficha:null,vinculo:"nenhum" as const};
+  return auto?{ficha:auto,mp:null,vinculo:"auto" as const}:vazio;
 };
 const BALDE_DA_FORMA:Record<string,string|null>={dinheiro:"dinheiro",credito:"maquininha",debito:"maquininha",pix:"maquininha",outros:"maquininha",pendura:null};
 const formasDaVenda=(v:any):[string,string,number][]=>
