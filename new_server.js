@@ -1012,6 +1012,30 @@ function normalizarFolhaInventario(empresa, j) {
   }));
 }
 
+// Saldo acabado na conta da Anthropic volta como invalid_request_error, o mesmo
+// tipo de "requisição malformada" — e a tela mostrava a mensagem crua em inglês
+// junto com dicas de tirar foto mais de perto, mandando o usuário refotografar
+// um cupom que estava perfeito. A causa não está na imagem nem no app.
+const MSG_SEM_CREDITO = 'A conta da Anthropic está sem crédito. '
+  + 'Entre em console.anthropic.com → Plans & Billing e adicione créditos. '
+  + 'Não é problema da foto nem do aplicativo — enquanto isso, dá para colar o '
+  + 'texto do cupom no campo abaixo.';
+const semCredito = (errObj) => /credit balance|billing|insufficient.*(credit|fund)/i
+  .test(String(errObj?.message || ''));
+
+// Erro que não muda por tentar de novo: chave errada, sem permissão, sem
+// crédito, pedido malformado. Repetir só faz o usuário esperar o triplo pra ler
+// a mesma coisa.
+const erroDefinitivo = (status, errObj) => [400, 401, 403, 404].includes(status)
+  || ['authentication_error', 'permission_error', 'invalid_request_error'].includes(errObj?.type || '');
+
+// Separado de propósito do anterior: "imagem ilegível" também é definitivo, mas
+// ali as dicas de refazer a foto AJUDAM. Só problema de conta as torna erradas —
+// é o que mandava refotografar um cupom perfeito.
+const problemaDeConta = (status, errObj) => semCredito(errObj)
+  || ['authentication_error', 'permission_error'].includes(errObj?.type || '')
+  || [401, 403].includes(status);
+
 // ---- IA (Anthropic) — helper compartilhado com retry, usado por /api/scan e pelas rotas de conciliação de produtos ----
 function anthropicComplete({ system, userText, maxTokens = 2048 }) {
   return new Promise((resolve, reject) => {
@@ -1071,6 +1095,7 @@ function anthropicComplete({ system, userText, maxTokens = 2048 }) {
         if (errObj) {
           const errType = errObj.type || '';
           if (errType === 'authentication_error') errMsg = 'Chave da API inválida ou expirada.';
+          else if (semCredito(errObj)) errMsg = MSG_SEM_CREDITO;
           else if (errType === 'rate_limit_error') errMsg = 'Limite de requisições da IA excedido. Aguarde alguns minutos.';
           else if (errType === 'overloaded_error' || lastStatus === 529) errMsg = 'Servidor da IA sobrecarregado. Tente novamente em alguns minutos.';
           else errMsg = errObj.message || JSON.stringify(errObj);
@@ -1233,6 +1258,9 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
 
         res.setHeader('Content-Type', 'application/json');
         let errMsg = '';
+        // Avisa a tela que insistir não adianta: sem isso ela tenta três vezes
+        // e só então mostra o erro, com dicas de refazer a foto por cima.
+        let definitivo = false, daConta = false;
         try {
           const parsed = JSON.parse(lastBody);
           const errObj = parsed?.error;
@@ -1240,10 +1268,13 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
             const errType = errObj.type || '';
             const errText = errObj.message || JSON.stringify(errObj);
             if (errType === 'authentication_error') errMsg = 'Chave da API inválida ou expirada. Verifique ANTHROPIC_API_KEY no .env da VPS.';
+            else if (semCredito(errObj)) errMsg = MSG_SEM_CREDITO;
             else if (errType === 'rate_limit_error') errMsg = 'Limite de requisições excedido. Aguarde alguns minutos e tente novamente.';
             else if (errType === 'overloaded_error' || lastStatus === 529) errMsg = 'Servidor da IA sobrecarregado. Tente novamente em alguns minutos.';
             else if (errType === 'invalid_request_error') errMsg = `Requisição inválida: ${errText}`;
             else errMsg = errText;
+            definitivo = erroDefinitivo(lastStatus, errObj);
+            daConta = problemaDeConta(lastStatus, errObj);
           }
         } catch {}
         if (!errMsg) {
@@ -1253,7 +1284,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         }
         console.log(`[IA] Falha final: HTTP ${lastStatus} — ${errMsg}`);
         res.writeHead(lastStatus >= 400 ? lastStatus : 500);
-        res.end(JSON.stringify({ error: errMsg }));
+        res.end(JSON.stringify({ error: errMsg, definitivo, daConta }));
       } catch (e) {
         console.log(`[IA] Erro ao processar requisição: ${e.message}`);
         res.writeHead(400);

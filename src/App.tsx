@@ -6208,7 +6208,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       if(!res.ok){
         const err=await res.json().catch(()=>({}));
         const errMsg=typeof err.error==="object"?err.error?.message||JSON.stringify(err.error):err.error||res.statusText;
-        throw new Error(errMsg);
+        const e:any=new Error(errMsg);
+        // Chave errada, sem permissão, sem crédito: o servidor marca porque
+        // insistir só faz esperar o triplo pra ler a mesma coisa.
+        e.definitivo=!!err.definitivo;
+        e.daConta=!!err.daConta;
+        throw e;
       }
       const data=await res.json();
       if(data.error)throw new Error(data.error);
@@ -6239,15 +6244,20 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       }catch(e:any){
         lastErr=e.message||String(e);
         if(e.name==="AbortError")lastErr="Tempo limite excedido. Verifique sua conexão.";
-        if(lastErr.includes("Chave da API inválida")||lastErr.includes("não configurada")){
+        if(e.definitivo||lastErr.includes("Chave da API inválida")||lastErr.includes("não configurada")){
           setIaLoading(false);setIaAttempt(0);
-          alert(`❌ ${lastErr}`);
+          // Dica de foto só quando a falha PODE ser da foto: problema de conta
+          // com "tire a foto mais de perto" manda refazer um cupom perfeito.
+          alert(e.daConta||!imgBase64?`❌ ${lastErr}`
+            :`❌ ${lastErr}\n\nDicas:\n• Verifique se a imagem está nítida e bem iluminada\n• Tente tirar a foto mais de perto\n• Ou copie o texto do cupom manualmente no campo abaixo`);
           return;
         }
         if(t<3){await new Promise(r=>setTimeout(r,2000*t));}
       }
     }
     setIaLoading(false);setIaAttempt(0);
+    // As dicas só valem quando a falha PODE ser da foto. Mostrá-las junto de um
+    // erro de conta mandava refotografar um cupom que estava perfeito.
     alert(`❌ Falha após 3 tentativas.\n\n${lastErr}\n\nDicas:\n• Verifique se a imagem está nítida e bem iluminada\n• Tente tirar a foto mais de perto\n• Ou copie o texto do cupom manualmente no campo abaixo`);
   };
 

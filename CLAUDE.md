@@ -611,6 +611,27 @@ Regras aprendidas na marra:
 - Status nunca só por cor: barra **e** rótulo escrito — muita impressão sai em P&B.
 - Timbre vem de `db.config.impressao` (nome, logo, razão social, CNPJ, endereço, contato).
 
+### Cupom IA — erro da API
+
+⚠️ **Sem crédito na conta da Anthropic volta como `invalid_request_error`** — o
+mesmo tipo de "requisição malformada" de uma imagem ilegível. A tela mostrava a
+mensagem crua em inglês junto com "tire a foto mais de perto", mandando
+refotografar um cupom perfeito por um problema de fatura.
+
+Duas marcações separadas de propósito no `/api/scan`:
+
+| campo | para quê |
+|---|---|
+| `definitivo` | 400/401/403/404 e `invalid_request_error` — a tela PARA de tentar |
+| `daConta` | crédito, chave, permissão — a tela ESCONDE as dicas de foto |
+
+Imagem ilegível é `definitivo` mas **não** é `daConta`: ali a dica ajuda. Juntar
+os dois num campo só reintroduz o bug por um lado ou pelo outro.
+
+O front tentava 3 vezes mesmo o que nunca mudaria (o servidor já não retentava:
+400 não está em `RETRY_CODES`), fazendo o usuário esperar o triplo pra ler a
+mesma coisa.
+
 ---
 
 ## 9. Cores
