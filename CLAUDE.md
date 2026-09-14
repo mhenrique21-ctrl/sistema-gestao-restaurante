@@ -268,6 +268,9 @@ não em `estoque`.
   se ninguém tem, joga tudo na primeira e deixa **negativo** de propósito
 - `recibosVenda` entra na baixa: são vendas reais e não descontam em nenhum
   outro lugar
+- **Desfazer** varre os `vsaida-` GRAVADOS no período e manda zero pra cada um —
+  não o que seria calculado agora. Produto desvinculado depois da baixa sumiria
+  do cálculo e deixaria movimento órfão segurando estoque
 
 ⚠️ O PDV (`delivery-backend`) tem o SEU próprio motor de estoque — `track_stock`,
 baixa no momento do pedido, inventário, extrato. Ele não é acionado pelas vendas

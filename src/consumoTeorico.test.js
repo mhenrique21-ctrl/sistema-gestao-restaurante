@@ -170,3 +170,48 @@ test('baixa de estoque por venda', async (t) => {
     assert.equal(r.materiasPrimas[0].estoqueAtual, 10, 'e nenhum saldo alheio é tocado');
   });
 });
+
+test('desfazer a baixa de um período inteiro', async (t) => {
+  const agora = '2026-09-14T10:00:00.000Z';
+  const mps = () => [
+    { id: 'mp1', nome: 'Polvilho', unidade: 'kg', estoqueAtual: 10 },
+    { id: 'mp2', nome: 'Queijo', unidade: 'kg', estoqueAtual: 4 },
+  ];
+
+  await t.test('devolve tudo e não toca em movimento de outra natureza', () => {
+    const compra = { id: 'c1', mpId: 'mp1', tipo: 'entrada', quantidade: 5, data: '2026-09-12' };
+    const perda = { id: 'p1', mpId: 'mp2', tipo: 'perda', quantidade: 1, data: '2026-09-12' };
+    const aplicado = aplicarBaixaVendas([compra, perda], mps(), {
+      '2026-09-11': { mp1: { qtd: 2, unidade: 'kg', nome: 'Polvilho' } },
+      '2026-09-12': { mp1: { qtd: 3, unidade: 'kg', nome: 'Polvilho' }, mp2: { qtd: 1, unidade: 'kg', nome: 'Queijo' } },
+    }, agora);
+    assert.equal(aplicado.materiasPrimas[0].estoqueAtual, 5);
+    assert.equal(aplicado.materiasPrimas[1].estoqueAtual, 3);
+
+    // É assim que a tela desfaz: varre os movimentos "vsaida-" já gravados e
+    // manda zero pra cada um. Varrer o que EXISTE (e não o que seria calculado
+    // agora) é o que garante que um produto desvinculado depois da baixa não
+    // deixe movimento órfão segurando estoque.
+    const zerar = {};
+    aplicado.movEstoque
+      .filter((m) => m.id.startsWith('vsaida-'))
+      .forEach((m) => { (zerar[m.data] = zerar[m.data] || {})[m.mpId] = { qtd: 0 }; });
+
+    const desfeito = aplicarBaixaVendas(aplicado.movEstoque, aplicado.materiasPrimas, zerar, agora);
+
+    assert.equal(desfeito.materiasPrimas[0].estoqueAtual, 10, 'polvilho volta ao original');
+    assert.equal(desfeito.materiasPrimas[1].estoqueAtual, 4, 'queijo também');
+    assert.equal(desfeito.movEstoque.filter((m) => m.id.startsWith('vsaida-')).length, 0);
+    assert.ok(desfeito.movEstoque.find((m) => m.id === 'c1'), 'a compra continua lá');
+    assert.ok(desfeito.movEstoque.find((m) => m.id === 'p1'), 'a perda também');
+  });
+
+  await t.test('desfazer e aplicar de novo devolve ao mesmo lugar', () => {
+    const porDia = { '2026-09-12': { mp1: { qtd: 3, unidade: 'kg', nome: 'Polvilho' } } };
+    const um = aplicarBaixaVendas([], mps(), porDia, agora);
+    const zero = aplicarBaixaVendas(um.movEstoque, um.materiasPrimas, { '2026-09-12': { mp1: { qtd: 0 } } }, agora);
+    const dois = aplicarBaixaVendas(zero.movEstoque, zero.materiasPrimas, porDia, agora);
+    assert.equal(dois.materiasPrimas[0].estoqueAtual, 7, 'mesmo saldo do primeiro apply');
+    assert.equal(dois.movEstoque.length, 1);
+  });
+});

@@ -5069,6 +5069,27 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         if(idsExistentes.has(idBaixaVenda(dt,mpId)))jaBaixados++; else aCriar++;
       }));
 
+      // Desfazer é o mesmo caminho da aplicação, com quantidade zero: o módulo
+      // remove o movimento e devolve a quantidade ao saldo. Varre o que EXISTE
+      // gravado, não o que seria calculado agora — um produto desvinculado
+      // depois da baixa sumiria do cálculo e o movimento dele ficaria órfão,
+      // segurando estoque que ninguém mais explica.
+      const gravadosNoPeriodo=(db.movEstoque||[]).filter((m:any)=>
+        typeof m?.id==="string"&&m.id.startsWith("vsaida-")&&m.data>=ini&&m.data<=fim);
+      const desfazer=()=>{
+        if(!gravadosNoPeriodo.length)return;
+        if(!confirm(`Desfazer a baixa de ${gravadosNoPeriodo.length} movimento(s) entre ${fmtDate(ini)} e ${fmtDate(fim)}?\n\nA quantidade volta pro saldo de cada insumo e os movimentos somem de Estoque → Movimentações.\n\nSó mexe no que esta tela gravou — compras, perdas e ajustes manuais não são tocados.`))return;
+        const zerar:Record<string,Record<string,any>>={};
+        gravadosNoPeriodo.forEach((m:any)=>{
+          (zerar[m.data]||(zerar[m.data]={}))[m.mpId]={qtd:0};
+        });
+        (setDbAndSave||setDb)((d:any)=>{
+          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],zerar,new Date().toISOString());
+          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
+        });
+        alert(`${gravadosNoPeriodo.length} movimento(s) desfeito(s). O estoque voltou ao que era.`);
+      };
+
       const aplicar=()=>{
         const qtdMov=jaBaixados+aCriar;
         if(!confirm(`Baixar o estoque de ${dias.length} dia(s) de venda?\n\n${aCriar} movimento(s) novo(s) e ${jaBaixados} já existente(s) serão recalculados.\n\nPode rodar de novo sem duplicar: cada dia tem um movimento só, e reaplicar corrige pela diferença.`))return;
@@ -5103,8 +5124,12 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
           <button className="btn" onClick={aplicar} style={{width:"100%",marginTop:10,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"11px",fontSize:14,fontWeight:700}}>
             📉 {jaBaixados&&!aCriar?"Recalcular baixa do período":"Baixar estoque do período"}
           </button>
+          {gravadosNoPeriodo.length>0&&<button className="btn" onClick={desfazer}
+            style={{width:"100%",marginTop:8,background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"9px",fontSize:12.5,fontWeight:700}}>
+            ↩️ Desfazer a baixa deste período ({gravadosNoPeriodo.length} movimento(s))
+          </button>}
           <div style={{fontSize:10.5,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
-            Pode rodar quantas vezes quiser: cada dia tem um movimento só. Corrigiu uma ficha? Rode de novo e a diferença é devolvida ao estoque — nunca somada.
+            Pode rodar quantas vezes quiser: cada dia tem um movimento só. Corrigiu uma ficha? Rode de novo e a diferença é devolvida ao estoque — nunca somada. E dá pra desfazer tudo: só o que esta tela gravou é tocado, compras e ajustes manuais ficam intactos.
           </div>
         </div>}
 
