@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 // parecendo plausível na tela. Lá tem teste travando as duas.
 import {converterQtd,consumoTeorico,aplicarBaixaVendas,idBaixaVenda} from "./consumoTeorico.js";
 import {tipoDoInsumo,pendenciasDeInsumo,ehProdutoVendido,baixaDaVenda,chaveTipo} from "./tipoInsumo.js";
-import {aplicarMovimento,insumosDaProducao} from "./movimentoEstoque.js";
+import {aplicarMovimento,insumosDaProducao,distribuirEntreMarcas} from "./movimentoEstoque.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -12375,12 +12375,31 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         const tipo=item?tipoDoInsumo(mapaTipo,item).tipo:null;
         const modo=baixaDaVenda(tipo);
 
-        // REVENDA e PRODUZIDO baixam o PRÓPRIO saldo. No produzido o insumo já
-        // saiu quando foi registrada a produção — baixar a ficha aqui de novo
-        // contaria a farinha duas vezes, e o erro só apareceria na contagem.
+        // PRODUZIDO baixa o PRÓPRIO saldo: o insumo já saiu quando a produção
+        // foi registrada, e baixar a ficha de novo contaria a farinha duas
+        // vezes — erro que só apareceria na contagem física.
         if(modo==="proprio"&&item){
           const porEmb=parseFloat(item.unidadesPorEmbalagem)||1;
-          acumula(data,item,p.qtd/porEmb,(parseFloat(item.ultimoValor)||0)*(p.qtd/porEmb),tipo==="revenda"?"revenda":"produção");
+          acumula(data,item,p.qtd/porEmb,(parseFloat(item.ultimoValor)||0)*(p.qtd/porEmb),"produção");
+          return;
+        }
+
+        // REVENDA baixa as MARCAS penduradas no produto da lista. O saldo mora
+        // nelas — o mesmo suco pode vir de duas —, e o produto do cardápio é só
+        // o nome pelo qual se vende. Guardar saldo nos dois seria contabilidade
+        // em dobro pra mesma garrafa.
+        if(modo==="lista"){
+          const r=resolverItemVendido(db,{nome:p.nome,cod:p.cod});
+          if(!r.produtoLista){
+            avisos.add(`"${p.nome}" é revenda sem produto da lista — vincule em Produtos Eclética → Conciliar`);
+            return;
+          }
+          if(!r.marcas.length){
+            avisos.add(`"${r.produtoLista.nome}" não tem insumo vinculado: a compra não chega até ele`);
+            return;
+          }
+          distribuirEntreMarcas(r.marcas,p.qtd).forEach((x:any)=>
+            acumula(data,x.mp,x.qtd,(parseFloat(x.mp.ultimoValor)||0)*x.qtd,"revenda"));
           return;
         }
 
@@ -12810,47 +12829,50 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     setLidos(null);setTipoPorItem({});setAbertos(new Set());
   };
 
-  // ── Conciliação revenda: o que se VENDE ↔ o que se COMPRA ──────────────
+  // ── Conciliação de revenda: produto do cardápio → produto da LISTA ──────
+  // Vincular, NÃO fundir. Um mesmo suco pode ser comprado de duas marcas; a
+  // lista já agrega as duas, e fundir o produto do cardápio com UMA delas
+  // deixaria a outra órfã — a NF-e dela alimentaria um registro que a venda
+  // não olha mais. Aqui só se grava um prodListaId: nada se perde, e desfazer
+  // é escolher outro.
   const mpsAll=db.materiasPrimas||[];
-  const movs=db.movEstoque||[];
-  const comprados=new Set(movs.filter((m:any)=>m.tipo==="entrada").map((m:any)=>m.mpId));
-  const vinculadosNaLista=new Set<string>();
-  (db.produtosLista||[]).forEach((p:any)=>(p.mpVinculados||[]).forEach((id:string)=>vinculadosNaLista.add(id)));
-
-  // Pendente = produto de revenda do Eclética que NUNCA recebeu compra e não
-  // está ligado à lista. Quem já recebeu compra se conciliou sozinho (a compra
-  // achou o item pelo nome) e não precisa aparecer aqui.
+  const prodsLista=db.produtosLista||[];
   const pendentes=mpsAll.filter((m:any)=>{
     if(!m?.codigoEcletica)return false;
     if(tipoDoInsumo(db.tipoInsumo||{},m).tipo!=="revenda")return false;
-    return !comprados.has(m.id)&&!vinculadosNaLista.has(m.id);
+    return !resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica}).produtoLista;
   });
-  // Do lado da compra: item SEM código que já foi comprado alguma vez.
-  const ladoCompra=mpsAll.filter((m:any)=>!m?.codigoEcletica&&comprados.has(m.id));
-  const sugerir=(ecl:any)=>{
+  const resumoMarcas=(pl:any)=>{
+    const ms=mpsDoProdutoLista(db,pl);
+    const un=ms.reduce((s:number,m:any)=>s+(parseFloat(m.estoqueAtual)||0)*(parseFloat(m.unidadesPorEmbalagem)||1),0);
+    return ms.length?`${ms.length} marca(s) · ${un.toFixed(0)} un`:"sem insumo vinculado ainda";
+  };
+  const sugerirLista=(ecl:any)=>{
     const alvo=foldBusca(ecl.nome||"");
     if(!alvo)return null;
-    return ladoCompra.find((m:any)=>{
-      const n=foldBusca(m.nome||"");
-      return n.length>=4&&(n.includes(alvo)||alvo.includes(n));
-    })||null;
+    return prodsLista.find((p:any)=>foldBusca(p.nome||"")===alvo)
+      ||prodsLista.find((p:any)=>{const n=foldBusca(p.nome||"");return n.length>=4&&(n.includes(alvo)||alvo.includes(n));})
+      ||null;
   };
-  const conciliar=(ecl:any)=>{
-    const esc=escolha[ecl.id];
-    const compraId=esc?.compraId||sugerir(ecl)?.id;
-    if(!compraId)return alert("Escolha o produto que você compra.");
-    const emb=parseFloat(esc?.emb||"")||parseFloat((ladoCompra.find((m:any)=>m.id===compraId)||{}).unidadesPorEmbalagem)||1;
-    const alvo=ladoCompra.find((m:any)=>m.id===compraId);
-    if(!confirm(`Conciliar "${ecl.nome}" (venda) com "${alvo?.nome}" (compra)?\n\nOs dois viram UM item: saldo somado, histórico unido, 1 ${alvo?.unidade||"emb"} = ${emb} ${ecl.unidade||"un"}.\n\nNão dá pra desfazer.`))return;
-    (setDbAndSave||setDb)((d:any)=>conciliarRevenda(d,{ecleticaId:ecl.id,compraId,porEmbalagem:emb}));
+  const vincular=(ecl:any,prodListaId:string)=>{
+    if(!prodListaId)return;
+    (setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>
+      m.id===ecl.id?{...m,prodListaId,atualizadoEm:new Date().toISOString()}:m)}));
     setEscolha(e=>{const n={...e};delete n[ecl.id];return n;});
+  };
+  const criarNaLista=(ecl:any)=>{
+    if(!confirm(`Criar "${ecl.nome}" na lista de compras e vincular?\n\nA primeira nota fiscal desse produto já cai nele.`))return;
+    const novoId=uid();
+    (setDbAndSave||setDb)((d:any)=>({...d,
+      produtosLista:[...(d.produtosLista||[]),{id:novoId,nome:ecl.nome,cat:"bebidas",unidade:ecl.unidade||"un",mpVinculados:[]}],
+      materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===ecl.id?{...m,prodListaId:novoId,atualizadoEm:new Date().toISOString()}:m)}));
   };
 
   return <div>
     <BackBar label="Inventário" onClick={onVoltar}/>
     <div className="section-title" style={{marginBottom:8}}>📥 Produtos do Eclética</div>
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
-      {([["importar","Importar"],["conciliar",`Conciliar compra${pendentes.length?` (${pendentes.length})`:""}`]] as const).map(([k,lbl])=>
+      {([["importar","Importar"],["conciliar",`Conciliar${pendentes.length?` (${pendentes.length})`:""}`]] as const).map(([k,lbl])=>
         <button key={k} onClick={()=>setAbaImp(k)} className="pill"
           style={{background:abaImp===k?"var(--btnPrimary)":"var(--bg3)",color:abaImp===k?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>{lbl}</button>)}
     </div>
@@ -12858,17 +12880,16 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     {abaImp==="conciliar"&&<>
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.6}}>
-          Produto de <strong>revenda</strong> que você vende mas que ainda não recebeu compra nenhuma.
-          Conciliar junta os dois num item só — a entrada da NF-e e a saída da venda passam a mexer no <strong>mesmo saldo</strong>.
-          <br/>Quem tem o mesmo nome dos dois lados já se concilia sozinho na primeira compra e não aparece aqui.
+          Produto de <strong>revenda</strong> do cardápio que ainda não aponta pra um produto da lista de compras.
+          O saldo da revenda mora nas <strong>marcas</strong> penduradas na lista — o mesmo suco pode vir de duas —, e é de lá que a venda baixa.
+          <br/>Vincular é reversível: grava só o vínculo, nada é fundido. Quem tem o mesmo nome dos dois lados já casa sozinho e não aparece aqui.
         </div>
       </div>
-      {!pendentes.length&&<EmptyState msg="Nada pendente. Todo produto de revenda ou já recebeu compra, ou ainda não foi marcado como revenda."/>}
+      {!pendentes.length&&<EmptyState msg="Nada pendente: todo produto de revenda já aponta pra um produto da lista de compras."/>}
       {pendentes.slice(0,60).map((ecl:any)=>{
-        const sug=sugerir(ecl);
-        const esc=escolha[ecl.id];
-        const sel=esc?.compraId||sug?.id||"";
-        const alvo=ladoCompra.find((m:any)=>m.id===sel);
+        const sug=sugerirLista(ecl);
+        const sel=escolha[ecl.id]?.compraId||sug?.id||"";
+        const alvo=prodsLista.find((pl:any)=>pl.id===sel);
         return <div key={ecl.id} className="card" style={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:8,alignItems:"baseline"}}>
             <span style={{fontSize:13,fontWeight:700}}>
@@ -12877,24 +12898,26 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
             </span>
             <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>vendido em {ecl.unidade||"un"}</span>
           </div>
-          <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>O que você compra</label>
+          <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Produto da lista de compras</label>
           <select className="inp" style={{marginBottom:6}} value={sel}
-            onChange={e=>setEscolha(x=>({...x,[ecl.id]:{compraId:e.target.value,emb:x[ecl.id]?.emb||""}}))}>
+            onChange={e=>setEscolha(x=>({...x,[ecl.id]:{compraId:e.target.value,emb:""}}))}>
             <option value="">— escolher —</option>
-            {ladoCompra.map((m:any)=><option key={m.id} value={m.id}>{m.nome} ({(parseFloat(m.estoqueAtual)||0).toFixed(2)} {m.unidade||"un"})</option>)}
+            {prodsLista.map((pl:any)=><option key={pl.id} value={pl.id}>{pl.nome} — {resumoMarcas(pl)}</option>)}
           </select>
-          {sug&&!esc?.compraId&&<div style={{fontSize:10.5,color:"var(--infoText)",marginBottom:6}}>sugerido pelo nome — confira antes de conciliar</div>}
-          {alvo&&<div className="row" style={{gap:6,alignItems:"center",flexWrap:"wrap" as const,marginBottom:8}}>
-            <span style={{fontSize:12,color:"var(--text2)"}}>1 {alvo.unidade||"emb"} rende</span>
-            <input type="number" min="1" step="any" className="inp" style={{width:90,marginBottom:0,textAlign:"center"}}
-              placeholder={String(parseFloat(alvo.unidadesPorEmbalagem)||1)}
-              value={esc?.emb||""} onChange={e=>setEscolha(x=>({...x,[ecl.id]:{compraId:sel,emb:e.target.value}}))}/>
-            <span style={{fontSize:12,color:"var(--text2)"}}>{ecl.unidade||"un"}</span>
+          {sug&&!escolha[ecl.id]&&<div style={{fontSize:10.5,color:"var(--infoText)",marginBottom:6}}>sugerido pelo nome — confira antes de vincular</div>}
+          {alvo&&<div style={{fontSize:11,color:"var(--text2)",marginBottom:8,lineHeight:1.5}}>
+            {resumoMarcas(alvo)} — é daqui que a venda baixa, tirando primeiro da marca com mais saldo.
           </div>}
-          <button className="btn" disabled={!sel} onClick={()=>conciliar(ecl)}
-            style={{width:"100%",background:sel?"var(--btnPrimary)":"var(--border)",color:sel?"var(--onPrimary,#FFFFFF)":"#888",padding:"10px",fontSize:13,fontWeight:700}}>
-            Conciliar
-          </button>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn" disabled={!sel} onClick={()=>vincular(ecl,sel)}
+              style={{flex:1,background:sel?"var(--btnPrimary)":"var(--border)",color:sel?"var(--onPrimary,#FFFFFF)":"#888",padding:"10px",fontSize:13,fontWeight:700}}>
+              Vincular
+            </button>
+            <button className="btn" onClick={()=>criarNaLista(ecl)}
+              style={{background:"var(--bg)",color:"var(--btnPrimary)",border:"1px solid var(--border)",padding:"10px 12px",fontSize:12.5,fontWeight:700}}>
+              + criar na lista
+            </button>
+          </div>
         </div>;
       })}
       {pendentes.length>60&&<div className="muted" style={{fontSize:11,padding:"8px 0"}}>Mostrando 60 de {pendentes.length}.</div>}
@@ -13148,8 +13171,18 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
 
   const linhas=(db.materiasPrimas||[]).map((m:any)=>{
     const {tipo}=tipoDoInsumo(mapaTipo,m);
+    // REVENDA não tem saldo próprio: o estoque está nas MARCAS penduradas no
+    // produto da lista, e o produto do cardápio é só o nome pelo qual se vende.
+    // Mostrar aqui um número guardado seria uma segunda contabilidade da mesma
+    // garrafa — e as duas divergiriam na primeira compra.
+    if(tipo==="revenda"){
+      const {produtoLista,marcas}=resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica});
+      const un=marcas.reduce((sa:number,x:any)=>sa+(parseFloat(x.estoqueAtual)||0)*(parseFloat(x.unidadesPorEmbalagem)||1),0);
+      const valor=marcas.reduce((sa:number,x:any)=>sa+(parseFloat(x.estoqueAtual)||0)*(parseFloat(x.ultimoValor)||0),0);
+      return{...m,tipo,saldo:un,valor,calculado:true,produtoLista,marcas};
+    }
     const saldo=parseFloat(m.estoqueAtual)||0;
-    return{...m,tipo,saldo,valor:saldo*(parseFloat(m.ultimoValor)||0)};
+    return{...m,tipo,saldo,valor:saldo*(parseFloat(m.ultimoValor)||0),calculado:false,marcas:[]};
   }).filter((m:any)=>{
     if(q&&!foldBusca(m.nome||"").includes(q))return false;
     if(filtro==="todos")return true;
@@ -13185,6 +13218,9 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
     });
     setEditando(null);
   };
+  // Revenda não tem saldo próprio — quem tem são as marcas. Ajustar por aqui
+  // gravaria um número que a tela nem lê, e a pessoa acharia ter corrigido.
+  const podeAjustar=(l:any)=>l.tipo!=="revenda";
   const excluir=(l:any)=>{
     const saldo=parseFloat(l.estoqueAtual)||0;
     if(!confirm(`Excluir "${l.nome}"?${saldo?`\n\nEle ainda tem saldo de ${saldo} ${l.unidade||"un"}.`:""}\n\nO histórico de movimentações dele continua em Estoque → Movimentações.`))return;
@@ -13226,14 +13262,18 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
             <span style={{fontSize:13,flex:1,minWidth:0}}>{l.nome}
               <span style={{display:"block",fontSize:10,color:"var(--text3)"}}>
                 {ROT[l.tipo]||"sem tipo"}{l.codigoEcletica?` · cód ${l.codigoEcletica}`:""}
+                {l.calculado&&(l.produtoLista
+                  ?` · ${l.marcas.length} marca(s) em "${l.produtoLista.nome}"`
+                  :" · ⚠️ sem produto da lista")}
               </span>
             </span>
             <span style={{fontFamily:"monospace",fontSize:13,fontWeight:700,color:l.saldo<0?"var(--dangerText)":"var(--text)",whiteSpace:"nowrap" as const,textAlign:"right" as const}}>
               {l.saldo.toFixed(2)} {l.unidade||"un"}
-              {(parseFloat(l.unidadesPorEmbalagem)||1)>1&&
+              {!l.calculado&&(parseFloat(l.unidadesPorEmbalagem)||1)>1&&
                 <span style={{display:"block",fontSize:10,fontWeight:400,color:"var(--text3)"}}>
                   = {(l.saldo*(parseFloat(l.unidadesPorEmbalagem)||1)).toFixed(0)} un
                 </span>}
+              {l.calculado&&<span style={{display:"block",fontSize:10,fontWeight:400,color:"var(--text3)"}}>somado das marcas</span>}
             </span>
           </div>
           {editando===l.id&&<div style={{padding:"0 12px 12px",background:"var(--bg)"}}>
@@ -13269,7 +13309,9 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
             })()}
             <div style={{fontSize:10.5,color:"var(--text3)",marginBottom:8,lineHeight:1.5}}>
               O <strong>código</strong> é o que amarra o produto à venda do Eclética — é por ele que a venda acha este item, sem vínculo manual nenhum.
-              Para corrigir o saldo, use Estoque → Manutenção (Ajuste).
+              {podeAjustar(l)
+                ?<> Para corrigir o saldo, use Estoque → Manutenção (Ajuste).</>
+                :<> O saldo de revenda é <strong>somado das marcas</strong> na lista de compras — corrija lá, em Estoque → Inventário.</>}
             </div>
             <div style={{display:"flex",gap:8}}>
               <button className="btn" onClick={()=>salvar(l)} style={{flex:1,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"9px",fontSize:13}}>Salvar</button>
@@ -20411,68 +20453,6 @@ const FORMAS_PGTO:[string,string][]=[["dinheiro","dinheiro"],["credito","crédit
 // matéria-prima faria o vínculo pular justamente o cadastro dele — e um mesmo
 // produto da lista costuma ter VÁRIAS matérias-primas vinculadas (marcas
 // diferentes do mesmo item), que só somadas respondem "quanto comprei disso".
-// Resolve um produto VENDIDO até o item de estoque, o tipo e a ficha.
-//
-// A chave é o CÓDIGO: o Eclética emite o cupom com cProd, o agente guarda em
-// itensVendidos[].itens[].cod, e a importação guarda o mesmo número em
-// codigoEcletica. São o mesmo produto — não existe vínculo a fazer, e a tela
-// que pedia isso foi apagada por ser trabalho inventado.
-//
-// O nome continua valendo como segunda tentativa: recibo avulso não tem código,
-// e produto cadastrado à mão também não.
-const resolverItemVendido=(db:any,venda:{nome?:string,cod?:string})=>{
-  const mps=db?.materiasPrimas||[];
-  const cod=String(venda?.cod||"").trim();
-  let item=cod?mps.find((m:any)=>String(m.codigoEcletica||"")===cod):null;
-  const porCodigo=!!item;
-  if(!item&&venda?.nome){
-    const k=foldNome(venda.nome);
-    item=mps.find((m:any)=>m?.nome&&foldNome(m.nome)===k)||null;
-  }
-  const tipo=item?tipoDoInsumo(db?.tipoInsumo||{},item).tipo:null;
-  const fichas=db?.fichasTecnicas||[];
-  // fichaId no item vence o nome: é o campo que o dono edita em Saldo Estoque
-  // quando o nome do produto e o da ficha não são iguais.
-  const ficha=(item?.fichaId&&fichas.find((f:any)=>f.id===item.fichaId))
-    ||fichas.find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item?.nome||venda?.nome||""))
-    ||null;
-  return{item,tipo,ficha,porCodigo};
-};
-
-// Concilia o produto do Eclética (o que se VENDE) com o insumo que nasceu da
-// compra (o que se COMPRA). Sem isso, a entrada da NF-e alimenta um registro e
-// a venda baixa outro — o saldo nunca fecha, e nada na tela denuncia.
-//
-// O CANÔNICO é o lado da COMPRA, de propósito. Ele carrega a unidade de
-// embalagem ("cx") e o vínculo com a lista de compras; o código de gravar
-// compra NÃO converte, então um item em "un" somaria 5 ao saldo quando chegasse
-// uma NF-e de 5 caixas. A venda, essa sim, já sabe dividir por
-// unidadesPorEmbalagem.
-//
-// O NOME final é o do Eclética — é o produto que o dono reconhece — e o nome
-// antigo da compra vira termo de substituição, então a próxima NF-e do
-// fornecedor cai no item certo sozinha.
-const conciliarRevenda=(d:any,{ecleticaId,compraId,porEmbalagem}:{ecleticaId:string,compraId:string,porEmbalagem:number})=>{
-  const mps=d.materiasPrimas||[];
-  const ecl=mps.find((m:any)=>m.id===ecleticaId);
-  const compra=mps.find((m:any)=>m.id===compraId);
-  if(!ecl||!compra||ecl.id===compra.id)return d;
-
-  const base=mesclarProdutosDuplicados(d,{canonicoId:compra.id,idsRemovidos:[ecl.id],nomeFinal:ecl.nome});
-  const emb=Number.isFinite(porEmbalagem)&&porEmbalagem>0?porEmbalagem:(parseFloat(compra.unidadesPorEmbalagem)||1);
-  const agora=new Date().toISOString();
-  const materiasPrimas=(base.materiasPrimas||[]).map((m:any)=>m.id===compra.id
-    ?{...m,codigoEcletica:ecl.codigoEcletica||"",grupoEcletica:ecl.grupoEcletica||m.grupoEcletica,
-      unidadesPorEmbalagem:emb,atualizadoEm:agora}
-    :m);
-  // A marcação de tipo segue o código, que agora vive no item canônico. Sem
-  // isso, o item conciliado perderia o "revenda" e sairia da baixa por venda.
-  const tipoInsumo={...(base.tipoInsumo||{})};
-  if(ecl.codigoEcletica)tipoInsumo[`cod:${ecl.codigoEcletica}`]="revenda";
-  tipoInsumo[foldNome(ecl.nome)]="revenda";
-  return{...base,materiasPrimas,tipoInsumo};
-};
-
 // Matérias-primas que respondem por um produto da lista (várias marcas do
 // mesmo item). É por aqui que a compra e o estoque chegam até ele.
 const mpsDoProdutoLista=(db:any,prod:any)=>{
@@ -20514,6 +20494,44 @@ const agruparProdutos=(porDia:Map<string,Map<string,any>>)=>{
   }));
   return Array.from(m.values()).sort((a,b)=>b.total-a.total);
 };
+// Resolve um produto VENDIDO até o item de estoque, o tipo e a ficha.
+//
+// A chave é o CÓDIGO: o Eclética emite o cupom com cProd, o agente guarda em
+// itensVendidos[].itens[].cod, e a importação guarda o mesmo número em
+// codigoEcletica. São o mesmo produto — não existe vínculo a fazer, e a tela
+// que pedia isso foi apagada por ser trabalho inventado.
+//
+// O nome continua valendo como segunda tentativa: recibo avulso não tem código,
+// e produto cadastrado à mão também não.
+const resolverItemVendido=(db:any,venda:{nome?:string,cod?:string})=>{
+  const mps=db?.materiasPrimas||[];
+  const cod=String(venda?.cod||"").trim();
+  let item=cod?mps.find((m:any)=>String(m.codigoEcletica||"")===cod):null;
+  const porCodigo=!!item;
+  if(!item&&venda?.nome){
+    const k=foldNome(venda.nome);
+    item=mps.find((m:any)=>m?.nome&&foldNome(m.nome)===k)||null;
+  }
+  const tipo=item?tipoDoInsumo(db?.tipoInsumo||{},item).tipo:null;
+  // Revenda aponta pro produto da LISTA DE COMPRAS, que já agrega as marcas.
+  // Fundir o produto do cardápio com UMA marca deixaria a outra órfã: a NF-e
+  // dela alimentaria um registro que a venda não olha mais.
+  const prods=db?.produtosLista||[];
+  const produtoLista=tipo==="revenda"
+    ?((item?.prodListaId&&prods.find((p:any)=>p.id===item.prodListaId))
+      ||prods.find((p:any)=>p?.nome&&foldNome(p.nome)===foldNome(item?.nome||""))
+      ||null)
+    :null;
+  const marcas=produtoLista?mpsDoProdutoLista(db,produtoLista):[];
+  const fichas=db?.fichasTecnicas||[];
+  // fichaId no item vence o nome: é o campo que o dono edita em Saldo Estoque
+  // quando o nome do produto e o da ficha não são iguais.
+  const ficha=(item?.fichaId&&fichas.find((f:any)=>f.id===item.fichaId))
+    ||fichas.find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item?.nome||venda?.nome||""))
+    ||null;
+  return{item,tipo,ficha,porCodigo,produtoLista,marcas};
+};
+
 const BALDE_DA_FORMA:Record<string,string|null>={dinheiro:"dinheiro",credito:"maquininha",debito:"maquininha",pix:"maquininha",outros:"maquininha",pendura:null};
 const formasDaVenda=(v:any):[string,string,number][]=>
   FORMAS_PGTO.map(([k,label])=>[k,label,(v&&v.formas&&v.formas[k])||0] as [string,string,number]).filter(f=>f[2]>0.005);

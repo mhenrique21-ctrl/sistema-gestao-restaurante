@@ -10,7 +10,9 @@
 //
 // O QUE CADA UM FAZ AO SER VENDIDO — a regra inteira em três linhas:
 //
-//   revenda    baixa o PRÓPRIO saldo
+//   revenda    baixa as MARCAS do produto da lista de compras — o mesmo suco
+//              pode vir de duas marcas, e o saldo mora nelas, não no nome do
+//              cardápio. Guardar saldo nos dois seria contabilidade em dobro
 //   produzido  baixa o PRÓPRIO saldo (o insumo já saiu quando foi produzido;
 //              baixar de novo aqui contaria a farinha duas vezes)
 //   dose       baixa o INSUMO pela ficha, porque não se estoca "fatia de
@@ -112,7 +114,12 @@ export function pendenciasDeInsumo(mapa, materiasPrimas) {
 // pergunta que as telas realmente fazem, e escrever a regra num lugar só é o
 // que impede a farinha de ser contada duas vezes.
 export function baixaDaVenda(tipo) {
-  if (tipo === 'revenda' || tipo === 'produzido') return 'proprio';
+  // revenda NÃO tem saldo próprio: o produto do cardápio é um nome de venda, e
+  // o estoque está nas marcas penduradas no produto da lista de compras.
+  if (tipo === 'revenda') return 'lista';
+  // produzido tem saldo próprio: o bolo pronto existe fisicamente e não vem de
+  // compra — o insumo dele já saiu quando a produção foi registrada.
+  if (tipo === 'produzido') return 'proprio';
   if (tipo === 'dose') return 'ficha';
   return 'nenhum';           // insumo e interno não são vendidos
 }

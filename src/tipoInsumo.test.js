@@ -92,8 +92,10 @@ test('pendências da tela de Insumos', async (t) => {
 });
 
 test('o que a venda faz com o estoque', async (t) => {
-  await t.test('revenda e produzido baixam o próprio saldo', () => {
-    assert.equal(baixaDaVenda('revenda'), 'proprio');
+  await t.test('revenda baixa as marcas; produzido baixa o próprio saldo', () => {
+    // O mesmo suco pode vir de duas marcas, e o saldo mora nelas. Guardar
+    // saldo também no nome do cardápio seria contabilidade em dobro.
+    assert.equal(baixaDaVenda('revenda'), 'lista');
     // O insumo do produzido já saiu quando foi produzido. Baixar de novo aqui
     // contaria a farinha duas vezes — e o erro só apareceria na contagem.
     assert.equal(baixaDaVenda('produzido'), 'proprio');

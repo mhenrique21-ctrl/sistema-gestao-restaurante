@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aplicarMovimento, insumosDaProducao } from './movimentoEstoque.js';
+import { aplicarMovimento, insumosDaProducao, distribuirEntreMarcas } from './movimentoEstoque.js';
 
 let n = 0;
 const uid = () => `id${++n}`;
@@ -104,5 +104,54 @@ test('produção: entra o produto e saem os insumos', async (t) => {
     const compra = { id: 'c1', mpId: 'i-farinha', tipo: 'entrada', quantidade: 5, data };
     const r = aplicarMovimento({ movEstoque: [compra], materiasPrimas: base(), item: bolo, operacao: 'producao', quantidade: 5, ficha, data, agora, uid });
     assert.ok(r.movEstoque.find((m) => m.id === 'c1'));
+  });
+});
+
+test('rateio entre marcas do mesmo produto', async (t) => {
+  const marca = (id, estoque, emb = 1) => ({ id, nome: id, estoqueAtual: estoque, unidadesPorEmbalagem: emb, unidade: emb > 1 ? 'cx' : 'un' });
+
+  await t.test('uma marca só recebe tudo', () => {
+    const r = distribuirEntreMarcas([marca('A', 10)], 4);
+    assert.equal(r.length, 1);
+    assert.equal(r[0].qtd, 4);
+  });
+
+  await t.test('tira primeiro de quem tem mais saldo', () => {
+    // Sem isso, uma marca ficaria muito negativa enquanto a outra seguia cheia,
+    // e nenhuma das duas refletiria a prateleira.
+    const r = distribuirEntreMarcas([marca('A', 3), marca('B', 10)], 8);
+    assert.equal(r[0].mp.id, 'B');
+    assert.equal(r[0].unidades, 8, 'B sozinha cobre');
+    assert.equal(r.length, 1);
+  });
+
+  await t.test('cascateia quando a primeira não cobre', () => {
+    const r = distribuirEntreMarcas([marca('A', 3), marca('B', 10)], 12);
+    assert.deepEqual(r.map((x) => [x.mp.id, x.unidades]), [['B', 10], ['A', 2]]);
+  });
+
+  await t.test('cada marca converte pela PRÓPRIA embalagem', () => {
+    // 12 latas podem ser 1 caixa numa marca e 2 packs de 6 noutra.
+    const r = distribuirEntreMarcas([marca('cx12', 5, 12)], 24);
+    assert.equal(r[0].unidades, 24);
+    assert.equal(r[0].qtd, 2, '24 latas = 2 caixas de 12');
+  });
+
+  await t.test('ninguém com saldo: tudo na primeira, negativo', () => {
+    // "Vendeu sem ter registrado compra" é a informação honesta; espalhar o
+    // negativo faria parecer que todas as marcas estão erradas.
+    const r = distribuirEntreMarcas([marca('A', 0), marca('B', 0)], 5);
+    assert.equal(r.length, 1);
+    assert.equal(r[0].unidades, 5);
+  });
+
+  await t.test('sem marcas ou sem quantidade não inventa linha', () => {
+    assert.deepEqual(distribuirEntreMarcas([], 5), []);
+    assert.deepEqual(distribuirEntreMarcas([marca('A', 10)], 0), []);
+  });
+
+  await t.test('a soma distribuída fecha com o vendido', () => {
+    const r = distribuirEntreMarcas([marca('A', 2), marca('B', 3), marca('C', 1)], 10);
+    assert.equal(r.reduce((s, x) => s + x.unidades, 0), 10);
   });
 });

@@ -98,3 +98,41 @@ export function aplicarMovimento({ movEstoque, materiasPrimas, item, operacao, q
 
   return { movEstoque: movs, materiasPrimas: mps, grupoId, delta, antes, depois: r3(depois), avisos };
 }
+
+// Distribui a venda de N unidades entre as MARCAS de um mesmo produto.
+// ============================================================================
+// "Suco de abacaxi" pode ser comprado de duas marcas — dois insumos, um produto
+// só no cardápio. O saldo mora nas marcas; a venda não sabe (nem precisa saber)
+// qual saiu da geladeira.
+//
+// Tira primeiro de quem tem MAIS saldo e cascateia. Sem isso, uma marca ficaria
+// muito negativa enquanto a outra seguia cheia — e nenhuma das duas refletiria
+// a prateleira.
+//
+// qtdUnidades vem em unidade de VENDA (lata, garrafa). Cada marca converte pela
+// própria embalagem: 12 latas podem ser 1 caixa numa marca e 2 packs de 6 noutra.
+export function distribuirEntreMarcas(mps, qtdUnidades) {
+  const lista = (mps || []).filter(Boolean);
+  if (!lista.length || !(qtdUnidades > 0)) return [];
+  const emb = (m) => parseFloat(m.unidadesPorEmbalagem) || 1;
+  const dispUn = (m) => Math.max(0, (parseFloat(m.estoqueAtual) || 0) * emb(m));
+
+  const ord = [...lista].sort((a, b) => dispUn(b) - dispUn(a));
+  const totalDisp = ord.reduce((s, m) => s + dispUn(m), 0);
+  const out = [];
+  let restante = qtdUnidades;
+
+  ord.forEach((mp, i) => {
+    if (restante <= 0.0001) return;
+    // Ninguém tem saldo: tudo na primeira, deixando negativo. "Vendeu sem ter
+    // registrado compra" é a informação honesta — espalhar o negativo entre as
+    // marcas só faria parecer que todas estão erradas.
+    const usarUn = totalDisp <= 0
+      ? (i === 0 ? restante : 0)
+      : (i === ord.length - 1 ? restante : Math.min(restante, dispUn(mp)));
+    if (usarUn <= 0) return;
+    restante -= usarUn;
+    out.push({ mp, unidades: Math.round(usarUn * 1000) / 1000, qtd: Math.round((usarUn / emb(mp)) * 1000) / 1000 });
+  });
+  return out;
+}

@@ -279,7 +279,8 @@ interno    não sai por venda                 detergente
 
 | tipo | baixa |
 |---|---|
-| revenda, produzido | o **próprio** saldo |
+| revenda | as **marcas** do produto da lista (`distribuirEntreMarcas`) |
+| produzido | o **próprio** saldo |
 | dose | o **insumo pela ficha** — não se estoca "fatia de queijo" |
 | insumo, interno | nada |
 
@@ -329,31 +330,37 @@ data, hora, "Página"). Lido como CSV comum dá 281 cabeçalhos e zero produtos.
 posição 24 — fixar quebra se o Eclética acrescentar uma coluna. Planilha comum
 com cabeçalho também é aceita.
 
-### Conciliar compra ↔ venda (só revenda)
+### Revenda: o saldo mora nas MARCAS, não no produto do cardápio
 
-Estoque → Produtos Eclética → aba **Conciliar**. O que se COMPRA e o que se
-VENDE nascem como registros diferentes quando os nomes diferem ("AGUA MINERAL
-500ML CRYSTAL" na NF-e × "Agua Mineral" no cardápio): a entrada alimenta um e a
-saída baixa o outro, e **o saldo nunca fecha sem nada denunciar**.
+Estoque → Produtos Eclética → aba **Conciliar**. O produto de revenda do
+cardápio aponta para um **produto da LISTA DE COMPRAS** (`prodListaId`), e a
+lista já agrega as marcas em `mpVinculados`.
 
-`conciliarRevenda` funde os dois via `mesclarProdutosDuplicados` (que já soma
-saldo, une fornecedores e reaponta `movEstoque`/`compras`/`mpVinculados`), e
-depois carimba `codigoEcletica` e `unidadesPorEmbalagem` no sobrevivente.
+⚠️ **Não funda** o produto do cardápio com um insumo. Houve uma versão que fazia
+isso, e ela estava errada: "Suco de abacaxi" pode ser comprado de duas marcas —
+fundir com a marca A deixa a B órfã, e a NF-e dela passa a alimentar um registro
+que a venda não olha mais. Fusão também não tem desfazer. Vincular grava só um
+id; desfazer é escolher outro.
 
-⚠️ O **canônico é o lado da COMPRA**, de propósito: ele tem a unidade de
-embalagem e o vínculo com a lista, e o código que grava compra **não converte** —
-um item em "un" somaria 5 ao saldo quando chegasse NF-e de 5 caixas. A venda
-sabe dividir por `unidadesPorEmbalagem`; a compra não.
+```
+VENDA cód 210 "Suco de Abacaxi"
+   └─ prodListaId ─► produtoLista "Suco de abacaxi"
+                       └─ mpVinculados ─► [marca A, marca B]   ← o saldo mora aqui
+```
 
-O **nome final é o do Eclética** (é o produto que o dono reconhece) e o nome
-antigo da compra vira termo de `normalizacoes`, então a próxima NF-e cai no item
-certo sozinha.
+⚠️ Produto de revenda **não tem `estoqueAtual` próprio**. Saldo Estoque mostra a
+soma das marcas (rótulo "somado das marcas") e a edição não oferece ajuste para
+ele — gravar um número que a tela nem lê faria a pessoa achar que corrigiu.
+Produzido **tem** saldo próprio: o bolo pronto existe e não vem de compra.
 
-Só **revenda** funde. Dose continua pela ficha de uma linha; produzido não é
-comprado. E quem tem o mesmo nome dos dois lados **se concilia sozinho na
-primeira compra** — a compra acha o item pelo nome — e nem aparece na lista.
+`distribuirEntreMarcas` (em `movimentoEstoque.js`, com testes) rateia a venda:
+tira primeiro da marca com mais saldo e cascateia. Sem isso, uma marca ficaria
+muito negativa enquanto a outra seguia cheia, e nenhuma refletiria a prateleira.
+Cada marca converte pela **própria** embalagem — 12 latas podem ser 1 caixa numa
+e 2 packs de 6 noutra.
 
-Saldo Estoque mostra os dois lados (`4,00 cx` / `= 48 un`) quando há conversão.
+O botão **"+ criar na lista"** cobre a revenda que nunca teve compra: cria o item
+na lista e vincula, e a primeira NF-e já cai nele.
 
 ### Identidade do item: o CÓDIGO, não o nome
 
