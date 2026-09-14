@@ -253,11 +253,30 @@ REVENDA (água, refrigerante, cerveja, industrializado) não tem ficha e não é
 "ignorar": o que se vende é o que se compra. Comparação em
 Vendas → Relatório → **Revenda × Compras**.
 
-### Baixa de estoque pelas vendas
+### Baixa de estoque pelas vendas — cada tipo tem UM dono
 
-Vendas → Relatório → **Baixar Estoque**. Grava `movEstoque` tipo `saida` e
-desconta `materiasPrimas[].estoqueAtual` — o saldo mora em **`estoqueAtual`**,
-não em `estoque`.
+Vendas → Relatório → **Baixar Estoque**. Decisão do dono, tomada depois de a
+divergência entre as duas telas de estoque aparecer:
+
+| | Onde baixa | Por quê |
+|---|---|---|
+| **Revenda** | **PDV** (`delivery-backend`) | É lá que mora o saldo desses produtos, com inventário, extrato e alerta de mínimo |
+| **Produzido** (insumos) | **Gestão** (`movEstoque`) | O PDV calcula custo pela ficha, mas não baixa insumo |
+
+Nada é descontado nos dois — a mesma lata em dois sistemas nunca fecharia.
+
+**Revenda → PDV:** `POST /api/estoque-pdv/venda-externa` (proxy) →
+`POST /api/stock/venda-externa` no `delivery-backend`. Idempotente por
+(`fonte`, `sale_date`, `product_id`) na tabela `vendas_externas_estoque`, criada
+sob demanda (padrão `garantirTabela*` do `gestaoSync.js`). Aplica só a
+**diferença** e gera movimento de estorno quando o dia diminui — o razão do PDV
+é append-only, e um UPDATE em `quantity` corromperia o `balance_after` de todas
+as linhas seguintes. Casa produto por nome normalizado do lado do PDV e devolve
+`naoEncontrados` e `semControle` (`track_stock` desligado).
+
+**Produzido → Gestão:** grava `movEstoque` tipo `saida` e desconta
+`materiasPrimas[].estoqueAtual` — o saldo mora em **`estoqueAtual`**, não em
+`estoque`.
 
 - **um movimento por dia e por insumo**, com id determinístico
   (`vsaida-<data>-<mpId>`). É o que torna reprocessar seguro: o agente reenvia
@@ -271,11 +290,16 @@ não em `estoque`.
 - **Desfazer** varre os `vsaida-` GRAVADOS no período e manda zero pra cada um —
   não o que seria calculado agora. Produto desvinculado depois da baixa sumiria
   do cálculo e deixaria movimento órfão segurando estoque
+- **Aplicar reconcilia o período**: além do que calcula, manda zero para todo
+  `vsaida-` do período que saiu do cálculo. É o que devolveu o estoque da
+  revenda quando ela migrou pro PDV, e o que corrige um produto desvinculado
+  sem exigir que alguém lembre de desfazer antes
 
-⚠️ O PDV (`delivery-backend`) tem o SEU próprio motor de estoque — `track_stock`,
-baixa no momento do pedido, inventário, extrato. Ele não é acionado pelas vendas
-do Eclética. Por decisão do dono, o estoque da cafeteria mora no Gestão; quando
-a migração pro PDV acontecer, esta tela vira redundante.
+⚠️ `Configurações de PDV → Estoque` e `Estoque` (menu) mostram bancos
+DIFERENTES: o primeiro é o PostgreSQL do `delivery-backend`, o segundo é o JSON
+do Gestão. Depois desta divisão, revenda só se mexe no primeiro e insumo só no
+segundo — se um produto aparecer nos dois com saldos diferentes, é sinal de
+vínculo duplicado, não de bug de sincronização.
 
 ⚠️ Quantidade vendida é em unidade individual; compra costuma ser em embalagem.
 A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar

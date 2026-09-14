@@ -4606,6 +4606,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   const [fim,setFim]=useState(today());
   const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"consumo"|"baixa"|"revenda"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
   const [buscaVinc,setBuscaVinc]=useState("");
+  const [enviandoPdv,setEnviandoPdv]=useState(false);
   const [soPendentes,setSoPendentes]=useState(true);
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
@@ -5024,32 +5025,22 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
           acumula(data,mp,q,l.custo,"produção");
         });
 
-        // REVENDA: o produto vendido É o comprado.
-        lista.forEach((p:any)=>{
-          const {produto,vinculo}=vinculoDoProduto(db,p.nome);
-          if(vinculo!=="produto"||!produto)return;
-          const mpsP=mpsDoProdutoLista(db,produto);
-          if(!mpsP.length){avisos.add(`"${produto.nome}" não tem insumo vinculado — a baixa não chega até ele`);return;}
-          // Várias marcas do mesmo item: tira primeiro de quem tem mais saldo,
-          // e cascateia. Sem isso, uma marca ficaria muito negativa enquanto a
-          // outra seguiria cheia — e nenhuma das duas refletiria a prateleira.
-          const un=(m:any)=>(parseFloat(m.unidadesPorEmbalagem)||1);
-          const disp=(m:any)=>Math.max(0,(parseFloat(m.estoqueAtual)||0)*un(m));
-          const ord=[...mpsP].sort((a,b)=>disp(b)-disp(a));
-          const total=ord.reduce((sa,m)=>sa+disp(m),0);
-          let restante=p.qtd;
-          ord.forEach((mp,idx)=>{
-            if(restante<=0.0001)return;
-            // Ninguém tem saldo: joga tudo na primeira e deixa negativo, que é
-            // a informação honesta ("vendeu sem ter registrado compra").
-            const usar=total<=0?(idx===0?restante:0):(idx===ord.length-1?restante:Math.min(restante,disp(mp)));
-            if(usar<=0)return;
-            restante-=usar;
-            const q=usar/un(mp);
-            acumula(data,mp,q,(parseFloat(mp.ultimoValor)||0)*q,"revenda");
-          });
-        });
+        // REVENDA não baixa aqui: por decisão do dono, o saldo desses produtos
+        // mora no PDV, que já tem inventário, extrato e alerta de mínimo. Vai
+        // pelo bloco "revendaPorDia" abaixo. Manter as duas baixas ligadas
+        // descontaria a mesma lata duas vezes, em dois sistemas.
       });
+
+      // Revenda → PDV. Agrupa por dia, pelo NOME do produto: o cardápio do
+      // Eclética e o do PDV são o mesmo, então o PDV casa por nome do lado de
+      // lá e devolve o que não encontrou.
+      const revendaPorDia=Array.from(diasVenda.entries()).map(([data,prods])=>{
+        const itens=Array.from(prods.values())
+          .filter((p:any)=>vinculoDoProduto(db,p.nome).vinculo==="produto")
+          .map((p:any)=>({nome:p.nome,quantidade:p.qtd}));
+        return{data,itens};
+      }).filter(d=>d.itens.length).sort((a,b)=>a.data.localeCompare(b.data));
+      const totalRevenda=revendaPorDia.reduce((sa,d)=>sa+d.itens.reduce((x:number,i:any)=>x+i.quantidade,0),0);
 
       const dias=Object.keys(porDia).sort();
       const resumo=new Map<string,{nome:string,unidade:string,qtd:number,custo:number,fontes:Set<string>}>();
@@ -5090,25 +5081,70 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         alert(`${gravadosNoPeriodo.length} movimento(s) desfeito(s). O estoque voltou ao que era.`);
       };
 
+      // Movimentos gravados antes que NÃO aparecem mais no cálculo — caso
+      // típico agora: a revenda que saiu daqui e foi pro PDV. Sem zerá-los, a
+      // baixa antiga fica pendurada segurando estoque que ninguém mais explica,
+      // porque o laço de aplicação só passa pelas chaves do cálculo atual.
+      const orfaos=gravadosNoPeriodo.filter((m:any)=>!(porDia[m.data]&&porDia[m.data][m.mpId]));
+      const porDiaReconciliado:Record<string,Record<string,any>>={};
+      Object.entries(porDia).forEach(([d,v]:any)=>{porDiaReconciliado[d]={...v};});
+      orfaos.forEach((m:any)=>{(porDiaReconciliado[m.data]||(porDiaReconciliado[m.data]={}))[m.mpId]={qtd:0};});
+
       const aplicar=()=>{
         const qtdMov=jaBaixados+aCriar;
-        if(!confirm(`Baixar o estoque de ${dias.length} dia(s) de venda?\n\n${aCriar} movimento(s) novo(s) e ${jaBaixados} já existente(s) serão recalculados.\n\nPode rodar de novo sem duplicar: cada dia tem um movimento só, e reaplicar corrige pela diferença.`))return;
+        if(!confirm(`Baixar o estoque de ${dias.length} dia(s) de venda?\n\n${aCriar} movimento(s) novo(s) e ${jaBaixados} já existente(s) serão recalculados.${orfaos.length?`\n${orfaos.length} baixa(s) antiga(s) fora do cálculo atual serão DESFEITAS.`:""}\n\nPode rodar de novo sem duplicar: cada dia tem um movimento só, e reaplicar corrige pela diferença.`))return;
         (setDbAndSave||setDb)((d:any)=>{
-          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],porDia,new Date().toISOString());
+          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],porDiaReconciliado,new Date().toISOString());
           return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
         });
-        alert(`Pronto. ${qtdMov} movimento(s) de saída gravados em Estoque → Movimentações.`);
+        alert(`Pronto. ${qtdMov} movimento(s) de saída gravados em Estoque → Movimentações.${orfaos.length?`\n\n${orfaos.length} baixa(s) antiga(s) que não valem mais foram desfeitas (o estoque voltou).`:""}`);
+      };
+
+      const enviarRevendaPdv=async()=>{
+        if(!revendaPorDia.length)return;
+        if(!confirm(`Baixar no PDV ${totalRevenda.toFixed(0)} unidade(s) de revenda, em ${revendaPorDia.length} dia(s)?\n\nO PDV aplica só a diferença por dia e produto — reenviar o mesmo período não desconta duas vezes.`))return;
+        setEnviandoPdv(true);
+        try{
+          const r=await fetch("/api/estoque-pdv/venda-externa",{method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({empresa,fonte:"ecletica",dias:revendaPorDia})});
+          const j=await r.json();
+          if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);
+          const partes=[`${j.aplicados} produto-dia aplicado(s) no PDV.`];
+          if(j.naoEncontrados?.length)partes.push(`\nSem produto correspondente no PDV (${j.naoEncontrados.length}): ${j.naoEncontrados.slice(0,8).join(", ")}`);
+          if(j.semControle?.length)partes.push(`\nSem controle de estoque ligado no PDV (${j.semControle.length}): ${j.semControle.slice(0,8).join(", ")}`);
+          if(j.falhas?.length)partes.push(`\nFalharam: ${j.falhas.map((f:any)=>`${f.data} (${f.erro})`).join(", ")}`);
+          alert(partes.join("\n"));
+        }catch(e:any){alert(`Não consegui baixar no PDV: ${e.message}`);}
+        finally{setEnviandoPdv(false);}
       };
 
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Baixar estoque das vendas</div>
         <div style={{fontSize:11,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
-          Desconta do estoque o que as vendas do período consumiram: <strong>produzido</strong> pela ficha técnica, <strong>revenda</strong> direto. Gera um movimento de saída por dia e por insumo.
+          <strong>Revenda</strong> baixa no <strong>PDV</strong> (é lá que mora o saldo desses produtos); <strong>produzido</strong> baixa os insumos aqui no Gestão, pela ficha técnica. Cada tipo tem um dono só — nada é descontado nos dois.
         </div>
 
-        {!dias.length&&<EmptyState msg="Nenhuma venda vinculada no período. Vincule os produtos em 'Vincular Produtos'."/>}
+        {revendaPorDia.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>🛒 Revenda → PDV</div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Unidades vendidas no período</span><strong>{totalRevenda.toFixed(0)}</strong>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Dias a enviar</span><strong>{revendaPorDia.length}</strong>
+          </div>
+          <button className="btn" disabled={enviandoPdv} onClick={enviarRevendaPdv}
+            style={{width:"100%",marginTop:10,background:enviandoPdv?"var(--border)":"var(--btnPrimary)",color:enviandoPdv?"#888":"var(--onPrimary,#FFFFFF)",padding:"11px",fontSize:14,fontWeight:700}}>
+            {enviandoPdv?"Enviando...":"📤 Baixar revenda no PDV"}
+          </button>
+          <div style={{fontSize:10.5,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
+            O PDV guarda quanto já baixou por dia e produto, e aplica só a diferença. Reenviar o mesmo período não desconta de novo. O saldo aparece em Configurações de PDV → Estoque.
+          </div>
+        </div>}
+
+        {!dias.length&&!revendaPorDia.length&&<EmptyState msg="Nenhuma venda vinculada no período. Vincule os produtos em 'Vincular Produtos'."/>}
 
         {dias.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>🍳 Produzido → insumos aqui</div>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
             <span style={{color:"var(--text2)"}}>Dias de venda no período</span><strong>{dias.length}</strong>
           </div>
@@ -5122,7 +5158,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
             <span>Movimentos</span><span>{aCriar} novo(s) · {jaBaixados} já baixado(s)</span>
           </div>
           <button className="btn" onClick={aplicar} style={{width:"100%",marginTop:10,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"11px",fontSize:14,fontWeight:700}}>
-            📉 {jaBaixados&&!aCriar?"Recalcular baixa do período":"Baixar estoque do período"}
+            📉 {jaBaixados&&!aCriar?"Recalcular baixa de insumos":"Baixar insumos do período"}
           </button>
           {gravadosNoPeriodo.length>0&&<button className="btn" onClick={desfazer}
             style={{width:"100%",marginTop:8,background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"9px",fontSize:12.5,fontWeight:700}}>

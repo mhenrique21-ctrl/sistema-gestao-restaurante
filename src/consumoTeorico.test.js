@@ -215,3 +215,38 @@ test('desfazer a baixa de um período inteiro', async (t) => {
     assert.equal(dois.movEstoque.length, 1);
   });
 });
+
+test('reconciliação: baixa que saiu do cálculo é desfeita ao reaplicar', async (t) => {
+  const agora = '2026-09-14T10:00:00.000Z';
+  const mps = () => [
+    { id: 'mp-polvilho', nome: 'Polvilho', unidade: 'kg', estoqueAtual: 10 },
+    { id: 'mp-agua', nome: 'Água', unidade: 'cx', estoqueAtual: 8 },
+  ];
+
+  await t.test('revenda que migrou pro PDV devolve o estoque que tinha baixado aqui', () => {
+    // O laço de aplicação só passa pelas chaves do cálculo ATUAL. Sem somar os
+    // órfãos explicitamente, a baixa antiga da água ficaria pendurada segurando
+    // estoque que ninguém mais explica — e o saldo do Gestão nunca bateria com
+    // o do PDV, que passou a ser o dono daquele produto.
+    const antes = aplicarBaixaVendas([], mps(), {
+      '2026-09-12': {
+        'mp-polvilho': { qtd: 2, unidade: 'kg', nome: 'Polvilho' },
+        'mp-agua': { qtd: 3, unidade: 'cx', nome: 'Água' },
+      },
+    }, agora);
+    assert.equal(antes.materiasPrimas[1].estoqueAtual, 5, 'água baixou 3');
+
+    // Novo cálculo: só produzido. A água sumiu do mapa.
+    const novoCalculo = { '2026-09-12': { 'mp-polvilho': { qtd: 2, unidade: 'kg', nome: 'Polvilho' } } };
+    // É isto que a tela monta: o cálculo + zero para cada órfão do período.
+    const orfaos = antes.movEstoque.filter((m) => m.id.startsWith('vsaida-') && !novoCalculo[m.data]?.[m.mpId]);
+    const reconciliado = { ...novoCalculo };
+    orfaos.forEach((m) => { reconciliado[m.data] = { ...reconciliado[m.data], [m.mpId]: { qtd: 0 } }; });
+
+    const depois = aplicarBaixaVendas(antes.movEstoque, antes.materiasPrimas, reconciliado, agora);
+
+    assert.equal(depois.materiasPrimas[1].estoqueAtual, 8, 'água volta ao saldo original');
+    assert.equal(depois.materiasPrimas[0].estoqueAtual, 8, 'polvilho continua baixado');
+    assert.equal(depois.movEstoque.filter((m) => m.mpId === 'mp-agua').length, 0, 'e o movimento da água some');
+  });
+});
