@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 // A matemática do consumo teórico vive fora daqui porque erra em silêncio:
 // esquecer de dividir por `porcoes` ou converter g↔kg dá um número que continua
 // parecendo plausível na tela. Lá tem teste travando as duas.
-import {converterQtd,consumoTeorico} from "./consumoTeorico.js";
+import {converterQtd,consumoTeorico,aplicarBaixaVendas,idBaixaVenda} from "./consumoTeorico.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -4604,7 +4604,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"consumo"|"revenda"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"consumo"|"baixa"|"revenda"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
   const [buscaVinc,setBuscaVinc]=useState("");
   const [soPendentes,setSoPendentes]=useState(true);
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
@@ -4649,7 +4649,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
     ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
     ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
     ["mensal","Evolução Mensal"],["canal","Por Canal"],["sazonal","Sazonalidade"],
-    ["margem","Margem por Produto"],["consumo","Consumo Teórico"],["revenda","Revenda × Compras"],["vinculos","Vincular Produtos"],["empresas","Confraria × Seama"],
+    ["margem","Margem por Produto"],["consumo","Consumo Teórico"],["baixa","Baixar Estoque"],["revenda","Revenda × Compras"],["vinculos","Vincular Produtos"],["empresas","Confraria × Seama"],
   ];
 
   const RowBar=({label,sub,qty,val,pct,color}:{label:string,sub?:string,qty?:string,val:number,pct:number,color?:string})=>(
@@ -4909,7 +4909,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
           const entradas=movs.filter((mv:any)=>mv.mpId===mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
           const brutoCompra=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0);
           comprado=converterQtd(brutoCompra,mp.unidade||"un",l.unidade);
-          estoque=converterQtd(parseFloat(mp.estoque)||0,mp.unidade||"un",l.unidade);
+          estoque=converterQtd(parseFloat(mp.estoqueAtual)||0,mp.unidade||"un",l.unidade);
         }
         return{...l,mp,comprado,estoque,unCompra:mp?.unidade||"",
           cobertura:comprado!=null&&l.qtd>0?comprado/l.qtd:null};
@@ -4982,6 +4982,154 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       </>;
     })()}
 
+    {relTab==="baixa"&&(()=>{
+      // Baixa por DIA, não pelo período inteiro: movimento de estoque sem data
+      // certa inutiliza o extrato e a contagem por período.
+      const mpsTodas=db.materiasPrimas||[];
+      const porDia:Record<string,Record<string,any>>={};
+      const avisos=new Set<string>();
+      const acumula=(data:string,mp:any,qtd:number,custo:number,fonte:string)=>{
+        if(!(qtd>0))return;
+        const dia=porDia[data]||(porDia[data]={});
+        const cur=dia[mp.id]||(dia[mp.id]={nome:mp.nome,unidade:mp.unidade||"un",qtd:0,custo:0,fontes:new Set<string>()});
+        cur.qtd+=qtd; cur.custo+=custo; cur.fontes.add(fonte);
+      };
+
+      // Vendas do período, agrupadas por dia e produto. recibosVenda entra
+      // junto: são vendas reais e hoje não baixam estoque em lugar nenhum.
+      const diasVenda=new Map<string,Map<string,{nome:string,qtd:number,total:number}>>();
+      const addVenda=(data:string,nome:string,qtd:number,valor:number)=>{
+        if(!nome||!data)return;
+        const dia=diasVenda.get(data)||new Map();
+        const k=foldNome(nome);
+        const cur=dia.get(k)||{nome,qtd:0,total:0};
+        cur.qtd+=qtd; cur.total+=valor; dia.set(k,cur); diasVenda.set(data,dia);
+      };
+      (db.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim)
+        .forEach((d:any)=>(d.itens||[]).forEach((it:any)=>addVenda(d.data,it.nome,it.qtd||0,it.valor||0)));
+      (db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim)
+        .forEach((r:any)=>(r.itens||[]).forEach((it:any)=>addVenda(r.data,it.nome,it.quantidade||0,it.subtotal||0)));
+
+      Array.from(diasVenda.entries()).forEach(([data,prods])=>{
+        const lista=Array.from(prods.values());
+
+        // PRODUZIDO: ficha explode em insumos.
+        const {linhas}=consumoTeorico(lista,(nome:string)=>vinculoDoProduto(db,nome).ficha);
+        linhas.forEach((l:any)=>{
+          if(!l.mpId){avisos.add(`"${l.nome}" está na ficha sem insumo vinculado — não dá pra baixar`);return;}
+          const mp=mpsTodas.find((m:any)=>m.id===l.mpId);
+          if(!mp){avisos.add(`Insumo da ficha não existe mais no cadastro ("${l.nome}")`);return;}
+          const q=converterQtd(l.qtd,l.unidade,mp.unidade||"un");
+          if(q==null){avisos.add(`"${mp.nome}": ficha em "${l.unidade}" e insumo em "${mp.unidade}" — sem conversão possível`);return;}
+          acumula(data,mp,q,l.custo,"produção");
+        });
+
+        // REVENDA: o produto vendido É o comprado.
+        lista.forEach((p:any)=>{
+          const {produto,vinculo}=vinculoDoProduto(db,p.nome);
+          if(vinculo!=="produto"||!produto)return;
+          const mpsP=mpsDoProdutoLista(db,produto);
+          if(!mpsP.length){avisos.add(`"${produto.nome}" não tem insumo vinculado — a baixa não chega até ele`);return;}
+          // Várias marcas do mesmo item: tira primeiro de quem tem mais saldo,
+          // e cascateia. Sem isso, uma marca ficaria muito negativa enquanto a
+          // outra seguiria cheia — e nenhuma das duas refletiria a prateleira.
+          const un=(m:any)=>(parseFloat(m.unidadesPorEmbalagem)||1);
+          const disp=(m:any)=>Math.max(0,(parseFloat(m.estoqueAtual)||0)*un(m));
+          const ord=[...mpsP].sort((a,b)=>disp(b)-disp(a));
+          const total=ord.reduce((sa,m)=>sa+disp(m),0);
+          let restante=p.qtd;
+          ord.forEach((mp,idx)=>{
+            if(restante<=0.0001)return;
+            // Ninguém tem saldo: joga tudo na primeira e deixa negativo, que é
+            // a informação honesta ("vendeu sem ter registrado compra").
+            const usar=total<=0?(idx===0?restante:0):(idx===ord.length-1?restante:Math.min(restante,disp(mp)));
+            if(usar<=0)return;
+            restante-=usar;
+            const q=usar/un(mp);
+            acumula(data,mp,q,(parseFloat(mp.ultimoValor)||0)*q,"revenda");
+          });
+        });
+      });
+
+      const dias=Object.keys(porDia).sort();
+      const resumo=new Map<string,{nome:string,unidade:string,qtd:number,custo:number,fontes:Set<string>}>();
+      dias.forEach(dt=>Object.entries(porDia[dt]).forEach(([mpId,v]:any)=>{
+        const cur=resumo.get(mpId)||{nome:v.nome,unidade:v.unidade,qtd:0,custo:0,fontes:new Set<string>()};
+        cur.qtd+=v.qtd; cur.custo+=v.custo; v.fontes.forEach((f:string)=>cur.fontes.add(f));
+        resumo.set(mpId,cur);
+      }));
+      const linhasResumo=Array.from(resumo.entries()).map(([mpId,v])=>({mpId,...v})).sort((a,b)=>b.custo-a.custo);
+      const custoTotal=linhasResumo.reduce((sa,l)=>sa+l.custo,0);
+
+      // Quanto deste período já foi baixado antes — é o que diz se o botão vai
+      // criar, corrigir ou não fazer nada.
+      const idsExistentes=new Set((db.movEstoque||[]).map((m:any)=>m.id));
+      let jaBaixados=0, aCriar=0;
+      dias.forEach(dt=>Object.keys(porDia[dt]).forEach(mpId=>{
+        if(idsExistentes.has(idBaixaVenda(dt,mpId)))jaBaixados++; else aCriar++;
+      }));
+
+      const aplicar=()=>{
+        const qtdMov=jaBaixados+aCriar;
+        if(!confirm(`Baixar o estoque de ${dias.length} dia(s) de venda?\n\n${aCriar} movimento(s) novo(s) e ${jaBaixados} já existente(s) serão recalculados.\n\nPode rodar de novo sem duplicar: cada dia tem um movimento só, e reaplicar corrige pela diferença.`))return;
+        (setDbAndSave||setDb)((d:any)=>{
+          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],porDia,new Date().toISOString());
+          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
+        });
+        alert(`Pronto. ${qtdMov} movimento(s) de saída gravados em Estoque → Movimentações.`);
+      };
+
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Baixar estoque das vendas</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
+          Desconta do estoque o que as vendas do período consumiram: <strong>produzido</strong> pela ficha técnica, <strong>revenda</strong> direto. Gera um movimento de saída por dia e por insumo.
+        </div>
+
+        {!dias.length&&<EmptyState msg="Nenhuma venda vinculada no período. Vincule os produtos em 'Vincular Produtos'."/>}
+
+        {dias.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Dias de venda no período</span><strong>{dias.length}</strong>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Insumos afetados</span><strong>{linhasResumo.length}</strong>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Custo do que sai</span><strong>{fmtMoney(custoTotal)}</strong>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0",color:"var(--text2)"}}>
+            <span>Movimentos</span><span>{aCriar} novo(s) · {jaBaixados} já baixado(s)</span>
+          </div>
+          <button className="btn" onClick={aplicar} style={{width:"100%",marginTop:10,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"11px",fontSize:14,fontWeight:700}}>
+            📉 {jaBaixados&&!aCriar?"Recalcular baixa do período":"Baixar estoque do período"}
+          </button>
+          <div style={{fontSize:10.5,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
+            Pode rodar quantas vezes quiser: cada dia tem um movimento só. Corrigiu uma ficha? Rode de novo e a diferença é devolvida ao estoque — nunca somada.
+          </div>
+        </div>}
+
+        {avisos.size>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10,lineHeight:1.6}}>
+          ⚠️ Fora da baixa:<br/>{[...avisos].slice(0,6).map((a,i)=><span key={i}>· {a}<br/></span>)}
+          {avisos.size>6&&<span>· +{avisos.size-6} outro(s)</span>}
+        </div>}
+
+        {linhasResumo.map(l=>{
+          const mp=mpsTodas.find((m:any)=>m.id===l.mpId);
+          const saldo=parseFloat(mp?.estoqueAtual)||0;
+          return <div key={l.mpId} style={{padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"baseline"}}>
+              <span style={{fontSize:13}}>{l.nome} <span style={{fontSize:10,color:"var(--text3)"}}>{[...l.fontes].join(" + ")}</span></span>
+              <span style={{fontSize:12,fontWeight:700,color:"var(--dangerText)"}}>−{l.qtd.toFixed(l.qtd<10?2:0)} {l.unidade}</span>
+            </div>
+            <div style={{fontSize:10.5,color:"var(--text3)",marginTop:2}}>
+              saldo atual {saldo.toFixed(saldo<10?2:0)} {l.unidade} → ficaria {(saldo-l.qtd).toFixed(2)} {l.unidade}
+              {saldo-l.qtd<0&&<span style={{color:"var(--warningText)",fontWeight:700}}> · negativo</span>}
+            </div>
+          </div>;
+        })}
+      </>;
+    })()}
+
     {relTab==="revenda"&&(()=>{
       // Só produtos de REVENDA: o que se vende é literalmente o que se compra,
       // então dá pra comparar quantidade contra quantidade. Produto produzido
@@ -5015,7 +5163,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
           unsCompra.add(un);
           if(porEmb===1&&!["un","und","unidade","unid"].includes(un))semConversao++;
           compradoUn+=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0)*porEmb;
-          estoqueUn+=(parseFloat(mp.estoque)||0)*porEmb;
+          estoqueUn+=(parseFloat(mp.estoqueAtual)||0)*porEmb;
         });
         const semVinculo=mps.length===0;
         const conversaoDuvidosa=!semVinculo&&semConversao>0;

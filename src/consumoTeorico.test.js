@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { converterQtd, consumoTeorico } from './consumoTeorico.js';
+import { converterQtd, consumoTeorico, aplicarBaixaVendas } from './consumoTeorico.js';
 
 test('conversão de unidade', async (t) => {
   await t.test('massa e volume convertem porque a relação é fixa', () => {
@@ -97,5 +97,76 @@ test('consumo teórico', async (t) => {
       resolver({ nome: 'Y', porcoes: 1, insumos: [{ nome: 'Sal', quantidade: 5, unidade: 'g' }] }));
     assert.equal(r.linhas.length, 1);
     assert.equal(r.linhas[0].chave, 'nome:sal');
+  });
+});
+
+test('baixa de estoque por venda', async (t) => {
+  const mps = () => [{ id: 'mp1', nome: 'Polvilho', unidade: 'kg', estoqueAtual: 10 }];
+  const agora = '2026-09-14T10:00:00.000Z';
+
+  await t.test('primeira aplicação cria o movimento e desconta', () => {
+    const r = aplicarBaixaVendas([], mps(), { '2026-09-12': { mp1: { qtd: 2, unidade: 'kg', nome: 'Polvilho' } } }, agora);
+    assert.equal(r.criados, 1);
+    assert.equal(r.movEstoque[0].quantidade, 2);
+    assert.equal(r.movEstoque[0].tipo, 'saida');
+    assert.equal(r.materiasPrimas[0].estoqueAtual, 8);
+  });
+
+  await t.test('reaplicar o MESMO dia não desconta de novo', () => {
+    // O agente reenvia ontem e hoje a cada 2 minutos. Sem isso, um dia de
+    // venda zeraria o estoque sozinho ao longo da tarde.
+    const porDia = { '2026-09-12': { mp1: { qtd: 2, unidade: 'kg', nome: 'Polvilho' } } };
+    const um = aplicarBaixaVendas([], mps(), porDia, agora);
+    const dois = aplicarBaixaVendas(um.movEstoque, um.materiasPrimas, porDia, agora);
+    assert.equal(dois.criados + dois.atualizados, 0, 'nada a fazer na segunda passada');
+    assert.equal(dois.materiasPrimas[0].estoqueAtual, 8, 'o saldo não se move');
+    assert.equal(dois.movEstoque.length, 1, 'e não cria um segundo movimento');
+  });
+
+  await t.test('ficha corrigida devolve a diferença em vez de somar', () => {
+    const um = aplicarBaixaVendas([], mps(), { '2026-09-12': { mp1: { qtd: 2, unidade: 'kg', nome: 'Polvilho' } } }, agora);
+    const dois = aplicarBaixaVendas(um.movEstoque, um.materiasPrimas,
+      { '2026-09-12': { mp1: { qtd: 1.6, unidade: 'kg', nome: 'Polvilho' } } }, agora);
+    assert.equal(dois.movEstoque.length, 1);
+    assert.equal(dois.movEstoque[0].quantidade, 1.6);
+    assert.equal(dois.materiasPrimas[0].estoqueAtual, 8.4, '10 − 1,6 — e não 10 − 2 − 1,6');
+  });
+
+  await t.test('dias diferentes geram movimentos diferentes', () => {
+    const r = aplicarBaixaVendas([], mps(), {
+      '2026-09-11': { mp1: { qtd: 1, unidade: 'kg', nome: 'Polvilho' } },
+      '2026-09-12': { mp1: { qtd: 2, unidade: 'kg', nome: 'Polvilho' } },
+    }, agora);
+    assert.equal(r.movEstoque.length, 2, 'saída tem data: um dia não engole o outro');
+    assert.equal(r.materiasPrimas[0].estoqueAtual, 7);
+    assert.deepEqual(r.movEstoque.map((m) => m.data).sort(), ['2026-09-11', '2026-09-12']);
+  });
+
+  await t.test('venda que virou zero remove o movimento e devolve o estoque', () => {
+    // Acontece ao desvincular um produto: aquele dia deixa de consumir o insumo.
+    const um = aplicarBaixaVendas([], mps(), { '2026-09-12': { mp1: { qtd: 2, unidade: 'kg', nome: 'Polvilho' } } }, agora);
+    const dois = aplicarBaixaVendas(um.movEstoque, um.materiasPrimas, { '2026-09-12': { mp1: { qtd: 0 } } }, agora);
+    assert.equal(dois.removidos, 1);
+    assert.equal(dois.movEstoque.length, 0);
+    assert.equal(dois.materiasPrimas[0].estoqueAtual, 10, 'volta ao que era');
+  });
+
+  await t.test('não mexe em movimento de outra origem', () => {
+    const compra = { id: 'x1', mpId: 'mp1', tipo: 'entrada', quantidade: 5, data: '2026-09-12' };
+    const r = aplicarBaixaVendas([compra], mps(), { '2026-09-12': { mp1: { qtd: 2, unidade: 'kg', nome: 'Polvilho' } } }, agora);
+    assert.equal(r.movEstoque.length, 2);
+    assert.ok(r.movEstoque.find((m) => m.id === 'x1'), 'a entrada de compra continua lá, intacta');
+  });
+
+  await t.test('saldo pode ficar negativo em vez de travar', () => {
+    // Travar porque o cadastro está desatualizado esconderia a inconsistência.
+    const r = aplicarBaixaVendas([], mps(), { '2026-09-12': { mp1: { qtd: 25, unidade: 'kg', nome: 'Polvilho' } } }, agora);
+    assert.equal(r.materiasPrimas[0].estoqueAtual, -15);
+  });
+
+  await t.test('insumo que não existe mais não quebra a aplicação', () => {
+    const r = aplicarBaixaVendas([], mps(), { '2026-09-12': { sumiu: { qtd: 3, unidade: 'kg', nome: '?' } } }, agora);
+    assert.equal(r.criados, 1, 'o movimento fica registrado');
+    assert.equal(r.materiasPrimas[0].estoqueAtual, 10, 'e nenhum saldo alheio é tocado');
   });
 });

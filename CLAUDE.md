@@ -253,6 +253,27 @@ REVENDA (água, refrigerante, cerveja, industrializado) não tem ficha e não é
 "ignorar": o que se vende é o que se compra. Comparação em
 Vendas → Relatório → **Revenda × Compras**.
 
+### Baixa de estoque pelas vendas
+
+Vendas → Relatório → **Baixar Estoque**. Grava `movEstoque` tipo `saida` e
+desconta `materiasPrimas[].estoqueAtual` — o saldo mora em **`estoqueAtual`**,
+não em `estoque`.
+
+- **um movimento por dia e por insumo**, com id determinístico
+  (`vsaida-<data>-<mpId>`). É o que torna reprocessar seguro: o agente reenvia
+  ontem a cada ciclo, e corrigir uma ficha deve REFAZER o dia, não somar
+- `aplicarBaixaVendas` trabalha por **diferença** contra o que já foi baixado.
+  Baixou 2,0 kg e a ficha corrigida pede 1,6? Devolve 0,4 ao estoque
+- revenda com várias marcas: tira primeiro de quem tem mais saldo e cascateia;
+  se ninguém tem, joga tudo na primeira e deixa **negativo** de propósito
+- `recibosVenda` entra na baixa: são vendas reais e não descontam em nenhum
+  outro lugar
+
+⚠️ O PDV (`delivery-backend`) tem o SEU próprio motor de estoque — `track_stock`,
+baixa no momento do pedido, inventário, extrato. Ele não é acionado pelas vendas
+do Eclética. Por decisão do dono, o estoque da cafeteria mora no Gestão; quando
+a migração pro PDV acontecer, esta tela vira redundante.
+
 ⚠️ Quantidade vendida é em unidade individual; compra costuma ser em embalagem.
 A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar
 "40 vendidas" com "7 compradas" inventa um rombo — por isso a tela avisa em vez
