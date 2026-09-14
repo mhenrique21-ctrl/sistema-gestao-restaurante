@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 // esquecer de dividir por `porcoes` ou converter g↔kg dá um número que continua
 // parecendo plausível na tela. Lá tem teste travando as duas.
 import {converterQtd,consumoTeorico,aplicarBaixaVendas,idBaixaVenda} from "./consumoTeorico.js";
-import {tipoDoInsumo,pendenciasDeInsumo} from "./tipoInsumo.js";
+import {tipoDoInsumo,pendenciasDeInsumo,ehProdutoVendido,baixaDaVenda} from "./tipoInsumo.js";
+import {aplicarMovimento,insumosDaProducao} from "./movimentoEstoque.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -2211,6 +2212,9 @@ export default function App() {
       {id:"est-ana",label:"Análise",icon:"📊",sub:"analise"},
       {id:"est-mov",label:"Movimentações",icon:"📋",sub:"movimentacoes"},
       {id:"est-proj",label:"Projeção de compras",icon:"📊",sub:"projecao"},
+      {id:"est-saldo",label:"Saldo Estoque",icon:"📊",sub:"saldo"},
+      {id:"est-manut",label:"Manutenção de Produtos",icon:"🔧",sub:"manutencao"},
+      {id:"est-import",label:"Produtos Eclética",icon:"📥",sub:"importar"},
       {id:"est-saidas",label:"Saídas por venda",icon:"📉",sub:"saidas"},
     ]},
     {id:"fluxo",label:"Fluxo de Caixa",icon:"💵"},
@@ -12323,7 +12327,6 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
   const [fim,setFim]=useState(today());
   const [buscaVinc,setBuscaVinc]=useState("");
   const [soPendentes,setSoPendentes]=useState(true);
-  const [enviandoPdv,setEnviandoPdv]=useState(false);
   const [verDetalhe,setVerDetalhe]=useState(false);
 
   const {porDia:vendasPorDia,diasPdv}=vendasPorItem(db,ini,fim);
@@ -12342,151 +12345,90 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
   const receitaSemVinculo=semVinculo.reduce((s:number,p:any)=>s+p.total,0);
 
   const RegistrarTab=()=>{
+    const movs=db.movEstoque||[];
+    const mpsTodas=db.materiasPrimas||[];
+    const mapaTipo=db.tipoInsumo||{};
+    const porDia:Record<string,Record<string,any>>={};
+    const avisos=new Set<string>();
+    const acumula=(data:string,mp:any,qtd:number,custo:number,fonte:string)=>{
+      if(!(qtd>0))return;
+      const dia=porDia[data]||(porDia[data]={});
+      const cur=dia[mp.id]||(dia[mp.id]={nome:mp.nome,unidade:mp.unidade||"un",qtd:0,custo:0,fontes:new Set<string>()});
+      cur.qtd+=qtd; cur.custo+=custo; cur.fontes.add(fonte);
+    };
+    const porNome=new Map<string,any>();
+    mpsTodas.forEach((m:any)=>{if(m?.nome)porNome.set(foldNome(m.nome),m);});
 
-      // Baixa por DIA, não pelo período inteiro: movimento de estoque sem data
-      // certa inutiliza o extrato e a contagem por período.
-      const mpsTodas=db.materiasPrimas||[];
-      const porDia:Record<string,Record<string,any>>={};
-      const avisos=new Set<string>();
-      const acumula=(data:string,mp:any,qtd:number,custo:number,fonte:string)=>{
-        if(!(qtd>0))return;
-        const dia=porDia[data]||(porDia[data]={});
-        const cur=dia[mp.id]||(dia[mp.id]={nome:mp.nome,unidade:mp.unidade||"un",qtd:0,custo:0,fontes:new Set<string>()});
-        cur.qtd+=qtd; cur.custo+=custo; cur.fontes.add(fonte);
-      };
+    Array.from(vendasPorDia.entries()).forEach(([data,prods]:any)=>{
+      Array.from(prods.values()).forEach((p:any)=>{
+        const item=porNome.get(foldNome(p.nome));
+        const tipo=item?tipoDoInsumo(mapaTipo,item).tipo:null;
+        const modo=baixaDaVenda(tipo);
 
-      // Vendas do período, agrupadas por dia e produto. recibosVenda entra
-      // junto: são vendas reais e hoje não baixam estoque em lugar nenhum.
-      const diasVenda=new Map<string,Map<string,{nome:string,qtd:number,total:number}>>();
-      const addVenda=(data:string,nome:string,qtd:number,valor:number)=>{
-        if(!nome||!data)return;
-        const dia=diasVenda.get(data)||new Map();
-        const k=foldNome(nome);
-        const cur=dia.get(k)||{nome,qtd:0,total:0};
-        cur.qtd+=qtd; cur.total+=valor; dia.set(k,cur); diasVenda.set(data,dia);
-      };
-      (db.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim)
-        .forEach((d:any)=>(d.itens||[]).forEach((it:any)=>addVenda(d.data,it.nome,it.qtd||0,it.valor||0)));
-      (db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim)
-        .forEach((r:any)=>(r.itens||[]).forEach((it:any)=>addVenda(r.data,it.nome,it.quantidade||0,it.subtotal||0)));
+        // REVENDA e PRODUZIDO baixam o PRÓPRIO saldo. No produzido o insumo já
+        // saiu quando foi registrada a produção — baixar a ficha aqui de novo
+        // contaria a farinha duas vezes, e o erro só apareceria na contagem.
+        if(modo==="proprio"&&item){
+          const porEmb=parseFloat(item.unidadesPorEmbalagem)||1;
+          acumula(data,item,p.qtd/porEmb,(parseFloat(item.ultimoValor)||0)*(p.qtd/porEmb),tipo==="revenda"?"revenda":"produção");
+          return;
+        }
 
-      Array.from(diasVenda.entries()).forEach(([data,prods])=>{
-        const lista=Array.from(prods.values());
-
-        // PRODUZIDO: ficha explode em insumos.
-        const {linhas}=consumoTeorico(lista,(nome:string)=>vinculoDoProduto(db,nome).ficha);
-        linhas.forEach((l:any)=>{
-          if(!l.mpId){avisos.add(`"${l.nome}" está na ficha sem insumo vinculado — não dá pra baixar`);return;}
-          const mp=mpsTodas.find((m:any)=>m.id===l.mpId);
-          if(!mp){avisos.add(`Insumo da ficha não existe mais no cadastro ("${l.nome}")`);return;}
-          const q=converterQtd(l.qtd,l.unidade,mp.unidade||"un");
-          if(q==null){avisos.add(`"${mp.nome}": ficha em "${l.unidade}" e insumo em "${mp.unidade}" — sem conversão possível`);return;}
-          acumula(data,mp,q,l.custo,"produção");
-        });
-
-        // REVENDA não baixa aqui: por decisão do dono, o saldo desses produtos
-        // mora no PDV, que já tem inventário, extrato e alerta de mínimo. Vai
-        // pelo bloco "revendaPorDia" abaixo. Manter as duas baixas ligadas
-        // descontaria a mesma lata duas vezes, em dois sistemas.
+        // DOSE baixa o insumo pela ficha: não se estoca "fatia de queijo", se
+        // estoca queijo, e a fatia sai na hora da venda.
+        if(modo==="ficha"||!item){
+          const ficha=item
+            ?(db.fichasTecnicas||[]).find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item.nome))
+            :vinculoDoProduto(db,p.nome).ficha;
+          if(!ficha){
+            // Sem item e sem ficha: o produto vendido não existe em lugar
+            // nenhum do cadastro. Dizer isso é melhor que sumir com ele.
+            if(!item)avisos.add(`"${p.nome}" não está no estoque nem tem ficha — importe em Produtos do Eclética`);
+            else avisos.add(`"${item.nome}" é dose mas não tem ficha técnica`);
+            return;
+          }
+          const {linhas}=consumoTeorico([{nome:p.nome,qtd:p.qtd,total:p.total}],()=>ficha);
+          linhas.forEach((l:any)=>{
+            const mp=l.mpId?mpsTodas.find((m:any)=>m.id===l.mpId):null;
+            if(!mp){avisos.add(`"${l.nome}" está na ficha sem insumo vinculado`);return;}
+            const q=converterQtd(l.qtd,l.unidade,mp.unidade||"un");
+            if(q==null){avisos.add(`"${mp.nome}": ficha em "${l.unidade}" e insumo em "${mp.unidade}" — sem conversão`);return;}
+            acumula(data,mp,q,l.custo,"dose/ficha");
+          });
+          return;
+        }
+        // insumo e interno não são vendidos: sai sem virar pendência.
       });
+    });
 
-      // Revenda → PDV. Agrupa por dia, pelo NOME do produto: o cardápio do
-      // Eclética e o do PDV são o mesmo, então o PDV casa por nome do lado de
-      // lá e devolve o que não encontrou.
-      const revendaPorDia=Array.from(diasVenda.entries()).map(([data,prods])=>{
-        const itens=Array.from(prods.values())
-          .filter((p:any)=>vinculoDoProduto(db,p.nome).vinculo==="produto")
-          .map((p:any)=>({nome:p.nome,quantidade:p.qtd}));
-        return{data,itens};
-      }).filter(d=>d.itens.length).sort((a,b)=>a.data.localeCompare(b.data));
-      const totalRevenda=revendaPorDia.reduce((sa,d)=>sa+d.itens.reduce((x:number,i:any)=>x+i.quantidade,0),0);
+    const dias=Object.keys(porDia).sort();
+    const resumo=new Map<string,any>();
+    dias.forEach(dt=>Object.entries(porDia[dt]).forEach(([mpId,v]:any)=>{
+      const cur=resumo.get(mpId)||{mpId,nome:v.nome,unidade:v.unidade,qtd:0,custo:0,fontes:new Set<string>()};
+      cur.qtd+=v.qtd; cur.custo+=v.custo; v.fontes.forEach((f:string)=>cur.fontes.add(f));
+      resumo.set(mpId,cur);
+    }));
+    const linhasResumo=Array.from(resumo.values()).sort((a:any,b:any)=>b.custo-a.custo);
 
-      const dias=Object.keys(porDia).sort();
-      const resumo=new Map<string,{nome:string,unidade:string,qtd:number,custo:number,fontes:Set<string>}>();
-      dias.forEach(dt=>Object.entries(porDia[dt]).forEach(([mpId,v]:any)=>{
-        const cur=resumo.get(mpId)||{nome:v.nome,unidade:v.unidade,qtd:0,custo:0,fontes:new Set<string>()};
-        cur.qtd+=v.qtd; cur.custo+=v.custo; v.fontes.forEach((f:string)=>cur.fontes.add(f));
-        resumo.set(mpId,cur);
-      }));
-      const linhasResumo=Array.from(resumo.entries()).map(([mpId,v])=>({mpId,...v})).sort((a,b)=>b.custo-a.custo);
-      const custoTotal=linhasResumo.reduce((sa,l)=>sa+l.custo,0);
-
-      // Quanto deste período já foi baixado antes — é o que diz se o botão vai
-      // criar, corrigir ou não fazer nada.
-      const idsExistentes=new Set((db.movEstoque||[]).map((m:any)=>m.id));
-      let jaBaixados=0, aCriar=0;
-      dias.forEach(dt=>Object.keys(porDia[dt]).forEach(mpId=>{
-        if(idsExistentes.has(idBaixaVenda(dt,mpId)))jaBaixados++; else aCriar++;
-      }));
-
-      // Desfazer é o mesmo caminho da aplicação, com quantidade zero: o módulo
-      // remove o movimento e devolve a quantidade ao saldo. Varre o que EXISTE
-      // gravado, não o que seria calculado agora — um produto desvinculado
-      // depois da baixa sumiria do cálculo e o movimento dele ficaria órfão,
-      // segurando estoque que ninguém mais explica.
-      const gravadosNoPeriodo=(db.movEstoque||[]).filter((m:any)=>
-        typeof m?.id==="string"&&m.id.startsWith("vsaida-")&&m.data>=ini&&m.data<=fim);
-      const desfazer=()=>{
-        if(!gravadosNoPeriodo.length)return;
-        if(!confirm(`Desfazer a baixa de ${gravadosNoPeriodo.length} movimento(s) entre ${fmtDate(ini)} e ${fmtDate(fim)}?\n\nA quantidade volta pro saldo de cada insumo e os movimentos somem de Estoque → Movimentações.\n\nSó mexe no que esta tela gravou — compras, perdas e ajustes manuais não são tocados.`))return;
-        const zerar:Record<string,Record<string,any>>={};
-        gravadosNoPeriodo.forEach((m:any)=>{
-          (zerar[m.data]||(zerar[m.data]={}))[m.mpId]={qtd:0};
-        });
-        (setDbAndSave||setDb)((d:any)=>{
-          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],zerar,new Date().toISOString());
-          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
-        });
-        alert(`${gravadosNoPeriodo.length} movimento(s) desfeito(s). O estoque voltou ao que era.`);
-      };
-
-      // Movimentos gravados antes que NÃO aparecem mais no cálculo — caso
-      // típico agora: a revenda que saiu daqui e foi pro PDV. Sem zerá-los, a
-      // baixa antiga fica pendurada segurando estoque que ninguém mais explica,
-      // porque o laço de aplicação só passa pelas chaves do cálculo atual.
-      const orfaos=gravadosNoPeriodo.filter((m:any)=>!(porDia[m.data]&&porDia[m.data][m.mpId]));
-      const porDiaReconciliado:Record<string,Record<string,any>>={};
-      Object.entries(porDia).forEach(([d,v]:any)=>{porDiaReconciliado[d]={...v};});
-      orfaos.forEach((m:any)=>{(porDiaReconciliado[m.data]||(porDiaReconciliado[m.data]={}))[m.mpId]={qtd:0};});
-
-      const aplicar=()=>{
-        const qtdMov=jaBaixados+aCriar;
-        if(!confirm(`Baixar o estoque de ${dias.length} dia(s) de venda?\n\n${aCriar} movimento(s) novo(s) e ${jaBaixados} já existente(s) serão recalculados.${orfaos.length?`\n${orfaos.length} baixa(s) antiga(s) fora do cálculo atual serão DESFEITAS.`:""}\n\nPode rodar de novo sem duplicar: cada dia tem um movimento só, e reaplicar corrige pela diferença.`))return;
-        (setDbAndSave||setDb)((d:any)=>{
-          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],porDiaReconciliado,new Date().toISOString());
-          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
-        });
-        alert(`Pronto. ${qtdMov} movimento(s) de saída gravados em Estoque → Movimentações.${orfaos.length?`\n\n${orfaos.length} baixa(s) antiga(s) que não valem mais foram desfeitas (o estoque voltou).`:""}`);
-      };
-
-      const enviarRevendaPdv=async()=>{
-        if(!revendaPorDia.length)return;
-        if(!confirm(`Baixar no PDV ${totalRevenda.toFixed(0)} unidade(s) de revenda, em ${revendaPorDia.length} dia(s)?\n\nO PDV aplica só a diferença por dia e produto — reenviar o mesmo período não desconta duas vezes.`))return;
-        setEnviandoPdv(true);
-        try{
-          const r=await fetch("/api/estoque-pdv/venda-externa",{method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({empresa,fonte:"ecletica",dias:revendaPorDia})});
-          const j=await r.json();
-          if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);
-          const partes=[`${j.aplicados} produto-dia aplicado(s) no PDV.`];
-          if(j.naoEncontrados?.length)partes.push(`\nSem produto correspondente no PDV (${j.naoEncontrados.length}): ${j.naoEncontrados.slice(0,8).join(", ")}`);
-          if(j.semControle?.length)partes.push(`\nSem controle de estoque ligado no PDV (${j.semControle.length}): ${j.semControle.slice(0,8).join(", ")}`);
-          if(j.falhas?.length)partes.push(`\nFalharam: ${j.falhas.map((f:any)=>`${f.data} (${f.erro})`).join(", ")}`);
-          alert(partes.join("\n"));
-        }catch(e:any){alert(`Não consegui baixar no PDV: ${e.message}`);}
-        finally{setEnviandoPdv(false);}
-      };
-
+    const idsExistentes=new Set(movs.map((m:any)=>m.id));
+    let jaBaixados=0,aCriar=0;
+    dias.forEach(dt=>Object.keys(porDia[dt]).forEach(mpId=>{
+      if(idsExistentes.has(idBaixaVenda(dt,mpId)))jaBaixados++; else aCriar++;
+    }));
+    const gravadosNoPeriodo=movs.filter((m:any)=>
+      typeof m?.id==="string"&&m.id.startsWith("vsaida-")&&m.data>=ini&&m.data<=fim);
+    const orfaos=gravadosNoPeriodo.filter((m:any)=>!(porDia[m.data]&&porDia[m.data][m.mpId]));
+    const porDiaReconciliado:Record<string,Record<string,any>>={};
+    Object.entries(porDia).forEach(([d,v]:any)=>{porDiaReconciliado[d]={...v};});
+    orfaos.forEach((m:any)=>{(porDiaReconciliado[m.data]||(porDiaReconciliado[m.data]={}))[m.mpId]={qtd:0};});
 
     // UM botão: o operador quer "registrar o que saiu", não escolher destino.
     // A separação revenda→PDV / insumo→Gestão é detalhe de implementação e o
     // sistema já sabe qual é qual pelo vínculo — perguntar isso a cada uso foi
     // exatamente o que deixou a tela confusa.
     const registrarTudo=async()=>{
-      const partes=[];
-      if(revendaPorDia.length)partes.push(`${totalRevenda.toFixed(0)} unidade(s) de revenda no PDV`);
-      if(dias.length)partes.push(`${linhasResumo.length} insumo(s) aqui no Gestão`);
-      if(!partes.length)return;
+      if(!dias.length&&!orfaos.length)return;
+      const partes=[`${linhasResumo.length} item(ns) de estoque`];
       if(!confirm(`Registrar as saídas de ${fmtDate(ini)} a ${fmtDate(fim)}?\n\n${partes.join("\n")}${orfaos.length?`\n${orfaos.length} baixa(s) antiga(s) fora do cálculo serão desfeitas.`:""}\n\nPode repetir sem duplicar: cada dia e produto tem um registro só, e repetir corrige pela diferença.`))return;
 
       if(dias.length||orfaos.length){
@@ -12496,27 +12438,13 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         });
       }
 
-      const msgs=[`Insumos: ${aCriar+jaBaixados} movimento(s) em Estoque → Movimentações.`];
+      const msgs=[`${aCriar+jaBaixados} movimento(s) gravado(s) em Estoque → Movimentações.`];
       if(orfaos.length)msgs.push(`${orfaos.length} baixa(s) antiga(s) desfeita(s).`);
 
-      if(revendaPorDia.length){
-        setEnviandoPdv(true);
-        try{
-          const r=await fetch("/api/estoque-pdv/venda-externa",{method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({empresa,fonte:"ecletica",dias:revendaPorDia})});
-          const j=await r.json();
-          if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);
-          msgs.push(`Revenda: ${j.aplicados} produto-dia no PDV.`);
-          if(j.naoEncontrados?.length)msgs.push(`Sem produto no PDV (${j.naoEncontrados.length}): ${j.naoEncontrados.slice(0,6).join(", ")}`);
-          if(j.semControle?.length)msgs.push(`Sem controle de estoque no PDV (${j.semControle.length}): ${j.semControle.slice(0,6).join(", ")}`);
-          if(j.falhas?.length)msgs.push(`Falharam: ${j.falhas.map((f:any)=>f.data).join(", ")}`);
-        }catch(e:any){msgs.push(`⚠️ Revenda NÃO foi pro PDV: ${e.message}`);}
-        finally{setEnviandoPdv(false);}
-      }
       alert(msgs.join("\n"));
     };
 
-    const nada=!dias.length&&!revendaPorDia.length;
+    const nada=!dias.length;
     const registrado=linhasResumo.reduce((s:number,l:any)=>s+l.custo,0);
     return <>
       {nada&&<EmptyState msg="Nenhuma venda vinculada no período. Comece pela aba Vínculos."/>}
@@ -12527,16 +12455,13 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
           <span style={{color:"var(--text2)"}}>Custo dos insumos que saem</span><strong>{fmtMoney(registrado)}</strong>
         </div>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
-          <span style={{color:"var(--text2)"}}>Unidades de revenda</span><strong>{totalRevenda.toFixed(0)}</strong>
-        </div>
-        <button className="btn" disabled={enviandoPdv} onClick={registrarTudo}
-          style={{width:"100%",marginTop:12,background:enviandoPdv?"var(--border)":"var(--btnPrimary)",color:enviandoPdv?"#888":"var(--onPrimary,#FFFFFF)",padding:"13px",fontSize:15,fontWeight:700}}>
-          {enviandoPdv?"Registrando..." : "✅ Registrar saídas do período"}
+        <button className="btn" onClick={registrarTudo}
+          style={{width:"100%",marginTop:12,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"13px",fontSize:15,fontWeight:700}}>
+          ✅ Registrar saídas do período
         </button>
         <div style={{fontSize:10.5,color:"var(--text3)",marginTop:8,lineHeight:1.5}}>
           Pode repetir quantas vezes quiser: cada dia e produto tem um registro só, e repetir corrige pela diferença — nunca soma.
-          Insumo de produto produzido sai daqui do Gestão; revenda sai do PDV, que é onde mora o saldo dela.
+          Revenda e produzido baixam o próprio saldo; dose baixa o insumo pela ficha. Insumo do produzido já saiu quando a produção foi registrada.
         </div>
       </div>}
 
@@ -12565,9 +12490,6 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
             <div style={{fontSize:10.5,color:"var(--text3)"}}>saldo {saldo.toFixed(saldo<10?2:0)} → {(saldo-l.qtd).toFixed(2)} {l.unidade}</div>
           </div>;
         })}
-        {revendaPorDia.length>0&&<div style={{fontSize:11,color:"var(--text2)",padding:"8px 0"}}>
-          + {totalRevenda.toFixed(0)} unidade(s) de revenda em {revendaPorDia.length} dia(s), que vão pro PDV.
-        </div>}
       </>}
     </>;
   };
@@ -12660,91 +12582,7 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         </div>}
       </>;
     })();
-    const revendaUi=(()=>{
-      // Só produtos de REVENDA: o que se vende é literalmente o que se compra,
-      // então dá pra comparar quantidade contra quantidade. Produto produzido
-      // não entra aqui — vendê-lo consome insumos, e comparar "pão de queijo
-      // vendido" com "pão de queijo comprado" não significaria nada.
-      const movs=db.movEstoque||[];
-      const porProd=new Map<string,{produto:any,vendido:number,receita:number}>();
-      const somar=(nome:string,qtd:number,valor:number)=>{
-        const {produto,vinculo}=vinculoDoProduto(db,nome);
-        if(vinculo!=="produto"||!produto)return;
-        const cur=porProd.get(produto.id)||{produto,vendido:0,receita:0};
-        cur.vendido+=qtd; cur.receita+=valor;
-        porProd.set(produto.id,cur);
-      };
-      itensPdvPeriodo.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
-      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
-
-      const linhas=Array.from(porProd.values()).map(l=>{
-        // Um produto da lista costuma ter VÁRIAS matérias-primas vinculadas
-        // (marcas diferentes do mesmo item). Só a soma das três responde
-        // "quanto de água eu comprei" — olhar uma marca só subestima.
-        const mps=mpsDoProdutoLista(db,l.produto);
-        let compradoUn=0, estoqueUn=0, semConversao=0;
-        let unsCompra=new Set<string>();
-        mps.forEach((mp:any)=>{
-          const entradas=movs.filter((mv:any)=>mv.mpId===mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
-          // 1 caixa comprada = 6 latas vendidas. Sem essa conversão, comparar
-          // "40 vendidas" com "7 compradas" produziria um rombo inventado.
-          const porEmb=parseFloat(mp.unidadesPorEmbalagem)||1;
-          const un=foldNome((entradas[0]?.unidade)||mp.unidade||"un");
-          unsCompra.add(un);
-          if(porEmb===1&&!["un","und","unidade","unid"].includes(un))semConversao++;
-          compradoUn+=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0)*porEmb;
-          estoqueUn+=(parseFloat(mp.estoqueAtual)||0)*porEmb;
-        });
-        const semVinculo=mps.length===0;
-        const conversaoDuvidosa=!semVinculo&&semConversao>0;
-        const impossivel=!semVinculo&&!conversaoDuvidosa&&l.vendido>compradoUn+estoqueUn+0.001;
-        return{...l,mps,compradoUn,estoqueUn,semVinculo,conversaoDuvidosa,impossivel,
-          unsCompra:[...unsCompra].join("/"),dif:compradoUn-l.vendido};
-      }).sort((a,b)=>b.receita-a.receita);
-
-      const alertas=linhas.filter(l=>l.semVinculo||l.conversaoDuvidosa||l.impossivel).length;
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Revenda — vendido × comprado</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
-          Só produtos vinculados como <strong>revenda</strong> em Vincular Produtos. A compra chega até o produto da lista pelos insumos vinculados a ele, e as quantidades são convertidas para unidade individual.
-        </div>
-        {!linhas.length&&<EmptyState msg="Nenhum produto de revenda vinculado ainda. Vincule em 'Vincular Produtos'."/>}
-        {alertas>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
-          ⚠️ {alertas} item(ns) com número não confiável — veja o aviso em cada linha antes de tirar conclusão.
-        </div>}
-        {linhas.map(l=><div key={l.produto.id} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
-            <span style={{fontSize:13,fontWeight:600}}>{l.produto.nome}
-              {l.mps.length>1&&<span style={{fontSize:10,color:"var(--text3)",fontWeight:400,marginLeft:6}}>{l.mps.length} marcas</span>}
-            </span>
-            <span style={{fontSize:11,color:"var(--text2)"}}>{fmtMoney(l.receita)}</span>
-          </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-            <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>vendido: {l.vendido.toFixed(0)} un</span>
-            {!l.semVinculo&&<>
-              <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>comprado: {l.compradoUn.toFixed(0)} un</span>
-              <span className="tag" style={{background:"var(--bg)",color:"var(--text2)"}}>estoque hoje: {l.estoqueUn.toFixed(0)} un</span>
-            </>}
-            {!l.semVinculo&&!l.conversaoDuvidosa&&<span className="tag" style={{background:l.dif>=0?"var(--bg)":"var(--dangerBg)",color:l.dif>=0?"var(--text2)":"var(--dangerText)",fontWeight:700}}>
-              {l.dif>=0?"+":""}{l.dif.toFixed(0)} un no período
-            </span>}
-          </div>
-          {l.semVinculo&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>
-            ⚠️ Este produto da lista não tem insumo vinculado, então a compra não chega até ele. Vincule em Compras → Insumos (Conciliar).
-          </div>}
-          {l.conversaoDuvidosa&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>
-            ⚠️ Compra em "{l.unsCompra}" e venda por unidade, sem conversão configurada. Preencha "unidades por embalagem" em Compras → Insumos, senão este comparativo não vale.
-          </div>}
-          {l.impossivel&&<div style={{fontSize:11,color:"var(--dangerText)",marginTop:5}}>
-            ⚠️ Vendeu mais do que comprou + estoque atual. Ou falta lançar compra no período, ou o vínculo aponta para o produto errado.
-          </div>}
-        </div>)}
-        {linhas.length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:10,lineHeight:1.5}}>
-          A diferença é o quanto o estoque <em>deveria</em> ter variado no período — não é sobra nem falta, porque não considera o que já havia antes. Para virar contagem de verdade, compare com o inventário em Estoque.
-        </div>}
-      </>;
-    })();
-    return <>{consumoUi}<div style={{height:18}}/>{revendaUi}</>;
+    return consumoUi;
   };
 
   const VinculosTab=()=>(()=>{
@@ -12893,6 +12731,335 @@ Aqui só ficam as <strong>exceções</strong>. Quem tem ficha técnica de mesmo 
       {aba==="conferencia"&&ConferenciaTab()}
       {aba==="vinculos"&&VinculosTab()}
     </div>
+  </div>;
+}
+
+
+// ===================== ESTOQUE → PRODUTOS DO ECLÉTICA =====================
+// Importa o cardápio do Eclética como itens COM SALDO. Eles entram na mesma
+// coleção dos insumos (materiasPrimas = "item com saldo") de propósito: criar
+// uma lista separada só pros 281 produtos seria a quarta coleção de produtos do
+// sistema, e tudo que já existe — ajuste, contagem, extrato, movimentações —
+// teria que ser reescrito pra ela.
+//
+// Separador detectado do cabeçalho: planilha brasileira sai com ";" quando o
+// Excel está em pt-BR e com "," quando veio de outro lugar. Adivinhar errado
+// transforma a linha inteira numa coluna só.
+const lerCSV=(texto:string)=>{
+  const linhas=texto.replace(/^﻿/,"").split(/\r?\n/).filter(l=>l.trim());
+  if(!linhas.length)return{cabecalho:[],linhas:[]};
+  const sep=(linhas[0].match(/;/g)||[]).length>(linhas[0].match(/,/g)||[]).length?";":",";
+  const quebrar=(l:string)=>{
+    const out:string[]=[];let cur="",aspas=false;
+    for(let i=0;i<l.length;i++){
+      const c=l[i];
+      if(c==='"'){ if(aspas&&l[i+1]==='"'){cur+='"';i++;} else aspas=!aspas; }
+      else if(c===sep&&!aspas){out.push(cur);cur="";}
+      else cur+=c;
+    }
+    out.push(cur);
+    return out.map(v=>v.trim());
+  };
+  const cabecalho=quebrar(linhas[0]).map(h=>foldNome(h));
+  return{cabecalho,linhas:linhas.slice(1).map(quebrar)};
+};
+
+function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
+  const [lidos,setLidos]=useState<any[]|null>(null);
+  const [erro,setErro]=useState("");
+  const [tipoPorGrupo,setTipoPorGrupo]=useState<Record<string,string>>({});
+
+  const carregar=(file:File)=>{
+    const rd=new FileReader();
+    rd.onload=()=>{
+      try{
+        const {cabecalho,linhas}=lerCSV(String(rd.result||""));
+        const col=(...nomes:string[])=>{
+          for(const n of nomes){const i=cabecalho.indexOf(foldNome(n));if(i>=0)return i;}
+          return -1;
+        };
+        const iNome=col("descricao do produto","descricao","produto","nome");
+        const iCod=col("codigo","cod","codigo do produto");
+        const iUn=col("unidade fisica","unidade","un");
+        const iGrupo=col("grupo de produtos","grupo","linha de produtos","departamentos","categoria");
+        if(iNome<0){setErro('Não achei a coluna de descrição. A planilha precisa ter "Descrição do produto".');setLidos(null);return;}
+        const itens=linhas.map(l=>({
+          nome:(l[iNome]||"").trim(),
+          codigo:iCod>=0?(l[iCod]||"").trim():"",
+          unidade:iUn>=0?((l[iUn]||"").toLowerCase().startsWith("unid")?"un":(l[iUn]||"un").trim()):"un",
+          grupo:iGrupo>=0?((l[iGrupo]||"SEM GRUPO").trim()||"SEM GRUPO"):"SEM GRUPO",
+        })).filter(i=>i.nome);
+        if(!itens.length){setErro("Nenhuma linha com descrição preenchida.");setLidos(null);return;}
+        setErro("");setLidos(itens);
+      }catch(e:any){setErro("Não consegui ler o arquivo: "+e.message);setLidos(null);}
+    };
+    rd.readAsText(file,"utf-8");
+  };
+
+  const existentes=new Set((db.materiasPrimas||[]).map((m:any)=>foldNome(m.nome)));
+  const grupos=lidos?Array.from(new Set(lidos.map(i=>i.grupo))).sort():[];
+  const novos=lidos?lidos.filter(i=>!existentes.has(foldNome(i.nome))):[];
+  const jaExistem=lidos?lidos.length-novos.length:0;
+  const semTipo=grupos.filter(g=>!tipoPorGrupo[g]);
+
+  const importar=()=>{
+    if(!lidos)return;
+    const agora=new Date().toISOString();
+    if(!confirm(`Importar ${novos.length} produto(s) novo(s)?\n\n${jaExistem} já existem e não serão duplicados — só recebem o tipo marcado.\n\nTodos entram com saldo ZERO. Use Manutenção pra lançar o saldo inicial.`))return;
+    (setDbAndSave||setDb)((d:any)=>{
+      const mps=[...(d.materiasPrimas||[])];
+      const vistos=new Set(mps.map((m:any)=>foldNome(m.nome)));
+      const tipos={...(d.tipoInsumo||{})};
+      lidos.forEach(i=>{
+        const k=foldNome(i.nome);
+        const t=tipoPorGrupo[i.grupo];
+        if(t)tipos[k]=t;
+        if(vistos.has(k))return;
+        vistos.add(k);
+        mps.push({id:uid(),nome:i.nome,unidade:i.unidade||"un",categoria:"Outros",
+          grupoEcletica:i.grupo,codigoEcletica:i.codigo,estoqueAtual:0,ultimoValor:0,
+          criadoEm:agora,atualizadoEm:agora});
+      });
+      return{...d,materiasPrimas:mps,tipoInsumo:tipos};
+    });
+    alert(`Pronto. ${novos.length} produto(s) importado(s) com saldo zero.`);
+    setLidos(null);setTipoPorGrupo({});
+  };
+
+  return <div>
+    <BackBar label="Inventário" onClick={onVoltar}/>
+    <div className="section-title" style={{marginBottom:8}}>📥 Produtos do Eclética</div>
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.6}}>
+        Exporte a lista de produtos do Eclética em <strong>CSV</strong> e escolha o arquivo aqui.
+        Colunas usadas: <strong>Descrição do produto</strong> (obrigatória), Código, Unidade física e Grupo de produtos.
+        <br/>Produto que já existe no estoque não é duplicado.
+      </div>
+      <input type="file" accept=".csv,text/csv,text/plain" className="inp" style={{marginBottom:0}}
+        onChange={e=>{const f=e.target.files?.[0];if(f)carregar(f);}}/>
+      {erro&&<div style={{fontSize:12,color:"var(--dangerText)",marginTop:8}}>⚠️ {erro}</div>}
+    </div>
+
+    {lidos&&<>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
+          <span style={{color:"var(--text2)"}}>Linhas lidas</span><strong>{lidos.length}</strong>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
+          <span style={{color:"var(--text2)"}}>Já existem no estoque</span><strong>{jaExistem}</strong>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
+          <span style={{color:"var(--text2)"}}>Serão criados</span><strong>{novos.length}</strong>
+        </div>
+      </div>
+
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>Marque o tipo de cada grupo</div>
+        <div className="muted" style={{fontSize:11.5,marginBottom:10,lineHeight:1.5}}>
+          Por grupo, não item a item — a planilha já vem agrupada, então {lidos.length} decisões viram {grupos.length}.
+          Grupo sem marcação é importado assim mesmo e vira pendência em Compras → Insumos.
+        </div>
+        {grupos.map(g=>{
+          const qtd=lidos.filter(i=>i.grupo===g).length;
+          return <div key={g} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)",flexWrap:"wrap" as const}}>
+            <span style={{fontSize:13,flex:1,minWidth:130}}>{g} <span style={{fontSize:10,color:"var(--text3)"}}>{qtd} item(ns)</span></span>
+            <div className="chip-row">
+              {([["revenda","Revenda"],["produzido","Produção própria"],["dose","Dose extra"]] as const).map(([v,lbl])=>(
+                <button key={v} type="button" className="chip"
+                  style={{minHeight:34,fontSize:11.5,...(tipoPorGrupo[g]===v?{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)"}:{})}}
+                  onClick={()=>setTipoPorGrupo(t=>({...t,[g]:v}))}>{lbl}</button>
+              ))}
+            </div>
+          </div>;
+        })}
+        {semTipo.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:8}}>
+          {semTipo.length} grupo(s) ainda sem tipo: {semTipo.slice(0,4).join(", ")}{semTipo.length>4?"…":""}
+        </div>}
+        <button className="btn" onClick={importar} disabled={!novos.length&&!Object.keys(tipoPorGrupo).length}
+          style={{width:"100%",marginTop:12,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",fontSize:14,fontWeight:700}}>
+          📥 Importar {novos.length} produto(s)
+        </button>
+      </div>
+    </>}
+  </div>;
+}
+
+// ===================== ESTOQUE → MANUTENÇÃO DE PRODUTOS =====================
+function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
+  const [busca,setBusca]=useState("");
+  const [itemId,setItemId]=useState("");
+  const [op,setOp]=useState<"producao"|"entrada"|"saida"|"ajuste">("producao");
+  const [qtd,setQtd]=useState("");
+  const [motivo,setMotivo]=useState("");
+  const [dataMov,setDataMov]=useState(today());
+
+  const mps=db.materiasPrimas||[];
+  const item=mps.find((m:any)=>m.id===itemId);
+  const q=foldBusca(busca);
+  const opcoes=q?mps.filter((m:any)=>foldBusca(m.nome||"").includes(q)).slice(0,40):[];
+  const ficha=item?(db.fichasTecnicas||[]).find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item.nome)):null;
+
+  // Prévia: mostra o que vai acontecer ANTES de acontecer. Baixar insumo sem
+  // mostrar o que sai é como se perde a confiança no número do estoque.
+  const previa=(()=>{
+    if(!item||op!=="producao")return null;
+    const n=parseFloat(qtd);
+    if(!Number.isFinite(n)||n<=0)return null;
+    return insumosDaProducao(ficha,n,mps);
+  })();
+
+  const confirmar=()=>{
+    if(!item)return alert("Escolha o item.");
+    const n=parseFloat(qtd);
+    if(!Number.isFinite(n)||n<0)return alert("Quantidade inválida.");
+    let resultado:any=null;
+    (setDbAndSave||setDb)((d:any)=>{
+      resultado=aplicarMovimento({movEstoque:d.movEstoque||[],materiasPrimas:d.materiasPrimas||[],
+        item:(d.materiasPrimas||[]).find((m:any)=>m.id===item.id)||item,
+        operacao:op,quantidade:n,motivo,data:dataMov,ficha,agora:new Date().toISOString(),uid});
+      return{...d,movEstoque:resultado.movEstoque,materiasPrimas:resultado.materiasPrimas};
+    });
+    const msgs=[`${item.nome}: ${resultado?.antes} → ${resultado?.depois} ${item.unidade||"un"}`];
+    if(resultado?.avisos?.length)msgs.push("","Não foi baixado:",...resultado.avisos.map((a:string)=>"· "+a));
+    alert(msgs.join("\n"));
+    setQtd("");setMotivo("");
+  };
+
+  const OPS:[typeof op,string,string][]=[
+    ["producao","Produção","entra o produto e saem os insumos da ficha"],
+    ["entrada","Entrada","recebimento, sem baixar insumo"],
+    ["saida","Saída","perda, consumo interno, brinde"],
+    ["ajuste","Ajuste","informe o saldo CONTADO, não a diferença"],
+  ];
+
+  return <div>
+    <BackBar label="Inventário" onClick={onVoltar}/>
+    <div className="section-title" style={{marginBottom:8}}>🔧 Manutenção de produtos</div>
+
+    <div className="card" style={{marginBottom:12}}>
+      <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Item</label>
+      {item
+        ? <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
+            <span style={{fontSize:13,fontWeight:700}}>{item.nome}
+              <span style={{fontWeight:400,fontSize:11,color:"var(--text2)",marginLeft:8}}>
+                saldo {(parseFloat(item.estoqueAtual)||0).toFixed(2)} {item.unidade||"un"}
+              </span>
+            </span>
+            <button onClick={()=>{setItemId("");setBusca("");}} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:12,fontWeight:700}}>trocar</button>
+          </div>
+        : <>
+            <input className="inp" placeholder="🔍 Buscar produto ou insumo..." value={busca} onChange={e=>setBusca(e.target.value)}/>
+            {opcoes.map((m:any)=>(
+              <div key={m.id} onClick={()=>{setItemId(m.id);setBusca("");}}
+                style={{padding:"8px 4px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between"}}>
+                <span>{m.nome}</span>
+                <span style={{color:"var(--text2)",fontSize:11}}>{(parseFloat(m.estoqueAtual)||0).toFixed(2)} {m.unidade||"un"}</span>
+              </div>
+            ))}
+            {busca&&!opcoes.length&&<div className="muted" style={{fontSize:12,padding:"10px 0"}}>Nada encontrado. Produtos do cardápio entram por Estoque → Produtos do Eclética.</div>}
+          </>}
+
+      {item&&<>
+        <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Operação</label>
+        <div style={{display:"flex",flexDirection:"column" as const,gap:4,marginBottom:10}}>
+          {OPS.map(([v,lbl,exp])=>(
+            <label key={v} style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",padding:"5px 0"}}>
+              <input type="radio" checked={op===v} onChange={()=>setOp(v)} style={{marginTop:3}}/>
+              <span style={{fontSize:13}}>{lbl}<span style={{display:"block",fontSize:11,color:"var(--text2)"}}>{exp}</span></span>
+            </label>
+          ))}
+        </div>
+
+        <div className="row" style={{gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+          <input type="number" min="0" step="any" className="inp" style={{flex:1,minWidth:110,marginBottom:0}}
+            placeholder={op==="ajuste"?"Saldo contado":"Quantidade"} value={qtd} onChange={e=>setQtd(e.target.value)}/>
+          <input type="date" className="inp" style={{maxWidth:150,marginBottom:0}} value={dataMov} onChange={e=>setDataMov(e.target.value)}/>
+        </div>
+        <input className="inp" placeholder="Motivo (opcional)" value={motivo} onChange={e=>setMotivo(e.target.value)}/>
+
+        {op==="producao"&&<div style={{background:"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
+          {!ficha&&<div style={{fontSize:11.5,color:"var(--warningText)"}}>
+            ⚠️ "{item.nome}" não tem ficha técnica com esse nome. A produção é registrada mesmo assim — nenhum insumo será baixado.
+          </div>}
+          {ficha&&!previa&&<div style={{fontSize:11.5,color:"var(--text2)"}}>Ficha "{ficha.nome}" encontrada. Informe a quantidade para ver o que sai.</div>}
+          {ficha&&previa&&<>
+            <div style={{fontSize:11.5,fontWeight:700,marginBottom:6}}>Vai baixar:</div>
+            {previa.linhas.map((l:any)=>{
+              const saldo=parseFloat(l.mp.estoqueAtual)||0;
+              return <div key={l.mp.id} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+                <span>{l.mp.nome}</span>
+                <span style={{fontFamily:"monospace"}}>{l.qtd.toFixed(3)} {l.unidade} <span style={{color:"var(--text3)"}}>({saldo.toFixed(2)} → {(saldo-l.qtd).toFixed(2)})</span></span>
+              </div>;
+            })}
+            {!previa.linhas.length&&<div style={{fontSize:11.5,color:"var(--text2)"}}>Nenhum insumo será baixado.</div>}
+            {previa.avisos.map((a:string,i:number)=><div key={i} style={{fontSize:11,color:"var(--warningText)",marginTop:4}}>⚠️ {a}</div>)}
+          </>}
+        </div>}
+
+        <button className="btn" onClick={confirmar}
+          style={{width:"100%",background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",fontSize:14,fontWeight:700}}>
+          ✅ Confirmar
+        </button>
+      </>}
+    </div>
+  </div>;
+}
+
+// ===================== ESTOQUE → SALDO =====================
+function SaldoEstoquePanel({db,onVoltar}:{db:any,onVoltar:()=>void}){
+  const [filtro,setFiltro]=useState<"produtos"|"revenda"|"produzido"|"dose"|"insumo"|"todos">("produtos");
+  const [busca,setBusca]=useState("");
+  const mapaTipo=db.tipoInsumo||{};
+  const q=foldBusca(busca);
+
+  const linhas=(db.materiasPrimas||[]).map((m:any)=>{
+    const {tipo}=tipoDoInsumo(mapaTipo,m);
+    const saldo=parseFloat(m.estoqueAtual)||0;
+    return{...m,tipo,saldo,valor:saldo*(parseFloat(m.ultimoValor)||0)};
+  }).filter((m:any)=>{
+    if(q&&!foldBusca(m.nome||"").includes(q))return false;
+    if(filtro==="todos")return true;
+    if(filtro==="produtos")return ehProdutoVendido(m.tipo);
+    return m.tipo===filtro;
+  }).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
+
+  const valorTotal=linhas.reduce((s:number,l:any)=>s+l.valor,0);
+  const negativos=linhas.filter((l:any)=>l.saldo<0).length;
+  const ROT:Record<string,string>={revenda:"revenda",produzido:"produção",dose:"dose",insumo:"insumo",interno:"interno"};
+  const FILTROS:[typeof filtro,string][]=[["produtos","Produtos"],["revenda","Revenda"],["produzido","Produção"],["dose","Dose"],["insumo","Insumos"],["todos","Todos"]];
+
+  return <div>
+    <BackBar label="Inventário" onClick={onVoltar}/>
+    <div className="section-title" style={{marginBottom:8}}>📊 Saldo do estoque</div>
+
+    <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"wrap" as const}}>
+      {FILTROS.map(([k,lbl])=>
+        <button key={k} onClick={()=>setFiltro(k)} className="pill"
+          style={{background:filtro===k?"var(--btnPrimary)":"var(--bg3)",color:filtro===k?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"7px 11px",borderRadius:8,fontWeight:700}}>{lbl}</button>)}
+    </div>
+    <input className="inp" placeholder="🔍 Buscar..." value={busca} onChange={e=>setBusca(e.target.value)}/>
+
+    <div className="card" style={{marginBottom:10,display:"flex",justifyContent:"space-between",flexWrap:"wrap" as const,gap:8}}>
+      <span style={{fontSize:12.5,color:"var(--text2)"}}>{linhas.length} item(ns)
+        {negativos>0&&<span style={{color:"var(--warningText)",fontWeight:700}}> · {negativos} negativo(s)</span>}
+      </span>
+      <span style={{fontSize:13,fontWeight:700}}>{fmtMoney(valorTotal)}</span>
+    </div>
+
+    {!linhas.length&&<EmptyState msg={filtro==="produtos"?"Nenhum produto ainda. Importe em Estoque → Produtos do Eclética.":"Nada encontrado."}/>}
+    <div className="card" style={{padding:0,overflow:"hidden"}}>
+      {linhas.slice(0,400).map((l:any)=>(
+        <div key={l.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"9px 12px",borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:13,flex:1,minWidth:0}}>{l.nome}
+            <span style={{display:"block",fontSize:10,color:"var(--text3)"}}>{ROT[l.tipo]||"sem tipo"}</span>
+          </span>
+          <span style={{fontFamily:"monospace",fontSize:13,fontWeight:700,color:l.saldo<0?"var(--dangerText)":"var(--text)",whiteSpace:"nowrap" as const}}>
+            {l.saldo.toFixed(2)} {l.unidade||"un"}
+          </span>
+        </div>
+      ))}
+    </div>
+    {linhas.length>400&&<div className="muted" style={{fontSize:11,padding:"10px 0"}}>Mostrando 400 de {linhas.length}. Use a busca.</div>}
   </div>;
 }
 
@@ -13341,6 +13508,9 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
     })()}
 
     {/* ===== PROJEÇÃO DE COMPRAS ===== */}
+    {sub==="saldo"&&<SaldoEstoquePanel db={db} onVoltar={()=>setSub("inventario")}/>}
+    {sub==="manutencao"&&<ManutencaoProdutosPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
+    {sub==="importar"&&<ImportarProdutosPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
     {sub==="saidas"&&<><BackBar label="Inventário" onClick={()=>setSub("inventario")}/>
       <SaidasPorVendaPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa}/></>}
     {sub==="projecao"&&<BackBar label="Inventário" onClick={()=>setSub("inventario")}/>}

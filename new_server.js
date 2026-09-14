@@ -2158,51 +2158,6 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       return;
     }
 
-    // POST /api/estoque-pdv/venda-externa  body:{empresa,fonte,dias:[{data,itens:[{nome,quantidade}]}]}
-    // Baixa no PDV a venda que aconteceu FORA dele (caixa do Eclética). O PDV
-    // é idempotente por (fonte, data, produto) e aplica só a diferença, então
-    // reenviar o mesmo dia não desconta duas vezes — o que importa porque a
-    // ponte do Eclética reenvia ontem a cada ciclo.
-    if (req.method === 'POST' && partes[2] === 'venda-externa' && partes.length === 3) {
-      const chunks = [];
-      req.on('data', c => chunks.push(c));
-      req.on('end', async () => {
-        try {
-          const { empresa: empresaRaw, fonte, dias } = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
-          const empresa = String(empresaRaw || 'CONFRARIA').toUpperCase() === 'SEAMA' ? 'SEAMA' : 'CONFRARIA';
-          if (empresa !== 'CONFRARIA') { res.writeHead(400); res.end(JSON.stringify({ error: 'Baixa de venda externa hoje só existe no PDV da Confraria' })); return; }
-          if (!Array.isArray(dias) || !dias.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Informe ao menos um dia' })); return; }
-
-          const token = await getServiceToken(empresa);
-          const base = pdvDaEmpresa(empresa).base;
-          const resultado = { aplicados: 0, naoEncontrados: [], semControle: [], falhas: [] };
-          // Um POST por dia: o movimento de estoque precisa da data certa, e
-          // mandar tudo junto perderia isso. São poucos dias por chamada.
-          for (const dia of dias) {
-            try {
-              const upstream = await fetch(`${base}/api/stock/venda-externa`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                body: JSON.stringify({ fonte: fonte || 'ecletica', data: dia.data, itens: dia.itens || [] }),
-              });
-              const data = await upstream.json().catch(() => ({}));
-              if (!upstream.ok) { resultado.falhas.push({ data: dia.data, erro: data.error || `HTTP ${upstream.status}` }); continue; }
-              resultado.aplicados += (data.aplicados || []).length;
-              (data.naoEncontrados || []).forEach(n => { if (!resultado.naoEncontrados.includes(n)) resultado.naoEncontrados.push(n); });
-              (data.semControle || []).forEach(n => { if (!resultado.semControle.includes(n)) resultado.semControle.push(n); });
-            } catch (e) {
-              resultado.falhas.push({ data: dia.data, erro: e.message });
-            }
-          }
-          res.setHeader('Content-Type', 'application/json'); res.writeHead(200);
-          res.end(JSON.stringify({ ok: true, ...resultado }));
-        } catch (e) {
-          res.writeHead(500); res.end(JSON.stringify({ error: 'Erro ao baixar venda externa no PDV: ' + e.message }));
-        }
-      });
-      return;
-    }
-
     // GET /api/estoque-pdv/:id/movimentos?empresa=  |  GET /api/estoque-pdv/:id/vendas?empresa=&de=&ate=
     if (req.method === 'GET' && (partes[3] === 'movimentos' || partes[3] === 'vendas')) {
       const id = partes[2];

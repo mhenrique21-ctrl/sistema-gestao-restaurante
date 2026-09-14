@@ -33,7 +33,8 @@ new_server.js         API Node (sem framework), serve o build e faz proxy pros P
 mergeDocument.js      fusão de documento no servidor (com testes)
 mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
 src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com testes)
-src/tipoInsumo.js     insumo é produção, revenda ou interno (com testes)
+src/tipoInsumo.js     o que o item é e o que a venda faz com ele (com testes)
+src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -258,20 +259,40 @@ REVENDA (água, refrigerante, cerveja, industrializado) não tem ficha e não é
 "ignorar": o que se vende é o que se compra. Comparação em
 Vendas → Relatório → **Revenda × Compras**.
 
-### Insumo: produção, revenda ou interno
+### Item com saldo: cinco tipos, uma coleção
 
-A marcação mora no **insumo** (Compras → Insumos), não no produto vendido — é
-quem dá entrada na compra que sabe se aquilo é ingrediente ou revenda.
+`materiasPrimas` é **"item com saldo"**, não só insumo: os produtos do cardápio
+do Eclética vivem nela também. Criar uma coleção separada pros 281 produtos
+seria a QUARTA lista de produtos do sistema (`produtosLista`, `materiasPrimas`,
+`produtosProducao`) e obrigaria a reescrever ajuste, contagem, extrato e
+movimentações pra ela. **Não crie.**
 
 ```
-producao   sai pela FICHA TÉCNICA do produto vendido
-revenda    o que se vende É o que se compra
-interno    não sai por venda (limpeza, descartável)
+insumo     comprado, vira ingrediente        farinha, queijo em kg
+revenda    comprado e vendido como está      água, coca, cerveja
+produzido  feito na cozinha, tem ficha       bolo, pão de queijo
+dose       porção vendida à parte            fatia de queijo, bacon
+interno    não sai por venda                 detergente
 ```
+
+**O que a VENDA faz** (`baixaDaVenda`, em `src/tipoInsumo.js`):
+
+| tipo | baixa |
+|---|---|
+| revenda, produzido | o **próprio** saldo |
+| dose | o **insumo pela ficha** — não se estoca "fatia de queijo" |
+| insumo, interno | nada |
+
+⚠️ `produzido` baixa o próprio saldo e **não** a ficha: o insumo já saiu quando
+a produção foi registrada. Explodir a ficha na venda também contaria a farinha
+duas vezes, e o erro só apareceria na contagem física.
+
+⚠️ `"producao"` foi o nome de `insumo` numa versão anterior. `LEGADO` em
+`tipoInsumo.js` traduz na leitura — não migre dado por isso.
 
 Quem não é marcado segue a **categoria contábil** (`tipoPadraoPorCategoria`):
 "Bebidas para revenda" → revenda; Proteínas/Hortifruti/Laticínios/Mercearia →
-produção; limpeza e descartáveis → interno. **"Outros" não tem palpite de
+insumo; limpeza e descartáveis → interno. **"Outros" não tem palpite de
 propósito** — vira pendência na tela em vez de um chute que ninguém revisa.
 
 Isso é o que torna a **revenda automática**: `vinculoDoProduto` casa o produto
@@ -283,6 +304,28 @@ xícara vendida.
 ⚠️ A conversão embalagem→unidade (`unidadesPorEmbalagem`) só é cobrada de
 **revenda**: é o que traduz "vendi 40 latas" em "saiu 3,33 caixas". Insumo de
 produção sai em g/kg pela ficha, que tem a própria conversão (`porcoes`).
+
+### Estoque → Saldo · Manutenção · Produtos Eclética
+
+- **Saldo Estoque** — todos os itens com saldo, filtro por tipo. Abre em
+  "Produtos" (revenda/produzido/dose); insumo e interno ficam atrás do filtro
+- **Manutenção de Produtos** — Produção · Entrada · Saída · Ajuste.
+  `src/movimentoEstoque.js`, com testes
+- **Produtos Eclética** — importa o cardápio em CSV e marca o tipo **por grupo**
+  (281 decisões viram ~15). Produto que já existe não é duplicado; entra com
+  saldo **zero**
+
+**PRODUÇÃO tem dois lados**: entra o produto e saem os insumos da ficha, no
+mesmo `grupoId` — separado, um lado some e ninguém percebe. Reaproveita
+`consumoTeorico` (que já divide pelo rendimento) em vez de repetir a divisão.
+
+⚠️ Por decisão do dono, produzir **nunca é bloqueado**: sem ficha, sem insumo
+cadastrado ou sem conversão de unidade, a produção é registrada e o que não foi
+baixado vira aviso. Travar a cozinha porque o cadastro está incompleto é pior.
+
+⚠️ `ajuste` recebe o saldo **CONTADO**, não a diferença — é como a contagem
+física funciona. Misturar os dois sentidos no mesmo campo é erro clássico de
+inventário.
 
 ### Estoque → Saídas por venda
 
@@ -298,27 +341,11 @@ A aba Registrar tem **UM botão**. A separação revenda→PDV / insumo→Gestã
 detalhe de implementação — o sistema sabe qual é qual pelo vínculo, e perguntar
 isso a cada uso foi exatamente o que deixou a tela confusa.
 
-Cada tipo tem UM dono de saldo. Decisão do dono, tomada depois de a divergência
-entre as duas telas de estoque aparecer:
+⚠️ Houve uma versão em que a revenda baixava no PDV (`/api/stock/venda-externa`).
+Foi **removida**: por decisão do dono o saldo do cardápio passou a viver no
+Gestão, e manter os dois significaria a mesma lata em dois sistemas.
 
-| | Onde baixa | Por quê |
-|---|---|---|
-| **Revenda** | **PDV** (`delivery-backend`) | É lá que mora o saldo desses produtos, com inventário, extrato e alerta de mínimo |
-| **Produzido** (insumos) | **Gestão** (`movEstoque`) | O PDV calcula custo pela ficha, mas não baixa insumo |
-
-Nada é descontado nos dois — a mesma lata em dois sistemas nunca fecharia.
-
-**Revenda → PDV:** `POST /api/estoque-pdv/venda-externa` (proxy) →
-`POST /api/stock/venda-externa` no `delivery-backend`. Idempotente por
-(`fonte`, `sale_date`, `product_id`) na tabela `vendas_externas_estoque`, criada
-sob demanda (padrão `garantirTabela*` do `gestaoSync.js`). Aplica só a
-**diferença** e gera movimento de estorno quando o dia diminui — o razão do PDV
-é append-only, e um UPDATE em `quantity` corromperia o `balance_after` de todas
-as linhas seguintes. Casa produto por nome normalizado do lado do PDV e devolve
-`naoEncontrados` e `semControle` (`track_stock` desligado).
-
-**Produzido → Gestão:** grava `movEstoque` tipo `saida` e desconta
-`materiasPrimas[].estoqueAtual` — o saldo mora em **`estoqueAtual`**, não em
+Grava `movEstoque` tipo `saida` e desconta `materiasPrimas[].estoqueAtual` — o saldo mora em **`estoqueAtual`**, não em
 `estoque`.
 
 - **um movimento por dia e por insumo**, com id determinístico
