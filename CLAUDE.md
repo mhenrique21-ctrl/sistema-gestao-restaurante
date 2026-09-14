@@ -33,6 +33,7 @@ new_server.js         API Node (sem framework), serve o build e faz proxy pros P
 mergeDocument.js      fusão de documento no servidor (com testes)
 mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
 src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com testes)
+src/tipoInsumo.js     insumo é produção, revenda ou interno (com testes)
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -123,6 +124,10 @@ categoriasDeleted        tombstone das categorias do Financeiro
 itensVendidos            [{id, data, origem, itens:[{cod,nome,un,qtd,valor}]}] — produtos
                          vendidos por dia, AGREGADOS por produto. Fora de `vendas`
                          de propósito: não entra em nenhum cálculo de faturamento
+tipoInsumo               {foldNome(insumo): "producao"|"revenda"|"interno"} — o que o
+                         insumo É. Marcado em Compras → Insumos; quem não é
+                         marcado cai na regra por categoria contábil
+                         (src/tipoInsumo.js, com testes)
 mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"produto"|"auto"|"ignorar",
                          fichaId|prodId, fichaNome|prodNome, origemAprendizado,
                          ultimaAtualizacao}}  — ver §6, "Produto vendido → compra"
@@ -252,6 +257,32 @@ Duas contas ali erram em silêncio, e por isso moram fora do `App.tsx`:
 REVENDA (água, refrigerante, cerveja, industrializado) não tem ficha e não é
 "ignorar": o que se vende é o que se compra. Comparação em
 Vendas → Relatório → **Revenda × Compras**.
+
+### Insumo: produção, revenda ou interno
+
+A marcação mora no **insumo** (Compras → Insumos), não no produto vendido — é
+quem dá entrada na compra que sabe se aquilo é ingrediente ou revenda.
+
+```
+producao   sai pela FICHA TÉCNICA do produto vendido
+revenda    o que se vende É o que se compra
+interno    não sai por venda (limpeza, descartável)
+```
+
+Quem não é marcado segue a **categoria contábil** (`tipoPadraoPorCategoria`):
+"Bebidas para revenda" → revenda; Proteínas/Hortifruti/Laticínios/Mercearia →
+produção; limpeza e descartáveis → interno. **"Outros" não tem palpite de
+propósito** — vira pendência na tela em vez de um chute que ninguém revisa.
+
+Isso é o que torna a **revenda automática**: `vinculoDoProduto` casa o produto
+vendido com o produto da lista de mesmo nome **só quando o insumo dele está
+marcado como revenda**. A trava não é detalhe — o "Café" da venda é a bebida
+pronta e o "Café" da lista é o pacote de grão; sem ela, o pacote baixaria a cada
+xícara vendida.
+
+⚠️ A conversão embalagem→unidade (`unidadesPorEmbalagem`) só é cobrada de
+**revenda**: é o que traduz "vendi 40 latas" em "saiu 3,33 caixas". Insumo de
+produção sai em g/kg pela ficha, que tem a própria conversão (`porcoes`).
 
 ### Estoque → Saídas por venda
 

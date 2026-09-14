@@ -37,6 +37,9 @@ const MAPAS = [
   // vez de remover a chave: a união só sabe adicionar, então a chave removida
   // num aparelho voltaria do outro no próximo POST.
   'mapaProdutoFicha',
+  // Insumo: "producao" | "revenda" | "interno". Marcação por insumo, mesma
+  // forma do giroInsumo.
+  'tipoInsumo',
 ];
 
 // Listas de NOMES (sem id), que crescem por união. Cada uma com seu tombstone,

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 // esquecer de dividir por `porcoes` ou converter g↔kg dá um número que continua
 // parecendo plausível na tela. Lá tem teste travando as duas.
 import {converterQtd,consumoTeorico,aplicarBaixaVendas,idBaixaVenda} from "./consumoTeorico.js";
+import {tipoDoInsumo,pendenciasDeInsumo} from "./tipoInsumo.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -276,7 +277,7 @@ const PRODS_SEED_V6=[
 ];
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
-  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[], itensVendidos:[] as any[], mapaProdutoFicha:{} as any,
+  materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[], itensVendidos:[] as any[], mapaProdutoFicha:{} as any, tipoInsumo:{} as any,
   normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
@@ -1737,6 +1738,10 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // Perecível/seco por insumo. Mesma fusão, mesmo motivo dos dois acima:
       // sem ela, classificar o giro seria revertido pelo poll seguinte.
       giroInsumo: {...(s.giroInsumo||{}),...(p.giroInsumo||{})},
+      // Insumo é matéria-prima de produção, revenda ou consumo interno. Mesma
+      // fusão do giro: mapa com local vencendo por chave. Sem estar aqui, a
+      // marcação voltaria atrás no poll seguinte — "eu marco e volta sozinho".
+      tipoInsumo: {...(s.tipoInsumo||{}),...(p.tipoInsumo||{})},
       // Projeções salvas: array com id e atualizadoEm carimbado ao salvar,
       // então usa a mesma fusão de vendas/contas — quem salvou por último
       // vence, e projeção de outra semana feita noutro aparelho não some.
@@ -7567,6 +7572,58 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           default "catalogo"), só não tem mais como navegar até lá pela UI. */}
 
       {/* ===== CATÁLOGO ===== */}
+      {/* ===== PENDÊNCIAS DO INSUMO (tipo e conversão) ===== */}
+      {prodSubTab==="catalogo"&&(()=>{
+        // As duas perguntas ficam AQUI, onde o insumo nasce, e não numa tela
+        // separada: quem acabou de dar entrada numa compra é quem sabe se
+        // aquilo é ingrediente ou revenda.
+        const mapaTipo=db.tipoInsumo||{};
+        const {semTipo,semConversao}=pendenciasDeInsumo(mapaTipo,db.materiasPrimas||[]);
+        const marcar=(mp:any,tipo:string)=>(setDbAndSave||setDb)((d:any)=>({...d,
+          tipoInsumo:{...(d.tipoInsumo||{}),[foldNome(mp.nome)]:tipo}}));
+        const setConversao=(mp:any,valor:number)=>(setDbAndSave||setDb)((d:any)=>({...d,
+          materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===mp.id?{...m,unidadesPorEmbalagem:valor,atualizadoEm:new Date().toISOString()}:m)}));
+        return <>
+          {semTipo.length>0&&<div className="card" style={{marginBottom:10,border:"1px solid #0EA5E940"}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>🏷️ {semTipo.length} insumo(s) sem tipo definido</div>
+            <div className="muted" style={{fontSize:11.5,marginBottom:8,lineHeight:1.5}}>
+              Ficam fora da baixa por venda até você dizer o que são. Os das categorias conhecidas já vêm resolvidos sozinhos — estes são os que a categoria não responde.
+            </div>
+            {semTipo.slice(0,40).map((mp:any)=>(
+              <div key={mp.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)",flexWrap:"wrap" as const}}>
+                <span style={{fontSize:13,flex:1,minWidth:120}}>{mp.nome}
+                  {mp.categoria&&<span style={{fontSize:10,color:"var(--text3)",marginLeft:6}}>{mp.categoria}</span>}</span>
+                <div className="chip-row">
+                  {([["producao","Produção"],["revenda","Revenda"],["interno","Interno"]] as const).map(([v,lbl])=>(
+                    <button key={v} type="button" className="chip" style={{minHeight:36,fontSize:12}}
+                      onClick={()=>marcar(mp,v)}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {semTipo.length>40&&<div className="muted" style={{fontSize:11,paddingTop:8}}>+{semTipo.length-40} — marque estes e os próximos aparecem.</div>}
+          </div>}
+
+          {semConversao.length>0&&<div className="card" style={{marginBottom:10,border:"1px solid #f59e0b55"}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>⚖️ {semConversao.length} insumo(s) de revenda sem conversão</div>
+            <div className="muted" style={{fontSize:11.5,marginBottom:8,lineHeight:1.5}}>
+              Você compra em embalagem e vende por unidade. Sem dizer quantas cabem, comparar "40 vendidas" com "7 compradas" inventa um rombo — por isso o comparativo fica em branco até isto ser preenchido.
+            </div>
+            {semConversao.slice(0,40).map((mp:any)=>(
+              <div key={mp.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)",flexWrap:"wrap" as const}}>
+                <span style={{fontSize:13,flex:1,minWidth:140}}>{mp.nome}</span>
+                <span style={{fontSize:11.5,color:"var(--text2)",whiteSpace:"nowrap" as const}}>1 {mp.unidade||"emb"} rende</span>
+                <input type="number" min="1" step="1" defaultValue="" placeholder="ex: 12"
+                  onBlur={e=>{const v=parseFloat(e.target.value);if(v>1)setConversao(mp,v);}}
+                  className="inp" style={{width:90,marginBottom:0,textAlign:"center"}}/>
+                <span style={{fontSize:11.5,color:"var(--text2)"}}>unidades</span>
+              </div>
+            ))}
+            {semConversao.length>40&&<div className="muted" style={{fontSize:11,paddingTop:8}}>+{semConversao.length-40} restantes.</div>}
+          </div>}
+        </>;
+      })()}
+
       {prodSubTab==="catalogo"&&<div>
         {/* Add/Edit form */}
         <div className="card" style={{marginBottom:12,border:`1px solid ${prodEdit?"#6366F155":"var(--border)"}`}}>
@@ -12740,7 +12797,7 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Produto vendido → ficha técnica</div>
         <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
-          Produto <strong>produzido</strong> aponta para a ficha técnica; produto de <strong>revenda</strong> (água, refrigerante, cerveja) aponta para o produto da <strong>lista de compras</strong> — o que se vende é o que se compra. Quem já casa pelo nome com uma ficha aparece como <strong>automático</strong>.
+Aqui só ficam as <strong>exceções</strong>. Quem tem ficha técnica de mesmo nome já casa sozinho, e quem é revenda também — basta o insumo estar marcado como revenda em <strong>Compras → Insumos</strong>. Use esta tela quando o nome vendido não bate com nada.
           <br/>Para <strong>desvincular</strong>, escolha a primeira opção do seletor. <strong>Ignorar</strong> é outra coisa: tira o produto de todas as análises de propósito (couvert, taxa, brinde).
         </div>
 
@@ -19989,11 +20046,30 @@ const vinculoDoProduto=(db:any,nomeProduto:string)=>{
     const pr=prods.find((x:any)=>(x.mpVinculados||(x.mpVinculadoId?[x.mpVinculadoId]:[])).includes(reg.mpId));
     if(pr)return{ficha:null,produto:pr,vinculo:"produto" as const};
   }
-  // Automático só para ficha: casar venda com produto de compra por nome
-  // sozinho erraria feio (o "Café" da venda é a bebida pronta, não o pacote
-  // de grão que tem o mesmo nome na lista).
+  // Ficha com o mesmo nome resolve sozinha o produto produzido.
   const auto=fichas.find((x:any)=>x?.nome&&foldNome(x.nome)===k);
-  return auto?{ficha:auto,produto:null,vinculo:"auto" as const}:vazio;
+  if(auto)return{ficha:auto,produto:null,vinculo:"auto" as const};
+
+  // Sem ficha: cai no produto da lista de mesmo nome, mas SÓ se o insumo dele
+  // estiver marcado como revenda. É isso que torna a revenda automática — o
+  // dono marca o insumo uma vez, na compra, e não precisa vincular produto
+  // vendido nenhum.
+  //
+  // A trava do "revenda" não é detalhe: casar venda com produto de compra por
+  // nome sozinho erraria feio, porque o "Café" da venda é a bebida pronta e o
+  // "Café" da lista é o pacote de grão. Marcado como produção, ele fica de
+  // fora daqui e só sai pela ficha, que é o certo.
+  const prodMesmoNome=prods.find((x:any)=>x?.nome&&foldNome(x.nome)===k);
+  if(prodMesmoNome){
+    const mps=(db?.materiasPrimas||[]).filter((m:any)=>
+      (prodMesmoNome.mpVinculados||(prodMesmoNome.mpVinculadoId?[prodMesmoNome.mpVinculadoId]:[])).includes(m.id));
+    const tipos=mps.map((m:any)=>tipoDoInsumo(db?.tipoInsumo||{},m).tipo);
+    if(tipos.some((t:string|null)=>t==="revenda"))return{ficha:null,produto:prodMesmoNome,vinculo:"produto" as const};
+    // Marcado como interno (limpeza, descartável): sai da análise sem virar
+    // pendência, que é diferente de "esqueci de vincular".
+    if(tipos.length&&tipos.every((t:string|null)=>t==="interno"))return{...vazio,vinculo:"ignorado" as const};
+  }
+  return vazio;
 };
 // Matérias-primas que respondem por um produto da lista (várias marcas do
 // mesmo item). É por aqui que a compra e o estoque chegam até ele.
