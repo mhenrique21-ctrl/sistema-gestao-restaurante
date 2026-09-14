@@ -13077,6 +13077,7 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
 function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [busca,setBusca]=useState("");
   const [modo,setModo]=useState<"um"|"lote">("um");
+  const [soProntos,setSoProntos]=useState(true);
   const [itemId,setItemId]=useState("");
   const [op,setOp]=useState<"producao"|"entrada"|"saida"|"ajuste">("producao");
   const [qtd,setQtd]=useState("");
@@ -13099,20 +13100,27 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
     const linhas:any[]=[];
     (db.materiasPrimas||[]).forEach((m:any)=>{
       const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
-      if(t==="produzido"){linhas.push({...m,rotulo:m.nome,contexto:""});return;}
+      if(t==="produzido"){linhas.push({...m,rotulo:m.nome,tipoProduto:t,ordem:m.nome,contexto:"produção própria"});return;}
       if(!m?.codigoEcletica||(t!=="revenda"&&t!=="dose"))return;
       const {produtoLista,marcas}=resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica});
       if(!marcas.length){
-        linhas.push({...m,rotulo:m.nome,contexto:produtoLista?"sem marca vinculada":"sem produto da lista",semAlvo:true});
+        linhas.push({...m,rotulo:m.nome,tipoProduto:t,ordem:m.nome,semAlvo:true,
+          contexto:produtoLista?"⚠ sem marca vinculada — a compra ainda não chegou nele":"⚠ sem produto da lista — concilie primeiro"});
         return;
       }
-      marcas.forEach((mc:any)=>linhas.push({...mc,rotulo:mc.nome,contexto:`${m.nome} · ${t}`}));
+      // O nome do CARDÁPIO vem primeiro: é o que o dono reconhece. A marca
+      // (descrição do fornecedor, tipo "AGUA AD SAIS BENEVI C/G 500ML") é
+      // detalhe de onde o saldo mora, não o nome do produto.
+      marcas.forEach((mc:any,i:number)=>linhas.push({...mc,
+        rotulo:m.nome,marcaNome:mc.nome,tipoProduto:t,codigoEcletica:m.codigoEcletica,
+        ordem:`${m.nome}\u0000${i}`,
+        contexto:marcas.length>1?`marca: ${mc.nome}`:mc.nome}));
     });
     // Marca vinculada a dois produtos do cardápio apareceria duas vezes e a
     // pessoa lançaria em dobro sem perceber.
     const vistos=new Set<string>();
     return linhas.filter(l=>{if(vistos.has(l.id))return false;vistos.add(l.id);return true;})
-      .sort((a:any,b:any)=>(a.rotulo||"").localeCompare(b.rotulo||"","pt-BR"));
+      .sort((a:any,b:any)=>String(a.ordem||a.rotulo||"").localeCompare(String(b.ordem||b.rotulo||""),"pt-BR"));
   })();
   const item=mps.find((m:any)=>m.id===itemId);
   const q=foldBusca(busca);
@@ -13203,8 +13211,9 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
     <BackBar label="Inventário" onClick={onVoltar}/>
     <div className="section-title" style={{marginBottom:4}}>🔧 Manutenção de produtos</div>
     <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
-      Todos os produtos do Eclética. <strong>Produção própria</strong> lança nela mesma; <strong>revenda e dose</strong> lançam na <strong>marca</strong> — é ela que está na prateleira e é dela que a venda baixa.
-      A quantidade é sempre na unidade da marca (4 caixas, 2 kg), que é como se conta.
+      Todos os produtos do Eclética, pelo nome do <strong>cardápio</strong>. Produção própria lança nela mesma;
+      <strong> revenda e dose</strong> lançam na <strong>marca</strong> (a linha cinza) — é ela que está na prateleira e é dela que a venda baixa.
+      A quantidade é sempre na unidade da marca: 4 caixas, 2 kg. É como se conta.
     </div>
 
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
@@ -13227,15 +13236,24 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
         <input type="date" className="inp" style={{maxWidth:150,marginBottom:0}} value={dataMov} onChange={e=>setDataMov(e.target.value)}/>
         <input className="inp" style={{flex:1,minWidth:150,marginBottom:0}} placeholder="Motivo (ex.: Produção do dia)" value={motivo} onChange={e=>setMotivo(e.target.value)}/>
       </div>
-      <input className="inp" placeholder="🔍 filtrar produtos..." value={busca} onChange={e=>setBusca(e.target.value)}/>
+      <div className="row" style={{gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
+        <input className="inp" style={{flex:1,minWidth:150,marginBottom:0}} placeholder="🔍 filtrar produtos..." value={busca} onChange={e=>setBusca(e.target.value)}/>
+        <button onClick={()=>setSoProntos(v=>!v)} className="pill"
+          style={{background:soProntos?"var(--btnPrimary)":"var(--bg3)",color:soProntos?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"9px 12px",borderRadius:8,fontWeight:700,whiteSpace:"nowrap" as const}}>
+          {soProntos?"Só os prontos":"Mostrando todos"}
+        </button>
+      </div>
+      {soProntos&&mps.some((m:any)=>m.semAlvo)&&<div style={{fontSize:10.5,color:"var(--text3)",padding:"6px 2px"}}>
+        {mps.filter((m:any)=>m.semAlvo).length} produto(s) escondido(s) por ainda não terem marca vinculada.
+      </div>}
 
       <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"var(--text3)",fontWeight:700,padding:"6px 2px",borderBottom:"1px solid var(--border)"}}>
         <span style={{flex:1}}>PRODUTO</span>
-        <span style={{width:70,textAlign:"right" as const}}>SALDO</span>
+        <span style={{width:82,textAlign:"right" as const}}>SALDO</span>
         <span style={{width:88,textAlign:"center" as const}}>{op==="ajuste"?"CONTADO":"LANÇAR"}</span>
         <span style={{width:70,textAlign:"right" as const}}>FICA</span>
       </div>
-      {(busca?opcoes:mps).slice(0,200).map((m:any)=>{
+      {(busca?opcoes:mps).filter((m:any)=>!soProntos||!m.semAlvo).slice(0,200).map((m:any)=>{
         const v=lote[m.id]||"";
         const dep=saldoDepois(m,v);
         const antes=parseFloat(m.estoqueAtual)||0;
@@ -13245,8 +13263,8 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
             {m.rotulo}
             {m.contexto&&<span style={{display:"block",fontSize:10,color:m.semAlvo?"var(--warningText)":"var(--text3)"}}>{m.contexto}</span>}
           </span>
-          <span style={{width:70,textAlign:"right" as const,fontFamily:"monospace",fontSize:12,color:antes<0?"var(--dangerText)":"var(--text2)"}}>
-            {antes.toFixed(2)}
+          <span style={{width:82,textAlign:"right" as const,fontFamily:"monospace",fontSize:12,color:antes<0?"var(--dangerText)":"var(--text2)"}}>
+            {antes.toFixed(2)}<span style={{fontSize:10,color:"var(--text3)"}}> {m.unidade||"un"}</span>
           </span>
           <input type="number" min="0" step="any" className="inp" disabled={m.semAlvo}
             style={{width:88,marginBottom:0,textAlign:"center",...(m.semAlvo?{background:"var(--border)"}:{})}}
