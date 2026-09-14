@@ -24,7 +24,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { textoDeEscPos, linhasUteis } from './escpos.js';
+import { extrairEscPos, linhasUteis } from './escpos.js';
+import { pngMono } from './png.js';
+import { lerPedido99, conferirPedido99, ehComanda99 } from './pedido99.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,20 +71,64 @@ function gravar(bytes, etiqueta = 'trabalho') {
   if (!bytes || !bytes.length) return null;
   fs.mkdirSync(SAIDA, { recursive: true });
   const base = path.join(SAIDA, carimbo());
-  const texto = textoDeEscPos(bytes);
+  const { texto, imagem, faixas } = extrairEscPos(bytes);
   fs.writeFileSync(`${base}.bin`, bytes);
   fs.writeFileSync(`${base}.txt`, texto, 'utf8');
   log(`📥 ${etiqueta}: ${bytes.length} bytes → ${path.basename(base)}.bin/.txt`);
+
+  // A comanda pode vir DESENHADA em vez de escrita. Montar o PNG é o que
+  // permite ver o que chegou no papel quando o .txt sai vazio — sem ele, um
+  // trabalho todo gráfico não deixaria rastro nenhum de conteúdo.
+  if (imagem) {
+    try {
+      fs.writeFileSync(`${base}.png`, pngMono(imagem));
+      log(`   🖼️  ${faixas} faixa(s) de imagem → ${path.basename(base)}.png`
+        + ` (${imagem.bytesLinha * 8}×${imagem.altura})`);
+    } catch (e) {
+      log(`   ⚠️  não consegui montar o PNG: ${e.message}`);
+    }
+  }
+
   const linhas = linhasUteis(texto);
   if (!linhas.length) {
-    log('   ⚠️  nenhuma linha de texto — a impressora pode usar outra tabela de');
-    log('      caracteres, ou o trabalho ser só imagem. O .bin guarda tudo.');
+    if (imagem) {
+      log('   ℹ️  a comanda veio como IMAGEM, não como texto. Abra o .png.');
+    } else {
+      log('   ⚠️  nenhuma linha de texto e nenhuma imagem — a impressora pode');
+      log('      usar outra tabela de caracteres. O .bin guarda tudo.');
+    }
   } else {
     console.log('   ┌─────────────────────────────────────────────');
     for (const l of linhas) console.log('   │ ' + l);
     console.log('   └─────────────────────────────────────────────');
+    interpretar(texto, base);
   }
   return base;
+}
+
+// Lê o pedido e GRAVA o .json ao lado da captura, mas ainda não manda pro
+// Gestão: para onde o valor entra em Vendas depende de decisão do dono (o que a
+// plataforma repassa e o que o entregador cobra na porta são dinheiros
+// diferentes). Mostrar aqui é o que permite conferir contra o papel antes.
+function interpretar(texto, base) {
+  if (!ehComanda99(texto)) return;
+  let pedido;
+  try { pedido = lerPedido99(texto); }
+  catch (e) { log(`   ⚠️  não consegui ler o pedido: ${e.message}`); return; }
+
+  const avisos = conferirPedido99(pedido);
+  const itens = pedido.itens.map((i) => `${i.qtd}x ${i.nome}`).join(', ');
+  log(`   🧾 pedido #${pedido.numero || '?'} · ${pedido.cliente || 'sem nome'}`
+    + ` · ${pedido.itens.length} item(ns)${itens ? ': ' + itens : ''}`);
+  log(`      total R$ ${(pedido.total ?? 0).toFixed(2)}`
+    + ` · plataforma repassa R$ ${(pedido.pagoPeloApp ?? 0).toFixed(2)}`
+    + ` · cobrar do cliente R$ ${(pedido.cobrarDoCliente ?? 0).toFixed(2)}`
+    + (pedido.formaPagamento ? ` · ${pedido.formaPagamento}` : ''));
+  for (const a of avisos) log(`   ⚠️  ${a}`);
+  for (const l of pedido.naoEntendido) log(`      não entendi: ${l}`);
+
+  try { fs.writeFileSync(`${base}.json`, JSON.stringify(pedido, null, 2), 'utf8'); }
+  catch (e) { log(`   ⚠️  não consegui gravar o .json: ${e.message}`); }
 }
 
 // ── Repasse: a comanda tem que sair no papel ────────────────────────────────
@@ -335,8 +381,14 @@ if (!chamadoDireto) {
   // antigo depois que o parser melhorar, sem esperar um pedido novo.
   const arq = arg('--ler');
   if (!arq) { console.error('uso: node agent.js --ler <arquivo.bin>'); process.exit(1); }
-  const texto = textoDeEscPos(fs.readFileSync(arq));
-  console.log(texto || '(nenhum texto legível — veja o .bin)');
+  const { texto, imagem, faixas } = extrairEscPos(fs.readFileSync(arq));
+  if (texto) console.log(texto);
+  if (imagem) {
+    const png = arq.replace(/\.[^.]+$/, '') + '.png';
+    fs.writeFileSync(png, pngMono(imagem));
+    console.log(`\n[${faixas} faixa(s) de imagem → ${png}, ${imagem.bytesLinha * 8}×${imagem.altura}]`);
+  }
+  if (!texto && !imagem) console.log('(nenhum texto legível e nenhuma imagem — veja o .bin)');
 } else if (args.includes('--imprimir')) {
   const arq = arg('--imprimir');
   if (!arq) { console.error('uso: node agent.js --imprimir <arquivo.bin>'); process.exit(1); }

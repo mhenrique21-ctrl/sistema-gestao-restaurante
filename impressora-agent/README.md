@@ -16,17 +16,46 @@ A cozinha continua recebendo o papel. Se o repasse falhar, a captura acontece
 assim mesmo e dá pra reimprimir depois — é por isso que ele é intermediário e
 não substituto.
 
-## Estado: FASE 1 — captura
+## Estado: captura + leitura do pedido
 
-Hoje o agente **captura e mostra** a comanda. Ele ainda **não** interpreta o
-pedido nem manda nada pro Gestão, e isso é de propósito: o layout da comanda do
-99Food é desconhecido daqui, e escrever o leitor antes de ver uma comanda real é
-exatamente o erro que custou três idas e vindas na ponte do Eclética.
+Cada trabalho capturado vira até quatro arquivos em `capturas\`:
 
-O `.bin` cru é guardado junto com o `.txt` justamente porque o `.txt` pode ser
-refeito: se a impressora usar outra tabela de caracteres, ou o leitor melhorar,
-é o `.bin` que permite reler os pedidos antigos sem esperar pedido novo
+| arquivo | o que é |
+|---|---|
+| `.bin` | os bytes crus, exatamente como chegaram |
+| `.txt` | o texto legível |
+| `.png` | a comanda montada como imagem, quando ela vem **desenhada** |
+| `.json` | o pedido já lido: número, cliente, itens, valores |
+
+O leitor foi escrito em cima de uma comanda **real** (pedido #871001), não de um
+layout imaginado — e ele não adivinha: linha que não casa com nada aparece como
+*não entendi* na tela, em vez de virar um pedido errado em silêncio. O agente
+ainda **não manda nada pro Gestão**: para onde o valor entra em Vendas depende de
+uma decisão que não é do código (veja abaixo).
+
+O `.bin` cru é guardado junto com o resto porque tudo o mais pode ser refeito a
+partir dele: se a impressora usar outra tabela de caracteres, ou o leitor
+melhorar, é ele que permite reler os pedidos antigos sem esperar pedido novo
 (`ler.bat capturas\<arquivo>.bin`).
+
+### Os dois dinheiros da comanda
+
+```
+Pagamento via 99Food     R$0,00     ← o que a plataforma repassa
+Cobrar do cliente       R$51,70     ← o que o entregador recebe na porta
+```
+
+Somar os dois **dobra** o faturamento do dia; trocar um pelo outro joga dinheiro
+de caixa na conta a receber do 99Food. O leitor devolve os dois separados, e a
+conferência avisa quando eles não fecham com o total.
+
+### Se a comanda vier como imagem
+
+A comanda do 99Food tem fonte proporcional e caixa de canto arredondado — coisa
+que impressora térmica não desenha sozinha. Quando o aplicativo manda a comanda
+**pronta, como imagem**, o `.txt` sai vazio: aí o agente monta o `.png` e avisa
+na tela. O papel continua saindo igual; o que falta nesse caso é o texto, e é
+disso que eu preciso saber pra escolher o caminho seguinte.
 
 ---
 
@@ -71,9 +100,17 @@ arquivo**. É nela que o 99Food vai imprimir.
 2. *Criar uma nova porta* → tipo **Local Port** → nome da porta:
    `C:\ComandasCapturadas\comanda.prn`
    (crie a pasta `C:\ComandasCapturadas` antes)
-3. Fabricante **Generic** → **Generic / Text Only**
-   — é o driver que manda o texto sem converter a comanda em desenho
+3. Driver: **o MESMO da térmica USB** (mesma marca e modelo, escolhido na lista)
 4. Nome: `99Food Captura`
+
+⚠️ O driver tem que ser o mesmo **de propósito**: assim os bytes capturados são
+exatamente os que a térmica entende, e o repasse reproduz a comanda **idêntica**
+à de hoje. Com um driver diferente o papel sairia com outra cara.
+
+Se o `.txt` sair vazio (comanda mandada como imagem), refaça este passo com
+**Generic / Text Only**: esse driver descarta a formatação e entrega texto puro.
+A comanda no papel fica mais simples, mas fica legível — e aí o pedido entra no
+Gestão.
 
 ⚠️ **Não escolha a porta `FILE:`**: ela abre uma janela pedindo o nome do arquivo
 a cada impressão, e ninguém vai estar no PC pra responder às 20h.
@@ -97,6 +134,13 @@ uma comanda de mentira no mesmo caminho que o 99Food usaria:
 
 - **apareceu arquivo em `capturas\`** e o texto saiu na tela → a captura está certa;
 - **saiu papel na térmica** → o repasse está certo.
+
+Com um pedido de verdade, a tela mostra também a leitura:
+
+```
+🧾 pedido #871001 · Nome do teste · 3 item(ns): 1x Suco Abacaxi c/ Hortelã, …
+   total R$ 51,70 · plataforma repassa R$ 0,00 · cobrar do cliente R$ 51,70
+```
 
 Se os dois acontecerem, é só esperar o primeiro pedido de verdade.
 
@@ -142,6 +186,8 @@ sairia cortada no meio, sem erro nenhum.
 
 ## Próximo passo
 
-Assim que existir **uma comanda real capturada**, o leitor do pedido nasce em
-cima dela: número do pedido, cliente, itens, observações, taxa e total, indo pro
-Gestão pelo mesmo caminho que o Eclética já usa. Até lá, o agente só guarda.
+Falta ligar o pedido ao Gestão, e o que trava isso não é código: é **onde o
+valor entra em Vendas**. Pedido pago no aplicativo é faturamento do canal 99Food,
+com taxa e líquido. Pedido pago em dinheiro na porta é dinheiro que chega ao
+caixa — e a comanda distingue os dois, mas quem decide em que coluna cada um
+entra é o dono.

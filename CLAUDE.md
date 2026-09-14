@@ -193,9 +193,37 @@ cadastro) e **pula os comandos**: parâmetro não consumido vira caractere solto
 colado no nome do item, e logo raster (`GS v 0`) não pulado pelo tamanho
 declarado vira páginas de sujeira.
 
-**Estado: FASE 1 — só captura.** Não interpreta o pedido nem envia pro Gestão;
-o leitor nasce em cima de uma comanda real capturada. O iFood usa o mesmo
-mecanismo e ainda não foi ligado.
+⚠️ A comanda do 99Food tem fonte proporcional e caixa de canto arredondado —
+térmica não desenha isso, é o app mandando a comanda PRONTA como imagem. Por
+isso o extrator não só pula o raster: devolve as faixas e o agente monta um
+`.png` (`png.js`, PNG de 1 bit escrito à mão sobre `node:zlib` — "npm install"
+no PC do caixa é uma coisa a mais pra dar errado às 20h). Sem isso um trabalho
+gráfico não deixaria rastro nenhum de conteúdo.
+
+⚠️ A impressora de CAPTURA usa o **mesmo driver** da térmica, não Generic/Text
+Only: assim os bytes capturados são os que a térmica entende e o repasse
+reproduz a comanda idêntica. Text Only só como plano B, se o `.txt` sair vazio.
+
+**Leitura do pedido: `pedido99.js`** (com testes), escrito em cima da comanda
+real #871001 — não de layout imaginado.
+
+⚠️ Rótulo é reconhecido por um **trecho SEM acento** ("verifica", "endere",
+"observa"), nunca pela frase inteira. Numa captura de teste a impressora
+entregou "Código de verificação" como "Cudigo de verificaúo": comparando a frase
+toda o rótulo sumia e o endereço engolia o resto da comanda, itens inclusive.
+
+⚠️ **"Pagamento via 99Food" e "Cobrar do cliente" são dinheiros DIFERENTES** — o
+que a plataforma repassa e o que o entregador recebe na porta. Somar dobra o
+faturamento do dia; trocar um pelo outro joga dinheiro de caixa na conta a
+receber do 99Food. `conferirPedido99` acusa quando não fecham com o total.
+
+⚠️ Linha que não casa com âncora nenhuma volta em `naoEntendido` — pendência na
+tela, nunca palpite. Item é testado ANTES dos rótulos: "1x Desconto especial
+R$5,00" é item, e deixar o rótulo ganhar viraria abatimento.
+
+**Estado:** captura, lê e grava `.bin`/`.txt`/`.png`/`.json`; **não envia pro
+Gestão**. O que falta não é código — é decidir em que coluna de Vendas entra
+cada um dos dois dinheiros. O iFood usa o mesmo mecanismo e não foi ligado.
 
 ---
 

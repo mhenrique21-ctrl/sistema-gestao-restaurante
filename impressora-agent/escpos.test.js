@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { textoDeEscPos, linhasUteis } from './escpos.js';
+import { textoDeEscPos, extrairEscPos, linhasUteis } from './escpos.js';
 
 const ESC = 0x1B, GS = 0x1D;
 const txt = (s) => Buffer.from(s, 'latin1');
@@ -89,4 +89,54 @@ test('linhasUteis preserva o recuo à esquerda', () => {
   // O layout da comanda usa recuo pra observação do item; tirar mataria o
   // único sinal de que a linha pertence ao item de cima.
   assert.deepEqual(linhasUteis('1x Cafe\n   sem acucar  '), ['1x Cafe', '   sem acucar']);
+});
+
+test('GS v 0 não é só pulado: a faixa volta pra montar a imagem', () => {
+  // A comanda do 99Food tem fonte proporcional e caixa arredondada — não é
+  // desenho de térmica, é imagem pronta. Se o extrator só pulasse, o .txt
+  // sairia vazio e não haveria como ver o que chegou no papel.
+  const dados = Buffer.from([0b10000001, 0x00, 0xFF, 0xFF]);
+  const b = juntar(bytes(GS, 0x76, 0x30, 0x00, 2, 0, 2, 0), dados);
+  const { texto, imagem, faixas } = extrairEscPos(b);
+  assert.equal(texto, '');
+  assert.equal(faixas, 1);
+  assert.equal(imagem.bytesLinha, 2);
+  assert.equal(imagem.altura, 2);
+  assert.deepEqual(imagem.dados, dados);
+});
+
+test('ESC * vem em COLUNAS e é virado pra linhas', () => {
+  // Guardada como veio, a imagem sai deitada e ilegível.
+  const dados = Buffer.from([0b10000000, 0b00000001]);
+  const { imagem } = extrairEscPos(juntar(bytes(ESC, 0x2A, 0, 2, 0), dados));
+  assert.equal(imagem.bytesLinha, 1);
+  assert.equal(imagem.altura, 8);
+  assert.equal(imagem.dados[0], 0b10000000);  // coluna 0, ponto de cima
+  assert.equal(imagem.dados[7], 0b01000000);  // coluna 1, ponto de baixo
+});
+
+test('faixas do trabalho viram UMA imagem, na ordem do papel', () => {
+  // O driver manda a comanda em dezenas de fatias; uma imagem por fatia daria
+  // 60 arquivos inúteis no lugar de uma comanda.
+  const f1 = juntar(bytes(GS, 0x76, 0x30, 0x00, 1, 0, 1, 0), bytes(0xAA));
+  const f2 = juntar(bytes(GS, 0x76, 0x30, 0x00, 1, 0, 2, 0), bytes(0x0F, 0xF0));
+  const { imagem, faixas } = extrairEscPos(juntar(f1, f2));
+  assert.equal(faixas, 2);
+  assert.equal(imagem.altura, 3);
+  assert.deepEqual(Array.from(imagem.dados), [0xAA, 0x0F, 0xF0]);
+});
+
+test('faixa mais estreita é alinhada à esquerda, como a impressora imprime', () => {
+  const larga  = juntar(bytes(GS, 0x76, 0x30, 0x00, 2, 0, 1, 0), bytes(0xFF, 0xFF));
+  const estreita = juntar(bytes(GS, 0x76, 0x30, 0x00, 1, 0, 1, 0), bytes(0xC0));
+  const { imagem } = extrairEscPos(juntar(larga, estreita));
+  assert.equal(imagem.bytesLinha, 2);
+  assert.deepEqual(Array.from(imagem.dados), [0xFF, 0xFF, 0xC0, 0x00]);
+});
+
+test('trabalho sem imagem nenhuma não inventa imagem', () => {
+  const { texto, imagem, faixas } = extrairEscPos(txt('PEDIDO 1\n'));
+  assert.equal(texto, 'PEDIDO 1');
+  assert.equal(imagem, null);
+  assert.equal(faixas, 0);
 });

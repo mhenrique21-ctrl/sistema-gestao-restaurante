@@ -6,6 +6,12 @@
 //
 // Mora fora do agente porque é o que vai mudar quando o layout mudar — e é a
 // única parte testável sem uma impressora na mesa.
+//
+// ⚠️ NEM TODA COMANDA É TEXTO. A do 99Food tem fonte proporcional e caixa de
+// canto arredondado — coisa que térmica não desenha sozinha, sinal de que o
+// aplicativo manda a comanda pronta como IMAGEM. Por isso o extrator não só
+// PULA o raster: ele também DEVOLVE, para o agente montar um PNG. Sem isso o
+// .txt sairia vazio e não haveria como ver o que chegou no papel.
 
 // Tabela de caracteres das térmicas: quase todas usam CP850 ou CP437 no Brasil.
 // Sem isso, "PÃO" vira "P?O" e o nome do produto deixa de casar com o cadastro.
@@ -32,8 +38,55 @@ const GS_PARAMS = {
   0x48:2, 0x45:1, 0x62:1, 0x50:2, 0x54:0,
 };
 
+// Uma faixa de pontos do papel, já em linhas (o ESC/POS guarda de dois jeitos
+// diferentes; quem chama não deveria precisar saber qual).
+function faixa(bytesLinha, altura, dados) { return { bytesLinha, altura, dados }; }
+
+// Converte a banda do ESC * — que vem em COLUNAS, 8 ou 24 pontos de altura —
+// para linhas. Guardada como veio, a imagem sai deitada e ilegível.
+function bandaDeEscEstrela(m, colunas, dados) {
+  const altura = (m === 32 || m === 33) ? 24 : 8;
+  const porColuna = altura / 8;
+  const bytesLinha = Math.ceil(colunas / 8);
+  const saida = Buffer.alloc(bytesLinha * altura);
+  for (let x = 0; x < colunas; x++) {
+    for (let k = 0; k < porColuna; k++) {
+      const byte = dados[x * porColuna + k] || 0;
+      for (let bit = 0; bit < 8; bit++) {
+        if (!(byte & (0x80 >> bit))) continue;
+        const y = k * 8 + bit;
+        saida[y * bytesLinha + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+    }
+  }
+  return faixa(bytesLinha, altura, saida);
+}
+
+// Empilha as faixas na ordem em que saíram do papel. O driver manda a comanda
+// em dezenas de fatias; salvar uma imagem por fatia daria 60 arquivos inúteis.
+// Faixa mais estreita é alinhada à esquerda, que é como a impressora imprime.
+export function montarImagem(faixas) {
+  const lista = (faixas || []).filter((f) => f && f.altura > 0 && f.bytesLinha > 0);
+  if (!lista.length) return null;
+  const bytesLinha = Math.max(...lista.map((f) => f.bytesLinha));
+  const altura = lista.reduce((a, f) => a + f.altura, 0);
+  const dados = Buffer.alloc(bytesLinha * altura);
+  let y = 0;
+  for (const f of lista) {
+    for (let l = 0; l < f.altura; l++, y++) {
+      f.dados.copy(dados, y * bytesLinha, l * f.bytesLinha, (l + 1) * f.bytesLinha);
+    }
+  }
+  return faixa(bytesLinha, altura, dados);
+}
+
 export function textoDeEscPos(buf) {
+  return extrairEscPos(buf).texto;
+}
+
+export function extrairEscPos(buf) {
   const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf || []);
+  const faixas = [];
   let out = '';
   for (let i = 0; i < b.length; i++) {
     const c = b[i];
@@ -45,7 +98,9 @@ export function textoDeEscPos(buf) {
       if (cmd === 0x2A) {
         const m = b[i + 2] || 0;
         const cols = (b[i + 3] || 0) + (b[i + 4] || 0) * 256;
-        i += 4 + cols * (m === 32 || m === 33 ? 3 : 1);
+        const largura = cols * (m === 32 || m === 33 ? 3 : 1);
+        if (cols > 0) faixas.push(bandaDeEscEstrela(m, cols, b.subarray(i + 5, i + 5 + largura)));
+        i += 4 + largura;
         continue;
       }
       i += 1 + (ESC_PARAMS[cmd] ?? 1);
@@ -58,7 +113,10 @@ export function textoDeEscPos(buf) {
       // os dados são binário puro: sem pular tudo, o logo vira páginas de lixo.
       if (cmd === 0x76) {
         const xL = b[i + 4] || 0, xH = b[i + 5] || 0, yL = b[i + 6] || 0, yH = b[i + 7] || 0;
-        i += 7 + (xL + xH * 256) * (yL + yH * 256);
+        const bytesLinha = xL + xH * 256, altura = yL + yH * 256;
+        const n = bytesLinha * altura;
+        if (n > 0) faixas.push(faixa(bytesLinha, altura, b.subarray(i + 8, i + 8 + n)));
+        i += 7 + n;
         continue;
       }
       // GS ( = famílias novas (QR Code, entre elas). O tamanho é declarado em
@@ -99,7 +157,8 @@ export function textoDeEscPos(buf) {
     out += c < 128 ? String.fromCharCode(c) : (CP850[c] || '');
   }
   // Térmica manda dezenas de LF no fim pra empurrar o papel até a guilhotina.
-  return out.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  const texto = out.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  return { texto, imagem: montarImagem(faixas), faixas: faixas.length };
 }
 
 // Linhas úteis, já sem as de enfeite. Separador é o que a comanda usa pra
