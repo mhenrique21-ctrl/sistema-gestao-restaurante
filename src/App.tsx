@@ -13087,21 +13087,38 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
   // continua em Estoque → Inventário, que é onde ele sempre morou — trazer os
   // dois pra cá faria a busca devolver "Queijo" (o kg) junto com "Queijo
   // fatia" (a dose), e a pessoa baixaria do item errado sem perceber.
-  // Só quem tem saldo PRÓPRIO. Revenda e dose não têm: o estoque delas está
-  // nas marcas do produto da lista, e lançar movimento aqui gravaria um número
-  // que nenhuma tela lê — a pessoa acharia ter ajustado e nada teria mudado.
-  const mps=(db.materiasPrimas||[]).filter((m:any)=>
-    tipoDoInsumo(db.tipoInsumo||{},m).tipo==="produzido")
-    .sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-  const semSaldoProprio=(db.materiasPrimas||[]).filter((m:any)=>{
-    const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
-    return m?.codigoEcletica&&(t==="revenda"||t==="dose");
-  }).length;
+  // TODO produto do Eclética aparece aqui — mas cada um opera sobre o item que
+  // REALMENTE tem saldo. Produzido é ele mesmo; revenda e dose viram as MARCAS
+  // do produto da lista, porque é a marca que está na prateleira e é ela que a
+  // venda baixa. Lançar no nome do cardápio gravaria um número que nenhuma
+  // tela lê: a pessoa acharia ter ajustado e nada teria mudado.
+  //
+  // A quantidade é sempre na unidade DA MARCA — contagem se faz no que está na
+  // prateleira (4 caixas, 2 kg de queijo), não numa unidade convertida.
+  const mps=(()=>{
+    const linhas:any[]=[];
+    (db.materiasPrimas||[]).forEach((m:any)=>{
+      const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
+      if(t==="produzido"){linhas.push({...m,rotulo:m.nome,contexto:""});return;}
+      if(!m?.codigoEcletica||(t!=="revenda"&&t!=="dose"))return;
+      const {produtoLista,marcas}=resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica});
+      if(!marcas.length){
+        linhas.push({...m,rotulo:m.nome,contexto:produtoLista?"sem marca vinculada":"sem produto da lista",semAlvo:true});
+        return;
+      }
+      marcas.forEach((mc:any)=>linhas.push({...mc,rotulo:mc.nome,contexto:`${m.nome} · ${t}`}));
+    });
+    // Marca vinculada a dois produtos do cardápio apareceria duas vezes e a
+    // pessoa lançaria em dobro sem perceber.
+    const vistos=new Set<string>();
+    return linhas.filter(l=>{if(vistos.has(l.id))return false;vistos.add(l.id);return true;})
+      .sort((a:any,b:any)=>(a.rotulo||"").localeCompare(b.rotulo||"","pt-BR"));
+  })();
   const item=mps.find((m:any)=>m.id===itemId);
   const q=foldBusca(busca);
   const opcoes=q
-    ?mps.filter((m:any)=>foldBusca(m.nome||"").includes(q)||String(m.codigoEcletica||"")===busca.trim()).slice(0,40)
-    :[...mps].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"")).slice(0,25);
+    ?mps.filter((m:any)=>foldBusca(`${m.rotulo} ${m.contexto}`).includes(q)||String(m.codigoEcletica||"")===busca.trim()).slice(0,40)
+    :mps.slice(0,25);
   // Mesma resolução do resto: fichaId escolhido no Saldo vence o nome.
   const ficha=item?resolverItemVendido(db,{nome:item.nome,cod:item.codigoEcletica}).ficha:null;
 
@@ -13136,7 +13153,13 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
   // data, um motivo, e N produtos. Fazer um a um é onde a contagem é
   // abandonada no meio.
   const [lote,setLote]=useState<Record<string,string>>({});
-  const preenchidos=Object.entries(lote).filter(([,v])=>String(v).trim()!==""&&Number.isFinite(parseFloat(v))&&parseFloat(v)>=0);
+  // semAlvo = produto de revenda/dose sem marca vinculada. Lançar nele gravaria
+  // no nome do cardápio, que nenhuma tela lê.
+  const preenchidos=Object.entries(lote).filter(([id,v])=>{
+    const alvo=mps.find((m:any)=>m.id===id);
+    if(!alvo||alvo.semAlvo)return false;
+    return String(v).trim()!==""&&Number.isFinite(parseFloat(v))&&parseFloat(v)>=0;
+  });
   const saldoDepois=(m:any,v:string)=>{
     const n=parseFloat(v);
     if(!Number.isFinite(n))return null;
@@ -13180,8 +13203,8 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
     <BackBar label="Inventário" onClick={onVoltar}/>
     <div className="section-title" style={{marginBottom:4}}>🔧 Manutenção de produtos</div>
     <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
-      Produtos <strong>produzidos</strong> na cozinha — são os que têm saldo próprio.
-      Insumo se ajusta em Estoque → Inventário; <strong>revenda e dose</strong> não têm saldo próprio, o estoque delas são as marcas do produto da lista.
+      Todos os produtos do Eclética. <strong>Produção própria</strong> lança nela mesma; <strong>revenda e dose</strong> lançam na <strong>marca</strong> — é ela que está na prateleira e é dela que a venda baixa.
+      A quantidade é sempre na unidade da marca (4 caixas, 2 kg), que é como se conta.
     </div>
 
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
@@ -13219,12 +13242,14 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
         return <div key={m.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 2px",borderBottom:"1px solid var(--border)"}}>
           <span style={{flex:1,fontSize:12.5,minWidth:0}}>
             {m.codigoEcletica&&<span style={{fontFamily:"monospace",color:"var(--text3)",fontSize:10,marginRight:5}}>{m.codigoEcletica}</span>}
-            {m.nome}
+            {m.rotulo}
+            {m.contexto&&<span style={{display:"block",fontSize:10,color:m.semAlvo?"var(--warningText)":"var(--text3)"}}>{m.contexto}</span>}
           </span>
           <span style={{width:70,textAlign:"right" as const,fontFamily:"monospace",fontSize:12,color:antes<0?"var(--dangerText)":"var(--text2)"}}>
             {antes.toFixed(2)}
           </span>
-          <input type="number" min="0" step="any" className="inp" style={{width:88,marginBottom:0,textAlign:"center"}}
+          <input type="number" min="0" step="any" className="inp" disabled={m.semAlvo}
+            style={{width:88,marginBottom:0,textAlign:"center",...(m.semAlvo?{background:"var(--border)"}:{})}}
             value={v} onChange={e=>setLote(x=>({...x,[m.id]:e.target.value}))}/>
           <span style={{width:70,textAlign:"right" as const,fontFamily:"monospace",fontSize:12,fontWeight:700,
             color:dep==null?"var(--text3)":dep<0?"var(--dangerText)":"var(--text)"}}>
@@ -13249,10 +13274,11 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
         ? <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
             <span style={{fontSize:13,fontWeight:700}}>
               {item.codigoEcletica&&<span style={{fontWeight:400,color:"var(--text3)",fontFamily:"monospace",marginRight:6,fontSize:11}}>{item.codigoEcletica}</span>}
-              {item.nome}
+              {item.rotulo||item.nome}
               <span style={{fontWeight:400,fontSize:11,color:"var(--text2)",marginLeft:8}}>
                 saldo {(parseFloat(item.estoqueAtual)||0).toFixed(2)} {item.unidade||"un"}
               </span>
+              {item.contexto&&<span style={{display:"block",fontWeight:400,fontSize:10,color:"var(--text3)"}}>{item.contexto}</span>}
             </span>
             <button onClick={()=>{setItemId("");setBusca("");}} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:12,fontWeight:700}}>trocar</button>
           </div>
@@ -13260,22 +13286,23 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
             <input className="inp" placeholder="🔍 Buscar por nome ou código..." value={busca} onChange={e=>setBusca(e.target.value)}/>
             {opcoes.map((m:any)=>{
               const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
-              return <div key={m.id} onClick={()=>{setItemId(m.id);setBusca("");}}
+              return <div key={m.id} onClick={()=>{if(m.semAlvo){alert(`"${m.nome}" ainda não tem marca vinculada. Vincule em Estoque → Produtos Eclética → Conciliar.`);return;}setItemId(m.id);setBusca("");}}
                 style={{padding:"8px 4px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",gap:8}}>
                 <span style={{flex:1,minWidth:0}}>
                   {m.codigoEcletica&&<span style={{color:"var(--text3)",fontFamily:"monospace",marginRight:6,fontSize:11}}>{m.codigoEcletica}</span>}
-                  {m.nome}
-                  <span style={{display:"block",fontSize:10,color:"var(--text3)"}}>{t||"sem tipo"}</span>
+                  {m.rotulo}
+                  <span style={{display:"block",fontSize:10,color:m.semAlvo?"var(--warningText)":"var(--text3)"}}>
+                    {m.contexto||t||"produção própria"}
+                  </span>
                 </span>
                 <span style={{color:"var(--text2)",fontSize:11,whiteSpace:"nowrap" as const}}>{(parseFloat(m.estoqueAtual)||0).toFixed(2)} {m.unidade||"un"}</span>
               </div>;
             })}
             {!mps.length&&<div className="muted" style={{fontSize:12,padding:"10px 0",lineHeight:1.5}}>
-              Nenhum produto marcado como <strong>produção própria</strong>.
-              {semSaldoProprio>0&&<> Existem {semSaldoProprio} de revenda/dose, mas o saldo delas são as marcas da lista de compras.</>}
+              Nenhum produto do Eclética ainda. Importe em <strong>Estoque → Produtos Eclética</strong>.
             </div>}
             {busca&&!opcoes.length&&mps.length>0&&<div className="muted" style={{fontSize:12,padding:"10px 0",lineHeight:1.5}}>
-              Nada encontrado entre os produtos de produção própria. Para <strong>insumo</strong>, use Estoque → Inventário; para <strong>revenda ou dose</strong>, ajuste a marca por lá.
+              Nada encontrado. Para ajustar um <strong>insumo</strong> que não é vendido, use Estoque → Inventário.
             </div>}
             {!busca&&mps.length>25&&<div className="muted" style={{fontSize:11,padding:"8px 0"}}>Mostrando 25 de {mps.length}. Use a busca.</div>}
           </>}

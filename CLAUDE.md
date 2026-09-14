@@ -311,12 +311,23 @@ produção sai em g/kg pela ficha, que tem a própria conversão (`porcoes`).
 - **Saldo Estoque** — todos os itens com saldo, filtro por tipo. Abre em
   "Produtos" (revenda/produzido/dose); insumo e interno ficam atrás do filtro
 - **Manutenção de Produtos** — Produção · Entrada · Saída · Ajuste, em **um
-  item** ou **vários de uma vez**. Lista só tipo **`produzido`**: é quem tem
-  saldo próprio. Insumo se ajusta em Estoque → Inventário; revenda e dose não
-  têm saldo próprio e lançar movimento nelas gravaria um número que nenhuma
-  tela lê. As duas telas mostram o **saldo resultante antes de confirmar**
-  (`4,00 → 16,00`, vermelho quando negativo). No lote, uma operação/data/motivo
-  valem pro bloco e **linha em branco não é zero** — fica de fora.
+  item** ou **vários de uma vez**. Lista **todo produto do Eclética**, mas cada
+  linha opera sobre o item que REALMENTE tem saldo: `produzido` é ele mesmo;
+  `revenda` e `dose` viram as **MARCAS** do produto da lista, porque é a marca
+  que está na prateleira e é dela que a venda baixa. A quantidade é sempre na
+  unidade DA MARCA (4 caixas, 2 kg) — contagem se faz no que está na prateleira,
+  não numa unidade convertida.
+
+  ⚠️ Marca vinculada a dois produtos do cardápio é **deduplicada** na lista:
+  apareceria duas vezes e a pessoa lançaria em dobro sem perceber.
+
+  ⚠️ Revenda/dose sem marca vinculada aparece **desabilitada**, com o motivo —
+  lançar nela gravaria em `estoqueAtual` do nome do cardápio, que nenhuma tela
+  lê. Insumo que não é vendido continua em Estoque → Inventário.
+
+  As duas telas mostram o **saldo resultante antes de confirmar** (`4,00 →
+  16,00`, vermelho quando negativo). No lote, uma operação/data/motivo valem pro
+  bloco e **linha em branco não é zero** — fica de fora.
   `src/movimentoEstoque.js`, com testes
 - **Produtos Eclética** — importa o cardápio. A marcação é **por ITEM**; o botão
   do grupo é só um atalho que escreve em todos os itens dele, para não existirem
