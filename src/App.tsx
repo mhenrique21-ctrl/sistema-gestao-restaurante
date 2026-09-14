@@ -12736,7 +12736,7 @@ const lerProdutosEcletica=(texto:string)=>{
 
 function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [abaImp,setAbaImp]=useState<"importar"|"conciliar">("importar");
-  const [escolha,setEscolha]=useState<Record<string,{compraId:string,emb:string}>>({});
+  const [escolha,setEscolha]=useState<Record<string,{compraId:string,emb:string,busca?:string}>>({});
   const [lidos,setLidos]=useState<any[]|null>(null);
   const [erro,setErro]=useState("");
   // Marcação por ITEM, não por grupo. O grupo é só um atalho que escreve em
@@ -12836,12 +12836,14 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
   // não olha mais. Aqui só se grava um prodListaId: nada se perde, e desfazer
   // é escolher outro.
   const mpsAll=db.materiasPrimas||[];
-  const prodsLista=db.produtosLista||[];
+  // Ordem alfabética nos dois lados: com centenas de itens, procurar numa
+  // lista na ordem em que foram cadastrados é o mesmo que não ter lista.
+  const prodsLista=[...(db.produtosLista||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
   const pendentes=mpsAll.filter((m:any)=>{
     if(!m?.codigoEcletica)return false;
     if(tipoDoInsumo(db.tipoInsumo||{},m).tipo!=="revenda")return false;
     return !resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica}).produtoLista;
-  });
+  }).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
   const resumoMarcas=(pl:any)=>{
     const ms=mpsDoProdutoLista(db,pl);
     const un=ms.reduce((s:number,m:any)=>s+(parseFloat(m.estoqueAtual)||0)*(parseFloat(m.unidadesPorEmbalagem)||1),0);
@@ -12899,12 +12901,22 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
             <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>vendido em {ecl.unidade||"un"}</span>
           </div>
           <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Produto da lista de compras</label>
+          <input className="inp" style={{marginBottom:6}} placeholder="🔍 filtrar a lista..."
+            value={escolha[ecl.id]?.busca||""}
+            onChange={e=>setEscolha(x=>({...x,[ecl.id]:{...(x[ecl.id]||{compraId:"",emb:""}),busca:e.target.value}}))}/>
           <select className="inp" style={{marginBottom:6}} value={sel}
-            onChange={e=>setEscolha(x=>({...x,[ecl.id]:{compraId:e.target.value,emb:""}}))}>
+            onChange={e=>setEscolha(x=>({...x,[ecl.id]:{...(x[ecl.id]||{emb:""}),compraId:e.target.value}}))}>
             <option value="">— escolher —</option>
-            {prodsLista.map((pl:any)=><option key={pl.id} value={pl.id}>{pl.nome} — {resumoMarcas(pl)}</option>)}
+            {(() => {
+              // O item já escolhido entra na lista mesmo quando não bate com o
+              // filtro: sem isso, digitar na busca depois de escolher faria o
+              // <select> perder o valor e parecer que o vínculo se desfez.
+              const q=foldBusca(escolha[ecl.id]?.busca||"");
+              const visiveis=q?prodsLista.filter((pl:any)=>foldBusca(pl.nome||"").includes(q)||pl.id===sel):prodsLista;
+              return visiveis.map((pl:any)=><option key={pl.id} value={pl.id}>{pl.nome} — {resumoMarcas(pl)}</option>);
+            })()}
           </select>
-          {sug&&!escolha[ecl.id]&&<div style={{fontSize:10.5,color:"var(--infoText)",marginBottom:6}}>sugerido pelo nome — confira antes de vincular</div>}
+          {sug&&sel===sug.id&&<div style={{fontSize:10.5,color:"var(--infoText)",marginBottom:6}}>sugerido pelo nome — confira antes de vincular</div>}
           {alvo&&<div style={{fontSize:11,color:"var(--text2)",marginBottom:8,lineHeight:1.5}}>
             {resumoMarcas(alvo)} — é daqui que a venda baixa, tirando primeiro da marca com mais saldo.
           </div>}
