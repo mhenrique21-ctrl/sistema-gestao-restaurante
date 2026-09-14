@@ -12716,6 +12716,8 @@ const lerProdutosEcletica=(texto:string)=>{
 };
 
 function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
+  const [abaImp,setAbaImp]=useState<"importar"|"conciliar">("importar");
+  const [escolha,setEscolha]=useState<Record<string,{compraId:string,emb:string}>>({});
   const [lidos,setLidos]=useState<any[]|null>(null);
   const [erro,setErro]=useState("");
   // Marcação por ITEM, não por grupo. O grupo é só um atalho que escreve em
@@ -12808,9 +12810,97 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     setLidos(null);setTipoPorItem({});setAbertos(new Set());
   };
 
+  // ── Conciliação revenda: o que se VENDE ↔ o que se COMPRA ──────────────
+  const mpsAll=db.materiasPrimas||[];
+  const movs=db.movEstoque||[];
+  const comprados=new Set(movs.filter((m:any)=>m.tipo==="entrada").map((m:any)=>m.mpId));
+  const vinculadosNaLista=new Set<string>();
+  (db.produtosLista||[]).forEach((p:any)=>(p.mpVinculados||[]).forEach((id:string)=>vinculadosNaLista.add(id)));
+
+  // Pendente = produto de revenda do Eclética que NUNCA recebeu compra e não
+  // está ligado à lista. Quem já recebeu compra se conciliou sozinho (a compra
+  // achou o item pelo nome) e não precisa aparecer aqui.
+  const pendentes=mpsAll.filter((m:any)=>{
+    if(!m?.codigoEcletica)return false;
+    if(tipoDoInsumo(db.tipoInsumo||{},m).tipo!=="revenda")return false;
+    return !comprados.has(m.id)&&!vinculadosNaLista.has(m.id);
+  });
+  // Do lado da compra: item SEM código que já foi comprado alguma vez.
+  const ladoCompra=mpsAll.filter((m:any)=>!m?.codigoEcletica&&comprados.has(m.id));
+  const sugerir=(ecl:any)=>{
+    const alvo=foldBusca(ecl.nome||"");
+    if(!alvo)return null;
+    return ladoCompra.find((m:any)=>{
+      const n=foldBusca(m.nome||"");
+      return n.length>=4&&(n.includes(alvo)||alvo.includes(n));
+    })||null;
+  };
+  const conciliar=(ecl:any)=>{
+    const esc=escolha[ecl.id];
+    const compraId=esc?.compraId||sugerir(ecl)?.id;
+    if(!compraId)return alert("Escolha o produto que você compra.");
+    const emb=parseFloat(esc?.emb||"")||parseFloat((ladoCompra.find((m:any)=>m.id===compraId)||{}).unidadesPorEmbalagem)||1;
+    const alvo=ladoCompra.find((m:any)=>m.id===compraId);
+    if(!confirm(`Conciliar "${ecl.nome}" (venda) com "${alvo?.nome}" (compra)?\n\nOs dois viram UM item: saldo somado, histórico unido, 1 ${alvo?.unidade||"emb"} = ${emb} ${ecl.unidade||"un"}.\n\nNão dá pra desfazer.`))return;
+    (setDbAndSave||setDb)((d:any)=>conciliarRevenda(d,{ecleticaId:ecl.id,compraId,porEmbalagem:emb}));
+    setEscolha(e=>{const n={...e};delete n[ecl.id];return n;});
+  };
+
   return <div>
     <BackBar label="Inventário" onClick={onVoltar}/>
     <div className="section-title" style={{marginBottom:8}}>📥 Produtos do Eclética</div>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
+      {([["importar","Importar"],["conciliar",`Conciliar compra${pendentes.length?` (${pendentes.length})`:""}`]] as const).map(([k,lbl])=>
+        <button key={k} onClick={()=>setAbaImp(k)} className="pill"
+          style={{background:abaImp===k?"var(--btnPrimary)":"var(--bg3)",color:abaImp===k?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>{lbl}</button>)}
+    </div>
+
+    {abaImp==="conciliar"&&<>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.6}}>
+          Produto de <strong>revenda</strong> que você vende mas que ainda não recebeu compra nenhuma.
+          Conciliar junta os dois num item só — a entrada da NF-e e a saída da venda passam a mexer no <strong>mesmo saldo</strong>.
+          <br/>Quem tem o mesmo nome dos dois lados já se concilia sozinho na primeira compra e não aparece aqui.
+        </div>
+      </div>
+      {!pendentes.length&&<EmptyState msg="Nada pendente. Todo produto de revenda ou já recebeu compra, ou ainda não foi marcado como revenda."/>}
+      {pendentes.slice(0,60).map((ecl:any)=>{
+        const sug=sugerir(ecl);
+        const esc=escolha[ecl.id];
+        const sel=esc?.compraId||sug?.id||"";
+        const alvo=ladoCompra.find((m:any)=>m.id===sel);
+        return <div key={ecl.id} className="card" style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:8,alignItems:"baseline"}}>
+            <span style={{fontSize:13,fontWeight:700}}>
+              <span style={{fontFamily:"monospace",color:"var(--text3)",fontSize:11,marginRight:6}}>{ecl.codigoEcletica}</span>
+              {ecl.nome}
+            </span>
+            <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>vendido em {ecl.unidade||"un"}</span>
+          </div>
+          <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>O que você compra</label>
+          <select className="inp" style={{marginBottom:6}} value={sel}
+            onChange={e=>setEscolha(x=>({...x,[ecl.id]:{compraId:e.target.value,emb:x[ecl.id]?.emb||""}}))}>
+            <option value="">— escolher —</option>
+            {ladoCompra.map((m:any)=><option key={m.id} value={m.id}>{m.nome} ({(parseFloat(m.estoqueAtual)||0).toFixed(2)} {m.unidade||"un"})</option>)}
+          </select>
+          {sug&&!esc?.compraId&&<div style={{fontSize:10.5,color:"var(--infoText)",marginBottom:6}}>sugerido pelo nome — confira antes de conciliar</div>}
+          {alvo&&<div className="row" style={{gap:6,alignItems:"center",flexWrap:"wrap" as const,marginBottom:8}}>
+            <span style={{fontSize:12,color:"var(--text2)"}}>1 {alvo.unidade||"emb"} rende</span>
+            <input type="number" min="1" step="any" className="inp" style={{width:90,marginBottom:0,textAlign:"center"}}
+              placeholder={String(parseFloat(alvo.unidadesPorEmbalagem)||1)}
+              value={esc?.emb||""} onChange={e=>setEscolha(x=>({...x,[ecl.id]:{compraId:sel,emb:e.target.value}}))}/>
+            <span style={{fontSize:12,color:"var(--text2)"}}>{ecl.unidade||"un"}</span>
+          </div>}
+          <button className="btn" disabled={!sel} onClick={()=>conciliar(ecl)}
+            style={{width:"100%",background:sel?"var(--btnPrimary)":"var(--border)",color:sel?"var(--onPrimary,#FFFFFF)":"#888",padding:"10px",fontSize:13,fontWeight:700}}>
+            Conciliar
+          </button>
+        </div>;
+      })}
+      {pendentes.length>60&&<div className="muted" style={{fontSize:11,padding:"8px 0"}}>Mostrando 60 de {pendentes.length}.</div>}
+    </>}
+
+    {abaImp==="importar"&&<>
     <div className="card" style={{marginBottom:12}}>
       <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.6}}>
         Exporte a lista de produtos do Eclética em <strong>CSV</strong> e escolha o arquivo aqui.
@@ -12895,6 +12985,7 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
           📥 Importar {novos.length} produto(s)
         </button>
       </div>
+    </>}
     </>}
   </div>;
 }
@@ -13137,8 +13228,12 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
                 {ROT[l.tipo]||"sem tipo"}{l.codigoEcletica?` · cód ${l.codigoEcletica}`:""}
               </span>
             </span>
-            <span style={{fontFamily:"monospace",fontSize:13,fontWeight:700,color:l.saldo<0?"var(--dangerText)":"var(--text)",whiteSpace:"nowrap" as const}}>
+            <span style={{fontFamily:"monospace",fontSize:13,fontWeight:700,color:l.saldo<0?"var(--dangerText)":"var(--text)",whiteSpace:"nowrap" as const,textAlign:"right" as const}}>
               {l.saldo.toFixed(2)} {l.unidade||"un"}
+              {(parseFloat(l.unidadesPorEmbalagem)||1)>1&&
+                <span style={{display:"block",fontSize:10,fontWeight:400,color:"var(--text3)"}}>
+                  = {(l.saldo*(parseFloat(l.unidadesPorEmbalagem)||1)).toFixed(0)} un
+                </span>}
             </span>
           </div>
           {editando===l.id&&<div style={{padding:"0 12px 12px",background:"var(--bg)"}}>
@@ -20342,6 +20437,40 @@ const resolverItemVendido=(db:any,venda:{nome?:string,cod?:string})=>{
     ||fichas.find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item?.nome||venda?.nome||""))
     ||null;
   return{item,tipo,ficha,porCodigo};
+};
+
+// Concilia o produto do Eclética (o que se VENDE) com o insumo que nasceu da
+// compra (o que se COMPRA). Sem isso, a entrada da NF-e alimenta um registro e
+// a venda baixa outro — o saldo nunca fecha, e nada na tela denuncia.
+//
+// O CANÔNICO é o lado da COMPRA, de propósito. Ele carrega a unidade de
+// embalagem ("cx") e o vínculo com a lista de compras; o código de gravar
+// compra NÃO converte, então um item em "un" somaria 5 ao saldo quando chegasse
+// uma NF-e de 5 caixas. A venda, essa sim, já sabe dividir por
+// unidadesPorEmbalagem.
+//
+// O NOME final é o do Eclética — é o produto que o dono reconhece — e o nome
+// antigo da compra vira termo de substituição, então a próxima NF-e do
+// fornecedor cai no item certo sozinha.
+const conciliarRevenda=(d:any,{ecleticaId,compraId,porEmbalagem}:{ecleticaId:string,compraId:string,porEmbalagem:number})=>{
+  const mps=d.materiasPrimas||[];
+  const ecl=mps.find((m:any)=>m.id===ecleticaId);
+  const compra=mps.find((m:any)=>m.id===compraId);
+  if(!ecl||!compra||ecl.id===compra.id)return d;
+
+  const base=mesclarProdutosDuplicados(d,{canonicoId:compra.id,idsRemovidos:[ecl.id],nomeFinal:ecl.nome});
+  const emb=Number.isFinite(porEmbalagem)&&porEmbalagem>0?porEmbalagem:(parseFloat(compra.unidadesPorEmbalagem)||1);
+  const agora=new Date().toISOString();
+  const materiasPrimas=(base.materiasPrimas||[]).map((m:any)=>m.id===compra.id
+    ?{...m,codigoEcletica:ecl.codigoEcletica||"",grupoEcletica:ecl.grupoEcletica||m.grupoEcletica,
+      unidadesPorEmbalagem:emb,atualizadoEm:agora}
+    :m);
+  // A marcação de tipo segue o código, que agora vive no item canônico. Sem
+  // isso, o item conciliado perderia o "revenda" e sairia da baixa por venda.
+  const tipoInsumo={...(base.tipoInsumo||{})};
+  if(ecl.codigoEcletica)tipoInsumo[`cod:${ecl.codigoEcletica}`]="revenda";
+  tipoInsumo[foldNome(ecl.nome)]="revenda";
+  return{...base,materiasPrimas,tipoInsumo};
 };
 
 // Matérias-primas que respondem por um produto da lista (várias marcas do

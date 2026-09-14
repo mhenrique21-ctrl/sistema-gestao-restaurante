@@ -329,6 +329,32 @@ data, hora, "Página"). Lido como CSV comum dá 281 cabeçalhos e zero produtos.
 posição 24 — fixar quebra se o Eclética acrescentar uma coluna. Planilha comum
 com cabeçalho também é aceita.
 
+### Conciliar compra ↔ venda (só revenda)
+
+Estoque → Produtos Eclética → aba **Conciliar**. O que se COMPRA e o que se
+VENDE nascem como registros diferentes quando os nomes diferem ("AGUA MINERAL
+500ML CRYSTAL" na NF-e × "Agua Mineral" no cardápio): a entrada alimenta um e a
+saída baixa o outro, e **o saldo nunca fecha sem nada denunciar**.
+
+`conciliarRevenda` funde os dois via `mesclarProdutosDuplicados` (que já soma
+saldo, une fornecedores e reaponta `movEstoque`/`compras`/`mpVinculados`), e
+depois carimba `codigoEcletica` e `unidadesPorEmbalagem` no sobrevivente.
+
+⚠️ O **canônico é o lado da COMPRA**, de propósito: ele tem a unidade de
+embalagem e o vínculo com a lista, e o código que grava compra **não converte** —
+um item em "un" somaria 5 ao saldo quando chegasse NF-e de 5 caixas. A venda
+sabe dividir por `unidadesPorEmbalagem`; a compra não.
+
+O **nome final é o do Eclética** (é o produto que o dono reconhece) e o nome
+antigo da compra vira termo de `normalizacoes`, então a próxima NF-e cai no item
+certo sozinha.
+
+Só **revenda** funde. Dose continua pela ficha de uma linha; produzido não é
+comprado. E quem tem o mesmo nome dos dois lados **se concilia sozinho na
+primeira compra** — a compra acha o item pelo nome — e nem aparece na lista.
+
+Saldo Estoque mostra os dois lados (`4,00 cx` / `= 48 un`) quando há conversão.
+
 ### Identidade do item: o CÓDIGO, não o nome
 
 Produto importado tem `codigoEcletica`, e **é ele que amarra tudo**: a marcação
