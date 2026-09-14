@@ -360,17 +360,34 @@ inventário.
 
 ### Estoque → Saídas por venda
 
-Tudo que liga venda a estoque num lugar só, em três abas na ordem de uso:
-**1. Vínculos** (cadastro, uma vez) → **2. Registrar** (a cada período) →
-**3. Conferência** (consumo teórico + revenda × compras).
+Duas abas: **1. Registrar** (a cada período) → **2. Conferência** (consumo
+teórico).
+
+⚠️ Existiu uma aba **Vínculos**, para mapear produto vendido → ficha/produto da
+lista, por nome. Foi **apagada**: depois que os produtos do Eclética passaram a
+ser importados com `codigoEcletica`, o casamento virou automático pelo código —
+o XML da NFC-e traz `cProd` e é o mesmo número. Ela mostrava "0 de 157
+vinculados" pedindo trabalho que não existia. **Não recrie.**
+
+`resolverItemVendido(db, {nome, cod})` é o resolvedor único: código → nome →
+tipo → ficha. Usado pela baixa, pela Conferência e pela Margem por Produto, para
+as três não discordarem entre si.
+
+O único vínculo que sobrou é **item produzido → ficha técnica**, quando os nomes
+diferem: campo `fichaId`, editado em Saldo Estoque junto com nome/código/tipo.
+Sem ele, casa pelo nome.
+
+⚠️ `mapaProdutoFicha` ficou **legado** — continua nas duas fusões (remover
+quebraria bundle antigo), mas nada mais lê.
 
 ⚠️ Isto já esteve espalhado em quatro abas dentro de Vendas → Relatório, que
 chegou a ter quinze. Relatório é lugar de OLHAR; tela que mexe em saldo não mora
 lá. Não devolva nada pra lá.
 
-A aba Registrar tem **UM botão**. A separação revenda→PDV / insumo→Gestão é
-detalhe de implementação — o sistema sabe qual é qual pelo vínculo, e perguntar
-isso a cada uso foi exatamente o que deixou a tela confusa.
+A aba Registrar tem **UM botão**, e no topo a estatística de casamento
+(casaram por código / por nome / não encontrados, com os nomes). É ela que
+substitui a antiga tela de vínculos: em vez de mandar vincular 157 produtos,
+mostra os poucos que não casaram.
 
 ⚠️ Houve uma versão em que a revenda baixava no PDV (`/api/stock/venda-externa`).
 Foi **removida**: por decisão do dono o saldo do cardápio passou a viver no

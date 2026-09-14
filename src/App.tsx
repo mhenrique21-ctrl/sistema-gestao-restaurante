@@ -4845,8 +4845,10 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
 
     {relTab==="margem"&&(()=>{
       const linhas=agruparItens().map((p:any)=>{
-        // vinculoDoProduto: vínculo confirmado > nome batendo por foldNome > nada.
-        const {ficha,vinculo}=vinculoDoProduto(db,p.nome);
+        // Resolve por código e cai no nome: mesma regra do estoque, pra a
+        // margem não discordar do que a baixa fez.
+        const {ficha,item}=resolverItemVendido(db,{nome:p.nome,cod:p.cod});
+        const vinculo=ficha?"auto":item?"item":"nenhum";
         const custo=ficha?(ficha.custoPorcao||0)*p.qtd:null;
         const margem=custo!=null?p.total-custo:null;
         const margemPct=margem!=null&&p.total?margem/p.total*100:null;
@@ -12322,11 +12324,9 @@ function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbA
 // tinha quinze. Relatório é lugar de OLHAR; uma tela que mexe no saldo não
 // pode morar lá, e ninguém acha uma ação escondida na décima segunda aba.
 function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string}){
-  const [aba,setAba]=useState<"registrar"|"conferencia"|"vinculos">("registrar");
+  const [aba,setAba]=useState<"registrar"|"conferencia">("registrar");
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [buscaVinc,setBuscaVinc]=useState("");
-  const [soPendentes,setSoPendentes]=useState(true);
   const [verDetalhe,setVerDetalhe]=useState(false);
 
   const {porDia:vendasPorDia,diasPdv}=vendasPorItem(db,ini,fim);
@@ -12337,11 +12337,14 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
     ?<div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Inclui {diasPdv} dia(s) de venda do PDV, agregados por produto.</div>
     :null;
 
-  // Quanto da receita do período ainda não tem para onde ir. É o número que
-  // decide se vale registrar agora ou vincular primeiro.
+  // Estatística de casamento. Substitui a antiga tela de vínculos: em vez de
+  // mandar a pessoa vincular 157 produtos, mostra os poucos que NÃO casaram.
   const todosProdutos=agruparItens();
   const receitaTotal=todosProdutos.reduce((s:number,p:any)=>s+p.total,0);
-  const semVinculo=todosProdutos.filter((p:any)=>vinculoDoProduto(db,p.nome).vinculo==="nenhum");
+  const resolvidos=todosProdutos.map((p:any)=>({...p,...resolverItemVendido(db,{nome:p.nome,cod:p.cod})}));
+  const porCodigo=resolvidos.filter((p:any)=>p.porCodigo).length;
+  const porNomeQtd=resolvidos.filter((p:any)=>!p.porCodigo&&p.item).length;
+  const semVinculo=resolvidos.filter((p:any)=>!p.item&&!p.ficha);
   const receitaSemVinculo=semVinculo.reduce((s:number,p:any)=>s+p.total,0);
 
   const RegistrarTab=()=>{
@@ -12384,9 +12387,7 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         // DOSE baixa o insumo pela ficha: não se estoca "fatia de queijo", se
         // estoca queijo, e a fatia sai na hora da venda.
         if(modo==="ficha"||!item){
-          const ficha=item
-            ?(db.fichasTecnicas||[]).find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item.nome))
-            :vinculoDoProduto(db,p.nome).ficha;
+          const ficha=resolverItemVendido(db,{nome:p.nome,cod:p.cod}).ficha;
           if(!ficha){
             // Sem item e sem ficha: o produto vendido não existe em lugar
             // nenhum do cadastro. Dizer isso é melhor que sumir com ele.
@@ -12472,9 +12473,27 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         </div>
       </div>}
 
-      {receitaSemVinculo>0&&<div style={{background:"var(--warningBg)",border:"1px solid #f59e0b55",borderRadius:8,padding:"9px 12px",marginBottom:12,fontSize:12,color:"var(--warningText)"}}>
-        ⚠️ {semVinculo.length} produto(s) sem vínculo — {receitaTotal?Math.round(receitaSemVinculo/receitaTotal*100):0}% da receita fica de fora.
-        <button onClick={()=>setAba("vinculos")} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontWeight:700,textDecoration:"underline",padding:0,marginLeft:6,fontSize:12}}>resolver</button>
+      {todosProdutos.length>0&&<div className="card" style={{marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:12.5,marginBottom:6}}>Produtos vendidos no período: {todosProdutos.length}</div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+          <span style={{color:"var(--text2)"}}>Casaram pelo código do Eclética</span>
+          <strong style={{color:"var(--successText)"}}>{porCodigo}</strong>
+        </div>
+        {porNomeQtd>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+          <span style={{color:"var(--text2)"}}>Casaram pelo nome</span><strong>{porNomeQtd}</strong>
+        </div>}
+        {semVinculo.length>0&&<>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--warningText)"}}>Não encontrados</span>
+            <strong style={{color:"var(--warningText)"}}>{semVinculo.length}</strong>
+          </div>
+          <div style={{fontSize:11,color:"var(--warningText)",marginTop:6,lineHeight:1.6}}>
+            {receitaTotal?Math.round(receitaSemVinculo/receitaTotal*100):0}% da receita fica de fora:<br/>
+            {semVinculo.slice(0,8).map((p:any,i:number)=><span key={i}>· {p.nome}{p.cod?` (cód ${p.cod})`:""}<br/></span>)}
+            {semVinculo.length>8&&<span>· +{semVinculo.length-8} outro(s)<br/></span>}
+            Corrija o código em <strong>Saldo Estoque</strong> ou importe em <strong>Produtos Eclética</strong>.
+          </div>
+        </>}
       </div>}
 
       {avisos.size>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10,lineHeight:1.6}}>
@@ -12508,7 +12527,7 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
       // entre os dois é justamente o que se quer enxergar.
       const movs=db.movEstoque||[];
       const {linhas:base,receitaComFicha,receitaSemFicha,semPorcoes,semInsumos}=
-        consumoTeorico(agruparItens(),(nome:string)=>vinculoDoProduto(db,nome).ficha);
+        consumoTeorico(agruparItens(),(nome:string)=>resolverItemVendido(db,{nome}).ficha);
 
       const linhas=base.map((l:any)=>{
         const mp=l.mpId?(db.materiasPrimas||[]).find((m:any)=>m.id===l.mpId):null;
@@ -12592,133 +12611,11 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
     return consumoUi;
   };
 
-  const VinculosTab=()=>(()=>{
-      const fichas=[...(db.fichasTecnicas||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
-      // A lista vem de TODO o histórico, não só do período escolhido: um
-      // produto vendido mês passado precisa poder ser vinculado, senão a tela
-      // muda de conteúdo conforme o filtro de datas e o trabalho nunca acaba.
-      const tudo=new Map<string,{nome:string,qtd:number,total:number}>();
-      const somar=(nome:string,qtd:number,valor:number)=>{
-        if(!nome)return;
-        const k=foldNome(nome);
-        const cur=tudo.get(k)||{nome,qtd:0,total:0};
-        cur.qtd+=qtd; cur.total+=valor; cur.nome=nome;
-        tudo.set(k,cur);
-      };
-      (db.itensVendidos||[]).forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
-      (db.recibosVenda||[]).forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
-
-      const todos=Array.from(tudo.values())
-        .map(p=>({...p,...vinculoDoProduto(db,p.nome)}))
-        .sort((a,b)=>b.total-a.total);
-      const receitaTotal=todos.reduce((s,p)=>s+p.total,0);
-      const comFicha=todos.filter(p=>p.ficha||p.produto);
-      const cobertura=receitaTotal?comFicha.reduce((s,p)=>s+p.total,0)/receitaTotal*100:0;
-      const pendentes=todos.filter(p=>p.vinculo==="nenhum");
-
-      const q=foldBusca(buscaVinc);
-      const lista=todos
-        .filter(p=>!soPendentes||p.vinculo==="nenhum")
-        .filter(p=>!q||foldBusca(p.nome).includes(q));
-
-      const prodsLista=[...(db.produtosLista||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
-      const vincular=(nome:string,valor:string)=>{
-        const k=foldNome(nome);
-        const agora=new Date().toISOString();
-        // Prefixo no value porque ficha e matéria-prima são listas diferentes
-        // com ids gerados pelo mesmo uid() — sem ele, um id igual nas duas
-        // apontaria pro destino errado sem nenhum sintoma visível.
-        const reg=valor==="__auto"?{modo:"auto"}
-          :valor==="__ignorar"?{modo:"ignorar"}
-          :valor.startsWith("m:")?{modo:"produto",prodId:valor.slice(2),prodNome:(prodsLista.find((m:any)=>m.id===valor.slice(2))||{}).nome||""}
-          :{modo:"ficha",fichaId:valor.slice(2),fichaNome:(fichas.find((f:any)=>f.id===valor.slice(2))||{}).nome||""};
-        // setDbAndSave (e não setDb): o auto-save genérico PODE pular a
-        // gravação se coincidir com outro save em andamento, e aí o vínculo
-        // some no próximo poll — o clássico "eu marco e volta sozinho".
-        (setDbAndSave||setDb)((d:any)=>({...d,mapaProdutoFicha:{...(d.mapaProdutoFicha||{}),
-          [k]:{...reg,origemAprendizado:"usuario",ultimaAtualizacao:agora}}}));
-      };
-
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Produto vendido → ficha técnica</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
-Aqui só ficam as <strong>exceções</strong>. Quem tem ficha técnica de mesmo nome já casa sozinho, e quem é revenda também — basta o insumo estar marcado como revenda em <strong>Compras → Insumos</strong>. Use esta tela quando o nome vendido não bate com nada.
-          <br/>Para <strong>desvincular</strong>, escolha a primeira opção do seletor. <strong>Ignorar</strong> é outra coisa: tira o produto de todas as análises de propósito (couvert, taxa, brinde).
-        </div>
-
-        <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
-            <span style={{color:"var(--text2)"}}>Receita com ficha vinculada</span>
-            <strong style={{color:cobertura>=80?"var(--successText)":cobertura>=40?"var(--warningText)":"var(--dangerText)"}}>{cobertura.toFixed(0)}%</strong>
-          </div>
-          <div style={{height:8,background:"var(--border)",borderRadius:4,overflow:"hidden"}}>
-            <div style={{width:`${Math.min(100,cobertura)}%`,height:"100%",background:cobertura>=80?"#16A34A":cobertura>=40?"#B45309":"#A32B24"}}/>
-          </div>
-          <div style={{fontSize:11,color:"var(--text2)",marginTop:6}}>
-            {comFicha.length} de {todos.length} produtos vinculados · {pendentes.length} pendente(s)
-            {todos.filter(p=>p.vinculo==="produto").length>0&&` · ${todos.filter(p=>p.vinculo==="produto").length} de revenda`}
-          </div>
-        </div>
-
-        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-          <input placeholder="🔍 Buscar produto..." value={buscaVinc} onChange={e=>setBuscaVinc(e.target.value)} className="inp" style={{flex:1,minWidth:160,marginBottom:0}}/>
-          <button onClick={()=>setSoPendentes(v=>!v)} className="pill"
-            style={{background:soPendentes?"var(--btnPrimary)":"var(--bg3)",color:soPendentes?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>
-            {soPendentes?"Só pendentes":"Todos"}
-          </button>
-        </div>
-
-        {!fichas.length&&!prodsLista.length&&<div style={{fontSize:12,color:"var(--warningText)",marginBottom:10}}>
-          ⚠️ Nem ficha técnica nem produto na lista de compras. Cadastre antes de vincular.
-        </div>}
-        {!lista.length&&<EmptyState msg={soPendentes?"Nenhum produto pendente — tudo vinculado.":"Nenhum produto vendido ainda."}/>}
-
-        {lista.slice(0,200).map(p=>{
-          const reg=(db.mapaProdutoFicha||{})[foldNome(p.nome)];
-          const valorSel=reg?.modo==="ficha"&&p.ficha?`f:${p.ficha.id}`
-            :(reg?.modo==="produto"||reg?.modo==="insumo")&&p.produto?`m:${p.produto.id}`
-            :reg?.modo==="ignorar"?"__ignorar":"__auto";
-          const pesoPct=receitaTotal?p.total/receitaTotal*100:0;
-          return <div key={p.nome} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
-              <span style={{fontSize:13,fontWeight:600}}>{p.nome}</span>
-              <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>{fmtMoney(p.total)} · {pesoPct.toFixed(1)}%</span>
-            </div>
-            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-              <select className="inp" value={valorSel} onChange={e=>vincular(p.nome,e.target.value)} style={{flex:1,minWidth:180,marginBottom:0,fontSize:12}}>
-                <option value="__auto">— sem vínculo manual (desvincular) —</option>
-                <optgroup label="Produzido — ficha técnica">
-                  {fichas.map((f:any)=><option key={f.id} value={`f:${f.id}`}>{f.nome}</option>)}
-                </optgroup>
-                <optgroup label="Revenda — produto da lista de compras">
-                  {prodsLista.map((m:any)=><option key={m.id} value={`m:${m.id}`}>{m.nome}{m.cat?` · ${m.cat}`:""}</option>)}
-                </optgroup>
-                <option value="__ignorar">Ignorar — fora da análise</option>
-              </select>
-              <span style={{fontSize:10,fontWeight:700,padding:"4px 8px",borderRadius:6,whiteSpace:"nowrap" as const,
-                ...(p.vinculo==="manual"?{background:"var(--successBg)",color:"var(--successText)"}
-                  :p.vinculo==="auto"?{background:"var(--infoBg)",color:"var(--infoText)"}
-                  :p.vinculo==="ignorado"?{background:"var(--border)",color:"var(--text3)"}
-                  :{background:"var(--warningBg)",color:"var(--warningText)"})}}>
-                {p.vinculo==="manual"?`✓ ${p.ficha.nome}`
-                  :p.vinculo==="produto"?`🛒 ${p.produto.nome}`
-                  :p.vinculo==="auto"?`automático: ${p.ficha.nome}`
-                  :p.vinculo==="ignorado"?"ignorado":"sem vínculo"}
-              </span>
-            </div>
-          </div>;
-        })}
-        {lista.length>200&&<div style={{fontSize:11,color:"var(--text2)",padding:"10px 0"}}>
-          Mostrando os 200 maiores de {lista.length}. Use a busca para achar os demais.
-        </div>}
-      </>;
-    })();
-
-  const ABAS:[typeof aba,string][]=[["registrar","2. Registrar"],["conferencia","3. Conferência"],["vinculos","1. Vínculos"]];
+  const ABAS:[typeof aba,string][]=[["registrar","1. Registrar"],["conferencia","2. Conferência"]];
   return <div>
     <div className="section-title" style={{marginBottom:8}}>📉 Saídas por venda</div>
     <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
-      Desconta do estoque o que as vendas consumiram. A ordem é: vincular os produtos uma vez, registrar a cada período, conferir quando quiser.
+      Desconta do estoque o que as vendas consumiram. O produto vendido casa com o do estoque pelo <strong>código do Eclética</strong> — não há vínculo a fazer.
     </div>
     <div className="row" style={{gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
       <input type="date" value={ini} onChange={e=>setIni(e.target.value)} className="inp" style={{maxWidth:150,marginBottom:0}}/>
@@ -12736,7 +12633,6 @@ Aqui só ficam as <strong>exceções</strong>. Quem tem ficha técnica de mesmo 
           o campo de busca dos Vínculos perderia o foco a cada tecla. */}
       {aba==="registrar"&&RegistrarTab()}
       {aba==="conferencia"&&ConferenciaTab()}
-      {aba==="vinculos"&&VinculosTab()}
     </div>
   </div>;
 }
@@ -13025,7 +12921,8 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
   const opcoes=q
     ?mps.filter((m:any)=>foldBusca(m.nome||"").includes(q)||String(m.codigoEcletica||"")===busca.trim()).slice(0,40)
     :[...mps].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"")).slice(0,25);
-  const ficha=item?(db.fichasTecnicas||[]).find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item.nome)):null;
+  // Mesma resolução do resto: fichaId escolhido no Saldo vence o nome.
+  const ficha=item?resolverItemVendido(db,{nome:item.nome,cod:item.codigoEcletica}).ficha:null;
 
   // Prévia: mostra o que vai acontecer ANTES de acontecer. Baixar insumo sem
   // mostrar o que sai é como se perde a confiança no número do estoque.
@@ -13171,7 +13068,7 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
 
   const abrirEdicao=(l:any)=>{
     setEditando(l.id);
-    setForm({nome:l.nome||"",codigo:l.codigoEcletica||"",unidade:l.unidade||"un",tipo:l.tipo||""});
+    setForm({nome:l.nome||"",codigo:l.codigoEcletica||"",unidade:l.unidade||"un",tipo:l.tipo||"",fichaId:l.fichaId||""});
   };
   const salvar=(l:any)=>{
     const nome=String(form.nome||"").trim();
@@ -13185,7 +13082,8 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
       const tipos={...(d.tipoInsumo||{})};
       const antes=(d.materiasPrimas||[]).find((m:any)=>m.id===l.id);
       const chaveAntiga=antes?chaveTipo(antes):null;
-      const depois={...antes,nome,codigoEcletica:codigo,unidade:String(form.unidade||"un").trim()||"un",atualizadoEm:new Date().toISOString()};
+      const depois={...antes,nome,codigoEcletica:codigo,unidade:String(form.unidade||"un").trim()||"un",
+        fichaId:form.fichaId||undefined,atualizadoEm:new Date().toISOString()};
       // A marcação segue o item quando a chave muda (ex.: ganhou código). Sem
       // isso, corrigir o código do produto apagaria o tipo dele em silêncio.
       const chaveNova=chaveTipo(depois);
@@ -13259,8 +13157,23 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
                   onClick={()=>setForm((f:any)=>({...f,tipo:v}))}>{lbl}</button>
               ))}
             </div>
+            {(form.tipo==="produzido"||form.tipo==="dose")&&(()=>{
+              const fichas=[...(db.fichasTecnicas||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
+              const auto=fichas.find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(form.nome||""));
+              return <div style={{marginBottom:8}}>
+                <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Ficha técnica</label>
+                <select className="inp" style={{marginBottom:4}} value={form.fichaId||""}
+                  onChange={e=>setForm((f:any)=>({...f,fichaId:e.target.value}))}>
+                  <option value="">{auto?`— automático: ${auto.nome} —`:"— nenhuma (o nome não bate com ficha) —"}</option>
+                  {fichas.map((f:any)=><option key={f.id} value={f.id}>{f.nome}</option>)}
+                </select>
+                <div style={{fontSize:10.5,color:"var(--text3)",lineHeight:1.5}}>
+                  Só precisa escolher quando o nome do produto for diferente do nome da ficha. É ela que a Produção usa para baixar os insumos.
+                </div>
+              </div>;
+            })()}
             <div style={{fontSize:10.5,color:"var(--text3)",marginBottom:8,lineHeight:1.5}}>
-              O <strong>código</strong> é o que amarra o produto à venda do Eclética. Mudar o nome aqui não desfaz o vínculo; mudar o código, sim.
+              O <strong>código</strong> é o que amarra o produto à venda do Eclética — é por ele que a venda acha este item, sem vínculo manual nenhum.
               Para corrigir o saldo, use Estoque → Manutenção (Ajuste).
             </div>
             <div style={{display:"flex",gap:8}}>
@@ -20403,57 +20316,34 @@ const FORMAS_PGTO:[string,string][]=[["dinheiro","dinheiro"],["credito","crédit
 // matéria-prima faria o vínculo pular justamente o cadastro dele — e um mesmo
 // produto da lista costuma ter VÁRIAS matérias-primas vinculadas (marcas
 // diferentes do mesmo item), que só somadas respondem "quanto comprei disso".
-const vinculoDoProduto=(db:any,nomeProduto:string)=>{
-  const vazio={ficha:null,produto:null,vinculo:"nenhum" as const};
-  const k=foldNome(nomeProduto||"");
-  if(!k)return vazio;
-  const mapa=db?.mapaProdutoFicha||{};
+// Resolve um produto VENDIDO até o item de estoque, o tipo e a ficha.
+//
+// A chave é o CÓDIGO: o Eclética emite o cupom com cProd, o agente guarda em
+// itensVendidos[].itens[].cod, e a importação guarda o mesmo número em
+// codigoEcletica. São o mesmo produto — não existe vínculo a fazer, e a tela
+// que pedia isso foi apagada por ser trabalho inventado.
+//
+// O nome continua valendo como segunda tentativa: recibo avulso não tem código,
+// e produto cadastrado à mão também não.
+const resolverItemVendido=(db:any,venda:{nome?:string,cod?:string})=>{
+  const mps=db?.materiasPrimas||[];
+  const cod=String(venda?.cod||"").trim();
+  let item=cod?mps.find((m:any)=>String(m.codigoEcletica||"")===cod):null;
+  const porCodigo=!!item;
+  if(!item&&venda?.nome){
+    const k=foldNome(venda.nome);
+    item=mps.find((m:any)=>m?.nome&&foldNome(m.nome)===k)||null;
+  }
+  const tipo=item?tipoDoInsumo(db?.tipoInsumo||{},item).tipo:null;
   const fichas=db?.fichasTecnicas||[];
-  const prods=db?.produtosLista||[];
-  const reg=mapa[k];
-  if(reg?.modo==="ignorar")return{...vazio,vinculo:"ignorado" as const};
-  if(reg?.modo==="ficha"&&reg.fichaId){
-    const f=fichas.find((x:any)=>x.id===reg.fichaId);
-    // Ficha apagada depois de vinculada: cai pro automático em vez de sumir em
-    // silêncio, e a tela de vínculos mostra o produto como pendente de novo.
-    if(f)return{ficha:f,produto:null,vinculo:"manual" as const};
-  }
-  if(reg?.modo==="produto"&&reg.prodId){
-    const pr=prods.find((x:any)=>x.id===reg.prodId);
-    if(pr)return{ficha:null,produto:pr,vinculo:"produto" as const};
-  }
-  // Compatibilidade com a primeira versão, que apontava direto na
-  // matéria-prima: acha o produto da lista que a contém, em vez de perder o
-  // vínculo que a pessoa já tinha feito.
-  if(reg?.modo==="insumo"&&reg.mpId){
-    const pr=prods.find((x:any)=>(x.mpVinculados||(x.mpVinculadoId?[x.mpVinculadoId]:[])).includes(reg.mpId));
-    if(pr)return{ficha:null,produto:pr,vinculo:"produto" as const};
-  }
-  // Ficha com o mesmo nome resolve sozinha o produto produzido.
-  const auto=fichas.find((x:any)=>x?.nome&&foldNome(x.nome)===k);
-  if(auto)return{ficha:auto,produto:null,vinculo:"auto" as const};
-
-  // Sem ficha: cai no produto da lista de mesmo nome, mas SÓ se o insumo dele
-  // estiver marcado como revenda. É isso que torna a revenda automática — o
-  // dono marca o insumo uma vez, na compra, e não precisa vincular produto
-  // vendido nenhum.
-  //
-  // A trava do "revenda" não é detalhe: casar venda com produto de compra por
-  // nome sozinho erraria feio, porque o "Café" da venda é a bebida pronta e o
-  // "Café" da lista é o pacote de grão. Marcado como produção, ele fica de
-  // fora daqui e só sai pela ficha, que é o certo.
-  const prodMesmoNome=prods.find((x:any)=>x?.nome&&foldNome(x.nome)===k);
-  if(prodMesmoNome){
-    const mps=(db?.materiasPrimas||[]).filter((m:any)=>
-      (prodMesmoNome.mpVinculados||(prodMesmoNome.mpVinculadoId?[prodMesmoNome.mpVinculadoId]:[])).includes(m.id));
-    const tipos=mps.map((m:any)=>tipoDoInsumo(db?.tipoInsumo||{},m).tipo);
-    if(tipos.some((t:string|null)=>t==="revenda"))return{ficha:null,produto:prodMesmoNome,vinculo:"produto" as const};
-    // Marcado como interno (limpeza, descartável): sai da análise sem virar
-    // pendência, que é diferente de "esqueci de vincular".
-    if(tipos.length&&tipos.every((t:string|null)=>t==="interno"))return{...vazio,vinculo:"ignorado" as const};
-  }
-  return vazio;
+  // fichaId no item vence o nome: é o campo que o dono edita em Saldo Estoque
+  // quando o nome do produto e o da ficha não são iguais.
+  const ficha=(item?.fichaId&&fichas.find((f:any)=>f.id===item.fichaId))
+    ||fichas.find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item?.nome||venda?.nome||""))
+    ||null;
+  return{item,tipo,ficha,porCodigo};
 };
+
 // Matérias-primas que respondem por um produto da lista (várias marcas do
 // mesmo item). É por aqui que a compra e o estoque chegam até ele.
 const mpsDoProdutoLista=(db:any,prod:any)=>{
