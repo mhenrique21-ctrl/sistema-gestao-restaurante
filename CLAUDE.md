@@ -289,6 +289,16 @@ Classificar · Reclassificar.
 
 - Classificação automática: regras duras de limpeza > dicionário aprendido > palpite por
   palavra-chave > "Outros" (`classificarItem`)
+
+⚠️ **Quem fecha o modal de conciliação é o próprio modal** (`onConfirm` em
+`ConciliacaoImportModal`), não cada função de importar. São quatro caminhos até
+ele — Cupom IA, XML, NF-e da SEFAZ e "importar todas" — e três fechavam sozinhos
+enquanto o de importar UMA NF-e esquecia: a importação acontecia, a nota saía da
+lista, e a tela ficava aberta como se nada tivesse sido feito. Quem clicasse
+"Concluir" de novo importava a MESMA nota outra vez — compra duplicada, CMV
+errado, nada denunciando. `checkDuplicataCompra` não pega: ela roda ANTES da
+conciliação. O botão também trava no primeiro clique, porque o modal só some no
+render seguinte.
 - Budget por categoria com sugestão híbrida e `statusPace` ok/warn/over
 
 ### Financeiro

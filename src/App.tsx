@@ -4994,6 +4994,7 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
   const [busca,setBusca]=useState("");
   const [cadastrando,setCadastrando]=useState<string|null>(null);
   const [novoForm,setNovoForm]=useState({nome:"",cat:"",rua:"",marca:""});
+  const [confirmando,setConfirmando]=useState(false);
   const cats=[...new Set([...CATS_DEFAULT,...produtosLista.map((p:any)=>p.cat).filter(Boolean)])];
 
   const sugerirProdLista=(nome:string):any=>{
@@ -5175,9 +5176,12 @@ function ConciliacaoImportModal({itens,materiasPrimas,produtosLista,ruas,onConfi
         })}
       </div>
       <div style={{padding:"12px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:8}}>
-        <button onClick={onCancel} style={{flex:"0 0 90px",background:"var(--border2)",color:"#aaa",border:"none",borderRadius:8,padding:"12px",fontSize:13,cursor:"pointer"}}>Cancelar</button>
-        <button onClick={()=>onConfirm(resolucoesNome,vinculos)} style={{flex:1,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-          ✅ Concluir importação{vinculados>0?` (${vinculados} vinculado${vinculados>1?"s":""})`:""}
+        <button disabled={confirmando} onClick={onCancel} style={{flex:"0 0 90px",background:"var(--border2)",color:"#aaa",border:"none",borderRadius:8,padding:"12px",fontSize:13,cursor:confirmando?"default":"pointer",opacity:confirmando?.5:1}}>Cancelar</button>
+        {/* Importar grava compra, matéria-prima e conta a pagar. Dois cliques
+            antes do modal sumir da tela gravariam tudo duas vezes, e a trava de
+            duplicata não pega: ela roda antes da conciliação, não aqui. */}
+        <button disabled={confirmando} onClick={()=>{if(confirmando)return;setConfirmando(true);onConfirm(resolucoesNome,vinculos);}} style={{flex:1,background:confirmando?"var(--border2)":"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:700,cursor:confirmando?"default":"pointer"}}>
+          {confirmando?"Importando...":<>✅ Concluir importação{vinculados>0?` (${vinculados} vinculado${vinculados>1?"s":""})`:""}</>}
         </button>
       </div>
     </div>
@@ -8129,8 +8133,16 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
     {/* ===== LISTA DE COMPRAS ===== */}
 
+    {/* Fechar AQUI, e não dentro de cada onConfirm. Eram quatro caminhos até a
+        conciliação (Cupom IA, XML, NF-e da SEFAZ, "importar todas") e três
+        fechavam o modal por conta própria; o de importar UMA NF-e da lista
+        esquecia. A importação acontecia, a nota saía da lista — e a tela ficava
+        aberta como se nada tivesse sido feito. Quem clicasse "Concluir" de novo
+        importava a MESMA nota outra vez: compra duplicada, CMV errado, e nada
+        na tela denunciando. Fechando antes de executar, esquecer deixa de ser
+        possível — inclusive num caminho novo que alguém acrescente depois. */}
     {conciliacao&&<ConciliacaoImportModal itens={conciliacao.itens} materiasPrimas={db.materiasPrimas||[]} produtosLista={db.produtosLista||[]} ruas={db.listaRuas||[]}
-      onConfirm={(res,vinc)=>conciliacao.onConfirm(res,vinc)} onCancel={()=>setConciliacao(null)}/>}
+      onConfirm={(res,vinc)=>{const fn=conciliacao.onConfirm;setConciliacao(null);fn(res,vinc);}} onCancel={()=>setConciliacao(null)}/>}
   </div>;
 }
 
