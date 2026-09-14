@@ -5118,6 +5118,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Produto vendido → ficha técnica</div>
         <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
           Produto <strong>produzido</strong> aponta para a ficha técnica; produto de <strong>revenda</strong> (água, refrigerante, cerveja) aponta para o produto da <strong>lista de compras</strong> — o que se vende é o que se compra. Quem já casa pelo nome com uma ficha aparece como <strong>automático</strong>.
+          <br/>Para <strong>desvincular</strong>, escolha a primeira opção do seletor. <strong>Ignorar</strong> é outra coisa: tira o produto de todas as análises de propósito (couvert, taxa, brinde).
         </div>
 
         <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
@@ -5160,7 +5161,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
             </div>
             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
               <select className="inp" value={valorSel} onChange={e=>vincular(p.nome,e.target.value)} style={{flex:1,minWidth:180,marginBottom:0,fontSize:12}}>
-                <option value="__auto">— automático (pelo nome) —</option>
+                <option value="__auto">— sem vínculo manual (desvincular) —</option>
                 <optgroup label="Produzido — ficha técnica">
                   {fichas.map((f:any)=><option key={f.id} value={`f:${f.id}`}>{f.nome}</option>)}
                 </optgroup>
