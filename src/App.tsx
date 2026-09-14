@@ -12391,15 +12391,31 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         if(modo==="lista"){
           const r=resolverItemVendido(db,{nome:p.nome,cod:p.cod});
           if(!r.produtoLista){
-            avisos.add(`"${p.nome}" é revenda sem produto da lista — vincule em Produtos Eclética → Conciliar`);
+            avisos.add(`"${p.nome}" não aponta pra produto da lista — vincule em Produtos Eclética → Conciliar`);
             return;
           }
           if(!r.marcas.length){
             avisos.add(`"${r.produtoLista.nome}" não tem insumo vinculado: a compra não chega até ele`);
             return;
           }
-          distribuirEntreMarcas(r.marcas,p.qtd).forEach((x:any)=>
-            acumula(data,x.mp,x.qtd,(parseFloat(x.mp.ultimoValor)||0)*x.qtd,"revenda"));
+          // DOSE é uma PARTE do produto: 1 venda = qtdPorDose (ex.: 25 g do
+          // queijo). Revenda é 1 venda = 1 unidade. A unidade da dose manda a
+          // conversão ser de massa/volume em vez de embalagem.
+          const ehDose=tipo==="dose";
+          const porDose=ehDose?(parseFloat(item?.qtdPorDose)||0):1;
+          if(ehDose&&!(porDose>0)){
+            avisos.add(`"${item?.nome}" é dose mas não diz quanto sai por venda — preencha em Produtos Eclética → Conciliar`);
+            return;
+          }
+          const total=p.qtd*porDose;
+          const un=ehDose?(item?.unidadeDose||"g"):undefined;
+          const linhas=distribuirEntreMarcas(r.marcas,total,un);
+          if(!linhas.length&&ehDose){
+            avisos.add(`"${item?.nome}": nenhuma marca de "${r.produtoLista.nome}" converte de "${un}" — confira a unidade`);
+            return;
+          }
+          linhas.forEach((x:any)=>
+            acumula(data,x.mp,x.qtd,(parseFloat(x.mp.ultimoValor)||0)*x.qtd,ehDose?"dose":"revenda"));
           return;
         }
 
@@ -12736,7 +12752,7 @@ const lerProdutosEcletica=(texto:string)=>{
 
 function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [abaImp,setAbaImp]=useState<"importar"|"conciliar">("importar");
-  const [escolha,setEscolha]=useState<Record<string,{compraId:string,emb:string,busca?:string}>>({});
+  const [escolha,setEscolha]=useState<Record<string,{compraId:string,emb:string,busca?:string,porDose?:string,unDose?:string}>>({});
   const [lidos,setLidos]=useState<any[]|null>(null);
   const [erro,setErro]=useState("");
   // Marcação por ITEM, não por grupo. O grupo é só um atalho que escreve em
@@ -12839,10 +12855,16 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
   // Ordem alfabética nos dois lados: com centenas de itens, procurar numa
   // lista na ordem em que foram cadastrados é o mesmo que não ter lista.
   const prodsLista=[...(db.produtosLista||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  // Revenda E dose: as duas apontam pro produto da lista. Dose ainda precisa
+  // dizer QUANTO sai por venda (25 g do queijo), então ela fica pendente
+  // também quando já tem produto mas não tem a quantidade.
   const pendentes=mpsAll.filter((m:any)=>{
     if(!m?.codigoEcletica)return false;
-    if(tipoDoInsumo(db.tipoInsumo||{},m).tipo!=="revenda")return false;
-    return !resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica}).produtoLista;
+    const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
+    if(t!=="revenda"&&t!=="dose")return false;
+    const {produtoLista}=resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica});
+    if(!produtoLista)return true;
+    return t==="dose"&&!(parseFloat(m.qtdPorDose)>0);
   }).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
   const resumoMarcas=(pl:any)=>{
     const ms=mpsDoProdutoLista(db,pl);
@@ -12856,10 +12878,16 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
       ||prodsLista.find((p:any)=>{const n=foldBusca(p.nome||"");return n.length>=4&&(n.includes(alvo)||alvo.includes(n));})
       ||null;
   };
-  const vincular=(ecl:any,prodListaId:string)=>{
+  const vincular=(ecl:any,prodListaId:string,ehDose:boolean)=>{
     if(!prodListaId)return;
+    const esc=escolha[ecl.id]||{};
+    const porDose=parseFloat((esc as any).porDose||"")||parseFloat(ecl.qtdPorDose)||0;
+    if(ehDose&&!(porDose>0))return alert("Diga quanto sai por venda (ex.: 25 g).");
+    const unDose=((esc as any).unDose||ecl.unidadeDose||"g").trim();
     (setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>
-      m.id===ecl.id?{...m,prodListaId,atualizadoEm:new Date().toISOString()}:m)}));
+      m.id===ecl.id
+        ?{...m,prodListaId,...(ehDose?{qtdPorDose:porDose,unidadeDose:unDose}:{}),atualizadoEm:new Date().toISOString()}
+        :m)}));
     setEscolha(e=>{const n={...e};delete n[ecl.id];return n;});
   };
   const criarNaLista=(ecl:any)=>{
@@ -12882,15 +12910,17 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     {abaImp==="conciliar"&&<>
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.6}}>
-          Produto de <strong>revenda</strong> do cardápio que ainda não aponta pra um produto da lista de compras.
+          Produto de <strong>revenda</strong> ou <strong>dose extra</strong> que ainda não aponta pra um produto da lista de compras.
+          Dose é uma <strong>parte</strong> do produto — 1 dose de mussarela são 25 g do queijo que você já compra.
           O saldo da revenda mora nas <strong>marcas</strong> penduradas na lista — o mesmo suco pode vir de duas —, e é de lá que a venda baixa.
           <br/>Vincular é reversível: grava só o vínculo, nada é fundido. Quem tem o mesmo nome dos dois lados já casa sozinho e não aparece aqui.
         </div>
       </div>
       {!pendentes.length&&<EmptyState msg="Nada pendente: todo produto de revenda já aponta pra um produto da lista de compras."/>}
       {pendentes.slice(0,60).map((ecl:any)=>{
+        const ehDose=tipoDoInsumo(db.tipoInsumo||{},ecl).tipo==="dose";
         const sug=sugerirLista(ecl);
-        const sel=escolha[ecl.id]?.compraId||sug?.id||"";
+        const sel=escolha[ecl.id]?.compraId||ecl.prodListaId||sug?.id||"";
         const alvo=prodsLista.find((pl:any)=>pl.id===sel);
         return <div key={ecl.id} className="card" style={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:8,alignItems:"baseline"}}>
@@ -12898,7 +12928,7 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
               <span style={{fontFamily:"monospace",color:"var(--text3)",fontSize:11,marginRight:6}}>{ecl.codigoEcletica}</span>
               {ecl.nome}
             </span>
-            <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>vendido em {ecl.unidade||"un"}</span>
+            <span style={{fontSize:11,color:ehDose?"var(--warningText)":"var(--text2)",whiteSpace:"nowrap" as const,fontWeight:ehDose?700:400}}>{ehDose?"dose extra":`vendido em ${ecl.unidade||"un"}`}</span>
           </div>
           <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Produto da lista de compras</label>
           <input className="inp" style={{marginBottom:6}} placeholder="🔍 filtrar a lista..."
@@ -12920,8 +12950,26 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
           {alvo&&<div style={{fontSize:11,color:"var(--text2)",marginBottom:8,lineHeight:1.5}}>
             {resumoMarcas(alvo)} — é daqui que a venda baixa, tirando primeiro da marca com mais saldo.
           </div>}
+          {ehDose&&<div style={{background:"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:8}}>
+            <div style={{fontSize:11.5,fontWeight:700,marginBottom:6}}>Quanto sai por venda</div>
+            <div className="row" style={{gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
+              <span style={{fontSize:12,color:"var(--text2)"}}>1 dose =</span>
+              <input type="number" min="0" step="any" className="inp" style={{width:100,marginBottom:0,textAlign:"center"}}
+                placeholder="25" value={(escolha[ecl.id] as any)?.porDose??(ecl.qtdPorDose||"")}
+                onChange={e=>setEscolha(x=>({...x,[ecl.id]:{...(x[ecl.id]||{compraId:sel,emb:""}),porDose:e.target.value} as any}))}/>
+              <select className="inp" style={{width:90,marginBottom:0}}
+                value={(escolha[ecl.id] as any)?.unDose||ecl.unidadeDose||"g"}
+                onChange={e=>setEscolha(x=>({...x,[ecl.id]:{...(x[ecl.id]||{compraId:sel,emb:""}),unDose:e.target.value} as any}))}>
+                {["g","kg","ml","l","un"].map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+              <span style={{fontSize:12,color:"var(--text2)"}}>de {alvo?alvo.nome:"..."}</span>
+            </div>
+            <div style={{fontSize:10.5,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
+              A dose é uma <strong>parte</strong> do produto da lista — não precisa de ficha técnica. A unidade precisa converter com a da compra (g ↔ kg, ml ↔ l).
+            </div>
+          </div>}
           <div style={{display:"flex",gap:8}}>
-            <button className="btn" disabled={!sel} onClick={()=>vincular(ecl,sel)}
+            <button className="btn" disabled={!sel} onClick={()=>vincular(ecl,sel,ehDose)}
               style={{flex:1,background:sel?"var(--btnPrimary)":"var(--border)",color:sel?"var(--onPrimary,#FFFFFF)":"#888",padding:"10px",fontSize:13,fontWeight:700}}>
               Vincular
             </button>
@@ -13028,6 +13076,7 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
 // ===================== ESTOQUE → MANUTENÇÃO DE PRODUTOS =====================
 function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [busca,setBusca]=useState("");
+  const [modo,setModo]=useState<"um"|"lote">("um");
   const [itemId,setItemId]=useState("");
   const [op,setOp]=useState<"producao"|"entrada"|"saida"|"ajuste">("producao");
   const [qtd,setQtd]=useState("");
@@ -13038,10 +13087,16 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
   // continua em Estoque → Inventário, que é onde ele sempre morou — trazer os
   // dois pra cá faria a busca devolver "Queijo" (o kg) junto com "Queijo
   // fatia" (a dose), e a pessoa baixaria do item errado sem perceber.
-  const mps=(db.materiasPrimas||[]).filter((m:any)=>{
-    if(m?.codigoEcletica)return true;
-    return ehProdutoVendido(tipoDoInsumo(db.tipoInsumo||{},m).tipo);
-  });
+  // Só quem tem saldo PRÓPRIO. Revenda e dose não têm: o estoque delas está
+  // nas marcas do produto da lista, e lançar movimento aqui gravaria um número
+  // que nenhuma tela lê — a pessoa acharia ter ajustado e nada teria mudado.
+  const mps=(db.materiasPrimas||[]).filter((m:any)=>
+    tipoDoInsumo(db.tipoInsumo||{},m).tipo==="produzido")
+    .sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  const semSaldoProprio=(db.materiasPrimas||[]).filter((m:any)=>{
+    const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
+    return m?.codigoEcletica&&(t==="revenda"||t==="dose");
+  }).length;
   const item=mps.find((m:any)=>m.id===itemId);
   const q=foldBusca(busca);
   const opcoes=q
@@ -13076,6 +13131,44 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
     setQtd("");setMotivo("");
   };
 
+  // ── Lote: vários produtos de uma vez ────────────────────────────────────
+  // Recebimento e contagem acontecem em bloco na vida real: uma operação, uma
+  // data, um motivo, e N produtos. Fazer um a um é onde a contagem é
+  // abandonada no meio.
+  const [lote,setLote]=useState<Record<string,string>>({});
+  const preenchidos=Object.entries(lote).filter(([,v])=>String(v).trim()!==""&&Number.isFinite(parseFloat(v))&&parseFloat(v)>=0);
+  const saldoDepois=(m:any,v:string)=>{
+    const n=parseFloat(v);
+    if(!Number.isFinite(n))return null;
+    const antes=parseFloat(m.estoqueAtual)||0;
+    return op==="ajuste"?n:(op==="saida"?antes-n:antes+n);
+  };
+  const lancarLote=()=>{
+    if(!preenchidos.length)return;
+    const nomes=preenchidos.slice(0,5).map(([id])=>mps.find((m:any)=>m.id===id)?.nome).filter(Boolean);
+    const extra=op==="producao"?"\n\nCada linha vai explodir a própria ficha técnica e baixar os insumos dela.":"";
+    if(!confirm(`Lançar ${preenchidos.length} movimento(s) de ${op.toUpperCase()} em ${fmtDate(dataMov)}?\n\n${nomes.join(", ")}${preenchidos.length>5?` e mais ${preenchidos.length-5}`:""}${extra}`))return;
+    const avisos:string[]=[];
+    (setDbAndSave||setDb)((d:any)=>{
+      let movEstoque=d.movEstoque||[],materiasPrimas=d.materiasPrimas||[];
+      const agora=new Date().toISOString();
+      preenchidos.forEach(([id,v])=>{
+        const alvo=materiasPrimas.find((m:any)=>m.id===id);
+        if(!alvo)return;
+        try{
+          const fichaAlvo=resolverItemVendido({...d,materiasPrimas},{nome:alvo.nome,cod:alvo.codigoEcletica}).ficha;
+          const r=aplicarMovimento({movEstoque,materiasPrimas,item:alvo,operacao:op,
+            quantidade:parseFloat(v),motivo,data:dataMov,ficha:fichaAlvo,agora,uid});
+          movEstoque=r.movEstoque;materiasPrimas=r.materiasPrimas;
+          (r.avisos||[]).forEach(a=>avisos.push(`${alvo.nome}: ${a}`));
+        }catch(e:any){avisos.push(`${alvo.nome}: ${e.message}`);}
+      });
+      return{...d,movEstoque,materiasPrimas};
+    });
+    alert([`${preenchidos.length} movimento(s) gravado(s).`,...(avisos.length?["","Não foi baixado:",...avisos.slice(0,10).map(a=>"· "+a)]:[])].join("\n"));
+    setLote({});
+  };
+
   const OPS:[typeof op,string,string][]=[
     ["producao","Produção","entra o produto e saem os insumos da ficha"],
     ["entrada","Entrada","recebimento, sem baixar insumo"],
@@ -13087,10 +13180,70 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
     <BackBar label="Inventário" onClick={onVoltar}/>
     <div className="section-title" style={{marginBottom:4}}>🔧 Manutenção de produtos</div>
     <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
-      Produtos do Eclética. Ajuste de <strong>insumo</strong> continua em Estoque → Inventário.
+      Produtos <strong>produzidos</strong> na cozinha — são os que têm saldo próprio.
+      Insumo se ajusta em Estoque → Inventário; <strong>revenda e dose</strong> não têm saldo próprio, o estoque delas são as marcas do produto da lista.
     </div>
 
-    <div className="card" style={{marginBottom:12}}>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
+      {([["um","Um item"],["lote","Vários de uma vez"]] as const).map(([k,lbl])=>
+        <button key={k} onClick={()=>setModo(k)} className="pill"
+          style={{background:modo===k?"var(--btnPrimary)":"var(--bg3)",color:modo===k?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>{lbl}</button>)}
+    </div>
+
+    {modo==="lote"&&<div className="card" style={{marginBottom:12}}>
+      <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Operação para todos</label>
+      <div style={{display:"flex",flexDirection:"column" as const,gap:2,marginBottom:10}}>
+        {OPS.map(([v,lbl,exp])=>(
+          <label key={v} style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",padding:"4px 0"}}>
+            <input type="radio" checked={op===v} onChange={()=>setOp(v)} style={{marginTop:3}}/>
+            <span style={{fontSize:13}}>{lbl}<span style={{display:"block",fontSize:11,color:"var(--text2)"}}>{exp}</span></span>
+          </label>
+        ))}
+      </div>
+      <div className="row" style={{gap:6,marginBottom:8,flexWrap:"wrap" as const}}>
+        <input type="date" className="inp" style={{maxWidth:150,marginBottom:0}} value={dataMov} onChange={e=>setDataMov(e.target.value)}/>
+        <input className="inp" style={{flex:1,minWidth:150,marginBottom:0}} placeholder="Motivo (ex.: Produção do dia)" value={motivo} onChange={e=>setMotivo(e.target.value)}/>
+      </div>
+      <input className="inp" placeholder="🔍 filtrar produtos..." value={busca} onChange={e=>setBusca(e.target.value)}/>
+
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"var(--text3)",fontWeight:700,padding:"6px 2px",borderBottom:"1px solid var(--border)"}}>
+        <span style={{flex:1}}>PRODUTO</span>
+        <span style={{width:70,textAlign:"right" as const}}>SALDO</span>
+        <span style={{width:88,textAlign:"center" as const}}>{op==="ajuste"?"CONTADO":"LANÇAR"}</span>
+        <span style={{width:70,textAlign:"right" as const}}>FICA</span>
+      </div>
+      {(busca?opcoes:mps).slice(0,200).map((m:any)=>{
+        const v=lote[m.id]||"";
+        const dep=saldoDepois(m,v);
+        const antes=parseFloat(m.estoqueAtual)||0;
+        return <div key={m.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 2px",borderBottom:"1px solid var(--border)"}}>
+          <span style={{flex:1,fontSize:12.5,minWidth:0}}>
+            {m.codigoEcletica&&<span style={{fontFamily:"monospace",color:"var(--text3)",fontSize:10,marginRight:5}}>{m.codigoEcletica}</span>}
+            {m.nome}
+          </span>
+          <span style={{width:70,textAlign:"right" as const,fontFamily:"monospace",fontSize:12,color:antes<0?"var(--dangerText)":"var(--text2)"}}>
+            {antes.toFixed(2)}
+          </span>
+          <input type="number" min="0" step="any" className="inp" style={{width:88,marginBottom:0,textAlign:"center"}}
+            value={v} onChange={e=>setLote(x=>({...x,[m.id]:e.target.value}))}/>
+          <span style={{width:70,textAlign:"right" as const,fontFamily:"monospace",fontSize:12,fontWeight:700,
+            color:dep==null?"var(--text3)":dep<0?"var(--dangerText)":"var(--text)"}}>
+            {dep==null?"—":dep.toFixed(2)}
+          </span>
+        </div>;
+      })}
+      {!busca&&mps.length>200&&<div className="muted" style={{fontSize:11,padding:"8px 0"}}>Mostrando 200 de {mps.length}. Use o filtro.</div>}
+
+      <div style={{fontSize:12,color:"var(--text2)",marginTop:10}}>
+        {preenchidos.length} produto(s) preenchido(s) — linha em branco não é zero, ela fica de fora.
+      </div>
+      <button className="btn" disabled={!preenchidos.length} onClick={lancarLote}
+        style={{width:"100%",marginTop:8,background:preenchidos.length?"var(--btnPrimary)":"var(--border)",color:preenchidos.length?"var(--onPrimary,#FFFFFF)":"#888",padding:"12px",fontSize:14,fontWeight:700}}>
+        ✅ Lançar {preenchidos.length} movimento(s)
+      </button>
+    </div>}
+
+    {modo==="um"&&<div className="card" style={{marginBottom:12}}>
       <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Item</label>
       {item
         ? <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
@@ -13118,10 +13271,11 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
               </div>;
             })}
             {!mps.length&&<div className="muted" style={{fontSize:12,padding:"10px 0",lineHeight:1.5}}>
-              Nenhum produto do Eclética ainda. Importe em <strong>Estoque → Produtos Eclética</strong>.
+              Nenhum produto marcado como <strong>produção própria</strong>.
+              {semSaldoProprio>0&&<> Existem {semSaldoProprio} de revenda/dose, mas o saldo delas são as marcas da lista de compras.</>}
             </div>}
             {busca&&!opcoes.length&&mps.length>0&&<div className="muted" style={{fontSize:12,padding:"10px 0",lineHeight:1.5}}>
-              Nada encontrado entre os produtos do Eclética. Para ajustar um <strong>insumo</strong>, use Estoque → Inventário.
+              Nada encontrado entre os produtos de produção própria. Para <strong>insumo</strong>, use Estoque → Inventário; para <strong>revenda ou dose</strong>, ajuste a marca por lá.
             </div>}
             {!busca&&mps.length>25&&<div className="muted" style={{fontSize:11,padding:"8px 0"}}>Mostrando 25 de {mps.length}. Use a busca.</div>}
           </>}
@@ -13143,6 +13297,24 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
           <input type="date" className="inp" style={{maxWidth:150,marginBottom:0}} value={dataMov} onChange={e=>setDataMov(e.target.value)}/>
         </div>
         <input className="inp" placeholder="Motivo (opcional)" value={motivo} onChange={e=>setMotivo(e.target.value)}/>
+
+        {(()=>{
+          // Mostrar o resultado ANTES de confirmar: sem isso a pessoa só
+          // descobre que zerou (ou negativou) o item depois de já ter gravado.
+          const n=parseFloat(qtd);
+          if(!Number.isFinite(n)||n<0)return null;
+          const antes=parseFloat(item.estoqueAtual)||0;
+          const depois=op==="ajuste"?n:(op==="saida"?antes-n:antes+n);
+          const neg=depois<0;
+          return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,
+            background:neg?"var(--dangerBg)":"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:10,flexWrap:"wrap" as const}}>
+            <span style={{fontSize:12,color:"var(--text2)"}}>Saldo depois deste lançamento</span>
+            <span style={{fontFamily:"monospace",fontSize:14,fontWeight:700,color:neg?"var(--dangerText)":"var(--text)"}}>
+              {antes.toFixed(2)} → {depois.toFixed(2)} {item.unidade||"un"}
+              {neg&&<span style={{fontSize:11,fontWeight:400,marginLeft:6}}>⚠ negativo</span>}
+            </span>
+          </div>;
+        })()}
 
         {op==="producao"&&<div style={{background:"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
           {!ficha&&<div style={{fontSize:11.5,color:"var(--warningText)"}}>
@@ -13168,7 +13340,7 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
           ✅ Confirmar
         </button>
       </>}
-    </div>
+    </div>}
   </div>;
 }
 
@@ -13187,10 +13359,23 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
     // produto da lista, e o produto do cardápio é só o nome pelo qual se vende.
     // Mostrar aqui um número guardado seria uma segunda contabilidade da mesma
     // garrafa — e as duas divergiriam na primeira compra.
-    if(tipo==="revenda"){
+    if(tipo==="revenda"||tipo==="dose"){
       const {produtoLista,marcas}=resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica});
-      const un=marcas.reduce((sa:number,x:any)=>sa+(parseFloat(x.estoqueAtual)||0)*(parseFloat(x.unidadesPorEmbalagem)||1),0);
       const valor=marcas.reduce((sa:number,x:any)=>sa+(parseFloat(x.estoqueAtual)||0)*(parseFloat(x.ultimoValor)||0),0);
+      if(tipo==="dose"){
+        // Dose é PARTE do produto: o saldo útil é "quantas doses ainda cabem no
+        // que há nas marcas". Mostrar o kg de queijo aqui não responde a
+        // pergunta de quem olha a tela.
+        const porDose=parseFloat(m.qtdPorDose)||0;
+        const un=m.unidadeDose||"g";
+        const total=marcas.reduce((sa:number,x:any)=>{
+          const f=converterQtd(parseFloat(x.estoqueAtual)||0,x.unidade||"un",un);
+          return sa+(f==null?0:f);
+        },0);
+        return{...m,tipo,saldo:porDose>0?total/porDose:0,valor,calculado:true,produtoLista,marcas,
+          detalhe:porDose>0?`${total.toFixed(0)} ${un} ÷ ${porDose} ${un}`:"falta dizer quanto sai por dose"};
+      }
+      const un=marcas.reduce((sa:number,x:any)=>sa+(parseFloat(x.estoqueAtual)||0)*(parseFloat(x.unidadesPorEmbalagem)||1),0);
       return{...m,tipo,saldo:un,valor,calculado:true,produtoLista,marcas};
     }
     const saldo=parseFloat(m.estoqueAtual)||0;
@@ -13232,7 +13417,7 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
   };
   // Revenda não tem saldo próprio — quem tem são as marcas. Ajustar por aqui
   // gravaria um número que a tela nem lê, e a pessoa acharia ter corrigido.
-  const podeAjustar=(l:any)=>l.tipo!=="revenda";
+  const podeAjustar=(l:any)=>l.tipo!=="revenda"&&l.tipo!=="dose";
   const excluir=(l:any)=>{
     const saldo=parseFloat(l.estoqueAtual)||0;
     if(!confirm(`Excluir "${l.nome}"?${saldo?`\n\nEle ainda tem saldo de ${saldo} ${l.unidade||"un"}.`:""}\n\nO histórico de movimentações dele continua em Estoque → Movimentações.`))return;
@@ -13285,7 +13470,7 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
                 <span style={{display:"block",fontSize:10,fontWeight:400,color:"var(--text3)"}}>
                   = {(l.saldo*(parseFloat(l.unidadesPorEmbalagem)||1)).toFixed(0)} un
                 </span>}
-              {l.calculado&&<span style={{display:"block",fontSize:10,fontWeight:400,color:"var(--text3)"}}>somado das marcas</span>}
+              {l.calculado&&<span style={{display:"block",fontSize:10,fontWeight:400,color:"var(--text3)"}}>{l.detalhe||"somado das marcas"}</span>}
             </span>
           </div>
           {editando===l.id&&<div style={{padding:"0 12px 12px",background:"var(--bg)"}}>
@@ -13323,7 +13508,7 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
               O <strong>código</strong> é o que amarra o produto à venda do Eclética — é por ele que a venda acha este item, sem vínculo manual nenhum.
               {podeAjustar(l)
                 ?<> Para corrigir o saldo, use Estoque → Manutenção (Ajuste).</>
-                :<> O saldo de revenda é <strong>somado das marcas</strong> na lista de compras — corrija lá, em Estoque → Inventário.</>}
+                :<> O saldo de revenda e dose vem das <strong>marcas</strong> da lista de compras — corrija lá, em Estoque → Inventário.</>}
             </div>
             <div style={{display:"flex",gap:8}}>
               <button className="btn" onClick={()=>salvar(l)} style={{flex:1,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"9px",fontSize:13}}>Salvar</button>
@@ -20529,7 +20714,7 @@ const resolverItemVendido=(db:any,venda:{nome?:string,cod?:string})=>{
   // Fundir o produto do cardápio com UMA marca deixaria a outra órfã: a NF-e
   // dela alimentaria um registro que a venda não olha mais.
   const prods=db?.produtosLista||[];
-  const produtoLista=tipo==="revenda"
+  const produtoLista=(tipo==="revenda"||tipo==="dose")
     ?((item?.prodListaId&&prods.find((p:any)=>p.id===item.prodListaId))
       ||prods.find((p:any)=>p?.nome&&foldNome(p.nome)===foldNome(item?.nome||""))
       ||null)

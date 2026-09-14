@@ -111,10 +111,21 @@ export function aplicarMovimento({ movEstoque, materiasPrimas, item, operacao, q
 //
 // qtdUnidades vem em unidade de VENDA (lata, garrafa). Cada marca converte pela
 // própria embalagem: 12 latas podem ser 1 caixa numa marca e 2 packs de 6 noutra.
-export function distribuirEntreMarcas(mps, qtdUnidades) {
-  const lista = (mps || []).filter(Boolean);
+// unidadeAlvo opcional: quando a venda é medida noutra unidade que não a
+// "unidade de venda" (DOSE em gramas, marca em kg), a conversão é de massa ou
+// volume, não de embalagem. Marca que não converte fica de fora — baixar um
+// número inventado seria pior que não baixar.
+export function distribuirEntreMarcas(mps, qtdUnidades, unidadeAlvo) {
+  let lista = (mps || []).filter(Boolean);
   if (!lista.length || !(qtdUnidades > 0)) return [];
-  const emb = (m) => parseFloat(m.unidadesPorEmbalagem) || 1;
+  // Quantas "unidades de venda" cabem em 1 unidade da marca.
+  const emb = (m) => {
+    if (!unidadeAlvo) return parseFloat(m.unidadesPorEmbalagem) || 1;
+    const f = converterQtd(1, m.unidade || 'un', unidadeAlvo);
+    return f == null ? null : f;
+  };
+  lista = lista.filter((m) => emb(m) != null && emb(m) > 0);
+  if (!lista.length) return [];
   const dispUn = (m) => Math.max(0, (parseFloat(m.estoqueAtual) || 0) * emb(m));
 
   const ord = [...lista].sort((a, b) => dispUn(b) - dispUn(a));

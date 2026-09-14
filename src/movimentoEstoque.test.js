@@ -155,3 +155,36 @@ test('rateio entre marcas do mesmo produto', async (t) => {
     assert.equal(r.reduce((s, x) => s + x.unidades, 0), 10);
   });
 });
+
+test('dose: parte de um produto da lista', async (t) => {
+  // "Dose extra de mussarela" são 25 g do queijo que já está na lista, comprado
+  // em kg. A conversão aqui é de MASSA, não de embalagem.
+  const queijo = { id: 'q', nome: 'Queijo mussarela', unidade: 'kg', estoqueAtual: 2 };
+
+  await t.test('converte grama para quilo ao baixar', () => {
+    // 10 doses × 25 g = 250 g = 0,25 kg
+    const r = distribuirEntreMarcas([queijo], 250, 'g');
+    assert.equal(r.length, 1);
+    assert.equal(r[0].qtd, 0.25);
+    assert.equal(r[0].unidades, 250);
+  });
+
+  await t.test('cascateia entre marcas pela massa disponível', () => {
+    const b = { id: 'b', nome: 'Marca B', unidade: 'kg', estoqueAtual: 0.1 };
+    const r = distribuirEntreMarcas([queijo, b], 2500, 'g');
+    assert.equal(r[0].mp.id, 'q', 'tira primeiro de quem tem mais');
+    assert.equal(r[0].unidades, 2000, '2 kg = 2000 g');
+    assert.equal(r[1].unidades, 500, 'o resto vai pra B, que fica negativa');
+  });
+
+  await t.test('marca com unidade que não converte fica de fora', () => {
+    // Queijo em "pct" e dose em "g": qualquer número aqui seria inventado.
+    const pct = { id: 'p', nome: 'Queijo pct', unidade: 'pct', estoqueAtual: 5 };
+    assert.deepEqual(distribuirEntreMarcas([pct], 250, 'g'), []);
+  });
+
+  await t.test('sem unidadeAlvo continua sendo conversão de embalagem', () => {
+    const cx = { id: 'c', nome: 'Coca cx', unidade: 'cx', estoqueAtual: 5, unidadesPorEmbalagem: 12 };
+    assert.equal(distribuirEntreMarcas([cx], 24)[0].qtd, 2);
+  });
+});

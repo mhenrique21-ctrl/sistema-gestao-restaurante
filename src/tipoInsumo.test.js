@@ -101,9 +101,10 @@ test('o que a venda faz com o estoque', async (t) => {
     assert.equal(baixaDaVenda('produzido'), 'proprio');
   });
 
-  await t.test('dose baixa o insumo pela ficha', () => {
-    // Não se estoca "fatia de queijo": se estoca queijo, e a fatia sai na hora.
-    assert.equal(baixaDaVenda('dose'), 'ficha');
+  await t.test('dose baixa o produto da lista, como a revenda', () => {
+    // Dose é uma PARTE do produto: 25 g do queijo que já está na lista. Uma
+    // ficha técnica de uma linha só seria cadastro a mais pra dizer o mesmo.
+    assert.equal(baixaDaVenda('dose'), 'lista');
   });
 
   await t.test('insumo e interno não são vendidos', () => {

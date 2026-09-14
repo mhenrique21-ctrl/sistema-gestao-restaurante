@@ -5,7 +5,7 @@
 //   insumo     comprado, vira ingrediente          farinha, queijo em kg
 //   revenda    comprado e vendido como está        água, coca, cerveja
 //   produzido  feito na cozinha, tem ficha         bolo, pão de queijo
-//   dose       porção vendida à parte              fatia de queijo, bacon
+//   dose       PARTE de um produto da lista        25 g do queijo mussarela
 //   interno    não sai por venda                   detergente, saco de lixo
 //
 // O QUE CADA UM FAZ AO SER VENDIDO — a regra inteira em três linhas:
@@ -15,8 +15,9 @@
 //              cardápio. Guardar saldo nos dois seria contabilidade em dobro
 //   produzido  baixa o PRÓPRIO saldo (o insumo já saiu quando foi produzido;
 //              baixar de novo aqui contaria a farinha duas vezes)
-//   dose       baixa o INSUMO pela ficha, porque não se estoca "fatia de
-//              queijo" — se estoca queijo, e a fatia é tirada na hora
+//   dose       baixa o mesmo produto da lista que a revenda, só que por uma
+//              QUANTIDADE por venda: uma dose de mussarela é 25 g do queijo
+//              que já está lá. Não precisa de ficha técnica pra isso
 //
 // Mora aqui, fora do App.tsx, por dois motivos: a regra automática precisa de
 // teste (ela decide sozinha o destino da maioria dos insumos, e um engano aqui
@@ -120,7 +121,10 @@ export function baixaDaVenda(tipo) {
   // produzido tem saldo próprio: o bolo pronto existe fisicamente e não vem de
   // compra — o insumo dele já saiu quando a produção foi registrada.
   if (tipo === 'produzido') return 'proprio';
-  if (tipo === 'dose') return 'ficha';
+  // dose é uma PARTE do produto da lista — mesma origem da revenda, só que
+  // multiplicada por qtdPorDose. Ficha técnica de uma linha só seria cadastro
+  // a mais pra dizer a mesma coisa.
+  if (tipo === 'dose') return 'lista';
   return 'nenhum';           // insumo e interno não são vendidos
 }
 

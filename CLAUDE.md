@@ -271,7 +271,7 @@ movimentações pra ela. **Não crie.**
 insumo     comprado, vira ingrediente        farinha, queijo em kg
 revenda    comprado e vendido como está      água, coca, cerveja
 produzido  feito na cozinha, tem ficha       bolo, pão de queijo
-dose       porção vendida à parte            fatia de queijo, bacon
+dose       PARTE de um produto da lista      25 g do queijo mussarela
 interno    não sai por venda                 detergente
 ```
 
@@ -281,7 +281,7 @@ interno    não sai por venda                 detergente
 |---|---|
 | revenda | as **marcas** do produto da lista (`distribuirEntreMarcas`) |
 | produzido | o **próprio** saldo |
-| dose | o **insumo pela ficha** — não se estoca "fatia de queijo" |
+| dose | as **marcas** também, × `qtdPorDose` (1 dose = 25 g do queijo) |
 | insumo, interno | nada |
 
 ⚠️ `produzido` baixa o próprio saldo e **não** a ficha: o insumo já saiu quando
@@ -310,11 +310,14 @@ produção sai em g/kg pela ficha, que tem a própria conversão (`porcoes`).
 
 - **Saldo Estoque** — todos os itens com saldo, filtro por tipo. Abre em
   "Produtos" (revenda/produzido/dose); insumo e interno ficam atrás do filtro
-- **Manutenção de Produtos** — Produção · Entrada · Saída · Ajuste. Lista só
-  **produto do Eclética** (tem `codigoEcletica` ou tipo vendável); ajuste de
-  INSUMO continua em Estoque → Inventário. Misturar os dois faria a busca
-  devolver "Queijo" (o kg) junto com "Queijo fatia" (a dose), e a pessoa
-  baixaria do item errado. `src/movimentoEstoque.js`, com testes
+- **Manutenção de Produtos** — Produção · Entrada · Saída · Ajuste, em **um
+  item** ou **vários de uma vez**. Lista só tipo **`produzido`**: é quem tem
+  saldo próprio. Insumo se ajusta em Estoque → Inventário; revenda e dose não
+  têm saldo próprio e lançar movimento nelas gravaria um número que nenhuma
+  tela lê. As duas telas mostram o **saldo resultante antes de confirmar**
+  (`4,00 → 16,00`, vermelho quando negativo). No lote, uma operação/data/motivo
+  valem pro bloco e **linha em branco não é zero** — fica de fora.
+  `src/movimentoEstoque.js`, com testes
 - **Produtos Eclética** — importa o cardápio. A marcação é **por ITEM**; o botão
   do grupo é só um atalho que escreve em todos os itens dele, para não existirem
   duas fontes de verdade na hora de importar. Cada grupo abre e mostra os
@@ -330,7 +333,7 @@ data, hora, "Página"). Lido como CSV comum dá 281 cabeçalhos e zero produtos.
 posição 24 — fixar quebra se o Eclética acrescentar uma coluna. Planilha comum
 com cabeçalho também é aceita.
 
-### Revenda: o saldo mora nas MARCAS, não no produto do cardápio
+### Revenda e DOSE: o saldo mora nas MARCAS, não no produto do cardápio
 
 Estoque → Produtos Eclética → aba **Conciliar**. O produto de revenda do
 cardápio aponta para um **produto da LISTA DE COMPRAS** (`prodListaId`), e a
@@ -361,6 +364,20 @@ e 2 packs de 6 noutra.
 
 O botão **"+ criar na lista"** cobre a revenda que nunca teve compra: cria o item
 na lista e vincula, e a primeira NF-e já cai nele.
+
+**DOSE é uma PARTE do produto da lista**, não uma receita: 1 dose de mussarela
+são 25 g do queijo que já se compra. Campos `qtdPorDose` + `unidadeDose` no
+item; a baixa é a mesma da revenda multiplicada por `qtdPorDose`, e a conversão
+passa a ser de **massa/volume** (g↔kg) em vez de embalagem —
+`distribuirEntreMarcas(marcas, total, unidadeDose)`. Marca cuja unidade não
+converte fica de fora em vez de baixar número inventado.
+
+⚠️ Dose NÃO precisa de ficha técnica. Houve uma versão que pedia "ficha de uma
+linha" pra isso — era cadastro a mais pra dizer a mesma coisa.
+
+Em Saldo Estoque, dose mostra **quantas doses ainda cabem** no que há nas marcas
+(`2000 g ÷ 25 g`), não o quilo de queijo: quem abre a tela quer saber quantas
+fatias tem, não quanto pesa o bloco.
 
 ### Identidade do item: o CÓDIGO, não o nome
 
