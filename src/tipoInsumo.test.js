@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tipoPadraoPorCategoria, tipoDoInsumo, pendenciasDeInsumo, baixaDaVenda, ehProdutoVendido } from './tipoInsumo.js';
+import { tipoPadraoPorCategoria, tipoDoInsumo, pendenciasDeInsumo, baixaDaVenda, ehProdutoVendido, chaveTipo } from './tipoInsumo.js';
 
 test('regra automática por categoria contábil', async (t) => {
   await t.test('a própria categoria já responde pra revenda', () => {
@@ -122,5 +122,38 @@ test('compatibilidade com a marcação anterior', async (t) => {
     // mais seguro que migrar dado: quem marcou não perde o trabalho.
     assert.deepEqual(tipoDoInsumo({ farinha: 'producao' }, { nome: 'Farinha', categoria: 'Outros' }),
       { tipo: 'insumo', origem: 'marcado' });
+  });
+});
+
+test('código como identidade do produto', async (t) => {
+  await t.test('produto com código é marcado pelo código, não pelo nome', () => {
+    const mp = { nome: 'Agua Mineral', codigoEcletica: '165', categoria: 'Outros' };
+    assert.equal(chaveTipo(mp), 'cod:165');
+    assert.equal(tipoDoInsumo({ 'cod:165': 'revenda' }, mp).tipo, 'revenda');
+  });
+
+  await t.test('renomear no Gestão NÃO perde a marcação', () => {
+    // É o motivo de existir: mudar o nome do produto não pode desfazer o
+    // trabalho de classificação nem desvincular a venda.
+    const mapa = { 'cod:165': 'revenda' };
+    const renomeado = { nome: 'Água Mineral 500ml', codigoEcletica: '165', categoria: 'Outros' };
+    assert.equal(tipoDoInsumo(mapa, renomeado).tipo, 'revenda');
+  });
+
+  await t.test('insumo sem código continua pelo nome', () => {
+    const mp = { nome: 'Farinha', categoria: 'Outros' };
+    assert.equal(chaveTipo(mp), 'farinha');
+    assert.equal(tipoDoInsumo({ farinha: 'insumo' }, mp).tipo, 'insumo');
+  });
+
+  await t.test('marcação antiga por nome continua valendo depois de ganhar código', () => {
+    // Quem marcou antes da importação não precisa marcar de novo.
+    const mp = { nome: 'Agua Mineral', codigoEcletica: '165', categoria: 'Outros' };
+    assert.equal(tipoDoInsumo({ 'agua mineral': 'revenda' }, mp).tipo, 'revenda');
+  });
+
+  await t.test('o código vence o nome quando os dois existem', () => {
+    const mp = { nome: 'Agua Mineral', codigoEcletica: '165', categoria: 'Outros' };
+    assert.equal(tipoDoInsumo({ 'cod:165': 'dose', 'agua mineral': 'revenda' }, mp).tipo, 'dose');
   });
 });

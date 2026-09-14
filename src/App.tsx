@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 // esquecer de dividir por `porcoes` ou converter g↔kg dá um número que continua
 // parecendo plausível na tela. Lá tem teste travando as duas.
 import {converterQtd,consumoTeorico,aplicarBaixaVendas,idBaixaVenda} from "./consumoTeorico.js";
-import {tipoDoInsumo,pendenciasDeInsumo,ehProdutoVendido,baixaDaVenda} from "./tipoInsumo.js";
+import {tipoDoInsumo,pendenciasDeInsumo,ehProdutoVendido,baixaDaVenda,chaveTipo} from "./tipoInsumo.js";
 import {aplicarMovimento,insumosDaProducao} from "./movimentoEstoque.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
@@ -12356,12 +12356,19 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
       const cur=dia[mp.id]||(dia[mp.id]={nome:mp.nome,unidade:mp.unidade||"un",qtd:0,custo:0,fontes:new Set<string>()});
       cur.qtd+=qtd; cur.custo+=custo; cur.fontes.add(fonte);
     };
+    // Casa por CÓDIGO primeiro: o XML da NFC-e traz cProd, e o código é o que
+    // não muda quando alguém renomeia o produto de um lado ou do outro.
+    const porCod=new Map<string,any>();
     const porNome=new Map<string,any>();
-    mpsTodas.forEach((m:any)=>{if(m?.nome)porNome.set(foldNome(m.nome),m);});
+    mpsTodas.forEach((m:any)=>{
+      if(m?.codigoEcletica)porCod.set(String(m.codigoEcletica),m);
+      if(m?.nome)porNome.set(foldNome(m.nome),m);
+    });
+    const acharItem=(p:any)=>(p.cod&&porCod.get(String(p.cod)))||porNome.get(foldNome(p.nome))||null;
 
     Array.from(vendasPorDia.entries()).forEach(([data,prods]:any)=>{
       Array.from(prods.values()).forEach((p:any)=>{
-        const item=porNome.get(foldNome(p.nome));
+        const item=acharItem(p);
         const tipo=item?tipoDoInsumo(mapaTipo,item).tipo:null;
         const modo=baixaDaVenda(tipo);
 
@@ -12745,23 +12752,71 @@ Aqui só ficam as <strong>exceções</strong>. Quem tem ficha técnica de mesmo 
 // Separador detectado do cabeçalho: planilha brasileira sai com ";" quando o
 // Excel está em pt-BR e com "," quando veio de outro lugar. Adivinhar errado
 // transforma a linha inteira numa coluna só.
-const lerCSV=(texto:string)=>{
-  const linhas=texto.replace(/^﻿/,"").split(/\r?\n/).filter(l=>l.trim());
-  if(!linhas.length)return{cabecalho:[],linhas:[]};
+const quebrarCSV=(l:string,sep:string)=>{
+  const out:string[]=[];let cur="",aspas=false;
+  for(let i=0;i<l.length;i++){
+    const c=l[i];
+    if(c==='"'){ if(aspas&&l[i+1]==='"'){cur+='"';i++;} else aspas=!aspas; }
+    else if(c===sep&&!aspas){out.push(cur);cur="";}
+    else cur+=c;
+  }
+  out.push(cur);
+  return out.map(v=>v.trim());
+};
+
+// Lê a exportação de produtos do Eclética. O arquivo NÃO é uma tabela: é um
+// relatório (RelCadProdutosT.rpt) em que CADA LINHA repete os rótulos das
+// colunas, depois um bloco de campos vazios, depois os dados, e no fim o rodapé
+// (nome do .rpt, data, hora, "Página"). Tratar como CSV comum lê 281 linhas de
+// cabeçalho e zero produtos.
+//
+// Em vez de fixar a posição 24 — que muda se o Eclética acrescentar uma coluna —
+// descarta os rótulos, os vazios e o rodapé, e o que sobra são os 10 campos de
+// dados na ordem: código, descrição, linha, grupo, unidade, status, %ICMS,
+// situação tributária, preço, adicional de delivery.
+const RELATORIO_RODAPE=/^(relat[óo]rio\s*-|P[áa]gina\b|\d{2}\/\d{2}\/\d{4}$|\d{2}:\d{2}:\d{2}$)/i;
+const RELATORIO_ROTULOS=["produtos","cod. prod.","descricao","linha","grupo","unid. fis.","status item","% icms","sit. trib.","preco","adic. dely."];
+const lerProdutosEcletica=(texto:string)=>{
+  const linhas=texto.replace(/^\uFEFF/,"").split(/\r?\n/).filter(l=>l.trim());
+  if(!linhas.length)return{itens:[],formato:"vazio"};
   const sep=(linhas[0].match(/;/g)||[]).length>(linhas[0].match(/,/g)||[]).length?";":",";
-  const quebrar=(l:string)=>{
-    const out:string[]=[];let cur="",aspas=false;
-    for(let i=0;i<l.length;i++){
-      const c=l[i];
-      if(c==='"'){ if(aspas&&l[i+1]==='"'){cur+='"';i++;} else aspas=!aspas; }
-      else if(c===sep&&!aspas){out.push(cur);cur="";}
-      else cur+=c;
-    }
-    out.push(cur);
-    return out.map(v=>v.trim());
-  };
-  const cabecalho=quebrar(linhas[0]).map(h=>foldNome(h));
-  return{cabecalho,linhas:linhas.slice(1).map(quebrar)};
+  const rotulos=new Set(RELATORIO_ROTULOS);
+  const ehRelatorio=quebrarCSV(linhas[0],sep).filter(v=>rotulos.has(foldNome(v))).length>=5;
+
+  if(ehRelatorio){
+    const itens=linhas.map(l=>{
+      const campos=quebrarCSV(l,sep)
+        .filter(v=>v&&!rotulos.has(foldNome(v))&&!RELATORIO_RODAPE.test(v));
+      if(campos.length<5)return null;
+      const [codigo,descricao,,grupo,unidade,,,,preco]=campos;
+      if(!descricao)return null;
+      return{codigo:(codigo||"").trim(),nome:descricao.trim(),
+        grupo:(grupo||"SEM GRUPO").trim()||"SEM GRUPO",
+        unidade:/^unid/i.test(unidade||"")?"un":((unidade||"un").trim()||"un"),
+        preco:parseFloat(String(preco||"0").replace(/\./g,"").replace(",","."))||0};
+    }).filter(Boolean) as any[];
+    return{itens,formato:"relatório do Eclética"};
+  }
+
+  // Planilha normal, com cabeçalho na primeira linha.
+  const cabecalho=quebrarCSV(linhas[0],sep).map(h=>foldNome(h));
+  const col=(...nomes:string[])=>{for(const n of nomes){const i=cabecalho.indexOf(foldNome(n));if(i>=0)return i;}return -1;};
+  const iNome=col("descricao do produto","descricao","produto","nome");
+  if(iNome<0)return{itens:[],formato:"desconhecido"};
+  const iCod=col("codigo","cod","cod. prod.","codigo do produto");
+  const iUn=col("unidade fisica","unid. fis.","unidade","un");
+  const iGrupo=col("grupo de produtos","grupo","linha de produtos","departamentos","categoria");
+  const iPreco=col("preco","valor");
+  const itens=linhas.slice(1).map(l=>{
+    const c=quebrarCSV(l,sep);
+    const nome=(c[iNome]||"").trim();
+    if(!nome)return null;
+    return{nome,codigo:iCod>=0?(c[iCod]||"").trim():"",
+      grupo:iGrupo>=0?((c[iGrupo]||"SEM GRUPO").trim()||"SEM GRUPO"):"SEM GRUPO",
+      unidade:iUn>=0?(/^unid/i.test(c[iUn]||"")?"un":((c[iUn]||"un").trim()||"un")):"un",
+      preco:iPreco>=0?(parseFloat(String(c[iPreco]||"0").replace(/\./g,"").replace(",","."))||0):0};
+  }).filter(Boolean) as any[];
+  return{itens,formato:"planilha"};
 };
 
 function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
@@ -12769,36 +12824,35 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
   const [erro,setErro]=useState("");
   const [tipoPorGrupo,setTipoPorGrupo]=useState<Record<string,string>>({});
 
+  const [formato,setFormato]=useState("");
   const carregar=(file:File)=>{
     const rd=new FileReader();
     rd.onload=()=>{
       try{
-        const {cabecalho,linhas}=lerCSV(String(rd.result||""));
-        const col=(...nomes:string[])=>{
-          for(const n of nomes){const i=cabecalho.indexOf(foldNome(n));if(i>=0)return i;}
-          return -1;
-        };
-        const iNome=col("descricao do produto","descricao","produto","nome");
-        const iCod=col("codigo","cod","codigo do produto");
-        const iUn=col("unidade fisica","unidade","un");
-        const iGrupo=col("grupo de produtos","grupo","linha de produtos","departamentos","categoria");
-        if(iNome<0){setErro('Não achei a coluna de descrição. A planilha precisa ter "Descrição do produto".');setLidos(null);return;}
-        const itens=linhas.map(l=>({
-          nome:(l[iNome]||"").trim(),
-          codigo:iCod>=0?(l[iCod]||"").trim():"",
-          unidade:iUn>=0?((l[iUn]||"").toLowerCase().startsWith("unid")?"un":(l[iUn]||"un").trim()):"un",
-          grupo:iGrupo>=0?((l[iGrupo]||"SEM GRUPO").trim()||"SEM GRUPO"):"SEM GRUPO",
-        })).filter(i=>i.nome);
-        if(!itens.length){setErro("Nenhuma linha com descrição preenchida.");setLidos(null);return;}
-        setErro("");setLidos(itens);
+        const {itens,formato:f}=lerProdutosEcletica(String(rd.result||""));
+        if(!itens.length){
+          setErro(f==="desconhecido"
+            ?'Não reconheci o arquivo. Exporte a lista de produtos do Eclética em CSV, ou use uma planilha com a coluna "Descrição do produto".'
+            :"Nenhuma linha com descrição preenchida.");
+          setLidos(null);return;
+        }
+        setErro("");setFormato(f);setLidos(itens);
       }catch(e:any){setErro("Não consegui ler o arquivo: "+e.message);setLidos(null);}
     };
     rd.readAsText(file,"utf-8");
   };
 
-  const existentes=new Set((db.materiasPrimas||[]).map((m:any)=>foldNome(m.nome)));
+  // Conferência por CÓDIGO primeiro: renomear o produto no Gestão não pode
+  // fazer a próxima importação criar uma segunda cópia dele.
+  const porCodigo=new Map<string,any>();
+  const porNome=new Map<string,any>();
+  (db.materiasPrimas||[]).forEach((m:any)=>{
+    if(m?.codigoEcletica)porCodigo.set(String(m.codigoEcletica),m);
+    if(m?.nome)porNome.set(foldNome(m.nome),m);
+  });
+  const achar=(i:any)=>(i.codigo&&porCodigo.get(String(i.codigo)))||porNome.get(foldNome(i.nome))||null;
   const grupos=lidos?Array.from(new Set(lidos.map(i=>i.grupo))).sort():[];
-  const novos=lidos?lidos.filter(i=>!existentes.has(foldNome(i.nome))):[];
+  const novos=lidos?lidos.filter(i=>!achar(i)):[];
   const jaExistem=lidos?lidos.length-novos.length:0;
   const semTipo=grupos.filter(g=>!tipoPorGrupo[g]);
 
@@ -12808,17 +12862,32 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     if(!confirm(`Importar ${novos.length} produto(s) novo(s)?\n\n${jaExistem} já existem e não serão duplicados — só recebem o tipo marcado.\n\nTodos entram com saldo ZERO. Use Manutenção pra lançar o saldo inicial.`))return;
     (setDbAndSave||setDb)((d:any)=>{
       const mps=[...(d.materiasPrimas||[])];
-      const vistos=new Set(mps.map((m:any)=>foldNome(m.nome)));
+      const idxCod=new Map<string,number>();
+      const idxNome=new Map<string,number>();
+      mps.forEach((m:any,n:number)=>{
+        if(m?.codigoEcletica)idxCod.set(String(m.codigoEcletica),n);
+        if(m?.nome)idxNome.set(foldNome(m.nome),n);
+      });
       const tipos={...(d.tipoInsumo||{})};
       lidos.forEach(i=>{
-        const k=foldNome(i.nome);
+        const n=(i.codigo&&idxCod.get(String(i.codigo)))??idxNome.get(foldNome(i.nome));
         const t=tipoPorGrupo[i.grupo];
-        if(t)tipos[k]=t;
-        if(vistos.has(k))return;
-        vistos.add(k);
-        mps.push({id:uid(),nome:i.nome,unidade:i.unidade||"un",categoria:"Outros",
-          grupoEcletica:i.grupo,codigoEcletica:i.codigo,estoqueAtual:0,ultimoValor:0,
-          criadoEm:agora,atualizadoEm:agora});
+        if(n!=null){
+          // Já existe: NÃO duplica e NÃO sobrescreve o nome — quem renomeou no
+          // Gestão fez isso de propósito. Só completa o código, que é o que
+          // amarra o item à venda daqui pra frente.
+          const atual=mps[n];
+          if(i.codigo&&!atual.codigoEcletica)mps[n]={...atual,codigoEcletica:i.codigo,grupoEcletica:i.grupo,atualizadoEm:agora};
+          if(t)tipos[chaveTipo(mps[n])]=t;
+          return;
+        }
+        const novo={id:uid(),nome:i.nome,unidade:i.unidade||"un",categoria:"Outros",
+          grupoEcletica:i.grupo,codigoEcletica:i.codigo,precoEcletica:i.preco||0,
+          estoqueAtual:0,ultimoValor:0,criadoEm:agora,atualizadoEm:agora};
+        mps.push(novo);
+        if(i.codigo)idxCod.set(String(i.codigo),mps.length-1);
+        idxNome.set(foldNome(i.nome),mps.length-1);
+        if(t)tipos[chaveTipo(novo)]=t;
       });
       return{...d,materiasPrimas:mps,tipoInsumo:tipos};
     });
@@ -12832,8 +12901,8 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     <div className="card" style={{marginBottom:12}}>
       <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.6}}>
         Exporte a lista de produtos do Eclética em <strong>CSV</strong> e escolha o arquivo aqui.
-        Colunas usadas: <strong>Descrição do produto</strong> (obrigatória), Código, Unidade física e Grupo de produtos.
-        <br/>Produto que já existe no estoque não é duplicado.
+        Aceita o <strong>relatório de produtos</strong> do Eclética direto (aquele que repete os rótulos em cada linha) e também planilha comum.
+        <br/>A conferência é pelo <strong>código</strong> do produto: renomear no Gestão não cria cópia na próxima importação.
       </div>
       <input type="file" accept=".csv,text/csv,text/plain" className="inp" style={{marginBottom:0}}
         onChange={e=>{const f=e.target.files?.[0];if(f)carregar(f);}}/>
@@ -12843,7 +12912,7 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     {lidos&&<>
       <div className="card" style={{marginBottom:12}}>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
-          <span style={{color:"var(--text2)"}}>Linhas lidas</span><strong>{lidos.length}</strong>
+          <span style={{color:"var(--text2)"}}>Linhas lidas <span style={{fontSize:10,color:"var(--text3)"}}>({formato})</span></span><strong>{lidos.length}</strong>
         </div>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
           <span style={{color:"var(--text2)"}}>Já existem no estoque</span><strong>{jaExistem}</strong>
@@ -13006,9 +13075,11 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
 }
 
 // ===================== ESTOQUE → SALDO =====================
-function SaldoEstoquePanel({db,onVoltar}:{db:any,onVoltar:()=>void}){
+function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [filtro,setFiltro]=useState<"produtos"|"revenda"|"produzido"|"dose"|"insumo"|"todos">("produtos");
   const [busca,setBusca]=useState("");
+  const [editando,setEditando]=useState<string|null>(null);
+  const [form,setForm]=useState<any>({});
   const mapaTipo=db.tipoInsumo||{};
   const q=foldBusca(busca);
 
@@ -13022,6 +13093,42 @@ function SaldoEstoquePanel({db,onVoltar}:{db:any,onVoltar:()=>void}){
     if(filtro==="produtos")return ehProdutoVendido(m.tipo);
     return m.tipo===filtro;
   }).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
+
+  const abrirEdicao=(l:any)=>{
+    setEditando(l.id);
+    setForm({nome:l.nome||"",codigo:l.codigoEcletica||"",unidade:l.unidade||"un",tipo:l.tipo||""});
+  };
+  const salvar=(l:any)=>{
+    const nome=String(form.nome||"").trim();
+    if(!nome)return alert("O nome não pode ficar vazio.");
+    const codigo=String(form.codigo||"").trim();
+    const outro=(db.materiasPrimas||[]).find((m:any)=>m.id!==l.id&&codigo&&String(m.codigoEcletica||"")===codigo);
+    // Código é a identidade: dois itens com o mesmo código fariam a venda
+    // baixar do item errado, e nada na tela denunciaria isso.
+    if(outro)return alert(`O código ${codigo} já é de "${outro.nome}". Cada produto precisa de um código próprio.`);
+    (setDbAndSave||setDb)((d:any)=>{
+      const tipos={...(d.tipoInsumo||{})};
+      const antes=(d.materiasPrimas||[]).find((m:any)=>m.id===l.id);
+      const chaveAntiga=antes?chaveTipo(antes):null;
+      const depois={...antes,nome,codigoEcletica:codigo,unidade:String(form.unidade||"un").trim()||"un",atualizadoEm:new Date().toISOString()};
+      // A marcação segue o item quando a chave muda (ex.: ganhou código). Sem
+      // isso, corrigir o código do produto apagaria o tipo dele em silêncio.
+      const chaveNova=chaveTipo(depois);
+      const tipoAtual=form.tipo||(chaveAntiga?tipos[chaveAntiga]:null);
+      if(tipoAtual)tipos[chaveNova]=tipoAtual;
+      return{...d,tipoInsumo:tipos,
+        materiasPrimas:(d.materiasPrimas||[]).map((m:any)=>m.id===l.id?depois:m)};
+    });
+    setEditando(null);
+  };
+  const excluir=(l:any)=>{
+    const saldo=parseFloat(l.estoqueAtual)||0;
+    if(!confirm(`Excluir "${l.nome}"?${saldo?`\n\nEle ainda tem saldo de ${saldo} ${l.unidade||"un"}.`:""}\n\nO histórico de movimentações dele continua em Estoque → Movimentações.`))return;
+    // Tombstone: sem ele, o próximo poll traz o item de volta do servidor.
+    _listaDeletados.add(l.id);
+    (setDbAndSave||setDb)((d:any)=>({...d,materiasPrimas:(d.materiasPrimas||[]).filter((m:any)=>m.id!==l.id)}));
+    setEditando(null);
+  };
 
   const valorTotal=linhas.reduce((s:number,l:any)=>s+l.valor,0);
   const negativos=linhas.filter((l:any)=>l.saldo<0).length;
@@ -13049,13 +13156,44 @@ function SaldoEstoquePanel({db,onVoltar}:{db:any,onVoltar:()=>void}){
     {!linhas.length&&<EmptyState msg={filtro==="produtos"?"Nenhum produto ainda. Importe em Estoque → Produtos do Eclética.":"Nada encontrado."}/>}
     <div className="card" style={{padding:0,overflow:"hidden"}}>
       {linhas.slice(0,400).map((l:any)=>(
-        <div key={l.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"9px 12px",borderBottom:"1px solid var(--border)"}}>
-          <span style={{fontSize:13,flex:1,minWidth:0}}>{l.nome}
-            <span style={{display:"block",fontSize:10,color:"var(--text3)"}}>{ROT[l.tipo]||"sem tipo"}</span>
-          </span>
-          <span style={{fontFamily:"monospace",fontSize:13,fontWeight:700,color:l.saldo<0?"var(--dangerText)":"var(--text)",whiteSpace:"nowrap" as const}}>
-            {l.saldo.toFixed(2)} {l.unidade||"un"}
-          </span>
+        <div key={l.id} style={{borderBottom:"1px solid var(--border)"}}>
+          <div onClick={()=>editando===l.id?setEditando(null):abrirEdicao(l)}
+            style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"9px 12px",cursor:"pointer"}}>
+            <span style={{fontSize:13,flex:1,minWidth:0}}>{l.nome}
+              <span style={{display:"block",fontSize:10,color:"var(--text3)"}}>
+                {ROT[l.tipo]||"sem tipo"}{l.codigoEcletica?` · cód ${l.codigoEcletica}`:""}
+              </span>
+            </span>
+            <span style={{fontFamily:"monospace",fontSize:13,fontWeight:700,color:l.saldo<0?"var(--dangerText)":"var(--text)",whiteSpace:"nowrap" as const}}>
+              {l.saldo.toFixed(2)} {l.unidade||"un"}
+            </span>
+          </div>
+          {editando===l.id&&<div style={{padding:"0 12px 12px",background:"var(--bg)"}}>
+            <div className="row" style={{gap:6,flexWrap:"wrap" as const,marginBottom:6}}>
+              <input className="inp" style={{flex:2,minWidth:150,marginBottom:0}} placeholder="Nome"
+                value={form.nome} onChange={e=>setForm((f:any)=>({...f,nome:e.target.value}))}/>
+              <input className="inp" style={{width:100,marginBottom:0}} placeholder="Código"
+                value={form.codigo} onChange={e=>setForm((f:any)=>({...f,codigo:e.target.value}))}/>
+              <input className="inp" style={{width:80,marginBottom:0}} placeholder="un"
+                value={form.unidade} onChange={e=>setForm((f:any)=>({...f,unidade:e.target.value}))}/>
+            </div>
+            <div className="chip-row" style={{marginBottom:8}}>
+              {([["revenda","Revenda"],["produzido","Produção"],["dose","Dose"],["insumo","Insumo"],["interno","Interno"]] as const).map(([v,lbl])=>(
+                <button key={v} type="button" className="chip" style={{minHeight:32,fontSize:11.5,
+                  ...(form.tipo===v?{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)"}:{})}}
+                  onClick={()=>setForm((f:any)=>({...f,tipo:v}))}>{lbl}</button>
+              ))}
+            </div>
+            <div style={{fontSize:10.5,color:"var(--text3)",marginBottom:8,lineHeight:1.5}}>
+              O <strong>código</strong> é o que amarra o produto à venda do Eclética. Mudar o nome aqui não desfaz o vínculo; mudar o código, sim.
+              Para corrigir o saldo, use Estoque → Manutenção (Ajuste).
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn" onClick={()=>salvar(l)} style={{flex:1,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"9px",fontSize:13}}>Salvar</button>
+              <button className="btn" onClick={()=>setEditando(null)} style={{background:"var(--border)",color:"#888",padding:"9px 14px",fontSize:13}}>Cancelar</button>
+              <button className="btn" onClick={()=>excluir(l)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"9px 14px",fontSize:13}}>🗑️</button>
+            </div>
+          </div>}
         </div>
       ))}
     </div>
@@ -13508,7 +13646,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
     })()}
 
     {/* ===== PROJEÇÃO DE COMPRAS ===== */}
-    {sub==="saldo"&&<SaldoEstoquePanel db={db} onVoltar={()=>setSub("inventario")}/>}
+    {sub==="saldo"&&<SaldoEstoquePanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
     {sub==="manutencao"&&<ManutencaoProdutosPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
     {sub==="importar"&&<ImportarProdutosPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
     {sub==="saidas"&&<><BackBar label="Inventário" onClick={()=>setSub("inventario")}/>
@@ -20257,16 +20395,19 @@ const mpsDoProdutoLista=(db:any,prod:any)=>{
 // e agrupar pelo texto cru faria o mesmo produto virar dois.
 const vendasPorItem=(db:any,ini:string,fim:string)=>{
   const porDia=new Map<string,Map<string,{nome:string,qtd:number,total:number,un:string}>>();
-  const add=(data:string,nome:string,qtd:number,valor:number,un:string)=>{
+  // Agrupa pelo CÓDIGO quando ele existe: o Eclética manda cProd no XML, e o
+  // código sobrevive a renomear o produto dos dois lados. Sem código (recibo
+  // avulso), o nome normalizado continua valendo.
+  const add=(data:string,nome:string,qtd:number,valor:number,un:string,cod?:string)=>{
     if(!nome||!data)return;
     const dia=porDia.get(data)||new Map();
-    const k=foldNome(nome);
-    const cur=dia.get(k)||{nome,qtd:0,total:0,un};
+    const k=cod?`cod:${cod}`:foldNome(nome);
+    const cur=dia.get(k)||{nome,qtd:0,total:0,un,cod:cod||""};
     cur.qtd+=qtd; cur.total+=valor; cur.nome=nome;
     dia.set(k,cur); porDia.set(data,dia);
   };
   const diasPdvLista=(db?.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim);
-  diasPdvLista.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>add(d.data,it.nome,it.qtd||0,it.valor||0,it.un||"un")));
+  diasPdvLista.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>add(d.data,it.nome,it.qtd||0,it.valor||0,it.un||"un",it.cod)));
   (db?.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim)
     .forEach((r:any)=>(r.itens||[]).forEach((it:any)=>add(r.data,it.nome,it.quantidade||0,it.subtotal||0,it.unidade||"un")));
   return{porDia,diasPdv:diasPdvLista.length};
@@ -20274,7 +20415,7 @@ const vendasPorItem=(db:any,ini:string,fim:string)=>{
 const agruparProdutos=(porDia:Map<string,Map<string,any>>)=>{
   const m=new Map<string,{nome:string,qtd:number,total:number,unidade:string}>();
   porDia.forEach(dia=>dia.forEach((p:any,k:string)=>{
-    const cur=m.get(k)||{nome:p.nome,qtd:0,total:0,unidade:p.un||"un"};
+    const cur=m.get(k)||{nome:p.nome,qtd:0,total:0,unidade:p.un||"un",cod:p.cod||""};
     cur.qtd+=p.qtd; cur.total+=p.total; m.set(k,cur);
   }));
   return Array.from(m.values()).sort((a,b)=>b.total-a.total);

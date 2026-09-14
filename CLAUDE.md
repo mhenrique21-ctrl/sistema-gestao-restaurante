@@ -311,9 +311,34 @@ produção sai em g/kg pela ficha, que tem a própria conversão (`porcoes`).
   "Produtos" (revenda/produzido/dose); insumo e interno ficam atrás do filtro
 - **Manutenção de Produtos** — Produção · Entrada · Saída · Ajuste.
   `src/movimentoEstoque.js`, com testes
-- **Produtos Eclética** — importa o cardápio em CSV e marca o tipo **por grupo**
+- **Produtos Eclética** — importa o cardápio e marca o tipo **por grupo**
   (281 decisões viram ~15). Produto que já existe não é duplicado; entra com
   saldo **zero**
+
+⚠️ O arquivo do Eclética **não é uma tabela**: é o relatório
+`RelCadProdutosT.rpt`, em que CADA linha repete os rótulos das colunas, depois
+um bloco de campos vazios, depois os dados, e no fim o rodapé (nome do .rpt,
+data, hora, "Página"). Lido como CSV comum dá 281 cabeçalhos e zero produtos.
+`lerProdutosEcletica` descarta rótulos, vazios e rodapé em vez de fixar a
+posição 24 — fixar quebra se o Eclética acrescentar uma coluna. Planilha comum
+com cabeçalho também é aceita.
+
+### Identidade do item: o CÓDIGO, não o nome
+
+Produto importado tem `codigoEcletica`, e **é ele que amarra tudo**: a marcação
+de tipo (`chaveTipo` devolve `cod:<código>`), a conferência da reimportação e o
+casamento com a venda (o XML da NFC-e traz `cProd`, guardado em
+`itensVendidos[].itens[].cod`).
+
+Renomear o produto no Gestão — ou no Eclética — **não** desfaz nada. Insumo
+comprado não tem código e continua pelo `foldNome`, como o resto do sistema.
+
+`tipoDoInsumo` tenta `cod:` e cai no nome depois, então quem foi marcado antes
+de o código existir continua valendo — sem migração de dado.
+
+Editar e excluir produto ficam em **Saldo Estoque** (toque na linha). Código
+repetido é recusado: dois itens com o mesmo código fariam a venda baixar do item
+errado, e nada na tela denunciaria.
 
 **PRODUÇÃO tem dois lados**: entra o produto e saem os insumos da ficha, no
 mesmo `grupoId` — separado, um lado some e ninguém percebe. Reaproveita

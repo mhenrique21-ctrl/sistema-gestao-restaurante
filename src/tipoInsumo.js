@@ -60,8 +60,21 @@ export function tipoPadraoPorCategoria(categoria) {
 //
 // Devolve {tipo, origem} — a origem é o que permite à tela mostrar "você marcou"
 // x "veio da categoria", e listar como pendente só quem não tem nenhum dos dois.
+// Chave de identidade do item. Produto importado do Eclética tem CÓDIGO, e o
+// código é o que não muda: renomear "Agua Mineral" para "Água Mineral 500ml" no
+// Gestão não pode perder a marcação nem desvincular a venda. Insumo comprado
+// não tem código, e aí o nome normalizado continua sendo a chave — é a mesma
+// regra do resto do sistema (foldNome).
+export function chaveTipo(mp) {
+  const cod = String(mp?.codigoEcletica || '').trim();
+  return cod ? `cod:${cod}` : fold(mp?.nome);
+}
+
 export function tipoDoInsumo(mapa, mp) {
-  const bruto = (mapa || {})[fold(mp?.nome)];
+  // Tenta o código primeiro e cai no nome depois: quem foi marcado antes de o
+  // código existir continua valendo, sem migração de dado.
+  const m = mapa || {};
+  const bruto = m[chaveTipo(mp)] ?? m[fold(mp?.nome)];
   const marcado = LEGADO[bruto] || bruto;
   if (marcado && TIPOS_INSUMO.includes(marcado)) return { tipo: marcado, origem: 'marcado' };
   const padrao = tipoPadraoPorCategoria(mp?.categoria);
