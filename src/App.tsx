@@ -2206,6 +2206,7 @@ export default function App() {
       {id:"est-ana",label:"Análise",icon:"📊",sub:"analise"},
       {id:"est-mov",label:"Movimentações",icon:"📋",sub:"movimentacoes"},
       {id:"est-proj",label:"Projeção de compras",icon:"📊",sub:"projecao"},
+      {id:"est-saidas",label:"Saídas por venda",icon:"📉",sub:"saidas"},
     ]},
     {id:"fluxo",label:"Fluxo de Caixa",icon:"💵"},
     {id:"gestao",label:"Gestão",icon:"⚙️",children:[
@@ -4604,53 +4605,25 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"consumo"|"baixa"|"revenda"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
-  const [buscaVinc,setBuscaVinc]=useState("");
-  const [enviandoPdv,setEnviandoPdv]=useState(false);
-  const [soPendentes,setSoPendentes]=useState(true);
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"empresas">(aj.abaRelatorioPadrao||"cliente");
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
 
-  // Linhas de item do período, de DUAS fontes. Os relatórios por produto
-  // (Produtos, Curva ABC, Margem) existiam desde sempre lendo só recibosVenda —
-  // a ferramenta de venda avulsa. A venda do balcão nunca passava por ali, então
-  // a aba Margem sabia calcular custo por ficha técnica e nunca tinha visto um
-  // produto. itensVendidos traz o que o PDV vendeu de verdade.
-  //
-  // O PDV chega AGREGADO por dia (um registro por dia e produto, não item a
-  // item): o documento inteiro trafega entre os aparelhos a cada ~100ms, e
-  // guardar cada linha de cada cupom engordaria isso todo dia, pra sempre.
-  const itensPdvPeriodo=(db.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim);
-  const itensPeriodo=(()=>{
-    const linhas:{nome:string,qtd:number,valor:number,un:string}[]=[];
-    recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>
-      linhas.push({nome:it.nome||"",qtd:it.quantidade||0,valor:it.subtotal||0,un:it.unidade||"un"})));
-    itensPdvPeriodo.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>
-      linhas.push({nome:it.nome||"",qtd:it.qtd||0,valor:it.valor||0,un:it.un||"un"})));
-    return linhas.filter(l=>l.nome);
-  })();
-  // Agrupa por foldNome: o PDV escreve "PAO DE QUEIJO" e o recibo "Pão de
-  // queijo" — agrupar pelo texto cru faria o mesmo produto virar dois no
-  // ranking. foldNome é a normalização única do sistema (§5 do CLAUDE.md).
-  const agruparItens=()=>{
-    const m=new Map<string,{nome:string,qtd:number,total:number,unidade:string}>();
-    itensPeriodo.forEach(l=>{
-      const k=foldNome(l.nome);
-      const cur=m.get(k)||{nome:l.nome,qtd:0,total:0,unidade:l.un};
-      cur.qtd+=l.qtd; cur.total+=l.valor;
-      m.set(k,cur);
-    });
-    return Array.from(m.values()).sort((a,b)=>b.total-a.total);
-  };
-  const avisoFontePdv=itensPdvPeriodo.length>0
-    ?<div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Inclui {itensPdvPeriodo.length} dia(s) de venda do PDV, agregados por produto.</div>
+  // Ranking, ABC e Margem leem as vendas por item — que vêm do PDV e dos
+  // recibos. A preparação mora em vendasPorItem() porque a tela de Saídas por
+  // Venda usa a mesma, e duplicar a normalização é como o mesmo produto vira
+  // dois no relatório.
+  const {porDia:vendasPorDia,diasPdv}=vendasPorItem(db,ini,fim);
+  const agruparItens=()=>agruparProdutos(vendasPorDia);
+  const avisoFontePdv=diasPdv>0
+    ?<div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Inclui {diasPdv} dia(s) de venda do PDV, agregados por produto.</div>
     :null;
 
   const TABS:[typeof relTab,string][]=[
     ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
     ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
     ["mensal","Evolução Mensal"],["canal","Por Canal"],["sazonal","Sazonalidade"],
-    ["margem","Margem por Produto"],["consumo","Consumo Teórico"],["baixa","Baixar Estoque"],["revenda","Revenda × Compras"],["vinculos","Vincular Produtos"],["empresas","Confraria × Seama"],
+    ["margem","Margem por Produto"],["empresas","Confraria × Seama"],
   ];
 
   const RowBar=({label,sub,qty,val,pct,color}:{label:string,sub?:string,qty?:string,val:number,pct:number,color?:string})=>(
@@ -4883,7 +4856,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         {avisoFontePdv}
         {semFicha.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
           ⚠️ {semFicha.filter((l:any)=>l.vinculo!=="ignorado").length} produto(s) sem ficha técnica — {receitaTotal?Math.round(receitaSemFicha/receitaTotal*100):0}% da receita do período fica sem margem calculada.
-          <button onClick={()=>setRelTab("vinculos")} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontWeight:700,textDecoration:"underline",padding:0,marginLeft:4,fontSize:11}}>vincular agora</button>
+          <span style={{marginLeft:4}}>Vincule em <strong>Estoque → Saídas por venda → Vínculos</strong>.</span>
         </div>}
         {!linhas.length&&<EmptyState msg="Nenhum item vendido no período."/>}
         {linhas.map((l:any)=><div key={l.nome} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
@@ -4892,509 +4865,6 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
             ?<span style={{fontWeight:700,fontFamily:"monospace",color:l.margem>=0?"#15803D":"#dc2626"}}>{fmtMoney(l.margem)} <span style={{fontSize:10,opacity:.75}}>({l.margemPct.toFixed(0)}%)</span></span>
             :<span style={{fontSize:11,color:"var(--text2)",fontStyle:"italic" as const}}>sem dado de custo</span>}
         </div>)}
-      </>;
-    })()}
-
-    {relTab==="consumo"&&(()=>{
-      // Consumo TEÓRICO: o que as fichas dizem que deveria ter saído do estoque
-      // para produzir o que foi vendido. Não é o que saiu de fato — a diferença
-      // entre os dois é justamente o que se quer enxergar.
-      const movs=db.movEstoque||[];
-      const {linhas:base,receitaComFicha,receitaSemFicha,semPorcoes,semInsumos}=
-        consumoTeorico(agruparItens(),(nome:string)=>vinculoDoProduto(db,nome).ficha);
-
-      const linhas=base.map((l:any)=>{
-        const mp=l.mpId?(db.materiasPrimas||[]).find((m:any)=>m.id===l.mpId):null;
-        let comprado:number|null=null, estoque:number|null=null;
-        if(mp){
-          const entradas=movs.filter((mv:any)=>mv.mpId===mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
-          const brutoCompra=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0);
-          comprado=converterQtd(brutoCompra,mp.unidade||"un",l.unidade);
-          estoque=converterQtd(parseFloat(mp.estoqueAtual)||0,mp.unidade||"un",l.unidade);
-        }
-        return{...l,mp,comprado,estoque,unCompra:mp?.unidade||"",
-          cobertura:comprado!=null&&l.qtd>0?comprado/l.qtd:null};
-      });
-
-      const custoTeorico=linhas.reduce((sa:number,l:any)=>sa+l.custo,0);
-      const cmvTeorico=receitaComFicha>0?custoTeorico/receitaComFicha*100:null;
-      const receitaTotal=receitaComFicha+receitaSemFicha;
-      const cobFichas=receitaTotal>0?receitaComFicha/receitaTotal*100:0;
-      const semConversao=linhas.filter((l:any)=>l.mp&&l.comprado==null).length;
-
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Consumo teórico de insumos</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
-          O que as fichas técnicas dizem que <em>deveria</em> ter saído do estoque para produzir o que foi vendido no período.
-        </div>
-
-        {!linhas.length&&<EmptyState msg="Nenhum produto vendido com ficha técnica vinculada no período."/>}
-
-        {linhas.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
-            <span style={{color:"var(--text2)"}}>Custo teórico dos insumos</span><strong>{fmtMoney(custoTeorico)}</strong>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
-            <span style={{color:"var(--text2)"}}>Receita dos produtos com ficha</span><strong>{fmtMoney(receitaComFicha)}</strong>
-          </div>
-          {cmvTeorico!=null&&<div style={{display:"flex",justifyContent:"space-between",fontSize:14,fontWeight:700,paddingTop:6,marginTop:4,borderTop:"1px solid var(--border)"}}>
-            <span>CMV teórico</span>
-            <span style={{color:cmvTeorico<=35?"var(--successText)":cmvTeorico<=45?"var(--warningText)":"var(--dangerText)"}}>{cmvTeorico.toFixed(1)}%</span>
-          </div>}
-          <div style={{fontSize:11,color:"var(--text2)",marginTop:6,lineHeight:1.5}}>
-            Calculado só sobre os {cobFichas.toFixed(0)}% da receita que têm ficha vinculada — não é o CMV da loja inteira.
-            {cobFichas<70&&<> Vincule mais produtos em <strong>Vincular Produtos</strong> para este número valer.</>}
-          </div>
-        </div>}
-
-        {semPorcoes.length>0&&<div style={{fontSize:11,color:"var(--dangerText)",marginBottom:8}}>
-          ⚠️ Ficha sem rendimento informado (tratada como 1 porção): {semPorcoes.slice(0,5).join(", ")}. Se a receita rende mais de uma unidade, o consumo dela está superestimado.
-        </div>}
-        {semInsumos.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:8}}>
-          ⚠️ Ficha sem insumos cadastrados: {semInsumos.slice(0,5).join(", ")}.
-        </div>}
-        {semConversao>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:8}}>
-          ⚠️ {semConversao} insumo(s) com unidade da ficha diferente da unidade de compra, sem conversão possível — o comparativo fica em branco neles.
-        </div>}
-
-        {linhas.map((l:any)=>{
-          const top=Array.from(l.fontes.entries() as Iterable<[string,number]>).sort((a,b)=>b[1]-a[1]).slice(0,3);
-          return <div key={l.chave} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
-              <span style={{fontSize:13,fontWeight:600}}>{l.nome}</span>
-              <span style={{fontSize:12,fontWeight:700}}>{fmtMoney(l.custo)}</span>
-            </div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:5}}>
-              <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>deveria ter saído: {l.qtd.toFixed(l.qtd<10?2:0)} {l.unidade}</span>
-              {l.comprado!=null&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>comprado: {l.comprado.toFixed(l.comprado<10?2:0)} {l.unidade}</span>}
-              {l.estoque!=null&&<span className="tag" style={{background:"var(--bg)",color:"var(--text2)"}}>estoque hoje: {l.estoque.toFixed(l.estoque<10?2:0)} {l.unidade}</span>}
-              {!l.mp&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>sem insumo vinculado na ficha</span>}
-              {l.mp&&l.comprado==null&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>ficha em "{l.unidade}", compra em "{l.unCompra}"</span>}
-            </div>
-            <div style={{fontSize:10.5,color:"var(--text3)"}}>
-              vem de: {top.map(([nome,q]:[string,number])=>`${nome} (${q.toFixed(q<10?1:0)})`).join(" · ")}{l.fontes.size>3?` · +${l.fontes.size-3}`:""}
-            </div>
-          </div>;
-        })}
-
-        {linhas.length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:10,lineHeight:1.5}}>
-          A primeira coisa que esta tela costuma revelar não é desperdício: é <strong>ficha desatualizada</strong>. Se ela diz 30 g e a cozinha usa 45 g, a diferença aparece aqui como se fosse desvio. Confira a ficha antes de concluir qualquer coisa.
-        </div>}
-      </>;
-    })()}
-
-    {relTab==="baixa"&&(()=>{
-      // Baixa por DIA, não pelo período inteiro: movimento de estoque sem data
-      // certa inutiliza o extrato e a contagem por período.
-      const mpsTodas=db.materiasPrimas||[];
-      const porDia:Record<string,Record<string,any>>={};
-      const avisos=new Set<string>();
-      const acumula=(data:string,mp:any,qtd:number,custo:number,fonte:string)=>{
-        if(!(qtd>0))return;
-        const dia=porDia[data]||(porDia[data]={});
-        const cur=dia[mp.id]||(dia[mp.id]={nome:mp.nome,unidade:mp.unidade||"un",qtd:0,custo:0,fontes:new Set<string>()});
-        cur.qtd+=qtd; cur.custo+=custo; cur.fontes.add(fonte);
-      };
-
-      // Vendas do período, agrupadas por dia e produto. recibosVenda entra
-      // junto: são vendas reais e hoje não baixam estoque em lugar nenhum.
-      const diasVenda=new Map<string,Map<string,{nome:string,qtd:number,total:number}>>();
-      const addVenda=(data:string,nome:string,qtd:number,valor:number)=>{
-        if(!nome||!data)return;
-        const dia=diasVenda.get(data)||new Map();
-        const k=foldNome(nome);
-        const cur=dia.get(k)||{nome,qtd:0,total:0};
-        cur.qtd+=qtd; cur.total+=valor; dia.set(k,cur); diasVenda.set(data,dia);
-      };
-      (db.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim)
-        .forEach((d:any)=>(d.itens||[]).forEach((it:any)=>addVenda(d.data,it.nome,it.qtd||0,it.valor||0)));
-      (db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim)
-        .forEach((r:any)=>(r.itens||[]).forEach((it:any)=>addVenda(r.data,it.nome,it.quantidade||0,it.subtotal||0)));
-
-      Array.from(diasVenda.entries()).forEach(([data,prods])=>{
-        const lista=Array.from(prods.values());
-
-        // PRODUZIDO: ficha explode em insumos.
-        const {linhas}=consumoTeorico(lista,(nome:string)=>vinculoDoProduto(db,nome).ficha);
-        linhas.forEach((l:any)=>{
-          if(!l.mpId){avisos.add(`"${l.nome}" está na ficha sem insumo vinculado — não dá pra baixar`);return;}
-          const mp=mpsTodas.find((m:any)=>m.id===l.mpId);
-          if(!mp){avisos.add(`Insumo da ficha não existe mais no cadastro ("${l.nome}")`);return;}
-          const q=converterQtd(l.qtd,l.unidade,mp.unidade||"un");
-          if(q==null){avisos.add(`"${mp.nome}": ficha em "${l.unidade}" e insumo em "${mp.unidade}" — sem conversão possível`);return;}
-          acumula(data,mp,q,l.custo,"produção");
-        });
-
-        // REVENDA não baixa aqui: por decisão do dono, o saldo desses produtos
-        // mora no PDV, que já tem inventário, extrato e alerta de mínimo. Vai
-        // pelo bloco "revendaPorDia" abaixo. Manter as duas baixas ligadas
-        // descontaria a mesma lata duas vezes, em dois sistemas.
-      });
-
-      // Revenda → PDV. Agrupa por dia, pelo NOME do produto: o cardápio do
-      // Eclética e o do PDV são o mesmo, então o PDV casa por nome do lado de
-      // lá e devolve o que não encontrou.
-      const revendaPorDia=Array.from(diasVenda.entries()).map(([data,prods])=>{
-        const itens=Array.from(prods.values())
-          .filter((p:any)=>vinculoDoProduto(db,p.nome).vinculo==="produto")
-          .map((p:any)=>({nome:p.nome,quantidade:p.qtd}));
-        return{data,itens};
-      }).filter(d=>d.itens.length).sort((a,b)=>a.data.localeCompare(b.data));
-      const totalRevenda=revendaPorDia.reduce((sa,d)=>sa+d.itens.reduce((x:number,i:any)=>x+i.quantidade,0),0);
-
-      const dias=Object.keys(porDia).sort();
-      const resumo=new Map<string,{nome:string,unidade:string,qtd:number,custo:number,fontes:Set<string>}>();
-      dias.forEach(dt=>Object.entries(porDia[dt]).forEach(([mpId,v]:any)=>{
-        const cur=resumo.get(mpId)||{nome:v.nome,unidade:v.unidade,qtd:0,custo:0,fontes:new Set<string>()};
-        cur.qtd+=v.qtd; cur.custo+=v.custo; v.fontes.forEach((f:string)=>cur.fontes.add(f));
-        resumo.set(mpId,cur);
-      }));
-      const linhasResumo=Array.from(resumo.entries()).map(([mpId,v])=>({mpId,...v})).sort((a,b)=>b.custo-a.custo);
-      const custoTotal=linhasResumo.reduce((sa,l)=>sa+l.custo,0);
-
-      // Quanto deste período já foi baixado antes — é o que diz se o botão vai
-      // criar, corrigir ou não fazer nada.
-      const idsExistentes=new Set((db.movEstoque||[]).map((m:any)=>m.id));
-      let jaBaixados=0, aCriar=0;
-      dias.forEach(dt=>Object.keys(porDia[dt]).forEach(mpId=>{
-        if(idsExistentes.has(idBaixaVenda(dt,mpId)))jaBaixados++; else aCriar++;
-      }));
-
-      // Desfazer é o mesmo caminho da aplicação, com quantidade zero: o módulo
-      // remove o movimento e devolve a quantidade ao saldo. Varre o que EXISTE
-      // gravado, não o que seria calculado agora — um produto desvinculado
-      // depois da baixa sumiria do cálculo e o movimento dele ficaria órfão,
-      // segurando estoque que ninguém mais explica.
-      const gravadosNoPeriodo=(db.movEstoque||[]).filter((m:any)=>
-        typeof m?.id==="string"&&m.id.startsWith("vsaida-")&&m.data>=ini&&m.data<=fim);
-      const desfazer=()=>{
-        if(!gravadosNoPeriodo.length)return;
-        if(!confirm(`Desfazer a baixa de ${gravadosNoPeriodo.length} movimento(s) entre ${fmtDate(ini)} e ${fmtDate(fim)}?\n\nA quantidade volta pro saldo de cada insumo e os movimentos somem de Estoque → Movimentações.\n\nSó mexe no que esta tela gravou — compras, perdas e ajustes manuais não são tocados.`))return;
-        const zerar:Record<string,Record<string,any>>={};
-        gravadosNoPeriodo.forEach((m:any)=>{
-          (zerar[m.data]||(zerar[m.data]={}))[m.mpId]={qtd:0};
-        });
-        (setDbAndSave||setDb)((d:any)=>{
-          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],zerar,new Date().toISOString());
-          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
-        });
-        alert(`${gravadosNoPeriodo.length} movimento(s) desfeito(s). O estoque voltou ao que era.`);
-      };
-
-      // Movimentos gravados antes que NÃO aparecem mais no cálculo — caso
-      // típico agora: a revenda que saiu daqui e foi pro PDV. Sem zerá-los, a
-      // baixa antiga fica pendurada segurando estoque que ninguém mais explica,
-      // porque o laço de aplicação só passa pelas chaves do cálculo atual.
-      const orfaos=gravadosNoPeriodo.filter((m:any)=>!(porDia[m.data]&&porDia[m.data][m.mpId]));
-      const porDiaReconciliado:Record<string,Record<string,any>>={};
-      Object.entries(porDia).forEach(([d,v]:any)=>{porDiaReconciliado[d]={...v};});
-      orfaos.forEach((m:any)=>{(porDiaReconciliado[m.data]||(porDiaReconciliado[m.data]={}))[m.mpId]={qtd:0};});
-
-      const aplicar=()=>{
-        const qtdMov=jaBaixados+aCriar;
-        if(!confirm(`Baixar o estoque de ${dias.length} dia(s) de venda?\n\n${aCriar} movimento(s) novo(s) e ${jaBaixados} já existente(s) serão recalculados.${orfaos.length?`\n${orfaos.length} baixa(s) antiga(s) fora do cálculo atual serão DESFEITAS.`:""}\n\nPode rodar de novo sem duplicar: cada dia tem um movimento só, e reaplicar corrige pela diferença.`))return;
-        (setDbAndSave||setDb)((d:any)=>{
-          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],porDiaReconciliado,new Date().toISOString());
-          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
-        });
-        alert(`Pronto. ${qtdMov} movimento(s) de saída gravados em Estoque → Movimentações.${orfaos.length?`\n\n${orfaos.length} baixa(s) antiga(s) que não valem mais foram desfeitas (o estoque voltou).`:""}`);
-      };
-
-      const enviarRevendaPdv=async()=>{
-        if(!revendaPorDia.length)return;
-        if(!confirm(`Baixar no PDV ${totalRevenda.toFixed(0)} unidade(s) de revenda, em ${revendaPorDia.length} dia(s)?\n\nO PDV aplica só a diferença por dia e produto — reenviar o mesmo período não desconta duas vezes.`))return;
-        setEnviandoPdv(true);
-        try{
-          const r=await fetch("/api/estoque-pdv/venda-externa",{method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({empresa,fonte:"ecletica",dias:revendaPorDia})});
-          const j=await r.json();
-          if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);
-          const partes=[`${j.aplicados} produto-dia aplicado(s) no PDV.`];
-          if(j.naoEncontrados?.length)partes.push(`\nSem produto correspondente no PDV (${j.naoEncontrados.length}): ${j.naoEncontrados.slice(0,8).join(", ")}`);
-          if(j.semControle?.length)partes.push(`\nSem controle de estoque ligado no PDV (${j.semControle.length}): ${j.semControle.slice(0,8).join(", ")}`);
-          if(j.falhas?.length)partes.push(`\nFalharam: ${j.falhas.map((f:any)=>`${f.data} (${f.erro})`).join(", ")}`);
-          alert(partes.join("\n"));
-        }catch(e:any){alert(`Não consegui baixar no PDV: ${e.message}`);}
-        finally{setEnviandoPdv(false);}
-      };
-
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Baixar estoque das vendas</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
-          <strong>Revenda</strong> baixa no <strong>PDV</strong> (é lá que mora o saldo desses produtos); <strong>produzido</strong> baixa os insumos aqui no Gestão, pela ficha técnica. Cada tipo tem um dono só — nada é descontado nos dois.
-        </div>
-
-        {revendaPorDia.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-          <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>🛒 Revenda → PDV</div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
-            <span style={{color:"var(--text2)"}}>Unidades vendidas no período</span><strong>{totalRevenda.toFixed(0)}</strong>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
-            <span style={{color:"var(--text2)"}}>Dias a enviar</span><strong>{revendaPorDia.length}</strong>
-          </div>
-          <button className="btn" disabled={enviandoPdv} onClick={enviarRevendaPdv}
-            style={{width:"100%",marginTop:10,background:enviandoPdv?"var(--border)":"var(--btnPrimary)",color:enviandoPdv?"#888":"var(--onPrimary,#FFFFFF)",padding:"11px",fontSize:14,fontWeight:700}}>
-            {enviandoPdv?"Enviando...":"📤 Baixar revenda no PDV"}
-          </button>
-          <div style={{fontSize:10.5,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
-            O PDV guarda quanto já baixou por dia e produto, e aplica só a diferença. Reenviar o mesmo período não desconta de novo. O saldo aparece em Configurações de PDV → Estoque.
-          </div>
-        </div>}
-
-        {!dias.length&&!revendaPorDia.length&&<EmptyState msg="Nenhuma venda vinculada no período. Vincule os produtos em 'Vincular Produtos'."/>}
-
-        {dias.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-          <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>🍳 Produzido → insumos aqui</div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
-            <span style={{color:"var(--text2)"}}>Dias de venda no período</span><strong>{dias.length}</strong>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
-            <span style={{color:"var(--text2)"}}>Insumos afetados</span><strong>{linhasResumo.length}</strong>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
-            <span style={{color:"var(--text2)"}}>Custo do que sai</span><strong>{fmtMoney(custoTotal)}</strong>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0",color:"var(--text2)"}}>
-            <span>Movimentos</span><span>{aCriar} novo(s) · {jaBaixados} já baixado(s)</span>
-          </div>
-          <button className="btn" onClick={aplicar} style={{width:"100%",marginTop:10,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"11px",fontSize:14,fontWeight:700}}>
-            📉 {jaBaixados&&!aCriar?"Recalcular baixa de insumos":"Baixar insumos do período"}
-          </button>
-          {gravadosNoPeriodo.length>0&&<button className="btn" onClick={desfazer}
-            style={{width:"100%",marginTop:8,background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"9px",fontSize:12.5,fontWeight:700}}>
-            ↩️ Desfazer a baixa deste período ({gravadosNoPeriodo.length} movimento(s))
-          </button>}
-          <div style={{fontSize:10.5,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
-            Pode rodar quantas vezes quiser: cada dia tem um movimento só. Corrigiu uma ficha? Rode de novo e a diferença é devolvida ao estoque — nunca somada. E dá pra desfazer tudo: só o que esta tela gravou é tocado, compras e ajustes manuais ficam intactos.
-          </div>
-        </div>}
-
-        {avisos.size>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10,lineHeight:1.6}}>
-          ⚠️ Fora da baixa:<br/>{[...avisos].slice(0,6).map((a,i)=><span key={i}>· {a}<br/></span>)}
-          {avisos.size>6&&<span>· +{avisos.size-6} outro(s)</span>}
-        </div>}
-
-        {linhasResumo.map(l=>{
-          const mp=mpsTodas.find((m:any)=>m.id===l.mpId);
-          const saldo=parseFloat(mp?.estoqueAtual)||0;
-          return <div key={l.mpId} style={{padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"baseline"}}>
-              <span style={{fontSize:13}}>{l.nome} <span style={{fontSize:10,color:"var(--text3)"}}>{[...l.fontes].join(" + ")}</span></span>
-              <span style={{fontSize:12,fontWeight:700,color:"var(--dangerText)"}}>−{l.qtd.toFixed(l.qtd<10?2:0)} {l.unidade}</span>
-            </div>
-            <div style={{fontSize:10.5,color:"var(--text3)",marginTop:2}}>
-              saldo atual {saldo.toFixed(saldo<10?2:0)} {l.unidade} → ficaria {(saldo-l.qtd).toFixed(2)} {l.unidade}
-              {saldo-l.qtd<0&&<span style={{color:"var(--warningText)",fontWeight:700}}> · negativo</span>}
-            </div>
-          </div>;
-        })}
-      </>;
-    })()}
-
-    {relTab==="revenda"&&(()=>{
-      // Só produtos de REVENDA: o que se vende é literalmente o que se compra,
-      // então dá pra comparar quantidade contra quantidade. Produto produzido
-      // não entra aqui — vendê-lo consome insumos, e comparar "pão de queijo
-      // vendido" com "pão de queijo comprado" não significaria nada.
-      const movs=db.movEstoque||[];
-      const porProd=new Map<string,{produto:any,vendido:number,receita:number}>();
-      const somar=(nome:string,qtd:number,valor:number)=>{
-        const {produto,vinculo}=vinculoDoProduto(db,nome);
-        if(vinculo!=="produto"||!produto)return;
-        const cur=porProd.get(produto.id)||{produto,vendido:0,receita:0};
-        cur.vendido+=qtd; cur.receita+=valor;
-        porProd.set(produto.id,cur);
-      };
-      itensPdvPeriodo.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
-      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
-
-      const linhas=Array.from(porProd.values()).map(l=>{
-        // Um produto da lista costuma ter VÁRIAS matérias-primas vinculadas
-        // (marcas diferentes do mesmo item). Só a soma das três responde
-        // "quanto de água eu comprei" — olhar uma marca só subestima.
-        const mps=mpsDoProdutoLista(db,l.produto);
-        let compradoUn=0, estoqueUn=0, semConversao=0;
-        let unsCompra=new Set<string>();
-        mps.forEach((mp:any)=>{
-          const entradas=movs.filter((mv:any)=>mv.mpId===mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
-          // 1 caixa comprada = 6 latas vendidas. Sem essa conversão, comparar
-          // "40 vendidas" com "7 compradas" produziria um rombo inventado.
-          const porEmb=parseFloat(mp.unidadesPorEmbalagem)||1;
-          const un=foldNome((entradas[0]?.unidade)||mp.unidade||"un");
-          unsCompra.add(un);
-          if(porEmb===1&&!["un","und","unidade","unid"].includes(un))semConversao++;
-          compradoUn+=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0)*porEmb;
-          estoqueUn+=(parseFloat(mp.estoqueAtual)||0)*porEmb;
-        });
-        const semVinculo=mps.length===0;
-        const conversaoDuvidosa=!semVinculo&&semConversao>0;
-        const impossivel=!semVinculo&&!conversaoDuvidosa&&l.vendido>compradoUn+estoqueUn+0.001;
-        return{...l,mps,compradoUn,estoqueUn,semVinculo,conversaoDuvidosa,impossivel,
-          unsCompra:[...unsCompra].join("/"),dif:compradoUn-l.vendido};
-      }).sort((a,b)=>b.receita-a.receita);
-
-      const alertas=linhas.filter(l=>l.semVinculo||l.conversaoDuvidosa||l.impossivel).length;
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Revenda — vendido × comprado</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
-          Só produtos vinculados como <strong>revenda</strong> em Vincular Produtos. A compra chega até o produto da lista pelos insumos vinculados a ele, e as quantidades são convertidas para unidade individual.
-        </div>
-        {!linhas.length&&<EmptyState msg="Nenhum produto de revenda vinculado ainda. Vincule em 'Vincular Produtos'."/>}
-        {alertas>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
-          ⚠️ {alertas} item(ns) com número não confiável — veja o aviso em cada linha antes de tirar conclusão.
-        </div>}
-        {linhas.map(l=><div key={l.produto.id} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
-            <span style={{fontSize:13,fontWeight:600}}>{l.produto.nome}
-              {l.mps.length>1&&<span style={{fontSize:10,color:"var(--text3)",fontWeight:400,marginLeft:6}}>{l.mps.length} marcas</span>}
-            </span>
-            <span style={{fontSize:11,color:"var(--text2)"}}>{fmtMoney(l.receita)}</span>
-          </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-            <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>vendido: {l.vendido.toFixed(0)} un</span>
-            {!l.semVinculo&&<>
-              <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>comprado: {l.compradoUn.toFixed(0)} un</span>
-              <span className="tag" style={{background:"var(--bg)",color:"var(--text2)"}}>estoque hoje: {l.estoqueUn.toFixed(0)} un</span>
-            </>}
-            {!l.semVinculo&&!l.conversaoDuvidosa&&<span className="tag" style={{background:l.dif>=0?"var(--bg)":"var(--dangerBg)",color:l.dif>=0?"var(--text2)":"var(--dangerText)",fontWeight:700}}>
-              {l.dif>=0?"+":""}{l.dif.toFixed(0)} un no período
-            </span>}
-          </div>
-          {l.semVinculo&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>
-            ⚠️ Este produto da lista não tem insumo vinculado, então a compra não chega até ele. Vincule em Compras → Insumos (Conciliar).
-          </div>}
-          {l.conversaoDuvidosa&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>
-            ⚠️ Compra em "{l.unsCompra}" e venda por unidade, sem conversão configurada. Preencha "unidades por embalagem" em Compras → Insumos, senão este comparativo não vale.
-          </div>}
-          {l.impossivel&&<div style={{fontSize:11,color:"var(--dangerText)",marginTop:5}}>
-            ⚠️ Vendeu mais do que comprou + estoque atual. Ou falta lançar compra no período, ou o vínculo aponta para o produto errado.
-          </div>}
-        </div>)}
-        {linhas.length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:10,lineHeight:1.5}}>
-          A diferença é o quanto o estoque <em>deveria</em> ter variado no período — não é sobra nem falta, porque não considera o que já havia antes. Para virar contagem de verdade, compare com o inventário em Estoque.
-        </div>}
-      </>;
-    })()}
-
-    {relTab==="vinculos"&&(()=>{
-      const fichas=[...(db.fichasTecnicas||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
-      // A lista vem de TODO o histórico, não só do período escolhido: um
-      // produto vendido mês passado precisa poder ser vinculado, senão a tela
-      // muda de conteúdo conforme o filtro de datas e o trabalho nunca acaba.
-      const tudo=new Map<string,{nome:string,qtd:number,total:number}>();
-      const somar=(nome:string,qtd:number,valor:number)=>{
-        if(!nome)return;
-        const k=foldNome(nome);
-        const cur=tudo.get(k)||{nome,qtd:0,total:0};
-        cur.qtd+=qtd; cur.total+=valor; cur.nome=nome;
-        tudo.set(k,cur);
-      };
-      (db.itensVendidos||[]).forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
-      (db.recibosVenda||[]).forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
-
-      const todos=Array.from(tudo.values())
-        .map(p=>({...p,...vinculoDoProduto(db,p.nome)}))
-        .sort((a,b)=>b.total-a.total);
-      const receitaTotal=todos.reduce((s,p)=>s+p.total,0);
-      const comFicha=todos.filter(p=>p.ficha||p.produto);
-      const cobertura=receitaTotal?comFicha.reduce((s,p)=>s+p.total,0)/receitaTotal*100:0;
-      const pendentes=todos.filter(p=>p.vinculo==="nenhum");
-
-      const q=foldBusca(buscaVinc);
-      const lista=todos
-        .filter(p=>!soPendentes||p.vinculo==="nenhum")
-        .filter(p=>!q||foldBusca(p.nome).includes(q));
-
-      const prodsLista=[...(db.produtosLista||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
-      const vincular=(nome:string,valor:string)=>{
-        const k=foldNome(nome);
-        const agora=new Date().toISOString();
-        // Prefixo no value porque ficha e matéria-prima são listas diferentes
-        // com ids gerados pelo mesmo uid() — sem ele, um id igual nas duas
-        // apontaria pro destino errado sem nenhum sintoma visível.
-        const reg=valor==="__auto"?{modo:"auto"}
-          :valor==="__ignorar"?{modo:"ignorar"}
-          :valor.startsWith("m:")?{modo:"produto",prodId:valor.slice(2),prodNome:(prodsLista.find((m:any)=>m.id===valor.slice(2))||{}).nome||""}
-          :{modo:"ficha",fichaId:valor.slice(2),fichaNome:(fichas.find((f:any)=>f.id===valor.slice(2))||{}).nome||""};
-        // setDbAndSave (e não setDb): o auto-save genérico PODE pular a
-        // gravação se coincidir com outro save em andamento, e aí o vínculo
-        // some no próximo poll — o clássico "eu marco e volta sozinho".
-        (setDbAndSave||setDb)((d:any)=>({...d,mapaProdutoFicha:{...(d.mapaProdutoFicha||{}),
-          [k]:{...reg,origemAprendizado:"usuario",ultimaAtualizacao:agora}}}));
-      };
-
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Produto vendido → ficha técnica</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
-          Produto <strong>produzido</strong> aponta para a ficha técnica; produto de <strong>revenda</strong> (água, refrigerante, cerveja) aponta para o produto da <strong>lista de compras</strong> — o que se vende é o que se compra. Quem já casa pelo nome com uma ficha aparece como <strong>automático</strong>.
-          <br/>Para <strong>desvincular</strong>, escolha a primeira opção do seletor. <strong>Ignorar</strong> é outra coisa: tira o produto de todas as análises de propósito (couvert, taxa, brinde).
-        </div>
-
-        <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
-            <span style={{color:"var(--text2)"}}>Receita com ficha vinculada</span>
-            <strong style={{color:cobertura>=80?"var(--successText)":cobertura>=40?"var(--warningText)":"var(--dangerText)"}}>{cobertura.toFixed(0)}%</strong>
-          </div>
-          <div style={{height:8,background:"var(--border)",borderRadius:4,overflow:"hidden"}}>
-            <div style={{width:`${Math.min(100,cobertura)}%`,height:"100%",background:cobertura>=80?"#16A34A":cobertura>=40?"#B45309":"#A32B24"}}/>
-          </div>
-          <div style={{fontSize:11,color:"var(--text2)",marginTop:6}}>
-            {comFicha.length} de {todos.length} produtos vinculados · {pendentes.length} pendente(s)
-            {todos.filter(p=>p.vinculo==="produto").length>0&&` · ${todos.filter(p=>p.vinculo==="produto").length} de revenda`}
-          </div>
-        </div>
-
-        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-          <input placeholder="🔍 Buscar produto..." value={buscaVinc} onChange={e=>setBuscaVinc(e.target.value)} className="inp" style={{flex:1,minWidth:160,marginBottom:0}}/>
-          <button onClick={()=>setSoPendentes(v=>!v)} className="pill"
-            style={{background:soPendentes?"var(--btnPrimary)":"var(--bg3)",color:soPendentes?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>
-            {soPendentes?"Só pendentes":"Todos"}
-          </button>
-        </div>
-
-        {!fichas.length&&!prodsLista.length&&<div style={{fontSize:12,color:"var(--warningText)",marginBottom:10}}>
-          ⚠️ Nem ficha técnica nem produto na lista de compras. Cadastre antes de vincular.
-        </div>}
-        {!lista.length&&<EmptyState msg={soPendentes?"Nenhum produto pendente — tudo vinculado.":"Nenhum produto vendido ainda."}/>}
-
-        {lista.slice(0,200).map(p=>{
-          const reg=(db.mapaProdutoFicha||{})[foldNome(p.nome)];
-          const valorSel=reg?.modo==="ficha"&&p.ficha?`f:${p.ficha.id}`
-            :(reg?.modo==="produto"||reg?.modo==="insumo")&&p.produto?`m:${p.produto.id}`
-            :reg?.modo==="ignorar"?"__ignorar":"__auto";
-          const pesoPct=receitaTotal?p.total/receitaTotal*100:0;
-          return <div key={p.nome} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
-              <span style={{fontSize:13,fontWeight:600}}>{p.nome}</span>
-              <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>{fmtMoney(p.total)} · {pesoPct.toFixed(1)}%</span>
-            </div>
-            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-              <select className="inp" value={valorSel} onChange={e=>vincular(p.nome,e.target.value)} style={{flex:1,minWidth:180,marginBottom:0,fontSize:12}}>
-                <option value="__auto">— sem vínculo manual (desvincular) —</option>
-                <optgroup label="Produzido — ficha técnica">
-                  {fichas.map((f:any)=><option key={f.id} value={`f:${f.id}`}>{f.nome}</option>)}
-                </optgroup>
-                <optgroup label="Revenda — produto da lista de compras">
-                  {prodsLista.map((m:any)=><option key={m.id} value={`m:${m.id}`}>{m.nome}{m.cat?` · ${m.cat}`:""}</option>)}
-                </optgroup>
-                <option value="__ignorar">Ignorar — fora da análise</option>
-              </select>
-              <span style={{fontSize:10,fontWeight:700,padding:"4px 8px",borderRadius:6,whiteSpace:"nowrap" as const,
-                ...(p.vinculo==="manual"?{background:"var(--successBg)",color:"var(--successText)"}
-                  :p.vinculo==="auto"?{background:"var(--infoBg)",color:"var(--infoText)"}
-                  :p.vinculo==="ignorado"?{background:"var(--border)",color:"var(--text3)"}
-                  :{background:"var(--warningBg)",color:"var(--warningText)"})}}>
-                {p.vinculo==="manual"?`✓ ${p.ficha.nome}`
-                  :p.vinculo==="produto"?`🛒 ${p.produto.nome}`
-                  :p.vinculo==="auto"?`automático: ${p.ficha.nome}`
-                  :p.vinculo==="ignorado"?"ignorado":"sem vínculo"}
-              </span>
-            </div>
-          </div>;
-        })}
-        {lista.length>200&&<div style={{fontSize:11,color:"var(--text2)",padding:"10px 0"}}>
-          Mostrando os 200 maiores de {lista.length}. Use a busca para achar os demais.
-        </div>}
       </>;
     })()}
 
@@ -12781,6 +12251,594 @@ function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbA
   </div>;
 }
 
+
+
+// ===================== ESTOQUE → SAÍDAS POR VENDA =====================
+// Tudo que liga venda a estoque num lugar só, na ordem em que se usa:
+// vincular → registrar → conferir.
+//
+// Antes isto eram quatro abas espalhadas dentro de Vendas → Relatório, que
+// tinha quinze. Relatório é lugar de OLHAR; uma tela que mexe no saldo não
+// pode morar lá, e ninguém acha uma ação escondida na décima segunda aba.
+function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string}){
+  const [aba,setAba]=useState<"registrar"|"conferencia"|"vinculos">("registrar");
+  const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
+  const [fim,setFim]=useState(today());
+  const [buscaVinc,setBuscaVinc]=useState("");
+  const [soPendentes,setSoPendentes]=useState(true);
+  const [enviandoPdv,setEnviandoPdv]=useState(false);
+  const [verDetalhe,setVerDetalhe]=useState(false);
+
+  const {porDia:vendasPorDia,diasPdv}=vendasPorItem(db,ini,fim);
+  const agruparItens=()=>agruparProdutos(vendasPorDia);
+  const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
+  const itensPdvPeriodo=(db.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim);
+  const avisoFontePdv=diasPdv>0
+    ?<div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Inclui {diasPdv} dia(s) de venda do PDV, agregados por produto.</div>
+    :null;
+
+  // Quanto da receita do período ainda não tem para onde ir. É o número que
+  // decide se vale registrar agora ou vincular primeiro.
+  const todosProdutos=agruparItens();
+  const receitaTotal=todosProdutos.reduce((s:number,p:any)=>s+p.total,0);
+  const semVinculo=todosProdutos.filter((p:any)=>vinculoDoProduto(db,p.nome).vinculo==="nenhum");
+  const receitaSemVinculo=semVinculo.reduce((s:number,p:any)=>s+p.total,0);
+
+  const RegistrarTab=()=>{
+
+      // Baixa por DIA, não pelo período inteiro: movimento de estoque sem data
+      // certa inutiliza o extrato e a contagem por período.
+      const mpsTodas=db.materiasPrimas||[];
+      const porDia:Record<string,Record<string,any>>={};
+      const avisos=new Set<string>();
+      const acumula=(data:string,mp:any,qtd:number,custo:number,fonte:string)=>{
+        if(!(qtd>0))return;
+        const dia=porDia[data]||(porDia[data]={});
+        const cur=dia[mp.id]||(dia[mp.id]={nome:mp.nome,unidade:mp.unidade||"un",qtd:0,custo:0,fontes:new Set<string>()});
+        cur.qtd+=qtd; cur.custo+=custo; cur.fontes.add(fonte);
+      };
+
+      // Vendas do período, agrupadas por dia e produto. recibosVenda entra
+      // junto: são vendas reais e hoje não baixam estoque em lugar nenhum.
+      const diasVenda=new Map<string,Map<string,{nome:string,qtd:number,total:number}>>();
+      const addVenda=(data:string,nome:string,qtd:number,valor:number)=>{
+        if(!nome||!data)return;
+        const dia=diasVenda.get(data)||new Map();
+        const k=foldNome(nome);
+        const cur=dia.get(k)||{nome,qtd:0,total:0};
+        cur.qtd+=qtd; cur.total+=valor; dia.set(k,cur); diasVenda.set(data,dia);
+      };
+      (db.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim)
+        .forEach((d:any)=>(d.itens||[]).forEach((it:any)=>addVenda(d.data,it.nome,it.qtd||0,it.valor||0)));
+      (db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim)
+        .forEach((r:any)=>(r.itens||[]).forEach((it:any)=>addVenda(r.data,it.nome,it.quantidade||0,it.subtotal||0)));
+
+      Array.from(diasVenda.entries()).forEach(([data,prods])=>{
+        const lista=Array.from(prods.values());
+
+        // PRODUZIDO: ficha explode em insumos.
+        const {linhas}=consumoTeorico(lista,(nome:string)=>vinculoDoProduto(db,nome).ficha);
+        linhas.forEach((l:any)=>{
+          if(!l.mpId){avisos.add(`"${l.nome}" está na ficha sem insumo vinculado — não dá pra baixar`);return;}
+          const mp=mpsTodas.find((m:any)=>m.id===l.mpId);
+          if(!mp){avisos.add(`Insumo da ficha não existe mais no cadastro ("${l.nome}")`);return;}
+          const q=converterQtd(l.qtd,l.unidade,mp.unidade||"un");
+          if(q==null){avisos.add(`"${mp.nome}": ficha em "${l.unidade}" e insumo em "${mp.unidade}" — sem conversão possível`);return;}
+          acumula(data,mp,q,l.custo,"produção");
+        });
+
+        // REVENDA não baixa aqui: por decisão do dono, o saldo desses produtos
+        // mora no PDV, que já tem inventário, extrato e alerta de mínimo. Vai
+        // pelo bloco "revendaPorDia" abaixo. Manter as duas baixas ligadas
+        // descontaria a mesma lata duas vezes, em dois sistemas.
+      });
+
+      // Revenda → PDV. Agrupa por dia, pelo NOME do produto: o cardápio do
+      // Eclética e o do PDV são o mesmo, então o PDV casa por nome do lado de
+      // lá e devolve o que não encontrou.
+      const revendaPorDia=Array.from(diasVenda.entries()).map(([data,prods])=>{
+        const itens=Array.from(prods.values())
+          .filter((p:any)=>vinculoDoProduto(db,p.nome).vinculo==="produto")
+          .map((p:any)=>({nome:p.nome,quantidade:p.qtd}));
+        return{data,itens};
+      }).filter(d=>d.itens.length).sort((a,b)=>a.data.localeCompare(b.data));
+      const totalRevenda=revendaPorDia.reduce((sa,d)=>sa+d.itens.reduce((x:number,i:any)=>x+i.quantidade,0),0);
+
+      const dias=Object.keys(porDia).sort();
+      const resumo=new Map<string,{nome:string,unidade:string,qtd:number,custo:number,fontes:Set<string>}>();
+      dias.forEach(dt=>Object.entries(porDia[dt]).forEach(([mpId,v]:any)=>{
+        const cur=resumo.get(mpId)||{nome:v.nome,unidade:v.unidade,qtd:0,custo:0,fontes:new Set<string>()};
+        cur.qtd+=v.qtd; cur.custo+=v.custo; v.fontes.forEach((f:string)=>cur.fontes.add(f));
+        resumo.set(mpId,cur);
+      }));
+      const linhasResumo=Array.from(resumo.entries()).map(([mpId,v])=>({mpId,...v})).sort((a,b)=>b.custo-a.custo);
+      const custoTotal=linhasResumo.reduce((sa,l)=>sa+l.custo,0);
+
+      // Quanto deste período já foi baixado antes — é o que diz se o botão vai
+      // criar, corrigir ou não fazer nada.
+      const idsExistentes=new Set((db.movEstoque||[]).map((m:any)=>m.id));
+      let jaBaixados=0, aCriar=0;
+      dias.forEach(dt=>Object.keys(porDia[dt]).forEach(mpId=>{
+        if(idsExistentes.has(idBaixaVenda(dt,mpId)))jaBaixados++; else aCriar++;
+      }));
+
+      // Desfazer é o mesmo caminho da aplicação, com quantidade zero: o módulo
+      // remove o movimento e devolve a quantidade ao saldo. Varre o que EXISTE
+      // gravado, não o que seria calculado agora — um produto desvinculado
+      // depois da baixa sumiria do cálculo e o movimento dele ficaria órfão,
+      // segurando estoque que ninguém mais explica.
+      const gravadosNoPeriodo=(db.movEstoque||[]).filter((m:any)=>
+        typeof m?.id==="string"&&m.id.startsWith("vsaida-")&&m.data>=ini&&m.data<=fim);
+      const desfazer=()=>{
+        if(!gravadosNoPeriodo.length)return;
+        if(!confirm(`Desfazer a baixa de ${gravadosNoPeriodo.length} movimento(s) entre ${fmtDate(ini)} e ${fmtDate(fim)}?\n\nA quantidade volta pro saldo de cada insumo e os movimentos somem de Estoque → Movimentações.\n\nSó mexe no que esta tela gravou — compras, perdas e ajustes manuais não são tocados.`))return;
+        const zerar:Record<string,Record<string,any>>={};
+        gravadosNoPeriodo.forEach((m:any)=>{
+          (zerar[m.data]||(zerar[m.data]={}))[m.mpId]={qtd:0};
+        });
+        (setDbAndSave||setDb)((d:any)=>{
+          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],zerar,new Date().toISOString());
+          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
+        });
+        alert(`${gravadosNoPeriodo.length} movimento(s) desfeito(s). O estoque voltou ao que era.`);
+      };
+
+      // Movimentos gravados antes que NÃO aparecem mais no cálculo — caso
+      // típico agora: a revenda que saiu daqui e foi pro PDV. Sem zerá-los, a
+      // baixa antiga fica pendurada segurando estoque que ninguém mais explica,
+      // porque o laço de aplicação só passa pelas chaves do cálculo atual.
+      const orfaos=gravadosNoPeriodo.filter((m:any)=>!(porDia[m.data]&&porDia[m.data][m.mpId]));
+      const porDiaReconciliado:Record<string,Record<string,any>>={};
+      Object.entries(porDia).forEach(([d,v]:any)=>{porDiaReconciliado[d]={...v};});
+      orfaos.forEach((m:any)=>{(porDiaReconciliado[m.data]||(porDiaReconciliado[m.data]={}))[m.mpId]={qtd:0};});
+
+      const aplicar=()=>{
+        const qtdMov=jaBaixados+aCriar;
+        if(!confirm(`Baixar o estoque de ${dias.length} dia(s) de venda?\n\n${aCriar} movimento(s) novo(s) e ${jaBaixados} já existente(s) serão recalculados.${orfaos.length?`\n${orfaos.length} baixa(s) antiga(s) fora do cálculo atual serão DESFEITAS.`:""}\n\nPode rodar de novo sem duplicar: cada dia tem um movimento só, e reaplicar corrige pela diferença.`))return;
+        (setDbAndSave||setDb)((d:any)=>{
+          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],porDiaReconciliado,new Date().toISOString());
+          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
+        });
+        alert(`Pronto. ${qtdMov} movimento(s) de saída gravados em Estoque → Movimentações.${orfaos.length?`\n\n${orfaos.length} baixa(s) antiga(s) que não valem mais foram desfeitas (o estoque voltou).`:""}`);
+      };
+
+      const enviarRevendaPdv=async()=>{
+        if(!revendaPorDia.length)return;
+        if(!confirm(`Baixar no PDV ${totalRevenda.toFixed(0)} unidade(s) de revenda, em ${revendaPorDia.length} dia(s)?\n\nO PDV aplica só a diferença por dia e produto — reenviar o mesmo período não desconta duas vezes.`))return;
+        setEnviandoPdv(true);
+        try{
+          const r=await fetch("/api/estoque-pdv/venda-externa",{method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({empresa,fonte:"ecletica",dias:revendaPorDia})});
+          const j=await r.json();
+          if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);
+          const partes=[`${j.aplicados} produto-dia aplicado(s) no PDV.`];
+          if(j.naoEncontrados?.length)partes.push(`\nSem produto correspondente no PDV (${j.naoEncontrados.length}): ${j.naoEncontrados.slice(0,8).join(", ")}`);
+          if(j.semControle?.length)partes.push(`\nSem controle de estoque ligado no PDV (${j.semControle.length}): ${j.semControle.slice(0,8).join(", ")}`);
+          if(j.falhas?.length)partes.push(`\nFalharam: ${j.falhas.map((f:any)=>`${f.data} (${f.erro})`).join(", ")}`);
+          alert(partes.join("\n"));
+        }catch(e:any){alert(`Não consegui baixar no PDV: ${e.message}`);}
+        finally{setEnviandoPdv(false);}
+      };
+
+
+    // UM botão: o operador quer "registrar o que saiu", não escolher destino.
+    // A separação revenda→PDV / insumo→Gestão é detalhe de implementação e o
+    // sistema já sabe qual é qual pelo vínculo — perguntar isso a cada uso foi
+    // exatamente o que deixou a tela confusa.
+    const registrarTudo=async()=>{
+      const partes=[];
+      if(revendaPorDia.length)partes.push(`${totalRevenda.toFixed(0)} unidade(s) de revenda no PDV`);
+      if(dias.length)partes.push(`${linhasResumo.length} insumo(s) aqui no Gestão`);
+      if(!partes.length)return;
+      if(!confirm(`Registrar as saídas de ${fmtDate(ini)} a ${fmtDate(fim)}?\n\n${partes.join("\n")}${orfaos.length?`\n${orfaos.length} baixa(s) antiga(s) fora do cálculo serão desfeitas.`:""}\n\nPode repetir sem duplicar: cada dia e produto tem um registro só, e repetir corrige pela diferença.`))return;
+
+      if(dias.length||orfaos.length){
+        (setDbAndSave||setDb)((d:any)=>{
+          const r=aplicarBaixaVendas(d.movEstoque||[],d.materiasPrimas||[],porDiaReconciliado,new Date().toISOString());
+          return{...d,movEstoque:r.movEstoque,materiasPrimas:r.materiasPrimas};
+        });
+      }
+
+      const msgs=[`Insumos: ${aCriar+jaBaixados} movimento(s) em Estoque → Movimentações.`];
+      if(orfaos.length)msgs.push(`${orfaos.length} baixa(s) antiga(s) desfeita(s).`);
+
+      if(revendaPorDia.length){
+        setEnviandoPdv(true);
+        try{
+          const r=await fetch("/api/estoque-pdv/venda-externa",{method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({empresa,fonte:"ecletica",dias:revendaPorDia})});
+          const j=await r.json();
+          if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);
+          msgs.push(`Revenda: ${j.aplicados} produto-dia no PDV.`);
+          if(j.naoEncontrados?.length)msgs.push(`Sem produto no PDV (${j.naoEncontrados.length}): ${j.naoEncontrados.slice(0,6).join(", ")}`);
+          if(j.semControle?.length)msgs.push(`Sem controle de estoque no PDV (${j.semControle.length}): ${j.semControle.slice(0,6).join(", ")}`);
+          if(j.falhas?.length)msgs.push(`Falharam: ${j.falhas.map((f:any)=>f.data).join(", ")}`);
+        }catch(e:any){msgs.push(`⚠️ Revenda NÃO foi pro PDV: ${e.message}`);}
+        finally{setEnviandoPdv(false);}
+      }
+      alert(msgs.join("\n"));
+    };
+
+    const nada=!dias.length&&!revendaPorDia.length;
+    const registrado=linhasResumo.reduce((s:number,l:any)=>s+l.custo,0);
+    return <>
+      {nada&&<EmptyState msg="Nenhuma venda vinculada no período. Comece pela aba Vínculos."/>}
+      {!nada&&<div className="card" style={{marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
+          <span style={{color:"var(--text2)"}}>Vendas do período</span><strong>{fmtMoney(receitaTotal)}</strong>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
+          <span style={{color:"var(--text2)"}}>Custo dos insumos que saem</span><strong>{fmtMoney(registrado)}</strong>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,padding:"3px 0"}}>
+          <span style={{color:"var(--text2)"}}>Unidades de revenda</span><strong>{totalRevenda.toFixed(0)}</strong>
+        </div>
+        <button className="btn" disabled={enviandoPdv} onClick={registrarTudo}
+          style={{width:"100%",marginTop:12,background:enviandoPdv?"var(--border)":"var(--btnPrimary)",color:enviandoPdv?"#888":"var(--onPrimary,#FFFFFF)",padding:"13px",fontSize:15,fontWeight:700}}>
+          {enviandoPdv?"Registrando..." : "✅ Registrar saídas do período"}
+        </button>
+        <div style={{fontSize:10.5,color:"var(--text3)",marginTop:8,lineHeight:1.5}}>
+          Pode repetir quantas vezes quiser: cada dia e produto tem um registro só, e repetir corrige pela diferença — nunca soma.
+          Insumo de produto produzido sai daqui do Gestão; revenda sai do PDV, que é onde mora o saldo dela.
+        </div>
+      </div>}
+
+      {receitaSemVinculo>0&&<div style={{background:"var(--warningBg)",border:"1px solid #f59e0b55",borderRadius:8,padding:"9px 12px",marginBottom:12,fontSize:12,color:"var(--warningText)"}}>
+        ⚠️ {semVinculo.length} produto(s) sem vínculo — {receitaTotal?Math.round(receitaSemVinculo/receitaTotal*100):0}% da receita fica de fora.
+        <button onClick={()=>setAba("vinculos")} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontWeight:700,textDecoration:"underline",padding:0,marginLeft:6,fontSize:12}}>resolver</button>
+      </div>}
+
+      {avisos.size>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10,lineHeight:1.6}}>
+        ⚠️ Fora do registro:<br/>{[...avisos].slice(0,6).map((a,i)=><span key={i}>· {a}<br/></span>)}
+        {avisos.size>6&&<span>· +{avisos.size-6} outro(s)</span>}
+      </div>}
+
+      {!nada&&<button onClick={()=>setVerDetalhe(v=>!v)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:12,fontWeight:700,padding:"4px 0",marginBottom:6}}>
+        {verDetalhe?"▾":"▸"} ver detalhe do que vai sair
+      </button>}
+      {verDetalhe&&<>
+        {linhasResumo.map((l:any)=>{
+          const mp=mpsTodas.find((m:any)=>m.id===l.mpId);
+          const saldo=parseFloat(mp?.estoqueAtual)||0;
+          return <div key={l.mpId} style={{padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+              <span style={{fontSize:12.5}}>{l.nome} <span style={{fontSize:10,color:"var(--text3)"}}>insumo</span></span>
+              <span style={{fontSize:12,fontWeight:700,color:"var(--dangerText)"}}>−{l.qtd.toFixed(l.qtd<10?2:0)} {l.unidade}</span>
+            </div>
+            <div style={{fontSize:10.5,color:"var(--text3)"}}>saldo {saldo.toFixed(saldo<10?2:0)} → {(saldo-l.qtd).toFixed(2)} {l.unidade}</div>
+          </div>;
+        })}
+        {revendaPorDia.length>0&&<div style={{fontSize:11,color:"var(--text2)",padding:"8px 0"}}>
+          + {totalRevenda.toFixed(0)} unidade(s) de revenda em {revendaPorDia.length} dia(s), que vão pro PDV.
+        </div>}
+      </>}
+    </>;
+  };
+
+  const ConferenciaTab=()=>{
+    const consumoUi=(()=>{
+      // Consumo TEÓRICO: o que as fichas dizem que deveria ter saído do estoque
+      // para produzir o que foi vendido. Não é o que saiu de fato — a diferença
+      // entre os dois é justamente o que se quer enxergar.
+      const movs=db.movEstoque||[];
+      const {linhas:base,receitaComFicha,receitaSemFicha,semPorcoes,semInsumos}=
+        consumoTeorico(agruparItens(),(nome:string)=>vinculoDoProduto(db,nome).ficha);
+
+      const linhas=base.map((l:any)=>{
+        const mp=l.mpId?(db.materiasPrimas||[]).find((m:any)=>m.id===l.mpId):null;
+        let comprado:number|null=null, estoque:number|null=null;
+        if(mp){
+          const entradas=movs.filter((mv:any)=>mv.mpId===mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
+          const brutoCompra=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0);
+          comprado=converterQtd(brutoCompra,mp.unidade||"un",l.unidade);
+          estoque=converterQtd(parseFloat(mp.estoqueAtual)||0,mp.unidade||"un",l.unidade);
+        }
+        return{...l,mp,comprado,estoque,unCompra:mp?.unidade||"",
+          cobertura:comprado!=null&&l.qtd>0?comprado/l.qtd:null};
+      });
+
+      const custoTeorico=linhas.reduce((sa:number,l:any)=>sa+l.custo,0);
+      const cmvTeorico=receitaComFicha>0?custoTeorico/receitaComFicha*100:null;
+      const receitaTotal=receitaComFicha+receitaSemFicha;
+      const cobFichas=receitaTotal>0?receitaComFicha/receitaTotal*100:0;
+      const semConversao=linhas.filter((l:any)=>l.mp&&l.comprado==null).length;
+
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Consumo teórico de insumos</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
+          O que as fichas técnicas dizem que <em>deveria</em> ter saído do estoque para produzir o que foi vendido no período.
+        </div>
+
+        {!linhas.length&&<EmptyState msg="Nenhum produto vendido com ficha técnica vinculada no período."/>}
+
+        {linhas.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Custo teórico dos insumos</span><strong>{fmtMoney(custoTeorico)}</strong>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Receita dos produtos com ficha</span><strong>{fmtMoney(receitaComFicha)}</strong>
+          </div>
+          {cmvTeorico!=null&&<div style={{display:"flex",justifyContent:"space-between",fontSize:14,fontWeight:700,paddingTop:6,marginTop:4,borderTop:"1px solid var(--border)"}}>
+            <span>CMV teórico</span>
+            <span style={{color:cmvTeorico<=35?"var(--successText)":cmvTeorico<=45?"var(--warningText)":"var(--dangerText)"}}>{cmvTeorico.toFixed(1)}%</span>
+          </div>}
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:6,lineHeight:1.5}}>
+            Calculado só sobre os {cobFichas.toFixed(0)}% da receita que têm ficha vinculada — não é o CMV da loja inteira.
+            {cobFichas<70&&<> Vincule mais produtos em <strong>Vincular Produtos</strong> para este número valer.</>}
+          </div>
+        </div>}
+
+        {semPorcoes.length>0&&<div style={{fontSize:11,color:"var(--dangerText)",marginBottom:8}}>
+          ⚠️ Ficha sem rendimento informado (tratada como 1 porção): {semPorcoes.slice(0,5).join(", ")}. Se a receita rende mais de uma unidade, o consumo dela está superestimado.
+        </div>}
+        {semInsumos.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:8}}>
+          ⚠️ Ficha sem insumos cadastrados: {semInsumos.slice(0,5).join(", ")}.
+        </div>}
+        {semConversao>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:8}}>
+          ⚠️ {semConversao} insumo(s) com unidade da ficha diferente da unidade de compra, sem conversão possível — o comparativo fica em branco neles.
+        </div>}
+
+        {linhas.map((l:any)=>{
+          const top=Array.from(l.fontes.entries() as Iterable<[string,number]>).sort((a,b)=>b[1]-a[1]).slice(0,3);
+          return <div key={l.chave} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
+              <span style={{fontSize:13,fontWeight:600}}>{l.nome}</span>
+              <span style={{fontSize:12,fontWeight:700}}>{fmtMoney(l.custo)}</span>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:5}}>
+              <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>deveria ter saído: {l.qtd.toFixed(l.qtd<10?2:0)} {l.unidade}</span>
+              {l.comprado!=null&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>comprado: {l.comprado.toFixed(l.comprado<10?2:0)} {l.unidade}</span>}
+              {l.estoque!=null&&<span className="tag" style={{background:"var(--bg)",color:"var(--text2)"}}>estoque hoje: {l.estoque.toFixed(l.estoque<10?2:0)} {l.unidade}</span>}
+              {!l.mp&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>sem insumo vinculado na ficha</span>}
+              {l.mp&&l.comprado==null&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>ficha em "{l.unidade}", compra em "{l.unCompra}"</span>}
+            </div>
+            <div style={{fontSize:10.5,color:"var(--text3)"}}>
+              vem de: {top.map(([nome,q]:[string,number])=>`${nome} (${q.toFixed(q<10?1:0)})`).join(" · ")}{l.fontes.size>3?` · +${l.fontes.size-3}`:""}
+            </div>
+          </div>;
+        })}
+
+        {linhas.length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:10,lineHeight:1.5}}>
+          A primeira coisa que esta tela costuma revelar não é desperdício: é <strong>ficha desatualizada</strong>. Se ela diz 30 g e a cozinha usa 45 g, a diferença aparece aqui como se fosse desvio. Confira a ficha antes de concluir qualquer coisa.
+        </div>}
+      </>;
+    })();
+    const revendaUi=(()=>{
+      // Só produtos de REVENDA: o que se vende é literalmente o que se compra,
+      // então dá pra comparar quantidade contra quantidade. Produto produzido
+      // não entra aqui — vendê-lo consome insumos, e comparar "pão de queijo
+      // vendido" com "pão de queijo comprado" não significaria nada.
+      const movs=db.movEstoque||[];
+      const porProd=new Map<string,{produto:any,vendido:number,receita:number}>();
+      const somar=(nome:string,qtd:number,valor:number)=>{
+        const {produto,vinculo}=vinculoDoProduto(db,nome);
+        if(vinculo!=="produto"||!produto)return;
+        const cur=porProd.get(produto.id)||{produto,vendido:0,receita:0};
+        cur.vendido+=qtd; cur.receita+=valor;
+        porProd.set(produto.id,cur);
+      };
+      itensPdvPeriodo.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
+      recibos.forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
+
+      const linhas=Array.from(porProd.values()).map(l=>{
+        // Um produto da lista costuma ter VÁRIAS matérias-primas vinculadas
+        // (marcas diferentes do mesmo item). Só a soma das três responde
+        // "quanto de água eu comprei" — olhar uma marca só subestima.
+        const mps=mpsDoProdutoLista(db,l.produto);
+        let compradoUn=0, estoqueUn=0, semConversao=0;
+        let unsCompra=new Set<string>();
+        mps.forEach((mp:any)=>{
+          const entradas=movs.filter((mv:any)=>mv.mpId===mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
+          // 1 caixa comprada = 6 latas vendidas. Sem essa conversão, comparar
+          // "40 vendidas" com "7 compradas" produziria um rombo inventado.
+          const porEmb=parseFloat(mp.unidadesPorEmbalagem)||1;
+          const un=foldNome((entradas[0]?.unidade)||mp.unidade||"un");
+          unsCompra.add(un);
+          if(porEmb===1&&!["un","und","unidade","unid"].includes(un))semConversao++;
+          compradoUn+=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0)*porEmb;
+          estoqueUn+=(parseFloat(mp.estoqueAtual)||0)*porEmb;
+        });
+        const semVinculo=mps.length===0;
+        const conversaoDuvidosa=!semVinculo&&semConversao>0;
+        const impossivel=!semVinculo&&!conversaoDuvidosa&&l.vendido>compradoUn+estoqueUn+0.001;
+        return{...l,mps,compradoUn,estoqueUn,semVinculo,conversaoDuvidosa,impossivel,
+          unsCompra:[...unsCompra].join("/"),dif:compradoUn-l.vendido};
+      }).sort((a,b)=>b.receita-a.receita);
+
+      const alertas=linhas.filter(l=>l.semVinculo||l.conversaoDuvidosa||l.impossivel).length;
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Revenda — vendido × comprado</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
+          Só produtos vinculados como <strong>revenda</strong> em Vincular Produtos. A compra chega até o produto da lista pelos insumos vinculados a ele, e as quantidades são convertidas para unidade individual.
+        </div>
+        {!linhas.length&&<EmptyState msg="Nenhum produto de revenda vinculado ainda. Vincule em 'Vincular Produtos'."/>}
+        {alertas>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
+          ⚠️ {alertas} item(ns) com número não confiável — veja o aviso em cada linha antes de tirar conclusão.
+        </div>}
+        {linhas.map(l=><div key={l.produto.id} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
+            <span style={{fontSize:13,fontWeight:600}}>{l.produto.nome}
+              {l.mps.length>1&&<span style={{fontSize:10,color:"var(--text3)",fontWeight:400,marginLeft:6}}>{l.mps.length} marcas</span>}
+            </span>
+            <span style={{fontSize:11,color:"var(--text2)"}}>{fmtMoney(l.receita)}</span>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>vendido: {l.vendido.toFixed(0)} un</span>
+            {!l.semVinculo&&<>
+              <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>comprado: {l.compradoUn.toFixed(0)} un</span>
+              <span className="tag" style={{background:"var(--bg)",color:"var(--text2)"}}>estoque hoje: {l.estoqueUn.toFixed(0)} un</span>
+            </>}
+            {!l.semVinculo&&!l.conversaoDuvidosa&&<span className="tag" style={{background:l.dif>=0?"var(--bg)":"var(--dangerBg)",color:l.dif>=0?"var(--text2)":"var(--dangerText)",fontWeight:700}}>
+              {l.dif>=0?"+":""}{l.dif.toFixed(0)} un no período
+            </span>}
+          </div>
+          {l.semVinculo&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>
+            ⚠️ Este produto da lista não tem insumo vinculado, então a compra não chega até ele. Vincule em Compras → Insumos (Conciliar).
+          </div>}
+          {l.conversaoDuvidosa&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>
+            ⚠️ Compra em "{l.unsCompra}" e venda por unidade, sem conversão configurada. Preencha "unidades por embalagem" em Compras → Insumos, senão este comparativo não vale.
+          </div>}
+          {l.impossivel&&<div style={{fontSize:11,color:"var(--dangerText)",marginTop:5}}>
+            ⚠️ Vendeu mais do que comprou + estoque atual. Ou falta lançar compra no período, ou o vínculo aponta para o produto errado.
+          </div>}
+        </div>)}
+        {linhas.length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:10,lineHeight:1.5}}>
+          A diferença é o quanto o estoque <em>deveria</em> ter variado no período — não é sobra nem falta, porque não considera o que já havia antes. Para virar contagem de verdade, compare com o inventário em Estoque.
+        </div>}
+      </>;
+    })();
+    return <>{consumoUi}<div style={{height:18}}/>{revendaUi}</>;
+  };
+
+  const VinculosTab=()=>(()=>{
+      const fichas=[...(db.fichasTecnicas||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
+      // A lista vem de TODO o histórico, não só do período escolhido: um
+      // produto vendido mês passado precisa poder ser vinculado, senão a tela
+      // muda de conteúdo conforme o filtro de datas e o trabalho nunca acaba.
+      const tudo=new Map<string,{nome:string,qtd:number,total:number}>();
+      const somar=(nome:string,qtd:number,valor:number)=>{
+        if(!nome)return;
+        const k=foldNome(nome);
+        const cur=tudo.get(k)||{nome,qtd:0,total:0};
+        cur.qtd+=qtd; cur.total+=valor; cur.nome=nome;
+        tudo.set(k,cur);
+      };
+      (db.itensVendidos||[]).forEach((d:any)=>(d.itens||[]).forEach((it:any)=>somar(it.nome,it.qtd||0,it.valor||0)));
+      (db.recibosVenda||[]).forEach((r:any)=>(r.itens||[]).forEach((it:any)=>somar(it.nome,it.quantidade||0,it.subtotal||0)));
+
+      const todos=Array.from(tudo.values())
+        .map(p=>({...p,...vinculoDoProduto(db,p.nome)}))
+        .sort((a,b)=>b.total-a.total);
+      const receitaTotal=todos.reduce((s,p)=>s+p.total,0);
+      const comFicha=todos.filter(p=>p.ficha||p.produto);
+      const cobertura=receitaTotal?comFicha.reduce((s,p)=>s+p.total,0)/receitaTotal*100:0;
+      const pendentes=todos.filter(p=>p.vinculo==="nenhum");
+
+      const q=foldBusca(buscaVinc);
+      const lista=todos
+        .filter(p=>!soPendentes||p.vinculo==="nenhum")
+        .filter(p=>!q||foldBusca(p.nome).includes(q));
+
+      const prodsLista=[...(db.produtosLista||[])].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||""));
+      const vincular=(nome:string,valor:string)=>{
+        const k=foldNome(nome);
+        const agora=new Date().toISOString();
+        // Prefixo no value porque ficha e matéria-prima são listas diferentes
+        // com ids gerados pelo mesmo uid() — sem ele, um id igual nas duas
+        // apontaria pro destino errado sem nenhum sintoma visível.
+        const reg=valor==="__auto"?{modo:"auto"}
+          :valor==="__ignorar"?{modo:"ignorar"}
+          :valor.startsWith("m:")?{modo:"produto",prodId:valor.slice(2),prodNome:(prodsLista.find((m:any)=>m.id===valor.slice(2))||{}).nome||""}
+          :{modo:"ficha",fichaId:valor.slice(2),fichaNome:(fichas.find((f:any)=>f.id===valor.slice(2))||{}).nome||""};
+        // setDbAndSave (e não setDb): o auto-save genérico PODE pular a
+        // gravação se coincidir com outro save em andamento, e aí o vínculo
+        // some no próximo poll — o clássico "eu marco e volta sozinho".
+        (setDbAndSave||setDb)((d:any)=>({...d,mapaProdutoFicha:{...(d.mapaProdutoFicha||{}),
+          [k]:{...reg,origemAprendizado:"usuario",ultimaAtualizacao:agora}}}));
+      };
+
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Produto vendido → ficha técnica</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
+          Produto <strong>produzido</strong> aponta para a ficha técnica; produto de <strong>revenda</strong> (água, refrigerante, cerveja) aponta para o produto da <strong>lista de compras</strong> — o que se vende é o que se compra. Quem já casa pelo nome com uma ficha aparece como <strong>automático</strong>.
+          <br/>Para <strong>desvincular</strong>, escolha a primeira opção do seletor. <strong>Ignorar</strong> é outra coisa: tira o produto de todas as análises de propósito (couvert, taxa, brinde).
+        </div>
+
+        <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
+            <span style={{color:"var(--text2)"}}>Receita com ficha vinculada</span>
+            <strong style={{color:cobertura>=80?"var(--successText)":cobertura>=40?"var(--warningText)":"var(--dangerText)"}}>{cobertura.toFixed(0)}%</strong>
+          </div>
+          <div style={{height:8,background:"var(--border)",borderRadius:4,overflow:"hidden"}}>
+            <div style={{width:`${Math.min(100,cobertura)}%`,height:"100%",background:cobertura>=80?"#16A34A":cobertura>=40?"#B45309":"#A32B24"}}/>
+          </div>
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:6}}>
+            {comFicha.length} de {todos.length} produtos vinculados · {pendentes.length} pendente(s)
+            {todos.filter(p=>p.vinculo==="produto").length>0&&` · ${todos.filter(p=>p.vinculo==="produto").length} de revenda`}
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+          <input placeholder="🔍 Buscar produto..." value={buscaVinc} onChange={e=>setBuscaVinc(e.target.value)} className="inp" style={{flex:1,minWidth:160,marginBottom:0}}/>
+          <button onClick={()=>setSoPendentes(v=>!v)} className="pill"
+            style={{background:soPendentes?"var(--btnPrimary)":"var(--bg3)",color:soPendentes?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>
+            {soPendentes?"Só pendentes":"Todos"}
+          </button>
+        </div>
+
+        {!fichas.length&&!prodsLista.length&&<div style={{fontSize:12,color:"var(--warningText)",marginBottom:10}}>
+          ⚠️ Nem ficha técnica nem produto na lista de compras. Cadastre antes de vincular.
+        </div>}
+        {!lista.length&&<EmptyState msg={soPendentes?"Nenhum produto pendente — tudo vinculado.":"Nenhum produto vendido ainda."}/>}
+
+        {lista.slice(0,200).map(p=>{
+          const reg=(db.mapaProdutoFicha||{})[foldNome(p.nome)];
+          const valorSel=reg?.modo==="ficha"&&p.ficha?`f:${p.ficha.id}`
+            :(reg?.modo==="produto"||reg?.modo==="insumo")&&p.produto?`m:${p.produto.id}`
+            :reg?.modo==="ignorar"?"__ignorar":"__auto";
+          const pesoPct=receitaTotal?p.total/receitaTotal*100:0;
+          return <div key={p.nome} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
+              <span style={{fontSize:13,fontWeight:600}}>{p.nome}</span>
+              <span style={{fontSize:11,color:"var(--text2)",whiteSpace:"nowrap" as const}}>{fmtMoney(p.total)} · {pesoPct.toFixed(1)}%</span>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+              <select className="inp" value={valorSel} onChange={e=>vincular(p.nome,e.target.value)} style={{flex:1,minWidth:180,marginBottom:0,fontSize:12}}>
+                <option value="__auto">— sem vínculo manual (desvincular) —</option>
+                <optgroup label="Produzido — ficha técnica">
+                  {fichas.map((f:any)=><option key={f.id} value={`f:${f.id}`}>{f.nome}</option>)}
+                </optgroup>
+                <optgroup label="Revenda — produto da lista de compras">
+                  {prodsLista.map((m:any)=><option key={m.id} value={`m:${m.id}`}>{m.nome}{m.cat?` · ${m.cat}`:""}</option>)}
+                </optgroup>
+                <option value="__ignorar">Ignorar — fora da análise</option>
+              </select>
+              <span style={{fontSize:10,fontWeight:700,padding:"4px 8px",borderRadius:6,whiteSpace:"nowrap" as const,
+                ...(p.vinculo==="manual"?{background:"var(--successBg)",color:"var(--successText)"}
+                  :p.vinculo==="auto"?{background:"var(--infoBg)",color:"var(--infoText)"}
+                  :p.vinculo==="ignorado"?{background:"var(--border)",color:"var(--text3)"}
+                  :{background:"var(--warningBg)",color:"var(--warningText)"})}}>
+                {p.vinculo==="manual"?`✓ ${p.ficha.nome}`
+                  :p.vinculo==="produto"?`🛒 ${p.produto.nome}`
+                  :p.vinculo==="auto"?`automático: ${p.ficha.nome}`
+                  :p.vinculo==="ignorado"?"ignorado":"sem vínculo"}
+              </span>
+            </div>
+          </div>;
+        })}
+        {lista.length>200&&<div style={{fontSize:11,color:"var(--text2)",padding:"10px 0"}}>
+          Mostrando os 200 maiores de {lista.length}. Use a busca para achar os demais.
+        </div>}
+      </>;
+    })();
+
+  const ABAS:[typeof aba,string][]=[["registrar","2. Registrar"],["conferencia","3. Conferência"],["vinculos","1. Vínculos"]];
+  return <div>
+    <div className="section-title" style={{marginBottom:8}}>📉 Saídas por venda</div>
+    <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
+      Desconta do estoque o que as vendas consumiram. A ordem é: vincular os produtos uma vez, registrar a cada período, conferir quando quiser.
+    </div>
+    <div className="row" style={{gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+      <input type="date" value={ini} onChange={e=>setIni(e.target.value)} className="inp" style={{maxWidth:150,marginBottom:0}}/>
+      <span style={{fontSize:12,color:"var(--text2)"}}>até</span>
+      <input type="date" value={fim} onChange={e=>setFim(e.target.value)} className="inp" style={{maxWidth:150,marginBottom:0}}/>
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+      {ABAS.map(([k,lbl])=>
+        <button key={k} onClick={()=>setAba(k)} className="pill"
+          style={{background:aba===k?"var(--btnPrimary)":"var(--bg3)",color:aba===k?"var(--onPrimary,#FFFFFF)":"var(--text2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,padding:"8px 12px",borderRadius:8,fontWeight:700}}>{lbl}</button>)}
+    </div>
+    <div className="card">
+      {/* Chamadas de função, não <Componente/>: declarado dentro do render, cada
+          renderização criaria um tipo novo e o React remontaria a subárvore —
+          o campo de busca dos Vínculos perderia o foco a cada tecla. */}
+      {aba==="registrar"&&RegistrarTab()}
+      {aba==="conferencia"&&ConferenciaTab()}
+      {aba==="vinculos"&&VinculosTab()}
+    </div>
+  </div>;
+}
+
 function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
 
   const [sub,setSub]=useState(pendingSub||"inventario");
@@ -13226,6 +13284,8 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
     })()}
 
     {/* ===== PROJEÇÃO DE COMPRAS ===== */}
+    {sub==="saidas"&&<><BackBar label="Inventário" onClick={()=>setSub("inventario")}/>
+      <SaidasPorVendaPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa}/></>}
     {sub==="projecao"&&<BackBar label="Inventário" onClick={()=>setSub("inventario")}/>}
     {sub==="projecao"&&modoProj==="semanal"&&(()=>{
       const p=projetarComprasSemanal(db,{semanas:semanasProj});
@@ -19941,6 +20001,37 @@ const mpsDoProdutoLista=(db:any,prod:any)=>{
   const ids=prod?.mpVinculados||(prod?.mpVinculadoId?[prod.mpVinculadoId]:[]);
   if(!ids?.length)return[];
   return (db?.materiasPrimas||[]).filter((m:any)=>ids.includes(m.id));
+};
+// Vendas POR ITEM no período, de duas fontes: itensVendidos (o que o PDV/Eclética
+// vendeu, já agregado por dia) e recibosVenda (venda avulsa). Devolve agrupado
+// por DIA porque a baixa de estoque precisa da data — movimento sem data certa
+// inutiliza o extrato e a contagem por período.
+//
+// A chave é foldNome: o PDV escreve "PAO DE QUEIJO" e o recibo "Pão de queijo",
+// e agrupar pelo texto cru faria o mesmo produto virar dois.
+const vendasPorItem=(db:any,ini:string,fim:string)=>{
+  const porDia=new Map<string,Map<string,{nome:string,qtd:number,total:number,un:string}>>();
+  const add=(data:string,nome:string,qtd:number,valor:number,un:string)=>{
+    if(!nome||!data)return;
+    const dia=porDia.get(data)||new Map();
+    const k=foldNome(nome);
+    const cur=dia.get(k)||{nome,qtd:0,total:0,un};
+    cur.qtd+=qtd; cur.total+=valor; cur.nome=nome;
+    dia.set(k,cur); porDia.set(data,dia);
+  };
+  const diasPdvLista=(db?.itensVendidos||[]).filter((d:any)=>d.data>=ini&&d.data<=fim);
+  diasPdvLista.forEach((d:any)=>(d.itens||[]).forEach((it:any)=>add(d.data,it.nome,it.qtd||0,it.valor||0,it.un||"un")));
+  (db?.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim)
+    .forEach((r:any)=>(r.itens||[]).forEach((it:any)=>add(r.data,it.nome,it.quantidade||0,it.subtotal||0,it.unidade||"un")));
+  return{porDia,diasPdv:diasPdvLista.length};
+};
+const agruparProdutos=(porDia:Map<string,Map<string,any>>)=>{
+  const m=new Map<string,{nome:string,qtd:number,total:number,unidade:string}>();
+  porDia.forEach(dia=>dia.forEach((p:any,k:string)=>{
+    const cur=m.get(k)||{nome:p.nome,qtd:0,total:0,unidade:p.un||"un"};
+    cur.qtd+=p.qtd; cur.total+=p.total; m.set(k,cur);
+  }));
+  return Array.from(m.values()).sort((a,b)=>b.total-a.total);
 };
 const BALDE_DA_FORMA:Record<string,string|null>={dinheiro:"dinheiro",credito:"maquininha",debito:"maquininha",pix:"maquininha",outros:"maquininha",pendura:null};
 const formasDaVenda=(v:any):[string,string,number][]=>

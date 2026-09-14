@@ -253,10 +253,22 @@ REVENDA (água, refrigerante, cerveja, industrializado) não tem ficha e não é
 "ignorar": o que se vende é o que se compra. Comparação em
 Vendas → Relatório → **Revenda × Compras**.
 
-### Baixa de estoque pelas vendas — cada tipo tem UM dono
+### Estoque → Saídas por venda
 
-Vendas → Relatório → **Baixar Estoque**. Decisão do dono, tomada depois de a
-divergência entre as duas telas de estoque aparecer:
+Tudo que liga venda a estoque num lugar só, em três abas na ordem de uso:
+**1. Vínculos** (cadastro, uma vez) → **2. Registrar** (a cada período) →
+**3. Conferência** (consumo teórico + revenda × compras).
+
+⚠️ Isto já esteve espalhado em quatro abas dentro de Vendas → Relatório, que
+chegou a ter quinze. Relatório é lugar de OLHAR; tela que mexe em saldo não mora
+lá. Não devolva nada pra lá.
+
+A aba Registrar tem **UM botão**. A separação revenda→PDV / insumo→Gestão é
+detalhe de implementação — o sistema sabe qual é qual pelo vínculo, e perguntar
+isso a cada uso foi exatamente o que deixou a tela confusa.
+
+Cada tipo tem UM dono de saldo. Decisão do dono, tomada depois de a divergência
+entre as duas telas de estoque aparecer:
 
 | | Onde baixa | Por quê |
 |---|---|---|
