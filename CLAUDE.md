@@ -35,6 +35,7 @@ mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
 src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com testes)
 src/tipoInsumo.js     o que o item é e o que a venda faz com ele (com testes)
 src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
+src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -579,6 +580,66 @@ de mostrar o número quando a conversão não está configurada.
 ### Outros
 Lista de Compras · Produção (fichas técnicas) · Encomendas · RH · Fluxo de Caixa ·
 Configurações de PDV (ponte com os dois PDVs) · Cardápio TV · Backups
+
+### RH → Financeiro → DRE: desconto ≠ desembolso
+
+`src/folhaRh.js` (com testes). Mora fora do `App.tsx` porque foi aqui que o erro
+nasceu, e erro de folha não aparece na tela: aparece na DRE, meses depois, como
+"custo de pessoal alto".
+
+**A regra única: cada real aparece UMA vez.**
+
+| item | no holerite | vira conta? |
+|---|---|---|
+| falta · consumação · encargo descontado (INSS) | desconto | **não** |
+| adiantamento | desconto | sim |
+| encargo patronal (FGTS) | — | sim |
+| bonificação · comissão · salário família | acréscimo | sim, **pela conta de encargos** |
+| líquido da folha | o resultado | sim |
+
+⚠️ **Adiantamento é desconto no holerite E desembolso no caixa**, e isso não é
+contradição: o dinheiro já saiu antes. Como a folha lança só o líquido, os dois
+somam exatamente o salário. Por isso `adiantamento` saiu de `"fora"` para
+`"folha"` no `MAPA_DRE_PADRAO` — ficava fora com a justificativa de que "o valor
+cheio já aparece em Salários", e não aparecia.
+
+⚠️ **Bonificação e comissão saem pela conta de encargos, não pelo líquido** (por
+decisão do dono). Entravam nos dois e a DRE contava em dobro. Por isso
+`holerite.liquido` (o que a folha lança) ≠ `holerite.aReceber` (o que o
+funcionário leva).
+
+⚠️ O encargo tinha **um campo para os dois sentidos**: era somado como custo da
+empresa E descontado do líquido ao mesmo tempo. Agora são `descontado` e
+`patronal`. `valor` é o nome antigo de `descontado` — `encargoDescontado()`
+traduz na leitura, como o `LEGADO` do `tipoInsumo.js`. **Não migre dado.**
+`saveEnc` continua gravando `valor` junto, pra bundle antigo seguir lendo o
+desconto (só o `patronal` se perderia num aparelho desatualizado).
+
+⚠️ A falta era calculada no valor a receber e **nunca usada**: não descontava de
+quem faltou e ainda virava despesa. Num funcionário de R$ 2.000 com uma falta,
+R$ 80 de consumação, R$ 150 de encargo e R$ 200 de bonificação, a DRE mostrava
+**R$ 2.466,67** de folha contra **R$ 1.970,00** de desembolso real.
+
+**Vínculo conta ↔ funcionário:** `funcionarioId` + `mesRef` + `tipoRh`
+(`folha`/`encargo`/`adiantamento`). Por id, nunca por nome — renomear o
+funcionário não pode desfazer a ligação, mesma lição do código do Eclética. Em
+Financeiro → + Novo, o campo **Fornecedor / Credor** sugere funcionários e
+fornecedores já usados; é texto livre de propósito (fornecedor novo não pode
+virar cadastro obrigatório).
+
+**RH → Conferência**: o que o RH calculou contra o que está lançado, por mês.
+Acusa lançamento duplicado (clicar duas vezes em "Lançar folha" criava duas
+contas e a DRE somava as duas — agora tem trava), holerite fechado sem
+lançamento, e conta de Salários sem funcionário.
+
+⚠️ As contas criadas pela regra antiga (`origem` `falta_rh`/`consumacao_rh`)
+**não são apagadas sozinhas** — apagar dado de mês fechado sem perguntar é pior
+que mostrar o problema. Ficam listadas na Conferência com o total que inflam e
+um botão de excluir.
+
+⚠️ Conta de Salários **sem** funcionário continua somando na DRE e aparece à
+parte, na Conferência e na linha da folha. As que já existiam não têm o vínculo,
+e adivinhar de quem é cada uma seria chute.
 
 ---
 

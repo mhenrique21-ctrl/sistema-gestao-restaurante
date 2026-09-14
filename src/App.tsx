@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import {converterQtd,consumoTeorico,aplicarBaixaVendas,idBaixaVenda} from "./consumoTeorico.js";
 import {tipoDoInsumo,pendenciasDeInsumo,ehProdutoVendido,baixaDaVenda,chaveTipo} from "./tipoInsumo.js";
 import {aplicarMovimento,insumosDaProducao,distribuirEntreMarcas} from "./movimentoEstoque.js";
+import {calcularHolerite,contasEsperadas,contasLancadas,conciliarMes,encargoDescontado,encargoPatronal} from "./folhaRh.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -8249,11 +8250,14 @@ const MAPA_DRE_PADRAO:{[k:string]:"folha"|"despesa"|"fora"}={
   // - alimentação/bebidas/limpeza: já entram pelo lado de Compras (CMV e
   //   material de limpeza). Compras é a fonte única desses gastos.
   "alimentacao":"fora","bebidas":"fora","limpeza":"fora",
-  // - adiantamento: antecipação de salário, não despesa nova — o valor cheio
-  //   já aparece em Salários.
-  "adiantamento":"fora",
+  // - adiantamento: ficava FORA com a justificativa de que "o valor cheio já
+  //   aparece em Salários". Não aparecia: a folha é lançada pelo LÍQUIDO, já
+  //   sem o adiantamento — então o dinheiro saía do caixa e não estava em
+  //   lugar nenhum da DRE. Entra na folha; como a folha lança o líquido, os
+  //   dois juntos dão exatamente o salário, sem contar duas vezes.
   // - empréstimo/negociação de dívida: financiamento e amortização, não
   //   despesa operacional do período.
+  "adiantamento":"folha",
   "emprestimo":"fora","negociacao de divida":"fora",
   // - máquinas e equipamentos: CAPEX. Lançar o valor cheio no mês distorce o
   //   resultado; tratar como depreciação está fora do escopo.
@@ -14495,6 +14499,22 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
     return d.toISOString().slice(0,10);
   };
 
+  // Credores já usados nas contas, do mais recente pro mais antigo. Vira
+  // sugestão no campo — quem lança a mesma conta todo mês não redigita o nome.
+  const credoresUsados=useMemo(()=>{
+    const nomesFunc=new Set((db.funcionarios||[]).map((f:any)=>foldNome(f.nome)));
+    const vistos=new Set<string>();const out:string[]=[];
+    for(const c of (db.contas||[])){
+      const n=String(c.fornecedor||"").trim();
+      if(!n)continue;
+      const k=foldNome(n);
+      if(vistos.has(k)||nomesFunc.has(k))continue;
+      vistos.add(k);out.push(n);
+    }
+    return out.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  },[db.contas,db.funcionarios]);
+  const funcDaConta=useMemo(()=>(db.funcionarios||[]).find((f:any)=>foldNome(f.nome)===foldNome(form.fornecedor)),[db.funcionarios,form.fornecedor]);
+
   const save=()=>{
     if(!form.descricao||!form.valor)return alert("Preencha descrição e valor.");
     const valorNum=parseMoney(form.valor);
@@ -14505,7 +14525,13 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
       if(dup&&!confirm(`⚠️ Possível duplicata: já existe uma conta com a descrição "${form.descricao}" e valor similar nos últimos 7 dias. Continuar mesmo assim?`))return;
     }
     const now=new Date().toISOString();
-    const base={categoria:form.categoria,valor:valorNum,status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor,...(form.anexo?{anexo:form.anexo}:{})};
+    // Fornecedor que é FUNCIONÁRIO carrega o id junto. Guardar só o nome faria
+    // a conferência com o RH quebrar no dia em que alguém corrigisse o nome no
+    // cadastro — a mesma lição do código do produto do Eclética. O nome
+    // continua gravado pra conta seguir legível em bundle antigo.
+    const func=(db.funcionarios||[]).find((f:any)=>foldNome(f.nome)===foldNome(form.fornecedor));
+    const vinc=func?{funcionarioId:func.id,mesRef:String(form.vencimento||"").slice(0,7),tipoRh:form.tipoRh||"folha"}:{};
+    const base={categoria:form.categoria,valor:valorNum,status:form.status,tipo:form.tipo,formaPag:form.formaPag,fornecedor:form.fornecedor,...vinc,...(form.anexo?{anexo:form.anexo}:{})};
     const n=form.recorrente?Math.max(parseInt(form.parcelas)||1,1):1;
     if(n>1){
       const gRecorr=editGrupoRecorr||uid();
@@ -14939,7 +14965,21 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
       <div className="section-title">{editId||editGrupoRecorr?"Editar Conta":"Nova Conta a Pagar / Receber"}</div>
       <div ref={formRef} className="card">
         <input placeholder="Descrição *" value={form.descricao} onChange={e=>setForm((f:any)=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <input placeholder="Fornecedor / Credor" value={form.fornecedor} onChange={e=>setForm((f:any)=>({...f,fornecedor:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        {/* Texto livre com sugestões, não lista fechada: fornecedor novo não
+            pode virar cadastro obrigatório só pra lançar uma conta. */}
+        <input placeholder="Fornecedor / Credor" list="credores-sugeridos" value={form.fornecedor} onChange={e=>setForm((f:any)=>({...f,fornecedor:e.target.value}))} className="inp" style={{marginBottom:funcDaConta?4:8}}/>
+        <datalist id="credores-sugeridos">
+          {(db.funcionarios||[]).map((f:any)=><option key={f.id} value={f.nome}>{f.funcao?`funcionário · ${f.funcao}`:"funcionário"}</option>)}
+          {credoresUsados.map((n:string)=><option key={n} value={n}/>)}
+        </datalist>
+        {funcDaConta&&<div style={{background:"var(--infoBg)",color:"var(--infoText)",borderRadius:8,padding:"7px 10px",fontSize:11.5,marginBottom:8}}>
+          👤 <b>{funcDaConta.nome}</b> — esta conta entra na conferência do RH.
+          <select value={form.tipoRh||"folha"} onChange={e=>setForm((f:any)=>({...f,tipoRh:e.target.value}))} className="inp" style={{marginBottom:0,marginTop:6,fontSize:12,padding:"6px 8px"}}>
+            <option value="folha">Folha do mês (líquido)</option>
+            <option value="encargo">Encargos e acréscimos</option>
+            <option value="adiantamento">Adiantamento</option>
+          </select>
+        </div>}
         <div className="row" style={{marginBottom:8}}>
           <select value={form.categoria} onChange={e=>setForm((f:any)=>({...f,categoria:e.target.value}))} className="inp">
             <option value="">Categoria</option>
@@ -15771,7 +15811,7 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
   const [faltaForm,setFaltaForm]=useState({funcionarioId:"",data:today(),dias:"",motivo:""});
   const [adtForm,setAdtForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [consForm,setConsForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
-  const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
+  const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),descontado:"",patronal:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   const [encEdit,setEncEdit]=useState(null);
   const [buscaFunc,setBuscaFunc]=useState("");
   const funcs=sortList(db.funcionarios||[],db,'rhFuncs','nome-az');
@@ -15793,11 +15833,13 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     const fn=funcs.find(f=>f.id===faltaForm.funcionarioId);
     const desconto=(fn?.salario||0)/30*parseFloat(faltaForm.dias);
     const now=new Date().toISOString();
-    const contaId=uid();
-    const falta={id:uid(),...faltaForm,desconto,mes:faltaForm.data.slice(0,7),contaId,criadoEm:now};
-    sv(d=>({...d,
-      faltas:[falta,...(d.faltas||[])],
-      contas:[{id:contaId,descricao:`Desc. falta – ${fn?.nome}`,categoria:"Salários",valor:desconto,vencimento:faltaForm.data,status:"pendente",tipo:"saida",origem:"falta_rh",criadoEm:now},...(d.contas||[])]}));
+    // Falta NÃO vira conta a pagar. Ela é desconto: reduz o que o funcionário
+    // recebe, não é dinheiro a mais saindo do caixa. Virava conta de "Salários"
+    // e a DRE somava como despesa NOVA — e o desconto ainda por cima não era
+    // aplicado no valor a receber. Agora ele desce no líquido da folha
+    // (src/folhaRh.js, com testes).
+    const falta={id:uid(),...faltaForm,desconto,mes:faltaForm.data.slice(0,7),criadoEm:now,atualizadoEm:now};
+    sv(d=>({...d,faltas:[falta,...(d.faltas||[])]}));
     setFaltaForm({funcionarioId:"",data:today(),dias:"",motivo:""});
   };
 
@@ -15806,7 +15848,7 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     const fn=funcs.find(f=>f.id===adtForm.funcionarioId);
     const contaId=uid();
     const now=new Date().toISOString();
-    const adt={id:uid(),...adtForm,valor:parseMoney(adtForm.valor),mes:adtForm.data.slice(0,7),contaId,criadoEm:now};
+    const adt={id:uid(),...adtForm,valor:parseMoney(adtForm.valor),mes:adtForm.data.slice(0,7),contaId,criadoEm:now,atualizadoEm:now};
     sv(d=>({...d,
       adiantamentos:[adt,...(d.adiantamentos||[])],
       contas:[{
@@ -15818,7 +15860,16 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
         status:"pendente",
         tipo:"saida",
         origem:"adiantamento_rh",
-        criadoEm:now,
+        // Vínculo por ID, nunca por nome: renomear o funcionário no RH não pode
+        // desfazer a ligação — mesma lição do código do produto do Eclética.
+        funcionarioId:adtForm.funcionarioId,
+        fornecedor:fn?.nome||"",
+        mesRef:adtForm.data.slice(0,7),
+        tipoRh:"adiantamento",
+        // `criadoEm` não é timestamp de fusão (TS_FIELDS só olha updatedAt e
+        // atualizadoEm): sem o carimbo, a conta cai na regra "ninguém carimbou,
+        // incoming vence" e um POST de outra tela pode desfazê-la.
+        criadoEm:now,atualizadoEm:now,
       },...(d.contas||[])]}));
     setAdtForm({funcionarioId:"",data:today(),valor:"",descricao:""});
   };
@@ -15838,33 +15889,33 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     if(!consForm.funcionarioId||!consForm.valor)return alert("Selecione funcionário e valor.");
     const fn=funcs.find(f=>f.id===consForm.funcionarioId);
     const now=new Date().toISOString();
-    const cons={id:uid(),...consForm,valor:parseMoney(consForm.valor),mes:consForm.data.slice(0,7),criadoEm:now};
+    const cons={id:uid(),...consForm,valor:parseMoney(consForm.valor),mes:consForm.data.slice(0,7),criadoEm:now,atualizadoEm:now};
     sv(d=>({...d,consumacoes:[cons,...(d.consumacoes||[])]}));
     setConsForm({funcionarioId:"",data:today(),valor:"",descricao:""});
-  };
-  const lancarConsFin=(c:any)=>{
-    const fn=funcs.find(f=>f.id===c.funcionarioId);
-    const now=new Date().toISOString();
-    sv(d=>({...d,contas:[{id:uid(),descricao:`Consumação – ${fn?.nome||"Func."}`,categoria:"Salários",valor:parseMoney(c.valor),vencimento:c.data,status:"pendente",tipo:"saida",origem:"consumacao_rh",criadoEm:now},...(d.contas||[])]}));
-    alert("✅ Lançado no Financeiro!");
   };
 
   const saveEnc=()=>{
     if(!encForm.funcionarioId)return alert("Selecione o funcionário.");
     const now=new Date().toISOString();
     const enc={id:encEdit||uid(),...encForm,
-      valor:parseMoney(encForm.valor),
+      // Dois campos porque um só servia pros dois sentidos ao mesmo tempo: o
+      // valor era somado como custo da empresa E descontado do líquido.
+      // `valor` fica gravado pro bundle antigo continuar lendo o desconto.
+      descontado:parseMoney(encForm.descontado),
+      patronal:parseMoney(encForm.patronal),
+      valor:parseMoney(encForm.descontado),
       bonificacao:parseMoney(encForm.bonificacao),
       comissao:parseMoney(encForm.comissao),
       salarioFamilia:parseMoney(encForm.salarioFamilia),
       mes:encForm.data.slice(0,7)};
     if(encEdit){sv(d=>({...d,encargos:(d.encargos||[]).map(x=>x.id===encEdit?{...enc,criadoEm:x.criadoEm||now,atualizadoEm:now}:x)}));setEncEdit(null);}
-    else{sv(d=>({...d,encargos:[{...enc,criadoEm:now},...(d.encargos||[])]}));}
-    setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
+    else{sv(d=>({...d,encargos:[{...enc,criadoEm:now,atualizadoEm:now},...(d.encargos||[])]}));}
+    setEncForm({funcionarioId:"",data:today(),descontado:"",patronal:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
   };
   const editEnc=(e)=>{setEncEdit(e.id);setEncForm({
     funcionarioId:e.funcionarioId,data:e.data,
-    valor:e.valor>0?String(e.valor.toFixed(2)).replace(".",","):"",
+    descontado:encargoDescontado(e)>0?String(encargoDescontado(e).toFixed(2)).replace(".",","):"",
+    patronal:encargoPatronal(e)>0?String(encargoPatronal(e).toFixed(2)).replace(".",","):"",
     bonificacao:e.bonificacao>0?String(e.bonificacao.toFixed(2)).replace(".",","):"",
     comissao:e.comissao>0?String(e.comissao.toFixed(2)).replace(".",","):"",
     salarioFamilia:e.salarioFamilia>0?String(e.salarioFamilia.toFixed(2)).replace(".",","):"",
@@ -15873,32 +15924,41 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
   const lancarEncFin=(e:any)=>{
     const fn=funcs.find(f=>f.id===e.funcionarioId);
     const now=new Date().toISOString();
-    const total=(e.valor||0)+(e.bonificacao||0)+(e.comissao||0)+(e.salarioFamilia||0);
+    // Só o que a empresa desembolsa: a parte patronal mais os acréscimos pagos
+    // ao funcionário. O encargo DESCONTADO dele fica de fora — entrava aqui e
+    // descia do líquido ao mesmo tempo, então a DRE contava um desconto como
+    // despesa. Bonificação e comissão saem por aqui, por decisão do dono, e
+    // por isso NÃO entram no líquido da folha (senão contariam duas vezes).
+    const total=encargoPatronal(e)+(e.bonificacao||0)+(e.comissao||0)+(e.salarioFamilia||0);
+    if(total<=0)return alert("Nada a lançar: este encargo só tem desconto do funcionário, que já desce no líquido da folha.");
     const partes:string[]=[];
-    if(e.valor>0)partes.push(`Enc: ${fmtMoney(e.valor)}`);
+    if(encargoPatronal(e)>0)partes.push(`Patronal: ${fmtMoney(encargoPatronal(e))}`);
     if(e.bonificacao>0)partes.push(`Bonif: ${fmtMoney(e.bonificacao)}`);
     if(e.comissao>0)partes.push(`Comis: ${fmtMoney(e.comissao)}`);
     if(e.salarioFamilia>0)partes.push(`Sal.Fam: ${fmtMoney(e.salarioFamilia)}`);
-    sv(d=>({...d,contas:[{id:uid(),descricao:`Encargos – ${fn?.nome||"Func."} (${partes.join(", ")})`,categoria:"Salários",valor:total,vencimento:e.data,status:"pendente",tipo:"saida",origem:"encargo_rh",criadoEm:now},...(d.contas||[])]}));
+    const mesRef=String(e.mes||e.data||"").slice(0,7);
+    const jaTem=(db.contas||[]).some((c:any)=>c.funcionarioId===e.funcionarioId&&c.mesRef===mesRef&&c.tipoRh==="encargo");
+    if(jaTem&&!confirm(`Já existe lançamento de encargos de ${fn?.nome} para ${mesRef}.\n\nLançar assim mesmo? A DRE somará os dois.`))return;
+    sv(d=>({...d,contas:[{id:uid(),descricao:`Encargos – ${fn?.nome||"Func."} (${partes.join(", ")})`,categoria:"Salários",valor:total,vencimento:e.data,status:"pendente",tipo:"saida",origem:"encargo_rh",funcionarioId:e.funcionarioId,fornecedor:fn?.nome||"",mesRef,tipoRh:"encargo",criadoEm:now,atualizadoEm:now},...(d.contas||[])]}));
     alert("✅ Lançado no Financeiro!");
   };
 
   const lancarFolhaFin=(f:any)=>{
     const now=new Date().toISOString();
-    const totFalt=(db.faltas||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+x.desconto,0);
-    const totAdt=(db.adiantamentos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
-    const totCons=(db.consumacoes||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
-    const encsF=(db.encargos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes);
-    const totEnc=encsF.reduce((s,x)=>s+(x.valor||0),0);
-    const totBonif=encsF.reduce((s,x)=>s+(x.bonificacao||0),0);
-    const totComis=encsF.reduce((s,x)=>s+(x.comissao||0),0);
-    const totSalFam=encsF.reduce((s,x)=>s+(x.salarioFamilia||0),0);
-    const aRec=Math.max(f.salario+totBonif+totComis+totSalFam-totAdt-totCons-totEnc,0);
-    if(aRec<=0)return alert("Valor a receber é R$ 0,00. Nada a lançar.");
+    // O cálculo mora em src/folhaRh.js e é o MESMO que a Conferência e o
+    // holerite usam — as três discordarem entre si era o que fazia ninguém
+    // conseguir dizer qual número estava certo.
+    const liquido=contasEsperadas(db,f,relMes).folha;
+    if(liquido<=0)return alert("Líquido da folha é R$ 0,00. Nada a lançar.");
+    // Clicar duas vezes criava duas contas iguais e a DRE somava as duas, sem
+    // nada na tela denunciando. Mesma trava que as compras já têm contra nota
+    // repetida.
+    const jaTem=(db.contas||[]).some((c:any)=>c.funcionarioId===f.id&&c.mesRef===relMes&&c.tipoRh==="folha");
+    if(jaTem&&!confirm(`Já existe folha de ${f.nome} lançada para ${relMes}.\n\nLançar assim mesmo? A DRE somará as duas.`))return;
     const [ano,mes]=relMes.split("-");
     const desc=`Folha ${mes}/${ano} – ${f.nome}`;
-    sv(d=>({...d,contas:[{id:uid(),descricao:desc,categoria:"Salários",valor:aRec,vencimento:today(),status:"pendente",tipo:"saida",origem:"folha_rh",criadoEm:now},...(d.contas||[])]}));
-    alert(`✅ Folha de ${f.nome} (${fmtMoney(aRec)}) lançada no Financeiro!`);
+    sv(d=>({...d,contas:[{id:uid(),descricao:desc,categoria:"Salários",valor:liquido,vencimento:today(),status:"pendente",tipo:"saida",origem:"folha_rh",funcionarioId:f.id,fornecedor:f.nome||"",mesRef:relMes,tipoRh:"folha",criadoEm:now,atualizadoEm:now},...(d.contas||[])]}));
+    alert(`✅ Folha de ${f.nome} (${fmtMoney(liquido)}) lançada no Financeiro!`);
   };
 
   const gerarHolerite=(func)=>{
@@ -15910,18 +15970,21 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     const totFalt   =faltas.reduce((s,f)=>s+f.desconto,0);
     const totAdt    =adts.reduce((s,a)=>s+parseMoney(a.valor),0);
     const totCons   =cons.reduce((s,c)=>s+parseMoney(c.valor),0);
-    const totEnc    =encs.reduce((s,e)=>s+(e.valor||0),0);
+    const totEnc    =encs.reduce((s,e)=>s+encargoDescontado(e),0);
     const totBonif  =encs.reduce((s,e)=>s+(e.bonificacao||0),0);
     const totComis  =encs.reduce((s,e)=>s+(e.comissao||0),0);
     const totSalFam =encs.reduce((s,e)=>s+(e.salarioFamilia||0),0);
-    const totDesc   =totAdt+totCons+totEnc;
+    // A falta entrava na soma de descontos em lugar nenhum: era calculada e
+    // ignorada, então quem faltava recebia como se não tivesse faltado.
+    const totDesc   =totFalt+totAdt+totCons+totEnc;
     const totAcresc =totBonif+totComis+totSalFam;
-    const aRec      =Math.max(func.salario+totAcresc-totDesc,0);
+    const liquido   =Math.max(func.salario-totDesc,0);
+    const aRec      =liquido+totAcresc;
     const detalhesDesc:string[]=[];
     faltas.forEach(f=>detalhesDesc.push(`<tr><td>Falta ${fmtDate(f.data)} (${f.dias}d)${f.motivo?" – "+f.motivo:""}</td><td class="vr">-${fmtMoney(f.desconto)}</td></tr>`));
     adts.forEach(a=>detalhesDesc.push(`<tr><td>Adiantamento ${fmtDate(a.data)}${a.descricao?" – "+a.descricao:""}</td><td class="vr">-${fmtMoney(parseMoney(a.valor))}</td></tr>`));
     cons.forEach(c=>detalhesDesc.push(`<tr><td>Consumação ${fmtDate(c.data)}${c.descricao?" – "+c.descricao:""}</td><td class="vr">-${fmtMoney(parseMoney(c.valor))}</td></tr>`));
-    encs.forEach(e=>detalhesDesc.push(`<tr><td>Encargo ${fmtDate(e.data)}${e.descricao?" – "+e.descricao:""}</td><td class="vr">-${fmtMoney(e.valor||0)}</td></tr>`));
+    encs.filter(e=>encargoDescontado(e)>0).forEach(e=>detalhesDesc.push(`<tr><td>Encargo ${fmtDate(e.data)}${e.descricao?" – "+e.descricao:""}</td><td class="vr">-${fmtMoney(encargoDescontado(e))}</td></tr>`));
     const detalhesAcresc:string[]=[];
     if(totBonif>0)detalhesAcresc.push(`<tr><td>Bonificação</td><td class="vr green">+${fmtMoney(totBonif)}</td></tr>`);
     if(totComis>0)detalhesAcresc.push(`<tr><td>Comissão</td><td class="vr green">+${fmtMoney(totComis)}</td></tr>`);
@@ -15973,8 +16036,8 @@ th{text-align:left;font-weight:600;color:#64748b;border-bottom:1px solid #e2e8f0
     <tr><td>Salário Bruto</td><td class="vr">${fmtMoney(func.salario)}</td></tr>
     ${totAcresc>0?`<tr><td>Acréscimos</td><td class="vr green">+${fmtMoney(totAcresc)}</td></tr>`:""}
     ${totDesc>0?`<tr><td>Descontos</td><td class="vr red">-${fmtMoney(totDesc)}</td></tr>`:""}
-    ${totFalt>0?`<tr><td>Faltas (informativo)</td><td class="vr" style="color:#888">${fmtMoney(totFalt)}</td></tr>`:""}
-    <tr class="sep total"><td>Líquido</td><td class="vr green">${fmtMoney(aRec)}</td></tr>
+    <tr class="sep total"><td>Líquido a receber</td><td class="vr green">${fmtMoney(aRec)}</td></tr>
+    ${totAcresc>0?`<tr><td colspan="2" style="font-size:9px;color:#888;padding-top:4px">Pago em ${fmtMoney(liquido)} na folha do mês e ${fmtMoney(totAcresc)} no lançamento de encargos.</td></tr>`:""}
   </table></div>
 </div>
 ${detalhesDesc.length||detalhesAcresc.length?`<div class="box" style="margin-bottom:10px"><h3>Detalhamento</h3><table>
@@ -16000,7 +16063,7 @@ ${detalhesDesc.join("")}
 
   return <div>
     <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-      {[["lista","👥 Lista"],["cadastro","➕ Cadastro"],["faltas","📅 Faltas"],["adiantamentos","💸 Adiant."],["encargos","💼 Encargos"],["consumacoes","🍺 Consum."]].map(([k,l])=>(
+      {[["lista","👥 Lista"],["conferencia","✅ Conferência"],["cadastro","➕ Cadastro"],["faltas","📅 Faltas"],["adiantamentos","💸 Adiant."],["encargos","💼 Encargos"],["consumacoes","🍺 Consum."]].map(([k,l])=>(
         <button key={k} onClick={()=>setSubTab(k)} className="pill"
           style={{background:subTab===k?"var(--btnPrimary)":"var(--bg4)",color:subTab===k?"var(--onPrimary,#FFFFFF)":"#777",fontSize:10,padding:"6px 10px"}}>{l}</button>
       ))}
@@ -16016,21 +16079,17 @@ ${detalhesDesc.join("")}
         <SortCtrl id="rhFuncs" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"],["valor-desc","Maior salário"],["valor-asc","Menor salário"]]}/>
       </div>
       {funcs.filter(f=>!buscaFunc||f.nome?.toLowerCase().includes(buscaFunc.toLowerCase())||f.funcao?.toLowerCase().includes(buscaFunc.toLowerCase())).map(f=>{
-        const totFalt=(db.faltas||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+x.desconto,0);
-        const totAdt =(db.adiantamentos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
-        const totCons=(db.consumacoes||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes).reduce((s,x)=>s+parseMoney(x.valor),0);
-        const encsF  =(db.encargos||[]).filter(x=>x.funcionarioId===f.id&&x.mes===relMes);
-        const totEnc =encsF.reduce((s,x)=>s+(x.valor||0),0);
-        const totBonif=encsF.reduce((s,x)=>s+(x.bonificacao||0),0);
-        const totComis=encsF.reduce((s,x)=>s+(x.comissao||0),0);
-        const totSalFam=encsF.reduce((s,x)=>s+(x.salarioFamilia||0),0);
-        const aRec=Math.max(f.salario+totBonif+totComis+totSalFam-totAdt-totCons-totEnc,0);
+        const h=calcularHolerite(db,f,relMes);
+        const totFalt=h.faltas,totAdt=h.adiantamentos,totCons=h.consumacoes;
+        const totEnc=h.encDescontado,totPatr=h.encPatronal;
+        const totBonif=h.bonificacao,totComis=h.comissao,totSalFam=h.salarioFamilia;
+        const aRec=h.aReceber;
         return <div key={f.id} className="list-item">
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
             <div><div style={{fontWeight:700,fontSize:15}}>{f.nome}</div><div className="muted">{f.funcao}</div></div>
             <div style={{textAlign:"right"}}>
               <div style={{color:"#22C55E",fontWeight:700,fontSize:15}}>{fmtMoney(aRec)}</div>
-              <div className="muted" style={{fontSize:11}}>a receber</div>
+              <div className="muted" style={{fontSize:11}}>a receber{h.acrescimos>0?` · ${fmtMoney(h.liquido)} na folha + ${fmtMoney(h.acrescimos)} nos encargos`:""}</div>
             </div>
           </div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
@@ -16040,7 +16099,9 @@ ${detalhesDesc.join("")}
             {totBonif>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totBonif)} bonif</span>}
             {totComis>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totComis)} comis</span>}
             {totSalFam>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totSalFam)} sal.fam</span>}
-            {totEnc>0&&<span className="tag" style={{background:"#F3E8FF",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} encargos</span>}
+            {totEnc>0&&<span className="tag" style={{background:"#F3E8FF",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} enc. desc.</span>}
+            {totPatr>0&&<span className="tag" style={{background:"var(--warningBg,#FBF0DA)",color:"var(--warningText,#8A5A00)"}}>{fmtMoney(totPatr)} patronal</span>}
+            {h.descontoNaoAbsorvido>0&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--btnDanger)"}}>⚠️ {fmtMoney(h.descontoNaoAbsorvido)} não coube no salário</span>}
             {totCons>0&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>-{fmtMoney(totCons)} cons</span>}
           </div>
           <div style={{display:"flex",gap:8}}>
@@ -16067,6 +16128,86 @@ ${detalhesDesc.join("")}
         {fEdit&&<button className="btn" onClick={()=>{setFEdit(null);setFForm({nome:"",funcao:"",salario:"",cpf:"",contato:""}); }} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
     </div>}
+
+    {subTab==="conferencia"&&(()=>{
+      // O que o RH calculou contra o que está lançado no Financeiro. Usa o
+      // MESMO cálculo do botão de lançar e do holerite (src/folhaRh.js), pras
+      // três não discordarem entre si — discordarem era o que fazia ninguém
+      // conseguir dizer qual número estava certo.
+      const conf=conciliarMes(db,relMes);
+      const cor=(st:string)=>st==="ok"?"var(--successText,#146B42)":st==="nao_lancado"?"var(--warningText,#8A5A00)":"var(--btnDanger)";
+      const fundo=(st:string)=>st==="ok"?"transparent":st==="nao_lancado"?"var(--warningBg,#FBF0DA)":"var(--categoryBg)";
+      return <div>
+        <div className="card" style={{marginBottom:12}}>
+          <div className="section-title" style={{marginBottom:8}}>Mês de Referência</div>
+          <input type="month" value={relMes} onChange={e=>setRelMes(e.target.value)} className="inp"/>
+        </div>
+        <div className="card" style={{marginBottom:12}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+            <div style={{flex:1,minWidth:110}}><div className="muted" style={{fontSize:10,textTransform:"uppercase",letterSpacing:1}}>Calculado no RH</div><div style={{fontFamily:"monospace",fontWeight:800,fontSize:18}}>{fmtMoney(conf.totalEsperado)}</div></div>
+            <div style={{flex:1,minWidth:110}}><div className="muted" style={{fontSize:10,textTransform:"uppercase",letterSpacing:1}}>Lançado no Financeiro</div><div style={{fontFamily:"monospace",fontWeight:800,fontSize:18}}>{fmtMoney(conf.totalLancado)}</div></div>
+            <div style={{flex:1,minWidth:110}}><div className="muted" style={{fontSize:10,textTransform:"uppercase",letterSpacing:1}}>Diferença</div><div style={{fontFamily:"monospace",fontWeight:800,fontSize:18,color:Math.abs(conf.diferenca)<0.01?"var(--successText,#146B42)":"var(--btnDanger)"}}>{fmtMoney(conf.diferenca)}</div></div>
+          </div>
+        </div>
+        {conf.linhas.map(l=>(
+          <div key={l.funcionarioId} className="list-item" style={{background:fundo(l.status)}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14}}>{l.nome}</div>
+                <div style={{fontSize:11,color:cor(l.status)}}>
+                  {l.duplicados.length?`lançado duas vezes: ${l.duplicados.join(", ")}`
+                    :l.status==="nao_lancado"?"holerite fechado, nada lançado no Financeiro"
+                    :l.status==="divergente"?"valores não batem"
+                    :"confere"}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:14,textAlign:"right" as const,fontFamily:"monospace",fontSize:12,flexShrink:0}}>
+                <div><div className="muted" style={{fontSize:9,fontFamily:"inherit",textTransform:"uppercase"}}>RH</div>{fmtMoney(l.esperado.total)}</div>
+                <div><div className="muted" style={{fontSize:9,fontFamily:"inherit",textTransform:"uppercase"}}>Lançado</div>{fmtMoney(l.lancado.total)}</div>
+                <div style={{color:cor(l.status)}}><div className="muted" style={{fontSize:9,fontFamily:"inherit",textTransform:"uppercase"}}>Dif.</div>{Math.abs(l.diferenca)<0.01?"—":fmtMoney(l.diferenca)}</div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginTop:8}}>
+              <span className="tag" style={{background:"var(--border)",color:"#888"}}>Folha {fmtMoney(l.esperado.folha)}{l.lancado.folha!==l.esperado.folha?` · lançado ${fmtMoney(l.lancado.folha)}`:""}</span>
+              {(l.esperado.encargo>0||l.lancado.encargo>0)&&<span className="tag" style={{background:"var(--border)",color:"#888"}}>Encargos {fmtMoney(l.esperado.encargo)}{l.lancado.encargo!==l.esperado.encargo?` · lançado ${fmtMoney(l.lancado.encargo)}`:""}</span>}
+              {(l.esperado.adiantamento>0||l.lancado.adiantamento>0)&&<span className="tag" style={{background:"var(--border)",color:"#888"}}>Adiant. {fmtMoney(l.esperado.adiantamento)}{l.lancado.adiantamento!==l.esperado.adiantamento?` · lançado ${fmtMoney(l.lancado.adiantamento)}`:""}</span>}
+            </div>
+          </div>
+        ))}
+        {!conf.linhas.length&&<EmptyState msg="Nenhum funcionário cadastrado"/>}
+        {conf.legadoDescontos.length>0&&<div className="card" style={{marginTop:12,borderColor:"var(--btnDanger)"}}>
+          {/* Criadas quando falta e consumação viravam conta a pagar. Continuam
+              somando na folha da DRE. Não são apagadas sozinhas: apagar dado de
+              mês fechado sem perguntar é pior que mostrar o problema. */}
+          <div className="section-title" style={{marginBottom:6,color:"var(--btnDanger)"}}>⚠️ Lançamentos antigos que hoje são desconto ({conf.legadoDescontos.length})</div>
+          <div className="muted" style={{fontSize:11,marginBottom:8}}>Faltas e consumações viravam conta a pagar de Salários e ainda somam na folha da DRE deste mês — {fmtMoney(conf.legadoDescontos.reduce((t:number,c:any)=>t+parseMoney(c.valor),0))} a mais. Hoje elas descontam no líquido da folha e não viram conta. Confira antes de excluir: meses já fechados podem ter sido conciliados com esses valores.</div>
+          {conf.legadoDescontos.map((c:any)=>(
+            <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid var(--border)",fontSize:12}}>
+              <span style={{flex:1,minWidth:0}}>{c.descricao}<span className="muted" style={{display:"block",fontSize:10}}>{fmtDate(c.vencimento)}</span></span>
+              <span style={{fontFamily:"monospace",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span>
+              <button className="btn" onClick={()=>{
+                if(!confirm(`Excluir "${c.descricao}" (${fmtMoney(parseMoney(c.valor))}) do Financeiro?\n\nO desconto continua valendo no holerite — só a conta a pagar sai.`))return;
+                _listaDeletados.add(c.id);
+                sv((d:any)=>({...d,contas:(d.contas||[]).filter((x:any)=>x.id!==c.id)}));
+              }} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"5px 10px",fontSize:11,flexShrink:0}}>🗑️</button>
+            </div>
+          ))}
+        </div>}
+        {conf.semVinculo.length>0&&<div className="card" style={{marginTop:12}}>
+          {/* As contas criadas antes do vínculo existir não têm funcionário, e
+              adivinhar de quem é cada uma seria chute. Continuam somando na DRE
+              e ficam aqui pra serem ligadas — sumir seria pior. */}
+          <div className="section-title" style={{marginBottom:6}}>Contas de Salários sem funcionário ({conf.semVinculo.length})</div>
+          <div className="muted" style={{fontSize:11,marginBottom:8}}>Somam na folha da DRE, mas ficam fora da conferência acima. Abra a conta no Financeiro e escolha o funcionário no campo Fornecedor / Credor.</div>
+          {conf.semVinculo.map((c:any)=>(
+            <div key={c.id} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderBottom:"1px solid var(--border)",fontSize:12}}>
+              <span style={{flex:1,minWidth:0}}>{c.descricao}</span>
+              <span style={{fontFamily:"monospace",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span>
+            </div>
+          ))}
+        </div>}
+      </div>;
+    })()}
 
     {subTab==="faltas"&&<div>
       <div className="card" style={{marginBottom:14}}>
@@ -16127,17 +16268,20 @@ ${detalhesDesc.join("")}
         <div className="section-title">{encEdit?"Editar Encargos":"Registrar Encargos"}</div>
         <div style={{background:"var(--infoBg)",borderRadius:10,padding:"10px",marginBottom:10,border:"1px solid #0EA5E940"}}>
           <div style={{fontSize:12,color:"var(--btnPrimary)",fontWeight:700,marginBottom:2}}>ℹ️ Encargos do funcionário</div>
-          <div className="muted" style={{fontSize:12}}>Vale Transporte + FGTS + INSS em valor único. Descontado no holerite (não lança no Financeiro).</div>
+          <div className="muted" style={{fontSize:12}}>O que é <b>descontado dele</b> (INSS, VT) desce no líquido da folha e não vira conta. O que a <b>empresa paga</b> (FGTS, INSS patronal) é custo e entra na DRE. Um campo só para os dois fazia o mesmo valor ser somado como despesa e descontado do salário ao mesmo tempo.</div>
         </div>
         <select value={encForm.funcionarioId} onChange={e=>setEncForm(f=>({...f,funcionarioId:e.target.value}))} className="inp" style={{marginBottom:8}}>
           <option value="">Selecionar funcionário</option>
           {funcs.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
         <input type="date" value={encForm.data} onChange={e=>setEncForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:10}}/>
-        <div style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Deduções</div>
-        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Encargos (VT + FGTS + INSS)</label>
-        <MoneyInput value={encForm.valor} onChange={v=>setEncForm(f=>({...f,valor:v}))} placeholder="0,00" className="inp" style={{marginBottom:10}}/>
-        <div style={{fontSize:11,color:"#22C55E",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Acréscimos</div>
+        <div style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Descontado do funcionário</div>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>INSS, vale transporte — desce no líquido, não vira conta</label>
+        <MoneyInput value={encForm.descontado} onChange={v=>setEncForm(f=>({...f,descontado:v}))} placeholder="0,00" className="inp" style={{marginBottom:10}}/>
+        <div style={{fontSize:11,color:"var(--warningText,#8A5A00)",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Pago pela empresa</div>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>FGTS, INSS patronal — custo da empresa, entra na DRE</label>
+        <MoneyInput value={encForm.patronal} onChange={v=>setEncForm(f=>({...f,patronal:v}))} placeholder="0,00" className="inp" style={{marginBottom:10}}/>
+        <div style={{fontSize:11,color:"#22C55E",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>Acréscimos <span style={{textTransform:"none",fontWeight:400,color:"var(--text3)"}}>— pagos ao funcionário por esta conta, não pela folha</span></div>
         <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Bonificação</label>
         <MoneyInput value={encForm.bonificacao} onChange={v=>setEncForm(f=>({...f,bonificacao:v}))} placeholder="0,00" className="inp" style={{marginBottom:8}}/>
         <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:3}}>Comissão</label>
@@ -16146,7 +16290,7 @@ ${detalhesDesc.join("")}
         <MoneyInput value={encForm.salarioFamilia} onChange={v=>setEncForm(f=>({...f,salarioFamilia:v}))} placeholder="0,00" className="inp" style={{marginBottom:8}}/>
         <input placeholder="Descrição (opcional)" value={encForm.descricao} onChange={e=>setEncForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <button className="btn" onClick={saveEnc} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",marginTop:4,fontSize:15}}>{encEdit?"✏️ Atualizar":"💾 Registrar"}</button>
-        {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),valor:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
+        {encEdit&&<button className="btn" onClick={()=>{setEncEdit(null);setEncForm({funcionarioId:"",data:today(),descontado:"",patronal:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});}} style={{background:"var(--border)",color:"#888",padding:"10px",width:"100%",fontSize:13,marginTop:8}}>Cancelar</button>}
       </div>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhEncs" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
       {sortList(db.encargos||[],db,'rhEncs','data-desc').map(e=>{const fn=funcs.find(f=>f.id===e.funcionarioId);return <div key={e.id} className="list-item">
@@ -16180,6 +16324,7 @@ ${detalhesDesc.join("")}
         </select>
         <input type="date" value={consForm.data} onChange={e=>setConsForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <MoneyInput value={consForm.valor} onChange={v=>setConsForm(f=>({...f,valor:v}))} placeholder="Valor da consumação" className="inp"/>
+        <div className="muted" style={{fontSize:11,marginTop:6}}>Desconta no líquido da folha. Não vira conta no Financeiro — o funcionário consumiu da loja, não saiu dinheiro a mais do caixa.</div>
         <input placeholder="Descrição" value={consForm.descricao} onChange={e=>setConsForm(f=>({...f,descricao:e.target.value}))} className="inp" style={{marginTop:8}}/>
         <button className="btn" onClick={saveCons} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
@@ -16187,9 +16332,6 @@ ${detalhesDesc.join("")}
       {sortList(db.consumacoes||[],db,'rhCons','data-desc').map(c=>{const fn=funcs.find(f=>f.id===c.funcionarioId);return <div key={c.id} className="list-item">
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"var(--infoText)",fontWeight:700}}>{fmtMoney(parseMoney(c.valor))}</span></div>
         <div className="muted">{fmtDate(c.data)}</div>{c.descricao&&<div className="muted">{c.descricao}</div>}
-        <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:6}}>
-          <button className="btn" onClick={()=>lancarConsFin(c)} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
-        </div>
         {c.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(c.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
       </div>;})}
       {!(db.consumacoes||[]).length&&<EmptyState msg="Nenhuma consumação registrada"/>}
@@ -16288,6 +16430,7 @@ function DREComp({db,setDb,empresa}){
   // ou fora da DRE. O que ficou fora é somado à parte e mostrado abaixo da
   // tabela — some do resultado, mas não some da vista.
   let foraDaDre=0, pendenteDaDre=0;
+  const folhaPorFunc:{[k:string]:number}={};
   contasPagas.forEach(c=>{
     const cat=c.categoria||"Outros";
     const v=parseMoney(c.valor);
@@ -16296,6 +16439,15 @@ function DREComp({db,setDb,empresa}){
     if(destino==="pendente"){pendenteDaDre+=v;return;}
     const k=destino==="folha"?LINHA_FOLHA:cat;
     despCats[k]=(despCats[k]||0)+v;
+    // A linha da folha deixa de ser um número que ninguém consegue conferir:
+    // guarda de quem é cada parte. Conta sem funcionário (as criadas antes do
+    // vínculo existir) cai em "sem funcionário" em vez de sumir da vista.
+    if(destino==="folha"){
+      const quem=c.funcionarioId
+        ?((db.funcionarios||[]).find((f:any)=>f.id===c.funcionarioId)?.nome||c.fornecedor||"—")
+        :"(sem funcionário indicado)";
+      folhaPorFunc[quem]=(folhaPorFunc[quem]||0)+v;
+    }
   });
   const catsPendentesDre=categoriasDrePendentes(db);
   // As compras fora do CMV (limpeza/higiene, outros) saíram do custo de
@@ -16502,7 +16654,18 @@ function DREComp({db,setDb,empresa}){
     <div className="card" style={{marginBottom:12}}>
       <div style={{padding:"0 0 8px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>Despesas</div>
       {Object.entries(despCats).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
-        <Row key={k} label={k} value={v} color="var(--btnDanger)" indent/>
+        <div key={k}>
+          <Row label={k} value={v} color="var(--btnDanger)" indent/>
+          {k===LINHA_FOLHA&&Object.keys(folhaPorFunc).length>0&&
+            <div style={{borderLeft:"2px solid var(--acc)",marginLeft:10,paddingLeft:12,marginBottom:6}}>
+              {Object.entries(folhaPorFunc).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>(
+                <div key={nome} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"3px 0",fontSize:11.5,color:nome.startsWith("(")?"var(--infoText)":"var(--text2)"}}>
+                  <span style={{flex:1,minWidth:0}}>{nome}</span>
+                  <span style={{fontFamily:"monospace",fontVariantNumeric:"tabular-nums"}}>{fmtMoney(val)}</span>
+                </div>
+              ))}
+            </div>}
+        </div>
       ))}
       {!Object.keys(despCats).length&&<div className="muted" style={{fontSize:12,paddingBottom:8}}>Nenhuma conta paga no período.</div>}
       <Row label="Total Despesas" value={totalDesp} color="var(--btnDanger)" bold/>
