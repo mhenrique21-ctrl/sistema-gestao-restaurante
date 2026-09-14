@@ -12146,15 +12146,53 @@ function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbA
   const [salvando,setSalvando]=useState(false);
   const [resultado,setResultado]=useState<any>(null);
 
+  const [abertos,setAbertos]=useState<Set<string>>(new Set());
+  const SEM_GRUPO="Insumos fora do cardápio";
+
+  // Agrupa pelo GRUPO DO ECLÉTICA — BEBIDAS, BOLOS, DOSE EXTRA. É o recorte de
+  // quem vai contar: "hoje eu conto a geladeira de bebidas". A categoria
+  // contábil, que era o agrupamento antigo, serve pra medir CMV e não pra
+  // andar pela loja com o celular na mão.
+  //
+  // Contar produto de revenda/dose vai pra MARCA: é ela que está na prateleira
+  // e é ela que tem saldo. A linha mostra o nome do cardápio em cima e a marca
+  // embaixo, como na Manutenção.
   const mps=useMemo(()=>{
     const todas=(db.materiasPrimas||[]) as any[];
-    const b=busca.trim().toLowerCase();
-    return todas
+    const b=foldBusca(busca);
+    const linhas:any[]=[];
+    const vistos=new Set<string>();
+    const push=(mp:any,rotulo:string,marca:string,grupo:string)=>{
+      if(vistos.has(mp.id))return;      // marca de dois produtos apareceria 2x
+      vistos.add(mp.id);
+      linhas.push({...mp,rotulo,marca,grupo:grupo||SEM_GRUPO});
+    };
+    todas.forEach(m=>{
+      const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
+      if(m?.codigoEcletica&&(t==="revenda"||t==="dose")){
+        const {marcas}=resolverItemVendido(db,{nome:m.nome,cod:m.codigoEcletica});
+        marcas.forEach((mc:any)=>push(mc,m.nome,mc.nome,m.grupoEcletica));
+        return;
+      }
+      if(m?.codigoEcletica)  {push(m,m.nome,"",m.grupoEcletica);return;}
+    });
+    // Insumo que não é produto do cardápio nem marca de nenhum: farinha,
+    // detergente. Continua contável, num grupo próprio — sumir daqui faria a
+    // contagem física deixar metade da despensa de fora.
+    todas.forEach(m=>{if(!vistos.has(m.id))push(m,m.nome,"",SEM_GRUPO);});
+
+    return linhas
       .filter(m=>!soComEstoque||(m.estoqueAtual||0)>0)
-      .filter(m=>!b||(m.nome||"").toLowerCase().includes(b))
-      .sort((a,b2)=>String(a.categoria||"").localeCompare(String(b2.categoria||""),"pt-BR")
-                  ||String(a.nome||"").localeCompare(String(b2.nome||""),"pt-BR"));
-  },[db.materiasPrimas,busca,soComEstoque]);
+      .filter(m=>!b||foldBusca(`${m.rotulo} ${m.marca}`).includes(b))
+      .sort((a,b2)=>String(a.grupo).localeCompare(String(b2.grupo),"pt-BR")
+                  ||String(a.rotulo||"").localeCompare(String(b2.rotulo||""),"pt-BR"));
+  },[db.materiasPrimas,db.tipoInsumo,db.produtosLista,busca,soComEstoque]);
+
+  const grupos=useMemo(()=>{
+    const m=new Map<string,any[]>();
+    mps.forEach(l=>{const g=m.get(l.grupo)||[];g.push(l);m.set(l.grupo,g);});
+    return Array.from(m,([nome,itens])=>({nome,itens}));
+  },[mps]);
 
   // Compras do insumo desde a data de referência, para o consumo real.
   const comprasPor=useMemo(()=>{
@@ -12180,7 +12218,7 @@ function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbA
   const valorDif=divergentes.reduce((s,m)=>s+dif(m)!*(m.ultimoValor||0),0);
 
   const fechar=()=>{
-    if(!contados.length)return alert("Conte ao menos um insumo.");
+    if(!contados.length)return alert("Conte ao menos um item.");
     const naoContados=mps.length-contados.length;
     if(!confirm(`Fechar a contagem?\n\n${contados.length} insumo(s) contados, ${divergentes.length} com diferença.`
       +(naoContados?`\n${naoContados} não contado(s) — o saldo deles fica como está.`:"")
@@ -12254,14 +12292,18 @@ function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbA
     <BackBar label="Inventário" onClick={()=>setSub("inventario")}/>
 
     <div className="card" style={{marginBottom:12}}>
-      <div className="section-title" style={{marginBottom:10}}>📝 Contagem de insumos</div>
+      <div className="section-title" style={{marginBottom:4}}>📝 Contagem</div>
+      <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
+        Agrupada pelo <strong>grupo do Eclética</strong> — bebidas, bolos, dose extra. Revenda e dose são contadas
+        pela <strong>marca</strong>, na unidade dela: é o que está na prateleira.
+      </div>
       <div className="row" style={{gap:6,flexWrap:"wrap",marginBottom:8}}>
         <input placeholder="🔍 Buscar insumo" value={busca} onChange={e=>setBusca(e.target.value)} className="inp"/>
         <input type="date" value={desde} onChange={e=>setDesde(e.target.value)} className="inp" style={{maxWidth:150}}/>
       </div>
       <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,cursor:"pointer"}}>
         <input type="checkbox" checked={soComEstoque} onChange={e=>setSoComEstoque(e.target.checked)}/>
-        Só insumos com estoque registrado
+        Só itens com estoque registrado
       </label>
       <div style={{fontSize:11,color:"var(--text2)",marginTop:6,lineHeight:1.6}}>
         A data é o início do período: o consumo real será calculado contra as compras feitas desde ela.
@@ -12271,6 +12313,7 @@ function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbA
     <div className="card" style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
       <div style={{fontSize:12.5,color:"var(--text2)"}}>
         <b style={{color:"var(--text)"}}>{contados.length}</b> de {mps.length} contados
+        {(db.materiasPrimas||[]).length>mps.length&&<span style={{color:"var(--text3)"}}> · filtrado de {(db.materiasPrimas||[]).length}</span>}
         {divergentes.length>0&&<> · <b style={{color:"var(--text)"}}>{divergentes.length}</b> com diferença</>}
       </div>
       {divergentes.length>0&&<div style={{fontSize:13,fontWeight:700,color:valorDif<0?"var(--btnDanger)":"#22C55E"}}>
@@ -12283,33 +12326,48 @@ function ContagemInsumos({db,setDb,setDbAndSave,setSub}:{db:any,setDb:any,setDbA
     </div>
 
     {!mps.length
-      ? <div className="card" style={{textAlign:"center",padding:22,color:"var(--text2)",fontSize:12.5}}>Nenhum insumo encontrado.</div>
-      : <div className="card" style={{padding:0,overflow:"hidden"}}>
-          {mps.map((m:any,i:number)=>{
-            const d=dif(m);
-            const cat=i===0||mps[i-1].categoria!==m.categoria?m.categoria:null;
-            return <div key={m.id}>
-              {cat&&<div style={{padding:"8px 12px",background:"var(--bg3)",fontSize:10.5,fontWeight:700,
-                                 color:"var(--text2)",textTransform:"uppercase",letterSpacing:.4}}>{cat||"outros"}</div>}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 92px 62px",gap:8,alignItems:"center",
-                           padding:"9px 12px",borderBottom:"1px solid var(--border)",fontSize:12.5}}>
-                <span>{m.nome}<span style={{display:"block",fontSize:10.5,color:"var(--text2)"}}>
-                  sistema: {(m.estoqueAtual||0).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unidade||"un"}</span></span>
+      ? <div className="card" style={{textAlign:"center",padding:22,color:"var(--text2)",fontSize:12.5}}>Nenhum item encontrado.</div>
+      : grupos.map(g=>{
+          // Recolhido por padrão: com 742 itens, a tela aberta é uma rolagem
+          // que ninguém termina. Abre-se um grupo, conta, fecha, vai pro
+          // próximo — que é como a contagem acontece na loja.
+          const aberto=abertos.has(g.nome)||!!busca;
+          const contadosG=g.itens.filter((m:any)=>dif(m)!==null).length;
+          const divG=g.itens.filter((m:any)=>{const d=dif(m);return d!==null&&d!==0;}).length;
+          return <div key={g.nome} className="card" style={{padding:0,overflow:"hidden",marginBottom:8}}>
+            <div onClick={()=>setAbertos(a=>{const n=new Set(a);n.has(g.nome)?n.delete(g.nome):n.add(g.nome);return n;})}
+              style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"11px 12px",cursor:"pointer",background:"var(--bg3)"}}>
+              <span style={{fontSize:12.5,fontWeight:700}}>{aberto?"▾":"▸"} {g.nome}
+                <span style={{fontWeight:400,color:"var(--text3)",fontSize:11,marginLeft:6}}>{g.itens.length} item(ns)</span>
+              </span>
+              <span style={{fontSize:11,color:contadosG===g.itens.length?"var(--successText)":"var(--text2)",whiteSpace:"nowrap" as const}}>
+                {contadosG} de {g.itens.length} contado(s){divG>0&&<span style={{color:"var(--warningText)",fontWeight:700}}> · {divG} c/ dif.</span>}
+              </span>
+            </div>
+            {aberto&&g.itens.map((m:any)=>{
+              const d=dif(m);
+              return <div key={m.id} style={{display:"grid",gridTemplateColumns:"1fr 92px 62px",gap:8,alignItems:"center",
+                           padding:"9px 12px",borderTop:"1px solid var(--border)",fontSize:12.5}}>
+                <span>{m.rotulo}
+                  {m.marca&&m.marca!==m.rotulo&&<span style={{display:"block",fontSize:10.5,color:"var(--text3)"}}>{m.marca}</span>}
+                  <span style={{display:"block",fontSize:10.5,color:"var(--text2)"}}>
+                    sistema: {(m.estoqueAtual||0).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unidade||"un"}</span>
+                </span>
                 <input type="number" min="0" step="0.001" inputMode="decimal" placeholder="contar"
                   value={contado[m.id]??""} onChange={e=>setContado(c=>({...c,[m.id]:e.target.value}))}
-                  className="inp" style={{textAlign:"right",padding:"8px"}}/>
+                  className="inp" style={{textAlign:"right",padding:"8px",marginBottom:0}}/>
                 <span style={{textAlign:"right",fontWeight:700,
                               color:d===null?"var(--text3)":d===0?"var(--text3)":d<0?"var(--btnDanger)":"#22C55E"}}>
                   {d===null?"—":d===0?"ok":(d>0?"+":"")+d.toLocaleString("pt-BR",{maximumFractionDigits:2})}
                 </span>
-              </div>
-            </div>;
-          })}
-        </div>}
+              </div>;
+            })}
+          </div>;
+        })}
 
     <div style={{fontSize:10.5,color:"var(--text2)",lineHeight:1.7,marginTop:10,padding:"0 2px"}}>
       Quem não for contado fica com o saldo atual — parar no meio não zera o resto.
-      Só os insumos com diferença viram movimento no histórico.
+      Só os itens com diferença viram movimento no histórico.
     </div>
   </div>;
 }

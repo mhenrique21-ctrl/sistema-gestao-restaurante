@@ -219,7 +219,22 @@ Contas · + Novo · DRE · Categorias. A DRE tem toggle **Semanal / Mensal / Per
 em modo semanal, contas de grupo recorrente mensal entram **rateadas por dia**.
 
 ### Estoque
-Inventário · Contagem · Análise · Movimentações · Projeção de compras, que tem dois modos:
+Inventário · Contagem · Análise · Movimentações · Projeção de compras.
+
+**Contagem** é agrupada pelo **grupo do Eclética** (BEBIDAS, BOLOS, DOSE EXTRA),
+com os grupos **recolhidos** e contador por grupo. Agrupava por categoria
+contábil, que serve pra medir CMV e não pra andar pela loja com o celular; e com
+742 itens a tela aberta era uma rolagem que ninguém termina.
+
+⚠️ Revenda e dose são contadas **pela MARCA**, na unidade dela — é o que está na
+prateleira e é quem tem saldo. A linha mostra o nome do cardápio em cima e a
+marca embaixo. Marca de dois produtos do cardápio é deduplicada.
+
+⚠️ Insumo que não é produto do cardápio nem marca de nenhum (farinha,
+detergente) cai no grupo **"Insumos fora do cardápio"** e continua contável —
+sumir daqui deixaria metade da despensa de fora da contagem física.
+
+Projeção de compras tem dois modos:
 
 - **Por ritmo**: janela de 90 dias, `consumo/dia × N dias − estoque`
 - **Semanal**: média das últimas N semanas **segunda a sábado**, separada por giro
