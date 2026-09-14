@@ -446,24 +446,24 @@ describe('mapaProdutoFicha (de-para produto → ficha técnica)', () => {
     // Produto produzido aponta pra ficha; revenda aponta pra matéria-prima.
     // São chaves diferentes do mesmo mapa e não podem se atropelar.
     const servidor = { mapaProdutoFicha: { 'pao de queijo': { modo: 'ficha', fichaId: 'f1' } } };
-    const chegando = { mapaProdutoFicha: { 'agua 500ml': { modo: 'insumo', mpId: 'mp7' } } };
+    const chegando = { mapaProdutoFicha: { 'agua 500ml': { modo: 'produto', prodId: 'pl7' } } };
 
     const r = mergeDocument(servidor, chegando);
 
     assert.equal(r.mapaProdutoFicha['pao de queijo'].modo, 'ficha');
-    assert.equal(r.mapaProdutoFicha['agua 500ml'].mpId, 'mp7');
+    assert.equal(r.mapaProdutoFicha['agua 500ml'].prodId, 'pl7', 'revenda aponta pro produto da LISTA, não pra matéria-prima');
   });
 
   test('trocar de destino sobrescreve o anterior inteiro', () => {
     // Reclassificar de ficha pra revenda não pode deixar fichaId pendurado: o
     // resolvedor testa modo primeiro, mas um campo órfão confunde quem depurar.
     const servidor = { mapaProdutoFicha: { 'suco': { modo: 'ficha', fichaId: 'f3' } } };
-    const chegando = { mapaProdutoFicha: { 'suco': { modo: 'insumo', mpId: 'mp2' } } };
+    const chegando = { mapaProdutoFicha: { 'suco': { modo: 'produto', prodId: 'pl2' } } };
 
     const r = mergeDocument(servidor, chegando);
 
-    assert.equal(r.mapaProdutoFicha['suco'].modo, 'insumo');
-    assert.equal(r.mapaProdutoFicha['suco'].mpId, 'mp2');
+    assert.equal(r.mapaProdutoFicha['suco'].modo, 'produto');
+    assert.equal(r.mapaProdutoFicha['suco'].prodId, 'pl2');
     assert.equal(r.mapaProdutoFicha['suco'].fichaId, undefined, 'o registro é trocado, não mesclado campo a campo');
   });
 

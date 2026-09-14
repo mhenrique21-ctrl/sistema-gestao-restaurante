@@ -122,8 +122,8 @@ categoriasDeleted        tombstone das categorias do Financeiro
 itensVendidos            [{id, data, origem, itens:[{cod,nome,un,qtd,valor}]}] — produtos
                          vendidos por dia, AGREGADOS por produto. Fora de `vendas`
                          de propósito: não entra em nenhum cálculo de faturamento
-mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"insumo"|"auto"|"ignorar",
-                         fichaId|mpId, fichaNome|mpNome, origemAprendizado,
+mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"produto"|"auto"|"ignorar",
+                         fichaId|prodId, fichaNome|prodNome, origemAprendizado,
                          ultimaAtualizacao}}  — ver §6, "Produto vendido → compra"
 ```
 
@@ -225,8 +225,15 @@ Tratar os dois como a mesma coisa é o que faz o CMV não fechar.
 ```
 PRODUZIDO   venda ─ mapaProdutoFicha ─► ficha técnica ─ insumos[].mpId ─►
             matéria-prima ─ produtosLista.mpVinculados ─► compra
-REVENDA     venda ─ mapaProdutoFicha (modo "insumo") ─► matéria-prima ─► compra
+REVENDA     venda ─ mapaProdutoFicha (modo "produto") ─► PRODUTO DA LISTA ─
+            mpVinculados ─► matéria-prima ─► compra
 ```
+
+O destino da revenda é o **produto da lista de compras**, não a matéria-prima.
+A lista é o cadastro que o dono mantém (nome, categoria, rua); a matéria-prima
+nasce das entradas. Um produto da lista costuma ter VÁRIAS matérias-primas
+vinculadas (marcas do mesmo item) — só a soma delas responde "quanto comprei
+disso".
 
 A corrente do PRODUZIDO já existe elo a elo (`autoVincularInsumosCompra` casa
 matéria-prima com produto da lista sozinho quando o nome bate). **O cálculo que
