@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+// A matemática do consumo teórico vive fora daqui porque erra em silêncio:
+// esquecer de dividir por `porcoes` ou converter g↔kg dá um número que continua
+// parecendo plausível na tela. Lá tem teste travando as duas.
+import {converterQtd,consumoTeorico} from "./consumoTeorico.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -4600,7 +4604,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"revenda"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"consumo"|"revenda"|"vinculos"|"empresas">(aj.abaRelatorioPadrao||"cliente");
   const [buscaVinc,setBuscaVinc]=useState("");
   const [soPendentes,setSoPendentes]=useState(true);
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
@@ -4645,7 +4649,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
     ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
     ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
     ["mensal","Evolução Mensal"],["canal","Por Canal"],["sazonal","Sazonalidade"],
-    ["margem","Margem por Produto"],["revenda","Revenda × Compras"],["vinculos","Vincular Produtos"],["empresas","Confraria × Seama"],
+    ["margem","Margem por Produto"],["consumo","Consumo Teórico"],["revenda","Revenda × Compras"],["vinculos","Vincular Produtos"],["empresas","Confraria × Seama"],
   ];
 
   const RowBar=({label,sub,qty,val,pct,color}:{label:string,sub?:string,qty?:string,val:number,pct:number,color?:string})=>(
@@ -4887,6 +4891,94 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
             ?<span style={{fontWeight:700,fontFamily:"monospace",color:l.margem>=0?"#15803D":"#dc2626"}}>{fmtMoney(l.margem)} <span style={{fontSize:10,opacity:.75}}>({l.margemPct.toFixed(0)}%)</span></span>
             :<span style={{fontSize:11,color:"var(--text2)",fontStyle:"italic" as const}}>sem dado de custo</span>}
         </div>)}
+      </>;
+    })()}
+
+    {relTab==="consumo"&&(()=>{
+      // Consumo TEÓRICO: o que as fichas dizem que deveria ter saído do estoque
+      // para produzir o que foi vendido. Não é o que saiu de fato — a diferença
+      // entre os dois é justamente o que se quer enxergar.
+      const movs=db.movEstoque||[];
+      const {linhas:base,receitaComFicha,receitaSemFicha,semPorcoes,semInsumos}=
+        consumoTeorico(agruparItens(),(nome:string)=>vinculoDoProduto(db,nome).ficha);
+
+      const linhas=base.map((l:any)=>{
+        const mp=l.mpId?(db.materiasPrimas||[]).find((m:any)=>m.id===l.mpId):null;
+        let comprado:number|null=null, estoque:number|null=null;
+        if(mp){
+          const entradas=movs.filter((mv:any)=>mv.mpId===mp.id&&mv.tipo==="entrada"&&mv.data>=ini&&mv.data<=fim);
+          const brutoCompra=entradas.reduce((sa:number,mv:any)=>sa+(mv.quantidade||0),0);
+          comprado=converterQtd(brutoCompra,mp.unidade||"un",l.unidade);
+          estoque=converterQtd(parseFloat(mp.estoque)||0,mp.unidade||"un",l.unidade);
+        }
+        return{...l,mp,comprado,estoque,unCompra:mp?.unidade||"",
+          cobertura:comprado!=null&&l.qtd>0?comprado/l.qtd:null};
+      });
+
+      const custoTeorico=linhas.reduce((sa:number,l:any)=>sa+l.custo,0);
+      const cmvTeorico=receitaComFicha>0?custoTeorico/receitaComFicha*100:null;
+      const receitaTotal=receitaComFicha+receitaSemFicha;
+      const cobFichas=receitaTotal>0?receitaComFicha/receitaTotal*100:0;
+      const semConversao=linhas.filter((l:any)=>l.mp&&l.comprado==null).length;
+
+      return <>
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Consumo teórico de insumos</div>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>
+          O que as fichas técnicas dizem que <em>deveria</em> ter saído do estoque para produzir o que foi vendido no período.
+        </div>
+
+        {!linhas.length&&<EmptyState msg="Nenhum produto vendido com ficha técnica vinculada no período."/>}
+
+        {linhas.length>0&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Custo teórico dos insumos</span><strong>{fmtMoney(custoTeorico)}</strong>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+            <span style={{color:"var(--text2)"}}>Receita dos produtos com ficha</span><strong>{fmtMoney(receitaComFicha)}</strong>
+          </div>
+          {cmvTeorico!=null&&<div style={{display:"flex",justifyContent:"space-between",fontSize:14,fontWeight:700,paddingTop:6,marginTop:4,borderTop:"1px solid var(--border)"}}>
+            <span>CMV teórico</span>
+            <span style={{color:cmvTeorico<=35?"var(--successText)":cmvTeorico<=45?"var(--warningText)":"var(--dangerText)"}}>{cmvTeorico.toFixed(1)}%</span>
+          </div>}
+          <div style={{fontSize:11,color:"var(--text2)",marginTop:6,lineHeight:1.5}}>
+            Calculado só sobre os {cobFichas.toFixed(0)}% da receita que têm ficha vinculada — não é o CMV da loja inteira.
+            {cobFichas<70&&<> Vincule mais produtos em <strong>Vincular Produtos</strong> para este número valer.</>}
+          </div>
+        </div>}
+
+        {semPorcoes.length>0&&<div style={{fontSize:11,color:"var(--dangerText)",marginBottom:8}}>
+          ⚠️ Ficha sem rendimento informado (tratada como 1 porção): {semPorcoes.slice(0,5).join(", ")}. Se a receita rende mais de uma unidade, o consumo dela está superestimado.
+        </div>}
+        {semInsumos.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:8}}>
+          ⚠️ Ficha sem insumos cadastrados: {semInsumos.slice(0,5).join(", ")}.
+        </div>}
+        {semConversao>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:8}}>
+          ⚠️ {semConversao} insumo(s) com unidade da ficha diferente da unidade de compra, sem conversão possível — o comparativo fica em branco neles.
+        </div>}
+
+        {linhas.map((l:any)=>{
+          const top=Array.from(l.fontes.entries() as Iterable<[string,number]>).sort((a,b)=>b[1]-a[1]).slice(0,3);
+          return <div key={l.chave} style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6,alignItems:"baseline"}}>
+              <span style={{fontSize:13,fontWeight:600}}>{l.nome}</span>
+              <span style={{fontSize:12,fontWeight:700}}>{fmtMoney(l.custo)}</span>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:5}}>
+              <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>deveria ter saído: {l.qtd.toFixed(l.qtd<10?2:0)} {l.unidade}</span>
+              {l.comprado!=null&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>comprado: {l.comprado.toFixed(l.comprado<10?2:0)} {l.unidade}</span>}
+              {l.estoque!=null&&<span className="tag" style={{background:"var(--bg)",color:"var(--text2)"}}>estoque hoje: {l.estoque.toFixed(l.estoque<10?2:0)} {l.unidade}</span>}
+              {!l.mp&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>sem insumo vinculado na ficha</span>}
+              {l.mp&&l.comprado==null&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>ficha em "{l.unidade}", compra em "{l.unCompra}"</span>}
+            </div>
+            <div style={{fontSize:10.5,color:"var(--text3)"}}>
+              vem de: {top.map(([nome,q]:[string,number])=>`${nome} (${q.toFixed(q<10?1:0)})`).join(" · ")}{l.fontes.size>3?` · +${l.fontes.size-3}`:""}
+            </div>
+          </div>;
+        })}
+
+        {linhas.length>0&&<div style={{fontSize:11,color:"var(--text2)",marginTop:10,lineHeight:1.5}}>
+          A primeira coisa que esta tela costuma revelar não é desperdício: é <strong>ficha desatualizada</strong>. Se ela diz 30 g e a cozinha usa 45 g, a diferença aparece aqui como se fosse desvio. Confira a ficha antes de concluir qualquer coisa.
+        </div>}
       </>;
     })()}
 

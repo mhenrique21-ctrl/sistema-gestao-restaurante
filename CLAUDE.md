@@ -32,6 +32,7 @@ src/ConfigPanel.tsx   configuração visual
 new_server.js         API Node (sem framework), serve o build e faz proxy pros PDVs
 mergeDocument.js      fusão de documento no servidor (com testes)
 mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
+src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com testes)
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -236,8 +237,17 @@ vinculadas (marcas do mesmo item) — só a soma delas responde "quanto comprei
 disso".
 
 A corrente do PRODUZIDO já existe elo a elo (`autoVincularInsumosCompra` casa
-matéria-prima com produto da lista sozinho quando o nome bate). **O cálculo que
-a percorre — consumo teórico de insumos a partir das vendas — ainda NÃO existe.**
+matéria-prima com produto da lista sozinho quando o nome bate). O cálculo que a
+percorre está em **`src/consumoTeorico.js`** (com testes) e aparece em
+Vendas → Relatório → **Consumo Teórico**.
+
+Duas contas ali erram em silêncio, e por isso moram fora do `App.tsx`:
+
+- `insumos[].quantidade` é da **receita inteira**; `porcoes` diz quantas unidades
+  ela rende. Sem dividir, uma receita que rende 50 pães acusa 50× o polvilho
+- ficha é escrita em g/ml, compra vem em kg/l. `converterQtd` só converte dentro
+  de massa e volume e devolve **null** fora disso — quantas unidades tem um
+  pacote é cadastro (`unidadesPorEmbalagem`), não tabela
 
 REVENDA (água, refrigerante, cerveja, industrializado) não tem ficha e não é
 "ignorar": o que se vende é o que se compra. Comparação em
