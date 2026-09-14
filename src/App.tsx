@@ -12822,7 +12822,12 @@ const lerProdutosEcletica=(texto:string)=>{
 function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [lidos,setLidos]=useState<any[]|null>(null);
   const [erro,setErro]=useState("");
-  const [tipoPorGrupo,setTipoPorGrupo]=useState<Record<string,string>>({});
+  // Marcação por ITEM, não por grupo. O grupo é só um atalho que escreve em
+  // todos os itens dele — assim dá pra marcar 25 bebidas num clique e depois
+  // corrigir o chocolate que na verdade é revenda, sem duas fontes de verdade
+  // brigando na hora de importar.
+  const [tipoPorItem,setTipoPorItem]=useState<Record<string,string>>({});
+  const [abertos,setAbertos]=useState<Set<string>>(new Set());
 
   const [formato,setFormato]=useState("");
   const carregar=(file:File)=>{
@@ -12851,10 +12856,22 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
     if(m?.nome)porNome.set(foldNome(m.nome),m);
   });
   const achar=(i:any)=>(i.codigo&&porCodigo.get(String(i.codigo)))||porNome.get(foldNome(i.nome))||null;
+  const chaveItem=(i:any)=>i.codigo?`cod:${i.codigo}`:foldNome(i.nome);
   const grupos=lidos?Array.from(new Set(lidos.map(i=>i.grupo))).sort():[];
   const novos=lidos?lidos.filter(i=>!achar(i)):[];
   const jaExistem=lidos?lidos.length-novos.length:0;
-  const semTipo=grupos.filter(g=>!tipoPorGrupo[g]);
+  const marcadosNoGrupo=(g:string)=>(lidos||[]).filter(i=>i.grupo===g&&tipoPorItem[chaveItem(i)]).length;
+  const totalMarcados=lidos?lidos.filter(i=>tipoPorItem[chaveItem(i)]).length:0;
+  const semTipo=grupos.filter(g=>marcadosNoGrupo(g)===0);
+  const marcarGrupo=(g:string,tipo:string)=>setTipoPorItem(t=>{
+    const novo={...t};
+    (lidos||[]).filter(i=>i.grupo===g).forEach(i=>{novo[chaveItem(i)]=tipo;});
+    return novo;
+  });
+  const tipoDoGrupo=(g:string)=>{
+    const ts=new Set((lidos||[]).filter(i=>i.grupo===g).map(i=>tipoPorItem[chaveItem(i)]||""));
+    return ts.size===1?[...ts][0]:"";
+  };
 
   const importar=()=>{
     if(!lidos)return;
@@ -12871,7 +12888,7 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
       const tipos={...(d.tipoInsumo||{})};
       lidos.forEach(i=>{
         const n=(i.codigo&&idxCod.get(String(i.codigo)))??idxNome.get(foldNome(i.nome));
-        const t=tipoPorGrupo[i.grupo];
+        const t=tipoPorItem[chaveItem(i)];
         if(n!=null){
           // Já existe: NÃO duplica e NÃO sobrescreve o nome — quem renomeou no
           // Gestão fez isso de propósito. Só completa o código, que é o que
@@ -12892,7 +12909,7 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
       return{...d,materiasPrimas:mps,tipoInsumo:tipos};
     });
     alert(`Pronto. ${novos.length} produto(s) importado(s) com saldo zero.`);
-    setLidos(null);setTipoPorGrupo({});
+    setLidos(null);setTipoPorItem({});setAbertos(new Set());
   };
 
   return <div>
@@ -12925,26 +12942,59 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>Marque o tipo de cada grupo</div>
         <div className="muted" style={{fontSize:11.5,marginBottom:10,lineHeight:1.5}}>
-          Por grupo, não item a item — a planilha já vem agrupada, então {lidos.length} decisões viram {grupos.length}.
-          Grupo sem marcação é importado assim mesmo e vira pendência em Compras → Insumos.
+          O botão do grupo marca todos de uma vez; abra em <strong>ver</strong> e corrija os que fogem à regra — um chocolate dentro de BOLOS que na verdade é revenda, por exemplo.
+          <br/>Item sem marcação é importado assim mesmo: dá pra resolver depois em <strong>Saldo Estoque</strong>, tocando na linha.
         </div>
         {grupos.map(g=>{
-          const qtd=lidos.filter(i=>i.grupo===g).length;
-          return <div key={g} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid var(--border)",flexWrap:"wrap" as const}}>
-            <span style={{fontSize:13,flex:1,minWidth:130}}>{g} <span style={{fontSize:10,color:"var(--text3)"}}>{qtd} item(ns)</span></span>
-            <div className="chip-row">
-              {([["revenda","Revenda"],["produzido","Produção própria"],["dose","Dose extra"]] as const).map(([v,lbl])=>(
-                <button key={v} type="button" className="chip"
-                  style={{minHeight:34,fontSize:11.5,...(tipoPorGrupo[g]===v?{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)"}:{})}}
-                  onClick={()=>setTipoPorGrupo(t=>({...t,[g]:v}))}>{lbl}</button>
-              ))}
+          const itensG=lidos.filter(i=>i.grupo===g);
+          const marcados=marcadosNoGrupo(g);
+          const sel=tipoDoGrupo(g);
+          const aberto=abertos.has(g);
+          return <div key={g} style={{borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 0",flexWrap:"wrap" as const}}>
+              <span style={{fontSize:13,flex:1,minWidth:130}}>{g}
+                <span style={{fontSize:10,color:marcados===itensG.length?"var(--successText)":"var(--text3)",marginLeft:6}}>
+                  {itensG.length} itens · {marcados} marcado(s)
+                </span>
+              </span>
+              <div className="chip-row">
+                {([["revenda","Revenda"],["produzido","Produção própria"],["dose","Dose extra"]] as const).map(([v,lbl])=>(
+                  <button key={v} type="button" className="chip"
+                    style={{minHeight:34,fontSize:11.5,...(sel===v?{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)"}:{})}}
+                    onClick={()=>marcarGrupo(g,v)}>{lbl}</button>
+                ))}
+                <button type="button" className="chip" style={{minHeight:34,fontSize:11.5}}
+                  onClick={()=>setAbertos(a=>{const n=new Set(a);n.has(g)?n.delete(g):n.add(g);return n;})}>
+                  {aberto?"▾ fechar":`▸ ver ${itensG.length}`}
+                </button>
+              </div>
             </div>
+            {aberto&&<div style={{paddingBottom:8}}>
+              {itensG.map(i=>{
+                const k=chaveItem(i);
+                const t=tipoPorItem[k]||"";
+                return <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"5px 0 5px 12px",borderTop:"1px solid var(--border)",flexWrap:"wrap" as const}}>
+                  <span style={{fontSize:12,flex:1,minWidth:140}}>
+                    {i.codigo&&<span style={{color:"var(--text3)",fontFamily:"monospace",marginRight:6}}>{i.codigo}</span>}
+                    {i.nome}
+                  </span>
+                  <div className="chip-row">
+                    {([["revenda","Rev"],["produzido","Prod"],["dose","Dose"]] as const).map(([v,lbl])=>(
+                      <button key={v} type="button" className="chip"
+                        style={{minHeight:30,fontSize:11,padding:"4px 9px",...(t===v?{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)"}:{})}}
+                        onClick={()=>setTipoPorItem(x=>({...x,[k]:v}))}>{lbl}</button>
+                    ))}
+                  </div>
+                </div>;
+              })}
+            </div>}
           </div>;
         })}
-        {semTipo.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginTop:8}}>
-          {semTipo.length} grupo(s) ainda sem tipo: {semTipo.slice(0,4).join(", ")}{semTipo.length>4?"…":""}
-        </div>}
-        <button className="btn" onClick={importar} disabled={!novos.length&&!Object.keys(tipoPorGrupo).length}
+        <div style={{fontSize:11.5,marginTop:10,fontWeight:700,color:totalMarcados===lidos.length?"var(--successText)":"var(--warningText)"}}>
+          {totalMarcados} de {lidos.length} produto(s) marcado(s)
+          {semTipo.length>0&&<span style={{fontWeight:400}}> · sem nenhum: {semTipo.slice(0,4).join(", ")}{semTipo.length>4?"…":""}</span>}
+        </div>
+        <button className="btn" onClick={importar} disabled={!novos.length&&!Object.keys(tipoPorItem).length}
           style={{width:"100%",marginTop:12,background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",fontSize:14,fontWeight:700}}>
           📥 Importar {novos.length} produto(s)
         </button>
@@ -12962,10 +13012,19 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
   const [motivo,setMotivo]=useState("");
   const [dataMov,setDataMov]=useState(today());
 
-  const mps=db.materiasPrimas||[];
+  // Só produto do Eclética: é o que esta tela controla. Ajuste de INSUMO
+  // continua em Estoque → Inventário, que é onde ele sempre morou — trazer os
+  // dois pra cá faria a busca devolver "Queijo" (o kg) junto com "Queijo
+  // fatia" (a dose), e a pessoa baixaria do item errado sem perceber.
+  const mps=(db.materiasPrimas||[]).filter((m:any)=>{
+    if(m?.codigoEcletica)return true;
+    return ehProdutoVendido(tipoDoInsumo(db.tipoInsumo||{},m).tipo);
+  });
   const item=mps.find((m:any)=>m.id===itemId);
   const q=foldBusca(busca);
-  const opcoes=q?mps.filter((m:any)=>foldBusca(m.nome||"").includes(q)).slice(0,40):[];
+  const opcoes=q
+    ?mps.filter((m:any)=>foldBusca(m.nome||"").includes(q)||String(m.codigoEcletica||"")===busca.trim()).slice(0,40)
+    :[...mps].sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"")).slice(0,25);
   const ficha=item?(db.fichasTecnicas||[]).find((f:any)=>f?.nome&&foldNome(f.nome)===foldNome(item.nome)):null;
 
   // Prévia: mostra o que vai acontecer ANTES de acontecer. Baixar insumo sem
@@ -13003,13 +13062,18 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
 
   return <div>
     <BackBar label="Inventário" onClick={onVoltar}/>
-    <div className="section-title" style={{marginBottom:8}}>🔧 Manutenção de produtos</div>
+    <div className="section-title" style={{marginBottom:4}}>🔧 Manutenção de produtos</div>
+    <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
+      Produtos do Eclética. Ajuste de <strong>insumo</strong> continua em Estoque → Inventário.
+    </div>
 
     <div className="card" style={{marginBottom:12}}>
       <label className="muted" style={{fontSize:11,fontWeight:600,display:"block",marginBottom:4}}>Item</label>
       {item
         ? <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,background:"var(--bg)",borderRadius:8,padding:"9px 11px",marginBottom:10}}>
-            <span style={{fontSize:13,fontWeight:700}}>{item.nome}
+            <span style={{fontSize:13,fontWeight:700}}>
+              {item.codigoEcletica&&<span style={{fontWeight:400,color:"var(--text3)",fontFamily:"monospace",marginRight:6,fontSize:11}}>{item.codigoEcletica}</span>}
+              {item.nome}
               <span style={{fontWeight:400,fontSize:11,color:"var(--text2)",marginLeft:8}}>
                 saldo {(parseFloat(item.estoqueAtual)||0).toFixed(2)} {item.unidade||"un"}
               </span>
@@ -13017,15 +13081,26 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
             <button onClick={()=>{setItemId("");setBusca("");}} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:12,fontWeight:700}}>trocar</button>
           </div>
         : <>
-            <input className="inp" placeholder="🔍 Buscar produto ou insumo..." value={busca} onChange={e=>setBusca(e.target.value)}/>
-            {opcoes.map((m:any)=>(
-              <div key={m.id} onClick={()=>{setItemId(m.id);setBusca("");}}
-                style={{padding:"8px 4px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between"}}>
-                <span>{m.nome}</span>
-                <span style={{color:"var(--text2)",fontSize:11}}>{(parseFloat(m.estoqueAtual)||0).toFixed(2)} {m.unidade||"un"}</span>
-              </div>
-            ))}
-            {busca&&!opcoes.length&&<div className="muted" style={{fontSize:12,padding:"10px 0"}}>Nada encontrado. Produtos do cardápio entram por Estoque → Produtos do Eclética.</div>}
+            <input className="inp" placeholder="🔍 Buscar por nome ou código..." value={busca} onChange={e=>setBusca(e.target.value)}/>
+            {opcoes.map((m:any)=>{
+              const t=tipoDoInsumo(db.tipoInsumo||{},m).tipo;
+              return <div key={m.id} onClick={()=>{setItemId(m.id);setBusca("");}}
+                style={{padding:"8px 4px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",gap:8}}>
+                <span style={{flex:1,minWidth:0}}>
+                  {m.codigoEcletica&&<span style={{color:"var(--text3)",fontFamily:"monospace",marginRight:6,fontSize:11}}>{m.codigoEcletica}</span>}
+                  {m.nome}
+                  <span style={{display:"block",fontSize:10,color:"var(--text3)"}}>{t||"sem tipo"}</span>
+                </span>
+                <span style={{color:"var(--text2)",fontSize:11,whiteSpace:"nowrap" as const}}>{(parseFloat(m.estoqueAtual)||0).toFixed(2)} {m.unidade||"un"}</span>
+              </div>;
+            })}
+            {!mps.length&&<div className="muted" style={{fontSize:12,padding:"10px 0",lineHeight:1.5}}>
+              Nenhum produto do Eclética ainda. Importe em <strong>Estoque → Produtos Eclética</strong>.
+            </div>}
+            {busca&&!opcoes.length&&mps.length>0&&<div className="muted" style={{fontSize:12,padding:"10px 0",lineHeight:1.5}}>
+              Nada encontrado entre os produtos do Eclética. Para ajustar um <strong>insumo</strong>, use Estoque → Inventário.
+            </div>}
+            {!busca&&mps.length>25&&<div className="muted" style={{fontSize:11,padding:"8px 0"}}>Mostrando 25 de {mps.length}. Use a busca.</div>}
           </>}
 
       {item&&<>

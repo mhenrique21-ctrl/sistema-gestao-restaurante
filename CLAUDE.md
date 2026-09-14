@@ -309,11 +309,17 @@ produção sai em g/kg pela ficha, que tem a própria conversão (`porcoes`).
 
 - **Saldo Estoque** — todos os itens com saldo, filtro por tipo. Abre em
   "Produtos" (revenda/produzido/dose); insumo e interno ficam atrás do filtro
-- **Manutenção de Produtos** — Produção · Entrada · Saída · Ajuste.
-  `src/movimentoEstoque.js`, com testes
-- **Produtos Eclética** — importa o cardápio e marca o tipo **por grupo**
-  (281 decisões viram ~15). Produto que já existe não é duplicado; entra com
-  saldo **zero**
+- **Manutenção de Produtos** — Produção · Entrada · Saída · Ajuste. Lista só
+  **produto do Eclética** (tem `codigoEcletica` ou tipo vendável); ajuste de
+  INSUMO continua em Estoque → Inventário. Misturar os dois faria a busca
+  devolver "Queijo" (o kg) junto com "Queijo fatia" (a dose), e a pessoa
+  baixaria do item errado. `src/movimentoEstoque.js`, com testes
+- **Produtos Eclética** — importa o cardápio. A marcação é **por ITEM**; o botão
+  do grupo é só um atalho que escreve em todos os itens dele, para não existirem
+  duas fontes de verdade na hora de importar. Cada grupo abre e mostra os
+  produtos com código. Item sem marcação é importado assim mesmo e pode ser
+  resolvido depois em Saldo Estoque. Produto que já existe não é duplicado;
+  entra com saldo **zero**
 
 ⚠️ O arquivo do Eclética **não é uma tabela**: é o relatório
 `RelCadProdutosT.rpt`, em que CADA linha repete os rótulos das colunas, depois
