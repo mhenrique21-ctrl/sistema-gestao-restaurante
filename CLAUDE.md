@@ -40,6 +40,13 @@ src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
 Persistência: **arquivos JSON por empresa** em `dados/confraria.json` e `dados/seama.json`.
 
+Agentes que rodam fora do servidor:
+
+```
+ecletica-agent/    lê os XML de NFC-e do Eclética no PC do caixa (ver §4)
+impressora-agent/  captura a comanda do 99Food no meio do caminho pra impressora
+```
+
 ### Sistemas irmãos (mesmo repositório)
 
 | Sistema | Pasta | pm2 | Endereço |
@@ -148,6 +155,37 @@ o que importa saber daqui:
   do fiado no `delivery-backend`
 - itens do dia alimentam Vendas → Relatório (Produtos, ABC, Margem), que antes
   liam só `recibosVenda` e nunca tinham visto a venda do balcão
+
+### Ponte de impressão 99Food (`impressora-agent/`)
+
+O 99Food não abre API pra loja ler o próprio pedido; o que existe é a comanda
+que já sai impressa na cozinha. O agente fica **entre** o app e a impressora
+(TCP 9100), guarda o trabalho e **repassa os mesmos bytes** pra impressora real.
+
+⚠️ Intermediário, nunca substituto: a cozinha depende daquele papel, e o
+primeiro pedido sem comanda acabaria com a confiança na ponte. Falha no repasse
+vira aviso, não interrupção da captura — o `.bin` fica guardado pra reimprimir.
+
+Dois modos porque *como* o 99Food imprime varia por loja: `rede` (o app aponta
+pra um IP) e `pasta` (o app imprime pelo Windows e um redirecionador grava o
+trabalho num arquivo). Descobrir o modo é o passo 1 do README de lá — supor o
+caminho antes de ver o real foi o que custou três idas e vindas no Eclética.
+
+⚠️ Grava **`.bin` cru + `.txt` legível**. O cru não é redundância: se a
+impressora usar outra tabela de caracteres, ou o leitor melhorar, é ele que
+permite reler os pedidos antigos sem esperar pedido novo (`--ler`).
+
+A decodificação mora em **`impressora-agent/escpos.js`** (com testes), fora do
+agente, porque é ela que muda quando o layout muda e é a única parte testável
+sem impressora na mesa. Ela converte **CP850** (térmica não fala UTF-8 — um
+byte por acentuado; lido como UTF-8, nome de produto com lixo não casa com o
+cadastro) e **pula os comandos**: parâmetro não consumido vira caractere solto
+colado no nome do item, e logo raster (`GS v 0`) não pulado pelo tamanho
+declarado vira páginas de sujeira.
+
+**Estado: FASE 1 — só captura.** Não interpreta o pedido nem envia pro Gestão;
+o leitor nasce em cima de uma comanda real capturada. O iFood usa o mesmo
+mecanismo e ainda não foi ligado.
 
 ---
 

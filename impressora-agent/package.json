@@ -1,0 +1,12 @@
+{
+  "name": "impressora-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ponte de impressão 99Food → App Gestão: captura a comanda que vai pra impressora e repassa pra ela.",
+  "type": "module",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js",
+    "test": "node --test"
+  }
+}
