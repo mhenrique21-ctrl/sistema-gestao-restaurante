@@ -8,7 +8,7 @@ import path from 'node:path';
 // import — daí o import dinâmico.
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'captura-'));
 process.env.CAPTURA_SAIDA = TMP;
-const { gravar, comandaDeTeste } = await import('./agent.js');
+const { gravar, comandaDeTeste, destinoWindows } = await import('./agent.js');
 const { textoDeEscPos, linhasUteis } = await import('./escpos.js');
 
 test('a comanda de teste volta legível depois de virar bytes de impressora', () => {
@@ -36,6 +36,21 @@ test('trabalho vazio não cria arquivo', () => {
   const antes = fs.readdirSync(TMP).length;
   assert.equal(gravar(Buffer.alloc(0), 'vazio'), null);
   assert.equal(fs.readdirSync(TMP).length, antes);
+});
+
+test('nome da impressora do Windows vira caminho sozinho', () => {
+  // Impressora USB não tem endereço, mas compartilhada tem caminho. Aceitar as
+  // três formas evita a pergunta "tenho que digitar as barras?" no config.bat.
+  assert.equal(destinoWindows('TERMICA'), '\\\\localhost\\TERMICA');
+  assert.equal(destinoWindows('  TERMICA  '), '\\\\localhost\\TERMICA');
+  assert.equal(destinoWindows('\\\\CAIXA\\TERMICA'), '\\\\CAIXA\\TERMICA');
+  // Porta paralela ainda existe em impressora antiga, e aceita a cópia direta.
+  assert.equal(destinoWindows('LPT1'), 'LPT1:');
+  assert.equal(destinoWindows('LPT1:'), 'LPT1:');
+  // Vazio tem que continuar vazio: é o sinal de "nenhum repasse configurado",
+  // e virar "\\\\localhost\\" mandaria a comanda pra lugar nenhum em silêncio.
+  assert.equal(destinoWindows(''), '');
+  assert.equal(destinoWindows(undefined), '');
 });
 
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));

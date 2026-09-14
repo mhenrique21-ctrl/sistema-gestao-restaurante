@@ -166,10 +166,20 @@ que já sai impressa na cozinha. O agente fica **entre** o app e a impressora
 primeiro pedido sem comanda acabaria com a confiança na ponte. Falha no repasse
 vira aviso, não interrupção da captura — o `.bin` fica guardado pra reimprimir.
 
-Dois modos porque *como* o 99Food imprime varia por loja: `rede` (o app aponta
-pra um IP) e `pasta` (o app imprime pelo Windows e um redirecionador grava o
-trabalho num arquivo). Descobrir o modo é o passo 1 do README de lá — supor o
-caminho antes de ver o real foi o que custou três idas e vindas no Eclética.
+A impressora da Confraria é **USB**, e isso decide a montagem:
+
+- **repasse** — porta USB não se abre como arquivo (ao contrário da LPT antiga).
+  O único caminho pra bytes crus é o **compartilhamento** do Windows, por
+  `copy /b` para `\\localhost\<share>`. ⚠️ O `/b` não é enfeite: sem ele o
+  `0x1A` do ESC/POS é lido como fim de arquivo e a comanda sai cortada no meio,
+  sem erro nenhum. `--impressoras` pergunta o nome ao Windows em vez de adivinhar
+- **captura** — modo `pasta`: uma segunda impressora com driver Generic/Text Only
+  numa **Local Port** apontada a um arquivo fixo. ⚠️ Porta `FILE:` não serve:
+  abre diálogo pedindo o nome a cada impressão. Como o nome é sempre o mesmo, o
+  agente lê, apaga e guarda a assinatura (tamanho+mtime) do que já leu — senão o
+  mesmo pedido viraria duas comandas
+- modo `rede` (o app aponta pra um IP, porta 9100) continua para quem tiver
+  impressora de rede; só ele repassa em fluxo, o USB espera o trabalho inteiro
 
 ⚠️ Grava **`.bin` cru + `.txt` legível**. O cru não é redundância: se a
 impressora usar outra tabela de caracteres, ou o leitor melhorar, é ele que

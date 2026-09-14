@@ -7,9 +7,8 @@
 //
 // POR QUE INTERMEDIÁRIO E NÃO SUBSTITUTO: a cozinha depende daquele papel. Um
 // agente que só captura deixaria o pedido sem comanda, e o primeiro pedido
-// perdido acabaria com a confiança na ponte inteira. Se a impressora estiver
-// desligada ou fora da rede, a captura continua e o .bin fica guardado — dá pra
-// reimprimir depois com "--imprimir".
+// perdido acabaria com a confiança na ponte inteira. Se o repasse falhar, a
+// captura continua e o .bin fica guardado — dá pra reimprimir com "--imprimir".
 //
 // POR QUE ESTA FASE NÃO INTERPRETA NADA: no Eclética eu supus o formato do
 // arquivo antes de ver um de verdade e errei o caminho duas vezes. Aqui o
@@ -23,25 +22,35 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { textoDeEscPos, linhasUteis } from './escpos.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Configuração ────────────────────────────────────────────────────────────
-// Dois modos porque ainda não se sabe COMO o 99Food manda imprimir nesta loja,
-// e descobrir isso custou três idas e vindas na ponte do Eclética:
-//   rede  → o tablet imprime num IP (impressora de rede). O agente escuta na
-//           porta 9100, que é a porta padrão de impressão crua (RAW/JetDirect).
-//   pasta → o app imprime pelo Windows. Aí a captura vem de uma porta "FILE" ou
-//           de um redirecionador que grava o trabalho num arquivo, e o agente
-//           só vigia a pasta.
+// Dois modos de CAPTURA, porque como o 99Food manda imprimir varia por loja:
+//   rede  → o app imprime num IP. O agente escuta na porta 9100, que é a porta
+//           padrão de impressão crua (RAW/JetDirect).
+//   pasta → o app imprime por uma impressora do Windows apontada pra um
+//           arquivo. O agente só vigia a pasta.
 const MODO      = (process.env.CAPTURA_MODO || 'rede').toLowerCase();
 const PORTA     = parseInt(process.env.CAPTURA_PORTA, 10) || 9100;
-const DESTINO   = (process.env.IMPRESSORA_IP || '').trim();
-const DESTINO_P = parseInt(process.env.IMPRESSORA_PORTA, 10) || 9100;
 const PASTA_IN  = (process.env.CAPTURA_PASTA || '').trim();
 const SAIDA     = (process.env.CAPTURA_SAIDA || path.join(AQUI, 'capturas')).trim();
+
+// E dois destinos de REPASSE, porque a impressora desta loja é USB:
+//   IMPRESSORA_WINDOWS → nome do COMPARTILHAMENTO da impressora no Windows.
+//                        É o único jeito de mandar bytes crus pra uma térmica
+//                        USB: a porta USB não se abre como arquivo (ao
+//                        contrário da LPT antiga), mas o spooler aceita uma
+//                        cópia binária pro caminho de rede local e repassa sem
+//                        reinterpretar nada.
+//   IMPRESSORA_IP      → impressora de rede, repasse direto por socket.
+const IMPRESSORA_WIN = (process.env.IMPRESSORA_WINDOWS || '').trim();
+const DESTINO        = (process.env.IMPRESSORA_IP || '').trim();
+const DESTINO_P      = parseInt(process.env.IMPRESSORA_PORTA, 10) || 9100;
+
 // Um trabalho de impressão não tem marcador de fim: o cliente às vezes mantém a
 // conexão aberta pro pedido seguinte. Sem este silêncio, dois pedidos viram um
 // arquivo só; curto demais, um pedido vira dois. 1,5s é o meio termo.
@@ -76,20 +85,61 @@ function gravar(bytes, etiqueta = 'trabalho') {
   return base;
 }
 
-// ── Modo rede: fica no meio do fio ──────────────────────────────────────────
-function enviarPraImpressora(bytes) {
+// ── Repasse: a comanda tem que sair no papel ────────────────────────────────
+// Impressora USB não tem endereço, mas compartilhada ela tem CAMINHO. Aceita o
+// nome curto do compartilhamento ("TERMICA"), o caminho inteiro, ou uma porta
+// paralela — normalizar aqui evita a pergunta "tenho que digitar as barras?".
+export function destinoWindows(nome) {
+  const n = String(nome || '').trim();
+  if (!n) return '';
+  if (/^(LPT|COM)\d+:?$/i.test(n)) return n.replace(/:?$/, ':');
+  if (n.startsWith('\\\\')) return n;
+  return `\\\\localhost\\${n}`;
+}
+
+function repassarWindows(caminhoBin) {
   return new Promise((resolve) => {
-    if (!DESTINO) return resolve(false);
+    const dest = destinoWindows(IMPRESSORA_WIN);
+    // "copy /b" é do cmd, não é programa — daí o cmd /c. E o /b é o que impede
+    // o Windows de tratar 0x1A como fim de arquivo: esse byte aparece no meio
+    // de ESC/POS e cortaria a comanda no meio sem erro nenhum.
+    execFile('cmd', ['/c', 'copy', '/b', caminhoBin, dest], (err, _o, stderr) => {
+      if (err) {
+        log(`   ⚠️  repasse para ${dest} falhou — a comanda NÃO saiu no papel.`);
+        log(`      ${String(stderr || err.message).trim()}`);
+        log('      Confira o nome do compartilhamento: node agent.js --impressoras');
+        return resolve(false);
+      }
+      log(`   🖨️  repassado para ${dest}`);
+      resolve(true);
+    });
+  });
+}
+
+function repassarRede(bytes) {
+  return new Promise((resolve) => {
     const s = net.connect({ host: DESTINO, port: DESTINO_P });
     let ok = false;
     s.setTimeout(15000);
     s.on('connect', () => { s.end(bytes); ok = true; });
     s.on('timeout', () => s.destroy());
-    s.on('error', (e) => { log(`   ⚠️  impressora ${DESTINO}:${DESTINO_P} — ${e.code || e.message}`); });
+    s.on('error', (e) => log(`   ⚠️  impressora ${DESTINO}:${DESTINO_P} — ${e.code || e.message}`));
     s.on('close', () => resolve(ok));
   });
 }
 
+// Grava primeiro, repassa depois — e nesta ordem de propósito: se o repasse
+// travar ou a impressora estiver sem papel, o pedido já está guardado em disco.
+async function capturar(bytes, etiqueta) {
+  const base = gravar(bytes, etiqueta);
+  if (!base) return null;
+  if (IMPRESSORA_WIN) await repassarWindows(`${base}.bin`);
+  else if (DESTINO) await repassarRede(bytes);
+  else log('   ⚠️  nenhum repasse configurado: a comanda NÃO sai no papel.');
+  return base;
+}
+
+// ── Modo rede: fica no meio do fio ──────────────────────────────────────────
 function modoRede() {
   const servidor = net.createServer((sock) => {
     const origem = sock.remoteAddress || '?';
@@ -97,14 +147,15 @@ function modoRede() {
     let repasse = null;
     let timer = null;
 
-    // O repasse é aberto junto com a conexão e os bytes seguem na hora, não no
-    // fim: a impressora térmica imprime em fluxo, e segurar o trabalho até o
-    // final atrasaria a comanda da cozinha sem motivo.
-    if (DESTINO) {
+    // Com impressora de REDE o repasse sai em fluxo, byte a byte, porque a
+    // térmica imprime enquanto recebe e segurar o trabalho atrasaria a cozinha.
+    // Com impressora USB isso não existe: o spooler só aceita o trabalho
+    // inteiro, então ali o repasse espera o fim (uns 1,5s a mais no papel).
+    if (DESTINO && !IMPRESSORA_WIN) {
       repasse = net.connect({ host: DESTINO, port: DESTINO_P });
       repasse.on('error', (e) => {
         log(`   ⚠️  repasse falhou (${e.code || e.message}) — a comanda NÃO saiu no papel.`);
-        log('      A captura continua; reimprima depois com: node agent.js --imprimir <arquivo.bin>');
+        log('      A captura continua; reimprima com: node agent.js --imprimir <arquivo.bin>');
         repasse = null;
       });
     }
@@ -115,7 +166,8 @@ function modoRede() {
       if (!pedacos.length) return;
       const bytes = Buffer.concat(pedacos);
       pedacos = [];
-      gravar(bytes, `trabalho de ${origem}`);
+      if (repasse) gravar(bytes, `trabalho de ${origem}`);   // já foi em fluxo
+      else capturar(bytes, `trabalho de ${origem}`);
     };
 
     sock.on('data', (d) => {
@@ -145,14 +197,18 @@ function modoRede() {
         if (i.family === 'IPv4' && !i.internal) log(`   endereço deste PC: ${i.address}  (${nome})`);
       }
     }
-    log(DESTINO
-      ? `   repassando para a impressora ${DESTINO}:${DESTINO_P}`
-      : '   ⚠️  IMPRESSORA_IP vazio: NADA será repassado e a cozinha fica sem papel.');
+    avisarDestino();
     log('   no 99Food, aponte a impressora para o endereço deste PC na porta acima.');
   });
 }
 
-// ── Modo pasta: o Windows grava, o agente lê ────────────────────────────────
+function avisarDestino() {
+  if (IMPRESSORA_WIN) log(`   repassando para a impressora do Windows ${destinoWindows(IMPRESSORA_WIN)}`);
+  else if (DESTINO) log(`   repassando para a impressora ${DESTINO}:${DESTINO_P}`);
+  else log('   ⚠️  nenhum repasse configurado: a cozinha ficará SEM PAPEL.');
+}
+
+// ── Modo pasta: o Windows grava, o agente lê e devolve pro papel ────────────
 // Arquivo recém-criado costuma estar sendo escrito ainda. Ler cedo demais pega
 // meia comanda, e meia comanda é pior que nenhuma: parece um pedido válido.
 async function esperarEstabilizar(arq) {
@@ -175,8 +231,16 @@ function modoPasta() {
   fs.mkdirSync(PASTA_IN, { recursive: true });
   fs.mkdirSync(SAIDA, { recursive: true });
   log(`vigiando a pasta ${PASTA_IN}`);
+  avisarDestino();
 
   const emAndamento = new Set();
+  // A porta do Windows grava SEMPRE no mesmo nome, então o arquivo processado
+  // precisa sair da frente. Quando o spooler ainda o segura e o apagar falha, a
+  // assinatura (tamanho+mtime) impede que a varredura seguinte o capture de
+  // novo — sem isso o mesmo pedido viraria duas comandas.
+  const jaVistos = new Set();
+  const assinatura = (st) => `${st.size}:${st.mtimeMs}`;
+
   const processar = async (nome) => {
     const arq = path.join(PASTA_IN, nome);
     if (emAndamento.has(arq)) return;
@@ -184,8 +248,22 @@ function modoPasta() {
     try {
       if (!fs.existsSync(arq) || fs.statSync(arq).isDirectory()) return;
       if (!(await esperarEstabilizar(arq))) return;
-      const bytes = fs.readFileSync(arq);
-      gravar(bytes, `arquivo ${nome}`);
+      const marca = `${nome}|${assinatura(fs.statSync(arq))}`;
+      if (jaVistos.has(marca)) return;
+
+      // O spooler mantém o arquivo aberto até terminar de escrever; ler nessa
+      // hora dá erro de acesso no Windows. Tentar de novo é mais barato que
+      // perder o pedido — e se falhar sempre, a varredura pega no ciclo seguinte.
+      let bytes = null;
+      for (let i = 0; i < 5 && !bytes; i++) {
+        try { bytes = fs.readFileSync(arq); }
+        catch { await new Promise((r) => setTimeout(r, 400)); }
+      }
+      if (!bytes) { log(`   ⚠️  ${nome} ainda em uso; tento de novo no próximo ciclo.`); return; }
+
+      jaVistos.add(marca);
+      if (jaVistos.size > 200) jaVistos.delete(jaVistos.values().next().value);
+      await capturar(bytes, `arquivo ${nome}`);
       // Sai da pasta de entrada pra não ser lido de novo na próxima varredura.
       try { fs.unlinkSync(arq); } catch (e) { log(`   ⚠️  não consegui remover ${nome}: ${e.message}`); }
     } finally {
@@ -221,6 +299,25 @@ function comandaDeTeste() {
   ]);
 }
 
+// Descobrir o nome da impressora PERGUNTANDO AO WINDOWS, não adivinhando. Na
+// ponte do Eclética eu li o caminho de uma captura de tela e errei uma letra;
+// custou três idas e vindas. Aqui a máquina escreve o nome.
+function listarImpressoras() {
+  const ps = 'Get-Printer | Select-Object Name,ShareName,Shared,PortName | Format-Table -AutoSize';
+  execFile('powershell', ['-NoProfile', '-Command', ps], (err, out) => {
+    if (!err && String(out).trim()) {
+      console.log(out);
+    } else {
+      execFile('wmic', ['printer', 'get', 'Name,ShareName,Shared,PortName'], (e2, o2) => {
+        console.log(e2 ? `não consegui listar as impressoras: ${e2.message}` : o2);
+      });
+    }
+    console.log('No config.bat, IMPRESSORA_WINDOWS recebe o ShareName (a coluna do meio).');
+    console.log('Se Shared estiver False, compartilhe a impressora primeiro — é o que');
+    console.log('dá a ela um caminho para o agente devolver a comanda ao papel.');
+  });
+}
+
 const args = process.argv.slice(2);
 const arg = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : null; };
 
@@ -231,6 +328,8 @@ const chamadoDireto = process.argv[1]
 
 if (!chamadoDireto) {
   // nada a fazer: quem importou quer só as funções
+} else if (args.includes('--impressoras')) {
+  listarImpressoras();
 } else if (args.includes('--ler')) {
   // Relê uma captura guardada. É o que permite refazer a leitura de um pedido
   // antigo depois que o parser melhorar, sem esperar um pedido novo.
@@ -241,17 +340,24 @@ if (!chamadoDireto) {
 } else if (args.includes('--imprimir')) {
   const arq = arg('--imprimir');
   if (!arq) { console.error('uso: node agent.js --imprimir <arquivo.bin>'); process.exit(1); }
-  if (!DESTINO) { console.error('IMPRESSORA_IP vazio no config.bat.'); process.exit(1); }
-  enviarPraImpressora(fs.readFileSync(arq))
+  if (IMPRESSORA_WIN) repassarWindows(path.resolve(arq));
+  else if (DESTINO) repassarRede(fs.readFileSync(arq))
     .then((ok) => console.log(ok ? '✅ enviado para a impressora' : '❌ não consegui enviar'));
+  else console.error('Configure IMPRESSORA_WINDOWS ou IMPRESSORA_IP no config.bat.');
 } else if (args.includes('--teste')) {
   // Confere a ponte inteira sem depender de um pedido real chegar: manda uma
-  // comanda de mentira pro próprio agente. Se sair papel E aparecer arquivo em
-  // capturas/, a instalação está certa.
-  const s = net.connect({ host: '127.0.0.1', port: PORTA });
-  s.on('connect', () => s.end(comandaDeTeste()));
-  s.on('error', (e) => console.error(`❌ o agente não está escutando na porta ${PORTA} (${e.code})`));
-  s.on('close', () => console.log('comanda de teste enviada — veja a outra janela.'));
+  // comanda de mentira pelo MESMO caminho que o 99Food usaria neste modo.
+  if (MODO === 'pasta') {
+    if (!PASTA_IN) { console.error('CAPTURA_PASTA vazio no config.bat.'); process.exit(1); }
+    const arq = path.join(PASTA_IN, `teste-${Date.now()}.prn`);
+    fs.writeFileSync(arq, comandaDeTeste());
+    console.log(`comanda de teste gravada em ${arq} — veja a outra janela.`);
+  } else {
+    const s = net.connect({ host: '127.0.0.1', port: PORTA });
+    s.on('connect', () => s.end(comandaDeTeste()));
+    s.on('error', (e) => console.error(`❌ o agente não está escutando na porta ${PORTA} (${e.code})`));
+    s.on('close', () => console.log('comanda de teste enviada — veja a outra janela.'));
+  }
 } else if (MODO === 'pasta') {
   modoPasta();
 } else {
