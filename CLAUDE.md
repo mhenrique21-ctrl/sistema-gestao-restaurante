@@ -37,6 +37,7 @@ src/tipoInsumo.js     o que o item é e o que a venda faz com ele (com testes)
 src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
 src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
 src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
+src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com testes)
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -301,6 +302,52 @@ errado, nada denunciando. `checkDuplicataCompra` não pega: ela roda ANTES da
 conciliação. O botão também trava no primeiro clique, porque o modal só some no
 render seguinte.
 - Budget por categoria com sugestão híbrida e `statusPace` ok/warn/over
+
+#### NF-e da SEFAZ: a lista mostra só o que FALTA importar
+
+⚠️ **A limpeza da lista NÃO é memória.** Ela apaga a nota de UMA lista; o botão
+**"↩ Do início"** reseta o contador NSU e a varredura devolve tudo — importadas
+inclusive. E a remoção do cache é uma chamada de rede: falhando, a nota some da
+tela e volta na abertura seguinte.
+
+A memória é a **chave de acesso de 44 dígitos** (`src/nfeImportadas.js`, com
+testes): identificador fiscal único, que não depende de nada que a tela faça.
+`separarImportadas(db, lista)` devolve `{visiveis, ocultas}` e a tela diz quantas
+escondeu — sumir sem explicação faria a pessoa procurar a nota.
+
+⚠️ Lê a chave de **`compras` E de `contas`**. A importação sempre gravou
+`chNFe` na conta a pagar e nunca na compra; sem olhar as duas, todo o histórico
+anterior voltaria como nota nova. A compra passou a gravar a chave também.
+
+⚠️ Comparação **só pelos dígitos** (`foldChave`): a chave aparece agrupada na
+tela e corrida no XML. Chave vazia nunca entra no conjunto — casaria com toda
+nota sem chave.
+
+⚠️ **"Importar Todas" checa duplicata por chave, aqui.** `checkDuplicataCompra`
+é pulada nesse caminho de propósito (`if(!all && …)` em `importarNFeSefaz`), então
+o lote entrava sem verificar nada: bastava usar "Do início" uma vez pra
+reimportar tudo — compra e conta a pagar em dobro, CMV errado, nada denunciando.
+
+⚠️ A lista renderizada é um **recorte**, então tudo nela opera por **`nsu`**,
+nunca por índice do array: por posição, editar a data de uma nota acertaria
+outra.
+
+⚠️ **O auto-fetch de resumo tenta cada chave UMA vez.** O gatilho era
+`sefazList.length`, então o ciclo recomeçava a cada mudança de tamanho —
+inclusive depois de cada importação. Com 25 resumos eram 25 consultas de 3 em 3
+segundos, repetidas a cada abertura da aba: é assim que se chega no **erro 656**
+(consumo indevido), que bloqueia por mais de uma hora. A chave é marcada ANTES
+da consulta — falha de rede não pode devolvê-la à fila. Sincronizar de novo
+limpa a trava, que é um pedido explícito de rebuscar.
+
+⚠️ `sefazVisiveis` é declarado **logo após** `sefazList`, antes de qualquer
+`useEffect` que o use: o array de dependências é avaliado durante o render, e
+declarar depois dava `ReferenceError` (TDZ) que derrubava a tela inteira. O
+build não pega isso.
+
+⚠️ Abrir a aba NF-e **não** consulta a SEFAZ para listar — lê o cache local. Só
+o auto-fetch acima consulta.
+
 
 ### Financeiro
 Contas · + Novo · DRE · Categorias. A DRE tem toggle **Semanal / Mensal / Período livre**;

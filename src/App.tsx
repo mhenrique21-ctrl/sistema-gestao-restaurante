@@ -7,6 +7,7 @@ import {tipoDoInsumo,pendenciasDeInsumo,ehProdutoVendido,baixaDaVenda,chaveTipo}
 import {aplicarMovimento,insumosDaProducao,distribuirEntreMarcas} from "./movimentoEstoque.js";
 import {calcularHolerite,contasEsperadas,contasLancadas,conciliarMes,encargoDescontado,encargoPatronal} from "./folhaRh.js";
 import {previaFalta,descontoDoMes,salarioDia,ehJustificada,MOTIVOS_473} from "./faltaClt.js";
+import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -6517,6 +6518,13 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   // ---- SEFAZ Sync ----
   const [sefazConfig,setSefazConfig]=useState<Record<string,boolean>>({});
   const [sefazList,setSefazList]=useState<any[]>([]);
+  // A lista da SEFAZ mostra só o que FALTA importar. A memória é a chave de 44
+  // dígitos gravada na compra e na conta (src/nfeImportadas.js, com testes),
+  // não a limpeza da lista: limpeza é de uma lista só, e "↩ Do início" reseta o
+  // contador da SEFAZ e devolve tudo — importadas inclusive.
+  const {visiveis:sefazVisiveis,ocultas:sefazOcultas}=useMemo(
+    ()=>separarImportadas(db,sefazList),[db.compras,db.contas,sefazList]);
+
   const [sefazLoading,setSefazLoading]=useState(false);
   const [sefazError,setSefazError]=useState("");
   const [fetchingChave,setFetchingChave]=useState<string|null>(null);
@@ -6552,10 +6560,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     try{
       const r=await fetch(`/api/nfe-cache?empresa=${empresa}`);
       const d=await r.json();
-      if((d.nfes||[]).length>0){
-        setSefazList(d.nfes);
-        if(d.ultNSU!=null){setSefazNSU(d.ultNSU);setSefazNsuInput(String(d.ultNSU));}
-      }
+      // Sem o else, cache vazio deixava na tela o que estava na memória — e a
+      // nota recém-importada continuava listada até alguém recarregar a página.
+      setSefazList(d.nfes||[]);
+      if(d.ultNSU!=null){setSefazNSU(d.ultNSU);setSefazNsuInput(String(d.ultNSU));}
       setCacheTs(d.timestamp?new Date(d.timestamp).toLocaleString("pt-BR",{timeZone:TZ}):null);
     }catch{}
     setCacheLoading(false);
@@ -6571,14 +6579,28 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   // Auto-load cache when NF-e sub-tab opens
   useEffect(()=>{if(subTab==="nfe")fetchCache();},[subTab,empresa]);
 
-  // Auto-fetch complete NF-e for any resumos in the list
+  // Busca sozinha o XML completo das notas que chegaram como RESUMO.
+  //
+  // ⚠️ CADA CHAVE É TENTADA UMA VEZ SÓ. O gatilho era `sefazList.length`, então
+  // o ciclo inteiro recomeçava sempre que a lista mudava de tamanho — inclusive
+  // depois de CADA nota importada. Com 25 resumos eram 25 consultas de 3 em 3
+  // segundos, repetidas a cada abertura da aba e a cada importação: é assim que
+  // se chega no erro 656 da SEFAZ (consumo indevido), que bloqueia por mais de
+  // uma hora. A trava guarda as chaves já tentadas e não as repete.
   const autoFetchingRef=useRef(false);
+  const tentadasRef=useRef<Set<string>>(new Set());
+  // Sincronizar de novo é um pedido explícito de buscar tudo outra vez.
+  useEffect(()=>{if(sefazLoading)tentadasRef.current=new Set();},[sefazLoading]);
   useEffect(()=>{
-    const resumos=sefazList.filter(n=>(n.tipoDoc==="resumo"||(!(n.tipoDoc)&&(n.itens||[]).length===0))&&n.chNFe&&n.chNFe.length===44);
+    const resumos=sefazVisiveis.filter((n:any)=>(n.tipoDoc==="resumo"||(!(n.tipoDoc)&&(n.itens||[]).length===0))
+      &&n.chNFe&&n.chNFe.length===44&&!tentadasRef.current.has(n.chNFe));
     if(resumos.length===0||autoFetchingRef.current||sefazLoading||!waitOk)return;
     autoFetchingRef.current=true;
     (async()=>{
       for(const resumo of resumos){
+        // Marca ANTES de consultar: falha de rede ou 656 no meio do caminho não
+        // pode fazer a chave voltar pra fila e a tela reconsultar sem parar.
+        tentadasRef.current.add(resumo.chNFe);
         try{
           setFetchingChave(resumo.chNFe);
           const res=await fetch("/api/nfe-manifestar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,chNFe:resumo.chNFe})});
@@ -6599,7 +6621,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       }
       autoFetchingRef.current=false;
     })();
-  },[sefazList.length,sefazLoading,waitOk]);
+    // sefazVisiveis entra na dependência, mas a trava por chave é que decide:
+    // sem ela, qualquer mudança na lista recomeçava tudo.
+  },[sefazVisiveis,sefazLoading,waitOk]);
 
   const salvarNSUManual=async()=>{
     const val=parseInt(sefazNsuInput);
@@ -6672,9 +6696,22 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     setSefazLoading(false);
   };
 
-  const removeFromCache=(nsus:number[])=>{
-    if(!nsus.length)return;
-    fetch("/api/nfe-cache/remove",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,nsus})}).catch(()=>{});
+  // Aguardada, não disparada e esquecida. Era `.catch(()=>{})`: a nota sumia da
+  // tela na hora e, se a chamada falhasse (rede oscilando, servidor
+  // reiniciando), continuava no cache e voltava na próxima abertura da aba —
+  // já importada e pronta pra entrar de novo, sem ninguém saber.
+  const removeFromCache=async(nsus:number[])=>{
+    if(!nsus.length)return true;
+    try{
+      const r=await fetch("/api/nfe-cache/remove",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({empresa,nsus})});
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      return true;
+    }catch(e:any){
+      // Não é fatal: a nota já foi importada e a chave dela agora bloqueia a
+      // reimportação. O aviso existe pra ninguém estranhar ela reaparecendo.
+      setSefazError(`A nota foi importada, mas não consegui limpá-la do cache (${e.message||"falha de rede"}). Ela pode reaparecer na lista — já marcada como importada.`);
+      return false;
+    }
   };
 
   const copiarChave=(chave:string)=>{
@@ -6682,7 +6719,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     else{const ta=document.createElement("textarea");ta.value=chave;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);alert("✅ Chave de acesso copiada!");}
   };
 
-  const buscarItensNFe=async(nfe:any,i:number)=>{
+  const buscarItensNFe=async(nfe:any)=>{
     if(!nfe.chNFe||nfe.chNFe.length!==44){alert("Chave de acesso não disponível para esta NF-e.");return;}
     if(!waitOk){alert(`⏳ Limite de consultas SEFAZ atingido. Aguarde ${Math.ceil(waitMs/60000)} min antes de tentar novamente.`);return;}
     setFetchingChave(nfe.chNFe);
@@ -6698,7 +6735,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       if(data.pendente||(data.itens||[]).length===0){
         alert("⏳ "+(data.message||"SEFAZ ainda processando. Aguarde alguns minutos e clique em 'Buscar' novamente."));
       }else if((data.itens||[]).length>0){
-        setSefazList(l=>l.map((n,j)=>j===i?{...n,...data,tipoDoc:"completo"}:n));
+        setSefazList(l=>l.map((n:any)=>n.nsu===nfe.nsu?{...n,...data,tipoDoc:"completo"}:n));
       }
     }catch(e:any){alert("⚠️ "+e.message);}
     finally{setFetchingChave(null);}
@@ -6749,7 +6786,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoesNome),categoria:item.categoria,
           unidade:item.unidade,quantidade:item.quantidade,
           valor:item.valorTotal,valorUnitario:item.valorUnitario,
-          data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",grupoId,criadoEm:new Date().toISOString(),
+          // A CHAVE, não só o número da nota: é o identificador fiscal único e
+          // é por ela que a lista da SEFAZ sabe que esta nota já entrou. Sem
+          // isso, "↩ Do início" traz a nota de volta como se fosse nova.
+          data:nfe.data||today(),origem:"sefaz",nNF:nfe.nNF||"",chNFe:nfe.chNFe||"",grupoId,criadoEm:new Date().toISOString(),
         },
       }));
       const novasCompras=paresCompra.map((p:any)=>p.compra);
@@ -6821,7 +6861,24 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   // descrição de uma compra de verdade — daí o "produto" esquisito
   // aparecendo depois na conciliação de insumos.
   const importarTodasNFeSefaz=()=>{
-    const comItens=sefazList.filter(n=>(n.itens||[]).length>0);
+    // Checa duplicata AQUI, por chave. A checagem por fornecedor+valor+data
+    // (`checkDuplicataCompra`) é pulada de propósito neste caminho — é
+    // `if(!all && ...)` no importarNFeSefaz —, então até agora "Importar Todas"
+    // entrava sem verificar nada. Bastava usar "↩ Do início" uma vez pra
+    // reimportar o lote inteiro: compra em dobro, conta a pagar em dobro, CMV
+    // errado, e nada na tela denunciando.
+    // `jaEntraram` olha a lista INTEIRA, não a visível: a visível já exclui as
+    // importadas, então contar nela sempre daria zero e a mensagem nunca diria
+    // nada. Já `comItens` filtra de novo sobre a visível — trava de verdade,
+    // caso alguma escape do recorte da tela.
+    const jaEntraram=sefazList.filter((n:any)=>(n.itens||[]).length>0&&jaImportada(db,n));
+    const comItens=sefazVisiveis.filter((n:any)=>(n.itens||[]).length>0&&!jaImportada(db,n));
+    if(!comItens.length){
+      alert(jaEntraram.length
+        ?`Todas as ${jaEntraram.length} nota(s) com itens já foram importadas antes. Nada a fazer.`
+        :"Nenhuma NF-e com itens para importar.");
+      return;
+    }
     const nsus=comItens.map(n=>n.nsu).filter(Boolean);
     const count=comItens.length;
     const todosItens=comItens.flatMap(nfe=>nfe.itens||[]);
@@ -6830,7 +6887,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       setSefazList(l=>l.filter(n=>!comItens.some(c=>c.nsu===n.nsu)));
       removeFromCache(nsus);
       setConciliacao(null);
-      alert(`✅ ${count} NF-e(s) importadas! (as sem itens ficaram de fora — confira/lance manualmente se precisar)`);
+      alert(`✅ ${count} NF-e(s) importadas!`
+        +(jaEntraram.length?`\n\n${jaEntraram.length} foram puladas por já terem sido importadas antes (conferido pela chave da nota).`:"")
+        +`\n\nAs sem itens ficaram de fora — confira/lance manualmente se precisar.`);
     };
     const pend=itensNaoConciliados(todosItens,db);
     if(pend.length){setConciliacao({itens:pend,onConfirm:finalizarTodas});return;}
@@ -7204,13 +7263,19 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
       {sefazError&&<div style={{background:"#FEE2E2",border:"1px solid #EF444440",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:12,color:"#f87171"}}>{sefazError}</div>}
 
-      {sefazList.length>0&&<>
+      {sefazOcultas.length>0&&<div style={{background:"var(--successBg,#E3F0E8)",border:"1px solid var(--border2)",borderRadius:8,padding:"9px 13px",marginBottom:10,fontSize:11.5,color:"var(--successText,#146B42)"}}>
+        ✅ {sefazOcultas.length} nota(s) já importada(s) não aparecem na lista. Some pela CHAVE da nota, então continuam fora mesmo depois de "↩ Do início".
+      </div>}
+      {sefazVisiveis.length>0&&<>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#22C55E"}}>{sefazList.length} NF-e(s) encontrada(s)</div>
-          <button className="btn" onClick={()=>{if(confirm(`Importar todas as ${sefazList.filter(n=>(n.itens||[]).length>0).length} NF-e(s) com itens?`)){importarTodasNFeSefaz();}}}
+          <div style={{fontSize:12,fontWeight:700,color:"#22C55E"}}>{sefazVisiveis.length} NF-e(s) a importar</div>
+          <button className="btn" onClick={()=>{if(confirm(`Importar todas as ${sefazVisiveis.filter((n:any)=>(n.itens||[]).length>0).length} NF-e(s) com itens?`)){importarTodasNFeSefaz();}}}
             style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"7px 14px",fontSize:12,fontWeight:700}}>📥 Importar Todas</button>
         </div>
-        {sefazList.map((nfe:any,i:number)=>{
+        {/* Por NSU, não por índice do array: a lista renderizada agora é um
+            recorte (sem as importadas), e mexer por posição acertaria a nota
+            errada — editar a data de uma e apagar outra. */}
+        {sefazVisiveis.map((nfe:any)=>{
           const temItens=(nfe.itens||[]).length>0;
           const isLoading=fetchingChave===nfe.chNFe;
           const isResumo=!temItens;
@@ -7221,7 +7286,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   {nfe.fornecedor?.nome||"Fornecedor desconhecido"}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--text2)",paddingTop:4,borderTop:"1px solid var(--border)",flexWrap:"wrap" as const}}>
-                  <input type="date" value={nfe.data||""} onChange={e=>setSefazList(l=>l.map((n:any,j:number)=>j===i?{...n,data:e.target.value}:n))}
+                  <input type="date" value={nfe.data||""} onChange={e=>setSefazList(l=>l.map((n:any)=>n.nsu===nfe.nsu?{...n,data:e.target.value}:n))}
                     style={{background:"transparent",border:"1px solid var(--border2)",borderRadius:4,color:"var(--text2)",fontSize:10,padding:"1px 3px"}}/>
                   {nfe.nNF?<span>· NF #{nfe.nNF}</span>:null} · {isResumo?<span style={{color:"#F59E0B"}}>aguardando XML…</span>:<span style={{color:"#22C55E"}}>{(nfe.itens||[]).length} produto(s)</span>}
                 </div>
@@ -7237,7 +7302,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 </div>}
               </div>
               <div style={{display:"flex",gap:5,flexShrink:0}}>
-                {isResumo&&<button className="btn" onClick={()=>buscarItensNFe(nfe,i)} disabled={isLoading||!waitOk}
+                {isResumo&&<button className="btn" onClick={()=>buscarItensNFe(nfe)} disabled={isLoading||!waitOk}
                   title={!waitOk?`Limite SEFAZ atingido. Aguarde ${Math.ceil(waitMs/60000)} min.`:undefined}
                   style={{background:isLoading||!waitOk?"var(--border2)":"#f59e0b",color:isLoading||!waitOk?"#888":"#000",border:"none",padding:"6px 12px",fontSize:12,fontWeight:700}}>
                   {isLoading?"⏳ Baixando…":!waitOk?"⏳ Aguarde":"⚡ Baixar"}
@@ -7246,7 +7311,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",padding:"6px 10px",fontSize:11}}>📥 Importar</button>}
                 {temItens&&nfe.rawXml&&<button className="btn" onClick={()=>baixarXmlNFe(nfe.rawXml,nfe.nNF||"",nfe.fornecedor?.nome||"")}
                   style={{background:"var(--border)",color:"#aaa",padding:"6px 10px",fontSize:11}}>⬇ XML</button>}
-                <button onClick={()=>{setSefazList(l=>l.filter((_:any,j:number)=>j!==i));removeFromCache([nfe.nsu]);}}
+                <button onClick={()=>{setSefazList(l=>l.filter((n:any)=>n.nsu!==nfe.nsu));removeFromCache([nfe.nsu]);}}
                   style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:14,padding:"4px 6px"}}>✕</button>
               </div>
             </div>
@@ -7254,7 +7319,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         })}
       </>}
 
-      {!sefazLoading&&sefazList.length===0&&!sefazError&&<div style={{textAlign:"center" as const,padding:"30px 20px",color:"#555"}}>
+      {!sefazLoading&&sefazVisiveis.length===0&&!sefazError&&<div style={{textAlign:"center" as const,padding:"30px 20px",color:"#555"}}>
         <div style={{fontSize:32,marginBottom:8}}>📄</div>
         <div style={{fontSize:13}}>Clique em <strong style={{color:"#22C55E"}}>Sincronizar SEFAZ</strong> para buscar NF-es onde a CONFRARIA é destinatária.</div>
       </div>}
