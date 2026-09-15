@@ -9,28 +9,26 @@ REM ===========================================================================
 REM ---------------------------------------------------------------------------
 REM  1) PARA ONDE A COMANDA VOLTA (o papel da cozinha)
 REM ---------------------------------------------------------------------------
-REM A impressora desta loja e USB. Porta USB nao se abre como arquivo, entao o
-REM unico jeito de mandar bytes crus pra ela e pelo COMPARTILHAMENTO do Windows.
+REM A comanda do 99Food sai na ELGIN i8, que e USB (PortName USB001). Porta USB
+REM nao se abre como arquivo, entao o unico jeito de mandar bytes crus pra ela e
+REM pelo COMPARTILHAMENTO do Windows - e ela JA ESTA compartilhada.
 REM
-REM   a) Painel de Controle -> Dispositivos e Impressoras
-REM   b) botao direito na termica -> Propriedades da impressora -> Compartilhamento
-REM   c) marque "Compartilhar esta impressora" e de um nome SEM ESPACO: TERMICA
+REM O valor abaixo e o ShareName, copiado do impressoras.bat. Se um dia nao
+REM bater, rode impressoras.bat de novo: o proprio Windows escreve a lista.
 REM
-REM Nao sabe o nome? Rode impressoras.bat: o proprio Windows escreve a lista.
-REM
-REM ATENCAO: nome com ESPACO ("EPSON COZINHA") funciona - o agente poe as aspas
-REM sozinho. Nao invente um nome sem espaco se o Windows ja usa um com espaco.
-REM set IMPRESSORA_WINDOWS=TERMICA
+REM ATENCAO: o ESPACO no nome esta certo. O agente poe as aspas sozinho - nao
+REM troque por um nome sem espaco, ou deixa de casar com o que o Windows usa.
+set IMPRESSORA_WINDOWS=ELGIN i8
 
-REM IMPRESSORA DE REDE: se a termica da cozinha tem IP (a coluna PortName do
-REM impressoras.bat mostra algo como 192.168.100.180), prefira este caminho.
-REM Ele repassa a comanda EM FLUXO, byte a byte, entao o papel comeca a sair
-REM enquanto o trabalho ainda esta chegando - pela impressora compartilhada o
-REM spooler so aceita o trabalho inteiro e a cozinha espera ~1,5s a mais.
+REM IMPRESSORA DE REDE: as EPSON da loja tem IP (COZINHA 192.168.100.180,
+REM BALCAO 192.168.100.88). Se um dia a comanda passar a sair numa delas, use
+REM estas duas linhas no lugar da de cima - por IP o repasse sai EM FLUXO, byte
+REM a byte, enquanto pela impressora compartilhada o spooler so aceita o
+REM trabalho inteiro e a cozinha espera ~1,5s a mais.
 REM
 REM Preencha SO UM dos dois: IMPRESSORA_WINDOWS ou IMPRESSORA_IP.
-set IMPRESSORA_IP=192.168.100.180
-set IMPRESSORA_PORTA=9100
+REM set IMPRESSORA_IP=192.168.100.180
+REM set IMPRESSORA_PORTA=9100
 
 REM ---------------------------------------------------------------------------
 REM  2) DE ONDE AS COMANDAS SAO CAPTURADAS (99Food e iFood)
