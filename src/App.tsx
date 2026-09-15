@@ -9,6 +9,7 @@ import {calcularHolerite,contasEsperadas,contasLancadas,conciliarMes,encargoDesc
 import {previaFalta,descontoDoMes,salarioDia,ehJustificada,MOTIVOS_473} from "./faltaClt.js";
 import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 import {calcularProducaoDia,aplicarProducaoDia,baixarPedidos} from "./producaoDia.js";
+import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -1657,22 +1658,6 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // atualizadoEm) e um poll caindo entre o clique e o POST confirmar no
       // servidor revertia a edição pro valor antigo — era o único campo que
       // tinha ficado de fora quando essa fusão foi aplicada aos outros.
-      // config vinha CRU do servidor — a armadilha do §3 em pessoa. Escolher a
-      // paleta (ou a fonte, ou a cor do botão) aplica local, funde com o
-      // servidor e posta: como config não estava na fusão, o merge devolvia o
-      // config do SERVIDOR e a escolha era perdida no caminho pro POST. União
-      // por chave nos sub-objetos de preferência, local vencendo — o mesmo
-      // padrão de "mapa {chave: valor}" do resto do app. O que este aparelho
-      // não mexeu continua vindo do servidor, então mudança feita em outro
-      // aparelho ainda chega.
-      config:(()=>{
-        const sc=s.config||{},pc=p.config||{};
-        const out:any={...sc};
-        for(const sub of ["aparenciaApp","coresBotoes"]){
-          if(sc[sub]||pc[sub])out[sub]={...(sc[sub]||{}),...(pc[sub]||{})};
-        }
-        return out;
-      })(),
       vendas:        mergeArrayById(s.vendas||[],p.vendas||[],_listaDeletados,true),
       // contas usa fusão por id+timestamp (não só byId): sem isso, um poll
       // que chega entre o clique em "marcar como pago" e o POST desse clique
@@ -1853,12 +1838,27 @@ const mergeFromServer=(prev:any,updates:any)=>{
     // vencendo em conflito; impressao/sortPrefs (sub-objetos) fundidos à parte pra uma
     // mudança num campo não apagar outro campo do mesmo sub-objeto trocado em outro
     // dispositivo.
+    // ⚠️ ESTE é o bloco que vale: ele roda DEPOIS do spread lá em cima e
+    // sobrescreve qualquer `config` montado antes. Uma tentativa anterior de
+    // tratar aparenciaApp/coresBotoes no spread virou código morto justamente
+    // por isso — parecia resolvido e não estava.
+    //
+    // aparenciaApp e coresBotoes entram como sub-objetos pelo mesmo motivo de
+    // impressao e sortPrefs: a união RASA faz o local sobrescrever o objeto
+    // inteiro, então quem mexeu só na fonte apagaria a paleta que outro
+    // aparelho acabou de escolher — os dois moram dentro de aparenciaApp.
     next[emp].config={
       ...(s.config||{}),
       ...(p.config||{}),
       impressao:{...(s.config?.impressao||{}),...(p.config?.impressao||{})},
       sortPrefs:{...(s.config?.sortPrefs||{}),...(p.config?.sortPrefs||{})},
     };
+    for(const sub of ["aparenciaApp","coresBotoes"]){
+      const e=(s.config||{})[sub],i=(p.config||{})[sub];
+      // Só cria o sub-objeto se algum lado tiver — senão o documento ganha
+      // chaves vazias em toda gravação, sem servir pra nada.
+      if(e||i)next[emp].config[sub]={...(e||{}),...(i||{})};
+    }
     // sessoesValidasApos é a ÚNICA chave de config em que o local não pode
     // vencer: é uma ordem do admin pra derrubar todo mundo, e um aparelho com
     // carimbo antigo guardado ignoraria o novo pra sempre — justamente o
@@ -1929,6 +1929,10 @@ export default function App() {
   const fromPollRef = useRef(false);
   const saveSeqRef = useRef(0);
   const directSaveRef = useRef(false);
+  // Reagendamento do auto-save: o tick força o efeito a rodar de novo quando o
+  // save direto termina, em vez de esperar o próximo toque do usuário.
+  const reagendarRef = useRef<any>(null);
+  const [saveTick,setSaveTick] = useState(0);
   const directSaveEndRef = useRef(0);
   // Última versão vista de cada empresa (data+tamanho do arquivo no servidor).
   // É o que permite ao polling decidir se precisa baixar o documento.
@@ -2057,13 +2061,40 @@ export default function App() {
   };
 
   // On state change: save to localStorage + debounced save to server (only changed companies)
+  //
+  // ⚠️ A decisão de salvar/reagendar/ignorar mora em src/autoSave.js, com
+  // testes. Ela ficava aqui e tinha uma linha que apagava mudança em silêncio:
+  //     if(directSaveRef.current){ prevState.current=state; return; }
+  // O `return` seria só atraso. O `prevState=state` é que marcava a mudança
+  // como JÁ PROCESSADA — no ciclo seguinte a comparação não via diferença
+  // nenhuma e o POST nunca acontecia. Enquanto um setDbAndSave rodava (até 5s),
+  // tudo que viesse de setDb puro era perdido sem erro nenhum. Era o
+  // "inseri e não apareceu pros outros" da Lista de Compras.
   useEffect(()=>{
     saveData(state);
-    if(firstRender.current){firstRender.current=false;prevState.current=state;return;}
-    if(fromPollRef.current){fromPollRef.current=false;prevState.current=state;return;}
-    if(directSaveRef.current){prevState.current=state;return;}
-    const changed=["CONFRARIA","SEAMA"].filter(emp=>state[emp]!==prevState.current?.[emp]);
-    prevState.current=state;
+    // Capturado ANTES de qualquer atualização: é contra este valor que se
+    // decide o que mudou, e é ele que precisa sobreviver ao save direto.
+    const antes=prevState.current;
+    const changed=empresasComMudanca(state,antes);
+    const d=decidirAutoSave({
+      primeiroRender:firstRender.current,
+      veioDoPoll:fromPollRef.current,
+      saveDiretoEmAndamento:directSaveRef.current,
+      mudou:changed.length>0,
+    });
+    if(firstRender.current)firstRender.current=false;
+    if(fromPollRef.current)fromPollRef.current=false;
+    // Só atualiza a referência quando a decisão permite. Durante o save direto
+    // ela NÃO é tocada — é ela que guarda a pendência.
+    if(d.atualizarPrev)prevState.current=state;
+    if(d.acao==="reagendar"){
+      // Roda o efeito de novo quando o save direto tiver terminado. Sem isto a
+      // pendência ficaria esperando o próximo toque do usuário pra ser notada.
+      clearTimeout(reagendarRef.current);
+      reagendarRef.current=setTimeout(()=>setSaveTick(t=>t+1),d.atrasoMs);
+      return;
+    }
+    if(d.acao!=="salvar")return;
     if(!changed.length)return;
     clearTimeout(syncTimer.current);
     setSyncStatus("sync");
@@ -2080,7 +2111,7 @@ export default function App() {
         syncTimer.current=null;
       }
     },100);
-  },[state]);
+  },[state,saveTick]);
 
   const db    = state[empresa];
   const setDb = (fn)=>setState(prev=>({...prev,[empresa]:fn(prev[empresa])}));
@@ -9119,7 +9150,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const del=(id:string)=>{
     _listaDeletados.add(id);
 
-    setDb((d:any)=>({
+    // setDbAndSave, não setDb: excluir PRECISA persistir. Com setDb puro, a
+    // exclusão feita durante a janela de outro save sumia e o item
+    // continuava na lista de todo mundo.
+    (setDbAndSave||setDb)((d:any)=>({
       ...d,
       listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
       listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-5000),
@@ -9128,14 +9162,20 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const limparComprados=()=>{
     if(!comprados.length)return;
 
-    const ids=comprados.map((i:any)=>i.id);
-    ids.forEach(id=>_listaDeletados.add(id));
-
-    setDb((d:any)=>({
-      ...d,
-      listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
-    }));
+    // ⚠️ Os ids saem do `d` do momento da GRAVAÇÃO, não do `comprados` do
+    // render. Vinham do render enquanto o filtro rodava sobre o `d`: se outro
+    // operador marcasse um item como comprado nesse meio, ele era removido da
+    // lista sem entrar no tombstone — e voltava no poll seguinte, piscando na
+    // tela de todo mundo. Os dois lados têm que olhar o mesmo estado.
+    (setDbAndSave||setDb)((d:any)=>{
+      const ids=(d.listaCompras||[]).filter((i:any)=>i.comprado).map((i:any)=>i.id);
+      ids.forEach((id:string)=>_listaDeletados.add(id));
+      return{
+        ...d,
+        listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
+      };
+    });
   };
 
   // Fechar lista: única forma de arquivar — sempre manual, sempre pelo Admin.
@@ -9204,7 +9244,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   };
 
   const moverItem=(id:string,dir:-1|1)=>{
-    setDb((d:any)=>{
+    // setDbAndSave: a ordem arrastada é o que o operador leva pro mercado.
+    (setDbAndSave||setDb)((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const cat0=arr.find(i=>i.id===id)?.categoria||"";
       const catItens=arr.filter(i=>i.categoria===cat0&&!i.comprado).sort((a,b)=>(a.urgente?-1:b.urgente?1:0)||((a.ordem||0)-(b.ordem||0)));
@@ -9263,7 +9304,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(!novo){setEditCat(null);return;}
     if(novo===old){setEditCat(null);return;}
     if(allCats.filter(c=>c!==old).includes(novo)){alert("Categoria já existe.");return;}
-    setDb((d:any)=>{
+    // setDbAndSave: renomear categoria reescreve TODOS os itens da lista.
+    // Com setDb puro, a renomeação feita durante a janela de outro save
+    // sumia e as telas ficavam com nomes de categoria diferentes entre si.
+    (setDbAndSave||setDb)((d:any)=>{
       const cl:string[]=d.listaCategorias||[];
       const newCl=cl.includes(old)?cl.map(c=>c===old?novo:c):[...cl.filter(c=>c!==novo),novo];
       const ordem=(d.listaCatOrdem||[]).map((c:string)=>c===old?novo:c);
@@ -9632,7 +9676,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       criadoEm:new Date().toISOString(),
       updatedAt:Date.now(),
     }));
-    setDb((d:any)=>{
+    // Lê os pendentes do `d` do momento da gravação, não do render: entre o
+    // clique e aqui pode ter chegado item de outro operador pelo poll, e é
+    // esse item que seria apagado sem ninguém notar.
+    (setDbAndSave||setDb)((d:any)=>{
       const pendIds=(d.listaCompras||[]).filter((i:any)=>!i.comprado).map((i:any)=>i.id);
       pendIds.forEach((id:string)=>_listaDeletados.add(id));
       const jaComprados=(d.listaCompras||[]).filter((i:any)=>i.comprado);

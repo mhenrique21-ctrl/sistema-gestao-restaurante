@@ -39,6 +39,7 @@ src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
 src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
 src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com testes)
 src/producaoDia.js    produção do dia: custo real, perda e baixa de insumo (com testes)
+src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 ```
 
@@ -77,6 +78,37 @@ setDbAndSave(fn)  → aplica local (otimista) → busca servidor → funde → P
 setDb(fn)         → só estado local; depende do auto-save genérico, que PODE PULAR
                     a gravação se coincidir com outro save em andamento
 ```
+
+### A armadilha nº 0: o auto-save que PULAVA e ESQUECIA
+
+`src/autoSave.js` (com testes). Foi a causa do "os operadores inserem produtos
+na lista e não atualiza pros outros", recorrente.
+
+`setDbAndSave` liga `directSaveRef` por até **5 segundos** enquanto busca o
+servidor, funde e posta. Dentro dessa janela, o efeito de auto-save fazia:
+
+```js
+if (directSaveRef.current) { prevState.current = state; return; }   // ERRADO
+```
+
+O `return` sozinho seria só atraso. O **`prevState = state`** é que marcava a
+mudança como já processada: no ciclo seguinte a comparação não via diferença
+nenhuma, `changed` vinha vazio e o POST **nunca acontecia**. Não era "pula e
+salva depois" — era "pula e ESQUECE", sem erro, sem log.
+
+Cada aparelho acumulava a própria pilha de mudança fantasma: visível na tela de
+quem fez, ausente em todo o resto. Quanto mais rápido o operador trabalha, maior
+a chance — daí ser recorrente justo na Lista de Compras, onde se adiciona um
+item (`setDbAndSave`) e logo em seguida se reordena ou exclui outro (`setDb`).
+
+⚠️ **A regra: enquanto o save direto roda, NÃO se toca em `prevState`.** A
+diferença precisa continuar visível. E um tick reagenda o efeito quando ele
+termina — sem isso a pendência esperaria o próximo toque do usuário.
+
+⚠️ O comentário do `applyBothProdutos` já descrevia esse mecanismo ("chance real
+de nunca chegar no servidor, silenciosamente") e a função se defendia salvando
+por conta própria. A defesa dela continua válida; agora o buraco embaixo está
+tapado.
 
 ### A armadilha que já mordeu seis vezes
 
@@ -714,6 +746,26 @@ A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar
 "40 vendidas" com "7 compradas" inventa um rombo — por isso a tela avisa em vez
 de mostrar o número quando a conversão não está configurada.
 
+### Lista de Compras — blindagem
+
+Fusão própria em `mergeListaCompras.js` (servidor) e bloco dedicado no
+`mergeFromServer` (cliente). As duas casam por `id` + `updatedAt`, e a união de
+`listaDeletedIds` garante que exclusão nunca "volta".
+
+⚠️ **Toda escrita na lista usa `setDbAndSave`.** Cinco usavam `setDb` puro —
+`del`, `limparComprados`, `moverItem`, `renameCat` e `retomarLista` — e caíam na
+armadilha nº 0 do §3: feitas durante a janela de outro save, sumiam caladas.
+
+⚠️ **Ler do `d` da gravação, nunca do render.** `limparComprados` tirava os ids
+do `comprados` do render e filtrava sobre o `d` do momento da gravação: item que
+outro operador marcasse como comprado nesse meio era removido da lista **sem
+entrar no tombstone**, e voltava no poll seguinte piscando na tela de todos.
+`retomarLista` tinha o mesmo descompasso — e ela apaga TODOS os pendentes.
+
+⚠️ `retomarLista` é destrutiva de propósito (o diálogo avisa), mas os ids que
+ela marca como excluídos saem do estado que está sendo escrito — senão apagaria
+item que chegou de outro operador entre o clique e a gravação.
+
 ### Outros
 Lista de Compras · Produção (fichas técnicas) · Encomendas · RH · Fluxo de Caixa ·
 Configurações de PDV (ponte com os dois PDVs) · Cardápio TV · Backups
@@ -935,13 +987,16 @@ TEXTO sobre o tom claro da mesma família — `#22C55E` sobre `#DCFCE7` dá
 escuro também saía ilegível, já que hex fixo não troca com o tema. Depois da
 correção o mesmo par dá **7,20:1**, na paleta antiga inclusive.
 
-⚠️ **`config` entrou na fusão explícita do `mergeFromServer`** — era a armadilha
-do §3 em pessoa. Escolher a paleta aplica local, funde com o servidor e posta:
-como `config` vinha CRU do servidor, o merge devolvia o config de lá e a escolha
-se perdia antes do POST. Vale também pra fonte, tamanho e cor de botão, que
-tinham o mesmo problema. A fusão é união por chave em `aparenciaApp` e
-`coresBotoes`, com o local vencendo; no `mergeDocument.js` os dois entraram na
-lista de sub-objetos ao lado de `impressao` e `sortPrefs`.
+⚠️ **`aparenciaApp` e `coresBotoes` são fundidos como SUB-OBJETOS**, ao lado de
+`impressao` e `sortPrefs`, nas duas fusões. A união rasa de `config` faz o local
+sobrescrever o objeto inteiro: quem mexeu só na fonte apagaria a paleta que
+outro aparelho acabou de escolher, porque as duas moram dentro de
+`aparenciaApp`.
+
+⚠️ No `mergeFromServer` isso vai no bloco **`next[emp].config={...}`**, que roda
+DEPOIS do spread e sobrescreve qualquer `config` montado antes. Uma primeira
+tentativa pôs o tratamento no spread e virou **código morto** — parecia
+resolvido e não estava. Se for mexer em `config`, é nesse bloco.
 
 ⚠️ **Pendente:** ainda há cores fixas em JSX que podem virar token. As 555
 dentro do HTML dos relatórios **não podem** (ver §8), e existem funções que
