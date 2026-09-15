@@ -5982,7 +5982,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const desfazerAutoVinculo=(v:{mp:string,prod:string,mpId?:string,prodId?:string})=>{
     if(!v.mpId||!v.prodId)return;
     applyBothProdutos(setState,setDb,(d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>
-      p.id===v.prodId?{...p,mpVinculados:(p.mpVinculados||[]).filter((id:string)=>id!==v.mpId)}:p)}));
+      p.id===v.prodId?{...p,mpVinculados:(p.mpVinculados||[]).filter((id:string)=>id!==v.mpId),atualizadoEm:new Date().toISOString()}:p)}));
     setAvisoAuto(a=>a.filter(x=>x.mpId!==v.mpId));
   };
   const [showConfigCatsPdv,setShowConfigCatsPdv]=useState(false);
@@ -8840,7 +8840,7 @@ function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca
     if(!prod){
       applyBothProd((d:any)=>{
         if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===item.nome.toLowerCase()))return d;
-        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:item.nome,cat:item.categoria,unidade:item.unidade,mpVinculados:[mpId]}]};
+        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:item.nome,cat:item.categoria,unidade:item.unidade,mpVinculados:[mpId],criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString()}]};
       });
     }else if(vIds.includes(mpId))desvincularMp(prod.id,mpId);
     else vincularMp(prod.id,mpId);
@@ -9117,7 +9117,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         }else{
           applyBothProd((d:any)=>{
             if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl))return d;
-            return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLinks?.length?{mpVinculados:pendingMpLinks}:{})}]};
+            return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLinks?.length?{mpVinculados:pendingMpLinks}:{}),criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString()}]};
           });
         }
       }else{
@@ -9139,7 +9139,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             return{...d,produtosLista:(d.produtosLista||[]).map((p:any)=>
               p.nome.toLowerCase()===nl?{...p,rua:ruaVal,atualizadoEm:new Date().toISOString()}:p)};
           }
-          return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal}]};
+          return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString()}]};
         });
       }
     }
@@ -9314,8 +9314,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       listaCategorias:[...new Set([...(d.listaCategorias||[]),n])],
       listaCatDeleted:(d.listaCatDeleted||[]).filter((x:string)=>x!==n),
     });
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyAdd(nx[e]);});return nx;});
-    else setDb(applyAdd);
+    applyBothProdutos(setState,setDb,applyAdd);
     setNovaCat("");
   };
   const delCat=(c:string)=>{
@@ -9328,7 +9327,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c),
       listaCatDeleted:[...new Set([...(d.listaCatDeleted||[]),c])],
       listaCompras:(d.listaCompras||[]).map((i:any)=>(i.categoria||"outros")===c?{...i,categoria:"outros"}:i),
-      produtosLista:(d.produtosLista||[]).map((p:any)=>(p.cat||"")===c?{...p,cat:"outros"}:p),
+      produtosLista:(d.produtosLista||[]).map((p:any)=>(p.cat||"")===c?{...p,cat:"outros",atualizadoEm:new Date().toISOString()}:p),
     });
     if(setState) setState((prev:any)=>{const n={...prev};Object.keys(n).forEach(e=>{if(n[e]&&typeof n[e]==="object"&&"listaCompras" in n[e])n[e]=applyDel(n[e]);});return n;});
     else setDb(applyDel);
@@ -9605,15 +9604,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       if(rua)m[cat]=rua;else delete m[cat];
       return{...d,ruaCatMap:m};
     };
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=apply(nx[e]);});return nx;});
-    else setDb(apply);
+    // applyBothProdutos, não setState cru: ele busca o servidor, funde e grava
+    // de verdade. O setState dependia do auto-save genérico — e mudança de rua
+    // feita durante a janela de outro save sumia calada (§3, armadilha nº 0).
+    applyBothProdutos(setState,setDb,apply);
   };
   const addRua=()=>{
     const n=novaRua.trim();if(!n)return;
     if(ruas.some(r=>r.toLowerCase()===n.toLowerCase()))return alert("Rua já existe.");
     const applyAdd=(d:any)=>({...d,listaRuas:[...(d.listaRuas||[]),n]});
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyAdd(nx[e]);});return nx;});
-    else setDb(applyAdd);
+    applyBothProdutos(setState,setDb,applyAdd);
     setNovaRua("");
   };
   const delRua=(r:string)=>{
@@ -9624,12 +9624,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       return{...d,
         listaRuas:(d.listaRuas||[]).filter((x:string)=>x!==r),
         listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===r?{...i,rua:""}:i),
-        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===r?{...p,rua:""}:p),
+        // ⚠️ CARIMBA. Sem `atualizadoEm`, a fusão por id cai na regra "só o
+        // servidor tem timestamp → servidor vence" e a rua volta ao que era,
+        // no poll seguinte. Era o "altero a rua, salvo, e volta sem rua".
+        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===r?{...p,rua:"",atualizadoEm:new Date().toISOString()}:p),
         ruaCatMap:m,
       };
     };
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyDel(nx[e]);});return nx;});
-    else setDb(applyDel);
+    applyBothProdutos(setState,setDb,applyDel);
   };
   const renameRua=(old:string,novo:string)=>{
     novo=novo.trim();
@@ -9642,12 +9644,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       return{...d,
         listaRuas:(d.listaRuas||[]).map((x:string)=>x===old?novo:x),
         listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===old?{...i,rua:novo}:i),
-        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===old?{...p,rua:novo}:p),
+        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===old?{...p,rua:novo,atualizadoEm:new Date().toISOString()}:p),
         ruaCatMap:m,
       };
     };
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyRen(nx[e]);});return nx;});
-    else setDb(applyRen);
+    applyBothProdutos(setState,setDb,applyRen);
     setEditRua(null);
   };
   const moverRua=(r:string,dir:-1|1)=>{
@@ -9658,8 +9659,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       [arr[i],arr[j]]=[arr[j],arr[i]];
       return{...d,listaRuas:arr};
     };
-    if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"listaCompras" in nx[e])nx[e]=applyMov(nx[e]);});return nx;});
-    else setDb(applyMov);
+    applyBothProdutos(setState,setDb,applyMov);
   };
   const getRuaProd=(nome:string,cat?:string):string=>{
     const p=(db.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
@@ -10100,7 +10100,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                         if(!l.prodId){
                           applyBothProd((d:any)=>{
                             if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===l.nome.toLowerCase()))return d;
-                            return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:l.nome,cat:l.categoria,unidade:l.unidade,mpVinculados:[mp.id]}]};
+                            return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString(),nome:l.nome,cat:l.categoria,unidade:l.unidade,mpVinculados:[mp.id]}]};
                           });
                         }else{
                           if(linked)desvincularMp(l.prodId,mp.id);
@@ -10240,11 +10240,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
               const prodsDisp=isBuscando&&q.length>=1
                 ?(db.produtosLista||[]).filter((p:any)=>p.rua!==r&&(p.nome||"").toLowerCase().includes(q)).slice(0,10)
                 :[];
+              // ⚠️ CARIMBA e salva pelo applyBothProdutos. Sem `atualizadoEm`, a
+              // fusão cai na regra "só o servidor tem timestamp → servidor
+              // vence" e a rua volta ao que era no poll seguinte — era o
+              // "altero a rua, salvo, e o produto volta sem rua". E o
+              // setState cru dependia do auto-save genérico; applyBothProdutos
+              // busca o servidor, funde e grava as duas empresas por conta.
               const setProdRuaBoth=(nome:string,rua:string)=>{
                 const nLow=nome.toLowerCase();
-                const apply=(d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((pp:any)=>(pp.nome||"").toLowerCase()===nLow?{...pp,rua}:pp)});
-                if(setState) setState((prev:any)=>{const nx={...prev};Object.keys(nx).forEach(e=>{if(nx[e]&&typeof nx[e]==="object"&&"produtosLista" in nx[e])nx[e]=apply(nx[e]);});return nx;});
-                else setDb(apply);
+                const ts=new Date().toISOString();
+                applyBothProdutos(setState,setDb,(d:any)=>({...d,
+                  produtosLista:(d.produtosLista||[]).map((pp:any)=>
+                    (pp.nome||"").toLowerCase()===nLow?{...pp,rua,atualizadoEm:ts}:pp)}));
               };
               return <div style={{padding:"0 8px 6px"}}>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center",marginBottom:4}}>

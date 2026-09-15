@@ -137,6 +137,25 @@ Exclusão usa o tombstone genérico `_listaDeletados` (itens com `id`) ou uma li
 
 Ao recriar algo que foi excluído, **limpe o tombstone** — senão a fusão apaga de novo.
 
+### A armadilha do CARIMBO que falta (`produtosLista`)
+
+`mergeArrayById(servidor, local)` desempata por `updatedAt`/`atualizadoEm`. Quando **só
+o servidor** tem carimbo, **o servidor vence** — a edição local é revertida pelo poll.
+
+Foi essa a causa de *"mudo a rua/categoria do produto no celular e ele volta pra sem
+rua"*: a tela gravava o produto **sem** `atualizadoEm`, e o registro do servidor (que
+tinha carimbo de uma gravação anterior) ganhava a disputa. Não é conflito entre dois
+operadores — basta **um**: a versão antiga dele mesmo, no servidor, é quem revertia.
+
+⚠️ **Toda escrita em `produtosLista` carimba `atualizadoEm`** — criação inclusive, senão
+o primeiro save da vida do produto já nasce perdendo. `src/carimbos.test.js` lê o
+`App.tsx` e reprova quem esquecer.
+
+⚠️ **E toda escrita usa `applyBothProdutos`**, nunca `setState` cru: `produtosLista` é
+compartilhado entre as duas empresas (§1) e `applyBothProdutos` é quem salva por conta
+própria. Cinco telas de rua gravavam com `setState` puro — mudança local que dependia do
+auto-save genérico e caía na armadilha nº 0.
+
 ---
 
 ## 4. Estrutura do `db` (por empresa)
