@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { extrairEscPos, linhasUteis } from './escpos.js';
 import { pngMono } from './png.js';
 import { lerPedido99, conferirPedido99 } from './pedido99.js';
+import { lerPedidoIfood, conferirPedidoIfood } from './pedidoIfood.js';
 import { resolverOrigem, rotuloPlataforma, temLeitor } from './plataforma.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
@@ -167,17 +168,30 @@ function interpretar(texto, base, origem) {
     }
     return;
   }
+  // Cada plataforma tem o próprio leitor E a própria conferência: a conta do
+  // iFood (mercadoria + taxas = repasse + cobrança) não é a do 99Food
+  // (repasse + cobrança = total). Trocar uma pela outra acusaria divergência
+  // em todo pedido, e ninguém mais olharia os avisos.
+  const ler = origem === 'ifood' ? lerPedidoIfood : lerPedido99;
+  const conferir = origem === 'ifood' ? conferirPedidoIfood : conferirPedido99;
+
   let pedido;
-  try { pedido = lerPedido99(texto); }
+  try { pedido = ler(texto); }
   catch (e) { log(`   ⚠️  não consegui ler o pedido: ${e.message}`); return; }
 
-  const avisos = conferirPedido99(pedido);
+  const avisos = conferir(pedido);
   const itens = pedido.itens.map((i) => `${i.qtd}x ${i.nome}`).join(', ');
   log(`   🧾 pedido #${pedido.numero || '?'} · ${pedido.cliente || 'sem nome'}`
     + ` · ${pedido.itens.length} item(ns)${itens ? ': ' + itens : ''}`);
-  log(`      total R$ ${(pedido.total ?? 0).toFixed(2)}`
-    + ` · plataforma repassa R$ ${(pedido.pagoPeloApp ?? 0).toFixed(2)}`
-    + ` · cobrar do cliente R$ ${(pedido.cobrarDoCliente ?? 0).toFixed(2)}`
+  // ⚠️ Valor que não foi lido mostra "?", não "R$ 0,00". Zero na tela diz "o
+  // pedido não tinha esse dinheiro" — e é justamente o que faria alguém passar
+  // batido por uma comanda que o leitor não entendeu.
+  const rs = (v) => (v == null ? '?' : `R$ ${v.toFixed(2)}`);
+  log(`      total ${rs(pedido.total)}`
+    + (pedido.taxaServico ? ` + serviço ${rs(pedido.taxaServico)}` : '')
+    + (pedido.taxaEntrega ? ` + entrega ${rs(pedido.taxaEntrega)}` : '')
+    + ` · plataforma repassa ${rs(pedido.pagoPeloApp)}`
+    + ` · cobrar do cliente ${rs(pedido.cobrarDoCliente)}`
     + (pedido.formaPagamento ? ` · ${pedido.formaPagamento}` : ''));
   for (const a of avisos) log(`   ⚠️  ${a}`);
   for (const l of pedido.naoEntendido) log(`      não entendi: ${l}`);

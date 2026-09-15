@@ -236,11 +236,53 @@ A separação funciona porque **"99food" não contém "ifood"**.
 ⚠️ A origem entra no **NOME do arquivo** (`..._99food.bin`), não só no log:
 quem procura a comanda de um pedido semanas depois procura na pasta.
 
-⚠️ **O leitor é POR PLATAFORMA e o do iFood ainda NÃO existe.** Rodar o do
+⚠️ **O leitor é POR PLATAFORMA, e a CONTA de cada um é diferente.** Rodar o do
 99Food numa comanda do iFood não daria erro: daria um pedido pela metade, com
-número e itens plausíveis e os dois dinheiros vazios. Captura do iFood é
-guardada e avisada na tela — o leitor nasce do primeiro `.bin` real, como o do
-99Food nasceu da comanda #871001. **Não escreva parser de layout imaginado.**
+número e itens plausíveis e os dois dinheiros vazios.
+
+```
+99Food   pagoPeloApp + cobrarDoCliente = total
+iFood    total + taxaServico + taxaEntrega = pagoPeloApp + cobrarDoCliente
+         33,88 +       0,99 +       10,00 =      44,87 +            0,00
+```
+
+No iFood o **total é só a mercadoria** e as taxas entram por fora. Usar a
+fórmula do 99Food ali acusaria divergência em todo pedido — e o aviso que grita
+sempre é o aviso que ninguém lê. Por isso cada leitor tem a própria
+`conferir…`, e `plataforma.js` escolhe o par pela origem.
+
+Os dois nasceram de comanda **real**: `pedido99.js` da #871001,
+`pedidoIfood.js` de um pedido de teste capturado no caixa em 15/09/2026.
+**Não escreva parser de layout imaginado.**
+
+#### O que a comanda do iFood ensinou (`pedidoIfood.js`, com testes)
+
+⚠️ **O repasse vem NEGATIVO** (`Pagamento via iFood: -R$ 44,87`) porque para a
+comanda é abatimento. É guardado **positivo**, como no 99Food: o campo quer
+dizer "o que a plataforma repassa" nos dois. Guardar o sinal cru obrigaria quem
+lê a saber de qual plataforma veio antes de somar — é assim que um dia alguém
+subtrai faturamento sem perceber.
+
+⚠️ **`"pedido:"` aparece DUAS vezes**: no cabeçalho (`PEDIDO: #1234`) e como
+rabo de `Valor total do pedido:`, que a térmica quebra em duas linhas.
+Atribuindo direto, a segunda apagava o número lido na primeira e a conferência
+acusava "sem número" num pedido que tinha número impresso.
+
+⚠️ **O menos tem que estar COLADO no `R$`.** Com `-?\s*` no meio,
+`1x PEDIDO DE TESTE -    R$ 6,99` — onde o hífen é sobra do nome cortado em 32
+colunas — virava menos 6,99, e os itens somavam negativo.
+
+⚠️ **A INDENTAÇÃO separa item de complemento** (`1x Item` vs `    1 Chilli`),
+e há dois níveis (o ketchup dentro do sanduíche). Sem ela, cada complemento
+viraria um item e o ranking de produtos passaria a vender "Chilli". Por isso as
+linhas são aparadas só à direita.
+
+⚠️ **O rodapé encerra a leitura** (`break`, não `continue`): a versão quebra em
+duas linhas (`Gestor Web 9.342.0 - Desktop` / `8.10.0`) e a sobra virava
+pendência em todo pedido.
+
+⚠️ Valor não lido aparece como **`?` na tela, nunca `R$ 0,00`** — zero diria
+que o pedido não tinha aquele dinheiro.
 
 ⚠️ A configuração antiga (`CAPTURA_MODO` + `CAPTURA_PASTA`/`CAPTURA_PORTA`, uma
 fonte sem rótulo) continua valendo: quem já instalou não é obrigado a
@@ -330,11 +372,10 @@ receber do 99Food. `conferirPedido99` acusa quando não fecham com o total.
 tela, nunca palpite. Item é testado ANTES dos rótulos: "1x Desconto especial
 R$5,00" é item, e deixar o rótulo ganhar viraria abatimento.
 
-**Estado:** captura os dois, lê o do 99Food e grava
-`.bin`/`.txt`/`.png`/`.json`; **não envia pro Gestão**. Faltam duas coisas, e
-nenhuma é código escrito no escuro: (1) o **leitor do iFood**, que precisa de
-um `.bin` de comanda real; (2) decidir **em que coluna de Vendas** entra cada um
-dos dois dinheiros.
+**Estado:** captura e **lê os dois**, gravando `.bin`/`.txt`/`.png`/`.json`;
+**não envia pro Gestão**. Falta uma decisão, não código: **em que coluna de
+Vendas** entra o que a plataforma repassa e em que coluna entra o que o
+entregador cobra na porta.
 
 ---
 

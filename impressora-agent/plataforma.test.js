@@ -50,11 +50,14 @@ describe('rótulo da pasta x conteúdo da comanda', () => {
 });
 
 describe('leitor por plataforma', () => {
-  test('o do 99Food existe; o do iFood ainda não', () => {
+  test('os dois existem; origem desconhecida não tem leitor', () => {
+    // Os dois nasceram de comanda REAL — o do 99Food da #871001, o do iFood de
+    // um pedido de teste capturado no caixa em 15/09/2026. Nenhum de layout
+    // imaginado, que é o erro que este projeto já pagou duas vezes.
     assert.equal(temLeitor('99food'), true);
-    // Escrito em cima de layout imaginado seria o erro que este projeto já
-    // pagou duas vezes. Sem comanda real, a captura guarda e avisa.
-    assert.equal(temLeitor('ifood'), false);
+    assert.equal(temLeitor('ifood'), true);
+    // Sem saber de quem é a comanda, NÃO se escolhe leitor: rodar o do 99Food
+    // numa do iFood daria um pedido pela metade, plausível e errado.
     assert.equal(temLeitor(''), false);
   });
 

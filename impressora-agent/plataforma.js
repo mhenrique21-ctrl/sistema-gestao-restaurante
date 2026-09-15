@@ -6,9 +6,15 @@
 //   1. a captura precisa SABER de quem é cada comanda, senão o pedido do iFood
 //      entraria em Vendas como se fosse do 99Food — canais com taxa diferente;
 //   2. cada aplicativo tem o próprio layout, então o leitor é por plataforma.
-//      O do 99Food foi escrito em cima de uma comanda real (#871001); o do
-//      iFood ainda não existe, e INVENTAR um a partir de layout imaginado é
-//      exatamente o erro que este projeto já pagou duas vezes.
+//      Os dois foram escritos em cima de comanda REAL — o do 99Food na #871001,
+//      o do iFood num pedido de teste capturado no caixa em 15/09/2026. Nenhum
+//      dos dois saiu de layout imaginado, que é o erro que este projeto já
+//      pagou duas vezes.
+//
+//   ⚠️ E as contas dos dois NÃO são iguais: no 99Food repasse + cobrança do
+//      cliente fecham o total; no iFood o total é só a mercadoria e as taxas
+//      entram por fora. Usar uma fórmula na outra acusa divergência em todo
+//      pedido — por isso cada leitor tem a própria conferência.
 //
 // Mora fora do agent.js porque é o que muda quando entrar a terceira
 // plataforma, e é a única parte testável sem impressora na mesa.
@@ -25,7 +31,7 @@ export function fold(s) {
 
 export const PLATAFORMAS = {
   '99food': { rotulo: '99Food', temLeitor: true },
-  ifood:    { rotulo: 'iFood',  temLeitor: false },
+  ifood:    { rotulo: 'iFood',  temLeitor: true },
 };
 
 export function rotuloPlataforma(p) {
