@@ -459,6 +459,31 @@ if (!chamadoDireto) {
     console.log(`\n[${faixas} faixa(s) de imagem → ${png}, ${imagem.bytesLinha * 8}×${imagem.altura}]`);
   }
   if (!texto && !imagem) console.log('(nenhum texto legível e nenhuma imagem — veja o .bin)');
+} else if (args.includes('--papel')) {
+  // Conferir o REPASSE sozinho, antes de existir captura nenhuma.
+  //
+  // ⚠️ Isto existe porque o README mandava `reimprimir.bat capturas\exemplo.bin`
+  // e esse arquivo NUNCA existiu: `capturas/` está no .gitignore, então numa
+  // instalação nova a pasta nem é criada. O primeiro passo da instalação — o
+  // único que dá pra testar isolado — falhava com "arquivo não encontrado", e
+  // quem estava instalando não tinha como saber se o problema era o
+  // compartilhamento da impressora ou o comando.
+  const bytes = comandaDeTeste();
+  const tmp = path.join(os.tmpdir(), `papel-${Date.now()}.bin`);
+  fs.writeFileSync(tmp, bytes);
+  const fim = (ok) => {
+    try { fs.unlinkSync(tmp); } catch {}
+    console.log(ok
+      ? '✅ enviado. Saiu papel na impressora? Então o repasse está certo.'
+      : '❌ não consegui enviar — confira IMPRESSORA_WINDOWS no config.bat (node agent.js --impressoras).');
+  };
+  if (IMPRESSORA_WIN) repassarWindows(tmp).then(fim);
+  else if (DESTINO) repassarRede(bytes).then(fim);
+  else {
+    try { fs.unlinkSync(tmp); } catch {}
+    console.error('Configure IMPRESSORA_WINDOWS ou IMPRESSORA_IP no config.bat.');
+    process.exit(1);
+  }
 } else if (args.includes('--imprimir')) {
   const arq = arg('--imprimir');
   if (!arq) { console.error('uso: node agent.js --imprimir <arquivo.bin>'); process.exit(1); }

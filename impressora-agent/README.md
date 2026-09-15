@@ -98,14 +98,28 @@ uma. O nome que vai no `config.bat` é esse, copiado da tela — não adivinhado
 
 ### Passo 2 — conferir o caminho de volta
 
-Ainda sem captura nenhuma, já dá pra testar o repasse:
+Ainda sem captura nenhuma, já dá pra testar o repasse. Dois cliques em
+**`papel.bat`** — ele manda uma comanda de mentira direto pra impressora.
 
-```
-reimprimir.bat capturas\exemplo.bin
+- **saiu papel** → o lado mais chato está resolvido, pode seguir pro passo 3;
+- **não saiu** → o nome em `IMPRESSORA_WINDOWS` está errado. É quase sempre isso:
+  rode `impressoras.bat` e copie o **ShareName** exato, espaço incluído.
+
+⚠️ **Pelo PowerShell, `.bat` da pasta atual precisa de `.\` na frente**, e você
+tem que estar na pasta certa:
+
+```powershell
+cd C:\impressora-agent
+.\papel.bat
 ```
 
-Se sair papel, o lado que importa está resolvido. (Se ainda não existe captura
-nenhuma, siga pro passo 4 e volte aqui.)
+Sem o `.\`, o PowerShell responde *"não é reconhecido como nome de cmdlet"* —
+não é o arquivo que está faltando, é ele que não procura no diretório atual.
+Dois cliques no arquivo evitam o assunto inteiro.
+
+⚠️ **`node agent.js --papel` direto não serve.** Quem carrega o `config.bat` é o
+`.bat`; chamando o `node` na mão, `IMPRESSORA_WINDOWS` não existe e o agente não
+sabe pra onde mandar.
 
 ### Passo 3 — criar UMA impressora de captura POR aplicativo
 
@@ -217,6 +231,7 @@ alcança: os bytes vão do tablet direto pra impressora, sem passar pelo PC.
 | Arquivo | Para quê |
 |---|---|
 | `iniciar.bat` | sobe a ponte e deixa rodando |
+| `papel.bat` | manda uma comanda direto pra impressora, sem captura — o 1º teste |
 | `impressoras.bat` | lista as impressoras do Windows e o nome do compartilhamento |
 | `teste.bat [99food\|ifood]` | manda uma comanda de mentira, pra conferir a instalação |
 | `ler.bat <arquivo.bin>` | mostra o texto de uma captura guardada |
