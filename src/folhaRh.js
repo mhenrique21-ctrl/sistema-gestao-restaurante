@@ -65,13 +65,27 @@ const cent = (v) => Math.round((v || 0) * 100) / 100;
 export const encargoDescontado = (e) => num(e?.descontado != null ? e.descontado : e?.valor);
 export const encargoPatronal = (e) => num(e?.patronal);
 
+// O desconto de falta deixa de ser o valor gravado no lançamento: ele depende
+// do CONJUNTO de faltas do mês, porque o DSR é perdido uma vez por SEMANA.
+// Gravar em cada falta faria a segunda da semana guardar zero, e excluir a
+// primeira deixaria a semana sem repouso descontado nenhum.
+import { descontoDoMes } from './faltaClt.js';
+
 const doMes = (lista, funcId, mes) =>
   (lista || []).filter((x) => x && x.funcionarioId === funcId && x.mes === mes);
 
-export function totaisDoMes(db, funcId, mes) {
+// Aceita o funcionário inteiro ou só o id: o cálculo da falta precisa do
+// salário, e quem já chamava com o id não pode quebrar.
+export function totaisDoMes(db, funcOuId, mes) {
+  const func = typeof funcOuId === 'string'
+    ? (db?.funcionarios || []).find((f) => f && f.id === funcOuId)
+    : funcOuId;
+  const funcId = typeof funcOuId === 'string' ? funcOuId : funcOuId?.id;
   const encs = doMes(db?.encargos, funcId, mes);
+  const falta = descontoDoMes(doMes(db?.faltas, funcId, mes), func?.salario);
   return {
-    faltas:        cent(red(doMes(db?.faltas, funcId, mes), (x) => num(x.desconto))),
+    faltas:        falta.total,
+    faltaDetalhe:  falta,
     adiantamentos: cent(red(doMes(db?.adiantamentos, funcId, mes), (x) => num(x.valor))),
     consumacoes:   cent(red(doMes(db?.consumacoes, funcId, mes), (x) => num(x.valor))),
     encDescontado: cent(red(encs, encargoDescontado)),
@@ -86,7 +100,7 @@ export function totaisDoMes(db, funcId, mes) {
 // que o funcionário leva no total — os dois diferem justamente porque os
 // acréscimos saem pela conta de encargos.
 export function calcularHolerite(db, func, mes) {
-  const t = totaisDoMes(db, func?.id, mes);
+  const t = totaisDoMes(db, func, mes);
   const salario = num(func?.salario);
   const descontos = cent(t.faltas + t.adiantamentos + t.consumacoes + t.encDescontado);
   const acrescimos = cent(t.bonificacao + t.comissao + t.salarioFamilia);

@@ -6,6 +6,7 @@ import {converterQtd,consumoTeorico,aplicarBaixaVendas,idBaixaVenda} from "./con
 import {tipoDoInsumo,pendenciasDeInsumo,ehProdutoVendido,baixaDaVenda,chaveTipo} from "./tipoInsumo.js";
 import {aplicarMovimento,insumosDaProducao,distribuirEntreMarcas} from "./movimentoEstoque.js";
 import {calcularHolerite,contasEsperadas,contasLancadas,conciliarMes,encargoDescontado,encargoPatronal} from "./folhaRh.js";
+import {previaFalta,descontoDoMes,salarioDia,ehJustificada,MOTIVOS_473} from "./faltaClt.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -15820,7 +15821,7 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
   const [fEdit,setFEdit]=useState(null);
   const formRefRH=useRef<HTMLDivElement>(null);
   const formRefEnc=useRef<HTMLDivElement>(null);
-  const [faltaForm,setFaltaForm]=useState({funcionarioId:"",data:today(),dias:"",motivo:""});
+  const [faltaForm,setFaltaForm]=useState({funcionarioId:"",data:today(),dias:"1",tipo:"injustificada",motivo473:"",motivo:""});
   const [adtForm,setAdtForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [consForm,setConsForm]=useState({funcionarioId:"",data:today(),valor:"",descricao:""});
   const [encForm,setEncForm]=useState({funcionarioId:"",data:today(),descontado:"",patronal:"",bonificacao:"",comissao:"",salarioFamilia:"",descricao:""});
@@ -15843,7 +15844,12 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
   const saveFalta=()=>{
     if(!faltaForm.funcionarioId||!faltaForm.dias)return alert("Selecione funcionário e dias.");
     const fn=funcs.find(f=>f.id===faltaForm.funcionarioId);
-    const desconto=(fn?.salario||0)/30*parseFloat(faltaForm.dias);
+    // O `desconto` gravado continua sendo só o DIA, como sempre foi — é o que
+    // o histórico e qualquer bundle antigo sabem ler. O DSR NÃO entra aqui: ele
+    // depende do conjunto de faltas da semana e é derivado na leitura
+    // (src/faltaClt.js). Gravado no lançamento, a segunda falta da semana
+    // guardaria zero e excluir a primeira deixaria a semana sem repouso.
+    const desconto=ehJustificada(faltaForm.tipo)?0:salarioDia(fn?.salario)*parseFloat(faltaForm.dias);
     const now=new Date().toISOString();
     // Falta NÃO vira conta a pagar. Ela é desconto: reduz o que o funcionário
     // recebe, não é dinheiro a mais saindo do caixa. Virava conta de "Salários"
@@ -15852,7 +15858,7 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     // (src/folhaRh.js, com testes).
     const falta={id:uid(),...faltaForm,desconto,mes:faltaForm.data.slice(0,7),criadoEm:now,atualizadoEm:now};
     sv(d=>({...d,faltas:[falta,...(d.faltas||[])]}));
-    setFaltaForm({funcionarioId:"",data:today(),dias:"",motivo:""});
+    setFaltaForm({funcionarioId:"",data:today(),dias:"1",tipo:"injustificada",motivo473:"",motivo:""});
   };
 
   const saveAdt=()=>{
@@ -15979,7 +15985,11 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     const adts   =(db.adiantamentos||[]).filter(a=>a.funcionarioId===func.id&&a.mes===mes);
     const cons   =(db.consumacoes||[]).filter(c=>c.funcionarioId===func.id&&c.mes===mes);
     const encs   =(db.encargos||[]).filter(e=>e.funcionarioId===func.id&&e.mes===mes);
-    const totFalt   =faltas.reduce((s,f)=>s+f.desconto,0);
+    // Do cálculo do mês, não da soma dos campos gravados: o `desconto` de cada
+    // falta cobre só o dia, e o DSR é uma vez por semana — somar lançamento a
+    // lançamento cobraria um repouso por falta.
+    const rFalta    =descontoDoMes(faltas,func.salario);
+    const totFalt   =rFalta.total;
     const totAdt    =adts.reduce((s,a)=>s+parseMoney(a.valor),0);
     const totCons   =cons.reduce((s,c)=>s+parseMoney(c.valor),0);
     const totEnc    =encs.reduce((s,e)=>s+encargoDescontado(e),0);
@@ -15993,7 +16003,11 @@ function RH({db,setDb,empresa,setDbAndSave}:{db:any,setDb:any,empresa:string,set
     const liquido   =Math.max(func.salario-totDesc,0);
     const aRec      =liquido+totAcresc;
     const detalhesDesc:string[]=[];
-    faltas.forEach(f=>detalhesDesc.push(`<tr><td>Falta ${fmtDate(f.data)} (${f.dias}d)${f.motivo?" – "+f.motivo:""}</td><td class="vr">-${fmtMoney(f.desconto)}</td></tr>`));
+    // Dia e DSR em linhas separadas: o colaborador precisa poder conferir o
+    // repouso perdido, que é o desconto que ninguém espera ver.
+    faltas.filter(f=>!ehJustificada(f.tipo)).forEach(f=>detalhesDesc.push(`<tr><td>Falta ${fmtDate(f.data)} (${f.dias}d)${f.motivo?" – "+f.motivo:""}</td><td class="vr">-${fmtMoney(salarioDia(func.salario)*(parseFloat(f.dias)||1))}</td></tr>`));
+    rFalta.semanas.forEach(sem=>detalhesDesc.push(`<tr><td>DSR perdido – semana que fecha em ${fmtDate(sem.domingo)} <span style="color:#888">(Lei 605/49, art. 6º)</span></td><td class="vr">-${fmtMoney(sem.valorDsr)}</td></tr>`));
+    faltas.filter(f=>ehJustificada(f.tipo)).forEach(f=>detalhesDesc.push(`<tr><td>${fmtDate(f.data)} (${f.dias}d) – ausência justificada${f.motivo?" – "+f.motivo:""}</td><td class="vr" style="color:#166534">0,00</td></tr>`));
     adts.forEach(a=>detalhesDesc.push(`<tr><td>Adiantamento ${fmtDate(a.data)}${a.descricao?" – "+a.descricao:""}</td><td class="vr">-${fmtMoney(parseMoney(a.valor))}</td></tr>`));
     cons.forEach(c=>detalhesDesc.push(`<tr><td>Consumação ${fmtDate(c.data)}${c.descricao?" – "+c.descricao:""}</td><td class="vr">-${fmtMoney(parseMoney(c.valor))}</td></tr>`));
     encs.filter(e=>encargoDescontado(e)>0).forEach(e=>detalhesDesc.push(`<tr><td>Encargo ${fmtDate(e.data)}${e.descricao?" – "+e.descricao:""}</td><td class="vr">-${fmtMoney(encargoDescontado(e))}</td></tr>`));
@@ -16228,22 +16242,113 @@ ${detalhesDesc.join("")}
           <option value="">Selecionar funcionário</option>
           {funcs.map(f=><option key={f.id} value={f.id}>{f.nome} – {fmtMoney(f.salario)}/mês</option>)}
         </select>
-        <input type="date" value={faltaForm.data} onChange={e=>setFaltaForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <input type="number" placeholder="Nº de dias" value={faltaForm.dias} onChange={e=>setFaltaForm(f=>({...f,dias:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <input placeholder="Motivo" value={faltaForm.motivo} onChange={e=>setFaltaForm(f=>({...f,motivo:e.target.value}))} className="inp"/>
-        {faltaForm.funcionarioId&&faltaForm.dias&&<div style={{background:"var(--infoBg)",borderRadius:10,padding:"10px",marginTop:8}}>
-          <span className="muted">Desconto: </span>
-          <span style={{color:"var(--btnDanger)",fontWeight:700}}>{fmtMoney(((funcs.find(f=>f.id===faltaForm.funcionarioId)?.salario||0)/30)*parseFloat(faltaForm.dias||0))}</span>
-        </div>}
+        <div className="row" style={{marginBottom:8}}>
+          <input type="date" value={faltaForm.data} onChange={e=>setFaltaForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:0}}/>
+          <input type="number" min="1" placeholder="Nº de dias" value={faltaForm.dias} onChange={e=>setFaltaForm(f=>({...f,dias:e.target.value}))} className="inp" style={{marginBottom:0}}/>
+        </div>
+        {/* O tipo passa a existir: antes TUDO era tratado como injustificado, e
+            atestado ou ausência do art. 473 descontavam igual. */}
+        <div style={{fontSize:10,letterSpacing:1,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:5}}>Tipo da ausência</div>
+        <div style={{display:"flex",flexWrap:"wrap" as const,gap:6,marginBottom:8}}>
+          {[["injustificada","Injustificada"],["atestado","Atestado médico"],["art473","Motivo legal (art. 473)"],["abonada","Abonada pela empresa"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setFaltaForm(f=>({...f,tipo:k,motivo473:k==="art473"?f.motivo473:""}))}
+              style={{border:"1px solid "+(faltaForm.tipo===k?"var(--btnPrimary)":"var(--border2)"),borderRadius:99,padding:"6px 13px",fontSize:12.5,cursor:"pointer",
+                background:faltaForm.tipo===k?"var(--btnPrimary)":"var(--bg)",color:faltaForm.tipo===k?"var(--onPrimary,#FFFFFF)":"var(--text2)",fontWeight:faltaForm.tipo===k?700:400}}>{l}</button>
+          ))}
+        </div>
+        {faltaForm.tipo==="art473"&&<select value={faltaForm.motivo473} onChange={e=>setFaltaForm(f=>({...f,motivo473:e.target.value}))} className="inp" style={{marginBottom:8}}>
+          <option value="">Qual motivo do art. 473?</option>
+          {MOTIVOS_473.map((m:any)=><option key={m.id} value={m.id}>{m.nome} — {m.dias?`até ${m.dias} dia(s)`:"conforme o caso"} (inciso {m.inciso})</option>)}
+        </select>}
+        <input placeholder="Motivo / observação" value={faltaForm.motivo} onChange={e=>setFaltaForm(f=>({...f,motivo:e.target.value}))} className="inp"/>
+        {(()=>{
+          const fn=funcs.find(f=>f.id===faltaForm.funcionarioId);
+          if(!fn||!faltaForm.dias||!faltaForm.data)return null;
+          const mesF=faltaForm.data.slice(0,7);
+          const jaTem=(db.faltas||[]).filter((x:any)=>x.funcionarioId===fn.id&&x.mes===mesF);
+          const p=previaFalta({faltasExistentes:jaTem,salario:fn.salario,data:faltaForm.data,dias:faltaForm.dias,tipo:faltaForm.tipo});
+          const lim=MOTIVOS_473.find((m:any)=>m.id===faltaForm.motivo473);
+          return <div style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:11,padding:"12px 14px",marginTop:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontSize:12.5,color:"var(--text2)"}}>
+              <span>Salário-dia <span style={{color:"var(--text3)"}}>{fmtMoney(fn.salario)} ÷ 30</span></span>
+              <span style={{fontFamily:"monospace"}}>{p.salarioDia.toFixed(6).replace(".",",")}</span>
+            </div>
+            {p.justificada
+              ? <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontSize:12.5,color:"var(--text2)"}}><span>Ausência justificada — não desconta dia nem DSR</span><span style={{fontFamily:"monospace"}}>0,00</span></div>
+              : <>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontSize:12.5,color:"var(--text2)"}}>
+                    <span>{p.dias} dia(s) não trabalhado(s)</span><span style={{fontFamily:"monospace"}}>−{fmtMoney(p.valorDias)}</span>
+                  </div>
+                  {p.dsrNovo
+                    ? <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontSize:12.5,color:"var(--text2)"}}>
+                        <span><b>DSR perdido</b> — domingo {fmtDate(p.domingo)}</span><span style={{fontFamily:"monospace"}}>−{fmtMoney(p.valorDsr)}</span>
+                      </div>
+                    : <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",fontSize:12.5,color:"var(--infoText)"}}>
+                        <span><b>DSR de {fmtDate(p.domingo)} já descontado</b> — falta de {fmtDate(p.dsrJaDescontadoPor)}</span><span style={{fontFamily:"monospace"}}>—</span>
+                      </div>}
+                </>}
+            <div style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"2px solid var(--border2)",marginTop:7,paddingTop:9,fontWeight:700,fontSize:15}}>
+              <span>Desconto total</span><span style={{fontFamily:"monospace",color:p.total>0?"var(--btnDanger)":"var(--successText,#146B42)"}}>{p.total>0?"−":""}{fmtMoney(p.total)}</span>
+            </div>
+            <div className="muted" style={{fontSize:10.5,marginTop:8,lineHeight:1.5}}>
+              {p.justificada
+                ? "Ausência legal não desconta o dia nem faz perder o repouso. Fica registrada para o controle de frequência."
+                : p.dsrNovo
+                  ? "Falta injustificada faz perder a remuneração do repouso da semana — Lei 605/49, art. 6º."
+                  : "Só existe um repouso por semana. Descontar de novo cobraria um dia a mais do colaborador."}
+            </div>
+            {lim&&lim.dias&&parseFloat(faltaForm.dias||"0")>lim.dias&&<div style={{fontSize:11,color:"var(--btnDanger)",marginTop:6}}>⚠️ O inciso {lim.inciso} garante até {lim.dias} dia(s). O que passar disso é falta injustificada e deve ser lançado à parte.</div>}
+          </div>;
+        })()}
         <button className="btn" onClick={saveFalta} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",marginTop:12,fontSize:15}}>💾 Registrar</button>
       </div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}><SortCtrl id="rhFaltas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["valor-desc","Maior valor"]]}/></div>
-      {sortList(db.faltas||[],db,'rhFaltas','data-desc').map(f=>{const fn=funcs.find(x=>x.id===f.funcionarioId);return <div key={f.id} className="list-item">
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"var(--btnDanger)",fontWeight:700}}>-{fmtMoney(f.desconto)}</span></div>
-        <div className="muted">{f.dias} dia(s) • {fmtDate(f.data)}</div>{f.motivo&&<div className="muted">{f.motivo}</div>}
-        {f.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(f.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
-      </div>;})}
-      {!(db.faltas||[]).length&&<EmptyState msg="Nenhuma falta registrada"/>}
+      {/* Agrupada por FUNCIONÁRIO e SEMANA: é a única forma de conferir o DSR.
+          Numa lista corrida, duas faltas da mesma semana mostrariam dois
+          repousos perdidos, e o holerite desconta um só. */}
+      <div className="card" style={{marginBottom:12}}>
+        <div className="section-title" style={{marginBottom:8}}>Mês</div>
+        <input type="month" value={relMes} onChange={e=>setRelMes(e.target.value)} className="inp"/>
+      </div>
+      {funcs.map((fn:any)=>{
+        const doFunc=(db.faltas||[]).filter((x:any)=>x.funcionarioId===fn.id&&x.mes===relMes);
+        if(!doFunc.length)return null;
+        const r=descontoDoMes(doFunc,fn.salario);
+        const justificadas=doFunc.filter((x:any)=>ehJustificada(x.tipo));
+        const rotuloTipo=(t:string)=>t==="atestado"?"atestado médico":t==="art473"?"motivo legal":t==="abonada"?"abonada":"injustificada";
+        return <div key={fn.id} className="card" style={{marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,marginBottom:8}}>
+            <span style={{fontWeight:700,fontSize:14}}>{fn.nome}</span>
+            <span style={{fontFamily:"monospace",fontWeight:800,fontSize:16,color:r.total>0?"var(--btnDanger)":"var(--successText,#146B42)"}}>{r.total>0?"−":""}{fmtMoney(r.total)}</span>
+          </div>
+          {r.semanas.map((sem:any)=>{
+            return <div key={sem.domingo} style={{marginBottom:10}}>
+              <div style={{fontSize:10,letterSpacing:.6,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:600,borderBottom:"1px solid var(--border)",paddingBottom:5}}>
+                Semana que fecha em {fmtDate(sem.domingo)} · repouso: domingo
+              </div>
+              {sem.dias.map((d:string)=>(
+                <div key={d} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderBottom:"1px solid var(--border)",fontSize:12.5}}>
+                  <span>{fmtDate(d)} — injustificada</span>
+                  <span style={{fontFamily:"monospace",color:"var(--btnDanger)"}}>−{fmtMoney(r.salarioDia)}</span>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",fontSize:12.5,color:"var(--warningText,#8A5A00)"}}>
+                <span><b>DSR perdido</b> — uma vez na semana{sem.dias.length>1?`, mesmo com ${sem.dias.length} dias de falta`:""}</span>
+                <span style={{fontFamily:"monospace"}}>−{fmtMoney(sem.valorDsr)}</span>
+              </div>
+            </div>;
+          })}
+          {justificadas.map((f:any)=>(
+            <div key={f.id} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderTop:"1px solid var(--border)",fontSize:12.5,color:"var(--successText,#146B42)"}}>
+              <span>{fmtDate(f.data)} · {f.dias} dia(s) — {rotuloTipo(f.tipo)}{f.motivo?` · ${f.motivo}`:""}</span>
+              <span style={{fontFamily:"monospace"}}>0,00</span>
+            </div>
+          ))}
+          {r.diasDescontados>0&&<div className="muted" style={{fontSize:10.5,marginTop:6}}>
+            {r.diasDescontados} dia(s) + {r.dsrPerdidos} DSR × {fmtMoney(r.salarioDia)} — arredondado uma vez só, no total.
+          </div>}
+        </div>;
+      })}
+      {!(db.faltas||[]).filter((x:any)=>x.mes===relMes).length&&<EmptyState msg="Nenhuma falta registrada neste mês"/>}
     </div>}
 
     {subTab==="adiantamentos"&&<div>

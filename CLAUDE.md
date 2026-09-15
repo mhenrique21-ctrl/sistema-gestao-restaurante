@@ -36,6 +36,7 @@ src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com teste
 src/tipoInsumo.js     o que o item é e o que a venda faz com ele (com testes)
 src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
 src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
+src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -629,6 +630,48 @@ desconto (só o `patronal` se perderia num aparelho desatualizado).
 quem faltou e ainda virava despesa. Num funcionário de R$ 2.000 com uma falta,
 R$ 80 de consumação, R$ 150 de encargo e R$ 200 de bonificação, a DRE mostrava
 **R$ 2.466,67** de folha contra **R$ 1.970,00** de desembolso real.
+
+#### Falta: o dia E o DSR — `src/faltaClt.js` (com testes)
+
+Falta injustificada faz perder a remuneração do repouso da semana.<br>
+**Lei 605/49, art. 6º** — o repouso é devido a quem trabalhou a semana
+"cumprindo integralmente o seu horário". Antes descontava só o dia.
+
+⚠️ **O DSR é por SEMANA, não por falta.** Duas faltas na mesma semana perdem UM
+repouso; em semanas diferentes, um cada. Calcular por lançamento ("2 faltas ×
+2 dias") cobraria um dia a mais do colaborador.
+
+⚠️ **Por isso o DSR NÃO é gravado na falta.** Depende do conjunto do mês:
+gravado no lançamento, a segunda falta da semana guardaria zero e excluir a
+primeira deixaria a semana sem repouso nenhum. O campo `desconto` continua
+sendo **só o dia** (leitura legada); o DSR é sempre derivado.
+
+⚠️ **Arredondar uma vez só, no total.** `2.269,40 ÷ 30 = 75,646666…` — arredondar
+antes e multiplicar por 2 dá 151,30 em vez de 151,29. A linha do DSR recebe o
+resíduo pra que as parcelas SEMPRE somem o total mostrado.
+
+⚠️ `previaFalta` é **incremental**: o quanto o desconto do MÊS aumenta, não o
+valor da falta isolada. Duas faltas iguais podem mostrar 151,29 e 151,30 —
+parece centavo errado e não é; mostrar 151,29 nas duas faria a soma da tela dar
+302,58 contra os 302,59 do holerite.
+
+Tipos: `injustificada` (única que desconta) · `atestado` · `art473` · `abonada`.
+Falta antiga, sem `tipo`, conta como injustificada — era como eram tratadas.
+`MOTIVOS_473` traz inciso e limite de dias; inciso sem limite fixo devolve
+`null`, não zero (zero impediria registrar).
+
+Datas em **UTC** de propósito: o app guarda `AAAA-MM-DD` e o Amapá é UTC−3 —
+ler como hora local jogaria a segunda para o domingo anterior e trocaria a
+semana do DSR. Falta de vários dias **pula o domingo**: não se falta na folga, e
+contá-lo descontaria o repouso duas vezes.
+
+Decisões do dono (15/09/2026): repouso é **domingo** para todos (a loja fecha
+domingo) · **feriado na semana não é descontado** (o entendimento majoritário diz
+que também se perde, mas exigiria calendário de feriados) · **atraso não faz
+perder o DSR**.
+
+⚠️ Convenção coletiva pode ser mais benéfica que a lei. Isto é a regra legal; o
+que o sindicato negociou é conferência da contabilidade.
 
 **Vínculo conta ↔ funcionário:** `funcionarioId` + `mesRef` + `tipoRh`
 (`folha`/`encargo`/`adiantamento`). Por id, nunca por nome — renomear o
