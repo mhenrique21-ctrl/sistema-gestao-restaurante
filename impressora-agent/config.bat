@@ -17,11 +17,20 @@ REM   b) botao direito na termica -> Propriedades da impressora -> Compartilhame
 REM   c) marque "Compartilhar esta impressora" e de um nome SEM ESPACO: TERMICA
 REM
 REM Nao sabe o nome? Rode impressoras.bat: o proprio Windows escreve a lista.
-set IMPRESSORA_WINDOWS=TERMICA
+REM
+REM ATENCAO: nome com ESPACO ("EPSON COZINHA") funciona - o agente poe as aspas
+REM sozinho. Nao invente um nome sem espaco se o Windows ja usa um com espaco.
+REM set IMPRESSORA_WINDOWS=TERMICA
 
-REM Se um dia a impressora virar de rede, apague a linha acima e use estas:
-REM set IMPRESSORA_IP=192.168.0.50
-REM set IMPRESSORA_PORTA=9100
+REM IMPRESSORA DE REDE: se a termica da cozinha tem IP (a coluna PortName do
+REM impressoras.bat mostra algo como 192.168.100.180), prefira este caminho.
+REM Ele repassa a comanda EM FLUXO, byte a byte, entao o papel comeca a sair
+REM enquanto o trabalho ainda esta chegando - pela impressora compartilhada o
+REM spooler so aceita o trabalho inteiro e a cozinha espera ~1,5s a mais.
+REM
+REM Preencha SO UM dos dois: IMPRESSORA_WINDOWS ou IMPRESSORA_IP.
+set IMPRESSORA_IP=192.168.100.180
+set IMPRESSORA_PORTA=9100
 
 REM ---------------------------------------------------------------------------
 REM  2) DE ONDE AS COMANDAS SAO CAPTURADAS (99Food e iFood)

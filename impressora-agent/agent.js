@@ -198,13 +198,26 @@ export function destinoWindows(nome) {
   return `\\\\localhost\\${n}`;
 }
 
+// ⚠️ NOME COM ESPAÇO É O NORMAL, não a exceção: as impressoras desta loja se
+// chamam "EPSON COZINHA", "EPSON BALCAO", "ELGIN i8". Sem as aspas, o `copy`
+// lê "EPSON" como destino e "COZINHA" como um segundo arquivo de origem — erro
+// que só aparece na hora do pedido, com a cozinha esperando papel.
+//
+// O comando vai INTEIRO num argumento só, e começando por `copy`: com `cmd /c`,
+// uma linha que COMEÇA com aspas cai na regra de remoção de aspas do cmd e se
+// desmonta. Começando por `copy`, a regra não se aplica e as aspas chegam ao
+// destino como escritas.
+export function comandoCopia(caminhoBin, dest) {
+  return `copy /b "${caminhoBin}" "${dest}"`;
+}
+
 function repassarWindows(caminhoBin) {
   return new Promise((resolve) => {
     const dest = destinoWindows(IMPRESSORA_WIN);
     // "copy /b" é do cmd, não é programa — daí o cmd /c. E o /b é o que impede
     // o Windows de tratar 0x1A como fim de arquivo: esse byte aparece no meio
     // de ESC/POS e cortaria a comanda no meio sem erro nenhum.
-    execFile('cmd', ['/c', 'copy', '/b', caminhoBin, dest], (err, _o, stderr) => {
+    execFile('cmd', ['/c', comandoCopia(caminhoBin, dest)], { windowsVerbatimArguments: true }, (err, _o, stderr) => {
       if (err) {
         log(`   ⚠️  repasse para ${dest} falhou — a comanda NÃO saiu no papel.`);
         log(`      ${String(stderr || err.message).trim()}`);

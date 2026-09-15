@@ -8,7 +8,7 @@ import path from 'node:path';
 // import — daí o import dinâmico.
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'captura-'));
 process.env.CAPTURA_SAIDA = TMP;
-const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas } = await import('./agent.js');
+const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas, comandoCopia } = await import('./agent.js');
 const { textoDeEscPos, linhasUteis } = await import('./escpos.js');
 
 test('a comanda de teste volta legível depois de virar bytes de impressora', () => {
@@ -101,6 +101,20 @@ test('um aplicativo por pasta e o outro por IP convivem', () => {
   const fontes = fontesConfiguradas();
   assert.deepEqual(fontes.map((f) => [f.plataforma, f.tipo]), [['99food', 'pasta'], ['ifood', 'rede']]);
   process.env = antes;
+});
+
+test('nome de impressora COM ESPAÇO chega inteiro no copy', () => {
+  // As impressoras desta loja se chamam "EPSON COZINHA", "EPSON BALCAO",
+  // "ELGIN i8" — espaço é o normal, não a exceção. Sem aspas, o `copy` lê
+  // "EPSON" como destino e "COZINHA" como um segundo arquivo de origem, e o
+  // erro só aparece na hora do pedido, com a cozinha esperando papel.
+  const cmd = comandoCopia('C:\\impressora-agent\\capturas\\x.bin', destinoWindows('EPSON COZINHA'));
+  assert.equal(cmd, 'copy /b "C:\\impressora-agent\\capturas\\x.bin" "\\\\localhost\\EPSON COZINHA"');
+  // Tem que COMEÇAR por `copy`: com `cmd /c`, linha que começa com aspas cai
+  // na regra de remoção de aspas do cmd e se desmonta.
+  assert.ok(cmd.startsWith('copy '), 'a linha não pode começar com aspas');
+  // E o /b continua lá: sem ele o 0x1A do ESC/POS vira fim de arquivo.
+  assert.ok(cmd.includes(' /b '));
 });
 
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
