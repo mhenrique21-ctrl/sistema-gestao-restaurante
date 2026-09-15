@@ -26,7 +26,8 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { extrairEscPos, linhasUteis } from './escpos.js';
 import { pngMono } from './png.js';
-import { lerPedido99, conferirPedido99, ehComanda99 } from './pedido99.js';
+import { lerPedido99, conferirPedido99 } from './pedido99.js';
+import { resolverOrigem, rotuloPlataforma, temLeitor } from './plataforma.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +41,44 @@ const MODO      = (process.env.CAPTURA_MODO || 'rede').toLowerCase();
 const PORTA     = parseInt(process.env.CAPTURA_PORTA, 10) || 9100;
 const PASTA_IN  = (process.env.CAPTURA_PASTA || '').trim();
 const SAIDA     = (process.env.CAPTURA_SAIDA || path.join(AQUI, 'capturas')).trim();
+
+// ── De onde cada aplicativo imprime ─────────────────────────────────────────
+// 99Food e iFood imprimem do mesmo jeito e podem chegar no MESMO computador.
+// Cada um ganha a própria fonte de captura — uma impressora do Windows por
+// aplicativo, gravando na própria pasta — e é o rótulo da fonte que diz de
+// quem é a comanda.
+//
+// ⚠️ Uma pasta só para os dois seria mais simples de instalar e é justamente o
+// que não serve: a porta do Windows grava SEMPRE no mesmo nome, então dois
+// pedidos quase juntos se sobrescrevem, e a cozinha perde uma comanda. Pastas
+// separadas transformam essa corrida em duas filas independentes.
+//
+// ⚠️ O rótulo é só a suspeita inicial: quem manda é o TEXTO da comanda
+// (`resolverOrigem`). Pasta trocada na instalação é erro silencioso, e seguir o
+// rótulo jogaria o pedido no canal errado de Vendas, com outra taxa.
+function fontesConfiguradas() {
+  const fs_ = [];
+  const pasta = (v) => (v || '').trim();
+  const porta = (v) => parseInt(v, 10) || 0;
+  const add = (f) => { if (f) fs_.push(f); };
+
+  for (const [plat, env] of [['99food', '99'], ['ifood', 'IFOOD']]) {
+    const dir = pasta(process.env[`CAPTURA_PASTA_${env}`]);
+    if (dir) add({ tipo: 'pasta', plataforma: plat, pasta: dir });
+    const pt = porta(process.env[`CAPTURA_PORTA_${env}`]);
+    if (pt) add({ tipo: 'rede', plataforma: plat, porta: pt });
+  }
+
+  // Configuração antiga (uma fonte só, sem rótulo) continua valendo: quem já
+  // instalou o agente não pode ser obrigado a reconfigurar pra continuar
+  // capturando o 99Food. Sem rótulo, a origem sai do texto da comanda.
+  if (!fs_.length) {
+    if (MODO === 'pasta') add(PASTA_IN ? { tipo: 'pasta', plataforma: '', pasta: PASTA_IN } : null);
+    else add({ tipo: 'rede', plataforma: '', porta: PORTA });
+  }
+  return fs_;
+}
+const FONTES = fontesConfiguradas();
 
 // E dois destinos de REPASSE, porque a impressora desta loja é USB:
 //   IMPRESSORA_WINDOWS → nome do COMPARTILHAMENTO da impressora no Windows.
@@ -67,14 +106,19 @@ function carimbo(d = new Date()) {
        + `${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`;
 }
 
-function gravar(bytes, etiqueta = 'trabalho') {
+function gravar(bytes, etiqueta = 'trabalho', rotulo = '') {
   if (!bytes || !bytes.length) return null;
   fs.mkdirSync(SAIDA, { recursive: true });
-  const base = path.join(SAIDA, carimbo());
   const { texto, imagem, faixas } = extrairEscPos(bytes);
+  // A origem entra no NOME do arquivo, não só no log: quando alguém for
+  // procurar a comanda de um pedido semanas depois, é pela pasta que procura.
+  const { origem, avisos } = resolverOrigem(rotulo, texto);
+  const base = path.join(SAIDA, carimbo() + (origem ? `_${origem}` : ''));
   fs.writeFileSync(`${base}.bin`, bytes);
   fs.writeFileSync(`${base}.txt`, texto, 'utf8');
-  log(`📥 ${etiqueta}: ${bytes.length} bytes → ${path.basename(base)}.bin/.txt`);
+  log(`📥 ${etiqueta}: ${bytes.length} bytes → ${path.basename(base)}.bin/.txt`
+    + (origem ? `  [${rotuloPlataforma(origem)}]` : ''));
+  for (const a of avisos) log(`   ⚠️  ${a}`);
 
   // A comanda pode vir DESENHADA em vez de escrita. Montar o PNG é o que
   // permite ver o que chegou no papel quando o .txt sai vazio — sem ele, um
@@ -101,7 +145,7 @@ function gravar(bytes, etiqueta = 'trabalho') {
     console.log('   ┌─────────────────────────────────────────────');
     for (const l of linhas) console.log('   │ ' + l);
     console.log('   └─────────────────────────────────────────────');
-    interpretar(texto, base);
+    interpretar(texto, base, origem);
   }
   return base;
 }
@@ -110,8 +154,19 @@ function gravar(bytes, etiqueta = 'trabalho') {
 // Gestão: para onde o valor entra em Vendas depende de decisão do dono (o que a
 // plataforma repassa e o que o entregador cobra na porta são dinheiros
 // diferentes). Mostrar aqui é o que permite conferir contra o papel antes.
-function interpretar(texto, base) {
-  if (!ehComanda99(texto)) return;
+function interpretar(texto, base, origem) {
+  // ⚠️ O leitor é POR PLATAFORMA. Rodar o do 99Food numa comanda do iFood não
+  // daria erro: daria um pedido pela metade, com número e itens plausíveis e
+  // os dois dinheiros vazios. Errado em silêncio é pior que não lido — e o
+  // .bin guardado deixa escrever o leitor do iFood em cima de uma comanda de
+  // VERDADE, sem esperar pedido novo.
+  if (!temLeitor(origem)) {
+    if (origem) {
+      log(`   ℹ️  comanda do ${rotuloPlataforma(origem)} capturada, mas o leitor dela`);
+      log('      ainda não existe. O papel saiu normal; me mande este .bin.');
+    }
+    return;
+  }
   let pedido;
   try { pedido = lerPedido99(texto); }
   catch (e) { log(`   ⚠️  não consegui ler o pedido: ${e.message}`); return; }
@@ -127,7 +182,7 @@ function interpretar(texto, base) {
   for (const a of avisos) log(`   ⚠️  ${a}`);
   for (const l of pedido.naoEntendido) log(`      não entendi: ${l}`);
 
-  try { fs.writeFileSync(`${base}.json`, JSON.stringify(pedido, null, 2), 'utf8'); }
+  try { fs.writeFileSync(`${base}.json`, JSON.stringify({ origem, ...pedido }, null, 2), 'utf8'); }
   catch (e) { log(`   ⚠️  não consegui gravar o .json: ${e.message}`); }
 }
 
@@ -176,8 +231,8 @@ function repassarRede(bytes) {
 
 // Grava primeiro, repassa depois — e nesta ordem de propósito: se o repasse
 // travar ou a impressora estiver sem papel, o pedido já está guardado em disco.
-async function capturar(bytes, etiqueta) {
-  const base = gravar(bytes, etiqueta);
+async function capturar(bytes, etiqueta, rotulo = '') {
+  const base = gravar(bytes, etiqueta, rotulo);
   if (!base) return null;
   if (IMPRESSORA_WIN) await repassarWindows(`${base}.bin`);
   else if (DESTINO) await repassarRede(bytes);
@@ -186,7 +241,8 @@ async function capturar(bytes, etiqueta) {
 }
 
 // ── Modo rede: fica no meio do fio ──────────────────────────────────────────
-function modoRede() {
+function modoRede(fonte) {
+  const PORTA = fonte.porta;
   const servidor = net.createServer((sock) => {
     const origem = sock.remoteAddress || '?';
     let pedacos = [];
@@ -212,8 +268,8 @@ function modoRede() {
       if (!pedacos.length) return;
       const bytes = Buffer.concat(pedacos);
       pedacos = [];
-      if (repasse) gravar(bytes, `trabalho de ${origem}`);   // já foi em fluxo
-      else capturar(bytes, `trabalho de ${origem}`);
+      if (repasse) gravar(bytes, `trabalho de ${origem}`, fonte.plataforma);   // já foi em fluxo
+      else capturar(bytes, `trabalho de ${origem}`, fonte.plataforma);
     };
 
     sock.on('data', (d) => {
@@ -237,14 +293,17 @@ function modoRede() {
   });
 
   servidor.listen(PORTA, '0.0.0.0', () => {
-    log(`escutando impressão na porta ${PORTA}`);
+    log(`escutando impressão na porta ${PORTA}`
+      + (fonte.plataforma ? `  [${rotuloPlataforma(fonte.plataforma)}]` : ''));
     for (const [nome, ifs] of Object.entries(os.networkInterfaces())) {
       for (const i of ifs || []) {
         if (i.family === 'IPv4' && !i.internal) log(`   endereço deste PC: ${i.address}  (${nome})`);
       }
     }
-    avisarDestino();
-    log('   no 99Food, aponte a impressora para o endereço deste PC na porta acima.');
+    // O destino do repasse é um só e já foi anunciado na subida — repetir a
+    // cada fonte encheria a tela de linha igual e esconderia o que importa.
+    log(`   no ${rotuloPlataforma(fonte.plataforma) === 'origem desconhecida' ? 'aplicativo' : rotuloPlataforma(fonte.plataforma)}`
+      + ', aponte a impressora para o endereço deste PC na porta acima.');
   });
 }
 
@@ -269,15 +328,12 @@ async function esperarEstabilizar(arq) {
   return false;
 }
 
-function modoPasta() {
-  if (!PASTA_IN) {
-    console.error('\n❌ CAPTURA_MODO=pasta exige CAPTURA_PASTA no config.bat.\n');
-    process.exit(1);
-  }
+function modoPasta(fonte) {
+  const PASTA_IN = fonte.pasta;
   fs.mkdirSync(PASTA_IN, { recursive: true });
   fs.mkdirSync(SAIDA, { recursive: true });
-  log(`vigiando a pasta ${PASTA_IN}`);
-  avisarDestino();
+  log(`vigiando a pasta ${PASTA_IN}`
+    + (fonte.plataforma ? `  [${rotuloPlataforma(fonte.plataforma)}]` : ''));
 
   const emAndamento = new Set();
   // A porta do Windows grava SEMPRE no mesmo nome, então o arquivo processado
@@ -309,7 +365,7 @@ function modoPasta() {
 
       jaVistos.add(marca);
       if (jaVistos.size > 200) jaVistos.delete(jaVistos.values().next().value);
-      await capturar(bytes, `arquivo ${nome}`);
+      await capturar(bytes, `arquivo ${nome}`, fonte.plataforma);
       // Sai da pasta de entrada pra não ser lido de novo na próxima varredura.
       try { fs.unlinkSync(arq); } catch (e) { log(`   ⚠️  não consegui remover ${nome}: ${e.message}`); }
     } finally {
@@ -330,12 +386,13 @@ function modoPasta() {
 }
 
 // ── Ferramentas de linha de comando ─────────────────────────────────────────
-function comandaDeTeste() {
+function comandaDeTeste(plataforma = '99food') {
+  const CABECALHO = plataforma === 'ifood' ? 'IFOOD - TESTE' : '99FOOD - TESTE';
   const ESC = 0x1B, GS = 0x1D;
   const t = (s) => Buffer.from(s, 'latin1');
   return Buffer.concat([
     Buffer.from([ESC, 0x40]), Buffer.from([ESC, 0x61, 0x01]), Buffer.from([ESC, 0x21, 0x30]),
-    t('99FOOD - TESTE\n'), Buffer.from([ESC, 0x21, 0x00]), Buffer.from([ESC, 0x61, 0x00]),
+    t(CABECALHO + '\n'), Buffer.from([ESC, 0x21, 0x00]), Buffer.from([ESC, 0x61, 0x00]),
     t('--------------------------------\n'),
     t('Pedido #TESTE   '), t(new Date().toLocaleString('pt-BR')), t('\n'),
     t('1x Pao de Queijo         8,00\n'),
@@ -398,22 +455,39 @@ if (!chamadoDireto) {
   else console.error('Configure IMPRESSORA_WINDOWS ou IMPRESSORA_IP no config.bat.');
 } else if (args.includes('--teste')) {
   // Confere a ponte inteira sem depender de um pedido real chegar: manda uma
-  // comanda de mentira pelo MESMO caminho que o 99Food usaria neste modo.
-  if (MODO === 'pasta') {
-    if (!PASTA_IN) { console.error('CAPTURA_PASTA vazio no config.bat.'); process.exit(1); }
-    const arq = path.join(PASTA_IN, `teste-${Date.now()}.prn`);
-    fs.writeFileSync(arq, comandaDeTeste());
-    console.log(`comanda de teste gravada em ${arq} — veja a outra janela.`);
-  } else {
-    const s = net.connect({ host: '127.0.0.1', port: PORTA });
-    s.on('connect', () => s.end(comandaDeTeste()));
-    s.on('error', (e) => console.error(`❌ o agente não está escutando na porta ${PORTA} (${e.code})`));
-    s.on('close', () => console.log('comanda de teste enviada — veja a outra janela.'));
+  // comanda de mentira pelo MESMO caminho que o aplicativo usaria. Com duas
+  // fontes configuradas, `--teste ifood` escolhe qual delas testar — testar só
+  // a primeira deixaria a segunda instalação sem conferência nenhuma.
+  const qual = (arg('--teste') || '').toLowerCase();
+  const alvos = qual ? FONTES.filter((f) => f.plataforma === qual) : FONTES;
+  if (!alvos.length) {
+    console.error(`❌ nenhuma captura configurada${qual ? ` para "${qual}"` : ''} no config.bat.`);
+    process.exit(1);
   }
-} else if (MODO === 'pasta') {
-  modoPasta();
+  for (const fonte of alvos) {
+    const marca = fonte.plataforma ? `[${rotuloPlataforma(fonte.plataforma)}] ` : '';
+    if (fonte.tipo === 'pasta') {
+      const arq = path.join(fonte.pasta, `teste-${Date.now()}.prn`);
+      fs.mkdirSync(fonte.pasta, { recursive: true });
+      fs.writeFileSync(arq, comandaDeTeste(fonte.plataforma));
+      console.log(`${marca}comanda de teste gravada em ${arq} — veja a outra janela.`);
+    } else {
+      const s = net.connect({ host: '127.0.0.1', port: fonte.porta });
+      s.on('connect', () => s.end(comandaDeTeste(fonte.plataforma)));
+      s.on('error', (e) => console.error(`❌ ${marca}o agente não está escutando na porta ${fonte.porta} (${e.code})`));
+      s.on('close', () => console.log(`${marca}comanda de teste enviada — veja a outra janela.`));
+    }
+  }
 } else {
-  modoRede();
+  // Todas as fontes sobem juntas: 99Food e iFood chegam pelo mesmo computador
+  // e não há razão pra pedir duas janelas abertas — uma fecharia sem ninguém
+  // perceber, e só se descobriria no pedido perdido.
+  if (!FONTES.length) {
+    console.error('\n❌ Nenhuma captura configurada. Veja CAPTURA_PASTA_99 / CAPTURA_PASTA_IFOOD no config.bat.\n');
+    process.exit(1);
+  }
+  avisarDestino();
+  for (const fonte of FONTES) (fonte.tipo === 'pasta' ? modoPasta : modoRede)(fonte);
 }
 
-export { gravar, comandaDeTeste };
+export { gravar, comandaDeTeste, fontesConfiguradas };

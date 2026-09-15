@@ -24,21 +24,38 @@ REM set IMPRESSORA_IP=192.168.0.50
 REM set IMPRESSORA_PORTA=9100
 
 REM ---------------------------------------------------------------------------
-REM  2) DE ONDE A COMANDA E CAPTURADA
+REM  2) DE ONDE AS COMANDAS SAO CAPTURADAS (99Food e iFood)
 REM ---------------------------------------------------------------------------
-REM  pasta = o 99Food imprime por uma impressora DO WINDOWS que grava o trabalho
-REM          num arquivo. E o caminho de quem tem impressora USB. Veja o README.
-REM  rede  = o 99Food imprime apontando para um ENDERECO IP. So serve se o
-REM          aplicativo pedir IP e porta.
-set CAPTURA_MODO=pasta
+REM Cada aplicativo imprime na PROPRIA impressora de captura, gravando na
+REM PROPRIA pasta. E assim que o agente sabe de quem e cada comanda: 99Food e
+REM iFood sao canais diferentes em Vendas, com taxa diferente.
+REM
+REM ATENCAO: uma pasta so para os dois seria mais facil de instalar e e
+REM justamente o que nao serve. A porta do Windows grava SEMPRE no mesmo nome,
+REM entao dois pedidos quase juntos se sobrescrevem e a cozinha perde uma
+REM comanda. Pastas separadas viram duas filas independentes.
+REM
+REM Crie as pastas ANTES (o README explica como criar cada impressora).
+REM Use so o que voce tem: se a loja ainda nao vende no iFood, deixe a linha
+REM dele comentada com REM na frente.
+set CAPTURA_PASTA_99=C:\ComandasCapturadas\99food
+set CAPTURA_PASTA_IFOOD=C:\ComandasCapturadas\ifood
 
-REM MODO PASTA: a mesma pasta que voce vai apontar na porta da impressora de
-REM captura (o README explica como criar). Precisa ser um caminho que o Windows
-REM consiga gravar sem pedir senha.
-set CAPTURA_PASTA=C:\ComandasCapturadas
+REM Se algum dos dois so aceitar impressora de REDE (pede IP e porta), troque a
+REM linha da pasta dele por uma porta. Os dois jeitos convivem: um aplicativo
+REM pode imprimir por pasta e o outro por IP, ao mesmo tempo.
+REM set CAPTURA_PORTA_99=9100
+REM set CAPTURA_PORTA_IFOOD=9101
 
-REM MODO REDE: porta em que ESTE computador recebe a impressao. 9100 e a padrao.
-set CAPTURA_PORTA=9100
+REM ---------------------------------------------------------------------------
+REM  2b) CONFIGURACAO ANTIGA (uma fonte so, sem rotulo)
+REM ---------------------------------------------------------------------------
+REM Continua funcionando: quem ja tinha o agente instalado so pro 99Food nao
+REM precisa reconfigurar nada. So vale quando NENHUMA linha do item 2 acima
+REM estiver preenchida; nesse caso a origem e descoberta pelo TEXTO da comanda.
+REM set CAPTURA_MODO=pasta
+REM set CAPTURA_PASTA=C:\ComandasCapturadas
+REM set CAPTURA_PORTA=9100
 
 REM ---------------------------------------------------------------------------
 REM  3) OPCIONAIS

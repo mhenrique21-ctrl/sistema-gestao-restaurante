@@ -50,7 +50,7 @@ Agentes que rodam fora do servidor:
 
 ```
 ecletica-agent/    lê os XML de NFC-e do Eclética no PC do caixa (ver §4)
-impressora-agent/  captura a comanda do 99Food no meio do caminho pra impressora
+impressora-agent/  captura a comanda do 99Food e do iFood a caminho da impressora
 ```
 
 ### Sistemas irmãos (mesmo repositório)
@@ -212,11 +212,39 @@ o que importa saber daqui:
 - itens do dia alimentam Vendas → Relatório (Produtos, ABC, Margem), que antes
   liam só `recibosVenda` e nunca tinham visto a venda do balcão
 
-### Ponte de impressão 99Food (`impressora-agent/`)
+### Ponte de impressão 99Food e iFood (`impressora-agent/`)
 
-O 99Food não abre API pra loja ler o próprio pedido; o que existe é a comanda
+Nenhum dos dois abre API pra loja ler o próprio pedido; o que existe é a comanda
 que já sai impressa na cozinha. O agente fica **entre** o app e a impressora
 (TCP 9100), guarda o trabalho e **repassa os mesmos bytes** pra impressora real.
+
+**Os dois aplicativos são capturados ao mesmo tempo, na mesma janela**, cada um
+na própria impressora de captura, gravando na própria pasta
+(`CAPTURA_PASTA_99` / `CAPTURA_PASTA_IFOOD`; ou `CAPTURA_PORTA_*` pra quem só
+aceita IP — os dois jeitos convivem).
+
+⚠️ **Uma pasta só para os dois seria mais fácil e é o que não serve:** a Local
+Port do Windows grava SEMPRE no mesmo nome, então dois pedidos quase juntos se
+sobrescrevem e a cozinha perde uma comanda. Pastas separadas viram duas filas.
+
+⚠️ **O rótulo da pasta é só a suspeita; quem manda é o TEXTO da comanda**
+(`plataforma.js`, com testes). Pasta trocada na instalação é erro silencioso, e
+seguir o rótulo jogaria o pedido no canal errado de Vendas — taxa diferente,
+faturamento errado, nada denunciando. A divergência vira aviso na tela.
+A separação funciona porque **"99food" não contém "ifood"**.
+
+⚠️ A origem entra no **NOME do arquivo** (`..._99food.bin`), não só no log:
+quem procura a comanda de um pedido semanas depois procura na pasta.
+
+⚠️ **O leitor é POR PLATAFORMA e o do iFood ainda NÃO existe.** Rodar o do
+99Food numa comanda do iFood não daria erro: daria um pedido pela metade, com
+número e itens plausíveis e os dois dinheiros vazios. Captura do iFood é
+guardada e avisada na tela — o leitor nasce do primeiro `.bin` real, como o do
+99Food nasceu da comanda #871001. **Não escreva parser de layout imaginado.**
+
+⚠️ A configuração antiga (`CAPTURA_MODO` + `CAPTURA_PASTA`/`CAPTURA_PORTA`, uma
+fonte sem rótulo) continua valendo: quem já instalou não é obrigado a
+reconfigurar. Sem rótulo, a origem sai do texto.
 
 ⚠️ Intermediário, nunca substituto: a cozinha depende daquele papel, e o
 primeiro pedido sem comanda acabaria com a confiança na ponte. Falha no repasse
@@ -277,9 +305,11 @@ receber do 99Food. `conferirPedido99` acusa quando não fecham com o total.
 tela, nunca palpite. Item é testado ANTES dos rótulos: "1x Desconto especial
 R$5,00" é item, e deixar o rótulo ganhar viraria abatimento.
 
-**Estado:** captura, lê e grava `.bin`/`.txt`/`.png`/`.json`; **não envia pro
-Gestão**. O que falta não é código — é decidir em que coluna de Vendas entra
-cada um dos dois dinheiros. O iFood usa o mesmo mecanismo e não foi ligado.
+**Estado:** captura os dois, lê o do 99Food e grava
+`.bin`/`.txt`/`.png`/`.json`; **não envia pro Gestão**. Faltam duas coisas, e
+nenhuma é código escrito no escuro: (1) o **leitor do iFood**, que precisa de
+um `.bin` de comanda real; (2) decidir **em que coluna de Vendas** entra cada um
+dos dois dinheiros.
 
 ---
 

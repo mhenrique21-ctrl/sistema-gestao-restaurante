@@ -1,4 +1,4 @@
-# Ponte de impressão 99Food → App Gestão
+# Ponte de impressão 99Food e iFood → App Gestão
 
 O 99Food não abre API pra loja ler o próprio pedido. O que ele tem é a **comanda
 que já sai impressa na cozinha**. Este agente se coloca **entre** o aplicativo e
@@ -6,11 +6,28 @@ a impressora: recebe o trabalho de impressão, guarda uma cópia e **devolve os
 mesmos bytes** pra impressora de verdade.
 
 ```
-   99Food  ──►  impressora de CAPTURA  ──►  ESTE AGENTE  ──►  TERMICA (USB)
-                  (grava num arquivo)         guarda            papel da cozinha
-                                                │
-                                                └──►  capturas\*.bin + *.txt
+   99Food ──► impressora "99Food Captura" ──┐
+                 (grava em ...\99food)      │
+                                             ├──► ESTE AGENTE ──► TERMICA (USB)
+   iFood  ──► impressora "iFood Captura"  ──┘      guarda          papel da cozinha
+                 (grava em ...\ifood)              │
+                                                   └──► capturas\*_99food.bin
+                                                        capturas\*_ifood.bin
 ```
+
+Os dois aplicativos imprimem do mesmo jeito, então a mesma ponte serve para os
+dois. **Cada um na própria impressora de captura, gravando na própria pasta** —
+é o rótulo da pasta que diz de quem é a comanda, e 99Food e iFood são canais
+diferentes em Vendas, com taxa diferente.
+
+⚠️ **Uma pasta só para os dois** seria mais fácil de instalar e é justamente o
+que não serve: a porta do Windows grava **sempre no mesmo nome**, então dois
+pedidos quase juntos se sobrescrevem e a cozinha perde uma comanda. Pastas
+separadas viram duas filas independentes.
+
+⚠️ O rótulo da pasta é só a suspeita inicial: quem manda é o **texto da
+comanda**. Se a instalação trocar as impressoras, o agente segue o texto e
+avisa na tela — seguir o rótulo mandaria o pedido pro canal errado, calado.
 
 A cozinha continua recebendo o papel. Se o repasse falhar, a captura acontece
 assim mesmo e dá pra reimprimir depois — é por isso que ele é intermediário e
@@ -90,18 +107,29 @@ reimprimir.bat capturas\exemplo.bin
 Se sair papel, o lado que importa está resolvido. (Se ainda não existe captura
 nenhuma, siga pro passo 4 e volte aqui.)
 
-### Passo 3 — criar a impressora de CAPTURA
+### Passo 3 — criar UMA impressora de captura POR aplicativo
 
-Uma segunda impressora no Windows, que em vez de imprimir **grava o trabalho num
-arquivo**. É nela que o 99Food vai imprimir.
+Uma impressora do Windows que, em vez de imprimir, **grava o trabalho num
+arquivo**. É nela que o aplicativo vai imprimir. Faça este passo **uma vez para
+cada aplicativo**, mudando só a pasta e o nome:
 
-1. **Dispositivos e Impressoras** → *Adicionar impressora* →
+| aplicativo | porta (Local Port) | nome da impressora |
+|---|---|---|
+| 99Food | `C:\ComandasCapturadas\99food\comanda.prn` | `99Food Captura` |
+| iFood | `C:\ComandasCapturadas\ifood\comanda.prn` | `iFood Captura` |
+
+1. crie as pastas `C:\ComandasCapturadas\99food` e `C:\ComandasCapturadas\ifood`
+2. **Dispositivos e Impressoras** → *Adicionar impressora* →
    *A impressora que eu quero não está na lista* → **Adicionar impressora local**
-2. *Criar uma nova porta* → tipo **Local Port** → nome da porta:
-   `C:\ComandasCapturadas\comanda.prn`
-   (crie a pasta `C:\ComandasCapturadas` antes)
-3. Driver: **o MESMO da térmica USB** (mesma marca e modelo, escolhido na lista)
-4. Nome: `99Food Captura`
+3. *Criar uma nova porta* → tipo **Local Port** → nome da porta: o caminho da
+   tabela acima
+4. Driver: **o MESMO da térmica USB** (mesma marca e modelo, escolhido na lista)
+5. Nome: o da tabela acima
+
+⚠️ **Pastas separadas, não uma só.** A Local Port grava sempre no mesmo nome de
+arquivo; com os dois aplicativos na mesma pasta, dois pedidos quase juntos se
+sobrescrevem e um deles nunca sai no papel. Separadas, cada um tem a própria
+fila e um não atrapalha o outro.
 
 ⚠️ O driver tem que ser o mesmo **de propósito**: assim os bytes capturados são
 exatamente os que a térmica entende, e o repasse reproduz a comanda **idêntica**
@@ -119,40 +147,65 @@ a cada impressão, e ninguém vai estar no PC pra responder às 20h.
 hora, e guarda a assinatura do que já leu pra não capturar o mesmo pedido duas
 vezes — mas é por isso que ele precisa estar rodando.
 
-### Passo 4 — apontar o 99Food e subir o agente
+### Passo 4 — apontar os aplicativos e subir o agente
 
-1. `config.bat`: confira `IMPRESSORA_WINDOWS=TERMICA`,
-   `CAPTURA_MODO=pasta` e `CAPTURA_PASTA=C:\ComandasCapturadas`
+1. `config.bat`: confira `IMPRESSORA_WINDOWS=TERMICA` e as duas pastas —
+   `CAPTURA_PASTA_99` e `CAPTURA_PASTA_IFOOD`.
+   Só vende num dos dois? Ponha `REM ` na frente da linha do outro.
 2. dois cliques em **`iniciar.bat`** (atalho dele em `shell:startup`, via Win+R,
-   faz subir junto com o Windows)
-3. no 99Food, troque a impressora dos pedidos para **99Food Captura**
+   faz subir junto com o Windows). Uma janela só atende os dois aplicativos —
+   duas janelas abertas só dariam uma pra fechar sem ninguém perceber
+3. no **99Food**, troque a impressora dos pedidos para `99Food Captura`
+4. no **iFood**, troque a impressora dos pedidos para `iFood Captura`
 
 ### Passo 5 — conferir sem esperar pedido
 
 Com o `iniciar.bat` aberto numa janela, rode **`teste.bat`** noutra. Ele grava
-uma comanda de mentira no mesmo caminho que o 99Food usaria:
+uma comanda de mentira no caminho de **cada** aplicativo configurado:
 
 - **apareceu arquivo em `capturas\`** e o texto saiu na tela → a captura está certa;
-- **saiu papel na térmica** → o repasse está certo.
+- **saiu papel na térmica** → o repasse está certo;
+- o nome do arquivo termina em **`_99food`** ou **`_ifood`** → o rótulo está certo.
 
-Com um pedido de verdade, a tela mostra também a leitura:
+Quer testar um só? `teste.bat ifood`.
+
+Com um pedido de verdade do 99Food, a tela mostra também a leitura:
 
 ```
 🧾 pedido #871001 · Nome do teste · 3 item(ns): 1x Suco Abacaxi c/ Hortelã, …
    total R$ 51,70 · plataforma repassa R$ 0,00 · cobrar do cliente R$ 51,70
 ```
 
-Se os dois acontecerem, é só esperar o primeiro pedido de verdade.
+Com um pedido do **iFood** a tela diz outra coisa, e isso é esperado:
+
+```
+ℹ️  comanda do iFood capturada, mas o leitor dela ainda não existe.
+    O papel saiu normal; me mande este .bin.
+```
+
+O leitor do 99Food foi escrito em cima de uma comanda **real** (#871001). O do
+iFood vai nascer do mesmo jeito — **do primeiro `.bin` capturado**, não de um
+layout imaginado. É por isso que a captura vem antes: rodar o leitor do 99Food
+numa comanda do iFood não daria erro, daria um pedido pela metade, com número e
+itens plausíveis e os dois dinheiros vazios.
 
 ---
 
-## E se o 99Food pedir um endereço IP?
+## E se um deles pedir um endereço IP?
 
-Alguns aplicativos só aceitam impressora de rede. Nesse caso não precisa da
-impressora de captura: ponha `CAPTURA_MODO=rede` no `config.bat` e, no 99Food,
-aponte a impressora para o **IP deste PC** (o agente mostra o IP quando sobe) na
-porta 9100. O repasse para a térmica USB continua igual, pelo
+Alguns aplicativos só aceitam impressora de rede. Nesse caso aquele aplicativo
+não precisa de impressora de captura: no `config.bat`, troque a linha da pasta
+dele por uma porta (`CAPTURA_PORTA_99=9100` ou `CAPTURA_PORTA_IFOOD=9101`) e, no
+aplicativo, aponte a impressora para o **IP deste PC** (o agente mostra o IP
+quando sobe) nessa porta. O repasse para a térmica USB continua igual, pelo
 `IMPRESSORA_WINDOWS`.
+
+⚠️ **Portas diferentes para cada um.** Duas fontes na mesma porta não sobem — o
+agente avisa `EADDRINUSE` e para, em vez de deixar uma das duas capturando em
+silêncio pelas duas.
+
+Os dois jeitos convivem: o 99Food pode imprimir por pasta e o iFood por IP, ao
+mesmo tempo, na mesma janela.
 
 Se o app só oferecer impressora **Bluetooth pareada no tablet**, o agente não
 alcança: os bytes vão do tablet direto pra impressora, sem passar pelo PC.
@@ -165,7 +218,7 @@ alcança: os bytes vão do tablet direto pra impressora, sem passar pelo PC.
 |---|---|
 | `iniciar.bat` | sobe a ponte e deixa rodando |
 | `impressoras.bat` | lista as impressoras do Windows e o nome do compartilhamento |
-| `teste.bat` | manda uma comanda de mentira, pra conferir a instalação |
+| `teste.bat [99food\|ifood]` | manda uma comanda de mentira, pra conferir a instalação |
 | `ler.bat <arquivo.bin>` | mostra o texto de uma captura guardada |
 | `reimprimir.bat <arquivo.bin>` | manda uma captura pra impressora |
 
@@ -184,10 +237,19 @@ O repasse usa `copy /b`, e o `/b` não é detalhe: sem ele o Windows trata o byt
 `0x1A` como fim de arquivo, e esse byte aparece no meio de ESC/POS — a comanda
 sairia cortada no meio, sem erro nenhum.
 
-## Próximo passo
+## O que falta
 
-Falta ligar o pedido ao Gestão, e o que trava isso não é código: é **onde o
-valor entra em Vendas**. Pedido pago no aplicativo é faturamento do canal 99Food,
-com taxa e líquido. Pedido pago em dinheiro na porta é dinheiro que chega ao
-caixa — e a comanda distingue os dois, mas quem decide em que coluna cada um
-entra é o dono.
+Duas coisas, e nenhuma delas se resolve escrevendo código no escuro:
+
+**1. O leitor do iFood.** Nasce do primeiro `.bin` capturado, como o do 99Food
+nasceu da comanda #871001. Capture um pedido de verdade e me mande o `.bin` (ou
+uma foto da comanda) — a captura já funciona hoje, o papel sai normal, e o
+arquivo guardado permite escrever o leitor sem esperar pedido novo.
+
+**2. Em que coluna de Vendas cada dinheiro entra.** Pedido pago no aplicativo é
+faturamento do canal (99Food ou iFood), com taxa e líquido. Pedido pago em
+dinheiro na porta é dinheiro que chega ao caixa. A comanda distingue os dois; em
+que coluna cada um entra é decisão do dono, não do código — e somar os dois
+dobraria o faturamento do dia.
+
+Resolvidas as duas, o agente passa a mandar o pedido pro Gestão sozinho.

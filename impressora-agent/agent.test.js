@@ -8,7 +8,7 @@ import path from 'node:path';
 // import — daí o import dinâmico.
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'captura-'));
 process.env.CAPTURA_SAIDA = TMP;
-const { gravar, comandaDeTeste, destinoWindows } = await import('./agent.js');
+const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas } = await import('./agent.js');
 const { textoDeEscPos, linhasUteis } = await import('./escpos.js');
 
 test('a comanda de teste volta legível depois de virar bytes de impressora', () => {
@@ -51,6 +51,56 @@ test('nome da impressora do Windows vira caminho sozinho', () => {
   // e virar "\\\\localhost\\" mandaria a comanda pra lugar nenhum em silêncio.
   assert.equal(destinoWindows(''), '');
   assert.equal(destinoWindows(undefined), '');
+});
+
+test('a origem entra no NOME do arquivo, não só no log', () => {
+  // Semanas depois ninguém vai ler o log: vai procurar a comanda na pasta.
+  const base = gravar(comandaDeTeste('ifood'), 'teste', 'ifood');
+  assert.ok(path.basename(base).endsWith('_ifood'), `esperava sufixo _ifood em ${base}`);
+  assert.ok(fs.existsSync(`${base}.bin`));
+});
+
+test('a COMANDA vence o rótulo da pasta quando os dois discordam', () => {
+  // Pasta trocada na instalação é erro silencioso; seguir o rótulo mandaria o
+  // pedido pro canal errado de Vendas, com outra taxa.
+  const base = gravar(comandaDeTeste('ifood'), 'teste', '99food');
+  assert.ok(path.basename(base).endsWith('_ifood'), `esperava _ifood em ${base}`);
+});
+
+test('as duas plataformas podem ser capturadas ao mesmo tempo', () => {
+  const antes = { ...process.env };
+  process.env.CAPTURA_PASTA_99 = 'C:\\Comandas99';
+  process.env.CAPTURA_PASTA_IFOOD = 'C:\\ComandasIfood';
+  const fontes = fontesConfiguradas();
+  assert.deepEqual(fontes.map((f) => f.plataforma), ['99food', 'ifood']);
+  assert.ok(fontes.every((f) => f.tipo === 'pasta'));
+  // ⚠️ Pastas SEPARADAS: a porta do Windows grava sempre no mesmo nome, então
+  // uma pasta só para os dois faria dois pedidos quase juntos se
+  // sobrescreverem — e a cozinha perderia uma comanda.
+  assert.notEqual(fontes[0].pasta, fontes[1].pasta);
+  process.env = antes;
+});
+
+test('quem já instalou o agente antigo continua capturando sem reconfigurar', () => {
+  const antes = { ...process.env };
+  delete process.env.CAPTURA_PASTA_99;
+  delete process.env.CAPTURA_PASTA_IFOOD;
+  delete process.env.CAPTURA_PORTA_99;
+  delete process.env.CAPTURA_PORTA_IFOOD;
+  const fontes = fontesConfiguradas();
+  assert.equal(fontes.length, 1);
+  assert.equal(fontes[0].plataforma, '', 'sem rótulo a origem sai do texto da comanda');
+  process.env = antes;
+});
+
+test('um aplicativo por pasta e o outro por IP convivem', () => {
+  const antes = { ...process.env };
+  process.env.CAPTURA_PASTA_99 = 'C:\\Comandas99';
+  process.env.CAPTURA_PORTA_IFOOD = '9101';
+  delete process.env.CAPTURA_PASTA_IFOOD;
+  const fontes = fontesConfiguradas();
+  assert.deepEqual(fontes.map((f) => [f.plataforma, f.tipo]), [['99food', 'pasta'], ['ifood', 'rede']]);
+  process.env = antes;
 });
 
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
