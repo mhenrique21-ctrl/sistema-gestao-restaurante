@@ -242,8 +242,8 @@ número e itens plausíveis e os dois dinheiros vazios.
 
 ```
 99Food   pagoPeloApp + cobrarDoCliente = total
-iFood    total + taxaServico + taxaEntrega = pagoPeloApp + cobrarDoCliente
-         33,88 +       0,99 +       10,00 =      44,87 +            0,00
+iFood    total + taxaServico + taxaEntrega − descontos = pagoPeloApp + cobrarDoCliente
+         29,90 +       0,99 +        7,00 −     15,00 =      22,89 +            0,00
 ```
 
 No iFood o **total é só a mercadoria** e as taxas entram por fora. Usar a
@@ -300,6 +300,25 @@ lojista**, não dado do pedido: sem suprimir, viram pendência em toda comanda.
 ⚠️ Complemento de graça (`1 Coca-Cola Lata R$ 0,00`, a bebida do combo) é lido
 como ZERO, não como "sem valor" — senão a conferência acusaria item sem valor
 em todo combo.
+
+**O terceiro pedido real trouxe o DESCONTO**, e ele muda a fórmula:
+
+⚠️ **`Descontos : -R$ 15,00` entra na conta.** Num pedido real de R$ 29,90 com
+R$ 15,00 de promoção, ignorá-lo acusaria divergência de exatamente esses
+R$ 15,00 — em toda comanda com promoção, que no iFood são muitas, até ninguém
+mais olhar os avisos. Guardado **positivo**, como o repasse: o sinal fica na
+fórmula, não no dado.
+
+⚠️ **ITEM e COMPLEMENTO são testados ANTES de qualquer rótulo** dentro do bloco
+de itens — a mesma lição que o `pedido99.js` já tinha e que faltava aqui. Com o
+rótulo ganhando, `1x Desconto especial R$ 5,00` viraria a linha de Descontos do
+pedido: o item sumiria do ranking **e** o abatimento entraria em dobro. Só a
+CONTINUAÇÃO de nome respeita rótulo, senão `* Pagamento realizado *`, que vem
+indentado dentro do bloco, seria colado no nome do último item.
+
+⚠️ **`Ref:` quebra em QUANTAS linhas precisar** ("ao lado de um galpao de uma /
+oficina, e uma casa de altos e / baixos") — lendo só a primeira, o resto virava
+pendência.
 
 ⚠️ A configuração antiga (`CAPTURA_MODO` + `CAPTURA_PASTA`/`CAPTURA_PORTA`, uma
 fonte sem rótulo) continua valendo: quem já instalou não é obrigado a

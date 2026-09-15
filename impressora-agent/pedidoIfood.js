@@ -60,11 +60,12 @@ const MARCAS = [
   ['total',            'valor total do'],
   ['taxaServico',      'taxa de servico'],
   ['taxaEntrega',      'taxa de entrega'],
+  ['descontos',        'desconto'],
   ['pagoPeloApp',      'pagamento via ifood'],
   ['cobrarDoCliente',  'cobrar do cliente'],
   ['rodape',           'gestor web'],
 ];
-const VALORES = ['total', 'taxaServico', 'taxaEntrega', 'pagoPeloApp', 'cobrarDoCliente'];
+const VALORES = ['total', 'taxaServico', 'taxaEntrega', 'descontos', 'pagoPeloApp', 'cobrarDoCliente'];
 
 const marcaDaLinha = (l) => (MARCAS.find(([, m]) => fold(l).includes(m)) || [null])[0];
 const ehRotuloConhecido = (l) => marcaDaLinha(l) != null;
@@ -131,7 +132,7 @@ export function lerPedidoIfood(texto) {
     endereco: null, complementoEndereco: null, bairro: null,
     referencia: null, cidade: null,
     itens: [], formaPagamento: null,
-    total: null, taxaServico: null, taxaEntrega: null,
+    total: null, taxaServico: null, taxaEntrega: null, descontos: null,
     pagoPeloApp: null, cobrarDoCliente: null,
     naoEntendido: [],
   };
@@ -181,9 +182,13 @@ export function lerPedidoIfood(texto) {
     // a ignorar a lista justamente quando ela tiver algo de verdade.
     if (campo === 'rodape') break;
 
-    // Dentro do bloco de itens, a indentação manda antes de qualquer rótulo:
-    // um complemento chamado "Taxa" não pode virar taxa de entrega.
-    if (emItens && !VALORES.includes(campo || '') && campo !== 'formaPagamento') {
+    // ⚠️ Dentro do bloco de itens, ITEM e COMPLEMENTO são testados ANTES de
+    // qualquer rótulo — a mesma lição que o leitor do 99Food já tinha. Com o
+    // rótulo ganhando, "1x Desconto especial R$ 5,00" viraria a linha de
+    // Descontos do pedido: o item sumiria do ranking E o abatimento entraria
+    // em dobro. Só a CONTINUAÇÃO de nome respeita rótulo, senão
+    // "* Pagamento realizado *", que vem indentado, seria colado no último item.
+    if (emItens) {
       const mComp = l.match(COMPLEMENTO);
       const ultimo = p.itens[p.itens.length - 1];
       if (mComp && ultimo) {
@@ -213,7 +218,7 @@ export function lerPedidoIfood(texto) {
         i += 1;
         continue;
       }
-      if (ultimo && /^\s/.test(l)) {
+      if (ultimo && /^\s/.test(l) && !campo) {
         // Linha indentada sem número: continuação de NOME. Se já houve
         // complemento, ela continua o nome DELE ("The Ketchup 190g" embaixo de
         // "Catchup Kito"); senão continua o nome do item, que a térmica
@@ -232,12 +237,12 @@ export function lerPedidoIfood(texto) {
       if (propria != null) {
         // O sinal negativo do "Pagamento via iFood" é convenção da comanda, não
         // do dinheiro: guardamos o que a plataforma REPASSA, sempre positivo.
-        p[campo] = campo === 'pagoPeloApp' ? Math.abs(propria) : propria;
+        p[campo] = (campo === 'pagoPeloApp' || campo === 'descontos') ? Math.abs(propria) : propria;
         i += 1;
         if (ehRaboDeRotulo(linhas[i])) i += 1;
       } else {
         const abaixo = linhas[i + 1] != null ? ultimoValorBR(linhas[i + 1]) : null;
-        p[campo] = abaixo != null && campo === 'pagoPeloApp' ? Math.abs(abaixo) : abaixo;
+        p[campo] = abaixo != null && (campo === 'pagoPeloApp' || campo === 'descontos') ? Math.abs(abaixo) : abaixo;
         i += abaixo != null ? 2 : 1;
       }
       continue;
@@ -273,7 +278,15 @@ export function lerPedidoIfood(texto) {
     if (campo === 'localizador') { p.localizador = depoisDoRotulo(l) || null; i += 1; continue; }
     if (campo === 'complementoEnd') { p.complementoEndereco = depoisDoRotulo(l) || null; i += 1; continue; }
     if (campo === 'bairro') { p.bairro = depoisDoRotulo(l) || null; i += 1; continue; }
-    if (campo === 'referencia') { p.referencia = depoisDoRotulo(l) || null; i += 1; continue; }
+    if (campo === 'referencia') {
+      // ⚠️ O ponto de referência é texto livre e quebra em QUANTAS linhas
+      // precisar ("ao lado de um galpao de uma / oficina, e uma casa de altos
+      // e / baixos"). Lendo só a primeira, o resto virava pendência.
+      const [partes, j] = ateProximoRotulo(i + 1, depoisDoRotulo(l));
+      p.referencia = partes.join(' ') || null;
+      i = j;
+      continue;
+    }
     if (campo === 'endereco') {
       const [partes, j] = ateProximoRotulo(i + 1, depoisDoRotulo(l));
       p.endereco = partes.join(' ') || null;
@@ -338,10 +351,13 @@ export function conferirPedidoIfood(p) {
   if (p.total != null && p.itens.length && !perto(somaItens, p.total)) {
     avisos.push(`itens somam ${somaItens.toFixed(2)} e o total do pedido diz ${p.total.toFixed(2)}`);
   }
-  // ⚠️ A conta do iFood: mercadoria + taxas = o que a plataforma repassa + o
-  // que o entregador cobra. NÃO é a do 99Food (repasse + cobrança = total).
+  // ⚠️ A conta do iFood: mercadoria + taxas − descontos = o que a plataforma
+  // repassa + o que o entregador cobra. NÃO é a do 99Food (repasse + cobrança
+  // = total). E o desconto NÃO é enfeite: num pedido real de R$ 29,90 com
+  // R$ 15,00 de desconto, ignorá-lo acusaria divergência de exatamente esses
+  // R$ 15,00 — em toda comanda com promoção, que no iFood são muitas.
   if (p.total != null && p.pagoPeloApp != null && p.cobrarDoCliente != null) {
-    const devido = soma(p.total + (p.taxaServico || 0) + (p.taxaEntrega || 0));
+    const devido = soma(p.total + (p.taxaServico || 0) + (p.taxaEntrega || 0) - (p.descontos || 0));
     const recebido = soma(p.pagoPeloApp + p.cobrarDoCliente);
     if (!perto(devido, recebido)) {
       avisos.push(`pedido + taxas dá ${devido.toFixed(2)} e repasse + cobrança dá ${recebido.toFixed(2)}`);

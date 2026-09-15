@@ -319,3 +319,105 @@ describe('comanda real de entrega PARCEIRA', () => {
     assert.ok(!p.naoEntendido.some((l) => /pedidos na sua loja/.test(l)));
   });
 });
+
+// Terceira comanda REAL, 15/09/2026 às 20:10 — a primeira COM DESCONTO. Dados
+// do cliente trocados; o que o teste trava é a forma e a conta.
+const COMANDA_DESCONTO = `iFood
+        Confraria Cafe
+           EXPEDICAO
+         PEDIDO: #8290
+       Entrega Parceira
+        CODIGO DE COLETA
+          PARCEIRA: 7805
+Data: 15/09/2026 20:10:30
+Entrega prevista: 20:48
+Primeiro pedido!
+Cliente Exemplo
+0800 700 3050 ID: 89418336
+Endereco: R. Exemplo de
+Almeida, 865
+Bairro: Bairro
+Ref: ao lado de um galpao de uma
+oficina, e uma casa de altos e
+baixos
+Cidade: Macapa - AP - CEP:
+68905741
+ITENS DO PEDIDO (1)
+1x  Bolo Brigadeiro de  R$ 29,90
+    Chocolate (fatia)
+     * Pagamento realizado *
+         Online - OUTROS
+Valor total do        R$ 29,90
+pedido:
+Taxa de servico:       R$ 0,99
+Taxa de entrega:       R$ 7,00
+Descontos :          -R$ 15,00
+Pagamento via iFood: -R$ 22,89
+Cobrar do cliente:     R$ 0,00
+Gestor Web 9.342.0 - Desktop
+8.10.0`;
+
+describe('comanda real COM DESCONTO', () => {
+  const p = lerPedidoIfood(COMANDA_DESCONTO);
+
+  test('o desconto é lido, e guardado positivo', () => {
+    // A comanda escreve "-R$ 15,00" porque é abatimento. O campo quer dizer
+    // "quanto foi abatido" — o sinal fica na fórmula, não no dado.
+    assert.equal(p.descontos, 15);
+  });
+
+  test('a conta fecha COM o desconto entrando', () => {
+    // 29,90 + 0,99 + 7,00 − 15,00 = 22,89 = repasse 22,89 + cobrança 0,00
+    assert.equal(p.total, 29.90);
+    assert.equal(p.taxaServico, 0.99);
+    assert.equal(p.taxaEntrega, 7.00);
+    assert.equal(p.pagoPeloApp, 22.89);
+    assert.deepEqual(conferirPedidoIfood(p), []);
+  });
+
+  test('ignorar o desconto acusaria divergência de exatamente o desconto', () => {
+    // É por isso que ele não podia ficar de fora: no iFood promoção é comum, e
+    // o aviso apareceria em quase toda comanda até ninguém mais olhar.
+    const semDesconto = { ...p, descontos: null };
+    assert.match(conferirPedidoIfood(semDesconto).join(' '), /37\.89 e repasse \+ cobran/);
+  });
+
+  test('ponto de referência de TRÊS linhas volta inteiro', () => {
+    assert.equal(p.referencia,
+      'ao lado de um galpao de uma oficina, e uma casa de altos e baixos');
+  });
+
+  test('o código de coleta vem da segunda linha do rótulo', () => {
+    assert.equal(p.codigoColeta, '7805');
+  });
+
+  test('o bloco de pagamento indentado não gruda no nome do item', () => {
+    // "* Pagamento realizado *" vem INDENTADO, dentro do bloco de itens. Sem a
+    // trava de rótulo na continuação, viraria parte do nome do bolo.
+    assert.equal(p.itens.length, 1);
+    assert.equal(p.itens[0].nome, 'Bolo Brigadeiro de Chocolate (fatia)');
+    assert.match(p.formaPagamento, /Online - OUTROS/);
+    assert.deepEqual(p.naoEntendido, []);
+  });
+});
+
+describe('item vence rótulo dentro do bloco de itens', () => {
+  test('"1x Desconto especial" é ITEM, não a linha de Descontos', () => {
+    // Mesma lição que o leitor do 99Food já tinha. Com o rótulo ganhando, o
+    // item sumiria do ranking E o abatimento entraria em dobro.
+    const p = lerPedidoIfood(`iFood
+PEDIDO: #1
+ITENS DO PEDIDO (2)
+1x  Bolo               R$ 20,00
+1x  Desconto especial   R$ 5,00
+Valor total do        R$ 25,00
+pedido:
+Pagamento via iFood: -R$ 25,00
+Cobrar do cliente:     R$ 0,00`);
+    assert.equal(p.itens.length, 2);
+    assert.equal(p.itens[1].nome, 'Desconto especial');
+    assert.equal(p.itens[1].valor, 5);
+    assert.equal(p.descontos, null, 'o item não pode virar a linha de Descontos');
+    assert.deepEqual(conferirPedidoIfood(p), []);
+  });
+});
