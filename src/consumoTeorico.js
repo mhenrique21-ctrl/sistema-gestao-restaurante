@@ -49,7 +49,12 @@ export function consumoTeorico(vendidos, resolverFicha) {
   const semInsumos = [];
 
   (vendidos || []).forEach((p) => {
-    const ficha = resolverFicha(p.nome);
+    // O produto INTEIRO vai junto, não só o nome: quem resolve precisa do
+    // código pra casar o que foi renomeado num dos lados. A Conferência
+    // resolvia só pelo nome e discordava da baixa, que casa por código — o
+    // produto renomeado baixava estoque e sumia do consumo teórico, derrubando
+    // o CMV sem nada avisar. Quem só usa o nome continua funcionando.
+    const ficha = resolverFicha(p.nome, p);
     if (!ficha) { receitaSemFicha += p.total || 0; return; }
     receitaComFicha += p.total || 0;
 

@@ -250,3 +250,30 @@ test('reconciliação: baixa que saiu do cálculo é desfeita ao reaplicar', asy
     assert.equal(depois.movEstoque.filter((m) => m.mpId === 'mp-agua').length, 0, 'e o movimento da água some');
   });
 });
+
+test('o resolvedor recebe o produto inteiro, não só o nome', () => {
+  // A Conferência casa por CÓDIGO, como a baixa. Recebendo só o nome, um
+  // produto renomeado no Gestão baixava estoque e sumia do consumo teórico:
+  // a receita caía em "sem ficha" e o CMV saía menor que o real, calado.
+  const vistos = [];
+  const fichaCod = {
+    nome: 'Receita', porcoes: 1,
+    insumos: [{ mpId: 'm1', nome: 'Farinha', quantidade: 100, unidade: 'g', custo: 1 }],
+  };
+  const r = consumoTeorico(
+    [{ nome: 'NOME NOVO NO GESTAO', cod: '141', qtd: 2, total: 20 }],
+    (nome, produto) => { vistos.push([nome, produto?.cod]); return produto?.cod === '141' ? fichaCod : null; },
+  );
+  assert.deepEqual(vistos, [['NOME NOVO NO GESTAO', '141']]);
+  assert.equal(r.receitaComFicha, 20);
+  assert.equal(r.receitaSemFicha, 0);
+  assert.equal(r.linhas[0].qtd, 200);
+});
+
+test('resolvedor que só olha o nome continua valendo', () => {
+  // movimentoEstoque.js e a aba Registrar passam a ficha pronta e ignoram os
+  // argumentos — a mudança não pode exigir nada deles.
+  const f = { nome: 'F', porcoes: 1, insumos: [{ mpId: 'm1', nome: 'X', quantidade: 5, unidade: 'g', custo: 1 }] };
+  const r = consumoTeorico([{ nome: 'Qualquer', qtd: 3, total: 9 }], () => f);
+  assert.equal(r.linhas[0].qtd, 15);
+});

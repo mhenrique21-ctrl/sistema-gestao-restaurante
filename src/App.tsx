@@ -4626,9 +4626,32 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   // dois no relatório.
   const {porDia:vendasPorDia,diasPdv}=vendasPorItem(db,ini,fim);
   const agruparItens=()=>agruparProdutos(vendasPorDia);
+  const diasPdvRel=diasPdv;
+  // Só o que veio do PDV, pro cabeçalho poder separar as duas parcelas em vez
+  // de mostrar um total que ninguém sabe de onde saiu.
+  const totalPdv=Math.round((db.itensVendidos||[])
+    .filter((d:any)=>d.data>=ini&&d.data<=fim)
+    .reduce((sa:number,d:any)=>sa+(d.itens||[]).reduce((s2:number,it:any)=>s2+(it.valor||0),0),0)*100)/100;
   const avisoFontePdv=diasPdv>0
     ?<div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Inclui {diasPdv} dia(s) de venda do PDV, agregados por produto.</div>
     :null;
+  // Mesmo produto em duas linhas: a venda do PDV traz o código do Eclética e a
+  // do recibo não, então cada uma vira uma chave. Por decisão do dono as linhas
+  // NÃO são unidas — juntar mudaria Ranking e ABC de períodos já conferidos.
+  // Ficam sinalizadas com a soma das duas, pra ninguém ler "vendeu 3" num
+  // produto que vendeu 3 + 2.
+  const avisoDuplicadas=(linhas:any[])=>{
+    const nomes=[...new Set(linhas.filter((l:any)=>l.duplicadoDeNome).map((l:any)=>l.nome))];
+    if(!nomes.length)return null;
+    return <div style={{background:"var(--warningBg,#FBF0DA)",border:"1px solid var(--border2)",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+      <div style={{fontSize:11.5,fontWeight:700,color:"var(--warningText,#8A5A00)",marginBottom:4}}>⚠️ {nomes.length} produto(s) aparecem em duas linhas</div>
+      <div className="muted" style={{fontSize:10.5,marginBottom:6}}>Vendidos pelo PDV (com código do Eclética) e por recibo (sem código) — o sistema não junta as duas, pra não mudar relatório já conferido. A soma real de cada um:</div>
+      {nomes.map((n:string)=>{const t=totalDoNome(linhas,n);return (
+        <div key={n} style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5,padding:"2px 0"}}>
+          <span>{n}</span><span style={{fontFamily:"monospace",fontWeight:700}}>{t.qtd} un · {fmtMoney(t.total)}</span>
+        </div>);})}
+    </div>;
+  };
 
   const TABS:[typeof relTab,string][]=[
     ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
@@ -4668,9 +4691,19 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       <div><label style={{fontSize:10,color:"var(--text2)",display:"block",marginBottom:2}}>Até</label><input type="date" className="inp" value={fim} onChange={e=>setFim(e.target.value)} style={{marginBottom:0}}/></div>
     </div>
 
-    <div className="card" style={{marginBottom:16,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-      <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>{recibos.length} recibo(s) no período</span>
-      <span style={{fontSize:24,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(totalPeriodo)}</span>
+    {/* Contava só os recibos, mas o ranking logo abaixo soma recibos E PDV:
+        num dia só de PDV a tela dizia "0 recibos · R$ 0,00" com um ranking de
+        R$ 120,00 embaixo. Como é o cabeçalho da tela inteira, parecia o total
+        de tudo — e dizia zero num dia em que se vendeu. */}
+    <div className="card" style={{marginBottom:16,padding:"14px 18px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10}}>
+        <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",textTransform:"uppercase" as const}}>Vendas por item no período</span>
+        <span style={{fontSize:24,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(totalPeriodo+totalPdv)}</span>
+      </div>
+      <div className="muted" style={{fontSize:11,marginTop:4}}>
+        {recibos.length} recibo(s) · {fmtMoney(totalPeriodo)}
+        {diasPdvRel>0?` · ${diasPdvRel} dia(s) de PDV · ${fmtMoney(totalPdv)}`:""}
+      </div>
     </div>
 
     {relTab==="cliente"&&(()=>{
@@ -4698,7 +4731,10 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Ranking de produtos — por receita</div>
         {avisoFontePdv}
         {!ranking.length&&<EmptyState msg="Nenhum item vendido no período."/>}
-        {ranking.map((p:any)=><RowBar key={p.nome} label={p.nome} qty={`${p.qtd} ${p.unidade}`} val={p.total} pct={p.total/max*100}/>)}
+        {avisoDuplicadas(ranking)}
+        {/* key com o código junto: duas linhas do mesmo produto colidiam na
+            chave do React, que é o que faz uma sumir ou trocar de lugar. */}
+        {ranking.map((p:any)=><RowBar key={`${p.cod||""}|${p.nome}`} label={p.duplicadoDeNome?`${p.nome} ${p.cod?"(PDV)":"(recibo)"}`:p.nome} qty={`${p.qtd} ${p.unidade}`} val={p.total} pct={p.total/max*100}/>)}
       </>;
     })()}
 
@@ -4711,14 +4747,15 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Curva ABC — quem sustenta a receita</div>
         <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>A = até 80% acumulado · B = até 95% · C = resto</div>
         {avisoFontePdv}
+        {avisoDuplicadas(ranking)}
         {!ranking.length&&<EmptyState msg="Nenhum item vendido no período."/>}
         {ranking.map((p:any)=>{
           acc+=p.total;
           const pctAcc=acc/totalRank*100;
           const classe=pctAcc<=80?"A":pctAcc<=95?"B":"C";
-          return <div key={p.nome} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+          return <div key={`${p.cod||""}|${p.nome}`} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
             <span style={{width:22,height:22,borderRadius:6,background:(classes as any)[classe]+"22",color:(classes as any)[classe],fontWeight:800,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{classe}</span>
-            <span style={{flex:1,fontSize:13}}>{p.nome}</span>
+            <span style={{flex:1,fontSize:13}}>{p.duplicadoDeNome?`${p.nome} ${p.cod?"(PDV)":"(recibo)"}`:p.nome}</span>
             <span style={{fontSize:10,color:"var(--text2)",fontFamily:"monospace"}}>{pctAcc.toFixed(0)}% acum.</span>
             <span style={{fontWeight:700,fontFamily:"monospace",width:88,textAlign:"right" as const}}>{fmtMoney(p.total)}</span>
           </div>;
@@ -4867,6 +4904,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       return <>
         <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Margem por produto</div>
         {avisoFontePdv}
+        {avisoDuplicadas(linhas)}
         {semFicha.length>0&&<div style={{fontSize:11,color:"var(--warningText)",marginBottom:10}}>
           ⚠️ {semFicha.filter((l:any)=>l.vinculo!=="ignorado").length} produto(s) sem ficha técnica — {receitaTotal?Math.round(receitaSemFicha/receitaTotal*100):0}% da receita do período fica sem margem calculada.
           <span style={{marginLeft:4}}>Vincule em <strong>Estoque → Saídas por venda → Vínculos</strong>.</span>
@@ -12431,6 +12469,7 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
   const porNomeQtd=resolvidos.filter((p:any)=>!p.porCodigo&&p.item).length;
   const semVinculo=resolvidos.filter((p:any)=>!p.item&&!p.ficha);
   const receitaSemVinculo=semVinculo.reduce((s:number,p:any)=>s+p.total,0);
+  const duplicadosNoPeriodo=[...new Set(todosProdutos.filter((p:any)=>p.duplicadoDeNome).map((p:any)=>p.nome))];
 
   const RegistrarTab=()=>{
     const movs=db.movEstoque||[];
@@ -12464,8 +12503,14 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         // foi registrada, e baixar a ficha de novo contaria a farinha duas
         // vezes — erro que só apareceria na contagem física.
         if(modo==="proprio"&&item){
-          const porEmb=parseFloat(item.unidadesPorEmbalagem)||1;
-          acumula(data,item,p.qtd/porEmb,(parseFloat(item.ultimoValor)||0)*(p.qtd/porEmb),"produção");
+          // Unidade por unidade: a conversão embalagem→unidade é cobrada só de
+          // REVENDA, que é o que traduz "vendi 40 latas" em "saiu 3,33 caixas".
+          // Dividir aqui fazia 12 fatias vendidas baixarem 1 do saldo se alguém
+          // preenchesse o campo no bolo — o campo é editável pra qualquer
+          // matéria-prima, e o produto do cardápio mora na mesma coleção.
+          const emb=parseFloat(item.unidadesPorEmbalagem)||1;
+          if(emb>1)avisos.add(`"${item.nome}" é produção mas tem ${emb} un/embalagem preenchido — esse campo só vale pra revenda e está sendo ignorado aqui. Limpe em Compras → Insumos.`);
+          acumula(data,item,p.qtd,(parseFloat(item.ultimoValor)||0)*p.qtd,"produção");
           return;
         }
 
@@ -12504,15 +12549,19 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
           return;
         }
 
-        // DOSE baixa o insumo pela ficha: não se estoca "fatia de queijo", se
-        // estoca queijo, e a fatia sai na hora da venda.
-        if(modo==="ficha"||!item){
+        // Produto vendido que NÃO está no estoque: última tentativa pela ficha
+        // técnica, casando por código e caindo no nome.
+        //
+        // O comentário aqui dizia "DOSE baixa o insumo pela ficha" e a condição
+        // testava modo==="ficha" — regra de antes de dose passar a baixar as
+        // marcas do produto da lista. `baixaDaVenda` nunca devolve "ficha",
+        // então aquele ramo era morto e o aviso de dose sem ficha, inalcançável.
+        if(!item){
           const ficha=resolverItemVendido(db,{nome:p.nome,cod:p.cod}).ficha;
           if(!ficha){
             // Sem item e sem ficha: o produto vendido não existe em lugar
             // nenhum do cadastro. Dizer isso é melhor que sumir com ele.
-            if(!item)avisos.add(`"${p.nome}" não está no estoque nem tem ficha — importe em Produtos do Eclética`);
-            else avisos.add(`"${item.nome}" é dose mas não tem ficha técnica`);
+            avisos.add(`"${p.nome}" não está no estoque nem tem ficha — importe em Produtos do Eclética`);
             return;
           }
           const {linhas}=consumoTeorico([{nome:p.nome,qtd:p.qtd,total:p.total}],()=>ficha);
@@ -12602,6 +12651,14 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
         {porNomeQtd>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
           <span style={{color:"var(--text2)"}}>Casaram pelo nome</span><strong>{porNomeQtd}</strong>
         </div>}
+        {/* A baixa soma certo — as duas linhas caem no mesmo item —, mas a
+            contagem acima conta duas, o que faz parecer que há mais produto
+            vendido do que há. Sinalizar é a decisão do dono: unir mudaria
+            Ranking e ABC de períodos já conferidos. */}
+        {duplicadosNoPeriodo.length>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
+          <span style={{color:"var(--text2)"}} title="Vendidos pelo PDV (com código) e por recibo (sem código): contam como duas linhas aqui, mas baixam do mesmo item.">Em duas linhas (PDV + recibo)</span>
+          <strong style={{color:"var(--warningText)"}}>{duplicadosNoPeriodo.length}</strong>
+        </div>}
         {semVinculo.length>0&&<>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2px 0"}}>
             <span style={{color:"var(--warningText)"}}>Não encontrados</span>
@@ -12646,8 +12703,13 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
       // para produzir o que foi vendido. Não é o que saiu de fato — a diferença
       // entre os dois é justamente o que se quer enxergar.
       const movs=db.movEstoque||[];
+      // Por CÓDIGO, como a baixa faz. Resolvendo só pelo nome, produto
+      // renomeado no Gestão baixava estoque na aba 1 e sumia daqui: a receita
+      // dele caía em "sem ficha" e o CMV teórico saía menor que o real, sem
+      // nada na tela denunciando. Era a única das dez chamadas do resolvedor
+      // que não passava o código — justamente a que confere as outras.
       const {linhas:base,receitaComFicha,receitaSemFicha,semPorcoes,semInsumos}=
-        consumoTeorico(agruparItens(),(nome:string)=>resolverItemVendido(db,{nome}).ficha);
+        consumoTeorico(agruparItens(),(nome:string,prod:any)=>resolverItemVendido(db,{nome,cod:prod?.cod}).ficha);
 
       const linhas=base.map((l:any)=>{
         const mp=l.mpId?(db.materiasPrimas||[]).find((m:any)=>m.id===l.mpId):null;
@@ -21082,8 +21144,20 @@ const agruparProdutos=(porDia:Map<string,Map<string,any>>)=>{
     const cur=m.get(k)||{nome:p.nome,qtd:0,total:0,unidade:p.un||"un",cod:p.cod||""};
     cur.qtd+=p.qtd; cur.total+=p.total; m.set(k,cur);
   }));
-  return Array.from(m.values()).sort((a,b)=>b.total-a.total);
+  const linhas=Array.from(m.values()).sort((a:any,b:any)=>b.total-a.total);
+  // O mesmo produto pode aparecer em DUAS linhas: a venda do Eclética traz
+  // código e vira a chave "cod:141"; o recibo de venda nunca traz código e vira
+  // a chave do nome. Por decisão do dono as linhas NÃO são unidas — juntar
+  // mudaria Ranking e ABC de períodos já conferidos —, mas ficam marcadas, pra
+  // ninguém ler "vendeu 3" num produto que vendeu 3 + 2.
+  const vezes=new Map<string,number>();
+  linhas.forEach((l:any)=>{const k=foldNome(l.nome);vezes.set(k,(vezes.get(k)||0)+1);});
+  return linhas.map((l:any)=>({...l,duplicadoDeNome:(vezes.get(foldNome(l.nome))||0)>1}));
 };
+// As linhas do mesmo produto que estão separadas por causa do código.
+const totalDoNome=(linhas:any[],nome:string)=>linhas
+  .filter((l:any)=>foldNome(l.nome)===foldNome(nome))
+  .reduce((a:any,l:any)=>({qtd:a.qtd+l.qtd,total:a.total+l.total}),{qtd:0,total:0});
 // Resolve um produto VENDIDO até o item de estoque, o tipo e a ficha.
 //
 // A chave é o CÓDIGO: o Eclética emite o cupom com cProd, o agente guarda em

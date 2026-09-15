@@ -537,6 +537,40 @@ vinculados" pedindo trabalho que não existia. **Não recrie.**
 tipo → ficha. Usado pela baixa, pela Conferência e pela Margem por Produto, para
 as três não discordarem entre si.
 
+⚠️ **Passe SEMPRE o `cod`.** A Conferência era a única das dez chamadas que
+resolvia só pelo nome — justamente a que confere o resultado das outras. Produto
+renomeado no Gestão (a importação preserva o nome editado de propósito) baixava
+estoque pela aba Registrar, que casa por código, e sumia do consumo teórico: a
+receita caía em "sem ficha" e o **CMV teórico saía menor que o real**, calado.
+Por isso `consumoTeorico(vendidos, resolverFicha)` chama
+`resolverFicha(p.nome, p)` — o produto inteiro, não só o nome.
+
+⚠️ **Produzido baixa unidade por unidade.** A conversão `unidadesPorEmbalagem`
+é cobrada só de REVENDA. A baixa dividia por ela também no `proprio`: bastava
+alguém preencher 12 num bolo (o campo é editável pra qualquer matéria-prima, e o
+produto do cardápio mora na mesma coleção) pra 12 fatias vendidas baixarem 1 do
+saldo. Hoje o campo preenchido num produzido vira **aviso**, não conversão.
+
+⚠️ **O mesmo produto pode aparecer em DUAS linhas** e isso é aceito de
+propósito: a venda do PDV traz o código do Eclética e vira a chave `cod:141`; o
+recibo de venda **nunca** traz código e vira a chave do nome. Por decisão do dono
+as linhas **não são unidas** — juntar mudaria Ranking e ABC de períodos já
+conferidos. Ficam **sinalizadas** (`duplicadoDeNome`), com a soma real das duas.
+A baixa de estoque some certo: as duas caem no mesmo item.
+
+⚠️ A `key` do React nessas listas leva o código junto (`${cod}|${nome}`): duas
+linhas do mesmo nome colidiam na chave, que é o que faz uma sumir ou trocar de
+lugar na tela.
+
+⚠️ `baixaDaVenda` nunca devolve `"ficha"` — devolve `lista`, `proprio` ou
+`nenhum`. Existia um ramo `modo==="ficha"` com o comentário da regra antiga
+(dose via ficha, anterior à decisão de dose baixar as marcas): ramo morto, e o
+aviso "é dose mas não tem ficha" era inalcançável. **Não recrie.**
+
+⚠️ O cabeçalho de Vendas → Relatório conta **recibos + PDV**, com as duas
+parcelas visíveis. Contava só recibos, então num dia só de PDV dizia "0 recibos ·
+R$ 0,00" com um ranking de R$ 120,00 logo abaixo.
+
 O único vínculo que sobrou é **item produzido → ficha técnica**, quando os nomes
 diferem: campo `fichaId`, editado em Saldo Estoque junto com nome/código/tipo.
 Sem ele, casa pelo nome.
