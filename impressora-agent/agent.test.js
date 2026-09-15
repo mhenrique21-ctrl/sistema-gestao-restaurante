@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,7 +8,7 @@ import path from 'node:path';
 // import — daí o import dinâmico.
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'captura-'));
 process.env.CAPTURA_SAIDA = TMP;
-const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas, comandoCopia } = await import('./agent.js');
+const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas, comandoCopia, conferirNomeCompartilhado } = await import('./agent.js');
 const { textoDeEscPos, linhasUteis } = await import('./escpos.js');
 
 test('a comanda de teste volta legível depois de virar bytes de impressora', () => {
@@ -115,6 +115,45 @@ test('nome de impressora COM ESPAÇO chega inteiro no copy', () => {
   assert.ok(cmd.startsWith('copy '), 'a linha não pode começar com aspas');
   // E o /b continua lá: sem ele o 0x1A do ESC/POS vira fim de arquivo.
   assert.ok(cmd.includes(' /b '));
+});
+
+describe('o nome da impressora é conferido na SUBIDA, não na primeira comanda', () => {
+  // Numa instalação real o config ficou com o nome de exemplo (TERMICA)
+  // enquanto a impressora se chamava ELGIN i8. O agente subiu anunciando
+  // "repassando para \\localhost\TERMICA" e só falhou quando a comanda chegou.
+  const DA_LOJA = ['VIRTUAL', 'EPSON COZINHA', 'EPSON BALCAO', 'ELGIN i8'];
+
+  test('nome que existe passa', () => {
+    assert.equal(conferirNomeCompartilhado('ELGIN i8', DA_LOJA).ok, true);
+  });
+
+  test('maiúscula não reprova — o Windows não diferencia', () => {
+    assert.equal(conferirNomeCompartilhado('elgin i8', DA_LOJA).ok, true);
+  });
+
+  test('o nome de exemplo é reprovado, com a lista do que existe', () => {
+    const r = conferirNomeCompartilhado('TERMICA', DA_LOJA);
+    assert.equal(r.ok, false);
+    assert.equal(r.motivo, 'ausente');
+    assert.deepEqual(r.candidatos, DA_LOJA, 'a tela precisa dizer quais existem');
+  });
+
+  test('espaço a menos vira sugestão do nome certo, não uma lista', () => {
+    // "ELGINi8" é erro de digitação, não impressora errada — dizer QUAL é o
+    // nome poupa uma ida ao impressoras.bat.
+    const r = conferirNomeCompartilhado('ELGINi8', DA_LOJA);
+    assert.equal(r.motivo, 'quase');
+    assert.deepEqual(r.candidatos, ['ELGIN i8']);
+  });
+
+  test('sem conseguir listar, não acusa nada', () => {
+    // PowerShell bloqueado não pode virar um alarme falso a cada subida.
+    assert.equal(conferirNomeCompartilhado('ELGIN i8', []).ok, true);
+  });
+
+  test('nome vazio é reprovado', () => {
+    assert.equal(conferirNomeCompartilhado('   ', DA_LOJA).ok, false);
+  });
 });
 
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));

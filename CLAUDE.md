@@ -246,6 +246,31 @@ guardada e avisada na tela — o leitor nasce do primeiro `.bin` real, como o do
 fonte sem rótulo) continua valendo: quem já instalou não é obrigado a
 reconfigurar. Sem rótulo, a origem sai do texto.
 
+#### Lições da instalação real (15/09/2026, PC do caixa)
+
+A comanda sai na **ELGIN i8** (USB001). As duas EPSON da loja são de REDE
+(COZINHA 192.168.100.180, BALCAO 192.168.100.88) e ficam como alternativa.
+
+⚠️ **Nome de impressora com ESPAÇO é o normal**, não a exceção. O `copy /b` ia
+sem aspas: o cmd leria `ELGIN` como destino e `i8` como um segundo arquivo de
+origem. O comando vai inteiro num argumento, **começando por `copy`** — com
+`cmd /c`, linha que começa com aspas cai na regra de remoção de aspas do cmd.
+
+⚠️ **O nome do compartilhamento é conferido na SUBIDA** (`conferirNomeCompartilhado`,
+com testes). O config ficou com o nome de EXEMPLO (`TERMICA`); o agente subiu
+anunciando "repassando para `\\localhost\TERMICA`" e só falhou quando a
+comanda chegou — o pior momento possível. Difere só por caixa/espaço? Sugere o
+nome certo. **Avisa, nunca impede de subir:** a captura não depende do repasse.
+
+⚠️ **`capturas/exemplo.bin` nunca existiu** — `capturas/` está no `.gitignore`,
+então numa instalação nova a pasta nem é criada, e o README mandava testar com
+ele. O teste do repasse é o **`papel.bat`**: manda a comanda de teste direto pra
+impressora, sem captura, sem agente rodando, sem arquivo de exemplo.
+
+⚠️ **PowerShell exige `.\` para rodar um `.bat` da pasta atual**, e `node
+agent.js` chamado na mão **não carrega o `config.bat`** — foi assim que a
+instalação travou duas vezes seguidas. Os `.bat` são feitos para dois cliques.
+
 ⚠️ Intermediário, nunca substituto: a cozinha depende daquele papel, e o
 primeiro pedido sem comanda acabaria com a confiança na ponte. Falha no repasse
 vira aviso, não interrupção da captura — o `.bin` fica guardado pra reimprimir.

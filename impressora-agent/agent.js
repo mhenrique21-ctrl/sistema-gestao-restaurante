@@ -326,6 +326,53 @@ function avisarDestino() {
   else log('   ⚠️  nenhum repasse configurado: a cozinha ficará SEM PAPEL.');
 }
 
+// Compara o nome configurado com os compartilhamentos que existem de verdade.
+//
+// ⚠️ Isto existe porque numa instalação real o config ficou com um nome de
+// EXEMPLO (`TERMICA`) enquanto a impressora se chamava `ELGIN i8`. O agente
+// subiu anunciando alegremente "repassando para \\localhost\TERMICA" e só
+// falhou quando a primeira comanda chegou — que é o pior momento possível pra
+// descobrir. O nome errado é conhecido no instante em que o agente sobe.
+export function conferirNomeCompartilhado(nome, shareNames) {
+  const alvo = String(nome || '').trim();
+  if (!alvo) return { ok: false, motivo: 'vazio', candidatos: [] };
+  const lista = (shareNames || []).map((x) => String(x || '').trim()).filter(Boolean);
+  if (!lista.length) return { ok: true, motivo: 'sem-lista', candidatos: [] };
+  const igual = (a, b) => a.toLowerCase() === b.toLowerCase();
+  if (lista.some((x) => igual(x, alvo))) return { ok: true, motivo: 'achou', candidatos: [] };
+  // Difere só por caixa ou espaço? É erro de digitação, não impressora errada —
+  // e dizer QUAL é o nome certo poupa uma ida ao impressoras.bat.
+  const semEspaco = (x) => x.toLowerCase().replace(/\s+/g, '');
+  const quase = lista.filter((x) => semEspaco(x) === semEspaco(alvo));
+  return quase.length
+    ? { ok: false, motivo: 'quase', candidatos: quase }
+    : { ok: false, motivo: 'ausente', candidatos: lista };
+}
+
+// ⚠️ Avisa, NUNCA impede de subir. A captura não depende do repasse, e um
+// agente que se recusa a rodar por causa do nome da impressora deixaria de
+// guardar pedidos que ele guardaria de qualquer jeito.
+function conferirDestino() {
+  if (!IMPRESSORA_WIN) return;
+  const ps = 'Get-Printer | Where-Object { $_.ShareName } | Select-Object -ExpandProperty ShareName';
+  execFile('powershell', ['-NoProfile', '-Command', ps], (err, out) => {
+    if (err) return;   // sem PowerShell não dá pra conferir; o repasse dirá.
+    const nomes = String(out).split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    const r = conferirNomeCompartilhado(IMPRESSORA_WIN, nomes);
+    if (r.ok) return;
+    log('');
+    log(`   ⚠️  NENHUMA impressora compartilhada se chama "${IMPRESSORA_WIN}".`);
+    if (r.motivo === 'quase') {
+      log(`      Você quis dizer "${r.candidatos[0]}"? (diferença de maiúscula ou espaço)`);
+    } else {
+      log(`      Compartilhadas neste PC: ${r.candidatos.join(' · ') || '(nenhuma)'}`);
+    }
+    log('      Corrija IMPRESSORA_WINDOWS no config.bat e reabra o iniciar.bat —');
+    log('      do jeito que está, a captura funciona mas a comanda NÃO sai no papel.');
+    log('');
+  });
+}
+
 // ── Modo pasta: o Windows grava, o agente lê e devolve pro papel ────────────
 // Arquivo recém-criado costuma estar sendo escrito ainda. Ler cedo demais pega
 // meia comanda, e meia comanda é pior que nenhuma: parece um pedido válido.
@@ -525,6 +572,7 @@ if (!chamadoDireto) {
     process.exit(1);
   }
   avisarDestino();
+  conferirDestino();
   for (const fonte of FONTES) (fonte.tipo === 'pasta' ? modoPasta : modoRede)(fonte);
 }
 
