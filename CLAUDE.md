@@ -872,6 +872,37 @@ um botão de excluir.
 parte, na Conferência e na linha da folha. As que já existiam não têm o vínculo,
 e adivinhar de quem é cada uma seria chute.
 
+### Dois comandos de admin — Configurações → Usuários
+
+| botão | carimbo | o que faz |
+|---|---|---|
+| Desconectar todos os aparelhos | `sessoesValidasApos` | derruba a sessão: todo mundo cai na senha |
+| Atualizar todos os aparelhos | `recarregarApos` | recarrega a página: todo mundo passa a rodar a versão publicada |
+
+⚠️ **Deslogar NÃO recarrega.** Depois de digitar a senha o aparelho segue com o
+mesmo código antigo na memória. Quando o motivo de derrubar todo mundo é uma
+correção recém-publicada — como a da armadilha nº 0 — é o segundo botão que
+resolve; o primeiro só pede senha de novo para o mesmo bundle com bug.
+
+Os dois carimbos vencem **pelo MAIOR** nas duas fusões, nunca pelo incoming: um
+aparelho postando sua cópia anterior desfaria a ordem que o admin acabou de dar
+— e é justamente o aparelho desatualizado o alvo dela.
+
+⚠️ `recarregarApos` é comparado com **`ABA_ABERTA_EM`**, o instante em que a aba
+carregou o código. Depois do reload a marca é nova e a ordem antiga não dispara
+de novo — não há laço.
+
+⚠️ A recarga **espera 10 segundos** e mostra a contagem. Recarregar na hora faria
+o operador perder o que estava digitando — mesmo cuidado do aviso de versão
+nova, que só avisa e nunca recarrega sozinho.
+
+**Aviso de versão nova** (`/api/versao`, a cada 2 min): faixa cognac no topo,
+"Versão nova disponível — toque para atualizar". É passiva de propósito. Quando
+o `recarregarApos` está valendo, a faixa vermelha da ordem do admin substitui a
+de versão — duas faixas empilhadas seriam ruído.
+
+---
+
 ---
 
 ## 7. Períodos — três conceitos diferentes

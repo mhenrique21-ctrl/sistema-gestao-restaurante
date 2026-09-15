@@ -237,6 +237,16 @@ export function mergeDocument(existing, incoming) {
   );
   if (maiorCarimbo) merged.config.sessoesValidasApos = maiorCarimbo;
 
+  // recarregarApos ("atualizar todos") tem a mesma natureza: é ordem do admin,
+  // e um aparelho postando sua cópia anterior desfaria a ordem que ele acabou
+  // de dar — justamente para os aparelhos que ainda rodam código velho, que
+  // são os que precisam recarregar.
+  const maiorRecarga = Math.max(
+    existing.config?.recarregarApos || 0,
+    afterLista.config?.recarregarApos || 0
+  );
+  if (maiorRecarga) merged.config.recarregarApos = maiorRecarga;
+
 
   // Categorias do Financeiro excluídas. Sem o tombstone unido aqui, o aparelho
   // que ainda não sabe da exclusão reenvia a categoria no próximo POST e ela

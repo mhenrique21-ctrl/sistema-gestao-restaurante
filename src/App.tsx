@@ -297,6 +297,10 @@ const initialState = { CONFRARIA: mkDb(), SEAMA: mkDb() };
 // em localStorage, não em db.config — por isso o flag módulo-level, mesmo
 // padrão de _impressaoCfg, atualizado a cada render do App().
 let _modoDiscreto=false;
+// Instante em que ESTA aba carregou o código. É contra ele que a ordem de
+// "atualizar todos" é comparada — depois de recarregar, a marca é nova e a
+// ordem antiga não dispara de novo.
+const ABA_ABERTA_EM = Date.now();
 const fmtMoney  = (v) => _modoDiscreto?"R$ ••••":(parseFloat(v)||0).toLocaleString("pt-BR",{timeZone:TZ,style:"currency",currency:"BRL"});
 // Quantidade, não dinheiro: saldo de estoque aceita fração (2,5 kg) mas casa
 // decimal à toa polui a tela — 47 un não precisa virar "47,000". Corta os zeros
@@ -1866,6 +1870,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
     {
       const maior=Math.max(s.config?.sessoesValidasApos||0,p.config?.sessoesValidasApos||0);
       if(maior)next[emp].config.sessoesValidasApos=maior;
+      // recarregarApos tem a mesma natureza: ordem do admin, vence o mais
+      // recente dos dois lados. Um aparelho com bundle velho postando sua
+      // cópia anterior desfaria a ordem — e é justamente ele o alvo dela.
+      const maiorRec=Math.max(s.config?.recarregarApos||0,p.config?.recarregarApos||0);
+      if(maiorRec)next[emp].config.recarregarApos=maiorRec;
     }
   });
   return migrateDb(next);
@@ -1897,6 +1906,7 @@ export default function App() {
   });
   const [login,setLogin]   = useState<{role:string,label:string,empresa?:string}|null>(()=>lerLoginSalvo());
   const [versaoNova,setVersaoNova] = useState(false);
+  const [recargaEm,setRecargaEm] = useState<number|null>(null);
   const [tab,setTab]       = useState("dashboard");
   const [pendingSub,setPendingSub]=useState<string|null>(null);
   const [expandedMenu,setExpandedMenu]=useState<string|null>(null);
@@ -2207,6 +2217,23 @@ export default function App() {
   const carimboSessao=Math.max(
     state.CONFRARIA?.config?.sessoesValidasApos||0,
     state.SEAMA?.config?.sessoesValidasApos||0);
+  // "Atualizar todos os aparelhos": o admin carimba a hora e toda aba aberta
+  // ANTES disso recarrega. Compara com o instante em que a aba carregou, então
+  // depois do reload o carimbo já é mais antigo e não há laço.
+  //
+  // ⚠️ NÃO recarrega na hora: dá 10 segundos e mostra a contagem. Recarregar no
+  // meio de um lançamento faria o operador perder o que estava digitando —
+  // mesmo cuidado do aviso de versão nova, que só avisa.
+  const carimboRecarga=Math.max(
+    state.CONFRARIA?.config?.recarregarApos||0,
+    state.SEAMA?.config?.recarregarApos||0);
+  useEffect(()=>{
+    if(!carimboRecarga||carimboRecarga<=ABA_ABERTA_EM)return;
+    setRecargaEm(Date.now()+10000);
+    const t=setTimeout(()=>window.location.reload(),10000);
+    return ()=>clearTimeout(t);
+  },[carimboRecarga]);
+
   useEffect(()=>{
     if(!carimboSessao||!login)return;
     const salvo=lerLoginSalvo();
@@ -2343,7 +2370,14 @@ export default function App() {
       {/* Barra de versão nova. Fica no topo, acima de tudo, mas não bloqueia:
           quem está no meio de um lançamento continua o que estava fazendo e
           atualiza quando puder. */}
-      {versaoNova&&<div onClick={()=>window.location.reload()} role="button" tabIndex={0}
+      {recargaEm&&<div onClick={()=>window.location.reload()} role="button" tabIndex={0}
+        onKeyDown={(e:any)=>{if(e.key==="Enter"||e.key===" ")window.location.reload();}}
+        style={{position:"sticky",top:0,zIndex:501,cursor:"pointer",display:"flex",alignItems:"center",
+          justifyContent:"center",gap:8,padding:"10px 14px",background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",
+          fontSize:13,fontWeight:700,textAlign:"center" as const}}>
+        🔄 O administrador pediu para atualizar — recarregando em instantes. Toque para atualizar agora.
+      </div>}
+      {versaoNova&&!recargaEm&&<div onClick={()=>window.location.reload()} role="button" tabIndex={0}
         onKeyDown={(e:any)=>{if(e.key==="Enter"||e.key===" ")window.location.reload();}}
         style={{position:"sticky",top:0,zIndex:500,cursor:"pointer",display:"flex",alignItems:"center",
           justifyContent:"center",gap:8,padding:"10px 14px",background:"var(--acc)",color:"#FFFFFF",
@@ -20957,6 +20991,29 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         }} style={{background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",padding:"11px",width:"100%",fontSize:13,fontWeight:700}}>
           Desconectar todos os aparelhos
         </button>
+
+        {/* Deslogar NÃO recarrega: depois de digitar a senha o aparelho segue
+            com o mesmo código antigo na memória. Quando o motivo de derrubar
+            todo mundo é justamente uma correção recém-publicada, é este botão
+            que resolve. */}
+        <div style={{borderTop:"1px solid var(--border)",marginTop:14,paddingTop:14}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>🔄 Atualizar todos os aparelhos</div>
+          <div className="muted" style={{fontSize:11.5,marginBottom:10}}>
+            Recarrega a página em todo aparelho com o app aberto, para todos passarem a rodar a versão publicada.
+            Ninguém perde o login — só a página recarrega, com <b>10 segundos</b> de aviso na tela para quem estiver
+            no meio de um lançamento terminar. Aparelho fechado pega a versão nova ao abrir.
+          </div>
+          <button className="btn" onClick={()=>{
+            if(!confirm("Mandar TODOS os aparelhos recarregarem a página?\n\nCada um avisa por 10 segundos antes. O login é mantido."))return;
+            const agora=Date.now();
+            (setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),recarregarApos:agora}}));
+          }} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"11px",width:"100%",fontSize:13,fontWeight:700}}>
+            Atualizar todos os aparelhos
+          </button>
+          {db.config?.recarregarApos&&<div className="muted" style={{fontSize:10.5,marginTop:7}}>
+            Última vez: {new Date(db.config.recarregarApos).toLocaleString("pt-BR",{timeZone:TZ})}
+          </div>}
+        </div>
         {db.config?.sessoesValidasApos&&<div className="muted" style={{fontSize:10.5,marginTop:7}}>
           Última vez: {new Date(db.config.sessoesValidasApos).toLocaleString("pt-BR",{timeZone:TZ})}
         </div>}

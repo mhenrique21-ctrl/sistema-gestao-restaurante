@@ -500,3 +500,17 @@ test('sub-objeto de preferência não é criado do nada', () => {
   assert.ok(!('aparenciaApp' in r.config));
   assert.ok(!('coresBotoes' in r.config));
 });
+
+test('a ordem de atualizar todos vence o carimbo antigo', () => {
+  // Mesma natureza do "desconectar todos": um aparelho postando sua cópia
+  // anterior desfaria a ordem — e é justamente ele, com bundle velho, o alvo.
+  const r = mergeDocument({ config: { recarregarApos: 5000 } }, { config: { recarregarApos: 0 } });
+  assert.equal(r.config.recarregarApos, 5000);
+  const r2 = mergeDocument({ config: { recarregarApos: 5000 } }, { config: { recarregarApos: 9000 } });
+  assert.equal(r2.config.recarregarApos, 9000);
+});
+
+test('sem ordem de atualizar, o campo não é inventado', () => {
+  const r = mergeDocument({ config: { snAliquota: 6 } }, { config: { snAliquota: 6 } });
+  assert.ok(!('recarregarApos' in r.config));
+});
