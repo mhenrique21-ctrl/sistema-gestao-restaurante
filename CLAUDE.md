@@ -785,6 +785,37 @@ entrar no tombstone**, e voltava no poll seguinte piscando na tela de todos.
 ela marca como excluídos saem do estado que está sendo escrito — senão apagaria
 item que chegou de outro operador entre o clique e a gravação.
 
+#### Fecha sozinha quando acaba
+
+Marcado o ÚLTIMO pendente, a lista está finalizada: ela se arquiva sozinha
+depois de **10 segundos de contagem na tela**, e é o arquivamento que apaga os
+comprados — "Limpar" e "Fechar Lista" deixaram de ser passo manual obrigatório
+(os dois botões continuam, para fechar antes da hora).
+
+⚠️ **A espera não é enfeite.** Um toque errado no último item tiraria da tela,
+sem aviso, a lista que a pessoa ainda está conferindo. Mesmo cuidado da ordem
+de recarregar do admin (§6).
+
+⚠️ **Cancelar vale pra lista inteira**, não só pra aquela contagem
+(`autoCanceladaRef` guarda o `listaAtualId`). Quem cancelou disse "ainda não
+terminei"; destravar a cada desmarcar/marcar faria a contagem voltar sem fim.
+
+⚠️ **O id do pedido é DETERMINÍSTICO: `arq-<listaAtualId>`.** Todo aparelho com
+a lista aberta arquiva ao mesmo tempo — com `uid()` cada um criaria um registro
+e o Arquivo mostraria a mesma compra três vezes. Derivado da lista, a união por
+id colapsa os três num só.
+
+⚠️ `arquivarLista` monta o pedido a partir do **`d` da gravação**. O
+`listaCompras:[]` cru de antes apagava também o item que outro operador acabou
+de adicionar: sem tombstone ele voltava no poll, já órfão da lista fechada.
+
+⚠️ `listaAtualId`/`listaAtualAbertaEm` passaram a ser fundidos **no cliente
+também** (antes vinham crus do servidor): durante os ~5s do save direto, o poll
+devolvia o id antigo e os itens reapareciam — "fechei e voltou sozinho". Vence
+o `abertaEm` estritamente MAIOR; **no empate o servidor vence**, porque a
+inicialização de fallback carimba época zero em todos os aparelhos e com `>=`
+nenhum convergiria.
+
 ### Outros
 Lista de Compras · Produção (fichas técnicas) · Encomendas · RH · Fluxo de Caixa ·
 Configurações de PDV (ponte com os dois PDVs) · Cardápio TV · Backups

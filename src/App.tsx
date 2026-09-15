@@ -1815,6 +1815,25 @@ const mergeFromServer=(prev:any,updates:any)=>{
       merged.push(st>lt?server:local);
     });
     next[emp].listaCompras=merged;
+    // listaAtualId/listaAtualAbertaEm: vence quem abriu a lista MAIS RECENTE,
+    // a mesma regra do mergeListaCompras no servidor. Vinham crus do `{...s}`:
+    // durante os ~5s em que o save direto do fechamento roda, o poll devolvia
+    // o id ANTIGO e os itens (ainda no servidor) reapareciam como se fossem da
+    // lista atual — "fechei e voltou sozinho". Com a regra dos dois lados, o
+    // fechamento local vence até o POST chegar, e o de outro aparelho vence
+    // aqui, que é como os dois convergem pra uma lista só.
+    {
+      const sAb=s.listaAtualAbertaEm?Date.parse(s.listaAtualAbertaEm):0;
+      const pAb=p.listaAtualAbertaEm?Date.parse(p.listaAtualAbertaEm):0;
+      // ⚠️ Estritamente MAIOR: no empate o servidor vence. A inicialização de
+      // fallback carimba época ZERO em todos os aparelhos (§3), então com `>=`
+      // cada um manteria o id que inventou, nenhum convergiria, e os itens do
+      // outro virariam órfãos sem ninguém ter fechado lista nenhuma.
+      if(p.listaAtualId&&pAb>sAb){
+        next[emp].listaAtualId=p.listaAtualId;
+        next[emp].listaAtualAbertaEm=p.listaAtualAbertaEm;
+      }
+    }
     // listaDeletedIds: unir local e servidor
     next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-5000);
     // listaCategorias, listaRuas, ruaCatMap: unir
@@ -9212,28 +9231,83 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     });
   };
 
-  // Fechar lista: única forma de arquivar — sempre manual, sempre pelo Admin.
-  // Gera um listaAtualId novo, que é o que "abre" a próxima lista e garante que
-  // itens adicionados depois nunca se misturem com o pedido recém-arquivado.
+  // Arquivar a lista: grava o pedido no histórico, esvazia a lista e abre uma
+  // lista nova. Dois caminhos chegam aqui — o botão do Admin e o fechamento
+  // AUTOMÁTICO, quando o último item pendente é marcado como comprado.
+  //
+  // ⚠️ Tudo sai do `d` da GRAVAÇÃO, nunca do render. É a mesma lição do
+  // `limparComprados`: o `listaCompras:[]` cru apagava também o item que outro
+  // operador acabou de adicionar — sem tombstone ele voltava no poll seguinte,
+  // já órfão da lista fechada, e ninguém entendia de onde tinha vindo.
+  //
+  // ⚠️ O id do pedido é DETERMINÍSTICO (`arq-<listaAtualId>`). No fechamento
+  // automático todos os aparelhos com a lista aberta disparam praticamente
+  // juntos; com `uid()` cada um criaria um registro próprio e o Arquivo
+  // mostraria a mesma compra três vezes. Derivado da lista, a união por id
+  // (`mergeListaCompras`) colapsa os três num só.
+  const arquivarLista=(auto:boolean)=>{
+    (setDbAndSave||setDb)((d:any)=>{
+      const atual=d.listaAtualId||listaAtualId;
+      const itens=(d.listaCompras||[]).filter((i:any)=>!i.listaId||i.listaId===atual);
+      if(!itens.length)return d;
+      const ids=itens.map((i:any)=>i.id);
+      ids.forEach((id:string)=>_listaDeletados.add(id));
+      const pedido={
+        id:"arq-"+atual,
+        listaId:atual,
+        data:today(),
+        automatico:!!auto,
+        itens:itens.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,quantidadeComprada:i.quantidadeComprada??null,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),
+        criadoEm:new Date().toISOString(),
+      };
+      return{
+        ...d,
+        pedidosLista:[pedido,...(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pedido.id)],
+        listaCompras:(d.listaCompras||[]).filter((i:any)=>!ids.includes(i.id)),
+        listaAtualId:uid(),
+        listaAtualAbertaEm:new Date().toISOString(),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
+      };
+    });
+  };
+
   const fecharLista=()=>{
     if(!isAdmin)return;
     if(!lista.length)return alert("A lista está vazia.");
     if(!confirm(`Fechar a lista atual (${lista.length} item(ns)) e arquivar?\nUma lista nova e vazia será aberta em seguida.`))return;
-    const todosIds=lista.map((i:any)=>i.id);
-    todosIds.forEach(id=>_listaDeletados.add(id));
-
-    const pedido={id:uid(),data:today(),itens:lista.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,quantidadeComprada:i.quantidadeComprada??null,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),criadoEm:new Date().toISOString()};
-    const novoListaId=uid();
-    (setDbAndSave||setDb)((d:any)=>({
-      ...d,
-      pedidosLista:[pedido,...(d.pedidosLista||[])],
-      listaCompras:[],
-      listaAtualId:novoListaId,
-      listaAtualAbertaEm:new Date().toISOString(),
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...todosIds])].slice(-5000),
-    }));
+    arquivarLista(false);
     alert("✅ Lista fechada e arquivada! Uma lista nova foi aberta.");
   };
+
+  // Fechamento AUTOMÁTICO: quando o último pendente é marcado, a lista está
+  // finalizada — ela se arquiva sozinha e os comprados sabem sair de cena
+  // junto (o arquivamento é que apaga os itens; "Limpar" deixa de ser um
+  // passo manual obrigatório).
+  //
+  // ⚠️ Espera SEGUNDOS_AUTO_FECHAR com a contagem na tela, exatamente como a
+  // ordem de recarregar do admin (§6 do CLAUDE.md). Arquivar no instante do
+  // toque tiraria da tela, sem aviso, a lista que a pessoa ainda está
+  // conferindo — e um toque errado no último item é tudo o que precisa.
+  //
+  // ⚠️ Cancelar vale pra ESTA lista inteira (`autoCanceladaRef` guarda o
+  // listaAtualId), não só pra esta contagem: quem cancelou disse "ainda não
+  // terminei". Destravar a cada desmarcar/marcar faria a contagem voltar a
+  // aparecer e a ser cancelada sem fim. O botão do Admin continua lá.
+  const SEGUNDOS_AUTO_FECHAR=10;
+  const [autoFecharEm,setAutoFecharEm]=useState<number|null>(null);
+  const autoCanceladaRef=useRef<string|null>(null);
+  const arquivarRef=useRef(arquivarLista);
+  arquivarRef.current=arquivarLista;
+  const listaFinalizada=lista.length>0&&pendentes.length===0;
+  useEffect(()=>{
+    if(!listaFinalizada||autoCanceladaRef.current===listaAtualId){setAutoFecharEm(null);return;}
+    const fim=Date.now()+SEGUNDOS_AUTO_FECHAR*1000;
+    setAutoFecharEm(SEGUNDOS_AUTO_FECHAR);
+    const tick=setInterval(()=>setAutoFecharEm(Math.max(0,Math.ceil((fim-Date.now())/1000))),250);
+    const fechar=setTimeout(()=>{setAutoFecharEm(null);arquivarRef.current(true);},SEGUNDOS_AUTO_FECHAR*1000);
+    return()=>{clearInterval(tick);clearTimeout(fechar);};
+  },[listaFinalizada,listaAtualId]);
+  const cancelarAutoFechar=()=>{autoCanceladaRef.current=listaAtualId;setAutoFecharEm(null);};
 
   // Órfãos NUNCA voltam pra lista atual — isso misturaria itens de uma lista
   // (dia) antiga com os de hoje, o que é exatamente o que não pode acontecer.
@@ -10658,6 +10732,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           {editId?"💾 Atualizar":"✅ Adicionar à Lista"}
         </button>
       </div>
+    </div>}
+
+    {/* Lista finalizada: arquiva sozinha depois da contagem. Texto escrito
+        além da cor — a paleta Tinta é monocromática (§9 do CLAUDE.md). */}
+    {autoFecharEm!==null&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"11px 13px",background:"var(--successBg)",borderRadius:10,border:"1px solid #22C55E55",fontSize:12,color:"var(--successText)"}}>
+      <span style={{flex:1,fontWeight:600}}>
+        ✅ Lista finalizada — {lista.length} item(ns) comprados. Arquivando em <b>{autoFecharEm}s</b> e abrindo uma lista nova.
+      </span>
+      <button onClick={cancelarAutoFechar} className="btn" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
+        Cancelar
+      </button>
     </div>}
 
     {/* Busca + ações */}

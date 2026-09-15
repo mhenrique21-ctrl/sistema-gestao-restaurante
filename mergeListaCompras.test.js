@@ -179,4 +179,62 @@ describe('mergeListaCompras', () => {
     const result = mergeListaCompras(existing, incoming);
     assert.deepEqual(result.listaCompras.map((i) => i.id), ['a']);
   });
+  // Fechamento AUTOMÁTICO da lista (App.tsx, `arquivarLista`): quando o último
+  // item pendente é marcado, TODO aparelho com a lista aberta arquiva. O id do
+  // pedido é derivado do listaAtualId justamente pra isso — com uid() cada um
+  // criaria um registro e o Arquivo mostraria a mesma compra várias vezes.
+  describe('fechamento automático: vários aparelhos arquivam a MESMA lista', () => {
+    const pedidoDe = (listaId) => ({
+      id: 'arq-' + listaId, listaId, data: '2026-09-15', automatico: true,
+      itens: [{ nome: 'Leite', quantidade: 2, comprado: true }],
+      criadoEm: '2026-09-15T12:00:00Z',
+    });
+
+    test('dois aparelhos fechando juntos geram UM pedido, não dois', () => {
+      const aparelhoA = {
+        pedidosLista: [pedidoDe('L1')], listaCompras: [],
+        listaAtualId: 'N-A', listaAtualAbertaEm: '2026-09-15T12:00:00.100Z',
+        listaDeletedIds: ['i1'],
+      };
+      const aparelhoB = {
+        pedidosLista: [pedidoDe('L1')], listaCompras: [],
+        listaAtualId: 'N-B', listaAtualAbertaEm: '2026-09-15T12:00:00.300Z',
+        listaDeletedIds: ['i1'],
+      };
+      const result = mergeListaCompras(aparelhoA, aparelhoB);
+      assert.equal(result.pedidosLista.length, 1, 'id derivado do listaAtualId colapsa os dois arquivamentos');
+      assert.equal(result.pedidosLista[0].id, 'arq-L1');
+      assert.equal(result.listaAtualId, 'N-B', 'a lista aberta mais tarde é a que fica valendo');
+    });
+
+    test('o item comprado não volta: sai da lista e entra no tombstone', () => {
+      const servidorAtrasado = {
+        listaCompras: [{ id: 'i1', nome: 'Leite', comprado: true, updatedAt: 5 }],
+        listaAtualId: 'L1', listaAtualAbertaEm: '2026-09-15T08:00:00Z',
+        listaDeletedIds: [],
+      };
+      const quemFechou = {
+        pedidosLista: [pedidoDe('L1')], listaCompras: [],
+        listaAtualId: 'N-A', listaAtualAbertaEm: '2026-09-15T12:00:00Z',
+        listaDeletedIds: ['i1'],
+      };
+      const result = mergeListaCompras(servidorAtrasado, quemFechou);
+      assert.deepEqual(result.listaCompras, [], 'sem o tombstone o item voltaria do lado atrasado');
+      assert.equal(result.pedidosLista[0].itens[0].nome, 'Leite', 'o que foi apagado da lista está no arquivo');
+    });
+
+    test('item adicionado DEPOIS do fechamento fica na lista nova', () => {
+      const servidor = {
+        listaCompras: [{ id: 'i9', nome: 'Café', listaId: 'N-A', updatedAt: 9 }],
+        listaAtualId: 'N-A', listaAtualAbertaEm: '2026-09-15T12:00:00Z',
+        listaDeletedIds: ['i1'],
+      };
+      const outro = {
+        listaCompras: [], listaAtualId: 'N-A',
+        listaAtualAbertaEm: '2026-09-15T12:00:00Z', listaDeletedIds: ['i1'],
+      };
+      const result = mergeListaCompras(servidor, outro);
+      assert.deepEqual(result.listaCompras.map((i) => i.id), ['i9']);
+    });
+  });
 });
