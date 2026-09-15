@@ -42,11 +42,31 @@ export function mergeListaCompras(existing, incoming) {
   });
   merged.listaCompras = mergedLista;
 
-  // Arquivamentos (pedidosLista) são só acrescentados, nunca editados —
-  // união por id é suficiente e nunca perde um fechamento de lista.
+  // Arquivamentos (pedidosLista): união por id, mas com os ITENS fundidos
+  // dentro do pedido.
+  //
+  // ⚠️ Antes bastava `map.set(p.id, p)` porque o pedido só nascia inteiro, no
+  // fechamento da lista. Agora que marcar como comprado APAGA o item e o move
+  // pro pedido da lista aberta, o mesmo pedido é escrito muitas vezes, por
+  // aparelhos diferentes: substituir em bloco faria o operador que marcou o
+  // leite perder o café que o outro marcou meio segundo antes — sem erro, sem
+  // log, e só apareceria no arquivo do dia seguinte.
   const pedidosMap = new Map((existing.pedidosLista || []).map((p) => [p.id, p]));
-  (incoming.pedidosLista || []).forEach((p) => pedidosMap.set(p.id, p));
+  (incoming.pedidosLista || []).forEach((p) => {
+    const anterior = pedidosMap.get(p.id);
+    pedidosMap.set(p.id, anterior ? fundirPedido(anterior, p) : p);
+  });
   merged.pedidosLista = [...pedidosMap.values()];
 
   return merged;
+}
+
+// Funde dois pedidos de MESMO id. Os campos escalares vêm do incoming (é a
+// gravação mais nova), menos `fechadoEm`: fechamento já registrado por um lado
+// nunca é desfeito pelo outro. Os itens são unidos por id — é pra isso que o
+// item arquivado preserva o id que tinha na lista.
+function fundirPedido(a, b) {
+  const itens = new Map((a.itens || []).map((i) => [i.id ?? i.nome, i]));
+  (b.itens || []).forEach((i) => itens.set(i.id ?? i.nome, i));
+  return { ...a, ...b, itens: [...itens.values()], fechadoEm: b.fechadoEm || a.fechadoEm };
 }

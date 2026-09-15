@@ -237,4 +237,54 @@ describe('mergeListaCompras', () => {
       assert.deepEqual(result.listaCompras.map((i) => i.id), ['i9']);
     });
   });
+  // Marcar como comprado APAGA o item da lista e o move pro pedido da lista
+  // aberta (`arq-<listaAtualId>`), que vai se enchendo durante a compra. Isso
+  // faz o MESMO pedido ser reescrito o tempo todo, por aparelhos diferentes —
+  // o caso que o `map.set(p.id, p)` de antes resolvia errado.
+  describe('comprado apaga na hora: o pedido da lista aberta se enche aos poucos', () => {
+    const ped = (itens, extra = {}) => ({
+      id: 'arq-L1', listaId: 'L1', data: '2026-09-15',
+      criadoEm: '2026-09-15T09:00:00Z', itens, ...extra,
+    });
+
+    test('dois operadores marcando itens diferentes: o arquivo fica com os DOIS', () => {
+      const servidor = { pedidosLista: [ped([{ id: 'i1', nome: 'Café' }])], listaDeletedIds: ['i1'] };
+      const celular = { pedidosLista: [ped([{ id: 'i2', nome: 'Leite' }])], listaDeletedIds: ['i2'] };
+      const r = mergeListaCompras(servidor, celular);
+      assert.equal(r.pedidosLista.length, 1);
+      assert.deepEqual(r.pedidosLista[0].itens.map((i) => i.nome).sort(), ['Café', 'Leite'],
+        'substituir o pedido em bloco faria um operador apagar o item do outro');
+    });
+
+    test('o item que os dois marcaram não duplica', () => {
+      const servidor = { pedidosLista: [ped([{ id: 'i1', nome: 'Café', quantidadeComprada: 1 }])] };
+      const celular = { pedidosLista: [ped([{ id: 'i1', nome: 'Café', quantidadeComprada: 2 }])] };
+      const r = mergeListaCompras(servidor, celular);
+      assert.equal(r.pedidosLista[0].itens.length, 1);
+      assert.equal(r.pedidosLista[0].itens[0].quantidadeComprada, 2, 'a gravação mais nova (incoming) vence');
+    });
+
+    test('fechamento já registrado não é desfeito por um aparelho atrasado', () => {
+      const fechado = { pedidosLista: [ped([{ id: 'i1', nome: 'Café' }], { fechadoEm: '2026-09-15T18:00:00Z' })] };
+      const atrasado = { pedidosLista: [ped([{ id: 'i1', nome: 'Café' }])] };
+      const r = mergeListaCompras(fechado, atrasado);
+      assert.equal(r.pedidosLista[0].fechadoEm, '2026-09-15T18:00:00Z');
+    });
+
+    test('o item devolvido à lista volta com id NOVO — o tombstone unido apagaria o antigo', () => {
+      // Devolver mantendo o id original cairia aqui: listaDeletedIds é unido
+      // entre os dois lados, então a exclusão do outro aparelho voltaria.
+      const servidor = { listaCompras: [], listaDeletedIds: ['i1'] };
+      const celular = {
+        listaCompras: [{ id: 'novo-1', nome: 'Café', comprado: false, updatedAt: 99 }],
+        listaDeletedIds: ['i1'],
+      };
+      const r = mergeListaCompras(servidor, celular);
+      assert.deepEqual(r.listaCompras.map((i) => i.id), ['novo-1']);
+
+      const comIdAntigo = { listaCompras: [{ id: 'i1', nome: 'Café', updatedAt: 99 }], listaDeletedIds: ['i1'] };
+      assert.deepEqual(mergeListaCompras(servidor, comIdAntigo).listaCompras, [],
+        'com o id original o item seria apagado de novo pela união dos tombstones');
+    });
+  });
 });

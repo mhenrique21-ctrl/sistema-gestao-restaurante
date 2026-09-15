@@ -785,12 +785,43 @@ entrar no tombstone**, e voltava no poll seguinte piscando na tela de todos.
 ela marca como excluídos saem do estado que está sendo escrito — senão apagaria
 item que chegou de outro operador entre o clique e a gravação.
 
-#### Fecha sozinha quando acaba
+#### Comprado APAGA na hora; a lista fecha sozinha quando acaba
 
-Marcado o ÚLTIMO pendente, a lista está finalizada: ela se arquiva sozinha
-depois de **10 segundos de contagem na tela**, e é o arquivamento que apaga os
-comprados — "Limpar" e "Fechar Lista" deixaram de ser passo manual obrigatório
-(os dois botões continuam, para fechar antes da hora).
+Marcar como comprado **apaga o item da lista imediatamente** (decisão do dono).
+Marcado o ÚLTIMO pendente, a lista está finalizada e se arquiva sozinha depois
+de **10 segundos de contagem na tela** — "Limpar" e "Fechar Lista" deixaram de
+ser passo manual obrigatório (os dois botões continuam, para fechar antes).
+
+⚠️ **O pedido do arquivo não nasce mais no fechamento.** O item apagado é
+MOVIDO pro pedido da lista aberta (`arq-<listaAtualId>`), que vai se enchendo
+durante a compra; `arquivarLista` só acrescenta o que sobrou pendente e carimba
+`fechadoEm`. Remontá-lo do zero, como antes, daria um arquivo VAZIO — o que foi
+comprado não está mais na lista pra ser lido.
+
+⚠️ **As duas fusões fundem os ITENS dentro do pedido**, não o pedido em bloco.
+O mesmo pedido é reescrito o tempo todo, por aparelhos diferentes: com
+`map.set(p.id, p)` quem marcasse o leite apagaria o café que o outro marcou meio
+segundo antes. É por isso que o item arquivado **preserva o `id`** que tinha na
+lista.
+
+⚠️ **Devolver um item à lista o recria com `id` NOVO.** `listaDeletedIds` é
+UNIDO entre local e servidor: tirar o id só do lado local não tira do outro, e a
+união ressuscitaria a exclusão — o item voltaria pra tela e sumiria no poll
+seguinte. Com id novo não há exclusão nenhuma a limpar.
+
+⚠️ **O pedido da lista ABERTA fica fora do Arquivo** (`pedidosArquivados`). Ele
+existe desde a primeira marcação, então apareceria como "lista arquivada" no
+meio da compra — com botão de Retomar, que apagaria os pendentes ainda em
+compra. Ele aparece no painel **"✅ N comprado(s) hoje"**, recolhido, dentro da
+própria lista: é o único lugar onde se confere o que já entrou no carrinho e se
+devolve um item marcado por engano.
+
+⚠️ A barra de progresso conta `pendentes + arquivados`. Ler `lista.length` como
+total faria ela andar pra TRÁS a cada item marcado (2/5, 1/4, 0/3).
+
+⚠️ `limparComprados` e `comprados` viraram LEGADO: ninguém mais acumula
+`comprado:true` dentro de `listaCompras`. Ficam para os itens marcados antes da
+mudança, que sem eles ficariam presos na lista.
 
 ⚠️ **A espera não é enfeite.** Um toque errado no último item tiraria da tela,
 sem aviso, a lista que a pessoa ainda está conferindo. Mesmo cuidado da ordem
