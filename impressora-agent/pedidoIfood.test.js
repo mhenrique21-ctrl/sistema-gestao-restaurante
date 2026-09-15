@@ -237,3 +237,85 @@ describe('valores em real', () => {
     assert.equal(valorBR('Cobrar do cliente:'), null);
   });
 });
+
+// Segunda comanda REAL, capturada ao vivo em 15/09/2026 às 16:29 — entrega da
+// PARCEIRA (a de antes era entrega própria). Dados do cliente trocados; o que
+// importa aqui é a FORMA, e ela trouxe três coisas que a primeira não tinha.
+const COMANDA_PARCEIRA = `iFood
+        Confraria Cafe
+           EXPEDICAO
+         PEDIDO: #8271
+       Entrega Parceira
+        CODIGO DE COLETA
+          PARCEIRA: 5977
+Data: 15/09/2026 16:29:39
+Entrega prevista: 17:09
+6 pedidos na sua loja
+Cliente Exemplo
+0800 705 2030 ID: 41921749
+Endereco: Av. Exemplo,
+125
+Comp: Predio
+Bairro: Bairro
+Ref: Ponto de referencia
+Cidade: Macapa - AP - CEP:
+68900260
+ITENS DO PEDIDO (2)
+1x  Combo Folhado de    R$ 19,90
+    frango + Bebida
+    1 Coca-Cola Lata     R$ 0,00
+    350ml
+1x  Agua Mineral Sem     R$ 5,50
+    Gas Indaia 500ml
+--------------------------------
+Valor total do        R$ 25,40
+pedido:
+Taxa de entrega:       R$ 0,00
+Pagamento via iFood: -R$ 25,40
+Cobrar do cliente:     R$ 0,00
+Gestor Web 9.342.0 - Desktop
+8.10.0`;
+
+describe('comanda real de entrega PARCEIRA', () => {
+  const p = lerPedidoIfood(COMANDA_PARCEIRA);
+
+  test('o rótulo do código de coleta quebra em duas linhas', () => {
+    // Saiu "CODIGO DE COLETA" numa linha e "PARCEIRA: 5977" na de baixo. Lendo
+    // só a primeira, o código virava a string "CODIGO DE COLETA" e o número
+    // caía em `naoEntendido` — o entregador chegaria e ninguém teria o código.
+    assert.equal(p.codigoColeta, '5977');
+    assert.equal(p.numero, '8271');
+    assert.match(p.tipoEntrega, /Entrega Parceira/);
+  });
+
+  test('ponto de referência tem campo próprio', () => {
+    // "Ref:" não existia na comanda de teste do iFood.
+    assert.equal(p.referencia, 'Ponto de referencia');
+    assert.equal(p.bairro, 'Bairro');
+  });
+
+  test('complemento de graça é lido como ZERO, não como "sem valor"', () => {
+    // "1 Coca-Cola Lata R$ 0,00" — a bebida que vem no combo. Tratar como não
+    // lido faria a conferência acusar item sem valor em todo combo.
+    const c = p.itens[0].complementos;
+    assert.equal(c.length, 1);
+    assert.equal(c[0].nome, 'Coca-Cola Lata 350ml');
+    assert.equal(c[0].valor, 0);
+  });
+
+  test('nome de item quebrado em duas linhas volta inteiro', () => {
+    assert.deepEqual(p.itens.map((i) => i.nome),
+      ['Combo Folhado de frango + Bebida', 'Agua Mineral Sem Gas Indaia 500ml']);
+    assert.deepEqual(p.itens.map((i) => i.valor), [19.90, 5.50]);
+  });
+
+  test('fecha consigo mesma e não deixa pendência', () => {
+    // 19,90 + 0,00 + 5,50 = 25,40 = repasse 25,40 + cobrança 0,00
+    assert.deepEqual(conferirPedidoIfood(p), []);
+    assert.deepEqual(p.naoEntendido, []);
+  });
+
+  test('"N pedidos na sua loja" é recado do app, não pendência', () => {
+    assert.ok(!p.naoEntendido.some((l) => /pedidos na sua loja/.test(l)));
+  });
+});

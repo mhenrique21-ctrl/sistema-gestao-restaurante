@@ -284,6 +284,23 @@ pendência em todo pedido.
 ⚠️ Valor não lido aparece como **`?` na tela, nunca `R$ 0,00`** — zero diria
 que o pedido não tinha aquele dinheiro.
 
+**O primeiro pedido REAL (entrega parceira) trouxe mais três**, que a comanda
+de teste não tinha — daí a regra de escrever leitor só em cima de comanda real:
+
+⚠️ **O rótulo inteiro pode quebrar**, não só o valor: saiu `CODIGO DE COLETA`
+numa linha e `PARCEIRA: 5977` na de baixo. Lendo só a primeira, o código virava
+a string "CODIGO DE COLETA" e o número caía em `naoEntendido` — o entregador
+chegaria e ninguém teria o código pra conferir.
+
+⚠️ **`Ref:`** (ponto de referência) existe e não aparecia na comanda de teste.
+
+⚠️ **`Primeiro pedido!` e `N pedidos na sua loja` são recado do app pro
+lojista**, não dado do pedido: sem suprimir, viram pendência em toda comanda.
+
+⚠️ Complemento de graça (`1 Coca-Cola Lata R$ 0,00`, a bebida do combo) é lido
+como ZERO, não como "sem valor" — senão a conferência acusaria item sem valor
+em todo combo.
+
 ⚠️ A configuração antiga (`CAPTURA_MODO` + `CAPTURA_PASTA`/`CAPTURA_PORTA`, uma
 fonte sem rótulo) continua valendo: quem já instalou não é obrigado a
 reconfigurar. Sem rótulo, a origem sai do texto.

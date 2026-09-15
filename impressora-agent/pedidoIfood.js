@@ -54,6 +54,7 @@ const MARCAS = [
   ['endereco',         'endereco:'],
   ['complementoEnd',   'comp:'],
   ['bairro',           'bairro:'],
+  ['referencia',       'ref:'],
   ['cidade',           'cidade:'],
   ['formaPagamento',   'pagamento realizado'],
   ['total',            'valor total do'],
@@ -127,7 +128,8 @@ export function lerPedidoIfood(texto) {
     loja: null, numero: null, localizador: null, cliente: null,
     tipoEntrega: null, prioritario: false, codigoColeta: null,
     data: null, previsao: null,
-    endereco: null, complementoEndereco: null, bairro: null, cidade: null,
+    endereco: null, complementoEndereco: null, bairro: null,
+    referencia: null, cidade: null,
     itens: [], formaPagamento: null,
     total: null, taxaServico: null, taxaEntrega: null,
     pagoPeloApp: null, cobrarDoCliente: null,
@@ -253,12 +255,25 @@ export function lerPedidoIfood(texto) {
       i += 1;
       continue;
     }
-    if (campo === 'codigoColeta') { p.codigoColeta = depoisDoRotulo(l) || null; i += 1; continue; }
+    if (campo === 'codigoColeta') {
+      // ⚠️ O rótulo INTEIRO quebra quando o papel aperta: num pedido real saiu
+      // "CODIGO DE COLETA" numa linha e "PARCEIRA: 5977" na de baixo. Lendo só
+      // a primeira, o código virava a string "CODIGO DE COLETA" e o número
+      // caía em `naoEntendido` — o entregador chegaria e ninguém teria o
+      // código pra conferir.
+      const aqui = (l.match(/(\d{2,})\s*$/) || [])[1];
+      if (aqui) { p.codigoColeta = aqui; i += 1; continue; }
+      const abaixo = (String(linhas[i + 1] || '').match(/(\d{2,})\s*$/) || [])[1];
+      if (abaixo) { p.codigoColeta = abaixo; i += 2; continue; }
+      i += 1;
+      continue;
+    }
     if (campo === 'data') { p.data = depoisDoRotulo(l) || null; i += 1; continue; }
     if (campo === 'previsao') { p.previsao = depoisDoRotulo(l).replace(/[<>]+/g, '').trim() || null; i += 1; continue; }
     if (campo === 'localizador') { p.localizador = depoisDoRotulo(l) || null; i += 1; continue; }
     if (campo === 'complementoEnd') { p.complementoEndereco = depoisDoRotulo(l) || null; i += 1; continue; }
     if (campo === 'bairro') { p.bairro = depoisDoRotulo(l) || null; i += 1; continue; }
+    if (campo === 'referencia') { p.referencia = depoisDoRotulo(l) || null; i += 1; continue; }
     if (campo === 'endereco') {
       const [partes, j] = ateProximoRotulo(i + 1, depoisDoRotulo(l));
       p.endereco = partes.join(' ') || null;
@@ -286,7 +301,10 @@ export function lerPedidoIfood(texto) {
     const t = l.trim();
     const jaUsada = fold(t) === 'ifood' || t === p.loja || t === p.cliente
       || (p.tipoEntrega && fold(t).replace(/[|+\s]+/g, ' ').trim() === fold(p.tipoEntrega))
-      || /expedicao|prioritario|confirme a entrega|primeiro pedido|turbo/.test(fold(t))
+      // "Primeiro pedido!" e "6 pedidos na sua loja" são recado do app pro
+      // lojista, não dado do pedido — pendência falsa em toda comanda.
+      || /expedicao|prioritario|confirme a entrega|turbo/.test(fold(t))
+      || /^(primeiro pedido|\d+ pedidos? na sua loja)/.test(fold(t))
       || /\bid:\s*\d+/.test(fold(t));
     if (!jaUsada) p.naoEntendido.push(t);
     i += 1;
