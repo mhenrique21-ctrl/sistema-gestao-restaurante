@@ -29,6 +29,7 @@ import { pngMono } from './png.js';
 import { lerPedido99, conferirPedido99 } from './pedido99.js';
 import { lerPedidoIfood, conferirPedidoIfood } from './pedidoIfood.js';
 import { resolverOrigem, rotuloPlataforma, temLeitor } from './plataforma.js';
+import { lancamentoDoDia } from './lancamentoVendas.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -97,6 +98,15 @@ const DESTINO_P      = parseInt(process.env.IMPRESSORA_PORTA, 10) || 9100;
 // conexão aberta pro pedido seguinte. Sem este silêncio, dois pedidos viram um
 // arquivo só; curto demais, um pedido vira dois. 1,5s é o meio termo.
 const SILENCIO  = parseInt(process.env.CAPTURA_SILENCIO_MS, 10) || 1500;
+
+// ── Envio pro Gestão ────────────────────────────────────────────────────────
+const GESTAO_URL = (process.env.GESTAO_URL || 'https://gestao.confrariacafe.com').replace(/\/$/, '');
+const SECRET     = process.env.SEAMA_SERVICE_SECRET || '';
+const EMPRESA    = (process.env.EMPRESA || 'CONFRARIA').toUpperCase();
+// Uma fonte só para os DOIS aplicativos. O Gestão guarda um registro por dia
+// por origem e SUBSTITUI, então duas fontes exigiriam dividir o dinheiro
+// cobrado na porta entre elas — e ele não tem coluna por plataforma.
+const FONTE      = process.env.COMANDAS_FONTE || 'comandas';
 
 const log = (...a) => console.log(new Date().toLocaleTimeString('pt-BR'), ...a);
 
@@ -198,6 +208,70 @@ function interpretar(texto, base, origem) {
 
   try { fs.writeFileSync(`${base}.json`, JSON.stringify({ origem, ...pedido }, null, 2), 'utf8'); }
   catch (e) { log(`   ⚠️  não consegui gravar o .json: ${e.message}`); }
+
+  // Reenvia o DIA INTEIRO, não este pedido: o endpoint substitui o registro do
+  // dia, então mandar só o novo apagaria os anteriores.
+  enviarDia(path.basename(base).slice(0, 10));
+}
+
+// ── Envio pro Gestão ────────────────────────────────────────────────────────
+// ⚠️ O DIA É RECONSTRUÍDO DOS ARQUIVOS, não acumulado na memória.
+//
+// `/api/venda-pdv` SUBSTITUI o registro do dia. Um acumulador em memória seria
+// zerado por qualquer reinício do PC — e o POST seguinte trocaria o dia inteiro
+// por só os pedidos que chegaram DEPOIS do reinício. O faturamento encolheria
+// sozinho, sem erro nenhum, e só apareceria no fechamento do mês.
+//
+// Os `.json` gravados ao lado de cada captura já são o dia inteiro, e o nome do
+// arquivo começa com a data. Ler a pasta é mais barato que manter um estado
+// paralelo que pode divergir do que está no disco.
+function pedidosDoDia(dataISO) {
+  let nomes = [];
+  try { nomes = fs.readdirSync(SAIDA); } catch { return []; }
+  const pedidos = [];
+  for (const n of nomes) {
+    if (!n.startsWith(`${dataISO}_`) || !n.endsWith('.json')) continue;
+    try { pedidos.push(JSON.parse(fs.readFileSync(path.join(SAIDA, n), 'utf8'))); }
+    catch (e) { log(`   ⚠️  ${n} não pôde ser lido: ${e.message}`); }
+  }
+  return pedidos;
+}
+
+const hojeISO = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+// ⚠️ Falha de envio NUNCA interrompe a captura nem o papel. A comanda já saiu e
+// o .json já está no disco; o ciclo seguinte reenvia o dia inteiro, e como o
+// endpoint substitui em vez de somar, reenviar é seguro.
+async function enviarDia(dataISO) {
+  if (!SECRET) return;                      // sem segredo, o envio nem existe
+  const pedidos = pedidosDoDia(dataISO);
+  if (!pedidos.length) return;
+  const dia = lancamentoDoDia(dataISO, pedidos);
+
+  try {
+    const r = await fetch(`${GESTAO_URL}/api/venda-pdv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-service-secret': SECRET },
+      body: JSON.stringify({
+        empresa: EMPRESA, data: dataISO, fonte: FONTE,
+        ifood: dia.ifood, ifoodTaxa: dia.ifoodTaxa, ifoodLiq: dia.ifoodLiq,
+        '99food': dia['99food'], nfoodTaxa: dia.nfoodTaxa, nfoodLiq: dia.nfoodLiq,
+        dinheiro: dia.dinheiro, total: dia.total, descontos: dia.descontos,
+      }),
+    });
+    if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(() => '')}`);
+    log(`   ☁️  ${dataISO}: ${dia.pedidos} pedido(s) → iFood R$ ${dia.ifood.toFixed(2)}`
+      + ` · 99Food R$ ${dia['99food'].toFixed(2)}`
+      + ` · na porta R$ ${dia.dinheiro.toFixed(2)}`
+      + ` · total R$ ${dia.total.toFixed(2)}`);
+    for (const a of dia.avisos) log(`   ⚠️  ${a}`);
+  } catch (e) {
+    log(`   ⚠️  não consegui enviar pro Gestão (${e.message}).`);
+    log('      A comanda saiu e está guardada; o próximo pedido reenvia o dia.');
+  }
 }
 
 // ── Repasse: a comanda tem que sair no papel ────────────────────────────────
@@ -588,6 +662,28 @@ if (!chamadoDireto) {
   avisarDestino();
   conferirDestino();
   for (const fonte of FONTES) (fonte.tipo === 'pasta' ? modoPasta : modoRede)(fonte);
+
+  if (SECRET) {
+    log(`   enviando as vendas para ${GESTAO_URL} como ${EMPRESA} [${FONTE}]`);
+    // ⚠️ Reenvia na subida e a cada 10 min, ALÉM de reenviar a cada pedido.
+    // O envio por pedido cobre o caso normal; este cobre o que o agente do
+    // Eclética aprendeu na marra: internet fora no último pedido do dia, ou o
+    // PC desligado antes de ela voltar, e aquela venda não subia NUNCA MAIS —
+    // em silêncio, aparecendo só como diferença inexplicável no mês.
+    //
+    // ⚠️ ONTEM vai junto: pedido que entrou depois da meia-noite, com o dia
+    // anterior ainda incompleto no servidor, não tem outra chance. É seguro
+    // porque o endpoint SUBSTITUI o registro do dia em vez de somar.
+    const reenviar = () => {
+      const ontem = new Date(Date.now() - 86400000);
+      enviarDia(hojeISO());
+      enviarDia(hojeISO(ontem));
+    };
+    reenviar();
+    setInterval(reenviar, 10 * 60 * 1000);
+  } else {
+    log('   ℹ️  sem SEAMA_SERVICE_SECRET no config.bat: capturo e leio, mas NÃO envio pro Gestão.');
+  }
 }
 
-export { gravar, comandaDeTeste, fontesConfiguradas };
+export { gravar, comandaDeTeste, fontesConfiguradas, pedidosDoDia, hojeISO };

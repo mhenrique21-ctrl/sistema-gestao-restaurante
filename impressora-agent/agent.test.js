@@ -8,7 +8,10 @@ import path from 'node:path';
 // import — daí o import dinâmico.
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'captura-'));
 process.env.CAPTURA_SAIDA = TMP;
-const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas, comandoCopia, conferirNomeCompartilhado } = await import('./agent.js');
+// Sem segredo, o envio pro Gestão nem existe — teste não fala com a rede.
+delete process.env.SEAMA_SERVICE_SECRET;
+const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas, comandoCopia, conferirNomeCompartilhado,
+  pedidosDoDia, hojeISO } = await import('./agent.js');
 const { textoDeEscPos, linhasUteis } = await import('./escpos.js');
 
 test('a comanda de teste volta legível depois de virar bytes de impressora', () => {
@@ -153,6 +156,48 @@ describe('o nome da impressora é conferido na SUBIDA, não na primeira comanda'
 
   test('nome vazio é reprovado', () => {
     assert.equal(conferirNomeCompartilhado('   ', DA_LOJA).ok, false);
+  });
+});
+
+describe('o dia é reconstruído dos ARQUIVOS, não acumulado na memória', () => {
+  // /api/venda-pdv SUBSTITUI o registro do dia. Um acumulador em memória seria
+  // zerado por qualquer reinício do PC, e o POST seguinte trocaria o dia
+  // inteiro pelos poucos pedidos que chegaram depois — o faturamento
+  // encolheria sozinho e só apareceria no fechamento do mês.
+  const grava = (nome, obj) => fs.writeFileSync(path.join(TMP, nome), JSON.stringify(obj));
+
+  test('pega só os .json do dia pedido', () => {
+    grava('2026-03-03_10-00-00-000_ifood.json', { numero: '1', pagoPeloApp: 10 });
+    grava('2026-03-03_11-00-00-000_99food.json', { numero: '2', pagoPeloApp: 20 });
+    grava('2026-03-04_09-00-00-000_ifood.json', { numero: '3', pagoPeloApp: 99 });
+    const hoje = pedidosDoDia('2026-03-03');
+    assert.deepEqual(hoje.map((p) => p.numero).sort(), ['1', '2']);
+    assert.deepEqual(pedidosDoDia('2026-03-04').map((p) => p.numero), ['3']);
+  });
+
+  test('.bin e .txt do mesmo pedido não entram como pedido', () => {
+    fs.writeFileSync(path.join(TMP, '2026-03-03_10-00-00-000_ifood.bin'), 'x');
+    fs.writeFileSync(path.join(TMP, '2026-03-03_10-00-00-000_ifood.txt'), 'x');
+    assert.equal(pedidosDoDia('2026-03-03').length, 2, 'só os .json');
+  });
+
+  test('.json corrompido não derruba o envio do dia inteiro', () => {
+    // Um arquivo cortado pela metade (PC desligado no meio da gravação) não
+    // pode impedir os outros pedidos do dia de subirem.
+    fs.writeFileSync(path.join(TMP, '2026-03-03_12-00-00-000_ifood.json'), '{ cortad');
+    assert.equal(pedidosDoDia('2026-03-03').length, 2);
+  });
+
+  test('dia sem captura nenhuma devolve vazio, não erro', () => {
+    assert.deepEqual(pedidosDoDia('2026-01-01'), []);
+  });
+
+  test('a data do arquivo é a LOCAL, não a UTC', () => {
+    // O Amapá é UTC−3: `toISOString()` às 21h de sexta devolveria sábado, e o
+    // pedido subiria no dia errado. O nome do arquivo usa a data local, e a
+    // busca tem que usar a mesma.
+    assert.equal(hojeISO(new Date(2026, 8, 15, 21, 30)), '2026-09-15');
+    assert.equal(hojeISO(new Date(2026, 8, 15, 0, 5)), '2026-09-15');
   });
 });
 

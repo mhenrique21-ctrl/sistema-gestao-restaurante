@@ -65,7 +65,23 @@ REM set CAPTURA_PASTA=C:\ComandasCapturadas
 REM set CAPTURA_PORTA=9100
 
 REM ---------------------------------------------------------------------------
-REM  3) OPCIONAIS
+REM  3) ENVIO PRO APP GESTAO
+REM ---------------------------------------------------------------------------
+REM Com o segredo preenchido, cada pedido lido vira faturamento do canal em
+REM Vendas. SEM ele o agente captura, le e guarda normalmente - so nao envia.
+REM
+REM O valor e o mesmo SEAMA_SERVICE_SECRET que esta no .env do servidor (e no
+REM config.bat do ecletica-agent, se ele ja roda neste PC).
+set SEAMA_SERVICE_SECRET=COLE_O_SEGREDO_AQUI
+
+REM De qual empresa sao estas comandas.
+set EMPRESA=CONFRARIA
+
+REM So mude se o endereco do Gestao mudar.
+REM set GESTAO_URL=https://gestao.confrariacafe.com
+
+REM ---------------------------------------------------------------------------
+REM  4) OPCIONAIS
 REM ---------------------------------------------------------------------------
 REM Onde guardar as capturas (.bin cru + .txt legivel). Em branco = subpasta
 REM "capturas" aqui do lado.

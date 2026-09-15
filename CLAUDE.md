@@ -408,10 +408,56 @@ receber do 99Food. `conferirPedido99` acusa quando não fecham com o total.
 tela, nunca palpite. Item é testado ANTES dos rótulos: "1x Desconto especial
 R$5,00" é item, e deixar o rótulo ganhar viraria abatimento.
 
-**Estado:** captura e **lê os dois**, gravando `.bin`/`.txt`/`.png`/`.json`;
-**não envia pro Gestão**. Falta uma decisão, não código: **em que coluna de
-Vendas** entra o que a plataforma repassa e em que coluna entra o que o
-entregador cobra na porta.
+#### O pedido vira faturamento — `lancamentoVendas.js` (com testes)
+
+Mora fora do agente porque é a única parte disto que erra em **silêncio**:
+leitor errado aparece na tela, conta errada vira um número plausível no
+faturamento do mês.
+
+**Decisões do dono (15/09/2026)**, sobre o pedido real de R$ 29,90 com R$ 15,00
+de promoção e entrega da parceira:
+
+| coluna | valor | o quê |
+|---|---|---|
+| `ifood` | 22,89 | o que o cliente PAGOU pelo app — não a mercadoria de tabela |
+| `ifoodTaxa` | 7,99 | entrega da parceira (7,00) + taxa de serviço (0,99) |
+| `ifoodLiq` | 14,90 | o que a loja vendeu |
+| `dinheiro` | 0,00 | o que o entregador cobra na porta, dos dois canais |
+
+⚠️ **O desconto NÃO vira despesa.** Como o faturamento é o que o cliente pagou,
+ele já está lá dentro (pagou 22,89 em vez de 37,89). Lançá-lo também como
+despesa contaria o mesmo real duas vezes — regra do `folhaRh.js`. Fica em
+`descontos`, como INFORMAÇÃO, fora de toda soma.
+
+⚠️ **A taxa de entrega só é despesa quando quem entrega é a PLATAFORMA.** Em
+"Entrega Propria" ela fica com a loja. Sem saber quem entregou, fica de fora e
+sai aviso — chutar tiraria do faturamento um dinheiro que entrou na gaveta.
+
+⚠️ **`ifoodLiq` é ANTES da comissão**, que não está na comanda (só no extrato).
+Chamar de "o que vou receber" seria mentira.
+
+⚠️ **A mesma comanda é impressa DUAS vezes** (cozinha e sacola) e as duas são
+capturadas — vimos com 1 segundo de diferença. `lancamentoDoDia` descarta
+repetição por canal + número; sem isso o dia DOBRA em silêncio. Pedido sem
+número entra e é sinalizado, nunca descartado.
+
+⚠️ **O dia é reconstruído dos `.json` da pasta**, não acumulado na memória:
+`/api/venda-pdv` SUBSTITUI o registro do dia, então um reinício do PC zeraria o
+acumulador e o envio seguinte trocaria o dia inteiro pelos poucos pedidos que
+chegaram depois. Reenvia a cada pedido, na subida e a cada 10 min, com ONTEM
+junto.
+
+⚠️ `hojeISO` usa data **LOCAL**, não `toISOString()`: o Amapá é UTC−3 e às 21h
+o UTC já é o dia seguinte — o pedido subiria no dia errado.
+
+⚠️ O endpoint gravava `ifood: 0, ifoodTaxa: 0, …` **fixo**. Agora aceita os
+campos; quem não manda (delivery-backend, PDV Seama, ecletica-agent) continua
+com zero, sem mudar nada.
+
+**Estado:** captura, lê e **envia** — origem `pdv_comandas`, uma só para os dois
+aplicativos (o Gestão não tem coluna de "dinheiro na porta" por plataforma).
+Sem `SEAMA_SERVICE_SECRET` no `config.bat`, captura e lê normalmente e não
+envia.
 
 ---
 

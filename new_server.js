@@ -1853,7 +1853,15 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
         }
 
-        const { empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte, formas, itens } = JSON.parse(body);
+        const {
+          empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte, formas, itens,
+          // Canais de plataforma — só a ponte de impressão manda (impressora-agent).
+          // Quem não manda continua com zero, exatamente como antes.
+          ifood, ifoodTaxa, ifoodLiq, nfoodTaxa, nfoodLiq, descontos,
+          // "99food" começa com dígito, então não dá pra desestruturar direto —
+          // e parsear o corpo duas vezes só por causa disso seria desperdício.
+          '99food': nfood,
+        } = JSON.parse(body);
         const emp = String(empresa || '').toUpperCase();
         if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
@@ -1908,8 +1916,12 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           total: num(total),
           maquininha: num(maquininha),
           dinheiro: num(dinheiro),
-          ifood: 0, ifoodTaxa: 0, ifoodLiq: 0,
-          '99food': 0, nfoodTaxa: 0, nfoodLiq: 0,
+          // ⚠️ Eram ZERO FIXO aqui. Quem não manda estes campos continua com
+          // zero (o delivery-backend, o PDV Seama e o agente do Eclética não
+          // mudam), mas a ponte de impressão precisa gravá-los: é nela que o
+          // pedido do iFood e do 99Food vira faturamento do canal.
+          ifood: num(ifood), ifoodTaxa: num(ifoodTaxa), ifoodLiq: num(ifoodLiq),
+          '99food': num(nfood), nfoodTaxa: num(nfoodTaxa), nfoodLiq: num(nfoodLiq),
           // Só a Confraria manda isso por enquanto (delivery-backend/gestaoSync.js) —
           // o PDV Seama não separa delivery, então chega undefined e cai no 0.
           delivery: num(delivery),
@@ -1917,6 +1929,12 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
           // Só grava quando veio algo — assim um emissor que não manda formas
           // não apaga o detalhamento de quem manda ao reenviar o dia.
           ...(formasLimpas && Object.keys(formasLimpas).length ? { formas: formasLimpas } : {}),
+          // ⚠️ INFORMAÇÃO, nunca dinheiro: o desconto já está abatido do que o
+          // cliente pagou, então somá-lo em qualquer lugar contaria o mesmo
+          // real duas vezes. Fica aqui só pra responder "quanto dei de
+          // desconto no mês". Só grava quando veio, pra emissor que não manda
+          // não apagar o de quem manda.
+          ...(num(descontos) > 0 ? { descontos: num(descontos) } : {}),
           origem,
           criadoEm: i >= 0 ? (vendas[i].criadoEm || agora) : agora,
           atualizadoEm: agora,

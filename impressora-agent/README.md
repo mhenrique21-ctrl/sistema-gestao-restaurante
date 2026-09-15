@@ -252,19 +252,48 @@ O repasse usa `copy /b`, e o `/b` não é detalhe: sem ele o Windows trata o byt
 `0x1A` como fim de arquivo, e esse byte aparece no meio de ESC/POS — a comanda
 sairia cortada no meio, sem erro nenhum.
 
+## O pedido vira faturamento em Vendas
+
+Com `SEAMA_SERVICE_SECRET` preenchido no `config.bat`, cada pedido lido sobe
+pro Gestão. Sem o segredo, o agente captura, lê e guarda normalmente — só não
+envia.
+
+No pedido real de R$ 29,90 com R$ 15,00 de promoção e entrega da parceira:
+
+| coluna | valor | o quê |
+|---|---|---|
+| `ifood` | 22,89 | o que o cliente pagou pelo app |
+| `ifoodTaxa` | 7,99 | entrega da parceira (7,00) + taxa de serviço (0,99) |
+| `ifoodLiq` | 14,90 | o que a loja vendeu, **antes da comissão** |
+| `dinheiro` | 0,00 | o que o entregador cobraria na porta |
+
+⚠️ **`ifoodLiq` é antes da comissão da plataforma.** A comissão não está na
+comanda — ela só aparece no extrato. Isto é "o que vendi", não "o que vou
+receber".
+
+⚠️ **O desconto não vira despesa.** Como o faturamento é o que o cliente pagou,
+ele já está lá dentro (o cliente pagou 22,89 em vez de 37,89). Lançá-lo também
+como despesa contaria o mesmo real duas vezes. Ele fica guardado à parte, só
+pra responder "quanto dei de desconto no mês".
+
+⚠️ **A taxa de entrega só é despesa quando quem entrega é a plataforma.** Em
+"Entrega Propria" ela fica com a loja. A comanda distingue; quando o leitor não
+consegue dizer, a taxa fica de fora e sai aviso — chutar tiraria do faturamento
+um dinheiro que entrou na gaveta.
+
+⚠️ **A mesma comanda é impressa duas vezes** (cozinha e sacola) e as duas são
+capturadas. A soma do dia descarta repetição por canal + número do pedido; sem
+isso o faturamento do dia dobraria em silêncio.
+
+O dia é **reconstruído dos `.json` da pasta `capturas`**, não acumulado na
+memória: `/api/venda-pdv` substitui o registro do dia, então um reinício do PC
+zeraria um acumulador em memória e o envio seguinte trocaria o dia inteiro
+pelos poucos pedidos que chegaram depois. O reenvio acontece a cada pedido, na
+subida do agente e a cada 10 minutos — e leva ONTEM junto, para o pedido que
+entrou perto da meia-noite.
+
 ## O que falta
 
-Duas coisas, e nenhuma delas se resolve escrevendo código no escuro:
-
-**1. O leitor do iFood.** Nasce do primeiro `.bin` capturado, como o do 99Food
-nasceu da comanda #871001. Capture um pedido de verdade e me mande o `.bin` (ou
-uma foto da comanda) — a captura já funciona hoje, o papel sai normal, e o
-arquivo guardado permite escrever o leitor sem esperar pedido novo.
-
-**2. Em que coluna de Vendas cada dinheiro entra.** Pedido pago no aplicativo é
-faturamento do canal (99Food ou iFood), com taxa e líquido. Pedido pago em
-dinheiro na porta é dinheiro que chega ao caixa. A comanda distingue os dois; em
-que coluna cada um entra é decisão do dono, não do código — e somar os dois
-dobraria o faturamento do dia.
-
-Resolvidas as duas, o agente passa a mandar o pedido pro Gestão sozinho.
+Nada de código. O que resta é conferir, no fim do mês, o `ifoodLiq` contra o
+extrato do iFood: a diferença entre os dois é a comissão, que a comanda não
+mostra.
