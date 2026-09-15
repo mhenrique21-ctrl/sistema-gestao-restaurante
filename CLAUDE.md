@@ -38,6 +38,7 @@ src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
 src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
 src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
 src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com testes)
+src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -849,10 +850,30 @@ passar um texto que reprovava sobre o creme.
 
 ### Paletas — Configurações → 🎨 Cores
 
-Cinco paletas prontas (`PALETAS_APP`), cada uma com claro E escuro, gravadas em
+Seis paletas prontas (`PALETAS_APP`), cada uma com claro E escuro, gravadas em
 `db.config.aparenciaApp.paleta` e aplicadas como `data-paleta` no `.app-root`.
 O CSS redefine os MESMOS tokens; nenhuma tela precisa saber que existem.
-Os **120 pares foram medidos** antes de entrar: nenhum abaixo de 4,5:1.
+
+⚠️ **`src/paletas.test.js` mede lendo o `App.tsx`**, não um rascunho à parte —
+o que vale é o que está no código. São **156 pares** e nenhum passa abaixo de
+4,5:1. O teste também exige que toda paleta defina TODOS os tokens usados: um
+faltando, o token base vence e a paleta sai pela metade (uma tag cognac no meio
+da Tinta), sem erro nenhum aparecendo. **Adicionou cor? O `npm test` confere.**
+
+#### Tinta: a monocromática
+
+Preto, branco e cinza. Sem cor, o que separa um status do outro é a
+**LUMINOSIDADE** — quatro degraus com pelo menos **1,43:1 entre si**. A primeira
+tentativa reprovou com 1,18:1 entre info e ok: abaixo de ~1,3 os cinzas leem
+como o mesmo cinza e a tag vira enfeite. Há um teste só pra isso.
+
+⚠️ O **perigo é o único invertido** (fundo escuro, texto claro no modo claro; e
+o contrário no escuro). É a inversão que faz ele saltar, no lugar do vermelho.
+
+⚠️ Ela só funciona porque **aqui a cor nunca foi a única informação**: a tag traz
+o rótulo escrito, o saldo negativo traz o sinal, e a regra de impressão da §8
+("status nunca só por cor") já valia. Se alguma tela nova depender só da cor,
+essa paleta é a que denuncia.
 
 ⚠️ **`personalizada` não define paleta nenhuma** — são os tokens base mais a cor
 do seletor. O `--btnPrimary` inline só é aplicado nesse caso: **style inline
