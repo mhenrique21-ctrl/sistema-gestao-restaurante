@@ -1755,25 +1755,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // por um poll no meio do caminho. syncProdByName/saveProd já carimbam
       // atualizadoEm, então a fusão por id+timestamp resolve certo.
       produtosLista: byIdDedup(mergeArrayById(s.produtosLista||[],p.produtosLista||[],_listaDeletados)),
-      // Arquivamentos: união por id com os ITENS fundidos dentro do pedido —
-      // a mesma regra do mergeListaCompras no servidor. Marcar como comprado
-      // apaga o item e o move pro pedido da lista aberta, então o mesmo pedido
-      // é reescrito o tempo todo por aparelhos diferentes; substituir em bloco
-      // faria um operador apagar o item que o outro acabou de marcar.
-      pedidosLista:  (()=>{
-        const m=new Map<string,any>();
-        const fundir=(a:any,b:any)=>{
-          const it=new Map<string,any>();
-          (a.itens||[]).forEach((i:any)=>it.set(i.id??i.nome,i));
-          (b.itens||[]).forEach((i:any)=>it.set(i.id??i.nome,i));
-          return{...a,...b,itens:[...it.values()],fechadoEm:b.fechadoEm||a.fechadoEm};
-        };
-        (s.pedidosLista||[]).forEach((x:any)=>m.set(x.id,x));
-        (p.pedidosLista||[]).forEach((x:any)=>{const ant=m.get(x.id);m.set(x.id,ant?fundir(ant,x):x);});
-        return[...m.values()]
-          .filter((x:any)=>!_listaDeletados.has(x.id))
-          .sort((a:any,b:any)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
-      })(),
+      pedidosLista:  unionById(p.pedidosLista||[],s.pedidosLista||[],true),
       // Mapa nome->categoria aprendida. Mesmo bug do iconesProducao: vinha cru
       // do spread {...s} acima, então classificar um item era revertido pelo
       // poll seguinte, e ele reaparecia na fila de "Pendente de Classificação"
@@ -9194,108 +9176,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   // Edição embutida: mesma lógica/estado do formulário do topo, mas renderizada
   // na própria posição do item na lista (não pula pro topo da página).
-  // Como o item vai pro arquivo. O `id` é PRESERVADO de propósito: é ele que
-  // permite às duas fusões unir item a item dentro do mesmo pedido quando dois
-  // operadores marcam coisas diferentes quase juntos. Sem id, o último POST
-  // substituiria o pedido inteiro e o item do outro sumiria do arquivo.
-  const itemArquivado=(i:any)=>({id:i.id,nome:i.nome,quantidade:i.quantidade,quantidadeComprada:i.quantidadeComprada??null,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem,compradoPor:i.compradoPor||"",compradoEm:i.compradoEm||""});
-
-  // ⚠️ Marcar como comprado APAGA o item da lista na hora (decisão do dono).
-  //
-  // O item não é perdido: ele é MOVIDO para o arquivamento da lista atual
-  // (`arq-<listaAtualId>` em pedidosLista), que agora vai se enchendo conforme
-  // a compra acontece. Antes o pedido era montado só no fechamento, lendo os
-  // itens que ainda estavam na lista — apagando na hora, ele nasceria VAZIO e a
-  // compra do dia não deixaria rastro nenhum.
-  const [ultimoComprado,setUltimoComprado]=useState<any|null>(null);
-  const [verComprados,setVerComprados]=useState(false);
   const toggle=(id:string)=>{
     if(travandoIds.has(id))return;
     travar(id);
-    const item=lista.find((i:any)=>i.id===id);
-    // Item LEGADO, marcado como comprado antes desta mudança: continua
-    // desmarcável. Sem esta saída ele ficaria preso na lista pra sempre,
-    // porque o caminho novo só sabe arquivar quem ainda está pendente.
-    if(item?.comprado){
-      const ts=Date.now();
-      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,comprado:false,quantidadeComprada:undefined,updatedAt:ts}:i)}));
-      return;
-    }
-    setUltimoComprado(item?{...item}:null);
+    const ts=Date.now();
     (setDbAndSave||setDb)((d:any)=>{
-      const it=(d.listaCompras||[]).find((i:any)=>i.id===id);
-      if(!it)return d;
-      const atual=d.listaAtualId||listaAtualId;
-      const pid="arq-"+atual;
-      const anterior=(d.pedidosLista||[]).find((pp:any)=>pp.id===pid);
-      const comprado={...it,comprado:true,naoTem:false,compradoPor:login?.label||"",compradoEm:new Date().toISOString()};
-      const pedido={
-        ...(anterior||{}),
-        id:pid,
-        listaId:atual,
-        data:anterior?.data||today(),
-        criadoEm:anterior?.criadoEm||new Date().toISOString(),
-        atualizadoEm:new Date().toISOString(),
-        itens:[...(anterior?.itens||[]).filter((x:any)=>x.id!==id),itemArquivado(comprado)],
-      };
-      _listaDeletados.add(id);
-      return{
-        ...d,
-        listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
-        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-5000),
-        pedidosLista:[pedido,...(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pid)],
-      };
+      const arr=[...(d.listaCompras||[])];
+      const it=arr.find(i=>i.id===id);if(!it)return d;
+      const nowComprado=!it.comprado;
+      const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
+      return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,quantidadeComprada:nowComprado?i.quantidadeComprada:undefined,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
     });
   };
-
-  // Desfazer: devolve o item à lista e tira do arquivo.
-  //
-  // ⚠️ Volta com um **id NOVO**, não com o original. O tombstone
-  // (`listaDeletedIds`) é UNIDO entre local e servidor nas duas fusões — tirar
-  // o id só daqui não tira do outro lado, e a união ressuscitaria a exclusão:
-  // o item voltaria pra tela e sumiria de novo no poll seguinte. Com id novo
-  // não há exclusão nenhuma a limpar.
-  const desfazerComprado=()=>{
-    if(!ultimoComprado)return;
-    const item=ultimoComprado;
-    setUltimoComprado(null);
-    devolverParaLista(item);
-  };
-
-  // Devolve à lista um item que já foi comprado, vindo do arquivo do dia. Serve
-  // tanto ao "Desfazer" da tarja quanto ao ↩ de cada linha do painel Comprados.
-  const devolverParaLista=(item:any)=>{
-    if(!item)return;
-    (setDbAndSave||setDb)((d:any)=>{
-      const atual=d.listaAtualId||listaAtualId;
-      const pid="arq-"+atual;
-      const anterior=(d.pedidosLista||[]).find((pp:any)=>pp.id===pid);
-      const itens=(anterior?.itens||[]).filter((x:any)=>x.id!==item.id);
-      const semPedido=(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pid);
-      return{
-        ...d,
-        listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==item.id),{
-          ...item,
-          // ⚠️ id NOVO, e nenhuma marca de compra sobrando: voltando com o id
-          // original o tombstone unido apagaria o item de novo no poll, e
-          // voltando com `compradoPor` preenchido ele reentraria no arquivo
-          // carimbado como se já tivesse sido comprado.
-          id:uid(),listaId:atual,comprado:false,naoTem:false,
-          quantidadeComprada:undefined,compradoPor:undefined,compradoEm:undefined,
-          ordem:Date.now(),criadoEm:new Date().toISOString(),updatedAt:Date.now(),
-        }],
-        pedidosLista:itens.length?[{...anterior,itens,atualizadoEm:new Date().toISOString()},...semPedido]:semPedido,
-      };
-    });
-  };
-
-  // A tarja de desfazer some sozinha — passado esse tempo, o item já foi
-  // embora pra valer e continuar oferecendo "Desfazer" seria promessa falsa.
-  useEffect(()=>{
-    if(!ultimoComprado)return;
-    const t=setTimeout(()=>setUltimoComprado(null),12000);
-    return()=>clearTimeout(t);
-  },[ultimoComprado]);
   const setQtd=(id:string,novaQtd:number)=>{
     if(!(novaQtd>0))return;
     const ts=Date.now();
@@ -9320,10 +9212,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-5000),
     }));
   };
-  // LEGADO: depois que marcar passou a apagar o item na hora, ninguém mais
-  // acumula `comprado:true` dentro de listaCompras. Continua aqui — e o botão
-  // continua aparecendo — só pros itens marcados antes da mudança, que sem isto
-  // ficariam na lista pra sempre.
   const limparComprados=()=>{
     if(!comprados.length)return;
 
@@ -9357,34 +9245,24 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // juntos; com `uid()` cada um criaria um registro próprio e o Arquivo
   // mostraria a mesma compra três vezes. Derivado da lista, a união por id
   // (`mergeListaCompras`) colapsa os três num só.
-  // ⚠️ O pedido NÃO nasce aqui. Depois que marcar como comprado passou a apagar
-  // o item, ele já vem sendo montado item a item pelo `toggle` — aqui a gente
-  // só ACRESCENTA o que sobrou pendente (fechamento manual antes da hora),
-  // carimba o fechamento e abre a lista nova. Remontá-lo do zero apagaria tudo
-  // o que foi comprado, que é justamente o que não está mais na lista.
   const arquivarLista=(auto:boolean)=>{
     (setDbAndSave||setDb)((d:any)=>{
       const atual=d.listaAtualId||listaAtualId;
-      const pid="arq-"+atual;
-      const restantes=(d.listaCompras||[]).filter((i:any)=>!i.listaId||i.listaId===atual);
-      const anterior=(d.pedidosLista||[]).find((pp:any)=>pp.id===pid);
-      if(!restantes.length&&!(anterior?.itens||[]).length)return d;
-      const ids=restantes.map((i:any)=>i.id);
+      const itens=(d.listaCompras||[]).filter((i:any)=>!i.listaId||i.listaId===atual);
+      if(!itens.length)return d;
+      const ids=itens.map((i:any)=>i.id);
       ids.forEach((id:string)=>_listaDeletados.add(id));
       const pedido={
-        ...(anterior||{}),
-        id:pid,
+        id:"arq-"+atual,
         listaId:atual,
-        data:anterior?.data||today(),
-        criadoEm:anterior?.criadoEm||new Date().toISOString(),
+        data:today(),
         automatico:!!auto,
-        fechadoEm:new Date().toISOString(),
-        atualizadoEm:new Date().toISOString(),
-        itens:[...(anterior?.itens||[]),...restantes.map(itemArquivado)],
+        itens:itens.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,quantidadeComprada:i.quantidadeComprada??null,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),
+        criadoEm:new Date().toISOString(),
       };
       return{
         ...d,
-        pedidosLista:[pedido,...(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pid)],
+        pedidosLista:[pedido,...(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pedido.id)],
         listaCompras:(d.listaCompras||[]).filter((i:any)=>!ids.includes(i.id)),
         listaAtualId:uid(),
         listaAtualAbertaEm:new Date().toISOString(),
@@ -9393,20 +9271,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     });
   };
 
-  // O que já foi comprado nesta lista mora no arquivo, não na lista.
-  const pedidoAberto=(db.pedidosLista||[]).find((pp:any)=>pp.id==="arq-"+listaAtualId);
-  const compradosNoArquivo:number=(pedidoAberto?.itens||[]).length;
-  // ⚠️ O pedido da lista ABERTA fica de fora do Arquivo. Ele existe desde a
-  // primeira marcação, então apareceria lá como "lista arquivada" no meio da
-  // compra — com botão de Retomar, que apagaria os pendentes que ainda estão
-  // sendo comprados. Ele é mostrado no painel "comprados hoje", na própria
-  // lista, que é onde a informação serve pra alguma coisa.
-  const pedidosArquivados=(db.pedidosLista||[]).filter((pp:any)=>pp.id!=="arq-"+listaAtualId);
-
   const fecharLista=()=>{
     if(!isAdmin)return;
-    if(!lista.length&&!compradosNoArquivo)return alert("A lista está vazia.");
-    if(!confirm(`Fechar a lista atual (${lista.length} pendente(s), ${compradosNoArquivo} comprado(s)) e arquivar?\nUma lista nova e vazia será aberta em seguida.`))return;
+    if(!lista.length)return alert("A lista está vazia.");
+    if(!confirm(`Fechar a lista atual (${lista.length} item(ns)) e arquivar?\nUma lista nova e vazia será aberta em seguida.`))return;
     arquivarLista(false);
     alert("✅ Lista fechada e arquivada! Uma lista nova foi aberta.");
   };
@@ -9430,11 +9298,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const autoCanceladaRef=useRef<string|null>(null);
   const arquivarRef=useRef(arquivarLista);
   arquivarRef.current=arquivarLista;
-  // ⚠️ "Finalizada" mudou de forma junto com a exclusão na hora: o último item
-  // marcado não fica na lista como comprado — ele SAI. Então finalizada é lista
-  // VAZIA com pelo menos um comprado no arquivo. Testar `pendentes.length===0`
-  // como antes dispararia a contagem também numa lista que ninguém abriu ainda.
-  const listaFinalizada=lista.length===0&&compradosNoArquivo>0;
+  const listaFinalizada=lista.length>0&&pendentes.length===0;
   useEffect(()=>{
     if(!listaFinalizada||autoCanceladaRef.current===listaAtualId){setAutoFecharEm(null);return;}
     const fim=Date.now()+SEGUNDOS_AUTO_FECHAR*1000;
@@ -10093,7 +9957,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap" as const}}>
       <div className="section-title" style={{marginBottom:0}}>🛒 Lista de Compras</div>
       {pendentes.length>0&&<span style={{background:"#EF444422",color:"var(--btnDanger)",border:"1px solid #EF444444",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{pendentes.length} pendente{pendentes.length>1?"s":""}</span>}
-      {compradosNoArquivo>0&&<span style={{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>✅ {compradosNoArquivo}</span>}
+      {comprados.length>0&&<span style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>✅ {comprados.length}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"var(--infoBg)",color:"var(--infoText)",border:"1px solid #0EA5E940",padding:"6px 12px",fontSize:12}}>🖨️</button>}
         {onLogout&&<button className="btn" onClick={onLogout} style={{background:"var(--dangerBg)",color:"var(--dangerText)",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
@@ -10127,17 +9991,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     {showHistorico&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
     {showHistorico&&<div className="card" style={{marginBottom:12,border:"1px solid #7c3a10"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div className="section-title" style={{color:"#fb923c",margin:0}}>📂 Listas Arquivadas <span style={{fontSize:11,color:"#555"}}>({pedidosArquivados.length})</span></div>
+        <div className="section-title" style={{color:"#fb923c",margin:0}}>📂 Listas Arquivadas <span style={{fontSize:11,color:"#555"}}>({(db.pedidosLista||[]).length})</span></div>
         <SortCtrl id="listaHist" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"]]}/>
       </div>
-      {!pedidosArquivados.length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma lista arquivada ainda.</div>}
+      {!(db.pedidosLista||[]).length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhuma lista arquivada ainda.</div>}
       {(()=>{
         const MESES_PT:Record<string,string>={
           "01":"Janeiro","02":"Fevereiro","03":"Março","04":"Abril",
           "05":"Maio","06":"Junho","07":"Julho","08":"Agosto",
           "09":"Setembro","10":"Outubro","11":"Novembro","12":"Dezembro"
         };
-        const sorted=sortList(pedidosArquivados,db,'listaHist','data-desc');
+        const sorted=sortList(db.pedidosLista||[],db,'listaHist','data-desc');
         const grupos:Record<string,any[]>={};
         sorted.forEach((p:any)=>{const k=p.data?p.data.slice(0,7):"sem-data";if(!grupos[k])grupos[k]=[];grupos[k].push(p);});
         const grupoKeys=Object.keys(grupos).sort((a,b)=>b.localeCompare(a));
@@ -10870,26 +10734,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       </div>
     </div>}
 
-    {/* Desfazer o último comprado. Existe porque marcar apaga na hora: sem uma
-        volta, um toque errado tira o item da tela sem recurso nenhum. Some
-        junto com a contagem da lista finalizada, que já tem o próprio botão —
-        duas tarjas empilhadas seriam ruído, mesma regra do aviso de versão. */}
-    {ultimoComprado&&autoFecharEm===null&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"9px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",fontSize:12,color:"var(--text2)"}}>
-      <span style={{flex:1}}>🛒 <b>{ultimoComprado.nome}</b> comprado — saiu da lista e foi pro arquivo do dia.</span>
-      <button onClick={desfazerComprado} className="btn" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
-        ↩ Desfazer
-      </button>
-    </div>}
-
     {/* Lista finalizada: arquiva sozinha depois da contagem. Texto escrito
         além da cor — a paleta Tinta é monocromática (§9 do CLAUDE.md). */}
     {autoFecharEm!==null&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"11px 13px",background:"var(--successBg)",borderRadius:10,border:"1px solid #22C55E55",fontSize:12,color:"var(--successText)"}}>
       <span style={{flex:1,fontWeight:600}}>
-        ✅ Lista finalizada — {compradosNoArquivo} item(ns) comprados. Arquivando em <b>{autoFecharEm}s</b> e abrindo uma lista nova.
+        ✅ Lista finalizada — {lista.length} item(ns) comprados. Arquivando em <b>{autoFecharEm}s</b> e abrindo uma lista nova.
       </span>
-      {ultimoComprado&&<button onClick={desfazerComprado} className="btn" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
-        ↩ Desfazer {ultimoComprado.nome}
-      </button>}
       <button onClick={cancelarAutoFechar} className="btn" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
         Cancelar
       </button>
@@ -10938,39 +10788,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     })()}
 
     {/* Progresso da lista atual */}
-    {/* O comprado saiu da lista, então o total do dia é pendente + arquivado —
-        ler `lista.length` como total faria a barra andar pra trás a cada item
-        marcado (2/5, depois 1/4, depois 0/3) em vez de avançar. */}
-    {(()=>{
-      const totalDia=pendentes.length+compradosNoArquivo;
-      return totalDia>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
-        <div style={{flex:1,height:8,borderRadius:99,background:"var(--bg4)",overflow:"hidden"}}>
-          <div style={{height:"100%",width:`${Math.round((compradosNoArquivo/totalDia)*100)}%`,background:"#22C55E",transition:"width .25s"}}/>
-        </div>
-        <span style={{fontSize:12,fontWeight:700,color:"var(--successText)",whiteSpace:"nowrap" as const}}>{compradosNoArquivo}/{totalDia} comprados</span>
-      </div>;
-    })()}
-
-    {/* Comprados do dia. Antes eles ficavam riscados na própria lista; agora
-        saem dela na hora e vivem no arquivo, então este painel é o único lugar
-        onde dá pra conferir o que já entrou no carrinho — e devolver um item
-        marcado por engano. Nasce RECOLHIDO: o que importa na loja é o que
-        falta, e 40 linhas de comprado empurrariam os pendentes pra fora da
-        tela do celular. */}
-    {compradosNoArquivo>0&&<div style={{marginBottom:14,background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)",overflow:"hidden"}}>
-      <button onClick={()=>setVerComprados(v=>!v)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"none",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,color:"var(--successText)",textAlign:"left" as const}}>
-        <span style={{flex:1}}>✅ {compradosNoArquivo} comprado(s) hoje</span>
-        <span style={{color:"var(--text3)",fontWeight:600}}>{verComprados?"▲ ocultar":"▼ ver"}</span>
-      </button>
-      {verComprados&&<div style={{borderTop:"1px solid var(--border)"}}>
-        {(pedidoAberto?.itens||[]).map((it:any)=><div key={it.id||it.nome} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:"1px solid var(--border)",fontSize:12}}>
-          <span style={{flex:1,color:"var(--text2)"}}>
-            <b style={{color:"var(--text)"}}>{it.nome}</b>
-            <span style={{color:"var(--text3)"}}> · {it.quantidadeComprada??it.quantidade} {it.unidade||"un"}{it.compradoPor?` · ${it.compradoPor}`:""}</span>
-          </span>
-          <button onClick={()=>devolverParaLista(it)} className="btn" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",padding:"4px 10px",fontSize:11,fontWeight:700,flexShrink:0}}>↩ devolver</button>
-        </div>)}
-      </div>}
+    {lista.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:"var(--bg3)",borderRadius:10,border:"1px solid var(--border)"}}>
+      <div style={{flex:1,height:8,borderRadius:99,background:"var(--bg4)",overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${Math.round((comprados.length/lista.length)*100)}%`,background:"#22C55E",transition:"width .25s"}}/>
+      </div>
+      <span style={{fontSize:12,fontWeight:700,color:"#22C55E",whiteSpace:"nowrap" as const}}>{comprados.length}/{lista.length} resolvidos</span>
     </div>}
 
     {/* Lista por categoria — somente pendentes */}
@@ -18003,8 +17825,7 @@ function Relatorios({db,setDb,setDbAndSave,empresa,state}:{db:any,setDb:any,setD
     const a=document.createElement("a");a.href=url;a.download=`pedido_${ped.data}.csv`;a.click();URL.revokeObjectURL(url);
   };
   const delPedido=(id:string)=>{if(!confirm("Excluir este pedido?"))return;_listaDeletados.add(id);(setDbAndSave||setDb)((d:any)=>({...d,pedidosLista:(d.pedidosLista||[]).filter((p:any)=>p.id!==id)}));};
-  // Fora o da lista aberta, que ainda está sendo comprada (ver pedidosArquivados).
-  const pedidos=(db.pedidosLista||[]).filter((p:any)=>p.id!=="arq-"+db.listaAtualId);
+  const pedidos=(db.pedidosLista||[]);
 
   const rels=[
     {label:"DRE",          desc:"Demonstrativo de Resultado",   icon:"📊",fn:gDRE,    color:"var(--btnPrimary)"},
