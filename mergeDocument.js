@@ -221,7 +221,10 @@ export function mergeDocument(existing, incoming) {
   merged.config = { ...(existing.config || {}), ...(afterLista.config || {}) };
   // Só cria o sub-objeto se algum dos lados tiver — senão o documento ganharia
   // impressao:{} e sortPrefs:{} vazios em toda gravação, sem servir pra nada.
-  for (const sub of ['impressao', 'sortPrefs']) {
+  // aparenciaApp e coresBotoes entram aqui pela mesma razão: são preferências
+  // visuais editadas numa tela só, e a união rasa de config faria o aparelho
+  // que mexeu na fonte apagar a paleta que outro acabou de escolher.
+  for (const sub of ['impressao', 'sortPrefs', 'aparenciaApp', 'coresBotoes']) {
     const e = existing.config?.[sub], i = afterLista.config?.[sub];
     if (e || i) merged.config[sub] = { ...(e || {}), ...(i || {}) };
   }

@@ -475,3 +475,28 @@ describe('mapaProdutoFicha (de-para produto → ficha técnica)', () => {
     assert.equal(r.mapaProdutoFicha['pao de queijo'].fichaId, 'f1');
   });
 });
+
+test('preferências visuais não se apagam entre aparelhos', () => {
+  // config é união rasa, então um aparelho postando a fonte apagaria a paleta
+  // que o outro acabou de escolher — os dois vivem dentro de aparenciaApp.
+  const servidor = { config: { snAliquota: 6, aparenciaApp: { paleta: 'azulejo', fonte: 'padrao' } } };
+  const chegando = { config: { snAliquota: 6, aparenciaApp: { fonte: 'tecnica' } } };
+  const r = mergeDocument(servidor, chegando);
+  assert.equal(r.config.aparenciaApp.paleta, 'azulejo');
+  assert.equal(r.config.aparenciaApp.fonte, 'tecnica');
+  assert.equal(r.config.snAliquota, 6);
+});
+
+test('quem acabou de escolher a paleta vence', () => {
+  const servidor = { config: { aparenciaApp: { paleta: 'cognac' } } };
+  const chegando = { config: { aparenciaApp: { paleta: 'contraste' } } };
+  assert.equal(mergeDocument(servidor, chegando).config.aparenciaApp.paleta, 'contraste');
+});
+
+test('sub-objeto de preferência não é criado do nada', () => {
+  // Sem os dois lados, criar aparenciaApp:{} em toda gravação só engorda o
+  // documento sem servir pra nada — mesma razão de impressao e sortPrefs.
+  const r = mergeDocument({ config: { snAliquota: 6 } }, { config: { snAliquota: 4 } });
+  assert.ok(!('aparenciaApp' in r.config));
+  assert.ok(!('coresBotoes' in r.config));
+});

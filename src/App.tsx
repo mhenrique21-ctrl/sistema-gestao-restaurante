@@ -1001,7 +1001,23 @@ const TAMANHOS_LETRA:{[k:string]:{label:string,zoom:number}}={
   grande:{label:"Grande",zoom:1.1},
   extra:{label:"Extra grande",zoom:1.25},
 };
+// Paletas prontas. A chave vira data-paleta no .app-root e o CSS acima troca
+// todos os tokens de uma vez, claro e escuro.
+//
+// ⚠️ "personalizada" NÃO define paleta nenhuma: são os tokens base do
+// .app-root mais a cor de botão que o usuário escolheu no seletor. É por isso
+// que o --btnPrimary inline só é aplicado nesse caso — style inline vence CSS,
+// e aplicá-lo sempre travaria o acento das cinco paletas na cor antiga, sem
+// variante escura.
+const PALETAS_APP:{[k:string]:{label:string,desc:string,amostra:string[],amostraEsc:string[]}}={
+  cognac:{label:"Cognac",desc:"A de hoje, com os pares consertados",amostra:["#8A5227", "#146B42", "#8A5A00", "#A32B24"],amostraEsc:["#D79A62", "#4FB07B", "#C99B3C", "#CC6A62"]},
+  papel:{label:"Café & Papel",desc:"Papel de embalagem e oliva torrado",amostra:["#4A5D34", "#3E6B2C", "#8A6110", "#A33326"],amostraEsc:["#A8C286", "#74B45C", "#C7A254", "#CC7268"]},
+  grao:{label:"Grão Escuro",desc:"Escuro em primeiro lugar, âmbar tostado",amostra:["#9A5B14", "#136344", "#855800", "#A32B21"],amostraEsc:["#E0A44B", "#4CAE7A", "#CCA04A", "#CB6960"]},
+  azulejo:{label:"Azulejo",desc:"Petróleo com terracota, sem marrom",amostra:["#14606B", "#136344", "#87590A", "#A83A28"],amostraEsc:["#5FB3BF", "#4DAF7B", "#C99F4B", "#CE7263"]},
+  contraste:{label:"Alto Contraste",desc:"Quase preto sobre branco, um acento só",amostra:["#1A4FA0", "#0E5E36", "#7A5000", "#A32218"],amostraEsc:["#7FB0EE", "#50B47F", "#CEA24E", "#D06F66"]},
+};
 const APARENCIA_APP_DEFAULT={
+  paleta:"personalizada",
   fonte:"padrao",
   tamanhoLetra:"padrao",
   bordasArredondadas:true,
@@ -1631,6 +1647,22 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // atualizadoEm) e um poll caindo entre o clique e o POST confirmar no
       // servidor revertia a edição pro valor antigo — era o único campo que
       // tinha ficado de fora quando essa fusão foi aplicada aos outros.
+      // config vinha CRU do servidor — a armadilha do §3 em pessoa. Escolher a
+      // paleta (ou a fonte, ou a cor do botão) aplica local, funde com o
+      // servidor e posta: como config não estava na fusão, o merge devolvia o
+      // config do SERVIDOR e a escolha era perdida no caminho pro POST. União
+      // por chave nos sub-objetos de preferência, local vencendo — o mesmo
+      // padrão de "mapa {chave: valor}" do resto do app. O que este aparelho
+      // não mexeu continua vindo do servidor, então mudança feita em outro
+      // aparelho ainda chega.
+      config:(()=>{
+        const sc=s.config||{},pc=p.config||{};
+        const out:any={...sc};
+        for(const sub of ["aparenciaApp","coresBotoes"]){
+          if(sc[sub]||pc[sub])out[sub]={...(sc[sub]||{}),...(pc[sub]||{})};
+        }
+        return out;
+      })(),
       vendas:        mergeArrayById(s.vendas||[],p.vendas||[],_listaDeletados,true),
       // contas usa fusão por id+timestamp (não só byId): sem isso, um poll
       // que chega entre o clique em "marcar como pago" e o POST desse clique
@@ -2260,7 +2292,12 @@ export default function App() {
   return (
     <>
       <ConfigStyleInjector config={config}/>
-      <div className="app-root" data-theme={theme} data-rounded={aparenciaApp.bordasArredondadas?"on":"off"} data-motion={aparenciaApp.animacoesReduzidas?"reduced":"normal"} data-tabular={aparenciaApp.numerosTabulares?"on":"off"} data-contraste={aparenciaApp.altoContraste?"alto":"normal"} style={{fontFamily:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,zoom:String((TAMANHOS_LETRA[aparenciaApp.tamanhoLetra]||TAMANHOS_LETRA.padrao).zoom),background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo,["--onPrimary" as any]:textoSobre(coresBotoes.corPrimaria),["--onDanger" as any]:textoSobre(coresBotoes.corPerigo)}}>
+      <div className="app-root" data-theme={theme} data-paleta={aparenciaApp.paleta||"personalizada"} data-rounded={aparenciaApp.bordasArredondadas?"on":"off"} data-motion={aparenciaApp.animacoesReduzidas?"reduced":"normal"} data-tabular={aparenciaApp.numerosTabulares?"on":"off"} data-contraste={aparenciaApp.altoContraste?"alto":"normal"} style={{fontFamily:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,zoom:String((TAMANHOS_LETRA[aparenciaApp.tamanhoLetra]||TAMANHOS_LETRA.padrao).zoom),background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,...(( aparenciaApp.paleta||"personalizada")==="personalizada"?{
+        // Style inline vence CSS. Aplicar isto sempre travaria o acento das
+        // cinco paletas na cor antiga, e sem variante escura — a paleta define
+        // os dois modos, o seletor de cor define um só.
+        ["--btnPrimary" as any]:coresBotoes.corPrimaria,["--btnDanger" as any]:coresBotoes.corPerigo,
+        ["--onPrimary" as any]:textoSobre(coresBotoes.corPrimaria),["--onDanger" as any]:textoSobre(coresBotoes.corPerigo)}:{})}}>
       {/* Barra de versão nova. Fica no topo, acima de tudo, mas não bloqueia:
           quem está no meio de um lançamento continua o que estava fazendo e
           atualiza quando puder. */}
@@ -2282,16 +2319,34 @@ export default function App() {
            Cada par texto/fundo aqui foi medido pela fórmula do WCAG contra os
            DOIS fundos reais do app (card branco e creme da página); o mínimo
            obtido é 5.12:1. */
-        .app-root{--btnPrimary:#8A5227;--btnDanger:#A32B24;--bg:#FAF6F0;--bg2:#2E241C;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F5EEE4;--sidebarHover:#3D3025;--border:#E2D6C7;--border2:#D3C3AF;--text:#2A211B;--text2:#63544A;--text3:#75665B;--acc:#8A5227;--accHover:#74441F;--accLight:#F3E7DA;--success:#146B42;--successBg:#E3F3E9;--successText:#0F5A37;--danger:#A32B24;--dangerBg:#FBEAE8;--dangerText:#8F241E;--warning:#8A5A00;--warningBg:#F7EBD4;--warningText:#744C00;--info:#1C5A9E;--infoBg:#E4EEF8;--infoText:#174B85;--category:#6D4C8C;--categoryBg:#F0E8F5;--categoryText:#5B3E75;--pink:#B03E6F;--radiusCard:18px;--radiusControl:14px;--shadowCard:0 8px 24px rgba(64,42,24,0.10)}
+        .app-root{--btnPrimary:#8A5227;--btnDanger:#A32B24;--bg:#FAF6F0;--bg2:#2E241C;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F5EEE4;--sidebarHover:#3D3025;--border:#E2D6C7;--border2:#D3C3AF;--text:#2A211B;--text2:#63544A;--text3:#75665B;--acc:#8A5227;--accHover:#74441F;--accLight:#F3E7DA;--success:#146B42;--successBg:#E3F3E9;--successText:#0F5A37;--onSuccess:#FFFFFF;--danger:#A32B24;--dangerBg:#FBEAE8;--dangerText:#8F241E;--warning:#8A5A00;--warningBg:#F7EBD4;--warningText:#744C00;--info:#1C5A9E;--infoBg:#E4EEF8;--infoText:#174B85;--category:#6D4C8C;--categoryBg:#F0E8F5;--categoryText:#5B3E75;--pink:#B03E6F;--radiusCard:18px;--radiusControl:14px;--shadowCard:0 8px 24px rgba(64,42,24,0.10)}
         /* Escuro: passou em 14 das 15 medições, então muda pouco — neutros com
            leve viés quente pra conversar com o cognac do tema claro, e a borda
            corrigida (era #2D333B, 1.36:1 contra o card: sumia). */
-        .app-root[data-theme="dark"]{--bg:#12100E;--bg2:#1B1815;--bg3:#1B1815;--bg4:#221E1A;--bg5:#1B1815;--sidebarHover:#2A2521;--border:#3A342E;--border2:#4A423A;--text:#FFFFFF;--text2:#9CA3AF;--text3:#918879;--acc:#F6C453;--accHover:#E7B336;--accLight:rgba(246,196,83,0.14);--success:#22C55E;--successBg:#0F2E1C;--successText:#4ADE80;--danger:#FF5A5F;--dangerBg:#3A1518;--dangerText:#FF8A8F;--warning:#F6C453;--warningBg:#3A2E12;--warningText:#F6C453;--info:#3B82F6;--infoBg:#122A47;--infoText:#7DB0FF;--category:#A78BFA;--categoryBg:#2A1F47;--categoryText:#C4B5FD;--pink:#F472B6;--shadowCard:0 12px 30px rgba(0,0,0,0.45)}
+        .app-root[data-theme="dark"]{--bg:#12100E;--bg2:#1B1815;--bg3:#1B1815;--bg4:#221E1A;--bg5:#1B1815;--sidebarHover:#2A2521;--border:#3A342E;--border2:#4A423A;--text:#FFFFFF;--text2:#9CA3AF;--text3:#918879;--acc:#F6C453;--accHover:#E7B336;--accLight:rgba(246,196,83,0.14);--success:#22C55E;--successBg:#0F2E1C;--successText:#4ADE80;--onSuccess:#06210F;--danger:#FF5A5F;--dangerBg:#3A1518;--dangerText:#FF8A8F;--warning:#F6C453;--warningBg:#3A2E12;--warningText:#F6C453;--info:#3B82F6;--infoBg:#122A47;--infoText:#7DB0FF;--category:#A78BFA;--categoryBg:#2A1F47;--categoryText:#C4B5FD;--pink:#F472B6;--shadowCard:0 12px 30px rgba(0,0,0,0.45)}
         /* Alto contraste vira REFORÇO, não muleta: com a base já legível, ele
            agora endurece também o texto de apoio e as bordas, em vez de ser o
            único jeito de enxergar. Tons quentes pra não brigar com o cognac. */
         .app-root[data-contraste="alto"]{--border:#A08A6E;--border2:#8C7355;--text2:#443930;--text3:#544539}
         .app-root[data-theme="dark"][data-contraste="alto"]{--border:#6B6154;--border2:#8C8172;--text2:#D6CFC4;--text3:#B8AE9F}
+
+        /* ── Paletas ──────────────────────────────────────────────────────
+           Cada uma redefine os MESMOS tokens do .app-root, em claro e escuro.
+           O par soft/ink de cada cor semântica (--successBg/--successText …)
+           já existia; o que faltava era a tag usar o token em vez de hex fixo,
+           que é por que o modo escuro saía ilegível.
+           Os 120 pares foram medidos pelo WCAG antes de entrar: nenhum abaixo
+           de 4,5:1 em nenhum dos dois modos. */
+        .app-root[data-paleta="cognac"]{--bg:#FAF6F0;--bg2:#2E241C;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F5EEE4;--sidebarHover:#3D3025;--border:#E2D6C7;--border2:#D3C3AE;--text:#2A211B;--text2:#5C4E44;--text3:#6E6055;--acc:#8A5227;--accHover:#74441F;--accLight:#F3E7DA;--btnPrimary:#8A5227;--onPrimary:#FFFFFF;--btnDanger:#A32B24;--onDanger:#FFFFFF;--success:#146B42;--successBg:#DFEDE5;--successText:#0F5533;--onSuccess:#FFFFFF;--danger:#A32B24;--dangerBg:#F7E0DE;--dangerText:#8C2019;--warning:#8A5A00;--warningBg:#F7EBD2;--warningText:#6E4700;--info:#1C5A9E;--infoBg:#E1EBF6;--infoText:#17497F;--category:#6D4C8C;--categoryBg:#F0E8F5;--categoryText:#57376F;--pink:#6D4C8C}
+        .app-root[data-paleta="cognac"][data-theme="dark"]{--bg:#17120E;--bg2:#1B1510;--bg3:#231C16;--bg4:#231C16;--bg5:#1E1812;--sidebarHover:#2A2219;--border:#3A2E23;--border2:#4A3A2C;--text:#F3EAE0;--text2:#C6B6A5;--text3:#A5937F;--acc:#D79A62;--accHover:#E8AC74;--accLight:#332417;--btnPrimary:#D79A62;--onPrimary:#10100E;--btnDanger:#CC6A62;--onDanger:#10100E;--success:#4FB07B;--successBg:#12301E;--successText:#7FD3A4;--onSuccess:#10100E;--danger:#CC6A62;--dangerBg:#331917;--dangerText:#F0A29B;--warning:#C99B3C;--warningBg:#2E2310;--warningText:#E5BC6A;--info:#5A94D6;--infoBg:#132435;--infoText:#95C4EF;--category:#9B7CC0;--categoryBg:#241B33;--categoryText:#C4AEE2;--pink:#9B7CC0}
+        .app-root[data-paleta="papel"]{--bg:#F6F3EC;--bg2:#242619;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#EFEBE1;--sidebarHover:#333526;--border:#DFD9CB;--border2:#CEC7B6;--text:#23241F;--text2:#53564C;--text3:#67695E;--acc:#4A5D34;--accHover:#3B4B29;--accLight:#E7EDE0;--btnPrimary:#4A5D34;--onPrimary:#FFFFFF;--btnDanger:#A33326;--onDanger:#FFFFFF;--success:#3E6B2C;--successBg:#E2EBDC;--successText:#2F5220;--onSuccess:#FFFFFF;--danger:#A33326;--dangerBg:#F5E2DF;--dangerText:#8A2A22;--warning:#8A6110;--warningBg:#F4EBD6;--warningText:#6B4A08;--info:#2A6690;--infoBg:#E2E9F0;--infoText:#1D4C70;--category:#6B5288;--categoryBg:#EDE8F3;--categoryText:#553F6E;--pink:#6B5288}
+        .app-root[data-paleta="papel"][data-theme="dark"]{--bg:#15160F;--bg2:#191A13;--bg3:#20211A;--bg4:#20211A;--bg5:#1B1C15;--sidebarHover:#272921;--border:#343629;--border2:#43462F;--text:#EDEDE3;--text2:#BCBEAF;--text3:#9A9C8C;--acc:#A8C286;--accHover:#B9D199;--accLight:#222B18;--btnPrimary:#A8C286;--onPrimary:#10100E;--btnDanger:#CC7268;--onDanger:#10100E;--success:#74B45C;--successBg:#182A14;--successText:#9AD183;--onSuccess:#10100E;--danger:#CC7268;--dangerBg:#301A17;--dangerText:#EFA79E;--warning:#C7A254;--warningBg:#2C2512;--warningText:#E3C177;--info:#6198C4;--infoBg:#152430;--infoText:#9AC6E8;--category:#9A83BC;--categoryBg:#221C30;--categoryText:#C0ADDC;--pink:#9A83BC}
+        .app-root[data-paleta="grao"]{--bg:#F5F2EE;--bg2:#1C1A17;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#EDE8E2;--sidebarHover:#2B2824;--border:#DED7CE;--border2:#CCC3B8;--text:#1F1B17;--text2:#514A43;--text3:#655D55;--acc:#9A5B14;--accHover:#834C0F;--accLight:#F5E7D5;--btnPrimary:#9A5B14;--onPrimary:#FFFFFF;--btnDanger:#A32B21;--onDanger:#FFFFFF;--success:#136344;--successBg:#DEEAE2;--successText:#0D5334;--onSuccess:#FFFFFF;--danger:#A32B21;--dangerBg:#F6E0DD;--dangerText:#8A1F18;--warning:#855800;--warningBg:#F6EAD1;--warningText:#6B4600;--info:#1A5793;--infoBg:#E0EAF5;--infoText:#15487E;--category:#6B4B8A;--categoryBg:#EFE8F4;--categoryText:#553A6F;--pink:#6B4B8A}
+        .app-root[data-paleta="grao"][data-theme="dark"]{--bg:#101010;--bg2:#131211;--bg3:#1B1A18;--bg4:#1B1A18;--bg5:#161514;--sidebarHover:#242220;--border:#2F2D2A;--border2:#403D39;--text:#F2EFE9;--text2:#C2BCB2;--text3:#A09990;--acc:#E0A44B;--accHover:#EFB662;--accLight:#2B2011;--btnPrimary:#E0A44B;--onPrimary:#10100E;--btnDanger:#CB6960;--onDanger:#10100E;--success:#4CAE7A;--successBg:#0F2C1C;--successText:#78CE9D;--onSuccess:#10100E;--danger:#CB6960;--dangerBg:#2F1816;--dangerText:#EFA098;--warning:#CCA04A;--warningBg:#2B2310;--warningText:#E8C273;--info:#5590D2;--infoBg:#11222F;--infoText:#8FC0EC;--category:#9A79C0;--categoryBg:#221930;--categoryText:#C3ACE2;--pink:#9A79C0}
+        .app-root[data-paleta="azulejo"]{--bg:#F4F7F7;--bg2:#12292E;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#EAF0F0;--sidebarHover:#1E393F;--border:#D5DFE0;--border2:#C0CDCF;--text:#17262A;--text2:#465558;--text3:#5A686B;--acc:#14606B;--accHover:#0F4E57;--accLight:#DDEDEF;--btnPrimary:#14606B;--onPrimary:#FFFFFF;--btnDanger:#A83A28;--onDanger:#FFFFFF;--success:#136344;--successBg:#DCEDE4;--successText:#0D5334;--onSuccess:#FFFFFF;--danger:#A83A28;--dangerBg:#F7E1DD;--dangerText:#8E2A1C;--warning:#87590A;--warningBg:#F6E9D4;--warningText:#6D4703;--info:#1A5793;--infoBg:#DEEAF5;--infoText:#14497E;--category:#6B4B8A;--categoryBg:#EEE8F4;--categoryText:#553A6F;--pink:#6B4B8A}
+        .app-root[data-paleta="azulejo"][data-theme="dark"]{--bg:#0D1416;--bg2:#0F181A;--bg3:#161F21;--bg4:#161F21;--bg5:#111A1C;--sidebarHover:#1D2A2D;--border:#28363A;--border2:#35464B;--text:#E9F1F2;--text2:#B3C2C5;--text3:#93A3A6;--acc:#5FB3BF;--accHover:#74C4CF;--accLight:#132B2F;--btnPrimary:#5FB3BF;--onPrimary:#10100E;--btnDanger:#CE7263;--onDanger:#10100E;--success:#4DAF7B;--successBg:#0F2B1D;--successText:#79CE9E;--onSuccess:#10100E;--danger:#CE7263;--dangerBg:#301A15;--dangerText:#F0A493;--warning:#C99F4B;--warningBg:#2A2311;--warningText:#E5C075;--info:#5892D3;--infoBg:#122431;--infoText:#92C3EE;--category:#977BBE;--categoryBg:#211A2F;--categoryText:#C1AEE0;--pink:#977BBE}
+        .app-root[data-paleta="contraste"]{--bg:#FFFFFF;--bg2:#141414;--bg3:#FFFFFF;--bg4:#FFFFFF;--bg5:#F2F2F2;--sidebarHover:#262626;--border:#C9C9C9;--border2:#B0B0B0;--text:#101010;--text2:#3A3A3A;--text3:#4E4E4E;--acc:#1A4FA0;--accHover:#143F83;--accLight:#E4EBF7;--btnPrimary:#1A4FA0;--onPrimary:#FFFFFF;--btnDanger:#A32218;--onDanger:#FFFFFF;--success:#0E5E36;--successBg:#DCEBE1;--successText:#0B4D2C;--onSuccess:#FFFFFF;--danger:#A32218;--dangerBg:#F7DFDC;--dangerText:#8A1B13;--warning:#7A5000;--warningBg:#F6E8CE;--warningText:#5F3F00;--info:#17508C;--infoBg:#DDE8F5;--infoText:#123F70;--category:#5E3D80;--categoryBg:#EDE7F3;--categoryText:#4B2F68;--pink:#5E3D80}
+        .app-root[data-paleta="contraste"][data-theme="dark"]{--bg:#0A0A0A;--bg2:#0D0D0D;--bg3:#161616;--bg4:#161616;--bg5:#121212;--sidebarHover:#202020;--border:#333333;--border2:#474747;--text:#FAFAFA;--text2:#C9C9C9;--text3:#A8A8A8;--acc:#7FB0EE;--accHover:#95C0F4;--accLight:#122033;--btnPrimary:#7FB0EE;--onPrimary:#10100E;--btnDanger:#D06F66;--onDanger:#10100E;--success:#50B47F;--successBg:#0D2A1A;--successText:#82D6A6;--onSuccess:#10100E;--danger:#D06F66;--dangerBg:#2E1715;--dangerText:#F4A79F;--warning:#CEA24E;--warningBg:#2A2210;--warningText:#EAC578;--info:#5E96D8;--infoBg:#10212E;--infoText:#9BC8F0;--category:#9C7FC4;--categoryBg:#1F1A2C;--categoryText:#C6B1E4;--pink:#9C7FC4}
         .app-root[data-rounded="off"] *{border-radius:0!important}
         .app-root[data-motion="reduced"] *{transition:none!important;animation:none!important}
         .app-root[data-tabular="on"] *{font-variant-numeric:tabular-nums}
@@ -3579,7 +3634,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           {!(iaCombResultado.maquininhaTotal>0||iaCombResultado.dinheiro>0||iaCombResultado.ifood>0||iaCombResultado.nfood>0||iaCombResultado.deliveryLiquido>0)&&<div style={{fontSize:12,color:"#F59E0B",padding:"4px 0"}}>Nenhum valor reconhecido nas fotos enviadas.</div>}
           <div style={{display:"flex",gap:6,marginTop:8}}>
             <button className="btn" type="button" onClick={aplicarResultadoCombinado}
-              style={{flex:1,background:"#22C55E",color:"#051208",fontSize:13,padding:"10px",borderRadius:10,fontWeight:700}}>✅ Preencher formulário</button>
+              style={{flex:1,background:"var(--success)",color:"var(--onSuccess)",fontSize:13,padding:"10px",borderRadius:10,fontWeight:700}}>✅ Preencher formulário</button>
             <button className="btn" type="button" onClick={()=>setIaCombResultado(null)}
               style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"10px 14px",borderRadius:10}}>🔄 Refazer</button>
           </div>
@@ -3696,7 +3751,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(totalDia)}</span>
         </div>
         {cDia>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-          <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>comprado: {fmtMoney(cDia)}</span>
+          <span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>comprado: {fmtMoney(cDia)}</span>
         </div>}
         {g.itens.map((v:any,i:number)=>
         <div key={v.id} style={varias&&i>0?{borderTop:"1px solid var(--border)",paddingTop:10,marginTop:10}:undefined}>
@@ -4394,7 +4449,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
         </div>
         <div style={{fontSize:16,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(r.total)}</div>
       </div>
-      {aj.mostrarChipVendasExtras&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E55"}:{background:"#FEF3C7",color:"#B45309",border:"1px solid #FDE68A"})}}>
+      {aj.mostrarChipVendasExtras&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E55"}:{background:"var(--warningBg)",color:"var(--warningText)",border:"1px solid #FDE68A"})}}>
         {r.lancadoEmVendas&&r.valorLancado>0?`✓ Em ${aj.legVendasExtras}`:"⚠️ Não lançado"}
       </span>}
       <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap" as const}}>
@@ -7058,7 +7113,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               <div style={{fontWeight:600,fontSize:13}}>{item.nomeProduto}</div>
               <div className="muted" style={{fontSize:12}}>{item.quantidade} {item.unidade}
                 {item.valorUnit&&` × ${fmtMoney(parseMoney(item.valorUnit))}`}
-                <span className="tag" style={{background:"#DCFCE7",color:"#22C55E",marginLeft:6,fontSize:10}}>{item.categoria}</span>
+                <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)",marginLeft:6,fontSize:10}}>{item.categoria}</span>
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -7177,7 +7232,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                 <span style={{color:"var(--infoText)",fontWeight:700,textDecoration:item.removido?"line-through":"none",whiteSpace:"nowrap" as const}}>{fmtMoney(item.valorTotal||0)}</span>
               </div>
               <div className="muted">{item.removido?"removido":<>{item.quantidade} {item.unidade} •
-                <span className="tag" style={{background:"#DCFCE7",color:"#22C55E",marginLeft:6,fontSize:10}}>{item.categoria}</span></>}
+                <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)",marginLeft:6,fontSize:10}}>{item.categoria}</span></>}
               </div>
             </div>
             <button onClick={()=>toggleItemIA(i)} title={item.removido?"Desfazer":"Remover item"}
@@ -7202,7 +7257,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           <input type="date" value={iaVenc} onChange={e=>setIaVenc(e.target.value)} className="inp" style={{marginBottom:8}}/>
         )}
         <div style={{display:"flex",gap:8,marginTop:4}}>
-          <button className="btn" onClick={confirmarIA} style={{background:"#22C55E",color:"#051208",padding:"12px",flex:1,fontSize:14}}>✅ Confirmar</button>
+          <button className="btn" onClick={confirmarIA} style={{background:"var(--success)",color:"var(--onSuccess)",padding:"12px",flex:1,fontSize:14}}>✅ Confirmar</button>
           <button className="btn" onClick={()=>{setIaResult(null);setNfeXml("");}} style={{background:"var(--border)",color:"#888",padding:"12px",flex:1,fontSize:14}}>❌ Descartar</button>
         </div>
       </div>}
@@ -7918,7 +7973,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
           {autoPendentesConciliar.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
             <span style={{fontFamily:"monospace",fontWeight:800,color:"var(--successText)",fontSize:15}}>{autoPendentesConciliar.length}</span>
             <span style={{fontSize:11.5,color:"var(--successText)",flex:1,lineHeight:1.4}}>sugestõe{autoPendentesConciliar.length!==1?"s":""} automática{autoPendentesConciliar.length!==1?"s":""} pronta{autoPendentesConciliar.length!==1?"s":""} (nome igual ou muito parecido)</span>
-            <button onClick={aplicarAutoTodosConciliar} style={{background:"#22C55E",color:"#08240f",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>✅ Aplicar as {autoPendentesConciliar.length}</button>
+            <button onClick={aplicarAutoTodosConciliar} style={{background:"var(--success)",color:"var(--onSuccess)",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>✅ Aplicar as {autoPendentesConciliar.length}</button>
           </div>}
           {insumosSoltosVis.map((mp:any)=>{
             const bl=(conciliarBusca[mp.id]||"").trim().toLowerCase();
@@ -8009,7 +8064,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
               </div>
               {escolha
                 ?<div style={{display:"flex",alignItems:"center",gap:8,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"8px 10px",fontSize:12,color:"var(--successText)",fontWeight:700}}>
-                  {escolha.auto&&<span style={{fontSize:9,fontWeight:800,background:"#22C55E",color:"#08240f",borderRadius:5,padding:"2px 6px",flexShrink:0}}>AUTO</span>}
+                  {escolha.auto&&<span style={{fontSize:9,fontWeight:800,background:"var(--success)",color:"var(--onSuccess)",borderRadius:5,padding:"2px 6px",flexShrink:0}}>AUTO</span>}
                   ✓ Vai {escolha.novo?"virar produto novo":`entrar como marca de "${escolha.prodNome}"`}
                   <button onClick={()=>setConciliarEscolha(e=>{const n={...e};delete n[mp.id];return n;})} style={{marginLeft:"auto",background:"none",border:"none",color:"var(--successText)",textDecoration:"underline",cursor:"pointer",fontSize:11.5,flexShrink:0}}>trocar</button>
                 </div>
@@ -8174,7 +8229,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
                   <button className="btn" onClick={()=>setGruposSugeridos(gs=>gs?gs.filter((_,j)=>j!==i):gs)}
                     style={{background:"var(--border2)",color:"#aaa",padding:"8px",fontSize:12,flex:1}}>Ignorar</button>
                   <button className="btn" onClick={()=>confirmarMesclagemGrupo(i)}
-                    style={{background:"#22C55E",color:"#051208",padding:"8px",fontSize:12,fontWeight:700,flex:2}}>✅ Confirmar mesclagem</button>
+                    style={{background:"var(--success)",color:"var(--onSuccess)",padding:"8px",fontSize:12,fontWeight:700,flex:2}}>✅ Confirmar mesclagem</button>
                 </div>
               </div>;
             })}
@@ -9730,7 +9785,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       {comprados.length>0&&<span style={{background:"#22C55E22",color:"#22C55E",border:"1px solid #22C55E44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>✅ {comprados.length}</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
         {lista.length>0&&<button className="btn" onClick={imprimirListaAtual} title="Imprimir lista atual" style={{background:"var(--infoBg)",color:"var(--infoText)",border:"1px solid #0EA5E940",padding:"6px 12px",fontSize:12}}>🖨️</button>}
-        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
+        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"var(--dangerBg)",color:"var(--dangerText)",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
 
@@ -9881,7 +9936,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       return <div className="card" style={{marginBottom:12,border:"1px solid #78600a"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div className="section-title" style={{color:"#F59E0B",marginBottom:0}}>💰 Estimativa de Custo da Lista</div>
-          {itensPend.length>0&&<button className="btn" onClick={imprimirEstimativa} style={{background:"#FEF3C7",color:"#F59E0B",border:"1px solid #78600a",padding:"5px 12px",fontSize:11}}>🖨️ Imprimir</button>}
+          {itensPend.length>0&&<button className="btn" onClick={imprimirEstimativa} style={{background:"var(--warningBg)",color:"var(--warningText)",border:"1px solid #78600a",padding:"5px 12px",fontSize:11}}>🖨️ Imprimir</button>}
         </div>
         {!itensPend.length&&<div className="muted" style={{textAlign:"center",padding:20}}>Nenhum item pendente na lista.</div>}
         {itensPend.length>0&&<>
@@ -10149,7 +10204,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             style={{background:"var(--successBg)",color:"var(--successText)",padding:"6px 12px",fontSize:11,fontWeight:700,opacity:sincronizando?.6:1}}>
             {sincronizando?"⏳ Sincronizando...":"🔄 Sincronizar este aparelho"}
           </button>
-          <button className="btn" onClick={removerDuplicatas} style={{background:"#F3E8FF",color:"#ff9aa8",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
+          <button className="btn" onClick={removerDuplicatas} style={{background:"var(--categoryBg)",color:"var(--categoryText)",padding:"6px 12px",fontSize:11}}>🧹 Remover duplicatas</button>
         </div>
       </div>
       {/* Só aparece quando há o que fazer: produto sem rua cuja categoria já
@@ -10346,8 +10401,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                   </>:<span style={{flex:1,fontSize:12}}>Nenhum parecido encontrado — <b>criar como novo?</b></span>}
                 </div>}
                 {!isManual&&!isNovo&&<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap" as const}}>
-                  {sug&&<button onClick={()=>aceitarSugestao(item,sug)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Vincular</button>}
-                  {!sug&&<button onClick={()=>abrirCadastrarNovo(item)} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>➕ Cadastrar novo</button>}
+                  {sug&&<button onClick={()=>aceitarSugestao(item,sug)} className="btn" style={{flex:1,background:"var(--success)",color:"var(--onSuccess)",padding:"7px",fontSize:11,fontWeight:700}}>✅ Vincular</button>}
+                  {!sug&&<button onClick={()=>abrirCadastrarNovo(item)} className="btn" style={{flex:1,background:"var(--success)",color:"var(--onSuccess)",padding:"7px",fontSize:11,fontWeight:700}}>➕ Cadastrar novo</button>}
                   <button onClick={()=>{setCtManualId(item.id);setCtBusca("");}} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🔍 {sug?"Escolher outro":"Buscar manualmente"}</button>
                   <button onClick={()=>marcarRevisado(item)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>🚫 Não conciliar</button>
                 </div>}
@@ -10401,7 +10456,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 </div>
                 <div style={{display:"flex",gap:6}}>
                   <button onClick={()=>setCtNovoId(null)} className="btn" style={{flex:1,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)",padding:"7px",fontSize:11,fontWeight:700}}>Cancelar</button>
-                  <button onClick={()=>{cadastrarNovoInsumo(item,ctNovoForm);setCtNovoId(null);}} className="btn" style={{flex:1,background:"#22C55E",color:"#051208",padding:"7px",fontSize:11,fontWeight:700}}>✅ Cadastrar</button>
+                  <button onClick={()=>{cadastrarNovoInsumo(item,ctNovoForm);setCtNovoId(null);}} className="btn" style={{flex:1,background:"var(--success)",color:"var(--onSuccess)",padding:"7px",fontSize:11,fontWeight:700}}>✅ Cadastrar</button>
                 </div>
               </div>}
             </div>;
@@ -10504,7 +10559,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         {busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}
       </div>}
       {isAdmin&&lista.length>0&&<>
-        <button className="btn" onClick={fecharLista} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #22C55E40",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
+        <button className="btn" onClick={fecharLista} style={{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E40",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
           🔒 Fechar Lista
         </button>
         {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"var(--dangerBg)",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
@@ -11343,7 +11398,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       <div className="section-title" style={{marginBottom:0}}>🏭 Produção</div>
       {itens.length>0&&<span style={{background:"#7C3AED22",color:"var(--categoryText)",border:"1px solid #7C3AED44",borderRadius:20,fontSize:11,fontWeight:700,padding:"2px 10px"}}>{itens.length} item(ns)</span>}
       <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
+        {onLogout&&<button className="btn" onClick={onLogout} style={{background:"var(--dangerBg)",color:"var(--dangerText)",border:"1px solid #EF444440",padding:"8px 16px",fontSize:13,fontWeight:700}}>🔒 Sair</button>}
       </div>
     </div>
 
@@ -11934,7 +11989,7 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
                 🖨️
               </button>
               {preenchidos>0&&<button onClick={()=>{try{localStorage.removeItem("prod_qtds_ped");localStorage.removeItem("prod_qtds_atual");}catch{}setQtdsCatalog({});setQtdsAtual({});}} className="btn"
-                style={{background:"#FEE2E2",color:"#ff7a7a",border:"1px solid #EF444440",padding:"14px 14px",fontSize:14}} title="Zerar tudo">
+                style={{background:"var(--dangerBg)",color:"var(--dangerText)",border:"1px solid #EF444440",padding:"14px 14px",fontSize:14}} title="Zerar tudo">
                 ✕
               </button>}
             </div>
@@ -13960,7 +14015,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
             </div>
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap" as const}}>
               <span className="tag" style={{background:"var(--border)",color:"#888",fontSize:10}}>{m.categoria}</span>
-              {!isCMV&&<span className="tag" style={{background:"#FEF3C7",color:"#f59e0b",fontSize:10,border:"1px solid #f59e0b44"}}>não CMV</span>}
+              {!isCMV&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",fontSize:10,border:"1px solid #f59e0b44"}}>não CMV</span>}
               {isPerecAlta&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--category)",fontSize:10}}>perecível</span>}
               <span className="muted" style={{fontSize:11}}>Custo: {fmtMoney(m.ultimoValor||0)}/{m.unidade}</span>
               {min>0&&<span className="muted" style={{fontSize:11,color:est<min?"#f59e0b":"#555"}}>Mín: {min} {m.unidade}</span>}
@@ -13978,7 +14033,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
             </div>}
             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const}}>
               <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"saida",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"var(--border)",color:"var(--btnPrimary)",padding:"5px 10px",fontSize:12}}>📝 Ajustar</button>
-              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"perda",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"#FEE2E2",color:"#f59e0b",padding:"5px 10px",fontSize:12,border:"1px solid #f59e0b44"}}>🗑️ Perda</button>
+              <button className="btn" onClick={()=>setAjusteModal({mp:m,qtd:"",tipo:"perda",descricao:"",razaoPerda:"",dataValidade:m.dataValidade||""})} style={{background:"var(--dangerBg)",color:"var(--dangerText)",padding:"5px 10px",fontSize:12,border:"1px solid #f59e0b44"}}>🗑️ Perda</button>
               <button className="btn" onClick={()=>{setMergeModal({src:m});setMergeTgt("");}} style={{background:"var(--border)",color:"var(--category)",padding:"5px 10px",fontSize:12}}>🔗 Agrupar</button>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <input type="number" min="0" step="0.1" value={m.estoqueMinimo||""} placeholder="0"
@@ -14914,7 +14969,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
             <span>📎</span><span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{verConta.anexo.nome}</span><span style={{fontSize:11,color:"#888"}}>abrir</span>
           </button>}
           <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap" as const}}>
-            {itens.length>0&&<button onClick={()=>imprimirNFe(verConta,itens)} style={{background:"#DCFCE7",color:"#22C55E",border:"1px solid #2a4a2a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            {itens.length>0&&<button onClick={()=>imprimirNFe(verConta,itens)} style={{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #2a4a2a",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               🖨️ Imprimir / PDF
             </button>}
             {verConta.xmlNFe&&<button onClick={()=>baixarXmlNFe(verConta.xmlNFe,verConta.nNF||"",verConta.fornecedorNome||"")} style={{background:"var(--infoBg)",color:"var(--btnPrimary)",border:"1px solid #0EA5E940",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
@@ -15037,7 +15092,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                   </div>
                 ))}
                 <div style={{padding:"10px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:6,flexWrap:"wrap" as const}}>
-                  <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"#DCFCE7",color:"#22C55E",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
+                  <button className="btn" onClick={()=>pagarGrupo(gid)} style={{background:"var(--successBg)",color:"var(--successText)",padding:"7px 12px",fontSize:12}}>✅ Pagar todas</button>
                   <button className="btn" onClick={()=>editGrupo(gid,sorted)} style={{background:"var(--border)",color:"var(--btnPrimary)",padding:"7px 12px",fontSize:12}}>✏️ Editar série</button>
                   <button className="btn" onClick={()=>delGrupo(gid)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"7px 12px",fontSize:12}}>🗑️ Excluir série</button>
                 </div>
@@ -15087,7 +15142,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
                     {c.status==="pago"?"✅ Pago":"⏰ Pendente"}
                   </button>
                   {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>setVerConta(c)} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:12}}>🧾 Itens</button>}
-                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>🖨️</button>}
+                  {c.origem==="compra"&&c.grupoId&&<button className="btn" onClick={()=>{const its=(db.compras||[]).filter((x:any)=>x.grupoId===c.grupoId);imprimirNFe(c,its);}} style={{background:"var(--successBg)",color:"var(--successText)",padding:"6px 12px",fontSize:12}}>🖨️</button>}
                   {c.anexo&&<button className="btn" onClick={()=>abrirAnexo(c.anexo)} title={c.anexo.nome} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"6px 12px",fontSize:12}}>📎</button>}
                   <button className="btn" onClick={()=>edit(c)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
                   <button className="btn" onClick={()=>del(c.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
@@ -15568,7 +15623,7 @@ function FichaTecnica({db,setDb,setDbAndSave,state,setState,empresa,prefillNome,
       ))}
     </div>
     {subTab==="lista"&&<div>
-      <button className="btn" onClick={atualizar} style={{background:"#DCFCE7",color:"#22C55E",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
+      <button className="btn" onClick={atualizar} style={{background:"var(--successBg)",color:"var(--successText)",padding:"10px",width:"100%",marginBottom:14,fontSize:13}}>🔄 Atualizar Fichas com Últimas Compras</button>
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
         <div style={{position:"relative",flex:1}}><input placeholder="🔍 Buscar ficha técnica..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{paddingRight:busca?36:14,marginBottom:0}}/>{busca&&<button onClick={()=>setBusca("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}}>✕</button>}</div>
         <SortCtrl id="fichas" db={db} setDb={setDb} opts={[["data-desc","Mais recente"],["data-asc","Mais antigo"],["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/>
@@ -15585,7 +15640,7 @@ function FichaTecnica({db,setDb,setDbAndSave,state,setState,empresa,prefillNome,
             </div>
             <div style={{display:"flex",gap:5}}>
               {por>1&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>{por} porções</span>}
-              <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>CMV {cmv}%</span>
+              <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>CMV {cmv}%</span>
             </div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
@@ -15930,7 +15985,7 @@ function FichaTecnica({db,setDb,setDbAndSave,state,setState,empresa,prefillNome,
           {items.map(m=>(
             <div key={m.id} className="list-item" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div><div style={{fontWeight:600,fontSize:14}}>{m.nome}</div><div className="muted" style={{fontSize:12}}>Último preço: {fmtMoney(m.ultimoValor||0)}/{m.unidade}</div></div>
-              <span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>{m.unidade}</span>
+              <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>{m.unidade}</span>
             </div>
           ))}
         </div>;
@@ -16248,18 +16303,18 @@ ${detalhesDesc.join("")}
           <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
             <span className="tag" style={{background:"var(--border)",color:"#888"}}>Sal: {fmtMoney(f.salario)}</span>
             {totFalt>0&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--btnDanger)"}}>-{fmtMoney(totFalt)} falta</span>}
-            {totAdt>0&&<span className="tag" style={{background:"#FEF3C7",color:"#F59E0B"}}>-{fmtMoney(totAdt)} adt</span>}
-            {totBonif>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totBonif)} bonif</span>}
-            {totComis>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totComis)} comis</span>}
-            {totSalFam>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(totSalFam)} sal.fam</span>}
-            {totEnc>0&&<span className="tag" style={{background:"#F3E8FF",color:"#ff9aa8"}}>-{fmtMoney(totEnc)} enc. desc.</span>}
+            {totAdt>0&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>-{fmtMoney(totAdt)} adt</span>}
+            {totBonif>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>+{fmtMoney(totBonif)} bonif</span>}
+            {totComis>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>+{fmtMoney(totComis)} comis</span>}
+            {totSalFam>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>+{fmtMoney(totSalFam)} sal.fam</span>}
+            {totEnc>0&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--categoryText)"}}>-{fmtMoney(totEnc)} enc. desc.</span>}
             {totPatr>0&&<span className="tag" style={{background:"var(--warningBg,#FBF0DA)",color:"var(--warningText,#8A5A00)"}}>{fmtMoney(totPatr)} patronal</span>}
             {h.descontoNaoAbsorvido>0&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--btnDanger)"}}>⚠️ {fmtMoney(h.descontoNaoAbsorvido)} não coube no salário</span>}
             {totCons>0&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>-{fmtMoney(totCons)} cons</span>}
           </div>
           <div style={{display:"flex",gap:8}}>
             <button className="btn" onClick={()=>gerarHolerite(f)} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"7px 14px",fontSize:12}}>📄 Holerite</button>
-            <button className="btn" onClick={()=>{if(confirm(`Lançar folha de ${f.nome} (${relMes}) no Financeiro?`))lancarFolhaFin(f);}} style={{background:"#DCFCE7",color:"#22C55E",padding:"7px 12px",fontSize:12}}>💰 Folha</button>
+            <button className="btn" onClick={()=>{if(confirm(`Lançar folha de ${f.nome} (${relMes}) no Financeiro?`))lancarFolhaFin(f);}} style={{background:"var(--successBg)",color:"var(--successText)",padding:"7px 12px",fontSize:12}}>💰 Folha</button>
             <button className="btn" onClick={()=>editFunc(f)} style={{background:"var(--border)",color:"#888",padding:"7px 12px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>delFunc(f.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"7px 12px",fontSize:12}}>🗑️</button>
           </div>
@@ -16499,7 +16554,7 @@ ${detalhesDesc.join("")}
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600}}>{fn?.nome||"—"}</span><span style={{color:"#F59E0B",fontWeight:700}}>{fmtMoney(parseMoney(a.valor))}</span></div>
         <div className="muted">{fmtDate(a.data)}</div>{a.descricao&&<div className="muted">{a.descricao}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
-          <span className="tag" style={{background:"#FEF3C7",color:"#F59E0B",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
+          <span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",display:"inline-block"}}>→ Financeiro: Adiantamento</span>
           <button className="btn" onClick={()=>{if(confirm("Excluir este adiantamento? A conta vinculada no Financeiro também será removida."))delAdt(a);}} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
         {a.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(a.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
@@ -16543,14 +16598,14 @@ ${detalhesDesc.join("")}
           <span style={{color:"#22C55E",fontWeight:700,fontSize:13}}>{fmtDate(e.data)}</span>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
-          {e.valor>0&&<span className="tag" style={{background:"#F3E8FF",color:"#ff9aa8"}}>-{fmtMoney(e.valor)} encargos</span>}
-          {e.bonificacao>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(e.bonificacao)} bonif.</span>}
-          {e.comissao>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(e.comissao)} comis.</span>}
-          {e.salarioFamilia>0&&<span className="tag" style={{background:"#DCFCE7",color:"#22C55E"}}>+{fmtMoney(e.salarioFamilia)} sal.fam.</span>}
+          {e.valor>0&&<span className="tag" style={{background:"var(--categoryBg)",color:"var(--categoryText)"}}>-{fmtMoney(e.valor)} encargos</span>}
+          {e.bonificacao>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>+{fmtMoney(e.bonificacao)} bonif.</span>}
+          {e.comissao>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>+{fmtMoney(e.comissao)} comis.</span>}
+          {e.salarioFamilia>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>+{fmtMoney(e.salarioFamilia)} sal.fam.</span>}
         </div>
         {e.descricao&&<div className="muted" style={{marginBottom:6}}>{e.descricao}</div>}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-          <button className="btn" onClick={()=>lancarEncFin(e)} style={{background:"#DCFCE7",color:"#22C55E",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
+          <button className="btn" onClick={()=>lancarEncFin(e)} style={{background:"var(--successBg)",color:"var(--successText)",padding:"6px 12px",fontSize:12}}>💰 Financeiro</button>
           <button className="btn" onClick={()=>editEnc(e)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
           <button className="btn" onClick={()=>{if(confirm("Excluir este registro?"))delEnc(e.id);}} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
         </div>
@@ -17423,7 +17478,7 @@ function Relatorios({db,setDb,setDbAndSave,empresa,state}:{db:any,setDb:any,setD
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
             <button className="btn" onClick={()=>gPedidoPrint(ped)} style={{flex:1,background:"var(--infoBg)",color:"var(--btnPrimary)",fontSize:12,padding:"8px 6px",minWidth:80}}>🖨️ PDF</button>
-            <button className="btn" onClick={()=>gPedidoWhatsApp(ped)} style={{flex:1,background:"#DCFCE7",color:"#22C55E",fontSize:12,padding:"8px 6px",minWidth:80}}>📱 WhatsApp</button>
+            <button className="btn" onClick={()=>gPedidoWhatsApp(ped)} style={{flex:1,background:"var(--successBg)",color:"var(--successText)",fontSize:12,padding:"8px 6px",minWidth:80}}>📱 WhatsApp</button>
             <button className="btn" onClick={()=>gPedidoCSV(ped)} style={{flex:1,background:"var(--infoBg)",color:"var(--infoText)",fontSize:12,padding:"8px 6px",minWidth:80}}>📊 CSV</button>
           </div>
         </div>
@@ -17562,13 +17617,13 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
           const r=await fetch(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(localEmp)});
           const d=await r.json();
           if(d.ok){alert("✅ Enviado!");window.location.reload();}else alert("Erro: "+(d.error||"—"));
-        }} style={{background:"#FEF3C7",color:"#f59e0b",padding:"8px 12px",fontSize:12,flex:1}}>⬆️ Enviar ao servidor</button>
+        }} style={{background:"var(--warningBg)",color:"var(--warningText)",padding:"8px 12px",fontSize:12,flex:1}}>⬆️ Enviar ao servidor</button>
       </div>}
     </div>
 
     {/* Export / Import */}
     <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
-      <button className="btn" onClick={exportarJSON} style={{background:"#DCFCE7",color:"#22C55E",padding:"9px 12px",fontSize:12,flex:1}}>⬇️ Baixar backup JSON</button>
+      <button className="btn" onClick={exportarJSON} style={{background:"var(--successBg)",color:"var(--successText)",padding:"9px 12px",fontSize:12,flex:1}}>⬇️ Baixar backup JSON</button>
       <button className="btn" onClick={()=>importRef.current?.click()} style={{background:"var(--infoBg)",color:"var(--infoText)",padding:"9px 12px",fontSize:12,flex:1}}>⬆️ Importar JSON</button>
       <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={importarJSON}/>
     </div>
@@ -17584,7 +17639,7 @@ function BackupsEmpresa({emp,db,setDb}:{emp:string,db:any,setDb:(fn:(d:any)=>any
       return <div key={b.file} className="list-item" style={{borderLeft:`3px solid ${isSafety?"#F59E0B":"#22C55E"}`,padding:"8px 10px",marginBottom:6}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
           <span style={{fontWeight:700,fontSize:12}}>{fmtTs(b.file)}</span>
-          {isSafety&&<span className="tag" style={{background:"#FEF3C7",color:"#F59E0B",fontSize:9}}>⚠️ segurança</span>}
+          {isSafety&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",fontSize:9}}>⚠️ segurança</span>}
           <span style={{fontSize:10,color:"#555"}}>{b.size?`${(b.size/1024).toFixed(0)} KB`:""}</span>
         </div>
         {b.preview&&<div style={{display:"flex",gap:4,flexWrap:"wrap" as const,marginBottom:6}}>
@@ -18645,7 +18700,7 @@ function EstoquePdvPanel({empresa,db,initialView}:{empresa:"CONFRARIA"|"SEAMA",d
         })}
         {!invFolha.length&&<div className="muted" style={{fontSize:12}}>Gere a folha primeiro (aba "1. Gerar folha").</div>}
         <textarea placeholder="Motivo (opcional)" value={lancMotivo} onChange={e=>setLancMotivo(e.target.value)} className="inp" style={{marginTop:10,minHeight:50}}/>
-        <button className="btn" onClick={fecharContagem} disabled={salvandoInv} style={{width:"100%",background:"#22C55E",color:"#06210f",padding:"12px",fontWeight:700,marginTop:8}}>{salvandoInv?"Salvando...":"✅ Fechar contagem e aplicar ajustes"}</button>
+        <button className="btn" onClick={fecharContagem} disabled={salvandoInv} style={{width:"100%",background:"var(--success)",color:"var(--onSuccess)",padding:"12px",fontWeight:700,marginTop:8}}>{salvandoInv?"Salvando...":"✅ Fechar contagem e aplicar ajustes"}</button>
       </div>}
     </div>}
 
@@ -18751,7 +18806,7 @@ function EstoquePdvPanel({empresa,db,initialView}:{empresa:"CONFRARIA"|"SEAMA",d
               </select>
               <div style={{display:"flex",gap:8,flexWrap:"wrap" as const,alignItems:"center"}}>
                 <input value={esc.fator} onChange={e=>setVincEscolha(m=>({...m,[p.source_name]:{...esc,fator:e.target.value}}))} title="1 embalagem = quantas unidades" className="inp" style={{width:56,flexShrink:0,marginBottom:0,textAlign:"center"}}/>
-                <button className="pill" onClick={()=>vincular(p.source_name)} style={{flexShrink:0,background:"#22C55E",color:"#06210f",fontSize:11,fontWeight:700}}>Vincular</button>
+                <button className="pill" onClick={()=>vincular(p.source_name)} style={{flexShrink:0,background:"var(--success)",color:"var(--onSuccess)",fontSize:11,fontWeight:700}}>Vincular</button>
                 <span style={{flex:1,minWidth:8}}/>
                 <button className="pill" onClick={()=>classificarUm(p.source_name,"materia_prima")} style={{flexShrink:0,background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Matéria-prima</button>
                 <button className="pill" onClick={()=>classificarUm(p.source_name,"higiene_limpeza")} style={{flexShrink:0,background:"var(--bg4)",color:"var(--text)",fontSize:11}}>Higiene</button>
@@ -19779,7 +19834,7 @@ function PdvDestaques(){
       <div style={{display:"flex",gap:8}}>
         <button className="btn" onClick={()=>setForm(null)} style={{flex:1,padding:"11px"}}>Cancelar</button>
         <button className="btn" onClick={salvar} disabled={salvando}
-          style={{flex:2,background:"#22C55E",color:"#051208",padding:"11px",fontWeight:700}}>
+          style={{flex:2,background:"var(--success)",color:"var(--onSuccess)",padding:"11px",fontWeight:700}}>
           {salvando?"Salvando...":"Salvar destaque"}
         </button>
       </div>
@@ -19802,7 +19857,7 @@ function PdvDestaques(){
                                                           price_label:h.price_label||"",image_url:h.image_url||""})}
               style={{padding:"6px 11px",fontSize:12}}>✏️</button>
             <button className="btn" onClick={()=>excluir(h.id)}
-              style={{padding:"6px 11px",fontSize:12,background:"#FEE2E2",color:"#EF4444"}}>🗑</button>
+              style={{padding:"6px 11px",fontSize:12,background:"var(--dangerBg)",color:"var(--dangerText)"}}>🗑</button>
           </div>
         ))}
       </div>}
@@ -19846,7 +19901,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void,setConfigPanelOpen?:(v:boolean)=>void,modoDiscreto:boolean,toggleModoDiscreto:()=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
-  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["conciliacao","🔗 Conciliação"],["pdvdestaques","🖥️ Destaques do totem"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
+  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["cores","🎨 Cores"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["conciliacao","🔗 Conciliação"],["pdvdestaques","🖥️ Destaques do totem"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
 
   // Shared helpers
   const setConfig=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
@@ -20139,6 +20194,89 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
     </div>
 
     {/* ===== EMPRESA / GERAL ===== */}
+    {subTab==="cores"&&(()=>{
+      // Prévia com data-theme PRÓPRIO: os tokens moram em .app-root, então um
+      // .app-root aninhado herda o recorte e mostra o outro modo sem trocar o
+      // app inteiro. Sem isso não dá pra ver o escuro estando no claro, que é
+      // justamente onde as tags quebravam.
+      const atual=aparenciaApp.paleta||"personalizada";
+      const Previa=({pal,modo}:{pal:string,modo:string})=>(
+        <div className="app-root" data-paleta={pal} data-theme={modo} style={{maxWidth:"none",margin:0,minHeight:0,padding:12,borderRadius:12,background:"var(--bg)",border:"1px solid var(--border2)"}}>
+          <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap" as const}}>
+            <span style={{flex:1,minWidth:92,background:"var(--btnPrimary)",color:"var(--onPrimary)",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>💾 Salvar</span>
+            <span style={{flex:1,minWidth:80,background:"transparent",border:"1px solid var(--border2)",color:"var(--text2)",borderRadius:8,padding:"8px 10px",fontSize:11,textAlign:"center" as const}}>Cancelar</span>
+            <span style={{flex:1,minWidth:92,background:"var(--dangerBg)",color:"var(--dangerText)",borderRadius:8,padding:"8px 10px",fontSize:11,fontWeight:700,textAlign:"center" as const}}>🗑️ Excluir</span>
+          </div>
+          <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:10,padding:"11px 13px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+              <span style={{fontWeight:700,fontSize:12.5,color:"var(--text)"}}>14/09/2026</span>
+              <span style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:"var(--successText)"}}>R$ 3.308,14</span>
+            </div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginTop:7}}>
+              <span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>comprado: R$ 880,78</span>
+            </div>
+            <div style={{borderTop:"1px solid var(--border)",marginTop:9,paddingTop:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:"var(--text)"}}>
+                <b>PDV Ecletica</b><span style={{fontFamily:"monospace"}}>R$ 3.085,14</span>
+              </div>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginTop:6}}>
+                <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>maquininha: R$ 2.623,12</span>
+                <span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>dinheiro: R$ 314,06</span>
+              </div>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap" as const,marginTop:5,alignItems:"center"}}>
+                <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>crédito: R$ 1.946,46</span>
+                <span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>PIX: R$ 676,66</span>
+                <span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>pendura: R$ 147,96</span>
+                <span className="tag" style={{background:"var(--categoryBg)",color:"var(--categoryText)"}}>outros</span>
+              </div>
+              <div style={{fontSize:10,color:"var(--text3)",marginTop:7}}>Registrado: 14/09/2026, 17:00</div>
+            </div>
+          </div>
+        </div>);
+      return <div>
+        <div className="section-title">🎨 Cores do App</div>
+        <div style={{fontSize:12,color:"var(--text2)",marginBottom:14,lineHeight:1.6}}>
+          Cada paleta traz o modo claro e o escuro juntos. Toque numa e ela vale na hora, no app inteiro —
+          nada é aplicado só na prévia. Os contrastes foram medidos pelo WCAG: nenhum texto abaixo de 4,5:1 em nenhum dos dois modos.
+        </div>
+        {Object.entries(PALETAS_APP).map(([k,pal]:any)=>(
+          <div key={k} className="card" style={{marginBottom:12,border:atual===k?"2px solid var(--btnPrimary)":"1px solid var(--border)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4,flexWrap:"wrap" as const}}>
+              <div style={{display:"flex",gap:3}}>
+                {pal.amostra.map((c:string,i:number)=><span key={i} style={{width:16,height:16,borderRadius:4,background:c,border:"1px solid var(--border2)"}}/>)}
+              </div>
+              <div style={{flex:1,minWidth:130}}>
+                <div style={{fontWeight:700,fontSize:14}}>{pal.label}</div>
+                <div className="muted" style={{fontSize:11}}>{pal.desc}</div>
+              </div>
+              {atual===k
+                ?<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>✓ em uso</span>
+                :<button className="btn" onClick={()=>setAparenciaApp("paleta",k)} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"8px 15px",fontSize:12,fontWeight:700}}>Usar esta</button>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:9,marginTop:10}}>
+              <div><div style={{fontSize:9.5,letterSpacing:1,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:4}}>☀️ Claro</div><Previa pal={k} modo="light"/></div>
+              <div><div style={{fontSize:9.5,letterSpacing:1,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:4}}>🌙 Escuro</div><Previa pal={k} modo="dark"/></div>
+            </div>
+          </div>
+        ))}
+        <div className="card" style={{border:atual==="personalizada"?"2px solid var(--btnPrimary)":"1px solid var(--border)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const}}>
+            <div style={{flex:1,minWidth:130}}>
+              <div style={{fontWeight:700,fontSize:14}}>Personalizada</div>
+              <div className="muted" style={{fontSize:11}}>As cores de antes, com o seletor de cor do botão logo abaixo</div>
+            </div>
+            {atual==="personalizada"
+              ?<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>✓ em uso</span>
+              :<button className="btn" onClick={()=>setAparenciaApp("paleta","personalizada")} style={{background:"var(--bg4)",border:"1px solid var(--border2)",color:"var(--text2)",padding:"8px 15px",fontSize:12,fontWeight:700}}>Voltar para esta</button>}
+          </div>
+          <div className="muted" style={{fontSize:11,marginTop:8,lineHeight:1.6}}>
+            ⚠️ O seletor de cor em <b>Empresa → Aparência</b> vale só aqui. Nas cinco paletas o acento vem da própria paleta,
+            que traz uma versão para o claro e outra para o escuro — o seletor guarda uma cor só, e ela ficaria ilegível num dos modos.
+          </div>
+        </div>
+      </div>;
+    })()}
+
     {subTab==="empresa"&&<div>
       <div className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>🏢 Dados da Empresa</div>

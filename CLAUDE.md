@@ -847,9 +847,40 @@ da página); mínimo 5.12:1.
 Ao propor cor nova, meça contra **os dois fundos** — medir só contra o branco já deixou
 passar um texto que reprovava sobre o creme.
 
-⚠️ **Pendente:** ~1.373 cores fixas ainda no código — 818 em JSX (podem virar token) e 555
-dentro do HTML dos relatórios (não podem, ver §8). Existem funções que devolvem cor usadas
-nas duas pontas, então substituição cega quebra a impressão.
+### Paletas — Configurações → 🎨 Cores
+
+Cinco paletas prontas (`PALETAS_APP`), cada uma com claro E escuro, gravadas em
+`db.config.aparenciaApp.paleta` e aplicadas como `data-paleta` no `.app-root`.
+O CSS redefine os MESMOS tokens; nenhuma tela precisa saber que existem.
+Os **120 pares foram medidos** antes de entrar: nenhum abaixo de 4,5:1.
+
+⚠️ **`personalizada` não define paleta nenhuma** — são os tokens base mais a cor
+do seletor. O `--btnPrimary` inline só é aplicado nesse caso: **style inline
+vence CSS**, e aplicá-lo sempre travaria o acento das cinco na cor antiga, sem
+variante escura. Por isso o seletor de cor avisa que só vale ali.
+
+⚠️ A prévia usa um `.app-root` **aninhado com `data-theme` próprio** — os tokens
+moram na classe, então o filho herda o recorte e mostra o outro modo sem trocar
+o app inteiro.
+
+**O que estava errado (46 ocorrências):** a tag usava a cor **saturada** como
+TEXTO sobre o tom claro da mesma família — `#22C55E` sobre `#DCFCE7` dá
+**2,07:1**, menos da metade do legível. Os pares soft/ink (`--successBg` /
+`--successText`) já existiam; as tags é que não os usavam — e por isso o modo
+escuro também saía ilegível, já que hex fixo não troca com o tema. Depois da
+correção o mesmo par dá **7,20:1**, na paleta antiga inclusive.
+
+⚠️ **`config` entrou na fusão explícita do `mergeFromServer`** — era a armadilha
+do §3 em pessoa. Escolher a paleta aplica local, funde com o servidor e posta:
+como `config` vinha CRU do servidor, o merge devolvia o config de lá e a escolha
+se perdia antes do POST. Vale também pra fonte, tamanho e cor de botão, que
+tinham o mesmo problema. A fusão é união por chave em `aparenciaApp` e
+`coresBotoes`, com o local vencendo; no `mergeDocument.js` os dois entraram na
+lista de sub-objetos ao lado de `impressao` e `sortPrefs`.
+
+⚠️ **Pendente:** ainda há cores fixas em JSX que podem virar token. As 555
+dentro do HTML dos relatórios **não podem** (ver §8), e existem funções que
+devolvem cor usadas nas duas pontas — substituição cega quebra a impressão.
 
 ---
 
