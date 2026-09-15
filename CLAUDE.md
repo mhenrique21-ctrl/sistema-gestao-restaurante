@@ -38,6 +38,7 @@ src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
 src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
 src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
 src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com testes)
+src/producaoDia.js    produção do dia: custo real, perda e baixa de insumo (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 ```
 
@@ -569,6 +570,49 @@ baixado vira aviso. Travar a cozinha porque o cadastro está incompleto é pior.
 ⚠️ `ajuste` recebe o saldo **CONTADO**, não a diferença — é como a contagem
 física funciona. Misturar os dois sentidos no mesmo campo é erro clássico de
 inventário.
+
+### Estoque → Produção do Dia — `src/producaoDia.js` (com testes)
+
+A baixa de insumo por produção **já existia** na Manutenção de Produtos. O que
+faltava era o resto.
+
+⚠️ **O produzido entrava no estoque valendo ZERO.** Recebia `ultimoValor` do
+próprio cadastro, que num item feito na cozinha nunca foi preenchido — ele não
+vem de compra. Era por isso que Saldo Estoque mostrava 25 produtos e **R$ 0,00**,
+a Margem por Produto não tinha custo e o CMV não fechava pelo lado do produzido.
+Agora o custo sai da soma dos insumos consumidos.
+
+⚠️ **O custo unitário divide pelas unidades BOAS, não pelo produzido** (decisão
+do dono). Assou 50 e 3 queimaram: os insumos de 50 saíram, mas só 47 entram.
+Dividir por 47 joga o custo das perdidas em cima das que sobraram — é como se
+apura custo de produção. Por 50 daria um custo que nenhuma unidade real tem.
+
+⚠️ **Os insumos saem pelo PRODUZIDO**, não pelas boas: a farinha das 3 que
+queimaram saiu do estoque do mesmo jeito.
+
+⚠️ **Sem ficha, `custoUnitario` é `null` — não zero.** Zero diria "este bolo não
+custou nada", que é a mentira que já existia. E `aplicarProducaoDia` **só
+sobrescreve `ultimoValor` quando o custo FOI calculado**: zerar um custo que
+alguém pôs à mão seria pior.
+
+⚠️ **A perda vira movimento próprio** (`tipo: 'perda'`), não fica embutida no
+custo — embutida, ninguém mede a quebra do mês por produto.
+
+⚠️ Dois produtos que usam o mesmo insumo **somam antes de mostrar o saldo**:
+cada um sozinho caberia no estoque, juntos não. Mostrar o saldo depois de cada
+linha prometeria estoque que não vai existir.
+
+**Pedido da cozinha:** `baixarPedidos` fecha o pedido quando a quantidade bate e
+deixa **`parcial`** quando produziu menos — fechar assim mesmo sumiria com a
+parte não feita e ninguém lembraria dela. Duas produções somam até fechar.
+
+Tudo num `grupoId` só: entrada do produto, saída dos insumos e perda saem juntos
+ou não saem. Linha em branco não é zero, e produzir **nunca é bloqueado** por
+cadastro incompleto — o que não baixou vira aviso.
+
+⚠️ Lançar produção **não conserta o passado**: saldo negativo de venda antiga
+continua negativo até alguém ajustar a contagem. A tela mostra, não corrige
+escondido.
 
 ### Estoque → Saídas por venda
 
