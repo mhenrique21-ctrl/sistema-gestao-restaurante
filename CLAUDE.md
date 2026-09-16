@@ -1174,7 +1174,8 @@ por `iaRequest()` em `new_server.js`, que fala com UM provedor escolhido no
 | `GEMINI_API_KEY` | chave do Google AI Studio (aistudio.google.com). Tem faixa **gratuita** com limite diário de requisições |
 | `ANTHROPIC_API_KEY` | chave paga da Anthropic |
 | `IA_PROVIDER` | `gemini` ou `anthropic`. **Sem ela, entra o Gemini se `GEMINI_API_KEY` existir, senão a Anthropic** |
-| `GEMINI_MODEL` | padrão `gemini-3.8-flash`; `gemini-3.5-flash-lite` é o mais barato no plano pago |
+| `GEMINI_MODEL` | padrão `gemini-3.8-flash` |
+| `GEMINI_MODEL_RESERVA` | padrão `gemini-3.5-flash-lite`. Entra na hora quando o principal falha por sobrecarga (503), limite por minuto ou cota do dia — que é **por modelo** |
 | `IA_MODEL` | padrão `claude-haiku-4-5` (~1/3 do preço do Sonnet, lê cupom igual) |
 
 Trocar de provedor é mexer no `.env` e `pm2 restart app-gestao` — nada no
@@ -1186,6 +1187,12 @@ código nem no front. O app inteiro continua falando o formato da Anthropic
 cupom: fornecedor, CNPJ, itens, valores) para melhorar os produtos dele — está
 escrito na página de preços. Foi uma escolha consciente pelo custo zero; se isso
 mudar de ideia, basta `IA_PROVIDER=anthropic`.
+
+⚠️ Na faixa gratuita o modelo mais novo devolve **503 "overloaded"** em horário
+de pico — no primeiro cupom real, o `gemini-3.8-flash` recusou 9 tentativas
+seguidas enquanto o Flash-Lite estava livre. Por isso `iaRequest()` percorre
+`[GEMINI_MODEL, GEMINI_MODEL_RESERVA]` e só desiste de trocar quando o erro é
+da chave ou do pedido (`valeTentarReserva()` em `iaGemini.js`).
 
 ⚠️ O 429 do Gemini usa o MESMO texto para "muitas por minuto" e "acabou a cota
 do dia" — e o texto menciona "billing details", que casava com `semCredito()`

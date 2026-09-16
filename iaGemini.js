@@ -18,6 +18,12 @@ export const MSG_COTA_DIARIA_GEMINI = 'Limite diário gratuito do Gemini atingid
   + 'IA_PROVIDER=anthropic no .env da VPS.';
 export const MSG_LIMITE_MINUTO_GEMINI = 'Muitas leituras ao Gemini em pouco tempo. Aguarde um minuto e tente de novo.';
 
+// Depois de um erro no modelo principal, vale tentar o reserva? Só não vale
+// quando o erro é da chave ou do pedido — esses falham igual em qualquer
+// modelo. Sobrecarga (503), limite por minuto, cota do dia (que é POR
+// modelo na faixa gratuita) e modelo inexistente mudam de um para o outro.
+export const valeTentarReserva = (type) => !['authentication_error', 'invalid_request_error'].includes(type);
+
 function blocosParaParts(content) {
   if (typeof content === 'string') return [{ text: content }];
   return (content || []).map(b => {

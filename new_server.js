@@ -10,7 +10,7 @@ import webPush from 'web-push';
 import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
-import { paraGemini, respostaDoGemini, erroDoGemini } from './iaGemini.js';
+import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva } from './iaGemini.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,7 +38,11 @@ const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 // Anthropic — colocar a chave do Gemini no .env já troca; tirar, volta.
 // Tudo é configurável pelo .env da VPS sem mexer no código.
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash'; // 'gemini-3.5-flash-lite' é o mais barato no plano pago
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+// Na faixa gratuita o modelo mais novo vive devolvendo 503 "overloaded" em
+// horário de pico, e a cota diária é POR modelo. Quando o principal falha, o
+// servidor cai na hora para este — mais leve, com muito mais capacidade livre.
+const GEMINI_MODEL_RESERVA = process.env.GEMINI_MODEL_RESERVA || 'gemini-3.5-flash-lite';
 const IA_MODEL = process.env.IA_MODEL || 'claude-haiku-4-5'; // Haiku 4.5 custa ~1/3 do Sonnet e dá conta do cupom
 const IA_PROVIDER = (process.env.IA_PROVIDER || (GEMINI_API_KEY ? 'gemini' : 'anthropic')).trim().toLowerCase() === 'gemini' ? 'gemini' : 'anthropic';
 const IA_KEY = IA_PROVIDER === 'gemini' ? GEMINI_API_KEY : API_KEY;
@@ -1075,17 +1079,30 @@ const postJson = (options, data, timeoutMs) => new Promise((resolve, reject) => 
 
 async function iaRequest({ system, messages, max_tokens, json = false }, timeoutMs) {
   if (IA_PROVIDER === 'gemini') {
-    const resp = await postJson({
-      hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      headers: { 'x-goog-api-key': GEMINI_API_KEY },
-    }, JSON.stringify(paraGemini({ system, messages, max_tokens, json })), timeoutMs);
-    let j = null;
-    try { j = JSON.parse(resp.body); } catch {}
-    if (resp.status !== 200) return { status: resp.status, body: JSON.stringify(erroDoGemini(resp.status, j ?? resp.body)) };
-    const trad = respostaDoGemini(j, GEMINI_MODEL);
-    // 200 sem texto (bloqueio de segurança etc.) vira 400: definitivo, sem retry.
-    return { status: trad.error ? 400 : 200, body: JSON.stringify(trad) };
+    const data = JSON.stringify(paraGemini({ system, messages, max_tokens, json }));
+    const modelos = [...new Set([GEMINI_MODEL, GEMINI_MODEL_RESERVA].filter(Boolean))];
+    let ultimo = null;
+    for (let i = 0; i < modelos.length; i++) {
+      const modelo = modelos[i];
+      const resp = await postJson({
+        hostname: 'generativelanguage.googleapis.com',
+        path: `/v1beta/models/${modelo}:generateContent`,
+        headers: { 'x-goog-api-key': GEMINI_API_KEY },
+      }, data, timeoutMs);
+      let j = null;
+      try { j = JSON.parse(resp.body); } catch {}
+      if (resp.status === 200) {
+        const trad = respostaDoGemini(j, modelo);
+        if (i > 0 && !trad.error) console.log(`[IA] respondido pelo modelo reserva ${modelo}`);
+        // 200 sem texto (bloqueio de segurança etc.) vira 400: definitivo, sem retry.
+        return { status: trad.error ? 400 : 200, body: JSON.stringify(trad) };
+      }
+      const erro = erroDoGemini(resp.status, j ?? resp.body);
+      ultimo = { status: resp.status, body: JSON.stringify(erro) };
+      if (!valeTentarReserva(erro.error.type)) break;
+      if (modelos[i + 1]) console.log(`[IA] ${modelo} falhou (HTTP ${resp.status}, ${erro.error.type}) — tentando ${modelos[i + 1]}`);
+    }
+    return ultimo;
   }
   return postJson({
     hostname: 'api.anthropic.com',

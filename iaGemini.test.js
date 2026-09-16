@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { paraGemini, respostaDoGemini, erroDoGemini, MSG_COTA_DIARIA_GEMINI, MSG_LIMITE_MINUTO_GEMINI } from './iaGemini.js';
+import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, MSG_COTA_DIARIA_GEMINI, MSG_LIMITE_MINUTO_GEMINI } from './iaGemini.js';
 
 // Análise do código sob teste (iaGemini.js):
 // - Input: o pedido que o app já monta no formato da Anthropic (system,
@@ -136,5 +136,17 @@ describe('erroDoGemini', () => {
     assert.equal(r.error.type, 'api_error');
     assert.match(r.error.message, /Bad Gateway/);
     assert.equal(erroDoGemini(500, null).error.message, 'HTTP 500');
+  });
+});
+
+describe('valeTentarReserva', () => {
+  test('sobrecarga, limite por minuto, cota do dia e modelo inexistente passam para o reserva', () => {
+    for (const tipo of ['overloaded_error', 'rate_limit_error', 'daily_quota_error', 'not_found_error', 'api_error']) {
+      assert.equal(valeTentarReserva(tipo), true, tipo);
+    }
+  });
+  test('chave errada e pedido inválido não: falhariam igual no outro modelo', () => {
+    assert.equal(valeTentarReserva('authentication_error'), false);
+    assert.equal(valeTentarReserva('invalid_request_error'), false);
   });
 });
