@@ -14,6 +14,8 @@
 // produção entraria no saldo do produto errado e só a contagem física
 // denunciaria, semanas depois.
 
+import { tipoDoInsumo } from './tipoInsumo.js';
+
 // Normalização mais agressiva que o foldNome do app: além de acento e caixa,
 // tira a pontuação e o ruído de catálogo ("salg.", "p/ café", "un"), que é o
 // que separa "Coxinha de frango" de "SALG. COXINHA FRANGO".
@@ -42,6 +44,34 @@ export function pontuar(a, b) {
   let comuns = 0;
   for (const t of sa) if (sb.has(t)) comuns++;
   return (2 * comuns) / (sa.size + sb.size);
+}
+
+// QUEM PODE RECEBER PRODUÇÃO.
+//
+// `materiasPrimas` é "item com saldo", não o cardápio: farinha, detergente e
+// bandeja de isopor moram na mesma coleção que os 281 produtos do Eclética (ver
+// CLAUDE.md, "Item com saldo: cinco tipos, uma coleção"). Oferecer a coleção
+// inteira fazia a busca de "Torta Banoffee" responder "bandeja retangular de
+// isopor", "banana nanica", "bandana preta" — e, pior, a SUGESTÃO automática
+// podia casar um produto de produção com um insumo COMPRADO. Ligado ali, a
+// fornada entraria no saldo do que se compra: o insumo pareceria nunca acabar,
+// a compra seguinte viria menor e só a contagem física denunciaria.
+//
+// São dois grupos legítimos, e os dois precisam estar aqui:
+//   1. produto do cardápio do Eclética — tem `codigoEcletica`, e o código vale
+//      mesmo sem marcação de tipo (produto importado sem marcar é o normal);
+//   2. item feito na cozinha (`produzido`) — inclui os RECHEIOS, que não têm
+//      código nenhum porque não são vendidos.
+// `produzido` nunca vem de palpite por categoria (só de marcação explícita em
+// tipoPadraoPorCategoria), então isto não abre a porta pro insumo comprado.
+export function ehAlvoDeProducao(mp, tipoInsumo = {}) {
+  if (!mp || !mp.nome) return false;
+  if (String(mp.codigoEcletica || '').trim()) return true;
+  return tipoDoInsumo(tipoInsumo || {}, mp).tipo === 'produzido';
+}
+
+export function candidatosDeVinculo(materiasPrimas = [], tipoInsumo = {}) {
+  return (materiasPrimas || []).filter((m) => ehAlvoDeProducao(m, tipoInsumo));
 }
 
 // Sugere o item de estoque para um nome de produção.

@@ -43,6 +43,7 @@ src/producaoDia.js    produção do dia: custo real, perda e baixa de insumo (co
 src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com testes)
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
+src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
 ```
 
 Stack: React + Vite + TypeScript. Backend em `http` puro, sem framework.
@@ -943,6 +944,42 @@ sem ninguém ver.
 `apelidos` {nome do pedido → nome produzido}: somar o produzido nos dois nomes
 daria um orçamento a cada um, e dois itens de pedido com esses nomes fechariam
 os dois com a mesma fornada.
+
+##### A busca só oferece quem pode receber produção
+
+⚠️ **A busca mostrava a DESPENSA no lugar do cardápio.** Procurar "Torta
+Banoffee" respondia "bandeja retangular de isopor", "banana nanica", "bandana
+preta". Duas causas somadas, as duas silenciosas:
+
+**1. O balaio errado.** `materiasPrimas` é "item com saldo", não o cardápio: os
+281 produtos do Eclética moram na mesma coleção que a farinha e o detergente. A
+busca — e a SUGESTÃO automática, que vincula em LOTE — liam a coleção inteira.
+Ligado a um insumo comprado, a fornada entraria no saldo do que se compra: o
+insumo pareceria nunca acabar, a compra seguinte viria menor, e só a contagem
+física denunciaria. `candidatosDeVinculo` recorta os dois grupos legítimos —
+produto com `codigoEcletica` (o código vale mesmo sem marcação de tipo, porque
+importar sem marcar é o normal) e item marcado `produzido` (os recheios, que não
+têm código). `produzido` nunca vem de palpite por categoria, então o insumo
+comprado não entra por acidente. O que casa e fica de fora continua alcançável,
+atrás do aviso do que acontece se ligar — sumir de vez deixaria um item legítimo
+mal cadastrado sem como ser ligado.
+
+**2. ⚠️ O `normalizarNome` SOMBREADO — e este é o que realmente escondia o
+cardápio.** O `App.tsx` declara um `normalizarNome` próprio (o da conciliação de
+importação, `(nome, norms)`, §6 Compras) e ele vence o import do
+`vinculoProducao.js`. Chamado com **um argumento só**, aquele cai no
+`if(!nome||!norms?.length) return nome` e devolve o nome **intacto** — sem
+minúscula, sem tirar acento. O cardápio é cadastrado em CAIXA ALTA ("SALG
+COXINHA FRANGO"), então `"TORTA BANOFFEE FATIA".includes("ban")` dava **falso** e
+só os insumos comprados, digitados em minúscula, respondiam. Por isso o import
+entra **apelidado** (`normalizarNome as normProducao`), e
+`src/vinculoSombra.test.js` lê o `App.tsx` e reprova quem chamar o nome cru
+dentro do card. Nem o build nem o TypeScript acusam: é chamada válida, com
+argumento opcional faltando.
+
+⚠️ O sombreamento atingia **dez** chamadas do card, não só a busca: `l.chave`
+nascia crua, e o "criar produto" que deveria **reaproveitar** o item existente
+não o encontrava quando a caixa diferia — criaria um item duplicado, calado.
 
 ##### Vincular como RECHEIO
 

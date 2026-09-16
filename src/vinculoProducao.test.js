@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizarNome, tokens, pontuar, sugerirVinculo, itemDeEstoqueDaProducao, apelidosDoItem, fichasQueUsam, ehRecheio } from './vinculoProducao.js';
+import { normalizarNome, tokens, pontuar, sugerirVinculo, itemDeEstoqueDaProducao, apelidosDoItem, fichasQueUsam, ehRecheio, candidatosDeVinculo, ehAlvoDeProducao } from './vinculoProducao.js';
 
 // Análise do código sob teste (vinculoProducao.js):
 // - Input: nome digitado no catálogo de produção ("Coxinha de frango") e a
@@ -122,4 +122,48 @@ test('ficha casa o insumo pelo mpId e, sem ele, pelo nome', () => {
   const porNome = { id: 'f2', nome: 'Esfirra', insumos: [{ nome: 'FRANGO CREMOSO', quantidade: 1 }] };
   assert.equal(fichasQueUsam(FRANGO, [porNome]).length, 1);
   assert.equal(fichasQueUsam(null, [FICHA_CROISSANT]).length, 0);
+});
+
+// ── Quem pode receber produção ───────────────────────────────────────────
+// `materiasPrimas` é "item com saldo": os 281 produtos do Eclética moram na
+// mesma coleção que a farinha e a bandeja de isopor.
+const DESPENSA = [
+  { id: 'x1', nome: 'SALG COXINHA FRANGO', codigoEcletica: '318' },
+  { id: 'x2', nome: 'Banana nanica', categoria: 'Hortifruti' },
+  { id: 'x3', nome: 'Bandeja retangular de isopor', categoria: 'Descartáveis de consumo do produto' },
+  { id: 'x4', nome: 'Frango cremoso', categoria: 'Outros' },
+  { id: 'x5', nome: 'Torta banoffee' },
+];
+const TIPOS = { 'frango cremoso': 'produzido' };
+
+test('produto do Eclética entra pelo CÓDIGO, mesmo sem marcação de tipo', () => {
+  // Importar sem marcar é o normal (ver CLAUDE.md, "Produtos Eclética"):
+  // exigir a marcação esconderia da busca justamente o cardápio.
+  assert.equal(ehAlvoDeProducao(DESPENSA[0], {}), true);
+});
+
+test('recheio entra pelo tipo produzido — ele não tem código, não é vendido', () => {
+  assert.equal(ehAlvoDeProducao(DESPENSA[3], TIPOS), true);
+});
+
+test('⚠️ insumo COMPRADO fica fora — era o bug da busca', () => {
+  // A busca de "Torta Banoffee" respondia "bandeja retangular de isopor",
+  // "banana nanica", "bandana preta". Pior que o ruído: ligar ali faria a
+  // fornada entrar no saldo do que se compra, e só a contagem denunciaria.
+  assert.equal(ehAlvoDeProducao(DESPENSA[1], {}), false);
+  assert.equal(ehAlvoDeProducao(DESPENSA[2], {}), false);
+  assert.deepEqual(candidatosDeVinculo(DESPENSA, TIPOS).map((m) => m.id), ['x1', 'x4']);
+});
+
+test('item sem código e sem marcação nenhuma não é chute de alvo', () => {
+  // "produzido" nunca vem de palpite por categoria — só de marcação explícita.
+  assert.equal(ehAlvoDeProducao(DESPENSA[4], {}), false);
+});
+
+test('⚠️ a SUGESTÃO automática também bebe da lista filtrada', () => {
+  // O botão "aplicar as sugestões seguras" vincula em lote: com a despensa
+  // inteira no balaio, ele ligaria produção a insumo comprado sem ninguém ver.
+  const comprado = [{ id: 'c1', nome: 'Coxinha de frango congelada', categoria: 'Proteínas' }];
+  assert.equal(sugerirVinculo('Coxinha de frango', comprado).mp.id, 'c1', 'sem filtro, casa com o comprado');
+  assert.equal(sugerirVinculo('Coxinha de frango', candidatosDeVinculo(comprado, {})), null);
 });

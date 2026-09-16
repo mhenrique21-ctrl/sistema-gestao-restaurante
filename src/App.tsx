@@ -9,7 +9,13 @@ import {calcularHolerite,contasEsperadas,contasLancadas,conciliarMes,encargoDesc
 import {previaFalta,descontoDoMes,salarioDia,ehJustificada,MOTIVOS_473} from "./faltaClt.js";
 import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 import {calcularProducaoDia,aplicarProducaoDia,baixarPedidos} from "./producaoDia.js";
-import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome,fichasQueUsam,ehRecheio} from "./vinculoProducao.js";
+// ⚠️ `normalizarNome` entra APELIDADO. O App.tsx tem um `normalizarNome`
+// próprio (o da conciliação de importação, que recebe `norms`) e ele SOMBREIA
+// o import: chamado com um argumento só, aquele devolve o nome INTACTO. Foi
+// assim que a busca "Buscar produto do Eclética" virou sensível a maiúscula e
+// nunca achava o cardápio — os nomes de lá são "SALG COXINHA FRANGO", e só os
+// insumos comprados, digitados em minúscula, respondiam.
+import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as normProducao,fichasQueUsam,ehRecheio,candidatosDeVinculo} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
@@ -11323,6 +11329,12 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
   const [buscas,setBuscas]=useState<Record<string,string>>({});
   const prodsCatalog=db.produtosProducao||[];
   const mps=db.materiasPrimas||[];
+  // Só produto do cardápio do Eclética e item feito na cozinha podem receber
+  // produção. `materiasPrimas` traz junto tudo que tem saldo — a busca e a
+  // sugestão liam a coleção inteira e ofereciam insumo COMPRADO (bandeja de
+  // isopor, banana nanica) para "Torta Banoffee". Ver candidatosDeVinculo.
+  const alvos=useMemo(()=>candidatosDeVinculo(mps,db.tipoInsumo||{}),[mps,db.tipoInsumo]);
+  const idsAlvo=useMemo(()=>new Set(alvos.map((m:any)=>m.id)),[alvos]);
   const salvar=(fn:(d:any)=>any)=>(setDbAndSave||setDb)(fn);
 
   // Quanto cada nome de produção ainda é esperado — serve pra ordenar pelo que
@@ -11334,7 +11346,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
       for(const it of (ped.itens||[])){
         const falta=(parseFloat(it.quantidade)||0)-(parseFloat(it.produzido)||0);
         if(it.atendido||!(falta>0.001))continue;
-        const k=normalizarNome(it.nome);if(!k)continue;
+        const k=normProducao(it.nome);if(!k)continue;
         const cur=m.get(k)||{vezes:0,falta:0,unidade:it.unidade||"un"};
         cur.vezes++;cur.falta=Math.round((cur.falta+falta)*1000)/1000;
         m.set(k,cur);
@@ -11348,7 +11360,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
   const linhas=useMemo(()=>{
     const porChave=new Map<string,any>();
     for(const p of prodsCatalog){
-      const k=normalizarNome(p.nome);if(!k)continue;
+      const k=normProducao(p.nome);if(!k)continue;
       if(!porChave.has(k))porChave.set(k,{chave:k,nome:p.nome,prodId:p.id,unidade:p.unidade||"un",mpId:p.mpId});
     }
     for(const [k,info] of pendencias){
@@ -11366,7 +11378,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
   const semVinculo=linhas.filter(l=>!l.resolvido);
   const comVinculo=linhas.filter(l=>l.resolvido);
   const jaUsados=comVinculo.map(l=>l.resolvido.mp.id);
-  const sugestaoDe=(l:any)=>l.resolvido?null:sugerirVinculo(l.nome,mps,{excluirIds:jaUsados});
+  const sugestaoDe=(l:any)=>l.resolvido?null:sugerirVinculo(l.nome,alvos,{excluirIds:jaUsados});
   const seguras=semVinculo.map(l=>({l,s:sugestaoDe(l)})).filter(x=>x.s?.seguro);
 
   // Vincula gravando no produto do CATÁLOGO. Não cria campo novo no db: o
@@ -11375,7 +11387,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
     const ts=new Date().toISOString();
     salvar((d:any)=>{
       const lista=[...(d.produtosProducao||[])];
-      const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave);
+      const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normProducao(p.nome)===l.chave);
       if(i>=0)lista[i]={...lista[i],mpId,atualizadoEm:ts};
       // Nome que só existe no pedido entra no catálogo agora — é o cadastro
       // que faltava, e sem ele o vínculo não teria onde morar.
@@ -11387,7 +11399,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
   const desvincular=(l:any)=>{
     const ts=new Date().toISOString();
     salvar((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>
-      (l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave)?{...p,mpId:undefined,atualizadoEm:ts}:p)}));
+      (l.prodId?p.id===l.prodId:normProducao(p.nome)===l.chave)?{...p,mpId:undefined,atualizadoEm:ts}:p)}));
   };
   const aplicarSeguras=()=>{
     if(!seguras.length)return;
@@ -11398,7 +11410,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
     salvar((d:any)=>{
       const lista=[...(d.produtosProducao||[])];
       for(const {l,s} of seguras){
-        const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave);
+        const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normProducao(p.nome)===l.chave);
         if(i>=0)lista[i]={...lista[i],mpId:s.mp.id,atualizadoEm:ts};
         else lista.push({id:uid(),nome:l.nome,cats:[],cat:"",unidade:l.unidade||"un",mpId:s.mp.id,atualizadoEm:ts});
       }
@@ -11410,7 +11422,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
   // `produzido` (é feito na cozinha e tem saldo próprio); recheio não é um
   // sexto tipo, é o que ele faz depois de pronto.
   const criarNoEstoque=(l:any,comoRecheio=false)=>{
-    const existente=mps.find((m:any)=>normalizarNome(m.nome)===l.chave)||null;
+    const existente=mps.find((m:any)=>normProducao(m.nome)===l.chave)||null;
     const msg=comoRecheio
       ?(existente
         ?`Marcar "${l.nome}" como RECHEIO e ligar ao item que já existe no estoque?\n\nEle não é vendido: entra no estoque e sai como insumo da ficha de outro produto.`
@@ -11427,7 +11439,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
       const lista=[...(d.produtosProducao||[])];
       const patch:any={mpId:alvoId,atualizadoEm:ts};
       if(comoRecheio)patch.recheio=true;
-      const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave);
+      const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normProducao(p.nome)===l.chave);
       if(i>=0)lista[i]={...lista[i],...patch};
       else lista.push({id:uid(),nome:l.nome,cats:[],cat:"",unidade:l.unidade||"un",...patch});
       return{...d,
@@ -11442,7 +11454,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
   const alternarRecheio=(l:any)=>{
     const ts=new Date().toISOString();
     salvar((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>
-      (l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave)?{...p,recheio:!p.recheio,atualizadoEm:ts}:p)}));
+      (l.prodId?p.id===l.prodId:normProducao(p.nome)===l.chave)?{...p,recheio:!p.recheio,atualizadoEm:ts}:p)}));
   };
 
   const lista=filtro==="sem"?semVinculo:comVinculo;
@@ -11471,7 +11483,13 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
       {lista.map(l=>{
         const sug=sugestaoDe(l);
         const busca=buscas[l.chave]||"";
-        const achados=busca?mps.filter((m:any)=>normalizarNome(m.nome).includes(normalizarNome(busca))).slice(0,6):[];
+        const alvo=normProducao(busca);
+        const casa=(l:any[])=>l.filter((m:any)=>normProducao(m.nome).includes(alvo));
+        const achados=busca.trim()?casa(alvos).slice(0,6):[];
+        // O que casa mas NÃO é produto do cardápio nem feito na cozinha continua
+        // alcançável — escondido de vez, um item legítimo mal cadastrado não
+        // teria como ser ligado. Fica atrás do aviso do que acontece se ligar.
+        const outros=busca.trim()?casa(mps).filter((m:any)=>!idsAlvo.has(m.id)).slice(0,4):[];
         return <div key={l.chave} style={{padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const}}>
             <div style={{flex:"1 1 170px",minWidth:0}}>
@@ -11513,14 +11531,19 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
                 </div>
               </>}
           </div>
-          {!l.resolvido&&busca&&achados.length>0&&<div style={{marginTop:6,border:"1px solid var(--border2)",borderRadius:8,overflow:"hidden"}}>
-            {achados.map((m:any)=><div key={m.id} onClick={()=>vincular(l,m.id)}
-              style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 10px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:12.5}}>
-              <span>{m.nome}</span>
-              <span style={{fontSize:10.5,color:"var(--text3)",whiteSpace:"nowrap" as const}}>{m.codigoEcletica?`cód ${m.codigoEcletica} · `:""}saldo {fmtNum(m.estoqueAtual)} {m.unidade||"un"}</span>
-            </div>)}
+          {!l.resolvido&&busca&&(achados.length>0||outros.length>0)&&<div style={{marginTop:6,border:"1px solid var(--border2)",borderRadius:8,overflow:"hidden"}}>
+            {[...achados.map((m:any)=>({m,comprado:false})),...outros.map((m:any)=>({m,comprado:true}))].map(({m,comprado}:any)=><Fragment key={m.id}>
+              {comprado&&m.id===outros[0]?.id&&<div style={{padding:"5px 10px",background:"var(--warningBg)",color:"var(--warningText)",fontSize:10,fontWeight:700,lineHeight:1.45}}>
+                não é produto do cardápio nem feito na cozinha — ligar aqui faz a produção entrar no saldo de um item comprado
+              </div>}
+              <div onClick={()=>vincular(l,m.id)}
+                style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 10px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:12.5,opacity:comprado?0.75:1}}>
+                <span>{m.nome}</span>
+                <span style={{fontSize:10.5,color:"var(--text3)",whiteSpace:"nowrap" as const}}>{m.codigoEcletica?`cód ${m.codigoEcletica} · `:""}saldo {fmtNum(m.estoqueAtual)} {m.unidade||"un"}</span>
+              </div>
+            </Fragment>)}
           </div>}
-          {!l.resolvido&&busca&&!achados.length&&<div className="muted" style={{fontSize:11,marginTop:5}}>Nenhum produto do estoque com esse nome. Use "criar produto" se ele não existe lá.</div>}
+          {!l.resolvido&&busca.trim()&&!achados.length&&!outros.length&&<div className="muted" style={{fontSize:11,marginTop:5}}>Nenhum produto do Eclética com esse nome. Use "criar produto" se ele não existe lá, ou "é recheio" se ele não é vendido.</div>}
         </div>;
       })}
     </div>
