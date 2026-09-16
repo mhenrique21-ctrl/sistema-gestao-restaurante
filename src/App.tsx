@@ -2380,7 +2380,7 @@ export default function App() {
   return (
     <>
       <ConfigStyleInjector config={config}/>
-      <div className="app-root" data-theme={theme} data-paleta={aparenciaApp.paleta||"personalizada"} data-rounded={aparenciaApp.bordasArredondadas?"on":"off"} data-motion={aparenciaApp.animacoesReduzidas?"reduced":"normal"} data-tabular={aparenciaApp.numerosTabulares?"on":"off"} data-contraste={aparenciaApp.altoContraste?"alto":"normal"} style={{fontFamily:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,zoom:String((TAMANHOS_LETRA[aparenciaApp.tamanhoLetra]||TAMANHOS_LETRA.padrao).zoom),background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,...(( aparenciaApp.paleta||"personalizada")==="personalizada"?{
+      <div className="app-root" data-theme={theme} data-paleta={aparenciaApp.paleta||"personalizada"} data-rounded={aparenciaApp.bordasArredondadas?"on":"off"} data-motion={aparenciaApp.animacoesReduzidas?"reduced":"normal"} data-tabular={aparenciaApp.numerosTabulares?"on":"off"} data-contraste={aparenciaApp.altoContraste?"alto":"normal"} style={{fontFamily:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,["--fonteApp" as any]:(FONTES_APP[aparenciaApp.fonte]||FONTES_APP.padrao).stack,zoom:String((TAMANHOS_LETRA[aparenciaApp.tamanhoLetra]||TAMANHOS_LETRA.padrao).zoom),background:"var(--bg)",minHeight:"100vh",color:"var(--text)",maxWidth:480,margin:"0 auto",position:"relative",paddingBottom:isOp?14:menuLayout==="bottom"?84:14,...(( aparenciaApp.paleta||"personalizada")==="personalizada"?{
         // Style inline vence CSS. Aplicar isto sempre travaria o acento das
         // cinco paletas na cor antiga, e sem variante escura — a paleta define
         // os dois modos, o seletor de cor define um só.
@@ -3400,7 +3400,10 @@ function IRow({label,value,positive,neutral}){return <div style={{display:"flex"
 // ===================== VENDAS =====================
 function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,aj?:any}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
-  const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:"",nfoodTaxa:"","99food":"",delivery:""});
+  // A taxa do iFood/99Food quase não muda de um dia pro outro: vem preenchida
+  // com a do último lançamento que teve uma, pra não digitar 27 todo dia.
+  const ultimaTaxa=(campo:string)=>{const v=[...(db.vendas||[])].filter((x:any)=>(x[campo]||0)>0).sort((x:any,y:any)=>x.data<y.data?1:-1)[0];return v?String(v[campo]):"";};
+  const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:ultimaTaxa("ifoodTaxa"),nfoodTaxa:ultimaTaxa("nfoodTaxa"),"99food":"",delivery:""});
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
   const formRef=useRef<HTMLDivElement>(null);
@@ -3456,11 +3459,11 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
 
   // O que JÁ foi lançado hoje por fonte automática (delivery-backend, Eclética).
   // Esses registros são linhas separadas do dia — não aparecem nos campos deste
-  // formulário, que é só do lançamento manual. Sem avisar aqui, a tela mostra
-  // "Maquininha 0,00" enquanto existe dinheiro no dia: quem olha conclui que
-  // não sincronizou e digita o valor à mão, e aí o dia conta DUAS vezes (as
-  // linhas somam no Dashboard). O campo de Vendas Extras já tinha esse aviso
-  // pelo mesmo motivo; faltava para os outros canais.
+  // formulário, que é só do lançamento manual. A tela mostra eles num bloco
+  // próprio, só leitura ("apurado automaticamente"); os campos manuais de
+  // maquininha/dinheiro só aparecem ao lado quando NÃO há valor automático no
+  // canal — senão ficam recolhidos em "fora do PDV", porque as linhas somam no
+  // Dashboard e um valor repetido conta o dia duas vezes.
   const vendasAutomaticas=(db.vendas||[]).filter((v:any)=>v.data===form.data&&ehOrigemPdv(v)&&v.id!==editId);
   const autoNoCampo=(campo:string)=>vendasAutomaticas.reduce((s:number,v:any)=>s+(v[campo]||0),0);
   // O delivery sincronizado já é exibido no campo de Vendas Extras, então sai
@@ -3468,19 +3471,61 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   const totalAutomatico=vendasAutomaticas.reduce((s:number,v:any)=>s+(v.total||0),0)
     -(deliverySincronizado?(vendaSincronizada.delivery||0):0);
   const penduraAutomatica=vendasAutomaticas.reduce((s:number,v:any)=>s+((v.formas&&v.formas.pendura)||0),0);
-  const avisoAutomatico=(campo:string)=>{
-    const v=autoNoCampo(campo);
-    if(v<=0)return null;
-    const fontes=Array.from(new Set(vendasAutomaticas.filter((x:any)=>(x[campo]||0)>0).map((x:any)=>rotuloOrigem(origemVenda(x)))));
-    const detalhe=vendasAutomaticas.flatMap((x:any)=>formasDaVenda(x))
-      .filter(f=>BALDE_DA_FORMA[f[0]]===campo)
-      .map(f=>`${f[1]} ${fmtMoney(f[2])}`).join(" + ");
-    return <div style={{fontSize:11,color:"var(--successText)",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 9px",marginTop:5,fontWeight:700}}>
-      🔄 {fontes.join(" + ")} já lançou {fmtMoney(v)} em {fmtDate(form.data)}, em linha própria — não repita aqui, os dois somam.
-      {detalhe&&<div style={{fontWeight:400,marginTop:2}}>{detalhe}</div>}
-    </div>;
-  };
   const totalRegistroManual=total-deliveryValorExibir+deliveryValorSalvar;
+  // ---- Fechamento do dia: apoio visual da tela (não muda nenhuma regra de soma) ----
+  const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+  const FONTE_APP={fontFamily:"var(--fonteApp)"};
+  const totalDia=total+totalAutomatico;
+  const ontemTotal=(db.vendas||[]).filter((v:any)=>v.data===ontemData).reduce((s:number,v:any)=>s+(v.total||0),0);
+  // Delta contra ontem: serve pra pegar erro de digitação (30,55 no lugar de 3.055).
+  const deltaTag=(hoje:number,ontemV:number)=>{
+    if(!(ontemV>0)||!(hoje>0))return null;
+    const d=Math.round((hoje-ontemV)/ontemV*100);
+    return <span style={{fontSize:11,color:d>=0?"var(--successText)":"var(--btnDanger)",...MONO}}>{d>=0?"+":""}{d}%</span>;
+  };
+  const ontemForma=(k:string)=>(db.vendas||[]).filter((v:any)=>v.data===ontemData).reduce((s:number,v:any)=>s+((v.formas&&v.formas[k])||0),0);
+  // Bloco "apurado automaticamente": uma linha por forma de pagamento quando a
+  // fonte manda o detalhe (Eclética), senão uma por canal (PDV Seama).
+  const linhasAuto:{label:string,fonte:string,val:number,ontem:number}[]=[];
+  for(const v of vendasAutomaticas){
+    const fonte=rotuloOrigem(origemVenda(v));
+    const formas=formasDaVenda(v).filter(f=>f[0]!=="pendura");
+    if(formas.length)formas.forEach(([k,label,val])=>linhasAuto.push({label,fonte,val,ontem:ontemForma(k)}));
+    else{
+      if((v.maquininha||0)>0)linhasAuto.push({label:aj.legMaquininha,fonte,val:v.maquininha,ontem:ontem("maquininha")});
+      if((v.dinheiro||0)>0)linhasAuto.push({label:aj.legDinheiro,fonte,val:v.dinheiro,ontem:ontem("dinheiro")});
+    }
+  }
+  const totalBlocoAuto=totalAutomatico+(deliverySincronizado?(vendaSincronizada.delivery||0):0);
+  const temBlocoAuto=linhasAuto.length>0||deliverySincronizado||penduraAutomatica>0.005;
+  const autoMaq=autoNoCampo("maquininha")>0;
+  const autoDin=autoNoCampo("dinheiro")>0;
+  const maqManual=parseMoney(form.maquininha||0);
+  const dinManual=parseMoney(form.dinheiro||0);
+  // Pendência = canal ligado, sem valor automático e sem valor digitado.
+  const pendencias:string[]=[];
+  if(!autoMaq&&maqManual<=0)pendencias.push(aj.legMaquininha);
+  if(aj.canalDinheiro&&!autoDin&&dinManual<=0)pendencias.push(aj.legDinheiro);
+  if(aj.canalIfood&&ifoodBruto<=0)pendencias.push("iFood");
+  if(aj.canal99food&&nfoodBruto<=0)pendencias.push("99Food");
+  if(aj.canalVendasExtras&&!deliverySincronizado&&parseMoney(form.delivery||0)<=0)pendencias.push(aj.legVendasExtras);
+  const chips=([
+    {label:aj.legMaquininha,val:autoNoCampo("maquininha")+maqManual,pend:pendencias.includes(aj.legMaquininha)},
+    aj.canalDinheiro&&{label:aj.legDinheiro,val:autoNoCampo("dinheiro")+dinManual,pend:pendencias.includes(aj.legDinheiro)},
+    aj.canalVendasExtras&&{label:aj.legVendasExtras,val:deliveryValorExibir,pend:pendencias.includes(aj.legVendasExtras)},
+    aj.canalIfood&&{label:"iFood",val:ifoodLiq,pend:ifoodBruto<=0},
+    aj.canal99food&&{label:"99Food",val:nfoodLiq,pend:nfoodBruto<=0},
+    penduraAutomatica>0.005&&{label:"pendura (a receber)",val:penduraAutomatica,pend:false},
+  ] as any[]).filter(Boolean);
+  const [iaAberta,setIaAberta]=useState(false);
+  const [outrosAberto,setOutrosAberto]=useState(false);
+  // Se já tem valor digitado em maquininha/dinheiro "fora do PDV", o bloco não
+  // pode ficar escondido — senão o número some da vista mas continua somando.
+  const outrosVisivel=outrosAberto||(autoMaq&&maqManual>0)||(autoDin&&dinManual>0);
+  const inpMoney={width:150,maxWidth:"100%",marginBottom:0,textAlign:"right" as const,...MONO};
+  const chipEstado=(texto:string,tom:"ok"|"pendente"|"info")=><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,marginLeft:6,whiteSpace:"nowrap" as const,...FONTE_APP,
+    background:tom==="ok"?"var(--successBg)":tom==="pendente"?"var(--warningBg)":"var(--infoBg)",
+    color:tom==="ok"?"var(--successText)":tom==="pendente"?"var(--warningText)":"var(--infoText)"}}>{texto}</span>;
 
   const formDeRegistro=(v:any)=>({data:v.data,
     maquininha:v.maquininha?String(v.maquininha.toFixed(2)).replace(".",","):"",
@@ -3676,15 +3721,64 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         <div style={{fontSize:10,color:"var(--text2)",marginTop:5}}>{pct.toFixed(0)}% da meta{pct>=100?" — atingida! 🎉":""}</div>
       </div>;
     })()}
-    <div className="section-title">Lançar Vendas do Dia</div>
+    <div className="section-title">Fechamento de vendas do dia</div>
     <div ref={formRef} className="card" style={{marginBottom:14}}>
-      <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:editId?4:10}}/>
-      {editId&&<div style={{fontSize:11,color:"var(--successText)",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"6px 10px",marginBottom:10,fontWeight:600}}>✏️ Editando o lançamento já existente de {fmtDate(form.data)} — os campos abaixo vieram do que já estava salvo.</div>}
-      <div style={{marginBottom:10}}>
         <input ref={iaCombRef} type="file" accept="image/*" multiple onChange={e=>{addCombFiles(e.target.files);if(iaCombRef.current)iaCombRef.current.value="";}} style={{display:"none"}}/>
         <input ref={iaCombCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{addCombFiles(e.target.files);if(iaCombCamRef.current)iaCombCamRef.current.value="";}} style={{display:"none"}}/>
-        <div style={{fontSize:11,fontWeight:600,color:"var(--text2)",marginBottom:6,textAlign:"center",letterSpacing:1}}>🤖 LEITURA COMBINADA DE COMPROVANTES</div>
-        <div style={{fontSize:10,color:"#888",marginBottom:6,textAlign:"center"}}>Junte todas as fotos do dia (maquininha, delivery, iFood...) — a IA identifica cada uma e separa por forma de pagamento</div>
+      <div style={{display:"flex",flexWrap:"wrap",alignItems:"flex-end",justifyContent:"space-between",gap:12}}>
+        <div style={{flex:"1 1 220px",minWidth:0}}>
+          <input type="date" value={form.data} onChange={e=>setForm(f=>({...f,data:e.target.value}))} className="inp" style={{marginBottom:8,maxWidth:200}}/>
+          <div style={{fontSize:11,color:"var(--text2)",...FONTE_APP}}>Total do dia · {fmtDate(form.data)}</div>
+          <div style={{fontSize:28,fontWeight:700,lineHeight:1.15,...MONO}}>{fmtMoney(totalDia)}</div>
+          <div style={{fontSize:12,color:"var(--text2)",display:"flex",gap:10,flexWrap:"wrap",marginTop:2,...FONTE_APP}}>
+            {ontemTotal>0&&<span>ontem <span style={MONO}>{fmtMoney(ontemTotal)}</span> {deltaTag(totalDia,ontemTotal)}</span>}
+            {totalAutomatico>0&&<span>{aj.legTotalLiquido} deste lançamento <span style={MONO}>{fmtMoney(total)}</span></span>}
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,...FONTE_APP}}>
+          {pendencias.length>0
+            ?<span style={{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:999,background:"var(--warningBg)",color:"var(--warningText)"}}>{pendencias.length} {pendencias.length===1?"pendência":"pendências"}</span>
+            :<span style={{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:999,background:"var(--successBg)",color:"var(--successText)"}}>✓ tudo informado</span>}
+          {editId&&<span style={{fontSize:11,color:"var(--infoText)"}}>editando o lançamento já salvo de {fmtDate(form.data)}</span>}
+        </div>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,margin:"10px 0 12px",...FONTE_APP}}>
+        {chips.map((c:any)=><span key={c.label} style={{fontSize:11,padding:"3px 8px",borderRadius:8,background:c.pend?"var(--warningBg)":"var(--bg5)",color:c.pend?"var(--warningText)":"var(--text2)"}}>
+          {c.label} <b style={{color:c.pend?"var(--warningText)":"var(--text)",...MONO}}>{c.pend?"—":fmtMoney(c.val)}</b>
+        </span>)}
+      </div>
+
+      {temBlocoAuto&&<div style={{marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"8px 0 4px",borderTop:"1px solid var(--border)"}}>
+          <span style={{fontSize:13,fontWeight:700,color:"var(--successText)",...FONTE_APP}}>✓ Apurado automaticamente</span>
+          <span style={{fontSize:13,fontWeight:700,...MONO}}>{fmtMoney(totalBlocoAuto)}</span>
+        </div>
+        {linhasAuto.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:13}}>
+          <span style={{flex:1,minWidth:0,color:"var(--text2)",...FONTE_APP}}>{l.label}{chipEstado(l.fonte,"ok")}</span>
+          <span style={MONO}>{fmtMoney(l.val)}</span>
+          <span style={{width:44,textAlign:"right"}}>{deltaTag(l.val,l.ontem)}</span>
+        </div>)}
+        {deliverySincronizado&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:13}}>
+          <span style={{flex:1,minWidth:0,color:"var(--text2)",...FONTE_APP}}>{aj.legVendasExtras}{chipEstado("sincronizado","ok")}
+            <button onClick={()=>{setDeliveryManual(true);setForm(f=>({...f,delivery:String((vendaSincronizada.delivery||0).toFixed(2)).replace(".",",")}));}} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,fontWeight:700,textDecoration:"underline",padding:0,marginLeft:8}}>editar</button>
+          </span>
+          <span style={MONO}>{fmtMoney(vendaSincronizada.delivery||0)}</span>
+          <span style={{width:44,textAlign:"right"}}>{deltaTag(vendaSincronizada.delivery||0,ontem("delivery"))}</span>
+        </div>}
+        {penduraAutomatica>0.005&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"2px 0",fontSize:11,color:"var(--warningText)"}}>
+          <span style={{flex:1,...FONTE_APP}}>dos quais pendura (a receber)</span>
+          <span style={MONO}>{fmtMoney(penduraAutomatica)}</span>
+          <span style={{width:44}}/>
+        </div>}
+      </div>}
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"8px 0 4px",borderTop:"1px solid var(--border)"}}>
+        <span style={{fontSize:13,fontWeight:700,color:pendencias.length?"var(--warningText)":"var(--text)",...FONTE_APP}}>{pendencias.length?"○ Falta informar":"Lançamento manual"}</span>
+        <button className="btn" type="button" onClick={()=>setIaAberta(a=>!a)}
+          style={{background:iaAberta?"var(--infoBg)":"var(--bg5)",color:"var(--btnPrimary)",fontSize:12,padding:"6px 10px",borderRadius:8,...FONTE_APP}}>📷 Ler comprovantes com IA</button>
+      </div>
+      {iaAberta&&<div style={{background:"var(--bg5)",borderRadius:10,padding:"10px 12px",marginBottom:6,...FONTE_APP}}>
+        <div style={{fontSize:11,color:"var(--text2)",marginBottom:8}}>Junte todas as fotos do dia (maquininha, delivery, iFood...) — a IA identifica cada uma e separa por forma de pagamento.</div>
         <div style={{display:"flex",gap:8,marginBottom:8}}>
           <button className="btn" type="button" onClick={()=>iaCombRef.current?.click()}
             style={{flex:1,background:"var(--bg4)",border:"1.5px dashed #6366F166",color:"var(--btnPrimary)",fontSize:13,padding:"10px",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
@@ -3743,67 +3837,46 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
               style={{background:"var(--bg3)",color:"#888",fontSize:12,padding:"10px 14px",borderRadius:10}}>🔄 Refazer</button>
           </div>
         </div>}
-      </div>
-      <LinhaCanal Icone={IconMaquininha} label={aj.legMaquininha} ontem={ontem("maquininha")} preenchido={parseMoney(form.maquininha||0)>0||autoNoCampo("maquininha")>0}>
-        <MoneyInput value={form.maquininha} onChange={v=>setForm(f=>({...f,maquininha:v}))} className="inp"/>
-        {avisoAutomatico("maquininha")}
-      </LinhaCanal>
-      {aj.canalDinheiro&&<LinhaCanal Icone={IconDinheiro} label={aj.legDinheiro} ontem={ontem("dinheiro")} preenchido={parseMoney(form.dinheiro||0)>0||autoNoCampo("dinheiro")>0}>
-        <MoneyInput value={form.dinheiro} onChange={v=>setForm(f=>({...f,dinheiro:v}))} className="inp"/>
-        {avisoAutomatico("dinheiro")}
-      </LinhaCanal>}
-      {aj.canalIfood&&<LinhaCanal Icone={IconIfood} label={aj.legIfood} ontem={ontem("ifood")} preenchido={ifoodBruto>0}>
-        <div style={{display:"flex",gap:6}}>
-          <MoneyInput value={form.ifood} onChange={v=>setForm(f=>({...f,ifood:v}))} className="inp" style={{flex:1}}/>
-          <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
-            <input type="number" value={form.ifoodTaxa} onChange={e=>setForm(f=>({...f,ifoodTaxa:e.target.value}))}
-              placeholder="Taxa%" min="0" max="100" step="0.1"
-              className="inp" style={{width:70,textAlign:"center"}}/>
-            <span style={{fontSize:11,color:"#888"}}>%</span>
-          </div>
-        </div>
-        {ifoodTaxaPct>0&&ifoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(ifoodLiq)} (desc. {fmtMoney(ifoodBruto-ifoodLiq)})</div>}
-      </LinhaCanal>}
-      {aj.canal99food&&<LinhaCanal Icone={Icon99Food} label={aj.leg99food} ontem={ontem("99food")} preenchido={nfoodBruto>0}>
-        <div style={{display:"flex",gap:6}}>
-          <MoneyInput value={form["99food"]} onChange={v=>setForm(f=>({...f,"99food":v}))} className="inp" style={{flex:1}}/>
-          <div style={{display:"flex",alignItems:"center",gap:4,flex:"0 0 auto"}}>
-            <input type="number" value={form.nfoodTaxa} onChange={e=>setForm(f=>({...f,nfoodTaxa:e.target.value}))}
-              placeholder="Taxa%" min="0" max="100" step="0.1"
-              className="inp" style={{width:70,textAlign:"center"}}/>
-            <span style={{fontSize:11,color:"#888"}}>%</span>
-          </div>
-        </div>
-        {nfoodTaxaPct>0&&nfoodBruto>0&&<div style={{fontSize:11,color:"#22C55E",marginTop:3}}>Líquido: {fmtMoney(nfoodLiq)} (desc. {fmtMoney(nfoodBruto-nfoodLiq)})</div>}
-      </LinhaCanal>}
-      {aj.canalVendasExtras&&<LinhaCanal Icone={IconDelivery} label={aj.legVendasExtras} ontem={ontem("delivery")} preenchido={deliveryValorExibir>0}>
-        {deliverySincronizado?<>
-          <div style={{display:"flex",alignItems:"center",gap:6,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8,padding:"7px 10px",marginBottom:6,fontSize:11,color:"var(--successText)",fontWeight:700}}>
-            🔄 Sincronizado automaticamente do delivery
-            <button onClick={()=>{setDeliveryManual(true);setForm(f=>({...f,delivery:String((vendaSincronizada.delivery||0).toFixed(2)).replace(".",",")}));}} style={{marginLeft:"auto",background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"underline",padding:0}}>editar</button>
-          </div>
-          <input readOnly value={fmtMoney(vendaSincronizada.delivery||0)} className="inp" style={{color:"var(--successText)",fontWeight:700}}/>
-        </>:<>
-          <MoneyInput value={form.delivery} onChange={v=>{setDeliveryManual(true);setForm(f=>({...f,delivery:v}));}} className="inp"/>
-          {deliveryManual&&vendaSincronizada&&(vendaSincronizada.delivery||0)>0&&
-            <button onClick={()=>setDeliveryManual(false)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:10,fontWeight:700,textDecoration:"underline",padding:0,marginTop:4}}>🔄 usar valor sincronizado</button>}
-        </>}
-      </LinhaCanal>}
-      <hr className="divider"/>
-      <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0 10px",fontWeight:700,fontSize:16}}>
-        <span>{aj.legTotalLiquido}</span><span style={{color:"#22C55E"}}>{fmtMoney(total)}</span>
-      </div>
-      {totalAutomatico>0&&<div style={{margin:"-4px 0 10px",padding:"8px 10px",background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:8}}>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--text2)"}}>
-          <span>🔄 Lançado automaticamente (linhas próprias)</span><span>{fmtMoney(totalAutomatico)}</span>
-        </div>
-        {penduraAutomatica>0.005&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--warningText)",marginTop:2}}>
-          <span>dos quais pendura (a receber)</span><span>{fmtMoney(penduraAutomatica)}</span>
-        </div>}
-        <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:14,marginTop:4,color:"var(--successText)"}}>
-          <span>Total do dia</span><span>{fmtMoney(total+totalAutomatico)}</span>
-        </div>
       </div>}
+
+      {!autoMaq&&<LinhaFechamento Icone={IconMaquininha} label={aj.legMaquininha} ontem={ontem("maquininha")} valor={maqManual} direita={deltaTag(maqManual,ontem("maquininha"))}>
+        <MoneyInput value={form.maquininha} onChange={v=>setForm(f=>({...f,maquininha:v}))} className="inp" placeholder="—" style={inpMoney}/>
+      </LinhaFechamento>}
+      {aj.canalDinheiro&&!autoDin&&<LinhaFechamento Icone={IconDinheiro} label={aj.legDinheiro} ontem={ontem("dinheiro")} valor={dinManual} direita={deltaTag(dinManual,ontem("dinheiro"))}>
+        <MoneyInput value={form.dinheiro} onChange={v=>setForm(f=>({...f,dinheiro:v}))} className="inp" placeholder="—" style={inpMoney}/>
+      </LinhaFechamento>}
+      {aj.canalIfood&&<LinhaFechamento Icone={IconIfood} label={aj.legIfood} ontem={ontem("ifood")} valor={ifoodBruto}
+        direita={<span style={{fontSize:13,minWidth:120,textAlign:"right",paddingRight:2,color:ifoodBruto>0?"var(--text)":"var(--text2)",...MONO}}>líquido {ifoodBruto>0?fmtMoney(ifoodLiq):"—"}</span>}>
+        <MoneyInput value={form.ifood} onChange={v=>setForm(f=>({...f,ifood:v}))} className="inp" placeholder="bruto" style={{...inpMoney,width:130}}/>
+        <input type="number" value={form.ifoodTaxa} onChange={e=>setForm(f=>({...f,ifoodTaxa:e.target.value}))} placeholder="taxa" min="0" max="100" step="0.1" className="inp" style={{width:72,marginBottom:0,padding:"10px 8px",textAlign:"right",...MONO}}/>
+        <span style={{fontSize:11,color:"var(--text2)"}}>%</span>
+      </LinhaFechamento>}
+      {aj.canal99food&&<LinhaFechamento Icone={Icon99Food} label={aj.leg99food} ontem={ontem("99food")} valor={nfoodBruto}
+        direita={<span style={{fontSize:13,minWidth:120,textAlign:"right",paddingRight:2,color:nfoodBruto>0?"var(--text)":"var(--text2)",...MONO}}>líquido {nfoodBruto>0?fmtMoney(nfoodLiq):"—"}</span>}>
+        <MoneyInput value={form["99food"]} onChange={v=>setForm(f=>({...f,"99food":v}))} className="inp" placeholder="bruto" style={{...inpMoney,width:130}}/>
+        <input type="number" value={form.nfoodTaxa} onChange={e=>setForm(f=>({...f,nfoodTaxa:e.target.value}))} placeholder="taxa" min="0" max="100" step="0.1" className="inp" style={{width:72,marginBottom:0,padding:"10px 8px",textAlign:"right",...MONO}}/>
+        <span style={{fontSize:11,color:"var(--text2)"}}>%</span>
+      </LinhaFechamento>}
+      {aj.canalVendasExtras&&!deliverySincronizado&&<LinhaFechamento Icone={IconDelivery} label={aj.legVendasExtras} ontem={ontem("delivery")} valor={parseMoney(form.delivery||0)} direita={deltaTag(parseMoney(form.delivery||0),ontem("delivery"))}>
+        <MoneyInput value={form.delivery} onChange={v=>{setDeliveryManual(true);setForm(f=>({...f,delivery:v}));}} className="inp" placeholder="—" style={inpMoney}/>
+        {deliveryManual&&vendaSincronizada&&(vendaSincronizada.delivery||0)>0&&
+          <button onClick={()=>setDeliveryManual(false)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,fontWeight:700,textDecoration:"underline",padding:0,...FONTE_APP}}>usar valor sincronizado</button>}
+      </LinhaFechamento>}
+
+      {(autoMaq||(aj.canalDinheiro&&autoDin))&&<div style={{padding:"8px 0 0",borderTop:"1px solid var(--border)",...FONTE_APP}}>
+        <button type="button" onClick={()=>setOutrosAberto(a=>!a)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:"var(--btnPrimary)",fontWeight:700,fontFamily:"inherit"}}>{outrosVisivel?"− ":"+ "}Maquininha fora do PDV ou dinheiro extra</button>
+        {outrosVisivel&&<div style={{marginTop:4}}>
+          <div style={{fontSize:11,color:"var(--text2)",marginBottom:2}}>Só o que NÃO passou pelo PDV — o valor digitado aqui soma ao apurado acima.</div>
+          {autoMaq&&<LinhaFechamento Icone={IconMaquininha} label={aj.legMaquininha+" fora do PDV"} ontem={0} valor={maqManual} direita={null}>
+            <MoneyInput value={form.maquininha} onChange={v=>setForm(f=>({...f,maquininha:v}))} className="inp" placeholder="—" style={inpMoney}/>
+          </LinhaFechamento>}
+          {aj.canalDinheiro&&autoDin&&<LinhaFechamento Icone={IconDinheiro} label={aj.legDinheiro+" extra"} ontem={0} valor={dinManual} direita={null}>
+            <MoneyInput value={form.dinheiro} onChange={v=>setForm(f=>({...f,dinheiro:v}))} className="inp" placeholder="—" style={inpMoney}/>
+          </LinhaFechamento>}
+        </div>}
+      </div>}
+
+      <div style={{marginTop:12}}/>
       <button className="btn" onClick={save} style={{background:saved?"#22C55E":"var(--btnPrimary)",color:saved?"#051208":"var(--onPrimary,#FFFFFF)",padding:"12px",width:"100%",fontSize:15,transition:"background .15s ease"}}>{saved?"✓ Salvo":editId?"✏️ Atualizar":`💾 ${aj.legBotaoSalvar}`}</button>
       {editId&&<div style={{display:"flex",gap:8,marginTop:8}}>
         <button className="btn" onClick={()=>{
@@ -3954,19 +4027,21 @@ const imprimirReciboVenda=(recibo:any,cfg:any,aj?:any,empresa?:string)=>{
 // pra conferência) + o campo em si. O ícone acende quando o campo tem valor,
 // então dá pra ver de relance o que já foi lançado. Cores vêm das variáveis de
 // tema — o app tem claro e escuro, valor fixo ficaria ilegível num dos dois.
-function LinhaCanal({Icone,label,ontem,preenchido,children}:{Icone:any,label:string,ontem:number,preenchido:boolean,children:any}){
-  return <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-    <div style={{width:36,height:36,borderRadius:10,flexShrink:0,marginTop:17,display:"flex",alignItems:"center",justifyContent:"center",
-      background:preenchido?"var(--infoBg)":"var(--bg3)",color:preenchido?"var(--infoText)":"#888",transition:"background .15s ease,color .15s ease"}}>
+// Linha de campo MANUAL do fechamento de vendas: ícone, rótulo (na fonte do
+// app, mesmo com a aba em fonte mono), "ontem R$ x" como referência, o campo
+// à direita e, depois dele, o líquido calculado ou o delta contra ontem.
+function LinhaFechamento({Icone,label,ontem,valor,direita,children}:{Icone:any,label:string,ontem:number,valor:number,direita:any,children:any}){
+  return <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"8px 0",borderTop:"1px solid var(--border)"}}>
+    <div style={{width:32,height:32,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+      background:valor>0?"var(--infoBg)":"var(--bg5)",color:valor>0?"var(--infoText)":"var(--text2)",transition:"background .15s ease,color .15s ease"}}>
       <Icone/>
     </div>
-    <div style={{flex:1,minWidth:0}}>
-      <label style={{fontSize:12,color:"#666",marginBottom:3,display:"flex",gap:6,flexWrap:"wrap",alignItems:"baseline"}}>
-        {label}
-        {ontem>0&&<span style={{fontSize:11,color:"#888"}}>· ontem {fmtMoney(ontem)}</span>}
-      </label>
-      {children}
+    <div style={{flex:"1 1 130px",minWidth:0,fontFamily:"var(--fonteApp)"}}>
+      <div style={{fontSize:13,color:"var(--text)"}}>{label}</div>
+      {ontem>0&&<div style={{fontSize:11,color:"var(--text2)"}}>ontem {fmtMoney(ontem)}</div>}
     </div>
+    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{children}</div>
+    {direita&&<div style={{marginLeft:"auto"}}>{direita}</div>}
   </div>;
 }
 

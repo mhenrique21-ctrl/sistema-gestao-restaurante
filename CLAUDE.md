@@ -517,6 +517,30 @@ Campos por dia: `maquininha`, `dinheiro`, `ifood`+`ifoodTaxa`+`ifoodLiq`,
 `origem` distingue lançamento manual, `"pdv"` (sincronizado) e `"recibo_venda"`. Os três
 coexistem no mesmo dia de propósito, e a fusão chaveia por `data+origem`.
 
+#### Vendas → Lançamentos: a tela é um fechamento, não um formulário
+
+Total do dia em cima (soma de TODAS as origens do dia + o que está sendo
+digitado), com "ontem" e delta ao lado — o delta é o que denuncia 30,55 digitado
+no lugar de 3.055. Abaixo, dois blocos com papéis opostos:
+
+| bloco | o que mostra | pode digitar? |
+|---|---|---|
+| **Apurado automaticamente** | uma linha por forma de pagamento quando a origem manda `formas` (PDV Eclética), senão por canal (PDV Seama); delivery sincronizado com "editar"; pendura em separado | não |
+| **Falta informar** | só os canais SEM valor automático no dia + iFood/99Food (bruto · taxa% · líquido calculado na linha, taxa vem do último lançamento) | sim |
+
+⚠️ Maquininha e dinheiro só aparecem como campo quando o PDV **não** apurou o
+canal naquele dia. Quando apurou, ficam recolhidos em **"+ Maquininha fora do
+PDV ou dinheiro extra"** — o campo continua existindo (as linhas somam no
+Dashboard, é a regra de sempre), só não fica ao lado do valor automático
+convidando a digitar de novo. Foi assim que o aviso "não repita aqui, os dois
+somam" deixou de ser necessário: o layout parou de induzir o erro em vez de
+avisar sobre ele. A seção abre sozinha se já houver valor digitado nela —
+esconder um número que soma é pior que o aviso antigo.
+
+Números em fonte mono tabular (`MONO`), rótulos na fonte do app
+(`var(--fonteApp)`, definida no `.app-root`) mesmo com a aba Vendas em fonte
+"Técnica". Verde = conferido, âmbar = pendente; nada mais é verde.
+
 ### Compras
 Entradas · Cupom IA · NF-e · Histórico · Fornecedores · Insumos · Consumo · Budget ·
 Classificar · Reclassificar.
