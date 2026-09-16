@@ -32,6 +32,7 @@ src/ConfigPanel.tsx   configuração visual
 new_server.js         API Node (sem framework), serve o build e faz proxy pros PDVs
 mergeDocument.js      fusão de documento no servidor (com testes)
 mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
+iaGemini.js           tradução Anthropic ↔ Gemini para o Cupom IA (com testes)
 src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com testes)
 src/tipoInsumo.js     o que o item é e o que a venda faz com ele (com testes)
 src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
@@ -1161,6 +1162,39 @@ Regras aprendidas na marra:
   no papel. Usar texto escuro, e `print-color-adjust:exact` onde o fundo carrega informação.
 - Status nunca só por cor: barra **e** rótulo escrito — muita impressão sai em P&B.
 - Timbre vem de `db.config.impressao` (nome, logo, razão social, CNPJ, endereço, contato).
+
+### Cupom IA — provedor (Gemini grátis ou Anthropic)
+
+A leitura de cupom, o teste de status e a conciliação de produtos passam todos
+por `iaRequest()` em `new_server.js`, que fala com UM provedor escolhido no
+`.env` da VPS:
+
+| variável | efeito |
+|---|---|
+| `GEMINI_API_KEY` | chave do Google AI Studio (aistudio.google.com). Tem faixa **gratuita** com limite diário de requisições |
+| `ANTHROPIC_API_KEY` | chave paga da Anthropic |
+| `IA_PROVIDER` | `gemini` ou `anthropic`. **Sem ela, entra o Gemini se `GEMINI_API_KEY` existir, senão a Anthropic** |
+| `GEMINI_MODEL` | padrão `gemini-3.8-flash`; `gemini-3.5-flash-lite` é o mais barato no plano pago |
+| `IA_MODEL` | padrão `claude-haiku-4-5` (~1/3 do preço do Sonnet, lê cupom igual) |
+
+Trocar de provedor é mexer no `.env` e `pm2 restart app-gestao` — nada no
+código nem no front. O app inteiro continua falando o formato da Anthropic
+(`messages` com blocos image/text, resposta em `content[].text`,
+`error.type`); `iaGemini.js` traduz na ida e na volta.
+
+⚠️ Na faixa gratuita do Gemini o Google **pode usar o conteúdo enviado** (foto do
+cupom: fornecedor, CNPJ, itens, valores) para melhorar os produtos dele — está
+escrito na página de preços. Foi uma escolha consciente pelo custo zero; se isso
+mudar de ideia, basta `IA_PROVIDER=anthropic`.
+
+⚠️ O 429 do Gemini usa o MESMO texto para "muitas por minuto" e "acabou a cota
+do dia" — e o texto menciona "billing details", que casava com `semCredito()`
+e mandava o usuário comprar crédito **na Anthropic**. Quem diferencia é o
+`quotaId` em `error.details` (`...PerDay...`): cota do dia vira o tipo
+próprio `daily_quota_error` — definitivo, sem retry, mensagem em português
+dizendo que volta à meia-noite da Califórnia. Chave errada no Gemini chega como
+`400 "API key not valid"` (não 401): `iaGemini.js` reconhece pelo texto e vira
+`authentication_error`, senão a tela mandaria refotografar o cupom.
 
 ### Cupom IA — erro da API
 

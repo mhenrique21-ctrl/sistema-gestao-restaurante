@@ -1,0 +1,140 @@
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { paraGemini, respostaDoGemini, erroDoGemini, MSG_COTA_DIARIA_GEMINI, MSG_LIMITE_MINUTO_GEMINI } from './iaGemini.js';
+
+// Análise do código sob teste (iaGemini.js):
+// - Input: o pedido que o app já monta no formato da Anthropic (system,
+//   messages com blocos image/text, max_tokens), e as respostas cruas do
+//   Gemini (200 ou erro).
+// - Output: o corpo do generateContent na ida; na volta, um objeto no formato
+//   da Anthropic (content[].text, stop_reason, usage) ou { error: { type } }
+//   com os mesmos tipos que new_server.js já classifica.
+// - Sem efeitos colaterais: funções puras, sem rede.
+// - Existe para trocar de provedor pelo .env sem reescrever a tela nem o
+//   tratamento de erro do /api/scan.
+
+const IMG = { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } };
+
+describe('paraGemini', () => {
+  test('imagem + texto do cupom viram parts na ordem, system vira systemInstruction', () => {
+    const body = paraGemini({
+      system: 'Você é um OCR',
+      messages: [{ role: 'user', content: [IMG, { type: 'text', text: 'Leia o cupom' }] }],
+      max_tokens: 8192,
+      json: true,
+    });
+    assert.deepEqual(body.systemInstruction, { parts: [{ text: 'Você é um OCR' }] });
+    assert.equal(body.contents.length, 1);
+    assert.equal(body.contents[0].role, 'user');
+    assert.deepEqual(body.contents[0].parts, [
+      { inline_data: { mime_type: 'image/jpeg', data: 'AAAA' } },
+      { text: 'Leia o cupom' },
+    ]);
+    assert.deepEqual(body.generationConfig, { maxOutputTokens: 8192, responseMimeType: 'application/json' });
+  });
+
+  test('conteúdo em string simples (rotas de conciliação) vira uma part de texto', () => {
+    const body = paraGemini({ messages: [{ role: 'user', content: 'Responda apenas: OK' }], max_tokens: 50 });
+    assert.deepEqual(body.contents[0].parts, [{ text: 'Responda apenas: OK' }]);
+    assert.equal(body.systemInstruction, undefined);
+    assert.equal(body.generationConfig.responseMimeType, undefined);
+    // piso de 8192: o raciocínio do Gemini conta dentro do limite
+    assert.equal(body.generationConfig.maxOutputTokens, 8192);
+  });
+
+  test('várias imagens na mesma mensagem (fechamento combinado) são todas preservadas', () => {
+    const body = paraGemini({ messages: [{ role: 'user', content: [IMG, IMG, IMG, { type: 'text', text: 'x' }] }], max_tokens: 10 });
+    assert.equal(body.contents[0].parts.filter(p => p.inline_data).length, 3);
+  });
+
+  test('role assistant vira model; bloco desconhecido é descartado', () => {
+    const body = paraGemini({
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'a' }, { type: 'tool_use', id: 'x' }] },
+        { role: 'assistant', content: 'b' },
+      ],
+      max_tokens: 10,
+    });
+    assert.deepEqual(body.contents[0].parts, [{ text: 'a' }]);
+    assert.equal(body.contents[1].role, 'model');
+  });
+});
+
+describe('respostaDoGemini', () => {
+  test('texto e uso viram o formato da Anthropic que a tela já lê', () => {
+    const r = respostaDoGemini({
+      candidates: [{ content: { parts: [{ text: '{"itens":' }, { text: '[]}' }] }, finishReason: 'STOP' }],
+      usageMetadata: { promptTokenCount: 1200, candidatesTokenCount: 300 },
+    }, 'gemini-x');
+    assert.equal(r.error, undefined);
+    assert.equal(r.content.map(c => c.text).join(''), '{"itens":[]}');
+    assert.equal(r.stop_reason, 'end_turn');
+    assert.equal(r.model, 'gemini-x');
+    assert.deepEqual(r.usage, { input_tokens: 1200, output_tokens: 300 });
+  });
+
+  test('parts de raciocínio (thought) não entram no texto', () => {
+    const r = respostaDoGemini({ candidates: [{ content: { parts: [{ text: 'pensando', thought: true }, { text: 'OK' }] } }] }, 'm');
+    assert.equal(r.content[0].text, 'OK');
+  });
+
+  test('MAX_TOKENS vira stop_reason max_tokens', () => {
+    const r = respostaDoGemini({ candidates: [{ content: { parts: [{ text: '{' }] }, finishReason: 'MAX_TOKENS' }] }, 'm');
+    assert.equal(r.stop_reason, 'max_tokens');
+  });
+
+  test('bloqueio de segurança ou candidato sem conteúdo vira erro definitivo com o motivo', () => {
+    const r1 = respostaDoGemini({ promptFeedback: { blockReason: 'SAFETY' } }, 'm');
+    assert.equal(r1.error.type, 'invalid_request_error');
+    assert.match(r1.error.message, /SAFETY/);
+    const r2 = respostaDoGemini({ candidates: [{ finishReason: 'RECITATION' }] }, 'm');
+    assert.match(r2.error.message, /RECITATION/);
+    assert.match(respostaDoGemini(null, 'm').error.message, /sem resposta/);
+  });
+});
+
+describe('erroDoGemini', () => {
+  test('chave inválida vira authentication_error (a tela esconde as dicas de foto)', () => {
+    const r = erroDoGemini(400, { error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } });
+    // O Google devolve chave inválida como 400 INVALID_ARGUMENT; só o texto
+    // diz o que é. Sem chave nenhuma vem 403 PERMISSION_DENIED.
+    assert.equal(r.error.type, 'authentication_error');
+    const r2 = erroDoGemini(403, { error: { code: 403, message: 'Method doesn\'t allow unregistered callers', status: 'PERMISSION_DENIED' } });
+    assert.equal(r2.error.type, 'authentication_error');
+  });
+
+  test('429 com quotaId PerDay é cota do dia: tipo próprio e mensagem em português', () => {
+    const r = erroDoGemini(429, { error: {
+      code: 429, status: 'RESOURCE_EXHAUSTED',
+      message: 'You exceeded your current quota, please check your plan and billing details.',
+      details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric: 'generativelanguage.googleapis.com/generate_content_free_tier_requests', quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }],
+    } });
+    assert.equal(r.error.type, 'daily_quota_error');
+    assert.equal(r.error.message, MSG_COTA_DIARIA_GEMINI);
+    // A mensagem crua tinha "billing details" — não pode vazar, senão
+    // semCredito() manda comprar crédito na Anthropic.
+    assert.doesNotMatch(r.error.message, /billing/i);
+  });
+
+  test('429 com quotaId PerMinute é limite por minuto: rate_limit_error, o servidor retenta', () => {
+    const r = erroDoGemini(429, { error: {
+      code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota, please check your plan and billing details.',
+      details: [{ violations: [{ quotaId: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier' }] }],
+    } });
+    assert.equal(r.error.type, 'rate_limit_error');
+    assert.equal(r.error.message, MSG_LIMITE_MINUTO_GEMINI);
+  });
+
+  test('429 sem details também é tratado como limite por minuto (retentável)', () => {
+    assert.equal(erroDoGemini(429, { error: { message: 'Resource has been exhausted' } }).error.type, 'rate_limit_error');
+  });
+
+  test('503 vira overloaded_error, 404 vira not_found_error, corpo não-JSON vira api_error com o texto', () => {
+    assert.equal(erroDoGemini(503, { error: { status: 'UNAVAILABLE', message: 'The model is overloaded.' } }).error.type, 'overloaded_error');
+    assert.equal(erroDoGemini(404, { error: { status: 'NOT_FOUND', message: 'models/x is not found' } }).error.type, 'not_found_error');
+    const r = erroDoGemini(502, '<html>Bad Gateway</html>');
+    assert.equal(r.error.type, 'api_error');
+    assert.match(r.error.message, /Bad Gateway/);
+    assert.equal(erroDoGemini(500, null).error.message, 'HTTP 500');
+  });
+});

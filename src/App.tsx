@@ -20519,7 +20519,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   useEffect(()=>{
     fetch("/api/ia-status").then(r=>{if(r.ok)return r.json();throw new Error();}).then(d=>{
       if(!d.configured){setIaStatus("none");setIaStatusDetail(d.error||"");}
-      else if(d.status==="ok"){setIaStatus("ok");setIaStatusDetail("");}
+      else if(d.status==="ok"){setIaStatus("ok");setIaStatusDetail(d.provider?`${d.provider==="gemini"?"Google Gemini":"Anthropic Claude"} · ${d.model||""}`:"");}
       else{setIaStatus("error");setIaStatusDetail(d.error||`HTTP ${d.httpCode||"?"}`);}
     }).catch(()=>{setIaStatus("none");setIaStatusDetail("Servidor offline");});
   },[]);
@@ -21197,14 +21197,14 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           <div style={{fontSize:22}}>{iaStatus==="ok"?"✅":iaStatus==="checking"?"⏳":iaStatus==="error"?"⚠️":"❌"}</div>
           <div>
             <div style={{fontSize:13,fontWeight:600}}>{iaStatus==="ok"?"API funcionando":iaStatus==="checking"?"Testando conexão com a API...":iaStatus==="error"?"API com problema":"Não configurada"}</div>
-            <div className="muted" style={{fontSize:11}}>{iaStatus==="ok"?"A IA está pronta para extrair produtos de cupons fiscais.":iaStatus==="error"?iaStatusDetail||"Erro ao conectar com a API.":"Configure a variável ANTHROPIC_API_KEY no .env do servidor."}</div>
+            <div className="muted" style={{fontSize:11}}>{iaStatus==="ok"?`A IA está pronta para extrair produtos de cupons fiscais.${iaStatusDetail?" Provedor: "+iaStatusDetail+".":""}`:iaStatus==="error"?iaStatusDetail||"Erro ao conectar com a API.":"Configure GEMINI_API_KEY (grátis) ou ANTHROPIC_API_KEY no .env do servidor."}</div>
           </div>
         </div>
         {iaStatus!=="ok"&&<div style={{background:"var(--infoBg)",borderRadius:8,padding:"10px",border:"1px solid #0EA5E940"}}>
           <div style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700,marginBottom:4}}>Como configurar:</div>
           <div className="muted" style={{fontSize:11,lineHeight:1.6}}>
             1. Acesse o .env na VPS<br/>
-            2. Adicione: <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>ANTHROPIC_API_KEY=sk-ant-...</code><br/>
+            2. Adicione <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>GEMINI_API_KEY=...</code> (chave grátis em aistudio.google.com) ou <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>ANTHROPIC_API_KEY=sk-ant-...</code> (paga)<br/>
             3. Reinicie: <code style={{background:"var(--bg4)",padding:"1px 4px",borderRadius:4}}>pm2 restart app-gestao</code>
           </div>
         </div>}

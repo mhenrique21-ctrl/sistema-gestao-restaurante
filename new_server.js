@@ -10,6 +10,7 @@ import webPush from 'web-push';
 import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
+import { paraGemini, respostaDoGemini, erroDoGemini } from './iaGemini.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,21 @@ try { await import('dotenv/config'); } catch {}
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
+
+// ---- Provedor de IA (Cupom IA, status, conciliação de produtos) ----
+// 'gemini' usa a API do Google AI Studio, que tem faixa gratuita (limite diário
+// de requisições; nessa faixa o Google pode usar o conteúdo enviado para
+// melhorar os produtos dele). 'anthropic' usa a chave paga da Anthropic.
+// Sem IA_PROVIDER no .env, entra o Gemini se GEMINI_API_KEY existir, senão a
+// Anthropic — colocar a chave do Gemini no .env já troca; tirar, volta.
+// Tudo é configurável pelo .env da VPS sem mexer no código.
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash'; // 'gemini-3.5-flash-lite' é o mais barato no plano pago
+const IA_MODEL = process.env.IA_MODEL || 'claude-haiku-4-5'; // Haiku 4.5 custa ~1/3 do Sonnet e dá conta do cupom
+const IA_PROVIDER = (process.env.IA_PROVIDER || (GEMINI_API_KEY ? 'gemini' : 'anthropic')).trim().toLowerCase() === 'gemini' ? 'gemini' : 'anthropic';
+const IA_KEY = IA_PROVIDER === 'gemini' ? GEMINI_API_KEY : API_KEY;
+const IA_MODEL_ATIVO = IA_PROVIDER === 'gemini' ? GEMINI_MODEL : IA_MODEL;
+const IA_ENV_VAR = IA_PROVIDER === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY';
 const DIST = path.join(__dirname, 'dist');
 const LOGOS_DIR = path.join(__dirname, 'logos');
 const CERTS_DIR = path.join(__dirname, 'certs');
@@ -1016,10 +1032,14 @@ function normalizarFolhaInventario(empresa, j) {
 // tipo de "requisição malformada" — e a tela mostrava a mensagem crua em inglês
 // junto com dicas de tirar foto mais de perto, mandando o usuário refotografar
 // um cupom que estava perfeito. A causa não está na imagem nem no app.
-const MSG_SEM_CREDITO = 'A conta da Anthropic está sem crédito. '
-  + 'Entre em console.anthropic.com → Plans & Billing e adicione créditos. '
-  + 'Não é problema da foto nem do aplicativo — enquanto isso, dá para colar o '
-  + 'texto do cupom no campo abaixo.';
+const MSG_SEM_CREDITO = IA_PROVIDER === 'gemini'
+  ? 'O Google recusou a cobrança da conta do AI Studio. Entre em aistudio.google.com '
+    + 'e verifique o plano/faturamento do projeto da chave. Não é problema da foto nem '
+    + 'do aplicativo — enquanto isso, dá para colar o texto do cupom no campo abaixo.'
+  : 'A conta da Anthropic está sem crédito. '
+    + 'Entre em console.anthropic.com → Plans & Billing e adicione créditos. '
+    + 'Não é problema da foto nem do aplicativo — enquanto isso, dá para colar o '
+    + 'texto do cupom no campo abaixo.';
 const semCredito = (errObj) => /credit balance|billing|insufficient.*(credit|fund)/i
   .test(String(errObj?.message || ''));
 
@@ -1027,7 +1047,7 @@ const semCredito = (errObj) => /credit balance|billing|insufficient.*(credit|fun
 // crédito, pedido malformado. Repetir só faz o usuário esperar o triplo pra ler
 // a mesma coisa.
 const erroDefinitivo = (status, errObj) => [400, 401, 403, 404].includes(status)
-  || ['authentication_error', 'permission_error', 'invalid_request_error'].includes(errObj?.type || '');
+  || ['authentication_error', 'permission_error', 'invalid_request_error', 'daily_quota_error'].includes(errObj?.type || '');
 
 // Separado de propósito do anterior: "imagem ilegível" também é definitivo, mas
 // ali as dicas de refazer a foto AJUDAM. Só problema de conta as torna erradas —
@@ -1036,38 +1056,59 @@ const problemaDeConta = (status, errObj) => semCredito(errObj)
   || ['authentication_error', 'permission_error'].includes(errObj?.type || '')
   || [401, 403].includes(status);
 
-// ---- IA (Anthropic) — helper compartilhado com retry, usado por /api/scan e pelas rotas de conciliação de produtos ----
-function anthropicComplete({ system, userText, maxTokens = 2048 }) {
+// ---- IA — UMA chamada HTTPS ao provedor ativo, sem retry ----
+// Recebe o pedido no formato da Anthropic ({ system, messages, max_tokens,
+// json }) e devolve { status, body } TAMBÉM no formato da Anthropic, seja quem
+// for que respondeu. Assim as rotas abaixo, o retry e a classificação de erro
+// (erroDefinitivo/problemaDeConta) não mudam quando o provedor muda.
+const postJson = (options, data, timeoutMs) => new Promise((resolve, reject) => {
+  const apiReq = https.request({ ...options, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), ...options.headers } }, apiRes => {
+    let result = '';
+    apiRes.on('data', c => result += c);
+    apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: result }));
+  });
+  apiReq.on('error', err => reject(err));
+  apiReq.setTimeout(timeoutMs, () => { apiReq.destroy(); reject(new Error('TIMEOUT')); });
+  apiReq.write(data);
+  apiReq.end();
+});
+
+async function iaRequest({ system, messages, max_tokens, json = false }, timeoutMs) {
+  if (IA_PROVIDER === 'gemini') {
+    const resp = await postJson({
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      headers: { 'x-goog-api-key': GEMINI_API_KEY },
+    }, JSON.stringify(paraGemini({ system, messages, max_tokens, json })), timeoutMs);
+    let j = null;
+    try { j = JSON.parse(resp.body); } catch {}
+    if (resp.status !== 200) return { status: resp.status, body: JSON.stringify(erroDoGemini(resp.status, j ?? resp.body)) };
+    const trad = respostaDoGemini(j, GEMINI_MODEL);
+    // 200 sem texto (bloqueio de segurança etc.) vira 400: definitivo, sem retry.
+    return { status: trad.error ? 400 : 200, body: JSON.stringify(trad) };
+  }
+  return postJson({
+    hostname: 'api.anthropic.com',
+    path: '/v1/messages',
+    headers: { 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01' },
+  }, JSON.stringify({ model: IA_MODEL, max_tokens, system, messages }), timeoutMs);
+}
+
+// Cota diária gratuita do Gemini: tentar de novo só faz esperar — pula o retry.
+const semRetry = (body) => { try { return JSON.parse(body)?.error?.type === 'daily_quota_error'; } catch { return false; } };
+
+// ---- IA — helper compartilhado com retry, usado pelas rotas de conciliação de produtos ----
+function iaComplete({ system, userText, maxTokens = 2048 }) {
   return new Promise((resolve, reject) => {
-    if (!API_KEY) { reject(new Error('Chave da API não configurada no servidor. Configure ANTHROPIC_API_KEY no .env da VPS.')); return; }
-    const bodyData = JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content: userText }],
-    });
-    const callAnthropic = (data) => new Promise((res2, rej2) => {
-      const options = {
-        hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01', 'Content-Length': Buffer.byteLength(data) },
-      };
-      const apiReq = https.request(options, apiRes => {
-        let result = '';
-        apiRes.on('data', c => result += c);
-        apiRes.on('end', () => res2({ status: apiRes.statusCode, body: result }));
-      });
-      apiReq.on('error', err => rej2(err));
-      apiReq.setTimeout(60000, () => { apiReq.destroy(); rej2(new Error('TIMEOUT')); });
-      apiReq.write(data);
-      apiReq.end();
-    });
+    if (!IA_KEY) { reject(new Error(`Chave da API não configurada no servidor. Configure ${IA_ENV_VAR} no .env da VPS.`)); return; }
+    const pedido = { system, messages: [{ role: 'user', content: userText }], max_tokens: maxTokens, json: true };
     (async () => {
       const MAX_RETRIES = 3;
       const RETRY_CODES = [429, 500, 502, 503, 529];
       let lastStatus = 0, lastBody = '';
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const resp = await callAnthropic(bodyData);
+          const resp = await iaRequest(pedido, 60000);
           lastStatus = resp.status; lastBody = resp.body;
           if (resp.status === 200) {
             try {
@@ -1077,7 +1118,7 @@ function anthropicComplete({ system, userText, maxTokens = 2048 }) {
             } catch (e) { reject(new Error('Resposta da IA inválida: ' + e.message)); }
             return;
           }
-          if (!RETRY_CODES.includes(resp.status) || attempt === MAX_RETRIES) break;
+          if (!RETRY_CODES.includes(resp.status) || semRetry(resp.body) || attempt === MAX_RETRIES) break;
           let retryAfter = 2000 * attempt;
           try { const p = JSON.parse(resp.body); if (p?.error?.type === 'rate_limit_error') retryAfter = Math.max(retryAfter, 5000); } catch {}
           await new Promise(r => setTimeout(r, retryAfter));
@@ -1137,9 +1178,9 @@ const server = http.createServer((req, res) => {
       try {
         const payload = JSON.parse(body);
         const msgs = [...(payload.messages || [])].filter(m => m.role !== 'assistant');
-        if (!API_KEY) {
+        if (!IA_KEY) {
           res.writeHead(500);
-          res.end(JSON.stringify({ error: 'Chave da API não configurada no servidor. Configure ANTHROPIC_API_KEY no .env da VPS.' }));
+          res.end(JSON.stringify({ error: `Chave da API não configurada no servidor. Configure ${IA_ENV_VAR} no .env da VPS.` }));
           return;
         }
 
@@ -1185,38 +1226,10 @@ FORMA DE PAGAMENTO — OBRIGATÓRIO extrair:
 
 Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
 
-        const callAnthropic = (bodyData) => new Promise((resolve, reject) => {
-          const options = {
-            hostname: 'api.anthropic.com',
-            path: '/v1/messages',
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': API_KEY,
-              'anthropic-version': '2023-06-01',
-              'Content-Length': Buffer.byteLength(bodyData)
-            }
-          };
-          const apiReq = https.request(options, apiRes => {
-            let result = '';
-            apiRes.on('data', chunk => result += chunk);
-            apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: result }));
-          });
-          apiReq.on('error', err => reject(err));
-          apiReq.setTimeout(90000, () => { apiReq.destroy(); reject(new Error('TIMEOUT')); });
-          apiReq.write(bodyData);
-          apiReq.end();
-        });
-
         const imgSize = JSON.stringify(msgs).length;
-        console.log(`[IA] Recebida requisição de scan — payload: ${(imgSize/1024).toFixed(0)}KB, msgs: ${msgs.length}`);
+        console.log(`[IA] Recebida requisição de scan (${IA_PROVIDER}/${IA_MODEL_ATIVO}) — payload: ${(imgSize/1024).toFixed(0)}KB, msgs: ${msgs.length}`);
 
-        const data = JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 8192,
-          system: SYSTEM_PROMPT,
-          messages: msgs
-        });
+        const pedido = { system: SYSTEM_PROMPT, messages: msgs, max_tokens: 8192, json: true };
 
         const MAX_RETRIES = 3;
         const RETRY_CODES = [429, 500, 502, 503, 529];
@@ -1225,7 +1238,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
           try {
-            const resp = await callAnthropic(data);
+            const resp = await iaRequest(pedido, 90000);
             lastStatus = resp.status;
             lastBody = resp.body;
 
@@ -1236,7 +1249,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
               return;
             }
 
-            if (!RETRY_CODES.includes(resp.status) || attempt === MAX_RETRIES) break;
+            if (!RETRY_CODES.includes(resp.status) || semRetry(resp.body) || attempt === MAX_RETRIES) break;
 
             let retryAfter = 2000 * attempt;
             try {
@@ -1267,7 +1280,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
           if (errObj) {
             const errType = errObj.type || '';
             const errText = errObj.message || JSON.stringify(errObj);
-            if (errType === 'authentication_error') errMsg = 'Chave da API inválida ou expirada. Verifique ANTHROPIC_API_KEY no .env da VPS.';
+            if (errType === 'authentication_error') errMsg = `Chave da API inválida ou expirada. Verifique ${IA_ENV_VAR} no .env da VPS.`;
             else if (semCredito(errObj)) errMsg = MSG_SEM_CREDITO;
             else if (errType === 'rate_limit_error') errMsg = 'Limite de requisições excedido. Aguarde alguns minutos e tente novamente.';
             else if (errType === 'overloaded_error' || lastStatus === 529) errMsg = 'Servidor da IA sobrecarregado. Tente novamente em alguns minutos.';
@@ -1279,7 +1292,7 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
         } catch {}
         if (!errMsg) {
           if (lastStatus === 504) errMsg = 'Timeout: a IA demorou demais para responder.';
-          else if (lastStatus === 401) errMsg = 'Chave da API inválida. Verifique ANTHROPIC_API_KEY no .env da VPS.';
+          else if (lastStatus === 401) errMsg = `Chave da API inválida. Verifique ${IA_ENV_VAR} no .env da VPS.`;
           else errMsg = `Erro do servidor da IA (HTTP ${lastStatus}). Tente novamente.`;
         }
         console.log(`[IA] Falha final: HTTP ${lastStatus} — ${errMsg}`);
@@ -1313,7 +1326,7 @@ Seja CONSERVADOR: só vincule quando tiver bastante confiança de que é o mesmo
 Responda APENAS com um JSON no formato:
 {"sugestoes":[{"nome":"<nome exato do item de entrada>","catalogoId":"<id do catálogo ou null>","confianca":"alta|media"}]}`;
         const userText = `CATÁLOGO (id — nome — categoria):\n${catalogo.map(c => `${c.id} — ${c.nome} — ${c.categoria || ''}`).join('\n')}\n\nITENS A CONCILIAR:\n${itens.map(i => `${i.nome} — ${i.categoria || ''}`).join('\n')}`;
-        const text = await anthropicComplete({ system, userText, maxTokens: 2048 });
+        const text = await iaComplete({ system, userText, maxTokens: 2048 });
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { sugestoes: [] };
         res.setHeader('Content-Type', 'application/json');
@@ -1346,7 +1359,7 @@ Responda APENAS com um JSON no formato:
 {"grupos":[{"nomeSugerido":"<nome final do produto unificado>","ids":["<id1>","<id2>", "..."],"motivo":"<breve explicação>"}]}
 Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
         const userText = `CATÁLOGO (id — nome — categoria — unidade):\n${catalogo.map(c => `${c.id} — ${c.nome} — ${c.categoria || ''} — ${c.unidade || ''}`).join('\n')}`;
-        const text = await anthropicComplete({ system, userText, maxTokens: 4096 });
+        const text = await iaComplete({ system, userText, maxTokens: 4096 });
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { grupos: [] };
         res.setHeader('Content-Type', 'application/json');
@@ -1391,54 +1404,28 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
 
   if (req.method === 'GET' && urlPath === '/api/ia-status') {
     res.setHeader('Content-Type', 'application/json');
-    if (!API_KEY) {
+    if (!IA_KEY) {
       res.writeHead(200);
-      res.end(JSON.stringify({ configured: false, error: 'ANTHROPIC_API_KEY não configurada no .env' }));
+      res.end(JSON.stringify({ configured: false, provider: IA_PROVIDER, error: `${IA_ENV_VAR} não configurada no .env` }));
       return;
     }
-    const testData = JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 50,
-      messages: [{ role: 'user', content: 'Responda apenas: OK' }]
-    });
-    const testReq = https.request({
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-        'anthropic-version': '2023-06-01',
-        'Content-Length': Buffer.byteLength(testData)
+    iaRequest({ messages: [{ role: 'user', content: 'Responda apenas: OK' }], max_tokens: 50 }, 15000).then(resp => {
+      if (resp.status === 200) {
+        res.writeHead(200);
+        res.end(JSON.stringify({ configured: true, status: 'ok', provider: IA_PROVIDER, model: IA_MODEL_ATIVO }));
+      } else {
+        let errDetail = '';
+        try { errDetail = JSON.parse(resp.body)?.error?.message || resp.body.slice(0, 200); } catch { errDetail = resp.body.slice(0, 200); }
+        console.log(`[IA-TEST] Falha (${IA_PROVIDER}): HTTP ${resp.status} — ${errDetail}`);
+        res.writeHead(200);
+        res.end(JSON.stringify({ configured: true, status: 'error', provider: IA_PROVIDER, model: IA_MODEL_ATIVO, httpCode: resp.status, error: errDetail }));
       }
-    }, apiRes => {
-      let result = '';
-      apiRes.on('data', chunk => result += chunk);
-      apiRes.on('end', () => {
-        if (apiRes.statusCode === 200) {
-          res.writeHead(200);
-          res.end(JSON.stringify({ configured: true, status: 'ok', model: 'claude-sonnet-4-6' }));
-        } else {
-          let errDetail = '';
-          try { errDetail = JSON.parse(result)?.error?.message || result.slice(0, 200); } catch { errDetail = result.slice(0, 200); }
-          console.log(`[IA-TEST] Falha: HTTP ${apiRes.statusCode} — ${errDetail}`);
-          res.writeHead(200);
-          res.end(JSON.stringify({ configured: true, status: 'error', httpCode: apiRes.statusCode, error: errDetail }));
-        }
-      });
-    });
-    testReq.on('error', err => {
-      console.log(`[IA-TEST] Erro de rede: ${err.message}`);
+    }).catch(err => {
+      const timeout = err.message === 'TIMEOUT';
+      console.log(`[IA-TEST] ${timeout ? 'Timeout' : 'Erro de rede'}: ${err.message}`);
       res.writeHead(200);
-      res.end(JSON.stringify({ configured: true, status: 'network_error', error: err.message }));
+      res.end(JSON.stringify({ configured: true, status: timeout ? 'timeout' : 'network_error', provider: IA_PROVIDER, model: IA_MODEL_ATIVO, error: timeout ? `Timeout ao conectar com a API (${IA_PROVIDER})` : err.message }));
     });
-    testReq.setTimeout(15000, () => {
-      testReq.destroy();
-      res.writeHead(200);
-      res.end(JSON.stringify({ configured: true, status: 'timeout', error: 'Timeout ao conectar com api.anthropic.com' }));
-    });
-    testReq.write(testData);
-    testReq.end();
     return;
   }
 
@@ -4032,7 +4019,7 @@ async function autoSyncSEFAZ() {
 
 server.listen(PORT, () => {
   console.log(`Servidor: http://localhost:${PORT}`);
-  console.log(`API Key: ${API_KEY ? '✅ configurada' : '❌ AUSENTE (IA desabilitada)'}`);
+  console.log(`IA: ${IA_PROVIDER}/${IA_MODEL_ATIVO} — ${IA_KEY ? '✅ chave configurada' : `❌ ${IA_ENV_VAR} AUSENTE (IA desabilitada)`}`);
   for (const emp of ['CONFRARIA', 'SEAMA']) {
     const pfx = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
     const cnpj = process.env[`CNPJ_${emp}`];
