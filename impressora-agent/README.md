@@ -232,6 +232,7 @@ alcança: os bytes vão do tablet direto pra impressora, sem passar pelo PC.
 |---|---|
 | `iniciar.bat` | sobe a ponte e deixa rodando |
 | `papel.bat` | manda uma comanda direto pra impressora, sem captura — o 1º teste |
+| `reprocessar.bat` | relê TODAS as capturas com o leitor atual e reenvia os dias |
 | `impressoras.bat` | lista as impressoras do Windows e o nome do compartilhamento |
 | `teste.bat [99food\|ifood]` | manda uma comanda de mentira, pra conferir a instalação |
 | `ler.bat <arquivo.bin>` | mostra o texto de uma captura guardada |
@@ -291,6 +292,23 @@ zeraria um acumulador em memória e o envio seguinte trocaria o dia inteiro
 pelos poucos pedidos que chegaram depois. O reenvio acontece a cada pedido, na
 subida do agente e a cada 10 minutos — e leva ONTEM junto, para o pedido que
 entrou perto da meia-noite.
+
+## Quando o leitor melhorar: `reprocessar.bat`
+
+Pedido capturado ANTES de o leitor daquela plataforma existir ficou só como
+bytes no disco — real, guardado, e fora do faturamento. `reprocessar.bat` relê
+todos os `.bin`, refaz os `.json` com o leitor de hoje e reenvia os dias.
+
+É pra isso que o `.bin` cru é guardado. Sem ele, a única forma de trazer esses
+pedidos seria esperar pedido novo, e os antigos ficariam perdidos.
+
+⚠️ Ele **não imprime nada**: reprocessar não pode fazer sair papel de pedido
+antigo na cozinha às três da tarde.
+
+⚠️ Nem tudo que passa pela impressora de captura é pedido. A comanda do
+`teste.bat`, uma página de teste do Windows, um documento mandado por engano —
+todos são capturados e guardados, mas ficam **fora do dia**. O agente diz na
+tela quando descarta.
 
 ## O que falta
 

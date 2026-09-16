@@ -59,12 +59,16 @@ export function lancamentoDoPedido(pedido) {
   }
   const taxa = round2((p.taxaServico || 0) + (daPlataforma ? (p.taxaEntrega || 0) : 0));
 
-  if (p.pagoPeloApp == null && p.cobrarDoCliente == null) {
-    avisos.push('pedido sem nenhum valor de pagamento lido — não entra no dia');
-  }
+  // ⚠️ Sem NENHUM dos dois valores, não há o que somar. Entrar como zero seria
+  // pior que ficar de fora: inflaria a contagem de pedidos do dia com uma
+  // venda que ninguém sabe quanto foi, e o total continuaria errado do mesmo
+  // jeito. Fica de fora E aparece no aviso — some da conta, não da vista.
+  const semValor = p.pagoPeloApp == null && p.cobrarDoCliente == null;
+  if (semValor) avisos.push('nenhum valor de pagamento lido — ficou FORA do dia');
 
   return {
     numero: p.numero || null,
+    semValor,
     canal: p.plataforma === 'ifood' ? 'ifood' : '99food',
     bruto,
     taxa,
@@ -102,8 +106,12 @@ export function lancamentoDoDia(data, pedidos) {
     } else {
       semNumero++;
     }
-    linhas.push(l);
     for (const a of l.avisos) avisos.push(`pedido ${l.numero || 's/nº'}: ${a}`);
+    // O aviso já saiu; o que não tem valor nenhum não entra na soma nem na
+    // contagem. Dizer "não entra no dia" e entrar assim mesmo era a pior das
+    // duas opções: o aviso na tela contradizia o número que subia.
+    if (l.semValor) continue;
+    linhas.push(l);
   }
 
   const soma = (canal, campo) => round2(linhas

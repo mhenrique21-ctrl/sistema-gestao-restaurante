@@ -456,6 +456,23 @@ o UTC já é o dia seguinte — o pedido subiria no dia errado.
 campos; quem não manda (delivery-backend, PDV Seama, ecletica-agent) continua
 com zero, sem mudar nada.
 
+⚠️ **Nem tudo que passa pela impressora de captura é pedido.** A comanda do
+`teste.bat`, uma página de teste do Windows, um documento mandado por engano —
+todos chegam ao leitor. A porta é `ehComanda99`/`ehComandaIfood`, conferindo o
+CONTEÚDO depois que a origem escolheu quem lê. Ela ficou aberta quando o leitor
+passou a ser escolhido pela origem (antes `ehComanda99` era o próprio gatilho),
+e na loja isso virou **cinco comandas de teste como cinco pedidos de R$ 0,00**.
+
+⚠️ **Pedido sem NENHUM valor de pagamento fica FORA do dia**, com aviso. A
+primeira versão dizia "não entra no dia" e entrava assim mesmo, como zero —
+aviso que contradiz o número que sobe ensina a não ler os avisos.
+
+⚠️ **`reprocessar.bat` (`--reprocessar`) relê todos os `.bin` com o leitor de
+hoje**, refaz os `.json` e reenvia os dias. Pedido capturado antes de o leitor
+daquela plataforma existir ficou só como bytes — real, no disco, fora do
+faturamento. É pra isso que o `.bin` cru é guardado. **Não imprime nada:**
+reprocessar não pode fazer sair papel de pedido antigo na cozinha.
+
 **Estado:** captura, lê e **envia** — origem `pdv_comandas`, uma só para os dois
 aplicativos (o Gestão não tem coluna de "dinheiro na porta" por plataforma).
 Sem `SEAMA_SERVICE_SECRET` no `config.bat`, captura e lê normalmente e não

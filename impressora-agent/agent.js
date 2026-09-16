@@ -26,8 +26,8 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { extrairEscPos, linhasUteis } from './escpos.js';
 import { pngMono } from './png.js';
-import { lerPedido99, conferirPedido99 } from './pedido99.js';
-import { lerPedidoIfood, conferirPedidoIfood } from './pedidoIfood.js';
+import { lerPedido99, conferirPedido99, ehComanda99 } from './pedido99.js';
+import { lerPedidoIfood, conferirPedidoIfood, ehComandaIfood } from './pedidoIfood.js';
 import { resolverOrigem, rotuloPlataforma, temLeitor } from './plataforma.js';
 import { lancamentoDoDia } from './lancamentoVendas.js';
 
@@ -109,6 +109,7 @@ const EMPRESA    = (process.env.EMPRESA || 'CONFRARIA').toUpperCase();
 const FONTE      = process.env.COMANDAS_FONTE || 'comandas';
 
 const log = (...a) => console.log(new Date().toLocaleTimeString('pt-BR'), ...a);
+let reprocessando = false;
 
 // ── Gravação ────────────────────────────────────────────────────────────────
 function carimbo(d = new Date()) {
@@ -184,6 +185,22 @@ function interpretar(texto, base, origem) {
   // em todo pedido, e ninguém mais olharia os avisos.
   const ler = origem === 'ifood' ? lerPedidoIfood : lerPedido99;
   const conferir = origem === 'ifood' ? conferirPedidoIfood : conferirPedido99;
+  const ehComanda = origem === 'ifood' ? ehComandaIfood : ehComanda99;
+
+  // ⚠️ NEM TUDO QUE PASSA PELA IMPRESSORA DE CAPTURA É PEDIDO. A comanda de
+  // teste do `teste.bat`, uma página de teste do Windows, um documento mandado
+  // por engano — todos chegariam aqui. Sem esta porta, cada um virava um
+  // "pedido" de R$ 0,00 no dia e enchia a tela de aviso.
+  //
+  // A porta ficou aberta quando o leitor passou a ser escolhido pela ORIGEM:
+  // antes, `ehComanda99` era o próprio gatilho. Agora ela confere o CONTEÚDO
+  // depois que a origem escolheu quem lê.
+  if (!ehComanda(texto)) {
+    log(`   ℹ️  não parece pedido do ${rotuloPlataforma(origem)} — capturado e guardado, fora do dia.`);
+    // Um .json de uma leitura anterior não pode ficar contando como pedido.
+    try { if (fs.existsSync(`${base}.json`)) fs.unlinkSync(`${base}.json`); } catch {}
+    return;
+  }
 
   let pedido;
   try { pedido = ler(texto); }
@@ -211,7 +228,9 @@ function interpretar(texto, base, origem) {
 
   // Reenvia o DIA INTEIRO, não este pedido: o endpoint substitui o registro do
   // dia, então mandar só o novo apagaria os anteriores.
-  enviarDia(path.basename(base).slice(0, 10));
+  // Durante o `--reprocessar` isso fica desligado: seriam dezenas de POSTs do
+  // mesmo dia, um por arquivo, e o certo é um só no fim.
+  if (!reprocessando) enviarDia(path.basename(base).slice(0, 10));
 }
 
 // ── Envio pro Gestão ────────────────────────────────────────────────────────
@@ -594,6 +613,47 @@ if (!chamadoDireto) {
     console.log(`\n[${faixas} faixa(s) de imagem → ${png}, ${imagem.bytesLinha * 8}×${imagem.altura}]`);
   }
   if (!texto && !imagem) console.log('(nenhum texto legível e nenhuma imagem — veja o .bin)');
+} else if (args.includes('--reprocessar')) {
+  // Relê TODOS os .bin guardados com o leitor de hoje e refaz os .json.
+  //
+  // ⚠️ É pra isso que o .bin cru é guardado. Os pedidos do iFood capturados
+  // ANTES de o leitor dele existir ficaram só como bytes: reais, no disco, e
+  // fora do faturamento. Sem este comando, a única forma de trazê-los seria
+  // esperar pedido novo — e os antigos ficariam perdidos pra sempre.
+  //
+  // ⚠️ Não imprime nada. Reprocessar não pode fazer sair papel de pedido
+  // antigo na cozinha às três da tarde.
+  reprocessando = true;
+  const arquivos = fs.existsSync(SAIDA)
+    ? fs.readdirSync(SAIDA).filter((n) => n.endsWith('.bin')).sort()
+    : [];
+  if (!arquivos.length) { console.log(`Nenhuma captura em ${SAIDA}.`); process.exit(0); }
+  console.log(`Relendo ${arquivos.length} captura(s) de ${SAIDA}…\n`);
+
+  const dias = new Set();
+  for (const nome of arquivos) {
+    const base = path.join(SAIDA, nome.replace(/\.bin$/, ''));
+    // O rótulo da plataforma está no NOME do arquivo (…_ifood.bin) — foi pra
+    // isso que ele foi parar ali, e não só no log.
+    const rotulo = (nome.match(/_([a-z0-9]+)\.bin$/) || [])[1] || '';
+    let texto = '';
+    try { texto = extrairEscPos(fs.readFileSync(`${base}.bin`)).texto; }
+    catch (e) { log(`   ⚠️  ${nome}: ${e.message}`); continue; }
+    const { origem } = resolverOrigem(rotulo, texto);
+    // Reescreve o .txt também: se a decodificação melhorou, o legível também
+    // melhorou, e deixar o antigo faria os dois discordarem.
+    try { fs.writeFileSync(`${base}.txt`, texto, 'utf8'); } catch {}
+    log(`📄 ${nome}${origem ? `  [${rotuloPlataforma(origem)}]` : ''}`);
+    interpretar(texto, base, origem);
+    dias.add(nome.slice(0, 10));
+  }
+
+  reprocessando = false;
+  console.log('');
+  (async () => {
+    for (const d of [...dias].sort()) await enviarDia(d);
+    if (!SECRET) console.log('ℹ️  sem SEAMA_SERVICE_SECRET no config.bat: os .json foram refeitos, mas nada foi enviado.');
+  })();
 } else if (args.includes('--papel')) {
   // Conferir o REPASSE sozinho, antes de existir captura nenhuma.
   //

@@ -141,3 +141,40 @@ describe('o dia inteiro, com os dois canais', () => {
     function round(n) { return Math.round(n * 100) / 100; }
   });
 });
+
+describe('o que não é pedido não entra no dia', () => {
+  test('comanda sem NENHUM valor de pagamento fica de fora, com aviso', () => {
+    // Foi o que aconteceu na loja: cinco comandas de TESTE viraram cinco
+    // "pedidos" de R$ 0,00 no dia. Entrar como zero inflaria a contagem de
+    // pedidos com vendas que ninguém sabe quanto foram.
+    const dia = lancamentoDoDia('2026-09-15', [
+      { plataforma: '99food', numero: null, pagoPeloApp: null, cobrarDoCliente: null },
+      { plataforma: '99food', numero: null, pagoPeloApp: null, cobrarDoCliente: null },
+    ]);
+    assert.equal(dia.pedidos, 0);
+    assert.equal(dia.total, 0);
+    assert.match(dia.avisos.join(' '), /ficou FORA do dia/);
+  });
+
+  test('o aviso não pode contradizer o número que sobe', () => {
+    // A primeira versão dizia "não entra no dia" e entrava assim mesmo. Aviso
+    // que contradiz o número é pior que nenhum aviso: ensina a não ler.
+    const dia = lancamentoDoDia('2026-09-15', [
+      { plataforma: 'ifood', numero: '1', tipoEntrega: 'Entrega Parceira', pagoPeloApp: 30, cobrarDoCliente: 0 },
+      { plataforma: 'ifood', numero: '2', pagoPeloApp: null, cobrarDoCliente: null },
+    ]);
+    assert.equal(dia.pedidos, 1, 'só o que tem valor conta');
+    assert.equal(dia.ifood, 30);
+    assert.match(dia.avisos.join(' '), /pedido 2/);
+  });
+
+  test('cobrança na porta SEM repasse continua valendo', () => {
+    // Zero no app não é "sem valor": é pedido pago na porta.
+    const dia = lancamentoDoDia('2026-09-15', [
+      { plataforma: '99food', numero: '3', tipoEntrega: 'Entrega da plataforma',
+        pagoPeloApp: 0, cobrarDoCliente: 51.70 },
+    ]);
+    assert.equal(dia.pedidos, 1);
+    assert.equal(dia.dinheiro, 51.70);
+  });
+});
