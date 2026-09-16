@@ -11432,7 +11432,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
       setEditId(null);
     }else{
       const newId=uid();
-      setItens(prev=>[...prev,{id:newId,nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}]);
+      const mpManual=(db.materiasPrimas||[]).find((m:any)=>foldNome(m.nome||"")===foldNome(nome));
+      setItens(prev=>[...prev,{id:newId,...(mpManual?{produtoId:mpManual.id}:{}),nome,quantidade:qtd,qtdAtual:form.qtdAtual,unidade:form.unidade,cat:form.cat,obs:form.obs}]);
       setMarcados(s=>{const n=new Set(s);n.add(newId);return n;});
     }
     setForm({nome:"",qtd:"",qtdAtual:"",unidade:"un",cat:"",obs:""});
@@ -11458,8 +11459,14 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
     .filter(({p,cat})=>{const k=qtyKey(p.id,cat);return _campoPreenchido(qtdsCatalog,k)||_campoPreenchido(qtdsAtual,k);})
     .map(({p,cat})=>{
       const k=qtyKey(p.id,cat);
+      // produtoId = id do item de ESTOQUE (materiasPrimas), não do catálogo de
+      // produção: é por ele que a Produção do Dia fecha o pedido. Vai só quando
+      // o produto já existe; sem ele o fechamento cai no nome, que é como todo
+      // pedido antigo continua funcionando (ver baixarPedidos).
+      const mpDoItem=(db.materiasPrimas||[]).find((m:any)=>foldNome(m.nome||"")===foldNome(p.nome||""));
       return{
         nome:p.nome,
+        ...(mpDoItem?{produtoId:mpDoItem.id}:{}),
         quantidade:_campoPreenchido(qtdsCatalog,k)?parseFloat(qtdsCatalog[k]):null,
         qtdAtual:_campoPreenchido(qtdsAtual,k)?qtdsAtual[k]:"",
         unidade:p.unidade||"un",categoria:cat||"",obs:""
@@ -13925,11 +13932,20 @@ function FichasEstoquePanel({db,onVoltar,onEditar}:{db:any,onVoltar:()=>void,onE
 function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [data,setData]=useState(today());
   // Uma linha por produto lançado; `ordem` guarda a sequência em que entraram.
-  const [linhas,setLinhas]=useState<Record<string,{qtd:string,modo:"receita"|"unidade",perda:string}>>({});
+  const [linhas,setLinhas]=useState<Record<string,{qtd:string,modo:"receita"|"unidade",perda:string,off?:boolean,doPedido?:boolean}>>({});
   const [ordem,setOrdem]=useState<string[]>([]);
   const [busca,setBusca]=useState("");
-  const [verTodosPedidos,setVerTodosPedidos]=useState(false);
   const [verTodosSugeridos,setVerTodosSugeridos]=useState(false);
+  // "tirar da folha" desliga o carregamento automático do pedido até trocar de
+  // dia — sem isso o efeito traria tudo de volta no render seguinte.
+  const [pedidoNaFolha,setPedidoNaFolha]=useState(true);
+  const [verPendentes,setVerPendentes]=useState(false);
+  const carregadoRef=useRef<string>("");
+  // Registrar limpa a folha DEPOIS que o efeito de carga já rodou (o save usa
+  // flushSync, então o db novo chega antes da limpeza): o efeito marcava a
+  // chave como carregada, a limpeza apagava as linhas e o que sobrou do pedido
+  // nunca voltava. Este contador é o pedido explícito de recarregar.
+  const [recarga,setRecarga]=useState(0);
   const [fichaAberta,setFichaAberta]=useState<any>(null);
   const [salvando,setSalvando]=useState(false);
 
@@ -13943,20 +13959,41 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
 
   // Pedidos da cozinha ainda em aberto — é o que a tela abre sabendo.
   const pedidosAbertos=(db.pedidosProducao||[]).filter((p:any)=>p&&p.status!=="atendido");
-  const pedidoDoItem=(m:any)=>{
+  // O que falta produzir, somado POR NOME. O catálogo do Novo Pedido cria um
+  // item por produto+categoria, então o mesmo produto aparece mais de uma vez
+  // no mesmo pedido de propósito (SEAMA pede 10, BARTOLOMEIA pede 5) — na folha
+  // isso é UMA linha de 15, senão a pessoa lançaria o mesmo bolo duas vezes.
+  const pendencias=useMemo(()=>{
+    const m=new Map<string,{nome:string,falta:number,unidade:string,datas:string[]}>();
     for(const ped of pedidosAbertos){
       for(const it of (ped.itens||[])){
-        const casa=(it.produtoId&&it.produtoId===m.id)||foldNome(it.nome||"")===foldNome(m.nome||"");
-        if(casa&&parseFloat(it.quantidade)>0)
-          return {qtd:parseFloat(it.quantidade)-(parseFloat(it.produzido)||0),pedidoId:ped.id};
+        const falta=(parseFloat(it.quantidade)||0)-(parseFloat(it.produzido)||0);
+        if(it.atendido||!(falta>0.001))continue;
+        const k=foldNome(it.nome||"");if(!k)continue;
+        const cur=m.get(k)||{nome:it.nome,falta:0,unidade:it.unidade||"un",datas:[] as string[]};
+        cur.falta=Math.round((cur.falta+falta)*1000)/1000;
+        if(ped.data&&!cur.datas.includes(ped.data))cur.datas.push(ped.data);
+        m.set(k,cur);
       }
     }
-    return null;
-  };
+    return m;
+  },[db.pedidosProducao]);
+  const pendenteDe=(m:any)=>pendencias.get(foldNome(m?.nome||""))||null;
+  const pedidoDoItem=(m:any)=>{const p=pendenteDe(m);return p?{qtd:p.falta,datas:p.datas}:null;};
+  // Decisão do dono (16/09/2026): carrega SÓ o pedido cuja data é a da folha.
+  // O que sobrou de dias anteriores fica atrás de um link — some da frente sem
+  // sumir do sistema.
+  const pendentesDoDia=[...pendencias.values()].filter(p=>p.datas.includes(data));
+  const pendentesAntigos=[...pendencias.values()].filter(p=>!p.datas.includes(data));
+  const mpDoNome=(nome:string)=>mps.find((m:any)=>foldNome(m.nome||"")===foldNome(nome||""))||null;
+  // Item do pedido que não existe como produto no estoque: não dá pra entrar
+  // saldo nem baixar insumo, mas NÃO bloqueia — produzir nunca é bloqueado por
+  // cadastro incompleto. Aparece com o que falta e um botão pra criar.
+  const pedidoSemProduto=pendentesDoDia.filter(p=>!mpDoNome(p.nome));
+  const pedidosDoDiaSolicitante=[...new Set(pedidosAbertos.filter((p:any)=>p.data===data).map((p:any)=>p.solicitante).filter(Boolean))].join(", ");
 
   const produzidos=mps.filter(ehProduzido);
   const naFolha=(id:string)=>!!linhas[id];
-  const comPedido=produzidos.filter((m:any)=>pedidoDoItem(m)?.qtd>0&&!naFolha(m.id));
   // Sugerido pelo saldo: produto zerado ou negativo é bolo vendido que nunca
   // foi produzido no sistema — é o que a cozinha precisa repor primeiro.
   const sugeridos=produzidos.filter((m:any)=>!naFolha(m.id)&&!(pedidoDoItem(m)?.qtd>0)&&(parseFloat(m.estoqueAtual)||0)<=0);
@@ -13969,7 +14006,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
   const ehRecheio=(m:any)=>fichasQueUsam(m).length>0;
 
   const produzidoDe=(id:string)=>{
-    const l=linhas[id];if(!l)return 0;
+    const l=linhas[id];if(!l||l.off)return 0;   // "não produzi isso" ≠ zero digitado
     const q=parseFloat(String(l.qtd).replace(",","."))||0;
     const m=mps.find((x:any)=>x.id===id);
     return l.modo==="receita"&&m?q*porcoesDe(m):q;
@@ -13999,6 +14036,39 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
   const usadoPorHoje=(m:any)=>ordem.filter(id=>id!==m.id&&produzidoDe(id)>0)
     .map(id=>mps.find((x:any)=>x.id===id)).filter((o:any)=>o&&fichasQueUsam(m).some((f:any)=>f.id===fichaDe(o)?.id))
     .map((o:any)=>o.nome);
+
+  // A ponte: o pedido do dia VIRA a folha, com a quantidade pedida já no campo.
+  // Confirmar que bateu é não mexer em nada; o que mudou, digita por cima.
+  // A chave inclui o que falta de cada item, então depois de registrar uma
+  // produção parcial o restante volta sozinho pra folha.
+  const chaveAuto=data+"|"+pendentesDoDia.map(p=>foldNome(p.nome)+":"+p.falta).join(",");
+  useEffect(()=>{
+    if(!pedidoNaFolha||carregadoRef.current===chaveAuto)return;
+    carregadoRef.current=chaveAuto;
+    if(!pendentesDoDia.length)return;
+    const alvos=pendentesDoDia.map(p=>({p,m:mpDoNome(p.nome)})).filter(x=>x.m);
+    if(!alvos.length)return;
+    // ⚠️ A decisão de "já está na folha?" vai DENTRO do setState, não no
+    // fechamento do efeito. Registrar a produção atualiza o db e limpa as
+    // linhas em sequência: o efeito rodava com o db novo e as linhas VELHAS,
+    // pulava tudo por achar que já estava na folha, e marcava a chave como
+    // carregada — o que sobrou do pedido nunca voltava.
+    setLinhas(l=>{
+      const n={...l};
+      for(const {p,m} of alvos)if(!n[m.id])n[m.id]={qtd:String(p.falta),modo:"unidade",perda:"",doPedido:true};
+      return n;
+    });
+    setOrdem(o=>[...o,...alvos.map(x=>x.m.id).filter(id=>!o.includes(id))]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[chaveAuto,pedidoNaFolha,recarga]);
+  const tirarPedidoDaFolha=()=>{
+    const ids=pendentesDoDia.map(p=>mpDoNome(p.nome)?.id).filter(Boolean) as string[];
+    setPedidoNaFolha(false);
+    setLinhas(l=>{const n={...l};ids.forEach(id=>{if(n[id]?.doPedido)delete n[id];});return n;});
+    setOrdem(o=>o.filter(id=>!ids.includes(id)||!linhas[id]?.doPedido));
+  };
+  // Troca de dia recomeça o ciclo: o pedido daquele dia volta a carregar.
+  useEffect(()=>{setPedidoNaFolha(true);},[data]);
 
   const addLinha=(m:any,prefillUnidades?:number)=>{
     if(!m||naFolha(m.id))return;
@@ -14044,16 +14114,38 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
     setSalvando(true);
     const agora=new Date().toISOString();
     const produzidoPorItem:Record<string,number>={};
-    calculo.linhas.forEach((c:any)=>{produzidoPorItem[c.itemId]=(produzidoPorItem[c.itemId]||0)+c.produzido;});
+    // Por NOME também: é o que fecha o pedido de verdade. Nenhum pedido real
+    // carrega o id do produto (ver baixarPedidos em src/producaoDia.js).
+    const produzidoPorNome:Record<string,number>={};
+    calculo.linhas.forEach((c:any)=>{
+      produzidoPorItem[c.itemId]=(produzidoPorItem[c.itemId]||0)+c.produzido;
+      produzidoPorNome[c.nome]=(produzidoPorNome[c.nome]||0)+c.produzido;
+    });
     (setDbAndSave||setDb)((d:any)=>{
       const r=aplicarProducaoDia({db:d,calculo,data,agora,uid});
       return {...d,materiasPrimas:r.materiasPrimas,movEstoque:r.movEstoque,
-        pedidosProducao:baixarPedidos({pedidos:d.pedidosProducao||[],produzidoPorItem})};
+        pedidosProducao:baixarPedidos({pedidos:d.pedidosProducao||[],produzidoPorItem,produzidoPorNome})};
     });
     setLinhas({});setOrdem([]);setSalvando(false);
+    carregadoRef.current="";setRecarga(r=>r+1);   // traz de volta o que ficou parcial
     alert(`✅ Produção de ${fmtDate(data)} registrada.\n\n${calculo.totalBoas} unidade(s) no estoque`
       +(calculo.totalPerdas>0?`\n${calculo.totalPerdas} de perda`:"")
       +`\nCusto dos insumos: ${fmtMoney(calculo.custoTotal)}`);
+  };
+
+  // Cria o produto com saldo ZERO e já marcado como produção própria — mesma
+  // forma da importação do Eclética (id, nome, unidade, saldo 0) mais a marca
+  // de tipo, senão ele nasceria fora de toda baixa por venda.
+  const criarProduto=(nome:string,unidade:string)=>{
+    if(!confirm(`Criar "${nome}" no estoque como produção própria, com saldo zero?`))return;
+    const agora=new Date().toISOString();
+    const novo={id:uid(),nome,unidade:unidade||"un",categoria:"Outros",estoqueAtual:0,ultimoValor:0,criadoEm:agora,atualizadoEm:agora};
+    (setDbAndSave||setDb)((d:any)=>({...d,
+      materiasPrimas:[...(d.materiasPrimas||[]),novo],
+      tipoInsumo:{...(d.tipoInsumo||{}),[chaveTipo(novo)]:"produzido"}}));
+    // O item já estava na lista de pendências (só não tinha produto), então a
+    // chave de carga não muda sozinha — pede a recarga pra linha entrar na folha.
+    carregadoRef.current="";setRecarga(r=>r+1);
   };
 
   const chip=(m:any,texto:string,onClick:()=>void)=><button key={m.id} type="button" onClick={onClick}
@@ -14073,26 +14165,40 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
     const usado=usadoHoje(m.id);
     const usadoPor=usadoPorHoje(m);
     const qtdNum=parseFloat(String(l.qtd).replace(",","."))||0;
-    return <div style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+    // Conferência do pedido: é pra isto que a ponte existe — dizer na hora se
+    // o que saiu da cozinha foi o que a gerência pediu.
+    const selo=(()=>{
+      if(!ped||!(ped.qtd>0))return null;
+      if(l.off)return {txt:"não produzido",bg:"var(--bg5)",fg:"var(--text2)"};
+      if(!(produzido>0))return null;
+      const d=Math.round((produzido-ped.qtd)*1000)/1000;
+      if(Math.abs(d)<0.001)return {txt:"bateu o pedido",bg:"var(--successBg)",fg:"var(--successText)"};
+      if(d<0)return {txt:`faltou ${fmtNum(-d)} ${un}`,bg:"var(--warningBg)",fg:"var(--warningText)"};
+      return {txt:`${fmtNum(d)} a mais`,bg:"var(--infoBg)",fg:"var(--infoText)"};
+    })();
+    return <div style={{padding:"10px 0",borderBottom:"1px solid var(--border)",opacity:l.off?.6:1}}>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const}}>
+        {ped&&ped.qtd>0&&<input type="checkbox" checked={!l.off} onChange={()=>setLin(m.id,{off:!l.off})}
+          title={l.off?"Marcar como produzido":"Não produzi isto hoje"}
+          style={{width:18,height:18,margin:0,flexShrink:0,accentColor:"var(--btnPrimary)"}}/>}
         <div style={{flex:"1 1 160px",minWidth:0}}>
           <div style={{fontWeight:700,fontSize:13.5}}>{m.nome}{recheio&&<span style={{fontSize:10,fontWeight:400,color:"var(--text3)",marginLeft:6}}>recheio</span>}</div>
           <div style={{fontSize:10.5,color:"var(--text3)"}}>
+            {ped&&ped.qtd>0&&<>pedido <b style={{color:"var(--text)"}}>{fmtNum(ped.qtd)} {un}</b> · </>}
             {ficha?(por>1?`1 receita = ${fmtNum(por)} ${un}`:"ficha"):"sem ficha"} · saldo <span style={MONO}>{fmtNum(saldo)} {un}</span>
             {saldo<0&&<span style={{color:"var(--dangerText)"}}> — vendeu sem produzir</span>}
-            {ped&&ped.qtd>0&&<> · pedido {fmtNum(ped.qtd)} {un}</>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <input value={l.qtd} onChange={e=>setLin(m.id,{qtd:e.target.value})} inputMode="decimal" placeholder="—" autoFocus={!l.qtd}
+          <input value={l.qtd} onChange={e=>setLin(m.id,{qtd:e.target.value})} inputMode="decimal" placeholder="—" disabled={l.off} autoFocus={!l.qtd&&!l.doPedido}
             className="inp" style={{width:64,textAlign:"right",marginBottom:0,fontWeight:700,...MONO}}/>
           {temReceita(m)
-            ?<select value={l.modo} onChange={e=>setLin(m.id,{modo:e.target.value as any})} className="inp" style={{width:110,marginBottom:0,padding:"8px 6px",fontSize:12}}>
+            ?<select value={l.modo} disabled={l.off} onChange={e=>setLin(m.id,{modo:e.target.value as any})} className="inp" style={{width:110,marginBottom:0,padding:"8px 6px",fontSize:12}}>
               <option value="receita">receita(s)</option><option value="unidade">{un}</option></select>
             :<span style={{fontSize:12,color:"var(--text2)",minWidth:24}}>{un}</span>}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:"var(--text2)"}}>perda
-          <input value={l.perda} onChange={e=>setLin(m.id,{perda:e.target.value})} inputMode="decimal" placeholder="0"
+          <input value={l.perda} onChange={e=>setLin(m.id,{perda:e.target.value})} inputMode="decimal" placeholder="0" disabled={l.off}
             className="inp" style={{width:52,textAlign:"right",marginBottom:0,...MONO}}/>
           <span style={{fontSize:10.5}}>{un}</span>
         </div>
@@ -14100,6 +14206,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
           <div style={{fontSize:9,letterSpacing:.5,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700}}>entram</div>
           <div style={{fontSize:15,fontWeight:700,color:c?"var(--successText)":"var(--text3)",...MONO}}>{c?`${fmtNum(c.boas)} ${un}`:"—"}</div>
         </div>
+        {selo&&<span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap" as const,background:selo.bg,color:selo.fg}}>{selo.txt}</span>}
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
           {ficha&&<button type="button" onClick={()=>setFichaAberta({ficha,m})} style={{background:"none",border:"none",padding:"2px 4px",cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>ver ficha</button>}
           <button type="button" onClick={()=>removerLinha(m.id)} title="Tirar da folha" style={{background:"none",border:"none",padding:"2px 6px",cursor:"pointer",color:"var(--text3)",fontSize:14}}>✕</button>
@@ -14110,6 +14217,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
         {c&&l.modo!=="receita"&&c.perda>0&&<>{fmtNum(c.perda)} de perda · </>}
         {c&&(c.custoUnitario!=null?<>custo <span style={MONO}>{fmtMoney(c.custoUnitario)}/{un}</span></>:<span style={{color:"var(--warningText)"}}>custo indisponível — {ficha?"nenhum insumo da ficha casou com o estoque":"sem ficha, nenhum insumo baixa"}</span>)}
         {c&&recheio&&<div>{usadoPor.length?<>usado hoje por <b>{usadoPor.join(", ")}</b> ({fmtNum(usado)} {un}) · sobra <span style={MONO}>{fmtNum(Math.round((c.boas-usado)*1000)/1000)} {un}</span> no estoque</>:<>nenhuma linha de hoje usa este recheio — entra inteiro no estoque</>}</div>}
+        {l.off&&ped&&ped.qtd>0&&<div>desmarcado — fica fora do registro e continua pendente no pedido</div>}
         {c&&ped&&ped.qtd>0&&<div>{produzido>=ped.qtd-0.001?`fecha o pedido da cozinha (${fmtNum(ped.qtd)} de ${fmtNum(ped.qtd)})`:`pedido fica parcial (${fmtNum(produzido)} de ${fmtNum(ped.qtd)} ${un}) — o que falta continua na lista`}</div>}
         {c&&c.bloqueado&&<div style={{color:"var(--dangerText)"}}>⚠️ Perda ({fmtNum(c.perda)}) maior que o produzido ({fmtNum(c.produzido)}).</div>}
       </div>
@@ -14145,15 +14253,48 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
           {!resultadosBusca.length&&<div className="muted" style={{padding:"9px 12px",fontSize:12}}>Nenhum produto de produção própria com esse nome. Marque o tipo em Saldo Estoque.</div>}
         </div>}
       </div>
-      {comPedido.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center",marginTop:10}}>
-        <span style={{fontSize:11,color:"var(--text3)"}}>Pedido da cozinha · {comPedido.length}</span>
-        {(verTodosPedidos?comPedido:comPedido.slice(0,6)).map((m:any)=>chip(m,`${m.nome} · ${fmtNum(pedidoDoItem(m)?.qtd||0)} ${rotuloUn(m)}`,()=>addLinha(m,pedidoDoItem(m)?.qtd)))}
-        {comPedido.length>6&&<button type="button" onClick={()=>setVerTodosPedidos(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>{verTodosPedidos?"menos":`ver todos (${comPedido.length})`}</button>}
+      {pendentesDoDia.length>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap" as const,marginTop:10,padding:"8px 10px",background:"var(--bg5)",borderRadius:9}}>
+        <div style={{fontSize:12.5}}>
+          📋 <b>Pedido de {fmtDate(data)}</b>
+          <span style={{color:"var(--text2)"}}> · {pendentesDoDia.length} item(ns){pedidosDoDiaSolicitante?` · por ${pedidosDoDiaSolicitante}`:""}</span>
+        </div>
+        {pedidoNaFolha
+          ?<button type="button" onClick={tirarPedidoDaFolha} style={{background:"none",border:"1px solid var(--border2)",borderRadius:7,padding:"4px 9px",cursor:"pointer",color:"var(--text2)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>tirar da folha</button>
+          :<button type="button" onClick={()=>{carregadoRef.current="";setPedidoNaFolha(true);}} style={{background:"none",border:"1px solid var(--border2)",borderRadius:7,padding:"4px 9px",cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>trazer para a folha</button>}
       </div>}
-      {sugeridos.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center",marginTop:8}}>
-        <span style={{fontSize:11,color:"var(--text3)"}}>Saldo zerado ou negativo · {sugeridos.length}</span>
-        {(verTodosSugeridos?sugeridos:sugeridos.slice(0,6)).map((m:any)=>chip(m,`${m.nome} · saldo ${fmtNum(m.estoqueAtual)}`,()=>addLinha(m)))}
-        {sugeridos.length>6&&<button type="button" onClick={()=>setVerTodosSugeridos(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>{verTodosSugeridos?"menos":`ver todos (${sugeridos.length})`}</button>}
+      {pedidoSemProduto.length>0&&<div style={{marginTop:8,padding:"8px 10px",background:"var(--warningBg)",borderRadius:9}}>
+        <div style={{fontSize:11.5,color:"var(--warningText)",fontWeight:700,marginBottom:4}}>
+          {pedidoSemProduto.length} item(ns) do pedido não existem como produto no estoque
+        </div>
+        {pedidoSemProduto.map(p=><div key={p.nome} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"3px 0",fontSize:12}}>
+          <span>{p.nome} <span style={{color:"var(--text2)"}}>· pedido {fmtNum(p.falta)} {p.unidade}</span></span>
+          <button type="button" onClick={()=>criarProduto(p.nome,p.unidade)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:7,padding:"3px 9px",cursor:"pointer",color:"var(--btnPrimary)",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>criar produto</button>
+        </div>)}
+        <div style={{fontSize:10.5,color:"var(--text2)",marginTop:3}}>Não entram no saldo nem baixam insumo enquanto não tiverem produto — o pedido fecha do mesmo jeito.</div>
+      </div>}
+      {pendentesAntigos.length>0&&<div style={{marginTop:8}}>
+        <button type="button" onClick={()=>setVerPendentes(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--text2)",fontSize:11.5,fontFamily:"inherit"}}>
+          🕘 {pendentesAntigos.length} item(ns) continuam pendentes de pedidos anteriores · <span style={{color:"var(--btnPrimary)",fontWeight:700}}>{verPendentes?"esconder":"ver e trazer para a folha"}</span>
+        </button>
+        {verPendentes&&<div style={{marginTop:6,border:"1px solid var(--border)",borderRadius:9,padding:"6px 10px"}}>
+          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:2}}>
+            <button type="button" onClick={()=>pendentesAntigos.forEach(p=>{const m=mpDoNome(p.nome);if(m)addLinha(m,p.falta);})} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>trazer os {pendentesAntigos.length} para a folha</button>
+          </div>
+          {pendentesAntigos.map(p=>{const m=mpDoNome(p.nome);return <div key={p.nome} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"5px 0",borderTop:"1px solid var(--border)",fontSize:12.5}}>
+            <span>{p.nome} <span style={{fontSize:11,color:"var(--text3)"}}>pedido de {p.datas.map(d=>fmtDate(d)).join(", ")} · falta {fmtNum(p.falta)} {p.unidade}</span></span>
+            {m?<button type="button" onClick={()=>addLinha(m,p.falta)} disabled={naFolha(m.id)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:7,padding:"3px 9px",cursor:naFolha(m.id)?"default":"pointer",color:naFolha(m.id)?"var(--text3)":"var(--btnPrimary)",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>{naFolha(m.id)?"na folha":"trazer"}</button>
+              :<span style={{fontSize:11,color:"var(--warningText)"}}>sem produto no estoque</span>}
+          </div>;})}
+        </div>}
+      </div>}
+      {sugeridos.length>0&&<div style={{marginTop:8}}>
+        <button type="button" onClick={()=>setVerTodosSugeridos(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--text2)",fontSize:11.5,fontFamily:"inherit"}}>
+          📉 {sugeridos.length} produto(s) com saldo zerado ou negativo · <span style={{color:"var(--btnPrimary)",fontWeight:700}}>{verTodosSugeridos?"esconder":"ver"}</span>
+        </button>
+        {verTodosSugeridos&&<div style={{display:"flex",gap:6,flexWrap:"wrap" as const,marginTop:6}}>
+          {sugeridos.slice(0,60).map((m:any)=>chip(m,`${m.nome} · saldo ${fmtNum(m.estoqueAtual)}`,()=>addLinha(m)))}
+          {sugeridos.length>60&&<span style={{fontSize:11,color:"var(--text3)",alignSelf:"center"}}>+{sugeridos.length-60} — use a busca</span>}
+        </div>}
       </div>}
       {producoesAnteriores.length>0&&<div style={{display:"flex",gap:8,alignItems:"center",marginTop:10,flexWrap:"wrap" as const}}>
         <span style={{fontSize:11,color:"var(--text3)"}}>Repetir produção de</span>
@@ -14169,7 +14310,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
     <div className="card" style={{marginBottom:12}}>
       <div style={preTitulo}>Folha do dia · {ordem.length} produto(s)</div>
       {ordemExibida.map(id=>{const m=mps.find((x:any)=>x.id===id);return m?<Fragment key={id}>{linhaJsx(m)}</Fragment>:null;})}
-      {!ordem.length&&<div className="muted" style={{fontSize:12,padding:"6px 0 2px"}}>Nada lançado. Busque o produto acima ou toque num pedido da cozinha.</div>}
+      {!ordem.length&&<div className="muted" style={{fontSize:12,padding:"6px 0 2px"}}>{!pedidoNaFolha&&pendentesDoDia.length?"O pedido do dia foi tirado da folha. Traga de volta acima ou busque o produto.":pendentesDoDia.length?"Nada lançado ainda. Busque o produto acima.":`Nenhum pedido para ${fmtDate(data)}. Busque o produto acima para lançar o que a cozinha fez.`}</div>}
     </div>
 
     {calculo.linhas.length>0&&<div className="card" style={{marginBottom:12}}>

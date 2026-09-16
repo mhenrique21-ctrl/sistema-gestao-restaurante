@@ -156,23 +156,65 @@ export function aplicarProducaoDia({ db, calculo, data, agora, uid, motivo }) {
   return { materiasPrimas: mps, movEstoque: movs, grupoId };
 }
 
+// Mesma normalização de nome do resto do sistema (foldNome no App.tsx): sem
+// acento, espaço colapsado, minúsculo. Repetida aqui porque este módulo não
+// importa o App — e é ela que faz a ponte entre o pedido e a produção.
+const foldPedido = (v) => String(v || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/\s+/g, ' ').trim().toLowerCase();
+
 // Fecha o pedido da cozinha com o que foi produzido (decisão do dono).
 // ⚠️ Só fecha quando a quantidade BATE. Produziu menos? Fica `parcial`, com o
 // que falta — fechar assim mesmo sumiria com a parte não feita, e ninguém
 // lembraria dela.
-export function baixarPedidos({ pedidos, produzidoPorItem }) {
-  const feito = new Map(Object.entries(produzidoPorItem || {}));
+//
+// ⚠️ O NOME é o que faz isto funcionar de verdade. Nenhum pedido real carrega
+// `produtoId`: o catálogo do Novo Pedido grava só `nome` e o caminho manual
+// grava um `id` próprio do item, enquanto a Produção do Dia manda tudo
+// chaveado pelo id da MATÉRIA-PRIMA. As chaves nunca batiam, então nenhum
+// pedido fechava — ficavam todos "aberto" para sempre e a lista só crescia
+// (18 itens acumulados quando isto foi descoberto, em 16/09/2026).
+//
+// ⚠️ O produzido é um ORÇAMENTO consumido em cascata, não um número repartido
+// à vontade: a mesma unidade não pode fechar dois itens. O catálogo cria um
+// item por produto+categoria, então o MESMO nome aparece duas vezes no mesmo
+// pedido de propósito (SEAMA pede 10, BARTOLOMEIA pede 5) — dar o total cheio
+// aos dois fecharia 15 tendo produzido 10.
+export function baixarPedidos({ pedidos, produzidoPorItem, produzidoPorNome }) {
+  const saldoId = new Map(Object.entries(produzidoPorItem || {}).map(([k, v]) => [k, num(v)]));
+  const saldoNome = new Map(Object.entries(produzidoPorNome || {}).map(([k, v]) => [foldPedido(k), num(v)]));
+
+  // Tira do orçamento o que este item precisa, na ordem: id do produto, id do
+  // item (legado) e NOME. Devolve só o que couber — o excedente fica para
+  // outro item do mesmo nome, e o que sobrar não é registrado no pedido
+  // (produzir a mais entra no estoque, mas não "fecha" mais do que foi pedido).
+  const tirar = (it, precisa) => {
+    const tentativas = [[saldoId, it.produtoId], [saldoId, it.id], [saldoNome, foldPedido(it.nome)]];
+    for (const [mapa, chave] of tentativas) {
+      if (!chave) continue;
+      const disponivel = num(mapa.get(chave));
+      if (!(disponivel > 0)) continue;
+      const usa = Math.min(disponivel, precisa);
+      mapa.set(chave, r3(disponivel - usa));
+      return usa;
+    }
+    return 0;
+  };
+
   return (pedidos || []).map((ped) => {
     if (!ped || ped.status === 'atendido') return ped;
     let mexeu = false;
     const itens = (ped.itens || []).map((it) => {
-      const chave = it.produtoId || it.id || it.nome;
-      const qFeita = num(feito.get(chave));
-      if (!(qFeita > 0)) return it;
-      mexeu = true;
       const pedida = num(it.quantidade);
-      const jaFeito = num(it.produzido) + qFeita;
-      return { ...it, produzido: r3(jaFeito), atendido: jaFeito >= pedida - 0.001 };
+      const jaFeito = num(it.produzido);
+      // Item já fechado não consome orçamento: consumiria o que outro item
+      // do mesmo nome ainda está esperando.
+      if (it.atendido || !(pedida > 0) || jaFeito >= pedida - 0.001) return it;
+      const usa = tirar(it, r3(pedida - jaFeito));
+      if (!(usa > 0)) return it;
+      mexeu = true;
+      const total = r3(jaFeito + usa);
+      return { ...it, produzido: total, atendido: total >= pedida - 0.001 };
     });
     if (!mexeu) return ped;
     const todos = itens.every((it) => it.atendido || !(num(it.quantidade) > 0));

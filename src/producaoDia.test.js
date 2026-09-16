@@ -188,3 +188,73 @@ test('pedido de outro produto não é tocado', () => {
   assert.equal(r[0].status, undefined);
   assert.equal(r[0].itens[0].produzido, undefined);
 });
+
+// ── A ponte pedido ↔ produção ────────────────────────────────────────────
+// Os testes acima usam `produtoId`, que NENHUM pedido real tem — foi por isso
+// que o bug passou. Estes usam o formato que o Novo Pedido grava de verdade.
+test('pedido do catálogo (só nome) fecha pelo nome — o formato real', () => {
+  const pedidos = [{ id: 'ped1', itens: [{ nome: 'Bolo de chocolate', quantidade: 12, unidade: 'un' }] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: { 'mp-bolo': 12 }, produzidoPorNome: { 'Bolo de chocolate': 12 } });
+  assert.equal(r[0].status, 'atendido');
+  assert.equal(r[0].itens[0].produzido, 12);
+});
+
+test('pedido manual (id próprio do item) também fecha pelo nome', () => {
+  const pedidos = [{ id: 'ped1', itens: [{ id: 'uid-abc', nome: 'Esfirra de Frango', quantidade: 3 }] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: { 'mp-esf': 3 }, produzidoPorNome: { 'Esfirra de Frango': 3 } });
+  assert.equal(r[0].status, 'atendido');
+});
+
+test('nome casa sem acento e sem diferença de caixa', () => {
+  const pedidos = [{ id: 'ped1', itens: [{ nome: 'PÃO DE QUEIJO', quantidade: 50 }] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: {}, produzidoPorNome: { 'pao de queijo': 50 } });
+  assert.equal(r[0].status, 'atendido');
+});
+
+test('mesmo nome em duas categorias: o produzido é repartido em cascata', () => {
+  // O catálogo cria um item por produto+categoria de propósito. Dar o total
+  // cheio aos dois fecharia 15 tendo produzido 10.
+  const pedidos = [{ id: 'ped1', itens: [
+    { nome: 'Bolo de laranja', quantidade: 10, categoria: 'SEAMA' },
+    { nome: 'Bolo de laranja', quantidade: 5, categoria: 'BARTOLOMEIA' },
+  ] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: {}, produzidoPorNome: { 'Bolo de laranja': 12 } });
+  assert.equal(r[0].itens[0].produzido, 10);
+  assert.equal(r[0].itens[0].atendido, true);
+  assert.equal(r[0].itens[1].produzido, 2);      // sobrou 2 do orçamento
+  assert.equal(r[0].itens[1].atendido, false);
+  assert.equal(r[0].status, 'parcial');
+});
+
+test('produzir a MAIS não fecha mais do que foi pedido', () => {
+  const pedidos = [{ id: 'ped1', itens: [{ nome: 'Bolo de milho', quantidade: 1 }] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: {}, produzidoPorNome: { 'Bolo de milho': 24 } });
+  assert.equal(r[0].itens[0].produzido, 1);
+  assert.equal(r[0].status, 'atendido');
+});
+
+test('item já atendido não consome o orçamento de outro do mesmo nome', () => {
+  const pedidos = [{ id: 'ped1', status: 'parcial', itens: [
+    { nome: 'Empada de frango', quantidade: 4, produzido: 4, atendido: true },
+    { nome: 'Empada de frango', quantidade: 3 },
+  ] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: {}, produzidoPorNome: { 'Empada de frango': 3 } });
+  assert.equal(r[0].itens[1].produzido, 3);
+  assert.equal(r[0].status, 'atendido');
+});
+
+test('dois pedidos em aberto do mesmo produto: o primeiro consome, o outro espera', () => {
+  const pedidos = [
+    { id: 'pedA', itens: [{ nome: 'Torta holandesa', quantidade: 1 }] },
+    { id: 'pedB', itens: [{ nome: 'Torta holandesa', quantidade: 1 }] },
+  ];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: {}, produzidoPorNome: { 'Torta holandesa': 1 } });
+  assert.equal(r[0].status, 'atendido');
+  assert.equal(r[1].status, undefined);
+});
+
+test('sem produzidoPorNome, o comportamento antigo por produtoId continua valendo', () => {
+  const pedidos = [{ id: 'ped1', itens: [{ produtoId: 'p1', nome: 'Pão de Queijo', quantidade: 50 }] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: { p1: 50 } });
+  assert.equal(r[0].status, 'atendido');
+});

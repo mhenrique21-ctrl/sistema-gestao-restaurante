@@ -879,10 +879,59 @@ inventário.
 A baixa de insumo por produção **já existia** na Manutenção de Produtos. O que
 faltava era o resto.
 
-**A tela é uma folha em branco** (decisão do dono, 15/09/2026): só entra o que a
-cozinha fez, pela busca ou pelas fichas clicáveis do pedido da cozinha e do
-saldo zerado/negativo. Abria com 18 pedidos + 12 "outros" e a pessoa rolava por
-produto que não produziu. `Linha` virou função (`linhaJsx`), não componente
+#### A ponte pedido → produção (16/09/2026)
+
+⚠️ **O pedido da cozinha NUNCA fechava.** `baixarPedidos` procurava o produzido
+por `produtoId || id || nome`, mas **nenhum pedido real carrega `produtoId`**:
+o catálogo do Novo Pedido gravava só `nome` e o caminho manual um `id` próprio
+do item, enquanto a Produção do Dia manda tudo chaveado pelo **id da
+matéria-prima**. As chaves nunca batiam, então todo pedido ficava "aberto" para
+sempre e a lista só crescia (18 itens acumulados quando isto foi descoberto).
+Os testes não pegaram porque todos usavam `produtoId`, que só existe em dado
+inventado.
+
+A ponte tem os dois lados:
+
+| onde | o quê |
+|---|---|
+| `baixarPedidos` | casa também pelo **nome normalizado**, e o produzido virou um **orçamento consumido em cascata** — a mesma unidade não fecha dois itens |
+| Novo Pedido | pedidos **novos** gravam `produtoId` = id da **matéria-prima** (não do catálogo de produção) quando o produto já existe; pedido antigo continua fechando pelo nome |
+| Produção do Dia | o pedido do dia **carrega sozinho** na folha, com a quantidade pedida já no campo |
+
+⚠️ **Cascata não é detalhe:** o catálogo cria um item por produto+categoria, então
+o mesmo nome aparece duas vezes no MESMO pedido de propósito (SEAMA pede 10,
+BARTOLOMEIA pede 5). Dar o total cheio aos dois fecharia 15 tendo produzido 10.
+Item já atendido não consome orçamento, e produzir a mais não fecha mais do que
+foi pedido.
+
+**A folha vira a conferência do pedido**: cada linha mostra "pedido N un" e um
+selo — **bateu o pedido** / **faltou N** / **N a mais** / **não produzido**. A
+caixinha desmarcada é "não produzi isto hoje": fica fora do registro e continua
+pendente, que é diferente de zero digitado. Editável por linha: quantidade,
+receita/unidade, perda e remover. **O nome não é editável** — é ele que liga o
+item ao produto do estoque e ao pedido.
+
+⚠️ **Carrega SÓ o pedido cuja data é a da folha** (decisão do dono). O que sobrou
+de dias anteriores fica atrás do link "ver e trazer para a folha" — some da
+frente sem sumir do sistema.
+
+⚠️ **Duas armadilhas de timing**, as duas já corrigidas e as duas invisíveis no
+build: (1) a decisão de "já está na folha?" mora DENTRO do `setLinhas`
+funcional, não no fechamento do efeito; (2) registrar limpa a folha **depois**
+que o efeito rodou (o save usa `flushSync`), então existe um contador
+`recarga` que é o pedido explícito de trazer de volta o que ficou parcial. Sem
+ele, produzir 12 de 24 deixava a folha vazia e os 12 restantes só voltavam com
+F5. Criar produto para um item do pedido também bumpa `recarga`.
+
+⚠️ Item do pedido **sem produto no estoque** (ex.: "Biscoito p/ café") aparece
+em âmbar com botão **criar produto** (cria com saldo zero e já marcado como
+`produzido`). Não entra no saldo nem baixa insumo enquanto não existir — mas
+**não bloqueia** o registro, e o pedido fecha do mesmo jeito.
+
+**A tela é uma folha em branco** (decisão do dono, 15/09/2026) quando não há
+pedido do dia: só entra o que a cozinha fez, pela busca. Abria com 18 pedidos +
+12 "outros" e a pessoa rolava por produto que não produziu. Os 195 chips de
+"saldo zerado ou negativo" viraram um link. `Linha` virou função (`linhaJsx`), não componente
 inline: componente recriado a cada render desmontava o input a cada tecla.
 
 **Receitas × unidades**: produto cuja ficha tem `porcoes > 1` lança em
