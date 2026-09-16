@@ -80,6 +80,34 @@ export function itemDeEstoqueDaProducao(nome, { produtosProducao = [], materiasP
   return porNome ? { mp: porNome, origem: 'nome' } : null;
 }
 
+// RECHEIO: item feito na cozinha que não é vendido — entra como insumo da
+// ficha de outro produto (o frango cremoso do croissant). Continua sendo do
+// tipo `produzido` (é feito e tem saldo próprio); "recheio" é só o PAPEL que
+// ele cumpre, não um sexto tipo de item — ver CLAUDE.md, "Item com saldo:
+// cinco tipos, uma coleção".
+//
+// Reconhecido de duas formas, nessa ordem:
+//   1. marcado no catálogo de produção (`recheio: true`) — é a declaração do
+//      dono, e vale ANTES de existir ficha alguma usando o item;
+//   2. derivado das fichas: alguma ficha lista este item como insumo.
+//
+// Só o 2 existia, e por isso um recheio recém-criado ficava sem identidade
+// até alguém escrever a ficha que o consome.
+export function fichasQueUsam(mp, fichasTecnicas = []) {
+  if (!mp) return [];
+  const k = normalizarNome(mp.nome);
+  return (fichasTecnicas || []).filter((f) => (f?.insumos || []).some((i) => (
+    (i.mpId && i.mpId === mp.id) || (!i.mpId && normalizarNome(i.nome) === k)
+  )));
+}
+
+export function ehRecheio(nome, { produtosProducao = [], fichasTecnicas = [], mp = null } = {}) {
+  const k = normalizarNome(nome);
+  const doCatalogo = (produtosProducao || []).find((p) => p && normalizarNome(p.nome) === k);
+  if (doCatalogo?.recheio) return true;
+  return fichasQueUsam(mp, fichasTecnicas).length > 0;
+}
+
 // Nomes de produção que apontam para um item de estoque — os APELIDOS que o
 // fechamento do pedido precisa conhecer. Produzir "SALG COXINHA" tem que fechar
 // o pedido de "Coxinha de frango", senão o vínculo conserta a tela e deixa o

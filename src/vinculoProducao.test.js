@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizarNome, tokens, pontuar, sugerirVinculo, itemDeEstoqueDaProducao, apelidosDoItem } from './vinculoProducao.js';
+import { normalizarNome, tokens, pontuar, sugerirVinculo, itemDeEstoqueDaProducao, apelidosDoItem, fichasQueUsam, ehRecheio } from './vinculoProducao.js';
 
 // Análise do código sob teste (vinculoProducao.js):
 // - Input: nome digitado no catálogo de produção ("Coxinha de frango") e a
@@ -96,4 +96,30 @@ test('apelidos: o fechamento do pedido precisa conhecer os dois nomes', () => {
   ];
   assert.deepEqual(apelidosDoItem('e1', produtosProducao), ['Coxinha de frango', 'Coxinha frango grande']);
   assert.deepEqual(apelidosDoItem('nao-existe', produtosProducao), []);
+});
+
+// ── Recheio ──────────────────────────────────────────────────────────────
+const FRANGO = mp('r1', 'Frango cremoso');
+const FICHA_CROISSANT = { id: 'f1', nome: 'Croissant de frango', insumos: [{ mpId: 'r1', nome: 'Frango cremoso', quantidade: 2 }] };
+
+test('recheio é reconhecido pela ficha que o usa como insumo', () => {
+  assert.equal(ehRecheio('Frango cremoso', { fichasTecnicas: [FICHA_CROISSANT], mp: FRANGO }), true);
+});
+
+test('⚠️ recheio MARCADO no catálogo vale antes de existir ficha', () => {
+  // Era o buraco: recheio recém-criado ficava sem identidade até alguém
+  // escrever a ficha que o consome.
+  const produtosProducao = [{ id: 'c1', nome: 'Frango cremoso', recheio: true }];
+  assert.equal(ehRecheio('Frango cremoso', { produtosProducao, fichasTecnicas: [], mp: FRANGO }), true);
+});
+
+test('produto normal não vira recheio', () => {
+  assert.equal(ehRecheio('Coxinha de frango', { produtosProducao: [{ id: 'c2', nome: 'Coxinha de frango' }], fichasTecnicas: [FICHA_CROISSANT], mp: ECLETICA[0] }), false);
+});
+
+test('ficha casa o insumo pelo mpId e, sem ele, pelo nome', () => {
+  assert.equal(fichasQueUsam(FRANGO, [FICHA_CROISSANT]).length, 1);
+  const porNome = { id: 'f2', nome: 'Esfirra', insumos: [{ nome: 'FRANGO CREMOSO', quantidade: 1 }] };
+  assert.equal(fichasQueUsam(FRANGO, [porNome]).length, 1);
+  assert.equal(fichasQueUsam(null, [FICHA_CROISSANT]).length, 0);
 });

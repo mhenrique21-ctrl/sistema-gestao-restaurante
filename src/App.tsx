@@ -9,7 +9,7 @@ import {calcularHolerite,contasEsperadas,contasLancadas,conciliarMes,encargoDesc
 import {previaFalta,descontoDoMes,salarioDia,ehJustificada,MOTIVOS_473} from "./faltaClt.js";
 import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 import {calcularProducaoDia,aplicarProducaoDia,baixarPedidos} from "./producaoDia.js";
-import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome} from "./vinculoProducao.js";
+import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome,fichasQueUsam,ehRecheio} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
@@ -11357,7 +11357,9 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
     return [...porChave.values()].map(l=>{
       const resolvido=itemDeEstoqueDaProducao(l.nome,{produtosProducao:prodsCatalog,materiasPrimas:mps});
       const pend=pendencias.get(l.chave);
-      return {...l,resolvido,vezes:pend?.vezes||0,falta:pend?.falta||0};
+      const recheio=ehRecheio(l.nome,{produtosProducao:prodsCatalog,fichasTecnicas:db.fichasTecnicas||[],mp:resolvido?.mp});
+      const usadoPor=recheio?fichasQueUsam(resolvido?.mp,db.fichasTecnicas||[]).map((f:any)=>f.nome):[];
+      return {...l,resolvido,recheio,usadoPor,vezes:pend?.vezes||0,falta:pend?.falta||0};
     }).sort((a,b)=>(b.vezes-a.vezes)||(b.falta-a.falta)||String(a.nome).localeCompare(String(b.nome),"pt-BR"));
   },[prodsCatalog,mps,pendencias]);
 
@@ -11403,20 +11405,44 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
       return{...d,produtosProducao:lista};
     });
   };
-  // Recheio e produto que o Eclética não vende: cria o item com saldo zero e já
-  // marcado como produção própria (é feito na cozinha e tem saldo próprio).
-  const criarNoEstoque=(l:any)=>{
-    if(!confirm(`Criar "${l.nome}" no estoque como produção própria, com saldo zero?`))return;
+  // Cria (ou aproveita) o item de estoque e liga o produto de produção nele.
+  // `comoRecheio` marca o papel no catálogo — o item continua sendo do tipo
+  // `produzido` (é feito na cozinha e tem saldo próprio); recheio não é um
+  // sexto tipo, é o que ele faz depois de pronto.
+  const criarNoEstoque=(l:any,comoRecheio=false)=>{
+    const existente=mps.find((m:any)=>normalizarNome(m.nome)===l.chave)||null;
+    const msg=comoRecheio
+      ?(existente
+        ?`Marcar "${l.nome}" como RECHEIO e ligar ao item que já existe no estoque?\n\nEle não é vendido: entra no estoque e sai como insumo da ficha de outro produto.`
+        :`Criar "${l.nome}" como RECHEIO, com saldo zero?\n\nEle não é vendido: entra no estoque e sai como insumo da ficha de outro produto.`)
+      :`Criar "${l.nome}" no estoque como produção própria, com saldo zero?`;
+    if(!confirm(msg))return;
     const ts=new Date().toISOString();
-    const novo={id:uid(),nome:l.nome,unidade:l.unidade||"un",categoria:"Outros",estoqueAtual:0,ultimoValor:0,criadoEm:ts,atualizadoEm:ts};
+    // Item que já existe NÃO tem o tipo alterado aqui: trocar o tipo de um item
+    // comprado mudaria calado a baixa por venda dele. Só liga e, se o tipo não
+    // for produção própria, avisa.
+    const novo=existente?null:{id:uid(),nome:l.nome,unidade:l.unidade||"un",categoria:"Outros",estoqueAtual:0,ultimoValor:0,criadoEm:ts,atualizadoEm:ts};
+    const alvoId=existente?existente.id:novo!.id;
     salvar((d:any)=>{
       const lista=[...(d.produtosProducao||[])];
+      const patch:any={mpId:alvoId,atualizadoEm:ts};
+      if(comoRecheio)patch.recheio=true;
       const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave);
-      if(i>=0)lista[i]={...lista[i],mpId:novo.id,atualizadoEm:ts};
-      else lista.push({id:uid(),nome:l.nome,cats:[],cat:"",unidade:l.unidade||"un",mpId:novo.id,atualizadoEm:ts});
-      return{...d,materiasPrimas:[...(d.materiasPrimas||[]),novo],
-        tipoInsumo:{...(d.tipoInsumo||{}),[chaveTipo(novo)]:"produzido"},produtosProducao:lista};
+      if(i>=0)lista[i]={...lista[i],...patch};
+      else lista.push({id:uid(),nome:l.nome,cats:[],cat:"",unidade:l.unidade||"un",...patch});
+      return{...d,
+        materiasPrimas:novo?[...(d.materiasPrimas||[]),novo]:d.materiasPrimas,
+        tipoInsumo:novo?{...(d.tipoInsumo||{}),[chaveTipo(novo)]:"produzido"}:d.tipoInsumo,
+        produtosProducao:lista};
     });
+    if(existente&&tipoDoInsumo(db.tipoInsumo||{},existente).tipo!=="produzido")
+      alert(`Ligado a "${existente.nome}", que hoje NÃO está marcado como produção própria.\n\nO tipo não foi alterado de propósito — trocar mexe na baixa por venda dele. Ajuste em Estoque → Saldo Estoque se for o caso.`);
+  };
+  // Marca/desmarca só o papel, sem mexer no vínculo já feito.
+  const alternarRecheio=(l:any)=>{
+    const ts=new Date().toISOString();
+    salvar((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>
+      (l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave)?{...p,recheio:!p.recheio,atualizadoEm:ts}:p)}));
   };
 
   const lista=filtro==="sem"?semVinculo:comVinculo;
@@ -11449,10 +11475,15 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
         return <div key={l.chave} style={{padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const}}>
             <div style={{flex:"1 1 170px",minWidth:0}}>
-              <div style={{fontSize:13.5,fontWeight:700}}>{l.nome}</div>
+              <div style={{fontSize:13.5,fontWeight:700}}>{l.nome}
+                {l.recheio&&<span style={{fontSize:9.5,fontWeight:700,marginLeft:6,padding:"1px 6px",borderRadius:6,background:"var(--categoryBg)",color:"var(--categoryText)"}}>RECHEIO</span>}
+              </div>
               <div style={{fontSize:10.5,color:"var(--text3)"}}>
                 {l.vezes>0?`pedido ${l.vezes}x · falta ${fmtNum(l.falta)} ${l.unidade}`:"sem pedido em aberto"}
                 {!l.prodId&&<span style={{color:"var(--warningText)"}}> · só no pedido, fora do catálogo</span>}
+                {l.recheio&&(l.usadoPor.length
+                  ?<> · usado na ficha de <b>{l.usadoPor.join(", ")}</b></>
+                  :<span style={{color:"var(--warningText)"}}> · nenhuma ficha usa ainda — vai entrar no estoque e ficar parado</span>)}
               </div>
             </div>
             {l.resolvido
@@ -11462,6 +11493,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
                   <span style={{fontSize:10.5,color:"var(--text3)"}}> {l.resolvido.mp.codigoEcletica?`· cód ${l.resolvido.mp.codigoEcletica} `:""}· saldo {fmtNum(l.resolvido.mp.estoqueAtual)} {l.resolvido.mp.unidade||"un"}</span>
                   {l.resolvido.origem==="nome"&&<span style={{fontSize:10,color:"var(--text3)"}}> · pelo nome igual</span>}
                 </div>
+                {l.prodId&&<button type="button" onClick={()=>alternarRecheio(l)} style={l.recheio?btn:{...btn,borderColor:"var(--categoryText)",color:"var(--categoryText)"}}>{l.recheio?"não é recheio":"é recheio"}</button>}
                 {l.resolvido.origem==="vinculo"&&<button type="button" onClick={()=>desvincular(l)} style={btn}>desvincular</button>}
               </>
               :<>
@@ -11477,6 +11509,7 @@ function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAnd
                   {sug&&!busca&&<button type="button" onClick={()=>vincular(l,sug.mp.id)} style={{...btn,borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)"}}>vincular</button>}
                   {sug&&!busca&&<button type="button" onClick={()=>setBuscas(b=>({...b,[l.chave]:" "}))} style={btn}>outro…</button>}
                   <button type="button" onClick={()=>criarNoEstoque(l)} style={btn}>criar produto</button>
+                  <button type="button" onClick={()=>criarNoEstoque(l,true)} style={{...btn,borderColor:"var(--categoryText)",color:"var(--categoryText)"}} title="Não é vendido: entra no estoque e sai como insumo da ficha de outro produto">é recheio</button>
                 </div>
               </>}
           </div>
@@ -14207,8 +14240,11 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
 
   // Recheio = item produzido que alguma ficha usa como insumo (frango cremoso
   // no croissant). É identificado pelas fichas que já existem, sem marcação nova.
-  const fichasQueUsam=(m:any)=>(db.fichasTecnicas||[]).filter((f:any)=>(f?.insumos||[]).some((i:any)=>(i.mpId&&i.mpId===m.id)||(!i.mpId&&foldNome(i.nome||"")===foldNome(m.nome||""))));
-  const ehRecheio=(m:any)=>fichasQueUsam(m).length>0;
+  // Recheio: marcado no catálogo de produção OU derivado das fichas que o usam
+  // como insumo. Só o segundo existia — recheio recém-criado ficava sem
+  // identidade até alguém escrever a ficha que o consome.
+  const fichasDoItem=(m:any)=>fichasQueUsam(m,db.fichasTecnicas||[]);
+  const ehRecheioItem=(m:any)=>ehRecheio(m?.nome,{produtosProducao:db.produtosProducao||[],fichasTecnicas:db.fichasTecnicas||[],mp:m});
 
   const produzidoDe=(id:string)=>{
     const l=linhas[id];if(!l||l.off)return 0;   // "não produzi isso" ≠ zero digitado
@@ -14224,7 +14260,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
   // recheio, depois o que o consome).
   const ordemExibida=[...ordem].sort((a,b)=>{
     const ma=mps.find((x:any)=>x.id===a),mb=mps.find((x:any)=>x.id===b);
-    return (ehRecheio(mb)?1:0)-(ehRecheio(ma)?1:0);
+    return (ehRecheioItem(mb)?1:0)-(ehRecheioItem(ma)?1:0);
   });
   // Quanto de um item da folha é consumido HOJE por outras linhas (já convertido
   // pela mesma conta que vai baixar).
@@ -14239,7 +14275,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
     return {antes,depois,negativo:depois<0};
   };
   const usadoPorHoje=(m:any)=>ordem.filter(id=>id!==m.id&&produzidoDe(id)>0)
-    .map(id=>mps.find((x:any)=>x.id===id)).filter((o:any)=>o&&fichasQueUsam(m).some((f:any)=>f.id===fichaDe(o)?.id))
+    .map(id=>mps.find((x:any)=>x.id===id)).filter((o:any)=>o&&fichasDoItem(m).some((f:any)=>f.id===fichaDe(o)?.id))
     .map((o:any)=>o.nome);
 
   // A ponte: o pedido do dia VIRA a folha, com a quantidade pedida já no campo.
@@ -14370,7 +14406,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
     const saldo=parseFloat(m.estoqueAtual)||0;
     const ped=pedidoDoItem(m);
     const produzido=produzidoDe(m.id);
-    const recheio=ehRecheio(m);
+    const recheio=ehRecheioItem(m);
     const usado=usadoHoje(m.id);
     const usadoPor=usadoPorHoje(m);
     const qtdNum=parseFloat(String(l.qtd).replace(",","."))||0;

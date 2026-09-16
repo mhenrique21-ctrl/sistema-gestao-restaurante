@@ -944,6 +944,33 @@ sem ninguém ver.
 daria um orçamento a cada um, e dois itens de pedido com esses nomes fechariam
 os dois com a mesma fornada.
 
+##### Vincular como RECHEIO
+
+O frango cremoso do croissant é feito na cozinha, entra no estoque e **não é
+vendido**: sai como insumo da ficha de outro produto. O botão **"é recheio"** na
+ferramenta cria/liga o item e marca esse papel.
+
+⚠️ **Recheio é PAPEL, não um sexto tipo de item.** O item continua `produzido`
+(ver "Item com saldo: cinco tipos, uma coleção") — é feito e tem saldo próprio.
+Criar um tipo novo obrigaria `baixaDaVenda`, contagem, Saldo Estoque e
+movimentações a aprender uma regra que é exatamente a do produzido.
+
+⚠️ **A marcação mora em `produtosProducao[].recheio`**, no cadastro que já
+existe — não é campo novo no `db`, não entra na armadilha do §3.
+
+⚠️ **Marcar no catálogo era o que faltava.** `ehRecheio` reconhecia recheio só
+pelas fichas que usam o item como insumo (`fichasQueUsam`), então um recheio
+recém-criado ficava **sem identidade** até alguém escrever a ficha que o
+consome: não subia ao topo da folha da Produção do Dia e não avisava nada. Agora
+a ordem é: marcação do catálogo (a declaração do dono, vale antes de existir
+ficha) → fichas que o usam. A linha sem ficha nenhuma avisa "nenhuma ficha usa
+ainda — vai entrar no estoque e ficar parado", em vez de ficar calada.
+
+⚠️ **Ligar a um item que já existe NÃO troca o tipo dele.** "Criar produto"
+reaproveita a matéria-prima de mesmo nome em vez de duplicar, e se o tipo dela
+não for produção própria o alerta diz isso e manda ajustar em Saldo Estoque —
+trocar calado mudaria a baixa por venda de um item comprado.
+
 #### A ponte pedido → produção (16/09/2026)
 
 ⚠️ **O pedido da cozinha NUNCA fechava.** `baixarPedidos` procurava o produzido
@@ -1004,9 +1031,11 @@ receitas por padrão ("2 receitas → 24 fatias"); a conversão é só na tela �
 `calcularProducaoDia` continua recebendo unidades. Perda é sempre em unidades.
 Pedido da cozinha pré-preenche em unidades (o pedido é em unidades).
 
-**Recheio** = item produzido que alguma ficha usa como insumo (`fichasQueUsam`,
-pelas fichas existentes, sem marcação nova). Sobe para o topo da folha e mostra
-"usado hoje por … · sobra N". ⚠️ Na prévia, a SAÍDA de um insumo que também foi
+**Recheio** = item produzido que não é vendido: sai como insumo da ficha de
+outro produto. Reconhecido pela marcação do catálogo (`produtosProducao[].recheio`,
+posta em Produção → Produtos → Vincular ao estoque) OU pelas fichas que o usam
+(`ehRecheio`/`fichasQueUsam`, em `src/vinculoProducao.js`). Sobe para o topo da
+folha e mostra "usado hoje por … · sobra N". ⚠️ Na prévia, a SAÍDA de um insumo que também foi
 produzido hoje parte do saldo **com** a entrada do dia (`saidaExibida`): a
 aplicação real faz entrada antes da saída, e sem isso a tela mostrava "4 → −16"
 para um saldo que termina em 4.
