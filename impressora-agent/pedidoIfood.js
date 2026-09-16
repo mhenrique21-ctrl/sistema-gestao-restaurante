@@ -70,6 +70,17 @@ const VALORES = ['total', 'taxaServico', 'taxaEntrega', 'descontos', 'pagoPeloAp
 const marcaDaLinha = (l) => (MARCAS.find(([, m]) => fold(l).includes(m)) || [null])[0];
 const ehRotuloConhecido = (l) => marcaDaLinha(l) != null;
 
+// Carimbos da VIA, não dados do pedido: "EXPEDICAO", "** PREPARO PRIORITARIO **",
+// "TURBO TURBO TURBO", "Primeiro pedido!", "6 pedidos na sua loja". Reconhecê-los
+// num lugar só é o que permite o nome da loja parar neles em vez de engoli-los.
+const ehCarimboDaVia = (l) => {
+  const t = fold(l);
+  return /expedicao|prioritario|confirme a entrega|turbo/.test(t)
+    || /^(primeiro pedido|\d+ pedidos? na sua loja)/.test(t)
+    || /entrega (propria|parceira)/.test(t)
+    || /\bid:\s*\d+/.test(t);
+};
+
 // R$1.234,56 / -R$ 44,87 — vírgula decimal, ponto de milhar. Number() direto
 // devolveria 1.234 para mil e duzentos, e o erro só apareceria no fechamento.
 // ⚠️ O menos precisa estar COLADO no R$ (ou no número). Com `-?\s*` no meio,
@@ -140,9 +151,18 @@ export function lerPedidoIfood(texto) {
   // ── Cabeçalho ────────────────────────────────────────────────────────────
   // A loja é o que vem entre "iFood" e a primeira âncora. "EXPEDICAO" e
   // "** PREPARO PRIORITARIO **" são carimbos da via, não nome de loja.
+  // ⚠️ O NOME DA LOJA QUEBRA EM 32 COLUNAS como qualquer outro texto: numa
+  // comanda real "Empreendimentos" caiu sozinho na linha de baixo e virava
+  // pendência em TODO pedido daquela loja. Junta enquanto não for rótulo nem
+  // carimbo da via.
   const iLoja = linhas.findIndex((l) => fold(l) === 'ifood');
-  if (iLoja >= 0 && linhas[iLoja + 1] && !ehRotuloConhecido(linhas[iLoja + 1])) {
-    p.loja = linhas[iLoja + 1].trim();
+  if (iLoja >= 0) {
+    const partesLoja = [];
+    for (let k = iLoja + 1; k < linhas.length; k++) {
+      if (ehRotuloConhecido(linhas[k]) || ehCarimboDaVia(linhas[k])) break;
+      partesLoja.push(linhas[k].trim());
+    }
+    p.loja = partesLoja.join(' ') || null;
   }
   p.prioritario = linhas.some((l) => fold(l).includes('prioritario'));
   const iEntrega = linhas.findIndex((l) => /entrega (propria|parceira)/.test(fold(l)));
@@ -276,8 +296,21 @@ export function lerPedidoIfood(texto) {
     if (campo === 'data') { p.data = depoisDoRotulo(l) || null; i += 1; continue; }
     if (campo === 'previsao') { p.previsao = depoisDoRotulo(l).replace(/[<>]+/g, '').trim() || null; i += 1; continue; }
     if (campo === 'localizador') { p.localizador = depoisDoRotulo(l) || null; i += 1; continue; }
-    if (campo === 'complementoEnd') { p.complementoEndereco = depoisDoRotulo(l) || null; i += 1; continue; }
-    if (campo === 'bairro') { p.bairro = depoisDoRotulo(l) || null; i += 1; continue; }
+    // ⚠️ TODO campo de endereço pode quebrar em 32 colunas, não só o
+    // "Endereco:". Complemento e bairro liam uma linha só, e a sobra ("Bloco
+    // B", o resto do nome do condomínio) virava pendência.
+    if (campo === 'complementoEnd') {
+      const [partes, j] = ateProximoRotulo(i + 1, depoisDoRotulo(l));
+      p.complementoEndereco = partes.join(' ') || null;
+      i = j;
+      continue;
+    }
+    if (campo === 'bairro') {
+      const [partes, j] = ateProximoRotulo(i + 1, depoisDoRotulo(l));
+      p.bairro = partes.join(' ') || null;
+      i = j;
+      continue;
+    }
     if (campo === 'referencia') {
       // ⚠️ O ponto de referência é texto livre e quebra em QUANTAS linhas
       // precisar ("ao lado de um galpao de uma / oficina, e uma casa de altos
@@ -316,9 +349,8 @@ export function lerPedidoIfood(texto) {
       || (p.tipoEntrega && fold(t).replace(/[|+\s]+/g, ' ').trim() === fold(p.tipoEntrega))
       // "Primeiro pedido!" e "6 pedidos na sua loja" são recado do app pro
       // lojista, não dado do pedido — pendência falsa em toda comanda.
-      || /expedicao|prioritario|confirme a entrega|turbo/.test(fold(t))
-      || /^(primeiro pedido|\d+ pedidos? na sua loja)/.test(fold(t))
-      || /\bid:\s*\d+/.test(fold(t));
+      || ehCarimboDaVia(t)
+      || (p.loja && fold(p.loja).includes(fold(t)));
     if (!jaUsada) p.naoEntendido.push(t);
     i += 1;
   }

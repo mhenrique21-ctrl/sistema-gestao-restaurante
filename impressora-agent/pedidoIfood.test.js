@@ -421,3 +421,54 @@ Cobrar do cliente:     R$ 0,00`);
     assert.deepEqual(conferirPedidoIfood(p), []);
   });
 });
+
+describe('texto que quebra em 32 colunas — os três que faltavam', () => {
+  // Numa comanda real de 15/09 sobrou "Empreendimentos" como única pendência
+  // de NOVE pedidos. Nome de loja, complemento e bairro quebram como qualquer
+  // outro texto, e cada um virava pendência em TODO pedido daquela loja.
+  const p = lerPedidoIfood(`iFood
+     Confraria Cafe e
+      Empreendimentos
+         EXPEDICAO
+       PEDIDO: #4033
+      Entrega Parceira
+Cliente Exemplo
+0800 700 3050 ID: 1
+Endereco: R. Exemplo, 100
+Comp: Residencial Alfa
+Bloco B
+Bairro: Jardim das
+Oliveiras
+Cidade: Macapa - AP
+ITENS DO PEDIDO (1)
+1x  Esfiha de frango  R$ 30,98
+Valor total do        R$ 30,98
+pedido:
+Taxa de servico:       R$ 0,99
+Taxa de entrega:       R$ 3,99
+Descontos :          -R$ 11,73
+Pagamento via iFood: -R$ 24,23
+Cobrar do cliente:     R$ 0,00`);
+
+  test('o nome da loja junta as duas linhas', () => {
+    assert.equal(p.loja, 'Confraria Cafe e Empreendimentos');
+  });
+
+  test('o carimbo da via não é engolido pelo nome da loja', () => {
+    // Sem parar em "EXPEDICAO", a loja viraria "… Empreendimentos EXPEDICAO".
+    assert.ok(!p.loja.includes('EXPEDICAO'));
+    assert.equal(p.numero, '4033');
+  });
+
+  test('complemento e bairro também quebram', () => {
+    assert.equal(p.complementoEndereco, 'Residencial Alfa Bloco B');
+    assert.equal(p.bairro, 'Jardim das Oliveiras');
+  });
+
+  test('nenhuma pendência sobra, e a conta fecha', () => {
+    // 30,98 + 0,99 + 3,99 − 11,73 = 24,23
+    assert.deepEqual(p.naoEntendido, []);
+    assert.equal(p.descontos, 11.73);
+    assert.deepEqual(conferirPedidoIfood(p), []);
+  });
+});

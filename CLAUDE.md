@@ -322,6 +322,18 @@ indentado dentro do bloco, seria colado no nome do último item.
 oficina, e uma casa de altos e / baixos") — lendo só a primeira, o resto virava
 pendência.
 
+**Os nove primeiros pedidos reais (R$ 325,31) deixaram UMA pendência só**, e ela
+valia por três: **todo texto quebra em 32 colunas**, não só o endereço.
+
+⚠️ **O NOME DA LOJA quebra** ("Confraria Cafe e / Empreendimentos") — virava
+pendência em TODO pedido daquela loja. Junta enquanto não for rótulo nem
+**carimbo da via** (`ehCarimboDaVia`: EXPEDICAO, PREPARO PRIORITARIO, TURBO,
+Primeiro pedido!, N pedidos na sua loja, Entrega Propria/Parceira, a linha do
+telefone com ID). Sem parar neles, a loja engoliria "EXPEDICAO".
+
+⚠️ **`Comp:` e `Bairro:` também quebram** — liam uma linha só, e a sobra ("Bloco
+B", o resto do nome do condomínio) virava pendência.
+
 ⚠️ A configuração antiga (`CAPTURA_MODO` + `CAPTURA_PASTA`/`CAPTURA_PORTA`, uma
 fonte sem rótulo) continua valendo: quem já instalou não é obrigado a
 reconfigurar. Sem rótulo, a origem sai do texto.
