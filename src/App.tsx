@@ -2441,6 +2441,7 @@ export default function App() {
       {id:"est-proj",label:"Projeção de compras",icon:"📊",sub:"projecao"},
       {id:"est-saldo",label:"Saldo Estoque",icon:"📊",sub:"saldo"},
       {id:"est-prodia",label:"Produção do Dia",icon:"🍞",sub:"producaodia"},
+      {id:"est-fichas",label:"Fichas técnicas",icon:"📝",sub:"fichas"},
       {id:"est-manut",label:"Manutenção de Produtos",icon:"🔧",sub:"manutencao"},
       {id:"est-import",label:"Produtos Eclética",icon:"📥",sub:"importar"},
       {id:"est-saidas",label:"Saídas por venda",icon:"📉",sub:"saidas"},
@@ -2793,7 +2794,7 @@ export default function App() {
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} setState={setState} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab} empresa={empresa} state={state} setState={setState}/>}
-              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub} onNavigate={setTab}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -13797,22 +13798,123 @@ function ImportarProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:an
 }
 
 // ===================== ESTOQUE → MANUTENÇÃO DE PRODUTOS =====================
-// ── Produção do Dia ────────────────────────────────────────────────────────
+// ── Ficha técnica, só leitura ───────────────────────────────────────────────
+// Cartão usado em Estoque → Fichas técnicas e no "ver ficha" da Produção do
+// Dia. NÃO edita nada: a ficha continua sendo cadastrada em Produção → Fichas.
+// O que ela acrescenta é o cruzamento com o estoque — saldo de cada insumo na
+// unidade da ficha e quantas receitas dá pra fazer hoje —, que é a pergunta que
+// a cozinha faz de manhã e a tela de fichas não responde.
+function FichaTecnicaCard({ficha,db,onEditar}:{ficha:any,db:any,onEditar?:()=>void}){
+  const mps=db.materiasPrimas||[];
+  const porcoes=Math.max(parseFloat(ficha.porcoes)||1,1);
+  const insumos=ficha.insumos||[];
+  const custoTotal=insumos.reduce((s:number,i:any)=>s+(parseFloat(i.custo)||0),0);
+  // Item de estoque que a ficha alimenta: pelo fichaId (vínculo editado em
+  // Saldo Estoque) e, sem ele, pelo nome — a mesma regra do resolvedor.
+  const item=mps.find((m:any)=>m.fichaId===ficha.id)||mps.find((m:any)=>foldNome(m.nome)===foldNome(ficha.nome))||null;
+  const unItem=item?.unidade||"un";
+  const linhas=insumos.map((i:any)=>{
+    const mp=(i.mpId&&mps.find((m:any)=>m.id===i.mpId))||mps.find((m:any)=>foldNome(m.nome)===foldNome(i.nome))||null;
+    const qtd=parseFloat(i.quantidade)||0;
+    // Saldo do insumo convertido pra unidade da ficha (kg→g); sem conversão
+    // possível (un×kg) fica null e o insumo não entra na conta de receitas.
+    const saldoConv=mp?converterQtd(parseFloat(mp.estoqueAtual)||0,mp.unidade||"un",i.unidade||"un"):null;
+    const receitas=(mp&&saldoConv!=null&&qtd>0)?Math.max(0,Math.floor(saldoConv/qtd)):null;
+    return {i,mp,qtd,porUnidade:qtd/porcoes,custo:parseFloat(i.custo)||0,receitas};
+  });
+  const limitantes=linhas.filter((l:any)=>l.receitas!=null);
+  const receitasPossiveis=limitantes.length?Math.min(...limitantes.map((l:any)=>l.receitas)):null;
+  const gargalo=limitantes.find((l:any)=>l.receitas===receitasPossiveis);
+  const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+  const th={fontSize:10,color:"var(--text3)",fontWeight:400,padding:"4px 0",borderBottom:"1px solid var(--border)",textAlign:"right" as const,whiteSpace:"nowrap" as const};
+  const td={padding:"5px 0",borderBottom:"1px solid var(--border)",textAlign:"right" as const,whiteSpace:"nowrap" as const,...MONO};
+  return <div className="card" style={{marginBottom:10}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap" as const}}>
+      <div style={{flex:"1 1 220px",minWidth:0}}>
+        <div style={{fontSize:15,fontWeight:700}}>{ficha.nome}</div>
+        <div style={{fontSize:11.5,color:"var(--text2)",marginTop:2}}>
+          rende <b style={{color:"var(--text)"}}>{fmtNum(porcoes)} {unItem}</b> por receita
+          {item?<> · alimenta o item <b style={{color:"var(--text)"}}>{item.nome}</b> · saldo <span style={MONO}>{fmtNum(item.estoqueAtual)} {unItem}</span></>:<> · <span style={{color:"var(--warningText)"}}>nenhum item de estoque com esse nome</span></>}
+        </div>
+      </div>
+      <div style={{textAlign:"right" as const}}>
+        <div style={{fontSize:10,color:"var(--text3)"}}>custo por receita · por {unItem}</div>
+        <div style={{fontSize:14,fontWeight:700,...MONO}}>{fmtMoney(custoTotal)} · {fmtMoney(custoTotal/porcoes)}</div>
+      </div>
+    </div>
+    {insumos.length>0?<div style={{overflowX:"auto" as const,marginTop:8}}>
+      <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:12,minWidth:460}}>
+        <thead><tr>
+          <th style={{...th,textAlign:"left" as const}}>Insumo</th><th style={th}>por receita</th><th style={th}>por {unItem}</th><th style={th}>custo</th><th style={th}>saldo hoje</th>
+        </tr></thead>
+        <tbody>{linhas.map((l:any)=><tr key={l.i.id||l.i.nome}>
+          <td style={{...td,textAlign:"left" as const,fontFamily:"inherit",whiteSpace:"normal" as const}}>{l.i.nome}{!l.mp&&<span style={{fontSize:10,color:"var(--warningText)",marginLeft:6}}>não está no estoque</span>}</td>
+          <td style={td}>{fmtNum(l.qtd)} {l.i.unidade}</td>
+          <td style={{...td,color:"var(--text2)"}}>{fmtNum(Math.round(l.porUnidade*1000)/1000)} {l.i.unidade}</td>
+          <td style={td}>{fmtMoney(l.custo).replace(/^R\$\s?/,"")}</td>
+          <td style={{...td,color:l.mp&&(parseFloat(l.mp.estoqueAtual)||0)<=0?"var(--btnDanger)":undefined}}>{l.mp?`${fmtNum(l.mp.estoqueAtual)} ${l.mp.unidade||"un"}`:"—"}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>:<div className="muted" style={{fontSize:12,marginTop:8}}>Ficha sem insumos cadastrados.</div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap" as const,marginTop:8,fontSize:11.5,color:"var(--text2)"}}>
+      <span>{receitasPossiveis==null?"sem saldo de insumo conferível para estimar quantas receitas dá pra fazer"
+        :<>dá para produzir <b style={{color:receitasPossiveis>0?"var(--text)":"var(--btnDanger)"}}>{receitasPossiveis} receita(s)</b> com o estoque de hoje{gargalo&&receitasPossiveis<3?<> — limita: {gargalo.i.nome}</>:null}</>}</span>
+      {onEditar&&<button type="button" onClick={onEditar} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>editar em Produção → Fichas</button>}
+    </div>
+  </div>;
+}
+
+// ── Estoque → Fichas técnicas ───────────────────────────────────────────────
+// Só leitura, de propósito: é a MESMA ficha de Produção → Fichas, vista do lado
+// do estoque. Um segundo cadastro seria a quarta lista de produtos do sistema.
+function FichasEstoquePanel({db,onVoltar,onEditar}:{db:any,onVoltar:()=>void,onEditar:()=>void}){
+  const [busca,setBusca]=useState("");
+  const fichas=[...(db.fichasTecnicas||[])].filter((f:any)=>f?.nome)
+    .filter((f:any)=>!busca||foldBusca(f.nome).includes(foldBusca(busca)))
+    .sort((a:any,b:any)=>String(a.nome).localeCompare(String(b.nome),"pt-BR"));
+  return <div>
+    <BackBar label="Estoque" onClick={onVoltar}/>
+    <div className="section-title">📝 Fichas técnicas</div>
+    <div style={{fontSize:12,color:"var(--text2)",marginBottom:12,lineHeight:1.6}}>
+      As fichas cadastradas em Produção, vistas pelo estoque: rendimento, insumos com saldo de hoje e quantas receitas dá para fazer. Para editar, use Produção → Fichas.
+    </div>
+    <input placeholder="🔍 Buscar ficha..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp" style={{marginBottom:12}}/>
+    {fichas.map((f:any)=><FichaTecnicaCard key={f.id} ficha={f} db={db} onEditar={onEditar}/>)}
+    {!fichas.length&&<EmptyState msg={busca?"Nenhuma ficha com esse nome.":"Nenhuma ficha técnica cadastrada."}/>}
+  </div>;
+}
+
+// ── Produção do Dia ───────────────────────────────────────────────────────────
 // A baixa de insumo por produção já existia na Manutenção de Produtos. O que
 // falta e mora aqui: o CUSTO (o produzido entrava valendo zero — daí o
 // "R$ 0,00" no Saldo Estoque), a PERDA e a ligação com o pedido da cozinha.
 // O cálculo está em src/producaoDia.js, com testes.
+//
+// A tela é uma FOLHA EM BRANCO: só entra o que a cozinha fez, pela busca ou
+// pelos pedidos da cozinha (fichas clicáveis). Abrir com os 18 pedidos + 12
+// "outros" fazia a pessoa rolar por produto que não produziu.
+//
+// Produto com ficha lança em RECEITAS ou em unidades (2 receitas de bolo → 24
+// fatias): é o Rendimento da ficha, sem cadastro novo. O cálculo continua
+// recebendo unidades; a conversão é só aqui na tela.
 function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [data,setData]=useState(today());
-  const [linhas,setLinhas]=useState<Record<string,{produzido:string,perda:string}>>({});
-  const [aberto,setAberto]=useState<string|null>(null);
+  // Uma linha por produto lançado; `ordem` guarda a sequência em que entraram.
+  const [linhas,setLinhas]=useState<Record<string,{qtd:string,modo:"receita"|"unidade",perda:string}>>({});
+  const [ordem,setOrdem]=useState<string[]>([]);
   const [busca,setBusca]=useState("");
+  const [verTodosPedidos,setVerTodosPedidos]=useState(false);
+  const [verTodosSugeridos,setVerTodosSugeridos]=useState(false);
+  const [fichaAberta,setFichaAberta]=useState<any>(null);
   const [salvando,setSalvando]=useState(false);
 
   const mps=db.materiasPrimas||[];
   const mapaTipo=db.tipoInsumo||{};
   const fichaDe=(item:any)=>resolverItemVendido(db,{nome:item?.nome,cod:item?.codigoEcletica}).ficha;
   const ehProduzido=(m:any)=>tipoDoInsumo(mapaTipo,m).tipo==="produzido";
+  const porcoesDe=(m:any)=>{const f=fichaDe(m);return f?Math.max(parseFloat(f.porcoes)||1,1):1;};
+  const temReceita=(m:any)=>porcoesDe(m)>1;
+  const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
 
   // Pedidos da cozinha ainda em aberto — é o que a tela abre sabendo.
   const pedidosAbertos=(db.pedidosProducao||[]).filter((p:any)=>p&&p.status!=="atendido");
@@ -13828,22 +13930,85 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
   };
 
   const produzidos=mps.filter(ehProduzido);
-  const comPedido=produzidos.filter((m:any)=>pedidoDoItem(m)?.qtd>0);
-  const idsPedido=new Set(comPedido.map((m:any)=>m.id));
+  const naFolha=(id:string)=>!!linhas[id];
+  const comPedido=produzidos.filter((m:any)=>pedidoDoItem(m)?.qtd>0&&!naFolha(m.id));
   // Sugerido pelo saldo: produto zerado ou negativo é bolo vendido que nunca
   // foi produzido no sistema — é o que a cozinha precisa repor primeiro.
-  const sugeridos=produzidos.filter((m:any)=>!idsPedido.has(m.id)&&(parseFloat(m.estoqueAtual)||0)<=0);
-  const idsDestaque=new Set([...idsPedido,...sugeridos.map((m:any)=>m.id)]);
-  const resto=produzidos.filter((m:any)=>!idsDestaque.has(m.id))
-    .filter((m:any)=>!busca||foldBusca(m.nome).includes(foldBusca(busca)))
-    .sort((a:any,b:any)=>String(a.nome).localeCompare(String(b.nome),"pt-BR"));
+  const sugeridos=produzidos.filter((m:any)=>!naFolha(m.id)&&!(pedidoDoItem(m)?.qtd>0)&&(parseFloat(m.estoqueAtual)||0)<=0);
+  const resultadosBusca=busca?produzidos.filter((m:any)=>!naFolha(m.id)&&foldBusca(m.nome).includes(foldBusca(busca)))
+    .sort((a:any,b:any)=>String(a.nome).localeCompare(String(b.nome),"pt-BR")).slice(0,8):[];
 
+  // Recheio = item produzido que alguma ficha usa como insumo (frango cremoso
+  // no croissant). É identificado pelas fichas que já existem, sem marcação nova.
+  const fichasQueUsam=(m:any)=>(db.fichasTecnicas||[]).filter((f:any)=>(f?.insumos||[]).some((i:any)=>(i.mpId&&i.mpId===m.id)||(!i.mpId&&foldNome(i.nome||"")===foldNome(m.nome||""))));
+  const ehRecheio=(m:any)=>fichasQueUsam(m).length>0;
+
+  const produzidoDe=(id:string)=>{
+    const l=linhas[id];if(!l)return 0;
+    const q=parseFloat(String(l.qtd).replace(",","."))||0;
+    const m=mps.find((x:any)=>x.id===id);
+    return l.modo==="receita"&&m?q*porcoesDe(m):q;
+  };
   const calculo=useMemo(()=>calcularProducaoDia({db,
-    linhas:Object.entries(linhas).map(([itemId,v])=>({itemId,produzido:v.produzido,perda:v.perda})),
-    resolverFicha:fichaDe}),[db,linhas]);
+    linhas:ordem.map(id=>({itemId:id,produzido:produzidoDe(id),perda:linhas[id]?.perda})),
+    resolverFicha:fichaDe}),[db,linhas,ordem]);
 
-  const setLin=(id:string,campo:"produzido"|"perda",v:string)=>
-    setLinhas(l=>({...l,[id]:{produzido:"",perda:"",...(l[id]||{}),[campo]:v}}));
+  // Recheios primeiro: o saldo do dia se lê de cima para baixo (produz o
+  // recheio, depois o que o consome).
+  const ordemExibida=[...ordem].sort((a,b)=>{
+    const ma=mps.find((x:any)=>x.id===a),mb=mps.find((x:any)=>x.id===b);
+    return (ehRecheio(mb)?1:0)-(ehRecheio(ma)?1:0);
+  });
+  // Quanto de um item da folha é consumido HOJE por outras linhas (já convertido
+  // pela mesma conta que vai baixar).
+  const usadoHoje=(id:string)=>calculo.insumos.find((x:any)=>x.mp.id===id)?.qtd||0;
+  // Insumo que também foi produzido hoje (recheio): a saída é aplicada DEPOIS
+  // da entrada (ver aplicarProducaoDia), então o "antes" da prévia inclui o
+  // que entra hoje — senão a tela mostra "4 → −16" para um saldo que termina em 4.
+  const saidaExibida=(i:any)=>{
+    const boasHoje=calculo.linhas.find((c:any)=>c.itemId===i.mp.id)?.boas||0;
+    const antes=Math.round((i.antes+boasHoje)*1000)/1000;
+    const depois=Math.round((antes-i.qtd)*1000)/1000;
+    return {antes,depois,negativo:depois<0};
+  };
+  const usadoPorHoje=(m:any)=>ordem.filter(id=>id!==m.id&&produzidoDe(id)>0)
+    .map(id=>mps.find((x:any)=>x.id===id)).filter((o:any)=>o&&fichasQueUsam(m).some((f:any)=>f.id===fichaDe(o)?.id))
+    .map((o:any)=>o.nome);
+
+  const addLinha=(m:any,prefillUnidades?:number)=>{
+    if(!m||naFolha(m.id))return;
+    setLinhas(l=>({...l,[m.id]:{qtd:prefillUnidades?String(prefillUnidades):"",modo:(temReceita(m)&&!prefillUnidades)?"receita":"unidade",perda:""}}));
+    setOrdem(o=>[...o,m.id]);
+    setBusca("");
+  };
+  const removerLinha=(id:string)=>{setLinhas(l=>{const n={...l};delete n[id];return n;});setOrdem(o=>o.filter(x=>x!==id));};
+  const setLin=(id:string,patch:any)=>setLinhas(l=>({...l,[id]:{...(l[id]||{qtd:"",modo:"unidade",perda:""}),...patch}}));
+
+  // Repetir uma produção já registrada: lê os movimentos de origem
+  // producao_dia por data (entrada = boas, perda à parte → produzido = soma).
+  const producoesAnteriores=useMemo(()=>{
+    const porData=new Map<string,Map<string,number>>();
+    for(const mv of (db.movEstoque||[])){
+      if(mv?.origem!=="producao_dia"||!mv.data||mv.data===data)continue;
+      if(mv.tipo!=="entrada"&&mv.tipo!=="perda")continue;
+      const d=porData.get(mv.data)||new Map();
+      d.set(mv.mpId,(d.get(mv.mpId)||0)+(parseFloat(mv.quantidade)||0));
+      porData.set(mv.data,d);
+    }
+    return [...porData.entries()].sort((a,b)=>a[0]<b[0]?1:-1).slice(0,7);
+  },[db.movEstoque,data]);
+  const repetir=(dataRef:string)=>{
+    const itens=producoesAnteriores.find(([d])=>d===dataRef)?.[1];
+    if(!itens)return;
+    itens.forEach((produzido,id)=>{
+      const m=mps.find((x:any)=>x.id===id);
+      if(!m||!(produzido>0)||naFolha(id))return;
+      const por=porcoesDe(m);
+      const emReceitas=temReceita(m)&&Math.abs(produzido/por-Math.round(produzido/por))<0.001;
+      setLinhas(l=>({...l,[id]:{qtd:String(emReceitas?Math.round(produzido/por):produzido),modo:emReceitas?"receita":"unidade",perda:""}}));
+      setOrdem(o=>o.includes(id)?o:[...o,id]);
+    });
+  };
 
   const registrar=()=>{
     if(!calculo.linhas.length)return alert("Nenhuma produção lançada.");
@@ -13860,146 +14025,174 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
       return {...d,materiasPrimas:r.materiasPrimas,movEstoque:r.movEstoque,
         pedidosProducao:baixarPedidos({pedidos:d.pedidosProducao||[],produzidoPorItem})};
     });
-    setLinhas({});setAberto(null);setSalvando(false);
+    setLinhas({});setOrdem([]);setSalvando(false);
     alert(`✅ Produção de ${fmtDate(data)} registrada.\n\n${calculo.totalBoas} unidade(s) no estoque`
       +(calculo.totalPerdas>0?`\n${calculo.totalPerdas} de perda`:"")
       +`\nCusto dos insumos: ${fmtMoney(calculo.custoTotal)}`);
   };
 
-  const Linha=({m,rotulo,alerta}:{m:any,rotulo?:string,alerta?:boolean})=>{
-    const v=linhas[m.id]||{produzido:"",perda:""};
+  const chip=(m:any,texto:string,onClick:()=>void)=><button key={m.id} type="button" onClick={onClick}
+    style={{background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"4px 9px",fontSize:12,color:"var(--text)",cursor:"pointer",fontFamily:"inherit"}}>+ {texto}</button>;
+  const rotuloUn=(m:any)=>m.unidade||"un";
+
+  const linhaJsx=(m:any)=>{
+    const l=linhas[m.id];
     const c=calculo.linhas.find((x:any)=>x.itemId===m.id);
+    const ficha=fichaDe(m);
+    const por=porcoesDe(m);
+    const un=rotuloUn(m);
     const saldo=parseFloat(m.estoqueAtual)||0;
-    return <div style={{borderBottom:"1px solid var(--border)",background:alerta?"var(--dangerBg)":undefined,
-      margin:alerta?"0 -14px":undefined,padding:alerta?"0 14px":undefined}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 0",flexWrap:"wrap" as const}}>
-        <div style={{flex:1,minWidth:140}}>
-          <div style={{fontWeight:700,fontSize:13.5}}>{m.nome}</div>
-          <div style={{fontSize:10.5,color:alerta?"var(--dangerText)":"var(--text3)"}}>
-            {rotulo?rotulo+" · ":""}saldo {fmtNum(saldo)} {m.unidade||"un"}
-            {saldo<0?" — vendeu sem ter produzido":""}
+    const ped=pedidoDoItem(m);
+    const produzido=produzidoDe(m.id);
+    const recheio=ehRecheio(m);
+    const usado=usadoHoje(m.id);
+    const usadoPor=usadoPorHoje(m);
+    const qtdNum=parseFloat(String(l.qtd).replace(",","."))||0;
+    return <div style={{padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const}}>
+        <div style={{flex:"1 1 160px",minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:13.5}}>{m.nome}{recheio&&<span style={{fontSize:10,fontWeight:400,color:"var(--text3)",marginLeft:6}}>recheio</span>}</div>
+          <div style={{fontSize:10.5,color:"var(--text3)"}}>
+            {ficha?(por>1?`1 receita = ${fmtNum(por)} ${un}`:"ficha"):"sem ficha"} · saldo <span style={MONO}>{fmtNum(saldo)} {un}</span>
+            {saldo<0&&<span style={{color:"var(--dangerText)"}}> — vendeu sem produzir</span>}
+            {ped&&ped.qtd>0&&<> · pedido {fmtNum(ped.qtd)} {un}</>}
           </div>
         </div>
-        <div style={{textAlign:"center" as const}}>
-          <div style={{fontSize:8.5,letterSpacing:.5,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700}}>Produziu</div>
-          <input value={v.produzido} onChange={e=>setLin(m.id,"produzido",e.target.value)} inputMode="decimal"
-            placeholder="—" className="inp" style={{width:62,textAlign:"center",marginBottom:0,fontFamily:"monospace",fontWeight:700}}/>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <input value={l.qtd} onChange={e=>setLin(m.id,{qtd:e.target.value})} inputMode="decimal" placeholder="—" autoFocus={!l.qtd}
+            className="inp" style={{width:64,textAlign:"right",marginBottom:0,fontWeight:700,...MONO}}/>
+          {temReceita(m)
+            ?<select value={l.modo} onChange={e=>setLin(m.id,{modo:e.target.value as any})} className="inp" style={{width:110,marginBottom:0,padding:"8px 6px",fontSize:12}}>
+              <option value="receita">receita(s)</option><option value="unidade">{un}</option></select>
+            :<span style={{fontSize:12,color:"var(--text2)",minWidth:24}}>{un}</span>}
         </div>
-        <div style={{textAlign:"center" as const}}>
-          <div style={{fontSize:8.5,letterSpacing:.5,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700}}>Perda</div>
-          <input value={v.perda} onChange={e=>setLin(m.id,"perda",e.target.value)} inputMode="decimal"
-            placeholder="0" className="inp" style={{width:52,textAlign:"center",marginBottom:0,fontFamily:"monospace"}}/>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:"var(--text2)"}}>perda
+          <input value={l.perda} onChange={e=>setLin(m.id,{perda:e.target.value})} inputMode="decimal" placeholder="0"
+            className="inp" style={{width:52,textAlign:"right",marginBottom:0,...MONO}}/>
+          <span style={{fontSize:10.5}}>{un}</span>
         </div>
-        <div style={{textAlign:"center" as const,minWidth:56}}>
-          <div style={{fontSize:8.5,letterSpacing:.5,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700}}>Entra</div>
-          <div style={{fontFamily:"monospace",fontWeight:700,fontSize:14,color:c?"var(--successText)":"var(--text3)",padding:"7px 0"}}>
-            {c?fmtNum(c.boas):"—"}
-          </div>
+        <div style={{textAlign:"right" as const,minWidth:96,marginLeft:"auto"}}>
+          <div style={{fontSize:9,letterSpacing:.5,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700}}>entram</div>
+          <div style={{fontSize:15,fontWeight:700,color:c?"var(--successText)":"var(--text3)",...MONO}}>{c?`${fmtNum(c.boas)} ${un}`:"—"}</div>
         </div>
-        {c&&<button className="btn" onClick={()=>setAberto(aberto===m.id?null:m.id)}
-          style={{background:"var(--bg4)",border:"1px solid var(--border2)",color:"var(--text2)",padding:"7px 10px",fontSize:11}}>
-          {aberto===m.id?"▲":"▼"} insumos</button>}
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          {ficha&&<button type="button" onClick={()=>setFichaAberta({ficha,m})} style={{background:"none",border:"none",padding:"2px 4px",cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>ver ficha</button>}
+          <button type="button" onClick={()=>removerLinha(m.id)} title="Tirar da folha" style={{background:"none",border:"none",padding:"2px 6px",cursor:"pointer",color:"var(--text3)",fontSize:14}}>✕</button>
+        </div>
       </div>
-      {c&&c.bloqueado&&<div style={{fontSize:11,color:"var(--dangerText)",paddingBottom:8}}>
-        ⚠️ Perda ({fmtNum(c.perda)}) maior que o produzido ({fmtNum(c.produzido)}).
-      </div>}
-      {c&&aberto===m.id&&<div style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:9,padding:"10px 12px",margin:"0 0 10px"}}>
-        <div style={{fontSize:9.5,letterSpacing:.6,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:6}}>
-          Insumos que vão baixar — para {fmtNum(c.produzido)} {c.unidade}
-        </div>
-        {!c.insumos.length&&<div className="muted" style={{fontSize:11.5}}>Nenhum insumo baixa — veja os avisos abaixo.</div>}
-        {c.insumos.map((i:any)=>{
-          const tot=calculo.insumos.find((x:any)=>x.mp.id===i.mp.id);
-          return <div key={i.mp.id} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"3px 0",fontSize:11.5,color:"var(--text2)"}}>
-            <span>{i.mp.nome}</span>
-            <span style={{fontFamily:"monospace",whiteSpace:"nowrap" as const}}>
-              {fmtNum(i.qtd)} {i.unidade} · {tot?fmtNum(tot.antes):"?"} → <b style={{color:tot&&tot.negativo?"var(--dangerText)":"var(--text)"}}>{tot?fmtNum(tot.depois):"?"}</b>
-            </span>
-          </div>;
-        })}
-        <div style={{display:"flex",justifyContent:"space-between",gap:10,borderTop:"1px solid var(--border)",marginTop:6,paddingTop:7,fontWeight:700,fontSize:12.5}}>
-          <span>Custo da fornada</span>
-          <span style={{fontFamily:"monospace"}}>
-            {fmtMoney(c.custoTotal)}
-            {c.custoUnitario!=null?` · ${fmtMoney(c.custoUnitario)}/${c.unidade}`:" · custo por unidade indisponível"}
-          </span>
-        </div>
-        {c.avisos.map((a:string,i:number)=><div key={i} style={{fontSize:11,color:"var(--warningText)",marginTop:5}}>⚠️ {a}</div>)}
-      </div>}
+      <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>
+        {c&&l.modo==="receita"&&<>{fmtNum(qtdNum)} receita(s) → {fmtNum(produzido)} {un}{c.perda>0?`, ${fmtNum(c.perda)} de perda`:""} · </>}
+        {c&&l.modo!=="receita"&&c.perda>0&&<>{fmtNum(c.perda)} de perda · </>}
+        {c&&(c.custoUnitario!=null?<>custo <span style={MONO}>{fmtMoney(c.custoUnitario)}/{un}</span></>:<span style={{color:"var(--warningText)"}}>custo indisponível — {ficha?"nenhum insumo da ficha casou com o estoque":"sem ficha, nenhum insumo baixa"}</span>)}
+        {c&&recheio&&<div>{usadoPor.length?<>usado hoje por <b>{usadoPor.join(", ")}</b> ({fmtNum(usado)} {un}) · sobra <span style={MONO}>{fmtNum(Math.round((c.boas-usado)*1000)/1000)} {un}</span> no estoque</>:<>nenhuma linha de hoje usa este recheio — entra inteiro no estoque</>}</div>}
+        {c&&ped&&ped.qtd>0&&<div>{produzido>=ped.qtd-0.001?`fecha o pedido da cozinha (${fmtNum(ped.qtd)} de ${fmtNum(ped.qtd)})`:`pedido fica parcial (${fmtNum(produzido)} de ${fmtNum(ped.qtd)} ${un}) — o que falta continua na lista`}</div>}
+        {c&&c.bloqueado&&<div style={{color:"var(--dangerText)"}}>⚠️ Perda ({fmtNum(c.perda)}) maior que o produzido ({fmtNum(c.produzido)}).</div>}
+      </div>
     </div>;
   };
+
+  const preTitulo={fontSize:10,letterSpacing:.9,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:6};
 
   return <div>
     <BackBar label="Estoque" onClick={onVoltar}/>
     <div className="section-title">🍞 Produção do Dia</div>
     <div style={{fontSize:12,color:"var(--text2)",marginBottom:12,lineHeight:1.6}}>
-      Registra o que a cozinha fez, baixa os insumos da ficha e calcula o <b>custo real</b> de cada unidade.
-      Linha em branco fica de fora — só entra o que você preencher.
+      Lance só o que a cozinha fez: o produto entra no estoque, os insumos da ficha saem e o <b>custo real</b> de cada unidade é calculado.
     </div>
 
     <div className="card" style={{marginBottom:12}}>
-      <div className="section-title" style={{marginBottom:8}}>Data da produção</div>
-      <input type="date" value={data} onChange={e=>setData(e.target.value)} className="inp"/>
-    </div>
-
-    {calculo.linhas.length>0&&<div className="card" style={{marginBottom:12}}>
-      <div style={{display:"flex",flexWrap:"wrap" as const,gap:10}}>
-        <div style={{flex:1,minWidth:92}}><div className="muted" style={{fontSize:9.5,textTransform:"uppercase" as const,letterSpacing:1}}>Produtos</div>
-          <div style={{fontFamily:"monospace",fontWeight:800,fontSize:18}}>{calculo.totalProdutos}</div></div>
-        <div style={{flex:1,minWidth:92}}><div className="muted" style={{fontSize:9.5,textTransform:"uppercase" as const,letterSpacing:1}}>Unidades boas</div>
-          <div style={{fontFamily:"monospace",fontWeight:800,fontSize:18,color:"var(--successText)"}}>{fmtNum(calculo.totalBoas)}</div></div>
-        <div style={{flex:1,minWidth:92}}><div className="muted" style={{fontSize:9.5,textTransform:"uppercase" as const,letterSpacing:1}}>Perdas</div>
-          <div style={{fontFamily:"monospace",fontWeight:800,fontSize:18,color:calculo.totalPerdas>0?"var(--dangerText)":"var(--text3)"}}>{fmtNum(calculo.totalPerdas)}</div></div>
-        <div style={{flex:1,minWidth:110}}><div className="muted" style={{fontSize:9.5,textTransform:"uppercase" as const,letterSpacing:1}}>Custo dos insumos</div>
-          <div style={{fontFamily:"monospace",fontWeight:800,fontSize:18}}>{fmtMoney(calculo.custoTotal)}</div></div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap" as const}}>
+        <input type="date" value={data} onChange={e=>setData(e.target.value)} className="inp" style={{maxWidth:180,marginBottom:0}}/>
+        <div style={{fontSize:12.5,color:"var(--text2)"}}>
+          {calculo.linhas.length?<>{calculo.totalProdutos} produto(s) · <b style={{color:"var(--text)",...MONO}}>{fmtNum(calculo.totalBoas)} un</b> entram{calculo.totalPerdas>0&&<> · <span style={{color:"var(--dangerText)"}}>{fmtNum(calculo.totalPerdas)} de perda</span></>} · custo <b style={{color:"var(--text)",...MONO}}>{fmtMoney(calculo.custoTotal)}</b></>:"nada lançado ainda"}
+        </div>
       </div>
-    </div>}
-
-    {comPedido.length>0&&<div className="card" style={{marginBottom:12}}>
-      <div style={{fontSize:10,letterSpacing:.9,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:4}}>
-        Pedido da cozinha · {comPedido.length} em aberto
+      <div style={{position:"relative",marginTop:10}}>
+        <input placeholder="🔍 O que a cozinha produziu? Digite para buscar…" value={busca} onChange={e=>setBusca(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter"&&resultadosBusca[0])addLinha(resultadosBusca[0]);if(e.key==="Escape")setBusca("");}}
+          className="inp" style={{marginBottom:0}}/>
+        {busca&&<div style={{position:"absolute",left:0,right:0,top:"100%",zIndex:20,background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:10,marginTop:4,boxShadow:"0 8px 24px rgba(0,0,0,.12)",overflow:"hidden"}}>
+          {resultadosBusca.map((m:any)=>{const ped=pedidoDoItem(m);const por=porcoesDe(m);return <div key={m.id} onMouseDown={e=>{e.preventDefault();addLinha(m);}}
+            style={{display:"flex",justifyContent:"space-between",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:13}}>
+            <span style={{fontWeight:600}}>{m.nome}</span>
+            <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap" as const}}>{fichaDe(m)?(por>1?`1 receita = ${fmtNum(por)} ${rotuloUn(m)}`:"ficha"):"sem ficha"} · saldo {fmtNum(m.estoqueAtual)}{ped&&ped.qtd>0?` · pedido ${fmtNum(ped.qtd)}`:""}</span>
+          </div>;})}
+          {!resultadosBusca.length&&<div className="muted" style={{padding:"9px 12px",fontSize:12}}>Nenhum produto de produção própria com esse nome. Marque o tipo em Saldo Estoque.</div>}
+        </div>}
       </div>
-      <div className="muted" style={{fontSize:11,marginBottom:6}}>Lançar a produção fecha o pedido; produzindo menos, ele fica parcial e o que falta continua na lista.</div>
-      {comPedido.map((m:any)=><Linha key={m.id} m={m} rotulo={`pedido: ${fmtNum(pedidoDoItem(m)?.qtd||0)} ${m.unidade||"un"}`}/>)}
-    </div>}
-
-    {sugeridos.length>0&&<div className="card" style={{marginBottom:12}}>
-      <div style={{fontSize:10,letterSpacing:.9,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:4}}>
-        Sugerido pelo saldo · {sugeridos.length} zerado(s) ou negativo(s)
-      </div>
-      {sugeridos.map((m:any)=><Linha key={m.id} m={m} alerta={(parseFloat(m.estoqueAtual)||0)<0}/>)}
-    </div>}
-
-    <div className="card" style={{marginBottom:12}}>
-      <div style={{fontSize:10,letterSpacing:.9,textTransform:"uppercase" as const,color:"var(--text3)",fontWeight:700,marginBottom:8}}>
-        Outros produtos de produção própria
-      </div>
-      <input placeholder="🔍 Buscar produto..." value={busca} onChange={e=>setBusca(e.target.value)} className="inp"/>
-      {resto.slice(0,busca?40:12).map((m:any)=><Linha key={m.id} m={m}/>)}
-      {!busca&&resto.length>12&&<div className="muted" style={{fontSize:11,marginTop:8}}>
-        +{resto.length-12} produto(s). Use a busca para achar.
+      {comPedido.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center",marginTop:10}}>
+        <span style={{fontSize:11,color:"var(--text3)"}}>Pedido da cozinha · {comPedido.length}</span>
+        {(verTodosPedidos?comPedido:comPedido.slice(0,6)).map((m:any)=>chip(m,`${m.nome} · ${fmtNum(pedidoDoItem(m)?.qtd||0)} ${rotuloUn(m)}`,()=>addLinha(m,pedidoDoItem(m)?.qtd)))}
+        {comPedido.length>6&&<button type="button" onClick={()=>setVerTodosPedidos(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>{verTodosPedidos?"menos":`ver todos (${comPedido.length})`}</button>}
+      </div>}
+      {sugeridos.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center",marginTop:8}}>
+        <span style={{fontSize:11,color:"var(--text3)"}}>Saldo zerado ou negativo · {sugeridos.length}</span>
+        {(verTodosSugeridos?sugeridos:sugeridos.slice(0,6)).map((m:any)=>chip(m,`${m.nome} · saldo ${fmtNum(m.estoqueAtual)}`,()=>addLinha(m)))}
+        {sugeridos.length>6&&<button type="button" onClick={()=>setVerTodosSugeridos(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--btnPrimary)",fontSize:11.5,fontWeight:700,fontFamily:"inherit"}}>{verTodosSugeridos?"menos":`ver todos (${sugeridos.length})`}</button>}
+      </div>}
+      {producoesAnteriores.length>0&&<div style={{display:"flex",gap:8,alignItems:"center",marginTop:10,flexWrap:"wrap" as const}}>
+        <span style={{fontSize:11,color:"var(--text3)"}}>Repetir produção de</span>
+        <select value="" onChange={e=>{if(e.target.value)repetir(e.target.value);}} className="inp" style={{width:"auto",marginBottom:0,padding:"6px 8px",fontSize:12}}>
+          <option value="">escolher dia…</option>
+          {producoesAnteriores.map(([d,itens])=><option key={d} value={d}>{fmtDate(d)} · {itens.size} produto(s)</option>)}
+        </select>
+        <span style={{fontSize:10.5,color:"var(--text3)"}}>preenche as quantidades daquele dia — perdas não se repetem</span>
       </div>}
       {!produzidos.length&&<EmptyState msg="Nenhum produto marcado como produção própria. Marque em Saldo Estoque."/>}
     </div>
 
-    {calculo.avisos.length>0&&<div className="card" style={{marginBottom:12,borderColor:"var(--warningText)"}}>
-      <div style={{fontSize:12.5,fontWeight:700,color:"var(--warningText)",marginBottom:6}}>⚠️ Antes de registrar</div>
-      {calculo.avisos.map((a:any,i:number)=><div key={i} style={{fontSize:11.5,color:"var(--text2)",padding:"2px 0"}}>
-        <b>{a.nome}</b>: {a.aviso}
-      </div>)}
-      <div className="muted" style={{fontSize:10.5,marginTop:7}}>
-        Nada disso impede o registro — produzir nunca é bloqueado por cadastro incompleto. O que não baixar fica como aviso.
+    <div className="card" style={{marginBottom:12}}>
+      <div style={preTitulo}>Folha do dia · {ordem.length} produto(s)</div>
+      {ordemExibida.map(id=>{const m=mps.find((x:any)=>x.id===id);return m?<Fragment key={id}>{linhaJsx(m)}</Fragment>:null;})}
+      {!ordem.length&&<div className="muted" style={{fontSize:12,padding:"6px 0 2px"}}>Nada lançado. Busque o produto acima ou toque num pedido da cozinha.</div>}
+    </div>
+
+    {calculo.linhas.length>0&&<div className="card" style={{marginBottom:12}}>
+      <div style={preTitulo}>Prévia · o que acontece no estoque ao registrar</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16,fontSize:12}}>
+        <div>
+          <div style={{fontWeight:700,marginBottom:4}}>Entra</div>
+          {calculo.linhas.map((c:any)=>{const m=mps.find((x:any)=>x.id===c.itemId);const antes=parseFloat(m?.estoqueAtual)||0;const depois=Math.round((antes+c.boas-usadoHoje(c.itemId))*1000)/1000;
+            return <div key={c.itemId} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"3px 0",borderBottom:"1px solid var(--border)"}}>
+              <span>{c.nome}</span><span style={{whiteSpace:"nowrap" as const,...MONO}}>+{fmtNum(c.boas)} {c.unidade} · {fmtNum(antes)} → <b style={{color:depois<0?"var(--dangerText)":undefined}}>{fmtNum(depois)}</b></span></div>;})}
+        </div>
+        <div>
+          <div style={{fontWeight:700,marginBottom:4}}>Sai</div>
+          {!calculo.insumos.length&&<div className="muted" style={{fontSize:11.5}}>Nenhum insumo baixa — veja os avisos.</div>}
+          {calculo.insumos.map((i:any)=>{const e=saidaExibida(i);return <div key={i.mp.id} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"3px 0",borderBottom:"1px solid var(--border)"}}>
+            <span>{i.mp.nome}{naFolha(i.mp.id)&&<span style={{fontSize:10,color:"var(--text3)"}}> (do produzido hoje)</span>}</span>
+            <span style={{whiteSpace:"nowrap" as const,color:e.negativo?"var(--dangerText)":undefined,...MONO}}>{fmtNum(i.qtd)} {i.unidade} · {fmtNum(e.antes)} → <b>{fmtNum(e.depois)}</b></span></div>;})}
+        </div>
       </div>
+      <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap" as const,marginTop:10,paddingTop:8,borderTop:"1px solid var(--border)",fontSize:12.5}}>
+        <span>Custo da produção <b style={MONO}>{fmtMoney(calculo.custoTotal)}</b></span>
+        {calculo.insumos.some((i:any)=>saidaExibida(i).negativo)&&<span style={{color:"var(--warningText)"}}>{calculo.insumos.filter((i:any)=>saidaExibida(i).negativo).length} insumo(s) ficam negativos — registra mesmo assim, vira aviso</span>}
+      </div>
+      {calculo.avisos.length>0&&<div style={{marginTop:8,fontSize:11.5,color:"var(--text2)"}}>
+        {calculo.avisos.map((a:any,i:number)=><div key={i} style={{padding:"2px 0"}}>⚠️ <b>{a.nome}</b>: {a.aviso}</div>)}
+        <div className="muted" style={{fontSize:10.5,marginTop:5}}>Nada disso impede o registro — produzir nunca é bloqueado por cadastro incompleto. O que não baixar fica como aviso.</div>
+      </div>}
     </div>}
 
     <button className="btn" onClick={registrar} disabled={salvando||!calculo.linhas.length}
       style={{width:"100%",background:calculo.linhas.length?"var(--btnPrimary)":"var(--border2)",color:"var(--onPrimary,#FFFFFF)",padding:"14px",fontWeight:700,fontSize:15}}>
       {salvando?"Registrando...":calculo.linhas.length
         ?`✅ Registrar produção de ${fmtDate(data)} — ${calculo.totalProdutos} produto(s), ${fmtNum(calculo.totalBoas)} un`
-        :"Preencha o que foi produzido"}
+        :"Lance o que foi produzido"}
     </button>
+
+    {fichaAberta&&<div onClick={()=>setFichaAberta(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(15,17,23,0.55)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+      <div onClick={(e:any)=>e.stopPropagation()} style={{background:"var(--bg)",width:"100%",maxWidth:720,borderRadius:"18px 18px 0 0",padding:"14px 14px 24px",maxHeight:"85vh",overflowY:"auto" as const}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <span style={{fontSize:11,color:"var(--text3)",letterSpacing:.6,textTransform:"uppercase" as const,fontWeight:700}}>Ficha técnica</span>
+          <button type="button" onClick={()=>setFichaAberta(null)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"var(--text2)"}}>✕</button>
+        </div>
+        <FichaTecnicaCard ficha={fichaAberta.ficha} db={db}/>
+      </div>
+    </div>}
   </div>;
 }
+
 
 function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
   const [busca,setBusca]=useState("");
@@ -14495,7 +14688,7 @@ function SaldoEstoquePanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb?:any,s
   </div>;
 }
 
-function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub,onNavigate}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,onNavigate?:(tab:string)=>void}){
 
   const [sub,setSub]=useState(pendingSub||"inventario");
   useEffect(()=>{if(pendingSub){setSub(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -14942,6 +15135,7 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub}:{db
     {/* ===== PROJEÇÃO DE COMPRAS ===== */}
     {sub==="saldo"&&<SaldoEstoquePanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
     {sub==="producaodia"&&<ProducaoDiaPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
+    {sub==="fichas"&&<FichasEstoquePanel db={db} onVoltar={()=>setSub("inventario")} onEditar={()=>{setPendingSub?.("ficha");onNavigate?.("producao");}}/>}
     {sub==="manutencao"&&<ManutencaoProdutosPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
     {sub==="importar"&&<ImportarProdutosPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={()=>setSub("inventario")}/>}
     {sub==="saidas"&&<><BackBar label="Inventário" onClick={()=>setSub("inventario")}/>

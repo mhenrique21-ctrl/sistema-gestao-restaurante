@@ -629,7 +629,16 @@ Contas · + Novo · DRE · Categorias. A DRE tem toggle **Semanal / Mensal / Per
 em modo semanal, contas de grupo recorrente mensal entram **rateadas por dia**.
 
 ### Estoque
-Inventário · Contagem · Análise · Movimentações · Projeção de compras.
+Inventário · Contagem · Análise · Movimentações · Projeção de compras · Saldo
+Estoque · Produção do Dia · **Fichas técnicas** (só leitura) · Manutenção ·
+Produtos Eclética · Saídas por venda.
+
+**Fichas técnicas em Estoque** (`FichasEstoquePanel` + `FichaTecnicaCard`) é a
+MESMA ficha de Produção → Fichas, vista pelo estoque: rendimento, insumos com o
+saldo de hoje convertido pra unidade da ficha e "dá para produzir N receitas —
+limita: X". **Não edita**; o link "editar em Produção → Fichas" navega
+(`setPendingSub("ficha")` + `onNavigate("producao")`). Um segundo cadastro
+seria a quarta lista de produtos do sistema.
 
 **Contagem** é agrupada pelo **grupo do Eclética** (BEBIDAS, BOLOS, DOSE EXTRA),
 com os grupos **recolhidos** e contador por grupo. Agrupava por categoria
@@ -848,6 +857,28 @@ inventário.
 
 A baixa de insumo por produção **já existia** na Manutenção de Produtos. O que
 faltava era o resto.
+
+**A tela é uma folha em branco** (decisão do dono, 15/09/2026): só entra o que a
+cozinha fez, pela busca ou pelas fichas clicáveis do pedido da cozinha e do
+saldo zerado/negativo. Abria com 18 pedidos + 12 "outros" e a pessoa rolava por
+produto que não produziu. `Linha` virou função (`linhaJsx`), não componente
+inline: componente recriado a cada render desmontava o input a cada tecla.
+
+**Receitas × unidades**: produto cuja ficha tem `porcoes > 1` lança em
+receitas por padrão ("2 receitas → 24 fatias"); a conversão é só na tela —
+`calcularProducaoDia` continua recebendo unidades. Perda é sempre em unidades.
+Pedido da cozinha pré-preenche em unidades (o pedido é em unidades).
+
+**Recheio** = item produzido que alguma ficha usa como insumo (`fichasQueUsam`,
+pelas fichas existentes, sem marcação nova). Sobe para o topo da folha e mostra
+"usado hoje por … · sobra N". ⚠️ Na prévia, a SAÍDA de um insumo que também foi
+produzido hoje parte do saldo **com** a entrada do dia (`saidaExibida`): a
+aplicação real faz entrada antes da saída, e sem isso a tela mostrava "4 → −16"
+para um saldo que termina em 4.
+
+**Repetir produção de <dia>** lê `movEstoque` de `origem:"producao_dia"`
+(entrada = boas, perda à parte → produzido = soma); volta em receitas quando o
+produzido é múltiplo do rendimento; perdas não se repetem.
 
 ⚠️ **O produzido entrava no estoque valendo ZERO.** Recebia `ultimoValor` do
 próprio cadastro, que num item feito na cozinha nunca foi preenchido — ele não
