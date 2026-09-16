@@ -9,6 +9,7 @@ import {calcularHolerite,contasEsperadas,contasLancadas,conciliarMes,encargoDesc
 import {previaFalta,descontoDoMes,salarioDia,ehJustificada,MOTIVOS_473} from "./faltaClt.js";
 import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 import {calcularProducaoDia,aplicarProducaoDia,baixarPedidos} from "./producaoDia.js";
+import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
@@ -11312,6 +11313,187 @@ function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string
   </div>;
 }
 
+// ── Vincular produção → estoque (produto do Eclética) ──────────────────────
+// A cozinha pede "Coxinha de frango"; na prateleira o item é "SALG COXINHA
+// FRANGO". Sem ligar os dois, produzir não alimenta saldo nenhum e o pedido
+// nunca fecha. O casamento e a sugestão moram em src/vinculoProducao.js (com
+// testes) porque sugerir par errado erra em silêncio.
+function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
+  const [filtro,setFiltro]=useState<"sem"|"com">("sem");
+  const [buscas,setBuscas]=useState<Record<string,string>>({});
+  const prodsCatalog=db.produtosProducao||[];
+  const mps=db.materiasPrimas||[];
+  const salvar=(fn:(d:any)=>any)=>(setDbAndSave||setDb)(fn);
+
+  // Quanto cada nome de produção ainda é esperado — serve pra ordenar pelo que
+  // mais dói, não pelo alfabeto.
+  const pendencias=useMemo(()=>{
+    const m=new Map<string,{vezes:number,falta:number,unidade:string}>();
+    for(const ped of (db.pedidosProducao||[])){
+      if(!ped||ped.status==="atendido")continue;
+      for(const it of (ped.itens||[])){
+        const falta=(parseFloat(it.quantidade)||0)-(parseFloat(it.produzido)||0);
+        if(it.atendido||!(falta>0.001))continue;
+        const k=normalizarNome(it.nome);if(!k)continue;
+        const cur=m.get(k)||{vezes:0,falta:0,unidade:it.unidade||"un"};
+        cur.vezes++;cur.falta=Math.round((cur.falta+falta)*1000)/1000;
+        m.set(k,cur);
+      }
+    }
+    return m;
+  },[db.pedidosProducao]);
+
+  // Nome pedido que NÃO está no catálogo de produção também precisa aparecer,
+  // senão o item some da ferramenta justamente por estar mal cadastrado.
+  const linhas=useMemo(()=>{
+    const porChave=new Map<string,any>();
+    for(const p of prodsCatalog){
+      const k=normalizarNome(p.nome);if(!k)continue;
+      if(!porChave.has(k))porChave.set(k,{chave:k,nome:p.nome,prodId:p.id,unidade:p.unidade||"un",mpId:p.mpId});
+    }
+    for(const [k,info] of pendencias){
+      if(!porChave.has(k))porChave.set(k,{chave:k,nome:k,prodId:null,unidade:info.unidade,mpId:undefined});
+    }
+    return [...porChave.values()].map(l=>{
+      const resolvido=itemDeEstoqueDaProducao(l.nome,{produtosProducao:prodsCatalog,materiasPrimas:mps});
+      const pend=pendencias.get(l.chave);
+      return {...l,resolvido,vezes:pend?.vezes||0,falta:pend?.falta||0};
+    }).sort((a,b)=>(b.vezes-a.vezes)||(b.falta-a.falta)||String(a.nome).localeCompare(String(b.nome),"pt-BR"));
+  },[prodsCatalog,mps,pendencias]);
+
+  const semVinculo=linhas.filter(l=>!l.resolvido);
+  const comVinculo=linhas.filter(l=>l.resolvido);
+  const jaUsados=comVinculo.map(l=>l.resolvido.mp.id);
+  const sugestaoDe=(l:any)=>l.resolvido?null:sugerirVinculo(l.nome,mps,{excluirIds:jaUsados});
+  const seguras=semVinculo.map(l=>({l,s:sugestaoDe(l)})).filter(x=>x.s?.seguro);
+
+  // Vincula gravando no produto do CATÁLOGO. Não cria campo novo no db: o
+  // produtosProducao já é fundido por id entre aparelhos (MERGEABLE_FIELDS).
+  const vincular=(l:any,mpId:string)=>{
+    const ts=new Date().toISOString();
+    salvar((d:any)=>{
+      const lista=[...(d.produtosProducao||[])];
+      const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave);
+      if(i>=0)lista[i]={...lista[i],mpId,atualizadoEm:ts};
+      // Nome que só existe no pedido entra no catálogo agora — é o cadastro
+      // que faltava, e sem ele o vínculo não teria onde morar.
+      else lista.push({id:uid(),nome:l.nome,cats:[],cat:"",unidade:l.unidade||"un",mpId,atualizadoEm:ts});
+      return{...d,produtosProducao:lista};
+    });
+    setBuscas(b=>({...b,[l.chave]:""}));
+  };
+  const desvincular=(l:any)=>{
+    const ts=new Date().toISOString();
+    salvar((d:any)=>({...d,produtosProducao:(d.produtosProducao||[]).map((p:any)=>
+      (l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave)?{...p,mpId:undefined,atualizadoEm:ts}:p)}));
+  };
+  const aplicarSeguras=()=>{
+    if(!seguras.length)return;
+    if(!confirm(`Vincular ${seguras.length} produto(s) pelas sugestões seguras?\n\n`
+      +seguras.slice(0,12).map(x=>`• ${x.l.nome} → ${x.s.mp.nome}`).join("\n")
+      +(seguras.length>12?`\n… e mais ${seguras.length-12}`:"")))return;
+    const ts=new Date().toISOString();
+    salvar((d:any)=>{
+      const lista=[...(d.produtosProducao||[])];
+      for(const {l,s} of seguras){
+        const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave);
+        if(i>=0)lista[i]={...lista[i],mpId:s.mp.id,atualizadoEm:ts};
+        else lista.push({id:uid(),nome:l.nome,cats:[],cat:"",unidade:l.unidade||"un",mpId:s.mp.id,atualizadoEm:ts});
+      }
+      return{...d,produtosProducao:lista};
+    });
+  };
+  // Recheio e produto que o Eclética não vende: cria o item com saldo zero e já
+  // marcado como produção própria (é feito na cozinha e tem saldo próprio).
+  const criarNoEstoque=(l:any)=>{
+    if(!confirm(`Criar "${l.nome}" no estoque como produção própria, com saldo zero?`))return;
+    const ts=new Date().toISOString();
+    const novo={id:uid(),nome:l.nome,unidade:l.unidade||"un",categoria:"Outros",estoqueAtual:0,ultimoValor:0,criadoEm:ts,atualizadoEm:ts};
+    salvar((d:any)=>{
+      const lista=[...(d.produtosProducao||[])];
+      const i=lista.findIndex((p:any)=>l.prodId?p.id===l.prodId:normalizarNome(p.nome)===l.chave);
+      if(i>=0)lista[i]={...lista[i],mpId:novo.id,atualizadoEm:ts};
+      else lista.push({id:uid(),nome:l.nome,cats:[],cat:"",unidade:l.unidade||"un",mpId:novo.id,atualizadoEm:ts});
+      return{...d,materiasPrimas:[...(d.materiasPrimas||[]),novo],
+        tipoInsumo:{...(d.tipoInsumo||{}),[chaveTipo(novo)]:"produzido"},produtosProducao:lista};
+    });
+  };
+
+  const lista=filtro==="sem"?semVinculo:comVinculo;
+  const btn={background:"none",border:"1px solid var(--border2)",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11.5,fontWeight:700,fontFamily:"inherit"};
+  return <div className="card" style={{marginBottom:12}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap" as const}}>
+      <div style={{flex:"1 1 240px",minWidth:0}}>
+        <div className="section-title" style={{margin:0,marginBottom:4}}>🔗 Vincular ao estoque</div>
+        <div className="muted" style={{fontSize:11,lineHeight:1.5}}>O que a cozinha produz alimenta o saldo do produto vendido no Eclética. Sem o vínculo, a produção não entra em lugar nenhum e o pedido não fecha.</div>
+      </div>
+      <div style={{textAlign:"right" as const}}>
+        <div style={{fontSize:10,color:"var(--text3)"}}>ligados</div>
+        <div style={{fontSize:16,fontWeight:800}}>{comVinculo.length} de {linhas.length}</div>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap" as const,alignItems:"center",margin:"10px 0"}}>
+      {([["sem",`Sem vínculo · ${semVinculo.length}`],["com",`Vinculados · ${comVinculo.length}`]] as const).map(([k,txt])=>
+        <button key={k} type="button" onClick={()=>setFiltro(k as any)} style={{...btn,
+          background:filtro===k?"var(--btnPrimary)":"none",color:filtro===k?"var(--onPrimary,#FFFFFF)":"var(--text2)",
+          border:filtro===k?"1px solid var(--btnPrimary)":"1px solid var(--border2)"}}>{txt}</button>)}
+      <span style={{flex:1}}/>
+      {filtro==="sem"&&seguras.length>0&&<button type="button" onClick={aplicarSeguras} style={{...btn,borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)"}}>✨ Aplicar as {seguras.length} sugestões seguras</button>}
+    </div>
+    <div style={{maxHeight:420,overflowY:"auto" as const}}>
+      {!lista.length&&<div className="muted" style={{fontSize:12,padding:"10px 0"}}>{filtro==="sem"?"Todo produto de produção está ligado a um item do estoque.":"Nenhum vínculo ainda."}</div>}
+      {lista.map(l=>{
+        const sug=sugestaoDe(l);
+        const busca=buscas[l.chave]||"";
+        const achados=busca?mps.filter((m:any)=>normalizarNome(m.nome).includes(normalizarNome(busca))).slice(0,6):[];
+        return <div key={l.chave} style={{padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap" as const}}>
+            <div style={{flex:"1 1 170px",minWidth:0}}>
+              <div style={{fontSize:13.5,fontWeight:700}}>{l.nome}</div>
+              <div style={{fontSize:10.5,color:"var(--text3)"}}>
+                {l.vezes>0?`pedido ${l.vezes}x · falta ${fmtNum(l.falta)} ${l.unidade}`:"sem pedido em aberto"}
+                {!l.prodId&&<span style={{color:"var(--warningText)"}}> · só no pedido, fora do catálogo</span>}
+              </div>
+            </div>
+            {l.resolvido
+              ?<>
+                <div style={{flex:"1 1 200px",minWidth:0,fontSize:12.5}}>
+                  → <b>{l.resolvido.mp.nome}</b>
+                  <span style={{fontSize:10.5,color:"var(--text3)"}}> {l.resolvido.mp.codigoEcletica?`· cód ${l.resolvido.mp.codigoEcletica} `:""}· saldo {fmtNum(l.resolvido.mp.estoqueAtual)} {l.resolvido.mp.unidade||"un"}</span>
+                  {l.resolvido.origem==="nome"&&<span style={{fontSize:10,color:"var(--text3)"}}> · pelo nome igual</span>}
+                </div>
+                {l.resolvido.origem==="vinculo"&&<button type="button" onClick={()=>desvincular(l)} style={btn}>desvincular</button>}
+              </>
+              :<>
+                <div style={{flex:"1 1 200px",minWidth:0}}>
+                  {sug&&!busca
+                    ?<div style={{fontSize:12.5}}>→ <b>{sug.mp.nome}</b>
+                      <span style={{fontSize:10,padding:"1px 6px",borderRadius:6,marginLeft:6,background:sug.seguro?"var(--successBg)":"var(--warningBg)",color:sug.seguro?"var(--successText)":"var(--warningText)"}}>{sug.seguro?"sugestão":"parecido"}</span>
+                      <div style={{fontSize:10.5,color:"var(--text3)"}}>{sug.mp.codigoEcletica?`cód ${sug.mp.codigoEcletica} · `:""}saldo {fmtNum(sug.mp.estoqueAtual)} {sug.mp.unidade||"un"}</div>
+                    </div>
+                    :<input className="inp" value={busca} placeholder="Buscar produto do Eclética..." onChange={e=>setBuscas(b=>({...b,[l.chave]:e.target.value}))} style={{marginBottom:0,fontSize:12}}/>}
+                </div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap" as const}}>
+                  {sug&&!busca&&<button type="button" onClick={()=>vincular(l,sug.mp.id)} style={{...btn,borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)"}}>vincular</button>}
+                  {sug&&!busca&&<button type="button" onClick={()=>setBuscas(b=>({...b,[l.chave]:" "}))} style={btn}>outro…</button>}
+                  <button type="button" onClick={()=>criarNoEstoque(l)} style={btn}>criar produto</button>
+                </div>
+              </>}
+          </div>
+          {!l.resolvido&&busca&&achados.length>0&&<div style={{marginTop:6,border:"1px solid var(--border2)",borderRadius:8,overflow:"hidden"}}>
+            {achados.map((m:any)=><div key={m.id} onClick={()=>vincular(l,m.id)}
+              style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 10px",borderBottom:"1px solid var(--border)",cursor:"pointer",fontSize:12.5}}>
+              <span>{m.nome}</span>
+              <span style={{fontSize:10.5,color:"var(--text3)",whiteSpace:"nowrap" as const}}>{m.codigoEcletica?`cód ${m.codigoEcletica} · `:""}saldo {fmtNum(m.estoqueAtual)} {m.unidade||"un"}</span>
+            </div>)}
+          </div>}
+          {!l.resolvido&&busca&&!achados.length&&<div className="muted" style={{fontSize:11,marginTop:5}}>Nenhum produto do estoque com esse nome. Use "criar produto" se ele não existe lá.</div>}
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
 function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAndSave,onNavigate,empresa,state,setState}:{db:any,setDb:any,login?:any,onLogout?:()=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,setDbAndSave?:(fn:(d:any)=>any)=>void,onNavigate?:(tab:string)=>void,empresa?:string,state?:any,setState?:any}){
   const isAdmin=login?.role==="admin";
   _dbIconesProd=db.iconesProducao||{};
@@ -11982,6 +12164,8 @@ function ProducaoPanel({db,setDb,login,onLogout,pendingSub,setPendingSub,setDbAn
         })}
       </div>
     </div>}
+
+    {showProdMgmt&&<VincularProducaoCard db={db} setDb={setDb} setDbAndSave={setDbAndSave}/>}
 
     {/* Order history */}
     {showHist&&<BackBar label="Novo Pedido" onClick={()=>setSubTab("novo")}/>}
@@ -13957,6 +14141,14 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
   const temReceita=(m:any)=>porcoesDe(m)>1;
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
 
+  // ⚠️ Declarado ANTES de pendencias/pendentePorMp, que o chamam dentro de
+  // useMemo durante o render: com `const` depois, o render inteiro morre com
+  // "Cannot access before initialization" (TDZ) e a tela fica em branco — o
+  // build não pega isso. Mesma lição do sefazVisiveis (ver CLAUDE.md §6).
+  // Resolve pelo VÍNCULO do catálogo antes do nome: é o que faz "Coxinha de
+  // frango" achar o item "SALG COXINHA FRANGO" do Eclética.
+  const mpDoNome=(nome:string)=>itemDeEstoqueDaProducao(nome,{produtosProducao:db.produtosProducao||[],materiasPrimas:mps})?.mp||null;
+
   // Pedidos da cozinha ainda em aberto — é o que a tela abre sabendo.
   const pedidosAbertos=(db.pedidosProducao||[]).filter((p:any)=>p&&p.status!=="atendido");
   // O que falta produzir, somado POR NOME. O catálogo do Novo Pedido cria um
@@ -13978,14 +14170,27 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
     }
     return m;
   },[db.pedidosProducao]);
-  const pendenteDe=(m:any)=>pendencias.get(foldNome(m?.nome||""))||null;
+  // Com vínculo, o nome do pedido ≠ nome do item. A pendência tem que ser
+  // somada por ITEM DE ESTOQUE, senão a linha não sabe quanto foi pedido dela.
+  const pendentePorMp=useMemo(()=>{
+    const r=new Map<string,{nome:string,falta:number,unidade:string,datas:string[]}>();
+    for(const p of pendencias.values()){
+      const alvo=mpDoNome(p.nome);
+      if(!alvo)continue;
+      const cur=r.get(alvo.id)||{nome:p.nome,falta:0,unidade:p.unidade,datas:[] as string[]};
+      cur.falta=Math.round((cur.falta+p.falta)*1000)/1000;
+      for(const d of p.datas)if(!cur.datas.includes(d))cur.datas.push(d);
+      r.set(alvo.id,cur);
+    }
+    return r;
+  },[pendencias,mps,db.produtosProducao]);
+  const pendenteDe=(m:any)=>pendentePorMp.get(m?.id)||null;
   const pedidoDoItem=(m:any)=>{const p=pendenteDe(m);return p?{qtd:p.falta,datas:p.datas}:null;};
   // Decisão do dono (16/09/2026): carrega SÓ o pedido cuja data é a da folha.
   // O que sobrou de dias anteriores fica atrás de um link — some da frente sem
   // sumir do sistema.
   const pendentesDoDia=[...pendencias.values()].filter(p=>p.datas.includes(data));
   const pendentesAntigos=[...pendencias.values()].filter(p=>!p.datas.includes(data));
-  const mpDoNome=(nome:string)=>mps.find((m:any)=>foldNome(m.nome||"")===foldNome(nome||""))||null;
   // Item do pedido que não existe como produto no estoque: não dá pra entrar
   // saldo nem baixar insumo, mas NÃO bloqueia — produzir nunca é bloqueado por
   // cadastro incompleto. Aparece com o que falta e um botão pra criar.
@@ -14117,14 +14322,18 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
     // Por NOME também: é o que fecha o pedido de verdade. Nenhum pedido real
     // carrega o id do produto (ver baixarPedidos em src/producaoDia.js).
     const produzidoPorNome:Record<string,number>={};
+    const apelidos:Record<string,string>={};
     calculo.linhas.forEach((c:any)=>{
       produzidoPorItem[c.itemId]=(produzidoPorItem[c.itemId]||0)+c.produzido;
       produzidoPorNome[c.nome]=(produzidoPorNome[c.nome]||0)+c.produzido;
+      // Nome de produção vinculado a este item vira TRADUÇÃO, não segunda
+      // chave — ver baixarPedidos.
+      for(const ap of apelidosDoItem(c.itemId,db.produtosProducao||[]))apelidos[ap]=c.nome;
     });
     (setDbAndSave||setDb)((d:any)=>{
       const r=aplicarProducaoDia({db:d,calculo,data,agora,uid});
       return {...d,materiasPrimas:r.materiasPrimas,movEstoque:r.movEstoque,
-        pedidosProducao:baixarPedidos({pedidos:d.pedidosProducao||[],produzidoPorItem,produzidoPorNome})};
+        pedidosProducao:baixarPedidos({pedidos:d.pedidosProducao||[],produzidoPorItem,produzidoPorNome,apelidos,agora})};
     });
     setLinhas({});setOrdem([]);setSalvando(false);
     carregadoRef.current="";setRecarga(r=>r+1);   // traz de volta o que ficou parcial
@@ -14270,7 +14479,7 @@ function ProducaoDiaPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,set
           <span>{p.nome} <span style={{color:"var(--text2)"}}>· pedido {fmtNum(p.falta)} {p.unidade}</span></span>
           <button type="button" onClick={()=>criarProduto(p.nome,p.unidade)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:7,padding:"3px 9px",cursor:"pointer",color:"var(--btnPrimary)",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>criar produto</button>
         </div>)}
-        <div style={{fontSize:10.5,color:"var(--text2)",marginTop:3}}>Não entram no saldo nem baixam insumo enquanto não tiverem produto — o pedido fecha do mesmo jeito.</div>
+        <div style={{fontSize:10.5,color:"var(--text2)",marginTop:3}}>Não entram no saldo nem baixam insumo enquanto não tiverem produto — o pedido fecha do mesmo jeito. Se o produto existe no Eclética com outro nome, ligue os dois em <b>Produção → Produtos → Vincular ao estoque</b>.</div>
       </div>}
       {pendentesAntigos.length>0&&<div style={{marginTop:8}}>
         <button type="button" onClick={()=>setVerPendentes(v=>!v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",color:"var(--text2)",fontSize:11.5,fontFamily:"inherit"}}>

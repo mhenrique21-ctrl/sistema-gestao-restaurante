@@ -180,16 +180,33 @@ const foldPedido = (v) => String(v || '')
 // item por produto+categoria, então o MESMO nome aparece duas vezes no mesmo
 // pedido de propósito (SEAMA pede 10, BARTOLOMEIA pede 5) — dar o total cheio
 // aos dois fecharia 15 tendo produzido 10.
-export function baixarPedidos({ pedidos, produzidoPorItem, produzidoPorNome }) {
+// `apelidos` traduz nome do PEDIDO -> nome do que foi PRODUZIDO, para o caso em
+// que a cozinha pede "Coxinha de frango" e o item de estoque é "SALG COXINHA
+// FRANGO" (o vínculo de src/vinculoProducao.js).
+//
+// ⚠️ Tradução, NÃO uma segunda chave de saldo: somar o produzido nos dois nomes
+// daria um orçamento a cada um, e dois itens de pedido com esses nomes fechariam
+// os dois com a mesma fornada.
+// ⚠️ CARIMBA `atualizadoEm`. Sem isso o fechamento não sobrevive à fusão: o
+// merge do servidor desempata por timestamp e, com a cópia do arquivo trazendo
+// um carimbo mais novo (qualquer gravação anterior do mesmo pedido), a versão
+// ABERTA vencia e o fechamento era descartado — o estoque entrava e o pedido
+// continuava pendente, sem nada no log. É a "armadilha do CARIMBO que falta"
+// do CLAUDE.md §3, e aqui ela custou um dia de investigação: a tela mostrava
+// o pedido fechado (estado local) e o arquivo, aberto.
+export function baixarPedidos({ pedidos, produzidoPorItem, produzidoPorNome, apelidos, agora }) {
+  const carimbo = agora || new Date().toISOString();
   const saldoId = new Map(Object.entries(produzidoPorItem || {}).map(([k, v]) => [k, num(v)]));
   const saldoNome = new Map(Object.entries(produzidoPorNome || {}).map(([k, v]) => [foldPedido(k), num(v)]));
+  const traduz = new Map(Object.entries(apelidos || {}).map(([k, v]) => [foldPedido(k), foldPedido(v)]));
 
   // Tira do orçamento o que este item precisa, na ordem: id do produto, id do
   // item (legado) e NOME. Devolve só o que couber — o excedente fica para
   // outro item do mesmo nome, e o que sobrar não é registrado no pedido
   // (produzir a mais entra no estoque, mas não "fecha" mais do que foi pedido).
   const tirar = (it, precisa) => {
-    const tentativas = [[saldoId, it.produtoId], [saldoId, it.id], [saldoNome, foldPedido(it.nome)]];
+    const nomeChave = foldPedido(it.nome);
+    const tentativas = [[saldoId, it.produtoId], [saldoId, it.id], [saldoNome, traduz.get(nomeChave) || nomeChave]];
     for (const [mapa, chave] of tentativas) {
       if (!chave) continue;
       const disponivel = num(mapa.get(chave));
@@ -218,6 +235,6 @@ export function baixarPedidos({ pedidos, produzidoPorItem, produzidoPorNome }) {
     });
     if (!mexeu) return ped;
     const todos = itens.every((it) => it.atendido || !(num(it.quantidade) > 0));
-    return { ...ped, itens, status: todos ? 'atendido' : 'parcial' };
+    return { ...ped, itens, status: todos ? 'atendido' : 'parcial', atualizadoEm: carimbo };
   });
 }

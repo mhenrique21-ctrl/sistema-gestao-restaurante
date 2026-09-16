@@ -258,3 +258,45 @@ test('sem produzidoPorNome, o comportamento antigo por produtoId continua valend
   const r = baixarPedidos({ pedidos, produzidoPorItem: { p1: 50 } });
   assert.equal(r[0].status, 'atendido');
 });
+
+test('apelido fecha o pedido quando o nome do estoque é outro (vínculo)', () => {
+  // Pedido diz "Coxinha de frango"; a produção entrou em "SALG COXINHA FRANGO".
+  const pedidos = [{ id: 'ped1', itens: [{ nome: 'Coxinha de frango', quantidade: 30 }] }];
+  const r = baixarPedidos({
+    pedidos, produzidoPorItem: { 'e1': 30 },
+    produzidoPorNome: { 'SALG COXINHA FRANGO': 30 },
+    apelidos: { 'Coxinha de frango': 'SALG COXINHA FRANGO' },
+  });
+  assert.equal(r[0].status, 'atendido');
+  assert.equal(r[0].itens[0].produzido, 30);
+});
+
+test('⚠️ apelido é TRADUÇÃO: uma fornada não fecha os dois nomes', () => {
+  // Os dois itens apontam para o mesmo produzido; só cabe 30 no total.
+  const pedidos = [{ id: 'ped1', itens: [
+    { nome: 'Coxinha de frango', quantidade: 30 },
+    { nome: 'SALG COXINHA FRANGO', quantidade: 30 },
+  ] }];
+  const r = baixarPedidos({
+    pedidos, produzidoPorItem: {},
+    produzidoPorNome: { 'SALG COXINHA FRANGO': 30 },
+    apelidos: { 'Coxinha de frango': 'SALG COXINHA FRANGO' },
+  });
+  assert.equal(r[0].itens[0].produzido, 30);
+  assert.equal(r[0].itens[1].produzido, undefined, 'o segundo não pode fechar com a mesma fornada');
+  assert.equal(r[0].status, 'parcial');
+});
+
+test('⚠️ o pedido alterado é CARIMBADO — sem isso a fusão descarta o fechamento', () => {
+  // O merge do servidor desempata por atualizadoEm. Com a cópia do arquivo mais
+  // nova, a versão ABERTA vencia e o fechamento sumia em silêncio.
+  const pedidos = [{ id: 'ped1', atualizadoEm: '2026-09-13T20:11:56.696Z', itens: [{ nome: 'Bolo', quantidade: 10 }] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: {}, produzidoPorNome: { Bolo: 10 }, agora: '2026-09-16T12:00:00.000Z' });
+  assert.equal(r[0].atualizadoEm, '2026-09-16T12:00:00.000Z');
+});
+
+test('pedido não tocado não recebe carimbo novo', () => {
+  const pedidos = [{ id: 'ped1', atualizadoEm: 'antes', itens: [{ nome: 'Outro', quantidade: 5 }] }];
+  const r = baixarPedidos({ pedidos, produzidoPorItem: {}, produzidoPorNome: { Bolo: 10 }, agora: 'agora' });
+  assert.equal(r[0].atualizadoEm, 'antes');
+});

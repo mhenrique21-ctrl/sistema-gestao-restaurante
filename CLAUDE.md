@@ -40,6 +40,7 @@ src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
 src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
 src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com testes)
 src/producaoDia.js    produção do dia: custo real, perda e baixa de insumo (com testes)
+src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com testes)
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 ```
@@ -908,6 +909,41 @@ inventário.
 A baixa de insumo por produção **já existia** na Manutenção de Produtos. O que
 faltava era o resto.
 
+#### Vincular produção → produto do Eclética — `src/vinculoProducao.js` (com testes)
+
+A cozinha pede **"Coxinha de frango"**; na prateleira o item é **"SALG COXINHA
+FRANGO"**. Sem ligar os dois, produzir não alimenta saldo nenhum e o pedido não
+fecha — era o que deixava 54 itens pendentes com "sem produto no estoque".
+
+⚠️ **Isto NÃO é a aba "Vínculos" que foi apagada** (ver "Estoque → Saídas por
+venda"). Aquela mapeava produto VENDIDO → ficha, e virou automática quando os
+produtos ganharam `codigoEcletica` — o XML da venda traz o mesmo código. Aqui o
+lado de origem é o NOME digitado no catálogo de produção, que não tem código
+nenhum e nunca casa sozinho.
+
+Ferramenta em **Produção → Produtos → 🔗 Vincular ao estoque**
+(`VincularProducaoCard`): lista o que está sem vínculo ordenado pelo que mais
+aparece nos pedidos, sugere o par por semelhança de nome, e tem o botão de
+aplicar as sugestões SEGURAS em lote. Decisão do dono (16/09/2026): a conversão
+é **1 para 1** — quanto uma receita rende continua sendo o Rendimento da ficha,
+um lugar só para essa conta.
+
+| onde mora | o quê |
+|---|---|
+| `produtosProducao[].mpId` | o vínculo. Campo no cadastro que já existe — **não** é campo novo no `db`, então não entra na armadilha do §3 |
+| `itemDeEstoqueDaProducao` | resolve: vínculo → nome igual → nada. **Nunca chuta por semelhança** — palpite é sugestão de tela, jamais baixa de saldo |
+| `apelidosDoItem` | os nomes de produção de um item, para o fechamento do pedido |
+
+⚠️ **`seguro` é deliberadamente duro** (score ≥ 0,85 E o segundo colocado pelo
+menos 0,15 atrás): "Trança de calabresa" e "Trança de camarão" pontuam alto
+contra "TRANCA CALABRESA", e sem a margem o lote ligaria o camarão na calabresa
+sem ninguém ver.
+
+⚠️ **O apelido é TRADUÇÃO, não segunda chave de saldo.** `baixarPedidos` recebe
+`apelidos` {nome do pedido → nome produzido}: somar o produzido nos dois nomes
+daria um orçamento a cada um, e dois itens de pedido com esses nomes fechariam
+os dois com a mesma fornada.
+
 #### A ponte pedido → produção (16/09/2026)
 
 ⚠️ **O pedido da cozinha NUNCA fechava.** `baixarPedidos` procurava o produzido
@@ -974,6 +1010,15 @@ pelas fichas existentes, sem marcação nova). Sobe para o topo da folha e mostr
 produzido hoje parte do saldo **com** a entrada do dia (`saidaExibida`): a
 aplicação real faz entrada antes da saída, e sem isso a tela mostrava "4 → −16"
 para um saldo que termina em 4.
+
+⚠️ **`baixarPedidos` CARIMBA `atualizadoEm`** no pedido que alterou. Sem o
+carimbo o fechamento não sobrevive à fusão: o merge do servidor desempata por
+timestamp e, com a cópia do arquivo trazendo um carimbo mais novo (qualquer
+gravação anterior daquele pedido), a versão ABERTA vencia e o fechamento era
+descartado — **o estoque entrava e o pedido continuava pendente**, a tela
+mostrando fechado (estado local) e o arquivo, aberto. É a "armadilha do CARIMBO
+que falta" do §3; custou um dia de investigação em 16/09/2026 e passou nos
+testes iniciais só porque ali os carimbos empatavam (no empate o incoming vence).
 
 **Repetir produção de <dia>** lê `movEstoque` de `origem:"producao_dia"`
 (entrada = boas, perda à parte → produzido = soma); volta em receitas quando o
