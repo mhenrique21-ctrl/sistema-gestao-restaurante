@@ -298,5 +298,24 @@ export function mergeDocument(existing, incoming) {
     merged.budgetCompras = bc;
   }
 
+  // fechamentos: mapa data -> { marcados: { item: {por, em} | null }, obs }.
+  // Dois níveis pelo mesmo motivo do budgetCompras: dois aparelhos marcando
+  // itens diferentes do mesmo dia não podem se apagar. Desmarcar grava null em
+  // vez de remover a chave — a união só sabe adicionar, e a chave removida
+  // voltaria do outro aparelho no próximo POST.
+  const diasFechamento = new Set([
+    ...Object.keys(existing.fechamentos || {}),
+    ...Object.keys(afterLista.fechamentos || {}),
+  ]);
+  if (diasFechamento.size) {
+    const fc = {};
+    for (const dia of diasFechamento) {
+      const e = existing.fechamentos?.[dia] || {};
+      const i = afterLista.fechamentos?.[dia] || {};
+      fc[dia] = { ...e, ...i, marcados: { ...(e.marcados || {}), ...(i.marcados || {}) } };
+    }
+    merged.fechamentos = fc;
+  }
+
   return merged;
 }

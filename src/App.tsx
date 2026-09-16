@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 // A matemática do consumo teórico vive fora daqui porque erra em silêncio:
 // esquecer de dividir por `porcoes` ou converter g↔kg dá um número que continua
 // parecendo plausível na tela. Lá tem teste travando as duas.
@@ -1051,7 +1051,20 @@ const FONTES_VENDAS:{[k:string]:{label:string,stack:string}}={
   serifada:{label:"Serifada",stack:"Georgia,'Times New Roman',serif"},
   tecnica:{label:"Técnica",stack:"'SFMono-Regular',Consolas,monospace"},
 };
+// Checklist do fechamento de vendas (opcional, não trava o Salvar). Um item por
+// linha; editável em Vendas → Ajustes. Item com "PDV" no texto se marca sozinho
+// quando alguma origem automática apurou o dia; com "salvo", quando o
+// lançamento manual do dia existe. O resto é marcação de quem fecha.
+const CHECKLIST_FECHAMENTO_PADRAO=[
+  "PDV conferido",
+  "Dinheiro em caixa contado e conferido",
+  "Apps lançados (iFood e 99Food)",
+  "Comprovantes da maquininha guardados",
+  "Sangrias e despesas do caixa anotadas",
+  "Fechamento salvo no sistema",
+].join("\n");
 const VENDAS_AJUSTES_DEFAULT={
+  checklistItens:CHECKLIST_FECHAMENTO_PADRAO,
   legNomeAba:"Vendas",legCliente:"Cliente",legBotaoEmitir:"Emitir Recibo",legVendasExtras:"Vendas Extras",
   legMaquininha:"Maquininha",legDinheiro:"Dinheiro",legIfood:"iFood (bruto)",leg99food:"99Food (bruto)",
   legTotalLiquido:"Total líquido",legBotaoSalvar:"Salvar Vendas",legHistorico:"Histórico",legBotaoImprimir:"Imprimir Vendas",
@@ -1118,6 +1131,83 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
   <p>Gerado em ${new Date().toLocaleString("pt-BR",{timeZone:TZ})} | ${new Date().toLocaleDateString("pt-BR",{timeZone:TZ,month:"long",year:"numeric"})}</p></div>
   ${conteudo}
   <div class="footer">${impressaoRodapeTxt(cfg)}</div>
+  </body></html>`;
+}
+// Folha A4 "Fechamento de caixa": timbre (Configurações → Impressão), valores
+// do dia, checklist com caixas em branco (a marcação é à caneta — imprimir o
+// que já estava marcado na tela tiraria da folha o papel de conferência),
+// conferência física do caixa (o que o sistema não sabe), observações e
+// assinaturas. Preto e branco de propósito: sai igual em qualquer impressora.
+function gerarFechamentoCaixaHTML({empresa,data,linhas,pendura,totalDia,comprasDia,itens,obs}:{empresa:string,data:string,linhas:[string,string,number|null][],pendura:number,totalDia:number,comprasDia:number,itens:string[],obs:string}){
+  const cfg=_impressaoCfg;
+  const nome=impressaoNome(cfg,empresa);
+  const esc=(v:any)=>String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const n=(v:number|null)=>v===null?"—":fmtMoney(v).replace(/^R\$\s?/,"");
+  const dataLonga=new Date(data+"T12:00:00").toLocaleDateString("pt-BR",{timeZone:TZ,weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});
+  const box='<span class="box"></span>';
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Fechamento de caixa ${esc(fmtDate(data))} - ${esc(nome)}</title>
+  <style>
+  body{font-family:'Segoe UI',Arial,sans-serif;color:#1a1a1a;margin:0;padding:24px;font-size:12px;line-height:1.45;background:#fff}
+  .folha{max-width:180mm;margin:0 auto}
+  .timbre{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:10px;border-bottom:1.5px solid #1a1a1a}
+  .timbre .id{display:flex;gap:12px;align-items:center}
+  .timbre .nome{font-size:17px;font-weight:700;letter-spacing:.5px}
+  .timbre .dados{font-size:10.5px;color:#444;margin:2px 0 0;line-height:1.4}
+  .timbre .titulo{text-align:right}.timbre .titulo b{font-size:15px;display:block}.timbre .titulo span{font-size:11px;color:#444}
+  h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin:16px 0 4px}
+  .topo{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px}
+  .topo h2{margin:0}.topo .total{font-size:12px}.topo .total b{font-size:16px;font-family:Consolas,'Courier New',monospace;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:11.5px}
+  th{text-align:left;font-weight:600;padding:4px 0;border-bottom:1px solid #1a1a1a}
+  td{padding:4px 0;border-bottom:.5px solid #ccc;vertical-align:top}
+  .r{text-align:right;font-family:Consolas,'Courier New',monospace;white-space:nowrap}
+  .cinza{color:#555}.forte td{border-bottom:1px solid #1a1a1a}
+  .box{display:inline-block;width:12px;height:12px;border:1px solid #1a1a1a;vertical-align:-2px}
+  .hora{color:#777;text-align:right;white-space:nowrap}
+  .conf{display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;font-size:11.5px}
+  .conf div{display:flex;justify-content:space-between;border-bottom:1px solid #1a1a1a;padding:4px 0}.conf span:last-child{color:#777}
+  .obs{border-bottom:.5px solid #999;min-height:18px;font-size:11.5px;padding:2px 0}
+  .assin{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:34px;font-size:10.5px;color:#444}
+  .assin div{border-top:1px solid #1a1a1a;padding-top:4px;text-align:center}
+  .rodape{text-align:center;font-size:9.5px;color:#888;margin-top:12px}
+  .no-print-bar{display:flex;gap:8px;margin:0 auto 16px;max-width:180mm}
+  .no-print-bar button{padding:10px 22px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
+  @media print{body{padding:0}.no-print-bar{display:none!important}.folha{max-width:none}${impressaoPageCss(cfg)}}
+  </style></head><body>
+  <div class="no-print-bar">
+    <button onclick="window.close()" style="background:#e2e8f0;color:#333">← Voltar</button>
+    <button onclick="window.print()" style="background:${cfg.cor};color:#fff">🖨️ Imprimir / Salvar PDF</button>
+  </div>
+  <div class="folha">
+    <div class="timbre">
+      <div class="id">${impressaoLogoHtml(cfg,"height:44px;max-width:120px;object-fit:contain;display:block")}<div><div class="nome">${esc(nome)}</div>${impressaoDadosHtml(cfg,"font-size:10.5px;color:#444;margin:2px 0 0;line-height:1.4")}</div></div>
+      <div class="titulo"><b>Fechamento de caixa</b><span>${esc(dataLonga)}</span></div>
+    </div>
+    <div class="topo"><h2>Valores do dia</h2><div class="total">Total do dia <b>${esc(fmtMoney(totalDia))}</b></div></div>
+    <table>
+      <tr><th>Forma / canal</th><th>Origem</th><th class="r">Valor</th></tr>
+      ${linhas.map(([label,origem,val])=>`<tr><td>${esc(label)}</td><td class="cinza">${esc(origem)}</td><td class="r">${n(val)}</td></tr>`).join("")}
+      ${pendura>0.005?`<tr class="forte"><td class="cinza">Pendura (a receber — está no total)</td><td></td><td class="r cinza">${n(pendura)}</td></tr>`:""}
+      <tr><td class="cinza">Compras do dia</td><td></td><td class="r cinza">${comprasDia>0.005?n(comprasDia):"—"}</td></tr>
+    </table>
+    <h2>Checklist</h2>
+    <table>
+      ${itens.map(it=>`<tr><td style="width:16px">${box}</td><td style="padding-left:6px">${esc(it)}</td><td class="hora">hora ________</td></tr>`).join("")}
+    </table>
+    <h2>Conferência do caixa</h2>
+    <div class="conf">
+      <div><span>Fundo de caixa inicial</span><span>R$</span></div>
+      <div><span>Dinheiro contado</span><span>R$</span></div>
+      <div><span>Sangrias</span><span>R$</span></div>
+      <div><span>Diferença (sobra / falta)</span><span>R$</span></div>
+    </div>
+    <h2>Observações</h2>
+    <div class="obs">${esc(obs)}</div>
+    <div class="obs"></div>
+    <div class="obs"></div>
+    <div class="assin"><div>Responsável pelo fechamento</div><div>Conferido por</div></div>
+    <div class="rodape">${esc(impressaoRodapeTxt(cfg))}</div>
+  </div>
   </body></html>`;
 }
 // Pop-up bloqueado devolve null. Antes a função saía calada: no celular, onde
@@ -1795,6 +1885,21 @@ const mergeFromServer=(prev:any,updates:any)=>{
           categorias:{...(s.budgetCompras?.[per]?.categorias||{}),...(p.budgetCompras?.[per]?.categorias||{})}};
       });
       next[emp].budgetCompras=bc;
+    }
+    // fechamentos: mapa data -> {marcados:{item:{por,em}|null}, obs}. Dois
+    // níveis pelo mesmo motivo: dois aparelhos marcando itens diferentes do
+    // mesmo dia não podem se apagar. Desmarcar grava null em vez de remover a
+    // chave — a união só sabe adicionar, e a chave removida voltaria do outro.
+    {
+      const dias=new Set([...Object.keys(s.fechamentos||{}),...Object.keys(p.fechamentos||{})]);
+      if(dias.size){
+        const fc:any={};
+        dias.forEach(dia=>{
+          fc[dia]={...(s.fechamentos?.[dia]||{}),...(p.fechamentos?.[dia]||{}),
+            marcados:{...(s.fechamentos?.[dia]?.marcados||{}),...(p.fechamentos?.[dia]?.marcados||{})}};
+        });
+        next[emp].fechamentos=fc;
+      }
     }
     // listaCompras: merge por ID, versão mais recente (updatedAt) vence
     const serverDeleted=new Set([...(s.listaDeletedIds||[]),..._listaDeletados]);
@@ -3398,7 +3503,7 @@ function StatCard({label,value,color,icon}){return <div className="card" style={
 function IRow({label,value,positive,neutral}){return <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #0EA5E940"}}><span className="muted">{label}</span><span style={{fontWeight:600,color:neutral?"var(--text)":positive?"#22C55E":"var(--btnDanger)"}}>{value}</span></div>;}
 
 // ===================== VENDAS =====================
-function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,aj?:any}){
+function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,aj?:any,login?:any,empresa?:string}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   // A taxa do iFood/99Food quase não muda de um dia pro outro: vem preenchida
   // com a do último lançamento que teve uma, pra não digitar 27 todo dia.
@@ -3526,6 +3631,64 @@ function Vendas({db,setDb,setDbAndSave,state,aj}:{db:any,setDb:any,setDbAndSave?
   const chipEstado=(texto:string,tom:"ok"|"pendente"|"info")=><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,marginLeft:6,whiteSpace:"nowrap" as const,...FONTE_APP,
     background:tom==="ok"?"var(--successBg)":tom==="pendente"?"var(--warningBg)":"var(--infoBg)",
     color:tom==="ok"?"var(--successText)":tom==="pendente"?"var(--warningText)":"var(--infoText)"}}>{texto}</span>;
+  const hora=(iso:string)=>new Date(iso).toLocaleTimeString("pt-BR",{timeZone:TZ,hour:"2-digit",minute:"2-digit"});
+  const numSemRS=(v:number)=>v>0.005?fmtMoney(v).replace(/^R\$\s?/,""):"—";
+  const comprasDoDia=(db.compras||[]).filter((c:any)=>c.data===form.data).reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+
+  // ---- Checklist do fechamento: opcional, estado por dia em db.fechamentos ----
+  const checklistItens:string[]=String(aj.checklistItens??CHECKLIST_FECHAMENTO_PADRAO).split("\n").map(x=>x.trim()).filter(Boolean);
+  const fechDia=(db.fechamentos||{})[form.data]||{};
+  const [checklistAberto,setChecklistAberto]=useState(false);
+  const [obsLocal,setObsLocal]=useState("");
+  useEffect(()=>{setObsLocal(fechDia.obs||"");},[form.data,fechDia.obs]);
+  const salvoNoSistema=!!vendaDoDia(db.vendas||[],form.data);
+  // Marcação automática por palavra no texto do item (o item é editável em
+  // Ajustes; chavear por índice quebraria ao reordenar as linhas).
+  const autoChecklist=(label:string)=>/\bPDV\b/i.test(label)?temBlocoAuto:/salvo/i.test(label)?salvoNoSistema:null;
+  // undefined = nunca tocado (vale o automático); null = desmarcado à mão;
+  // objeto = marcado à mão, com quem e quando.
+  const estadoChecklist=(i:number)=>{
+    const m=fechDia.marcados?.[String(i)];
+    if(m===undefined){const auto=autoChecklist(checklistItens[i]);return{marcado:auto===true,hint:auto===true?"automático":""};}
+    if(m===null)return{marcado:false,hint:""};
+    return{marcado:true,hint:[m.por,m.em?hora(m.em):""].filter(Boolean).join(" · ")};
+  };
+  const checklistFeitos=checklistItens.filter((_,i)=>estadoChecklist(i).marcado).length;
+  const gravarFechamento=(patch:(f:any)=>any)=>(setDbAndSave||setDb)((d:any)=>{
+    const atual=(d.fechamentos||{})[form.data]||{};
+    return{...d,fechamentos:{...(d.fechamentos||{}),[form.data]:{...atual,...patch(atual),atualizadoEm:new Date().toISOString()}}};
+  });
+  const alternarChecklist=(i:number)=>{
+    const marcado=estadoChecklist(i).marcado;
+    gravarFechamento(f=>({marcados:{...(f.marcados||{}),[String(i)]:marcado?null:{por:login?.label||"",em:new Date().toISOString()}}}));
+  };
+  const salvarObs=()=>{if((fechDia.obs||"")!==obsLocal)gravarFechamento(()=>({obs:obsLocal}));};
+  const imprimirFechamento=()=>{
+    const linhas:[string,string,number|null][]=linhasAuto.map(l=>[l.label,l.fonte,l.val] as [string,string,number|null]);
+    if(deliverySincronizado)linhas.push([aj.legVendasExtras,"sincronizado",vendaSincronizada.delivery||0]);
+    if(autoMaq){if(maqManual>0)linhas.push([aj.legMaquininha+" fora do PDV","manual",maqManual]);}
+    else linhas.push([aj.legMaquininha,"manual",maqManual>0?maqManual:null]);
+    if(aj.canalDinheiro){if(autoDin){if(dinManual>0)linhas.push([aj.legDinheiro+" extra","manual",dinManual]);}
+      else linhas.push([aj.legDinheiro,"manual",dinManual>0?dinManual:null]);}
+    if(aj.canalVendasExtras&&!deliverySincronizado)linhas.push([aj.legVendasExtras,"manual",parseMoney(form.delivery||0)>0?parseMoney(form.delivery||0):null]);
+    if(aj.canalIfood)linhas.push(["iFood (líquido)","manual",ifoodBruto>0?ifoodLiq:null]);
+    if(aj.canal99food)linhas.push(["99Food (líquido)","manual",nfoodBruto>0?nfoodLiq:null]);
+    abrirRelatorio(gerarFechamentoCaixaHTML({empresa:empresa||"",data:form.data,linhas,pendura:penduraAutomatica,totalDia,comprasDia:comprasDoDia,itens:checklistItens,obs:obsLocal}));
+  };
+
+  // ---- Histórico em formato de extrato: colunas fixas, sem etiqueta colorida ----
+  const thL={textAlign:"left" as const,fontWeight:400,padding:"4px 0",borderBottom:"1px solid var(--border)",...FONTE_APP};
+  const thR={...thL,textAlign:"right" as const};
+  const tdL={padding:"6px 0",...FONTE_APP};
+  const tdR={padding:"6px 0",textAlign:"right" as const,whiteSpace:"nowrap" as const,...MONO};
+  const btnIcon={background:"none",border:"none",cursor:"pointer",fontSize:13,padding:"2px 4px",opacity:.65};
+  const diaSemana=(d:string)=>new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{timeZone:TZ,weekday:"long"}).replace("-feira","");
+  const detalheVenda=(v:any)=>{
+    const p:string[]=formasDaVenda(v).map(([k,label,val])=>k==="pendura"?`pendura ${numSemRS(val)} (a receber, já no total)`:`${label} ${numSemRS(val)}`);
+    if(v.ifood>0&&v.ifoodTaxa>0)p.push(`iFood bruto ${numSemRS(v.ifood)} − ${v.ifoodTaxa}%`);
+    if(v["99food"]>0&&v.nfoodTaxa>0)p.push(`99Food bruto ${numSemRS(v["99food"])} − ${v.nfoodTaxa}%`);
+    return p.join(" · ");
+  };
 
   const formDeRegistro=(v:any)=>({data:v.data,
     maquininha:v.maquininha?String(v.maquininha.toFixed(2)).replace(".",","):"",
@@ -3886,6 +4049,24 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         }} style={{flex:1,background:"var(--border)",color:"#888",padding:"10px",fontSize:13}}>Cancelar</button>
         <button className="btn" onClick={()=>del(editId)} style={{flex:1,background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"10px",fontSize:13}}>🗑️ Excluir este dia</button>
       </div>}
+
+      {checklistItens.length>0&&<div style={{marginTop:14,paddingTop:10,borderTop:"1px solid var(--border)",...FONTE_APP}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <button type="button" onClick={()=>setChecklistAberto(a=>!a)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",color:"var(--text)",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:11,color:"var(--text2)"}}>{checklistAberto?"▾":"▸"}</span> Checklist do fechamento
+            <span style={{fontSize:11,fontWeight:400,color:"var(--text2)"}}>{checklistFeitos} de {checklistItens.length} · opcional</span>
+          </button>
+          <button className="btn" type="button" onClick={imprimirFechamento} style={{background:"var(--bg5)",color:"var(--btnPrimary)",fontSize:12,padding:"6px 10px",borderRadius:8}}>🖨️ Imprimir checklist (A4)</button>
+        </div>
+        {checklistAberto&&<div style={{marginTop:6}}>
+          {checklistItens.map((it,i)=>{const st=estadoChecklist(i);return <label key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderTop:i?"1px solid var(--border)":"none",fontSize:13,cursor:"pointer"}}>
+            <input type="checkbox" checked={st.marcado} onChange={()=>alternarChecklist(i)} style={{width:18,height:18,margin:0,accentColor:"var(--btnPrimary)"}}/>
+            <span style={{flex:1,color:st.marcado?"var(--text2)":"var(--text)"}}>{it}</span>
+            {st.hint&&<span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>{st.hint}</span>}
+          </label>;})}
+          <input className="inp" value={obsLocal} onChange={e=>setObsLocal(e.target.value)} onBlur={salvarObs} placeholder="Observação do dia (opcional)" style={{marginTop:8,marginBottom:0,fontSize:13}}/>
+        </div>}
+      </div>}
     </div>
 
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
@@ -3919,49 +4100,47 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
       const cDia=(db.compras||[]).filter(c=>c.data===g.data).reduce((s,c)=>s+parseMoney(c.valor),0);
       const totalDia=g.itens.reduce((s:number,v:any)=>s+(v.total||0),0);
       const varias=g.itens.length>1;
-      return <div key={g.data} className="list-item">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
-          <span style={{fontWeight:700}}>{fmtDate(g.data)}
-            {varias&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>{g.itens.length} lançamentos no dia</span>}
-            {!varias&&g.itens[0].origem&&g.itens[0].origem!=="manual"&&<span style={{fontWeight:400,fontSize:10,color:"var(--text3)",marginLeft:6}}>({rotuloOrigem(g.itens[0].origem)})</span>}
+      return <div key={g.data} className="list-item" style={{padding:"12px 14px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
+          <span style={FONTE_APP}><span style={{fontWeight:700,fontSize:15}}>{fmtDate(g.data)}</span>
+            <span style={{fontSize:11,color:"var(--text2)",marginLeft:8}}>{diaSemana(g.data)}{varias?` · ${g.itens.length} lançamentos`:g.itens[0].origem&&g.itens[0].origem!=="manual"?` · ${rotuloOrigem(g.itens[0].origem)}`:""}{cDia>0?` · compras do dia ${fmtMoney(cDia)}`:""}</span>
           </span>
-          <span style={{color:"#22C55E",fontWeight:700}}>{fmtMoney(totalDia)}</span>
+          <span style={{fontWeight:700,fontSize:16,...MONO}}>{fmtMoney(totalDia)}</span>
         </div>
-        {cDia>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-          <span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>comprado: {fmtMoney(cDia)}</span>
-        </div>}
-        {g.itens.map((v:any,i:number)=>
-        <div key={v.id} style={varias&&i>0?{borderTop:"1px solid var(--border)",paddingTop:10,marginTop:10}:undefined}>
-        {varias&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12,fontWeight:700,color:"var(--text2)"}}>
-          <span>{rotuloOrigem(origemVenda(v))}</span><span>{fmtMoney(v.total)}</span>
-        </div>}
-        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-          {v.maquininha>0&&<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)"}}>maquininha: {fmtMoney(v.maquininha)}</span>}
-          {v.dinheiro>0&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>dinheiro: {fmtMoney(v.dinheiro)}</span>}
-          {v.ifood>0&&<span className="tag" style={{background:"var(--dangerBg)",color:"var(--dangerText)"}}>
-            iFood: {fmtMoney(v.ifood)}{v.ifoodTaxa>0?` (-${v.ifoodTaxa}%→${fmtMoney(v.ifoodLiq??v.ifood)})`:""}
-          </span>}
-          {v["99food"]>0&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)"}}>
-            99food: {fmtMoney(v["99food"])}{v.nfoodTaxa>0?` (-${v.nfoodTaxa}%→${fmtMoney(v.nfoodLiq??v["99food"])})`:""}
-          </span>}
-          {v.delivery>0&&<span className="tag" style={{background:"#F3E8DC",color:"#78350F"}}>vendas extras: {fmtMoney(v.delivery)}</span>}
+        <div style={{overflowX:"auto" as const,marginTop:6}}>
+          <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:12,minWidth:560}}>
+            <thead><tr style={{fontSize:10,color:"var(--text3)"}}>
+              <th style={thL}>Origem</th><th style={thR}>{aj.legDinheiro}</th><th style={thR}>{aj.legMaquininha}</th><th style={thR}>{aj.legVendasExtras}</th><th style={thR}>iFood</th><th style={thR}>99Food</th><th style={thR}>Total</th><th style={{width:56,borderBottom:"1px solid var(--border)"}}/>
+            </tr></thead>
+            <tbody>
+              {g.itens.map((v:any)=>{const det=detalheVenda(v);const vazio=(v.total||0)<=0.005;return <Fragment key={v.id}>
+                <tr style={vazio?{color:"var(--text3)"}:undefined}>
+                  <td style={{...tdL,paddingBottom:det?1:6,borderBottom:det?"none":"1px solid var(--border)"}}>{rotuloOrigem(origemVenda(v))}{v.criadoEm&&<span style={{fontSize:10,color:"var(--text3)",marginLeft:6}}>{hora(v.criadoEm)}</span>}{vazio&&<span style={{fontSize:10,marginLeft:6}}>sem valores</span>}</td>
+                  <td style={{...tdR,borderBottom:det?"none":"1px solid var(--border)"}}>{numSemRS(v.dinheiro||0)}</td>
+                  <td style={{...tdR,borderBottom:det?"none":"1px solid var(--border)"}}>{numSemRS(v.maquininha||0)}</td>
+                  <td style={{...tdR,borderBottom:det?"none":"1px solid var(--border)"}}>{numSemRS(v.delivery||0)}</td>
+                  <td style={{...tdR,borderBottom:det?"none":"1px solid var(--border)"}}>{numSemRS(v.ifood>0?(v.ifoodLiq??v.ifood):0)}</td>
+                  <td style={{...tdR,borderBottom:det?"none":"1px solid var(--border)"}}>{numSemRS(v["99food"]>0?(v.nfoodLiq??v["99food"]):0)}</td>
+                  <td style={{...tdR,fontWeight:700,borderBottom:det?"none":"1px solid var(--border)"}}>{numSemRS(v.total||0)}</td>
+                  <td style={{textAlign:"right" as const,whiteSpace:"nowrap" as const,borderBottom:det?"none":"1px solid var(--border)"}}>
+                    <button onClick={()=>edit(v)} title="Editar" style={btnIcon}>✏️</button>
+                    <button onClick={()=>del(v.id)} title="Excluir" style={btnIcon}>🗑️</button>
+                  </td>
+                </tr>
+                {det&&<tr><td colSpan={8} style={{padding:"0 0 6px",fontSize:11,color:"var(--text2)",borderBottom:"1px solid var(--border)",...FONTE_APP}}>{det}</td></tr>}
+              </Fragment>;})}
+            </tbody>
+            {varias&&<tfoot><tr style={{fontSize:12,color:"var(--text2)"}}>
+              <td style={tdL}>Total do dia</td>
+              <td style={tdR}>{numSemRS(g.itens.reduce((s:number,v:any)=>s+(v.dinheiro||0),0))}</td>
+              <td style={tdR}>{numSemRS(g.itens.reduce((s:number,v:any)=>s+(v.maquininha||0),0))}</td>
+              <td style={tdR}>{numSemRS(g.itens.reduce((s:number,v:any)=>s+(v.delivery||0),0))}</td>
+              <td style={tdR}>{numSemRS(g.itens.reduce((s:number,v:any)=>s+(v.ifood>0?(v.ifoodLiq??v.ifood):0),0))}</td>
+              <td style={tdR}>{numSemRS(g.itens.reduce((s:number,v:any)=>s+(v["99food"]>0?(v.nfoodLiq??v["99food"]):0),0))}</td>
+              <td style={{...tdR,fontWeight:700,color:"var(--text)"}}>{numSemRS(totalDia)}</td><td/>
+            </tr></tfoot>}
+          </table>
         </div>
-        {formasDaVenda(v).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8,alignItems:"center"}}>
-          <span style={{fontSize:10,color:"var(--text3)",fontWeight:700}}>FORMAS:</span>
-          {formasDaVenda(v).map(([k,label,val])=>
-            <span key={k} className="tag" style={k==="pendura"
-              ?{background:"var(--warningBg)",color:"var(--warningText)",fontWeight:700}
-              :{background:"var(--bg)",color:"var(--text2)"}}>{label}: {fmtMoney(val)}</span>)}
-          {(v.formas?.pendura||0)>0.005&&<span style={{fontSize:10,color:"var(--warningText)"}}>
-            a receber — no total, fora de dinheiro/maquininha
-          </span>}
-        </div>}
-        <div style={{display:"flex",gap:8}}>
-          <button className="btn" onClick={()=>edit(v)} style={{background:"var(--border)",color:"#888",padding:"6px 12px",fontSize:12}}>✏️</button>
-          <button className="btn" onClick={()=>del(v.id)} style={{background:"var(--categoryBg)",color:"var(--btnDanger)",padding:"6px 12px",fontSize:12}}>🗑️</button>
-        </div>
-        {v.criadoEm&&<span className="muted" style={{fontSize:10,display:"block",marginTop:4}}>Registrado: {new Date(v.criadoEm).toLocaleString('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
-        </div>)}
       </div>;
     })}{!vendasFiltradas.length&&<EmptyState msg="Nenhum registro de venda"/>}</>;})()}
   </div>;
@@ -4066,7 +4245,7 @@ function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPe
   else if(subTab==="clientes")content=<><BackBar label="Vendas" onClick={voltar}/><ClientesEncPanel db={db} setDb={setDb} empresa={empresa} aj={aj}/></>;
   else if(subTab==="relatorio")content=<RecibosVendaRelatorioPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} aj={aj} onVoltar={voltar}/>;
   else if(subTab==="ajustes")content=<VendasAjustesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
-  else content=<Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} aj={aj}/>;
+  else content=<Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} aj={aj} login={login} empresa={empresa}/>;
   return Object.keys(wrapStyle).length?<div style={wrapStyle}>{content}</div>:content;
 }
 
@@ -4079,6 +4258,7 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
     legTotalLiquido:aj.legTotalLiquido,legBotaoSalvar:aj.legBotaoSalvar,legHistorico:aj.legHistorico,legBotaoImprimir:aj.legBotaoImprimir,
     prefixoRecibo:aj.prefixoRecibo,metaMensal:String(aj.metaMensal||""),confirmacaoReforcadaAcima:String(aj.confirmacaoReforcadaAcima||""),
     diasEsfriando:String(aj.diasEsfriando),diasSumiu:String(aj.diasSumiu),corDestaque:aj.corDestaque,
+    checklistItens:aj.checklistItens??CHECKLIST_FECHAMENTO_PADRAO,
   });
   const salvarTexto=(key:string,parse?:(v:string)=>any)=>setAj(key,parse?parse((texto as any)[key]):(texto as any)[key]);
 
@@ -4134,6 +4314,14 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
       ))}
     </Grupo>
 
+    <Grupo icon="✅" titulo="Checklist do fechamento">
+      <Campo label="Itens (um por linha)" hint='Opcional — não trava o Salvar. Item com "PDV" no texto se marca sozinho quando o PDV apurou o dia; com "salvo", quando o lançamento do dia existe. Linha em branco desliga o checklist.'>
+        <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
+          <textarea className="inp" value={(texto as any).checklistItens} onChange={e=>setTexto(t=>({...t,checklistItens:e.target.value}))} style={{marginBottom:0,flex:1,minHeight:130}}/>
+          <button className="btn" onClick={()=>salvarTexto("checklistItens")} style={{background:"#16A34A",color:"#fff",padding:"8px 14px",fontSize:12}}>💾</button>
+        </div>
+      </Campo>
+    </Grupo>
     <Grupo icon="🔤" titulo="Fonte desta aba">
       <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
         {Object.entries(FONTES_VENDAS).map(([k,f])=>(

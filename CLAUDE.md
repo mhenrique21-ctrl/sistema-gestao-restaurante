@@ -163,6 +163,7 @@ auto-save genérico e caía na armadilha nº 0.
 
 ```
 vendas              lançamentos diários por canal (ver §6)
+fechamentos         checklist do fechamento por dia {data:{marcados:{item:{por,em}|null},obs}} — mapa em 2 níveis
 compras             entradas de estoque; categoria CONTÁBIL (ver §5)
 contas              financeiro. tipo, status, origem, vencimento, categoria
 fornecedores        materiasPrimas      fichasTecnicas
@@ -536,6 +537,24 @@ convidando a digitar de novo. Foi assim que o aviso "não repita aqui, os dois
 somam" deixou de ser necessário: o layout parou de induzir o erro em vez de
 avisar sobre ele. A seção abre sozinha se já houver valor digitado nela —
 esconder um número que soma é pior que o aviso antigo.
+
+**Checklist do fechamento** (opcional, recolhido no fim do card): itens vêm de
+`aj.checklistItens` (Vendas → Ajustes, um por linha); estado por dia em
+`db.fechamentos[data]` — `marcados[i]` é `undefined` (nunca tocado: vale o
+automático), `null` (desmarcado à mão) ou `{por,em}`. Automático por palavra no
+texto do item ("PDV" → alguma origem automática apurou o dia; "salvo" →
+lançamento manual do dia existe), porque chavear por índice quebraria ao
+reordenar as linhas em Ajustes. Fusão em 2 níveis nos dois lugares
+(`mergeFromServer` e `mergeDocument.js`, com teste). **Imprimir checklist
+(A4)** → `gerarFechamentoCaixaHTML`: timbre de Configurações → Impressão,
+valores do dia, caixas em branco (a marcação é à caneta), conferência física do
+caixa, assinaturas — preto e branco de propósito.
+
+**Histórico** é um extrato: colunas fixas por canal em todo dia (Dinheiro ·
+Maquininha · Vendas Extras · iFood líquido · 99Food líquido · Total), uma linha
+por origem, detalhe das formas em texto pequeno embaixo, sem etiqueta colorida.
+Lançamento manual com total 0 aparece apagado como "sem valores" — é o registro
+que o Salvar cria num dia só de PDV; a lixeira ali é de propósito.
 
 Números em fonte mono tabular (`MONO`), rótulos na fonte do app
 (`var(--fonteApp)`, definida no `.app-root`) mesmo com a aba Vendas em fonte

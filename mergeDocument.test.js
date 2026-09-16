@@ -514,3 +514,23 @@ test('sem ordem de atualizar, o campo não é inventado', () => {
   const r = mergeDocument({ config: { snAliquota: 6 } }, { config: { snAliquota: 6 } });
   assert.ok(!('recarregarApos' in r.config));
 });
+
+describe('fechamentos (checklist do fechamento por dia)', () => {
+  test('itens marcados em aparelhos diferentes no mesmo dia coexistem', () => {
+    const noServidor = { fechamentos: { '2026-09-15': { marcados: { '0': { por: 'Mario', em: 'a' } }, obs: '' } } };
+    const incoming = { fechamentos: { '2026-09-15': { marcados: { '1': { por: 'Ana', em: 'b' } }, obs: 'tudo ok' } } };
+    const r = mergeDocument(noServidor, incoming);
+    assert.deepEqual(Object.keys(r.fechamentos['2026-09-15'].marcados).sort(), ['0', '1']);
+    assert.equal(r.fechamentos['2026-09-15'].obs, 'tudo ok');
+  });
+  test('desmarcar (null) vence a marcação antiga do servidor, e outro dia não é apagado', () => {
+    const noServidor = { fechamentos: { '2026-09-15': { marcados: { '0': { por: 'Mario', em: 'a' } } }, '2026-09-14': { marcados: { '2': { por: 'Mario', em: 'x' } } } } };
+    const incoming = { fechamentos: { '2026-09-15': { marcados: { '0': null } } } };
+    const r = mergeDocument(noServidor, incoming);
+    assert.equal(r.fechamentos['2026-09-15'].marcados['0'], null);
+    assert.ok(r.fechamentos['2026-09-14'].marcados['2']);
+  });
+  test('sem fechamentos em nenhum dos lados, o campo não aparece', () => {
+    assert.equal(mergeDocument({ vendas: [] }, { vendas: [] }).fechamentos, undefined);
+  });
+});
