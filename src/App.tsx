@@ -4838,6 +4838,12 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
   const [totalEdit,setTotalEdit]=useState(String(recibo.total||0));
   const [dataEdit,setDataEdit]=useState(recibo.data||"");
   const [motivo,setMotivo]=useState("");
+  // Recibo já somado em Vendas: editar data ou total precisa REFAZER a soma lá,
+  // não só gravar o recibo. É o que separa `onSalvar` (só o recibo) de
+  // `onSalvarComVendas` (recibo + Vendas, subtraindo do dia antigo e somando no
+  // dia alvo). Quem nunca foi lançado continua por `onSalvar`: mexer em Vendas
+  // ali lançaria um recibo que o dono deliberadamente não lançou.
+  const jaLancado=!!recibo.lancadoEmVendas&&(recibo.valorLancado||0)>0;
 
   if(!tipoEdicao){
     return <div>
@@ -4926,7 +4932,17 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
           <strong>R$ {Math.max(0,(recibo.total||0)-desconto).toFixed(2).replace(".",",")}</strong>
         </div>
       </div>
-      <button onClick={()=>{onSalvar({total:Math.round(parseFloat(totalEdit)*100)/100});}} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
+      {jaLancado&&<div style={{background:"var(--infoBg)",border:"1px solid var(--border2)",borderRadius:6,padding:"10px 12px",marginBottom:16,fontSize:11.5,color:"var(--text2)",lineHeight:1.5}}>
+        Em {aj.legVendasExtras}, o dia {fmtDate(recibo.data)} passa de <b>{fmtMoney(recibo.valorLancado)}</b> para <b>{fmtMoney(Math.round((parseFloat(totalEdit)||0)*100)/100)}</b> ao salvar.
+      </div>}
+      <button onClick={()=>{
+        const novo=Math.round((parseFloat(totalEdit)||0)*100)/100;
+        // Sem isto, `parseFloat("")` grava NaN no total do recibo — some da soma
+        // do dia e nenhuma tela denuncia.
+        if(!(novo>0))return alert("Informe um total maior que zero.");
+        if(jaLancado)onSalvarComVendas({total:novo},novo);
+        else onSalvar({total:novo});
+      }} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
     </div>;
   }
 
@@ -4937,7 +4953,16 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
         <label style={{fontSize:10,fontWeight:700,textTransform:"uppercase" as const,color:"var(--text2)",display:"block",marginBottom:6}}>Data do Recibo</label>
         <input className="inp" type="date" value={dataEdit} onChange={e=>setDataEdit(e.target.value)} style={{marginBottom:0}}/>
       </div>
-      <button onClick={()=>{onSalvar({data:dataEdit});}} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
+      {jaLancado&&<div style={{background:"var(--infoBg)",border:"1px solid var(--border2)",borderRadius:6,padding:"10px 12px",marginBottom:16,fontSize:11.5,color:"var(--text2)",lineHeight:1.5}}>
+        {dataEdit&&dataEdit!==recibo.data
+          ?<>Em {aj.legVendasExtras}, <b>{fmtMoney(recibo.valorLancado)}</b> sai de {fmtDate(recibo.data)} e entra em <b>{fmtDate(dataEdit)}</b> ao salvar.</>
+          :<>Em {aj.legVendasExtras}, {fmtMoney(recibo.valorLancado)} está somado em {fmtDate(recibo.data)}.</>}
+      </div>}
+      <button onClick={()=>{
+        if(!dataEdit)return alert("Informe a data do recibo.");
+        if(jaLancado)onSalvarComVendas({data:dataEdit},recibo.valorLancado);
+        else onSalvar({data:dataEdit});
+      }} style={{background:"var(--btnPrimary)",color:"white",border:"none",borderRadius:6,padding:"12px",width:"100%",fontWeight:700,cursor:"pointer",fontSize:14}}>Salvar</button>
     </div>;
   }
 

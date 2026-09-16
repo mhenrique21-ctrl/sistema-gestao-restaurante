@@ -550,6 +550,27 @@ reordenar as linhas em Ajustes. Fusão em 2 níveis nos dois lugares
 valores do dia, caixas em branco (a marcação é à caneta), conferência física do
 caixa, assinaturas — preto e branco de propósito.
 
+#### Editar recibo emitido: quem já foi lançado precisa REFAZER a soma em Vendas
+
+O painel de edição tem dois caminhos de gravação, e a diferença é a origem do
+bug: `onSalvar` grava **só o recibo**; `onSalvarComVendas` grava o recibo **e**
+refaz Vendas (subtrai do dia antigo, soma no dia alvo, `consolidarVendasDoDia`
+nos dois dias antes de mexer).
+
+⚠️ **Editar Data e Editar Valores chamavam `onSalvar`.** O recibo passava a
+dizer 15/09 e os R$ 462,00 continuavam somados em 16/09, sem aviso nenhum — o
+dia fechava errado dos dois lados e nada na tela denunciava. `salvarComVendas`
+já sabia mover de dia (`dataAlvo=atualizacoesRecibo.data||antigo.data`, escrito
+para o editor de itens); faltava ser chamado. Corrigido em 16/09/2026.
+
+⚠️ **Só quem tem `lancadoEmVendas && valorLancado>0` passa por lá**
+(`jaLancado`). Recibo nunca lançado continua em `onSalvar`: mexer em Vendas ali
+lançaria um recibo que o dono deliberadamente não lançou — e o botão
+"{legVendasExtras}" existe justamente para essa decisão ser explícita.
+
+As duas telas mostram antes de salvar o que vai acontecer no dia ("sai de
+16/09 e entra em 15/09", "o dia 15/09 passa de R$ 462,00 para R$ 400,00").
+
 **Histórico** é um extrato: colunas fixas por canal em todo dia (Dinheiro ·
 Maquininha · Vendas Extras · iFood líquido · 99Food líquido · Total), uma linha
 por origem, detalhe das formas em texto pequeno embaixo, sem etiqueta colorida.
