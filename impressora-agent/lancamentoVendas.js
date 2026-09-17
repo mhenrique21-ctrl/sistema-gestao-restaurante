@@ -47,6 +47,45 @@ export function entregaDaPlataforma(tipoEntrega) {
   return null;
 }
 
+// ⚠️ REIMPRESSÃO NÃO É VENDA NOVA. A comanda sai de novo quando trava o papel,
+// quando alguém testa, quando a cozinha perde a via — e o agente captura tudo
+// igual. Sem olhar a data do PEDIDO, a reimpressão de um pedido de 15/09 vira
+// faturamento do dia em que foi reimpressa: no primeiro lote real, a comanda
+// de teste reimpressa criou R$ 51,70 de "dinheiro na porta" em dois dias
+// diferentes, de uma venda que aconteceu uma vez só.
+//
+// A comanda carrega a própria data, nos dois formatos:
+//   iFood    `data`     "15/09/2026 16:29:39"
+//   99Food   `aceitoEm` "15 de set 16:00"   ← sem ano
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+export function dataDoPedido(pedido, dataReferencia) {
+  const p = pedido || {};
+  const ref = /^\d{4}-\d{2}-\d{2}$/.test(String(dataReferencia || '')) ? String(dataReferencia) : null;
+
+  // iFood: dd/mm/aaaa, com ano.
+  const br = String(p.data || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+
+  // 99Food: "15 de set" — o ANO não vem. Sai do dia da captura; se a data
+  // montada cair no futuro, é do ano passado (pedido de dezembro relido em
+  // janeiro). Chutar o ano corrente sempre jogaria esse pedido 12 meses à
+  // frente, num dia que ainda não existe.
+  const pt = String(p.aceitoEm || '').match(/(\d{1,2})\s*de\s*([a-zç]{3})/i);
+  if (pt && ref) {
+    const mes = MESES.indexOf(pt[2].toLowerCase().slice(0, 3));
+    if (mes >= 0) {
+      const dia = String(parseInt(pt[1], 10)).padStart(2, '0');
+      let ano = parseInt(ref.slice(0, 4), 10);
+      let iso = `${ano}-${String(mes + 1).padStart(2, '0')}-${dia}`;
+      if (iso > ref) iso = `${ano - 1}-${String(mes + 1).padStart(2, '0')}-${dia}`;
+      return iso;
+    }
+  }
+  // Sem data legível, o pedido é do dia em que foi capturado — é o que se sabe.
+  return ref;
+}
+
 export function lancamentoDoPedido(pedido) {
   const p = pedido || {};
   const avisos = [];
@@ -103,7 +142,17 @@ export function lancamentoDoDia(data, pedidos) {
   let duplicados = 0;
 
   const linhas = [];
+  let reimpressoes = 0;
   for (const ped of pedidos || []) {
+    // ⚠️ A comanda diz de que dia ela é. Se não for deste, é reimpressão: fica
+    // de fora, com aviso. Ela já foi contada no dia certo (ou nunca foi, se é
+    // de antes da ponte existir) — somar aqui criaria uma venda que não houve.
+    const dataPropria = dataDoPedido(ped, data);
+    if (dataPropria && data && dataPropria !== data) {
+      reimpressoes++;
+      avisos.push(`pedido ${ped.numero || 's/nº'} é de ${dataPropria} — reimpressão, fora do dia`);
+      continue;
+    }
     const l = lancamentoDoPedido(ped);
     if (l.numero) {
       const chave = `${l.canal}#${l.numero}`;

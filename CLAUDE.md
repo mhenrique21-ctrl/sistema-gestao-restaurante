@@ -522,6 +522,35 @@ verdade apareceria.
 `16:00`) — é a ÚLTIMA linha da comanda, então o ruído dela fechava a lista de
 pendências.
 
+⚠️ **O NOME DO CLIENTE também quebra** no iFood ("Alessandra Do Socorro Cardoso
+Da" / "Silva"): pegando só a linha colada no telefone, a primeira metade virava
+pendência. Volta enquanto não for rótulo nem carimbo. E o `jaUsada` compara por
+**inclusão**, não por igualdade — nome montado de várias linhas faria cada
+pedaço virar pendência de novo.
+
+#### REIMPRESSÃO NÃO É VENDA NOVA (`dataDoPedido`, com testes)
+
+A comanda sai de novo quando trava o papel, quando alguém testa, quando a
+cozinha perde a via — e o agente captura tudo igual. Sem olhar a data do
+PEDIDO, a reimpressão de um pedido de 15/09 vira faturamento do dia em que foi
+reimpressa. **No primeiro lote real a comanda de teste reimpressa criou
+R$ 51,70 de "dinheiro na porta" em DOIS dias diferentes**, de uma venda que
+aconteceu uma vez só.
+
+A comanda carrega a própria data, nos dois formatos:
+
+| | campo | formato |
+|---|---|---|
+| iFood | `data` | `15/09/2026 16:29:39` |
+| 99Food | `aceitoEm` | `15 de set 16:00` — **sem ano** |
+
+⚠️ O ano do 99Food sai do dia da captura; **se a data montada cair no futuro, é
+do ano passado** (pedido de dezembro relido em janeiro). Chutar o ano corrente
+sempre jogaria esse pedido 12 meses à frente, num dia que ainda não existe.
+
+⚠️ **Sem data legível, vale o dia da captura** — é o que se sabe. Descartar
+seria perder venda de verdade por causa de uma linha que o leitor não entendeu.
+
 #### O pedido vira faturamento — `lancamentoVendas.js` (com testes)
 
 Mora fora do agente porque é a única parte disto que erra em **silêncio**:

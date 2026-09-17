@@ -171,9 +171,18 @@ export function lerPedidoIfood(texto) {
   // O nome do cliente não tem rótulo: é a linha imediatamente ANTES da do
   // telefone com "ID:". Achar por posição no cabeçalho quebraria com
   // "Primeiro pedido!", que só aparece em alguns pedidos.
+  // ⚠️ O NOME DO CLIENTE também quebra — "Alessandra Do Socorro Cardoso Da" /
+  // "Silva". Pegando só a linha colada no ID, a primeira metade virava
+  // pendência. Volta enquanto não for rótulo nem carimbo da via.
   const iId = linhas.findIndex((l) => /\bid:\s*\d+/.test(fold(l)));
-  const iCliente = iId > 0 ? iId - 1 : -1;
-  if (iCliente >= 0 && !ehRotuloConhecido(linhas[iCliente])) p.cliente = linhas[iCliente].trim();
+  if (iId > 0) {
+    const partes = [];
+    for (let k = iId - 1; k >= 0; k--) {
+      if (ehRotuloConhecido(linhas[k]) || ehCarimboDaVia(linhas[k])) break;
+      partes.unshift(linhas[k].trim());
+    }
+    p.cliente = partes.join(' ') || null;
+  }
 
   // ── Corpo ────────────────────────────────────────────────────────────────
   // Um rótulo de texto vale até o PRÓXIMO rótulo conhecido: endereço e cidade
@@ -350,7 +359,10 @@ export function lerPedidoIfood(texto) {
       // "Primeiro pedido!" e "6 pedidos na sua loja" são recado do app pro
       // lojista, não dado do pedido — pendência falsa em toda comanda.
       || ehCarimboDaVia(t)
-      || (p.loja && fold(p.loja).includes(fold(t)));
+      // Nome de loja e de cliente podem ter sido montados de VÁRIAS linhas;
+      // comparar com o nome inteiro deixaria cada pedaço virar pendência.
+      || (p.loja && fold(p.loja).includes(fold(t)))
+      || (p.cliente && fold(p.cliente).includes(fold(t)));
     if (!jaUsada) p.naoEntendido.push(t);
     i += 1;
   }

@@ -472,3 +472,46 @@ Cobrar do cliente:     R$ 0,00`);
     assert.deepEqual(conferirPedidoIfood(p), []);
   });
 });
+
+describe('o nome do cliente também quebra', () => {
+  test('nome de duas linhas volta inteiro', () => {
+    // "Alessandra Do Socorro Cardoso Da / Silva" — pegando só a linha colada
+    // no telefone, a primeira metade virava pendência.
+    const p = lerPedidoIfood(`iFood
+        Confraria Cafe
+         PEDIDO: #9857
+       Entrega Parceira
+Localizador: 1111 2222
+Nome Comprido Do Cliente
+Sobrenome
+0800 000 0000 ID: 11112222
+Endereco: R. Exemplo, 1
+Cidade: Macapa - AP
+ITENS DO PEDIDO (1)
+1x  Cafe                 R$ 5,00
+Valor total do         R$ 5,00
+pedido:
+Pagamento via iFood:  -R$ 5,00
+Cobrar do cliente:     R$ 0,00`);
+    assert.equal(p.cliente, 'Nome Comprido Do Cliente Sobrenome');
+    assert.deepEqual(p.naoEntendido, []);
+  });
+
+  test('para no rótulo de cima — não engole o Localizador', () => {
+    const p = lerPedidoIfood(`iFood
+        Confraria Cafe
+         PEDIDO: #1
+       Entrega Parceira
+Localizador: 1111 2222
+Fulano
+0800 000 0000 ID: 1
+ITENS DO PEDIDO (1)
+1x  Cafe                 R$ 5,00
+Valor total do         R$ 5,00
+pedido:
+Pagamento via iFood:  -R$ 5,00
+Cobrar do cliente:     R$ 0,00`);
+    assert.equal(p.cliente, 'Fulano');
+    assert.equal(p.localizador, '1111 2222');
+  });
+});

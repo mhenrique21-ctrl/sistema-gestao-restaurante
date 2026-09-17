@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { lancamentoDoPedido, lancamentoDoDia, entregaDaPlataforma } from './lancamentoVendas.js';
+import { lancamentoDoPedido, lancamentoDoDia, entregaDaPlataforma, dataDoPedido } from './lancamentoVendas.js';
 
 // O pedido real de 15/09/2026, 20:10 — R$ 29,90 de bolo, R$ 15,00 de promoção,
 // entrega da parceira. É em cima dele que as três decisões foram tomadas.
@@ -205,5 +205,63 @@ describe('frete grátis do 99Food (comanda real #871010)', () => {
     // Taxa negativa somaria ao líquido — faturamento inventado.
     const l = lancamentoDoPedido({ ...PEDIDO, taxaEntrega: 3.99, entregaPromocional: 10 });
     assert.equal(l.taxa, 2.40);
+  });
+});
+
+describe('reimpressão não é venda nova', () => {
+  // No primeiro lote real, a comanda de teste reimpressa criou R$ 51,70 de
+  // "dinheiro na porta" em DOIS dias diferentes, de uma venda que aconteceu
+  // uma vez só. A comanda sai de novo quando trava o papel, quando alguém
+  // testa, quando a cozinha perde a via.
+  test('pedido de outro dia fica FORA e aparece no aviso', () => {
+    const dia = lancamentoDoDia('2026-09-17', [
+      { plataforma: '99food', numero: '871001', aceitoEm: '15 de set 18:45',
+        tipoEntrega: 'Entrega da plataforma', pagoPeloApp: 0, cobrarDoCliente: 51.70 },
+    ]);
+    assert.equal(dia.pedidos, 0);
+    assert.equal(dia.total, 0);
+    assert.match(dia.avisos.join(' '), /871001 é de 2026-09-15 — reimpressão/);
+  });
+
+  test('pedido do próprio dia entra normalmente', () => {
+    const dia = lancamentoDoDia('2026-09-15', [
+      { plataforma: '99food', numero: '871001', aceitoEm: '15 de set 18:45',
+        tipoEntrega: 'Entrega da plataforma', pagoPeloApp: 0, cobrarDoCliente: 51.70 },
+    ]);
+    assert.equal(dia.pedidos, 1);
+    assert.equal(dia.dinheiro, 51.70);
+  });
+
+  test('sem data legível, vale o dia da captura', () => {
+    // É o que se sabe. Descartar seria perder venda de verdade por causa de
+    // uma linha que o leitor não entendeu.
+    const dia = lancamentoDoDia('2026-09-17', [
+      { plataforma: 'ifood', numero: '9', tipoEntrega: 'Entrega Parceira',
+        pagoPeloApp: 30, cobrarDoCliente: 0 },
+    ]);
+    assert.equal(dia.pedidos, 1);
+    assert.equal(dia.ifood, 30);
+  });
+});
+
+describe('a data que a própria comanda carrega', () => {
+  test('iFood traz dia, mês e ano', () => {
+    assert.equal(dataDoPedido({ data: '15/09/2026 16:29:39' }, '2026-09-17'), '2026-09-15');
+  });
+
+  test('99Food traz "15 de set" — o ano sai do dia da captura', () => {
+    assert.equal(dataDoPedido({ aceitoEm: '15 de set 18:45' }, '2026-09-17'), '2026-09-15');
+    assert.equal(dataDoPedido({ aceitoEm: '1 de jan 08:00' }, '2026-01-02'), '2026-01-01');
+  });
+
+  test('data que cairia no FUTURO é do ano passado', () => {
+    // Pedido de dezembro relido em janeiro. Chutar o ano corrente sempre
+    // jogaria esse pedido 12 meses à frente, num dia que ainda não existe.
+    assert.equal(dataDoPedido({ aceitoEm: '28 de dez 19:00' }, '2026-01-05'), '2025-12-28');
+  });
+
+  test('sem data nenhuma devolve o dia da captura', () => {
+    assert.equal(dataDoPedido({}, '2026-09-17'), '2026-09-17');
+    assert.equal(dataDoPedido({ aceitoEm: 'coisa nenhuma' }, '2026-09-17'), '2026-09-17');
   });
 });
