@@ -1840,6 +1840,92 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     return;
   }
 
+  // ---- Comanda que chegou como IMAGEM: a IA TRANSCREVE, o leitor é o de sempre ----
+  //
+  // ⚠️ A IA NÃO devolve o pedido montado, devolve o TEXTO da comanda. A diferença
+  // não é estilo, é onde o erro aparece:
+  //
+  //   pedindo JSON     a IA faz a aritmética. Um total alucinado sai coerente com
+  //                    os itens que ela mesma inventou, passa em qualquer
+  //                    conferência e vira faturamento errado, calado.
+  //   pedindo TEXTO    a IA faz só OCR, que é o que ela sabe. Quem lê é o
+  //                    `pedido99.js`, testado contra duas comandas reais, e quem
+  //                    decide é a aritmética: um dígito trocado quebra
+  //                    "subtotal + taxas − abatimentos = total" e o pedido NÃO
+  //                    entra no dia.
+  //
+  // De quebra, a transcrição é gravada como .txt ao lado da captura: o
+  // `reprocessar.bat` passa a funcionar nela como funciona em qualquer outra.
+  if (req.method === 'POST' && urlPath === '/api/comanda-ocr') {
+    let body = '';
+    req.on('data', (c) => {
+      body += c;
+      if (body.length > 8 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({ error: 'Imagem muito grande.' })); req.destroy(); }
+    });
+    req.on('end', async () => {
+      try {
+        const secret = process.env.SEAMA_SERVICE_SECRET;
+        if (!secret) { res.writeHead(503); res.end(JSON.stringify({ error: 'Integração não configurada' })); return; }
+        if (req.headers['x-service-secret'] !== secret) { res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return; }
+        if (!IA_KEY) { res.writeHead(500); res.end(JSON.stringify({ error: `Configure ${IA_ENV_VAR} no .env da VPS.` })); return; }
+
+        const { imagemBase64, tipo } = JSON.parse(body);
+        if (!imagemBase64 || typeof imagemBase64 !== 'string') { res.writeHead(400); res.end(JSON.stringify({ error: 'imagemBase64 ausente' })); return; }
+        const plataforma = String(tipo || '').toLowerCase() === 'ifood' ? 'iFood' : '99Food';
+
+        // ⚠️ "Transcreva, não interprete" é o pedido inteiro. Toda instrução aqui
+        // existe pra impedir a IA de ajudar: somar, converter, completar o que
+        // está cortado — cada uma dessas gentilezas destrói a conferência que
+        // vem depois, porque a aritmética passaria a bater com o que ela
+        // inventou em vez de com o que está no papel.
+        const SYSTEM = `Você transcreve comandas de pedido da plataforma ${plataforma}, impressas em bobina térmica.
+
+TAREFA: devolva o TEXTO da comanda, linha por linha, exatamente como aparece na imagem.
+
+REGRAS:
+- Transcreva TUDO o que está escrito, de cima para baixo, na mesma ordem.
+- Uma linha da imagem = uma linha da resposta. Rótulo e valor na MESMA linha quando estiverem na mesma linha do papel.
+- Mantenha os valores exatamente como impressos: "R$12,00", "-R$3,99". NÃO converta, NÃO arredonde, NÃO some nada.
+- NÃO calcule totais nem confira contas. Se um número parecer errado, transcreva errado do mesmo jeito.
+- NÃO complete palavra cortada e NÃO corrija erro de digitação da comanda.
+- Trecho ilegível: escreva ??? no lugar. NUNCA adivinhe número.
+- Sem markdown, sem comentário, sem explicação. Só o texto da comanda.`;
+
+        const r = await iaRequest({
+          system: SYSTEM,
+          max_tokens: 2000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imagemBase64 } },
+              { type: 'text', text: 'Transcreva esta comanda.' },
+            ],
+          }],
+        }, 60000);
+
+        let j = null;
+        try { j = JSON.parse(r.body); } catch {}
+        if (r.status !== 200) {
+          console.error(`[comanda-ocr] ${r.status} — ${j?.error?.type || ''}`);
+          res.writeHead(r.status);
+          res.end(JSON.stringify({ error: j?.error?.message || 'IA não respondeu', tipo: j?.error?.type || '' }));
+          return;
+        }
+        const texto = (j?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+        if (!texto) { res.writeHead(502); res.end(JSON.stringify({ error: 'IA respondeu sem texto' })); return; }
+        console.log(`[comanda-ocr] ${plataforma}: ${texto.split('\n').length} linha(s) transcritas`);
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify({ texto }));
+      } catch (e) {
+        console.error('[comanda-ocr]', e.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && urlPath === '/api/venda-pdv') {
     let body = '';
     req.on('data', c => body += c);

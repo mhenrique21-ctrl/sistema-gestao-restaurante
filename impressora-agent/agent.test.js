@@ -11,7 +11,7 @@ process.env.CAPTURA_SAIDA = TMP;
 // Sem segredo, o envio pro Gestão nem existe — teste não fala com a rede.
 delete process.env.SEAMA_SERVICE_SECRET;
 const { gravar, comandaDeTeste, destinoWindows, fontesConfiguradas, comandoCopia, conferirNomeCompartilhado,
-  pedidosDoDia, hojeISO } = await import('./agent.js');
+  pedidosDoDia, hojeISO, interpretar } = await import('./agent.js');
 const { textoDeEscPos, linhasUteis } = await import('./escpos.js');
 
 test('a comanda de teste volta legível depois de virar bytes de impressora', () => {
@@ -198,6 +198,58 @@ describe('o dia é reconstruído dos ARQUIVOS, não acumulado na memória', () =
     // busca tem que usar a mesma.
     assert.equal(hojeISO(new Date(2026, 8, 15, 21, 30)), '2026-09-15');
     assert.equal(hojeISO(new Date(2026, 8, 15, 0, 5)), '2026-09-15');
+  });
+});
+
+describe('comanda que chega DESENHADA', () => {
+  // O 99Food manda a comanda como imagem: 116 KB de raster e .txt vazio.
+  // Generic/Text Only foi testado na loja e não resolveu — nenhum driver
+  // extrai texto de onde não tem.
+  test('a transcrição guardada é REUSADA, sem chamar a IA de novo', async () => {
+    // Sem o cache, cada `reprocessar.bat` gastaria uma chamada por comanda
+    // antiga — e reprocessar existe pra ser rodado à vontade.
+    const base = path.join(TMP, '2026-04-01_10-00-00-000_99food');
+    fs.writeFileSync(`${base}.png`, 'png falso');
+    fs.writeFileSync(`${base}.ocr.txt`, `99 Food
+#871010
+Cliente
+Entrega da plataforma
+1x  Cafe                 R$12,00
+Subtotal                 R$12,00
+Total do pedido          R$12,00
+Pagamento via 99Food     R$12,00
+Cobrar do cliente         R$0,00`);
+    // Sem segredo configurado, a rede está proibida: se ele tentasse chamar a
+    // IA, não haveria transcrição nenhuma e o .json não nasceria.
+    await interpretar('', base, '99food');
+    assert.ok(fs.existsSync(`${base}.json`), 'leu pela transcrição guardada');
+    const p = JSON.parse(fs.readFileSync(`${base}.json`, 'utf8'));
+    assert.equal(p.numero, '871010');
+    assert.equal(p.lidoPor, 'ia', 'a procedência fica gravada');
+  });
+
+  test('o .json diz quando o texto veio da IMPRESSORA', () => {
+    // Quem conferir um número meses depois precisa saber qual dos dois.
+    const base = path.join(TMP, '2026-04-02_10-00-00-000_99food');
+    fs.writeFileSync(`${base}.txt`, 'x');
+    return interpretar(`99 Food
+#871011
+Cliente
+Entrega da plataforma
+1x  Cafe                 R$12,00
+Subtotal                 R$12,00
+Total do pedido          R$12,00
+Pagamento via 99Food     R$12,00
+Cobrar do cliente         R$0,00`, base, '99food').then(() => {
+      const p = JSON.parse(fs.readFileSync(`${base}.json`, 'utf8'));
+      assert.equal(p.lidoPor, 'escpos');
+    });
+  });
+
+  test('sem imagem e sem transcrição, nada é inventado', async () => {
+    const base = path.join(TMP, '2026-04-03_10-00-00-000_99food');
+    await interpretar('folha qualquer', base, '99food');
+    assert.ok(!fs.existsSync(`${base}.json`), 'não vira pedido');
   });
 });
 

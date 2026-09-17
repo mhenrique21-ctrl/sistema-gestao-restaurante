@@ -146,19 +146,20 @@ function gravar(bytes, etiqueta = 'trabalho', rotulo = '') {
   }
 
   const linhas = linhasUteis(texto);
-  if (!linhas.length) {
-    if (imagem) {
-      log('   ℹ️  a comanda veio como IMAGEM, não como texto. Abra o .png.');
-    } else {
-      log('   ⚠️  nenhuma linha de texto e nenhuma imagem — a impressora pode');
-      log('      usar outra tabela de caracteres. O .bin guarda tudo.');
-    }
-  } else {
+  if (linhas.length) {
     console.log('   ┌─────────────────────────────────────────────');
     for (const l of linhas) console.log('   │ ' + l);
     console.log('   └─────────────────────────────────────────────');
-    interpretar(texto, base, origem);
+  } else if (!imagem) {
+    log('   ⚠️  nenhuma linha de texto e nenhuma imagem — a impressora pode');
+    log('      usar outra tabela de caracteres. O .bin guarda tudo.');
   }
+
+  // ⚠️ `interpretar` é chamado TAMBÉM quando não sobrou linha de texto: é
+  // exatamente o caso do 99Food, que manda a comanda desenhada. Antes ele só
+  // rodava quando havia texto, então a comanda em imagem morria aqui — nem
+  // chegava a tentar a transcrição.
+  if (linhas.length || imagem) interpretar(texto, base, origem);
   return base;
 }
 
@@ -166,7 +167,7 @@ function gravar(bytes, etiqueta = 'trabalho', rotulo = '') {
 // Gestão: para onde o valor entra em Vendas depende de decisão do dono (o que a
 // plataforma repassa e o que o entregador cobra na porta são dinheiros
 // diferentes). Mostrar aqui é o que permite conferir contra o papel antes.
-function interpretar(texto, base, origem) {
+async function interpretar(texto, base, origem) {
   // ⚠️ O leitor é POR PLATAFORMA. Rodar o do 99Food numa comanda do iFood não
   // daria erro: daria um pedido pela metade, com número e itens plausíveis e
   // os dois dinheiros vazios. Errado em silêncio é pior que não lido — e o
@@ -195,6 +196,18 @@ function interpretar(texto, base, origem) {
   // A porta ficou aberta quando o leitor passou a ser escolhido pela ORIGEM:
   // antes, `ehComanda99` era o próprio gatilho. Agora ela confere o CONTEÚDO
   // depois que a origem escolheu quem lê.
+  // Sem texto de comanda, mas COM imagem: é o caso do 99Food. Tenta a
+  // transcrição uma vez; se vier, segue o fluxo normal a partir dela.
+  if (!ehComanda(texto) && fs.existsSync(`${base}.png`)) {
+    const transcrito = await transcreverImagem(base, origem);
+    if (transcrito && ehComanda(transcrito)) {
+      texto = transcrito;
+      // O .txt passa a ser a transcrição: é ele que o `--ler` mostra e o que
+      // um humano vai conferir contra o papel.
+      try { fs.writeFileSync(`${base}.txt`, texto, 'utf8'); } catch {}
+    }
+  }
+
   if (!ehComanda(texto)) {
     log(`   ℹ️  não parece pedido do ${rotuloPlataforma(origem)} — capturado e guardado, fora do dia.`);
     // Um .json de uma leitura anterior não pode ficar contando como pedido.
@@ -223,7 +236,10 @@ function interpretar(texto, base, origem) {
   for (const a of avisos) log(`   ⚠️  ${a}`);
   for (const l of pedido.naoEntendido) log(`      não entendi: ${l}`);
 
-  try { fs.writeFileSync(`${base}.json`, JSON.stringify({ origem, ...pedido }, null, 2), 'utf8'); }
+  // ⚠️ `lidoPor` diz se o texto veio da impressora ou de uma transcrição de
+  // imagem. Quem conferir um número meses depois precisa saber qual dos dois.
+  const lidoPor = fs.existsSync(`${base}.ocr.txt`) ? 'ia' : 'escpos';
+  try { fs.writeFileSync(`${base}.json`, JSON.stringify({ origem, lidoPor, ...pedido }, null, 2), 'utf8'); }
   catch (e) { log(`   ⚠️  não consegui gravar o .json: ${e.message}`); }
 
   // Reenvia o DIA INTEIRO, não este pedido: o endpoint substitui o registro do
@@ -231,6 +247,56 @@ function interpretar(texto, base, origem) {
   // Durante o `--reprocessar` isso fica desligado: seriam dezenas de POSTs do
   // mesmo dia, um por arquivo, e o certo é um só no fim.
   if (!reprocessando) enviarDia(path.basename(base).slice(0, 10));
+}
+
+// ── Comanda que veio DESENHADA: a IA transcreve ─────────────────────────────
+// O 99Food manda a comanda como imagem — 116 KB de raster e um .txt vazio. Não
+// há texto pra ler, e nenhum driver extrai texto de onde não tem (Generic/Text
+// Only foi testado na loja e não resolveu).
+//
+// ⚠️ A IA TRANSCREVE; quem LÊ continua sendo o `pedido99.js`, testado contra
+// duas comandas reais, e quem DECIDE é a aritmética dele. Pedir o pedido
+// montado deixaria a IA fazer a conta — e um total alucinado sairia coerente
+// com os itens que ela mesma inventou, passando em qualquer conferência.
+//
+// ⚠️ A transcrição é gravada em `.ocr.txt` e REUSADA. Sem o cache, cada
+// `reprocessar.bat` gastaria uma chamada por comanda antiga — e reprocessar
+// existe justamente pra ser rodado à vontade quando o leitor melhora.
+async function transcreverImagem(base, origem) {
+  const cache = `${base}.ocr.txt`;
+  try {
+    if (fs.existsSync(cache)) {
+      const guardado = fs.readFileSync(cache, 'utf8');
+      if (guardado.trim()) return guardado;
+    }
+  } catch {}
+
+  if (!SECRET) {
+    log('   ℹ️  comanda veio como imagem e não há SEAMA_SERVICE_SECRET: sem transcrição.');
+    return null;
+  }
+  let png;
+  try { png = fs.readFileSync(`${base}.png`); }
+  catch { return null; }
+
+  try {
+    log('   🔎 comanda desenhada — pedindo a transcrição ao Gestão…');
+    const r = await fetch(`${GESTAO_URL}/api/comanda-ocr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-service-secret': SECRET },
+      body: JSON.stringify({ imagemBase64: png.toString('base64'), tipo: origem }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.texto) throw new Error(j.error || `HTTP ${r.status}`);
+    fs.writeFileSync(cache, j.texto, 'utf8');
+    log(`   📝 transcrita: ${j.texto.split('\n').length} linha(s) → ${path.basename(cache)}`);
+    return j.texto;
+  } catch (e) {
+    // ⚠️ Falhar aqui não pode parar nada: o papel já saiu e o .bin/.png estão
+    // guardados. O `reprocessar.bat` tenta de novo quando quiser.
+    log(`   ⚠️  não consegui transcrever (${e.message}). O .png está guardado; rode o reprocessar depois.`);
+    return null;
+  }
 }
 
 // ── Envio pro Gestão ────────────────────────────────────────────────────────
@@ -631,6 +697,7 @@ if (!chamadoDireto) {
   console.log(`Relendo ${arquivos.length} captura(s) de ${SAIDA}…\n`);
 
   const dias = new Set();
+  (async () => {
   for (const nome of arquivos) {
     const base = path.join(SAIDA, nome.replace(/\.bin$/, ''));
     // O rótulo da plataforma está no NOME do arquivo (…_ifood.bin) — foi pra
@@ -644,15 +711,18 @@ if (!chamadoDireto) {
     // melhorou, e deixar o antigo faria os dois discordarem.
     try { fs.writeFileSync(`${base}.txt`, texto, 'utf8'); } catch {}
     log(`📄 ${nome}${origem ? `  [${rotuloPlataforma(origem)}]` : ''}`);
-    interpretar(texto, base, origem);
+    // ⚠️ AWAIT: a transcrição de imagem é uma ida à rede. Sem esperar, os
+    // envios do fim rodariam antes das leituras terminarem e mandariam o dia
+    // pela metade — e como o endpoint SUBSTITUI o dia, o que chegasse depois
+    // não somaria: seria descartado.
+    await interpretar(texto, base, origem);
     dias.add(nome.slice(0, 10));
   }
 
   reprocessando = false;
   console.log('');
-  (async () => {
-    for (const d of [...dias].sort()) await enviarDia(d);
-    if (!SECRET) console.log('ℹ️  sem SEAMA_SERVICE_SECRET no config.bat: os .json foram refeitos, mas nada foi enviado.');
+  for (const d of [...dias].sort()) await enviarDia(d);
+  if (!SECRET) console.log('ℹ️  sem SEAMA_SERVICE_SECRET no config.bat: os .json foram refeitos, mas nada foi enviado.');
   })();
 } else if (args.includes('--papel')) {
   // Conferir o REPASSE sozinho, antes de existir captura nenhuma.
@@ -746,4 +816,4 @@ if (!chamadoDireto) {
   }
 }
 
-export { gravar, comandaDeTeste, fontesConfiguradas, pedidosDoDia, hojeISO };
+export { gravar, comandaDeTeste, fontesConfiguradas, pedidosDoDia, hojeISO, interpretar };

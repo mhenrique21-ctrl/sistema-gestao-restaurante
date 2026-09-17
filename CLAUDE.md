@@ -453,10 +453,48 @@ o cliente não pagou frete. Contar os 3,99 como despesa inventaria uma despesa
 que não existiu e o líquido do canal sairia menor que a venda. Com a promoção,
 `liquido` bate exatamente com o `subtotal`.
 
-⚠️ **A comanda do 99Food chega como IMAGEM** (116–123 KB de raster, `.txt`
-quase vazio), então o leitor acima **ainda não tem de onde ler** no dia a dia.
-A captura guarda `.bin` + `.png` e o pedido fica fora do faturamento. O leitor
-está pronto e testado contra a comanda real — falta a fonte de texto.
+#### A comanda do 99Food chega DESENHADA — a IA transcreve, o leitor é o mesmo
+
+116–123 KB de raster e `.txt` vazio. Testado na loja em 16–17/09: o driver
+**Generic / Text Only não resolve** (o app manda bitmap pronto) e o `.txt` não
+tem nada aproveitável. Nenhum driver extrai texto de onde não tem.
+
+`POST /api/comanda-ocr` (autenticado pelo `SEAMA_SERVICE_SECRET`, como o
+`/api/venda-pdv`) recebe o PNG e devolve o **texto**.
+
+⚠️ **A IA TRANSCREVE; quem LÊ é o `pedido99.js` e quem DECIDE é a aritmética
+dele.** A diferença não é estilo, é onde o erro aparece:
+
+| | |
+|---|---|
+| pedindo **JSON** | a IA faz a conta. Um total alucinado sai coerente com os itens que ela mesma inventou, passa em qualquer conferência e vira faturamento errado, calado |
+| pedindo **TEXTO** | a IA faz só OCR, que é o que ela sabe. Um dígito trocado quebra `subtotal + taxas − abatimentos = total` e o pedido **não entra no dia** |
+
+⚠️ O prompt é todo feito pra **impedir a IA de ajudar**: não somar, não
+converter, não completar palavra cortada, não corrigir erro da comanda,
+ilegível vira `???`. Cada uma dessas gentilezas destruiria a conferência, porque
+a aritmética passaria a bater com o que ela inventou em vez de com o papel.
+
+⚠️ **A transcrição é gravada em `.ocr.txt` e REUSADA.** Sem o cache, cada
+`reprocessar.bat` gastaria uma chamada por comanda antiga — e reprocessar existe
+justamente pra ser rodado à vontade quando o leitor melhora.
+
+⚠️ **`lidoPor` no `.json`** diz `escpos` ou `ia`: quem conferir um número meses
+depois precisa saber se o texto veio da impressora ou de uma transcrição.
+
+⚠️ `interpretar` é chamado **também quando não sobrou linha de texto** — antes
+só rodava quando havia texto, e a comanda em imagem morria ali sem nem tentar.
+E o `--reprocessar` **espera** (`await`) cada leitura: sem isso os envios do fim
+rodariam antes das transcrições e mandariam o dia pela metade, que o endpoint
+substituiria em vez de somar.
+
+⚠️ Falha na transcrição **não para nada**: o papel já saiu, o `.bin`/`.png`
+estão guardados e o `reprocessar.bat` tenta de novo.
+
+⚠️ **Decisão do dono (17/09/2026): pelo Gemini**, mesma faixa gratuita do Cupom
+IA. Diferente do cupom, aqui vai **dado de cliente** (nome, endereço, telefone)
+— e na faixa gratuita o Google pode usar o conteúdo enviado (ver §8). Escolha
+consciente; `IA_PROVIDER=anthropic` inverte, ao custo de crédito lá.
 
 #### O pedido vira faturamento — `lancamentoVendas.js` (com testes)
 
