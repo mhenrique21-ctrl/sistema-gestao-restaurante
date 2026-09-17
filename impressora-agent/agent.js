@@ -232,6 +232,16 @@ async function interpretar(texto, base, origem) {
     log(`      📅 a comanda diz que é de ${diaPedido} — reimpressão, não conta em ${diaArquivo}`);
   } else if (!pedido.aceitoEm && !pedido.data) {
     log('      📅 a comanda não diz de que dia é — vai contar no dia da captura');
+  } else if (pedido.aceitoEm || pedido.data) {
+    // ⚠️ O caso que faltava, e é o que escondia o problema: o campo EXISTE mas
+    // `dataDoPedido` não consegue lê-lo, então ele devolve o dia da captura e
+    // tudo parece normal — a reimpressão passa e nenhuma das duas linhas acima
+    // aparece. Mostrar o texto cru é o que permite consertar o formato em vez
+    // de adivinhar qual é.
+    const cru = String(pedido.data || pedido.aceitoEm);
+    const leu = String(pedido.data || '').match(/\d{2}\/\d{2}\/\d{4}/)
+      || String(pedido.aceitoEm || '').match(/\d{1,2}\s*de\s*[a-zç]{3}/i);
+    if (!leu) log(`      📅 a comanda diz "${cru}" e eu NÃO consegui ler a data — conta em ${diaArquivo}`);
   }
   // ⚠️ Valor que não foi lido mostra "?", não "R$ 0,00". Zero na tela diz "o
   // pedido não tinha esse dinheiro" — e é justamente o que faria alguém passar
