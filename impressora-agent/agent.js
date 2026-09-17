@@ -29,7 +29,7 @@ import { pngMono } from './png.js';
 import { lerPedido99, conferirPedido99, ehComanda99 } from './pedido99.js';
 import { lerPedidoIfood, conferirPedidoIfood, ehComandaIfood } from './pedidoIfood.js';
 import { resolverOrigem, rotuloPlataforma, temLeitor } from './plataforma.js';
-import { lancamentoDoDia } from './lancamentoVendas.js';
+import { lancamentoDoDia, dataDoPedido } from './lancamentoVendas.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -221,8 +221,18 @@ async function interpretar(texto, base, origem) {
 
   const avisos = conferir(pedido);
   const itens = pedido.itens.map((i) => `${i.qtd}x ${i.nome}`).join(', ');
+  // ⚠️ A DATA DO PEDIDO na tela. Sem ela não dava pra saber, olhando, em que dia
+  // um pedido foi contado — e quando a reimpressão de teste continuou entrando
+  // no dia errado, a única forma de investigar era abrir o .json na mão.
+  const diaArquivo = path.basename(base).slice(0, 10);
+  const diaPedido = dataDoPedido(pedido, diaArquivo);
   log(`   🧾 pedido #${pedido.numero || '?'} · ${pedido.cliente || 'sem nome'}`
     + ` · ${pedido.itens.length} item(ns)${itens ? ': ' + itens : ''}`);
+  if (diaPedido && diaPedido !== diaArquivo) {
+    log(`      📅 a comanda diz que é de ${diaPedido} — reimpressão, não conta em ${diaArquivo}`);
+  } else if (!pedido.aceitoEm && !pedido.data) {
+    log('      📅 a comanda não diz de que dia é — vai contar no dia da captura');
+  }
   // ⚠️ Valor que não foi lido mostra "?", não "R$ 0,00". Zero na tela diz "o
   // pedido não tinha esse dinheiro" — e é justamente o que faria alguém passar
   // batido por uma comanda que o leitor não entendeu.
