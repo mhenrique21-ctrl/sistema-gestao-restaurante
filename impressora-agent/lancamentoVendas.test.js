@@ -178,3 +178,32 @@ describe('o que não é pedido não entra no dia', () => {
     assert.equal(dia.dinheiro, 51.70);
   });
 });
+
+describe('frete grátis do 99Food (comanda real #871010)', () => {
+  const PEDIDO = {
+    plataforma: '99food', numero: '871010', tipoEntrega: 'Entrega da plataforma',
+    subtotal: 39.90, taxaEntrega: 3.99, entregaPromocional: 3.99, taxaServico: 2.40,
+    total: 42.30, pagoPeloApp: 42.30, cobrarDoCliente: 0,
+  };
+
+  test('a entrega promocional ANULA a taxa de entrega na despesa do canal', () => {
+    // O 99Food cobrou 3,99 e devolveu os mesmos 3,99: o cliente não pagou
+    // frete. Contar os 3,99 como despesa inventaria uma despesa que não houve.
+    const l = lancamentoDoPedido(PEDIDO);
+    assert.equal(l.bruto, 42.30);
+    assert.equal(l.taxa, 2.40, 'só a taxa de serviço');
+    assert.equal(l.liquido, 39.90, 'bate com o subtotal — a mercadoria vendida');
+  });
+
+  test('sem promoção, a entrega volta a ser despesa', () => {
+    const l = lancamentoDoPedido({ ...PEDIDO, entregaPromocional: null });
+    assert.equal(l.taxa, 6.39);
+    assert.equal(l.liquido, 35.91);
+  });
+
+  test('promoção maior que a taxa não vira despesa negativa', () => {
+    // Taxa negativa somaria ao líquido — faturamento inventado.
+    const l = lancamentoDoPedido({ ...PEDIDO, taxaEntrega: 3.99, entregaPromocional: 10 });
+    assert.equal(l.taxa, 2.40);
+  });
+});

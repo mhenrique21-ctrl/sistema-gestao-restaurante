@@ -57,7 +57,13 @@ export function lancamentoDoPedido(pedido) {
   if (daPlataforma == null && p.taxaEntrega) {
     avisos.push('não sei quem entregou: a taxa de entrega ficou FORA da despesa do canal');
   }
-  const taxa = round2((p.taxaServico || 0) + (daPlataforma ? (p.taxaEntrega || 0) : 0));
+  // ⚠️ FRETE GRÁTIS ANULA A TAXA DE ENTREGA. Na comanda real #871010 o 99Food
+  // cobrou R$ 3,99 de entrega e devolveu os mesmos R$ 3,99 como "Entrega
+  // promocional para cliente" — o cliente não pagou frete nenhum. Contar os
+  // 3,99 como despesa do canal inventaria uma despesa que não existiu, e o
+  // líquido do canal sairia menor que a venda real.
+  const entregaLiquida = Math.max(0, (p.taxaEntrega || 0) - (p.entregaPromocional || 0));
+  const taxa = round2((p.taxaServico || 0) + (daPlataforma ? entregaLiquida : 0));
 
   // ⚠️ Sem NENHUM dos dois valores, não há o que somar. Entrar como zero seria
   // pior que ficar de fora: inflaria a contagem de pedidos do dia com uma

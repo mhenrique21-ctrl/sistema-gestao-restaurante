@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { lerPedido99, conferirPedido99, ehComanda99, valorBR } from './pedido99.js';
 
@@ -173,6 +173,92 @@ Taxa de entrega R$4,50
 Desconto -R$1,00
 Total do pedido R$11,50`);
   assert.equal(p.taxaEntrega, 4.50);
-  assert.equal(p.desconto, -1);
+  // ⚠️ MUDOU em 17/09: o desconto era guardado CRU (-1) e passou a ser guardado
+  // POSITIVO, como o `descontos` do iFood e a "Entrega promocional". O campo
+  // quer dizer "quanto foi abatido"; o sinal fica na fórmula. Com o valor cru,
+  // a conferência nova (subtotal + taxas − abatimentos = total) SOMARIA o
+  // abatimento em vez de subtrair, e o erro apareceria como um total que não
+  // fecha por duas vezes o desconto.
+  assert.equal(p.desconto, 1);
   assert.equal(p.total, 11.50);
+  // 8,00 + 4,50 − 1,00 = 11,50. (A comanda de mentira deste teste não tem
+  // número nem cabeçalho, então a conferência acusa outras coisas — o que
+  // importa aqui é que a conta do TOTAL fecha.)
+  assert.ok(!conferirPedido99(p).some((a) => a.includes('o total diz')));
+});
+
+// Comanda REAL da Confraria no 99Food, pedido #871010 de 15/09/2026, lida da
+// imagem capturada pela ponte (a do 99Food chega desenhada, não como texto —
+// ver o README). Dados do cliente trocados; o que o teste trava é a FORMA e a
+// CONTA, e esta comanda trouxe duas linhas que a #871001 não tinha.
+const COMANDA_871010 = `99 Food
+Confraria Café
+#871010
+Cliente Exemplo
+Entrega da plataforma
+Código de verificação
+#2377
+Endereço   Avenida Exemplo, 707
+Central, Macapá - AP ao lado
+do mercado
+Observações do pedido
+Cancelar apenas o que está em falta
+1x  Coxinha de Frango com
+Catupiry                 R$12,00
+1x  Torta Banoffe        R$27,90
+Subtotal                 R$39,90
+Taxa de entrega           R$3,99
+Entrega promocional para cliente  -R$3,99
+Taxa de serviço           R$2,40
+Total do pedido          R$42,30
+Pagamento via 99Food     R$42,30
+Cobrar do cliente         R$0,00
+Horário de aceite do pedido:15 de set 18:45`;
+
+describe('comanda real #871010 — frete grátis e taxa de serviço', () => {
+  const p = lerPedido99(COMANDA_871010);
+
+  test('cabeçalho e código de verificação', () => {
+    assert.equal(p.numero, '871010');
+    assert.equal(p.cliente, 'Cliente Exemplo');
+    assert.equal(p.tipoEntrega, 'Entrega da plataforma');
+    assert.equal(p.codigoVerificacao, '2377');
+  });
+
+  test('"Entrega promocional" é guardada POSITIVA, como abatimento', () => {
+    // A comanda escreve "-R$3,99" porque para ela é desconto. Guardando cru, a
+    // conferência somaria em vez de subtrair, e o total não fecharia por duas
+    // vezes o valor.
+    assert.equal(p.entregaPromocional, 3.99);
+    assert.equal(p.taxaEntrega, 3.99);
+    assert.equal(p.taxaServico, 2.40);
+  });
+
+  test('a conta do 99Food fecha dos DOIS lados', () => {
+    // repasse + cobrança = total …
+    assert.equal(p.total, 42.30);
+    assert.equal(p.pagoPeloApp, 42.30);
+    assert.equal(p.cobrarDoCliente, 0);
+    // … e subtotal + taxas − abatimentos = total
+    assert.equal(p.subtotal, 39.90);
+    assert.deepEqual(conferirPedido99(p), []);
+  });
+
+  test('sem as duas linhas novas, o total deixaria de fechar', () => {
+    // É o que prova que a segunda conta serve pra alguma coisa: uma taxa nova
+    // que o leitor não conheça passa a aparecer, em vez de entrar calada.
+    const semTaxaServico = { ...p, taxaServico: null };
+    assert.match(conferirPedido99(semTaxaServico).join(' '), /39\.90 e o total diz 42\.30/);
+  });
+
+  test('itens com nome quebrado em duas linhas', () => {
+    assert.equal(p.itens.length, 2);
+    assert.equal(p.itens[0].valor, 12);
+    assert.equal(p.itens[1].nome, 'Torta Banoffe');
+    assert.equal(p.itens[1].valor, 27.90);
+  });
+
+  test('nenhuma pendência sobra', () => {
+    assert.deepEqual(p.naoEntendido, []);
+  });
 });

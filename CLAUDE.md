@@ -424,6 +424,40 @@ receber do 99Food. `conferirPedido99` acusa quando não fecham com o total.
 tela, nunca palpite. Item é testado ANTES dos rótulos: "1x Desconto especial
 R$5,00" é item, e deixar o rótulo ganhar viraria abatimento.
 
+**A comanda real da Confraria (#871010, 15/09/2026) trouxe duas linhas novas** —
+e ela chega como IMAGEM, então foi lida do `.png` capturado, não de um `.txt`:
+
+```
+Subtotal                           39,90
+Taxa de entrega                    +3,99
+Entrega promocional para cliente   −3,99   ← frete grátis
+Taxa de serviço                    +2,40
+Total do pedido                     42,30
+Pagamento via 99Food 42,30 + Cobrar do cliente 0,00 = 42,30
+```
+
+⚠️ **`conferirPedido99` ganhou a SEGUNDA conta:** `subtotal + taxas −
+abatimentos = total`. A primeira (repasse + cobrança = total) continuava
+fechando mesmo com a taxa de serviço ignorada — o total é que estaria errado. O
+iFood inventou três linhas novas em três comandas; sem a segunda conta, a
+quarta entraria calada.
+
+⚠️ **Abatimento é guardado POSITIVO** (`entregaPromocional`, `desconto`), como
+no iFood: o campo diz "quanto foi abatido" e o sinal fica na fórmula. Guardando
+cru, a conferência SOMARIA o abatimento e o erro apareceria como um total
+errado por duas vezes o desconto. **Mudou em 17/09** — `desconto` era cru.
+
+⚠️ **Frete grátis ANULA a taxa de entrega na despesa do canal**
+(`lancamentoVendas.js`): o 99Food cobrou 3,99 e devolveu os mesmos 3,99, então
+o cliente não pagou frete. Contar os 3,99 como despesa inventaria uma despesa
+que não existiu e o líquido do canal sairia menor que a venda. Com a promoção,
+`liquido` bate exatamente com o `subtotal`.
+
+⚠️ **A comanda do 99Food chega como IMAGEM** (116–123 KB de raster, `.txt`
+quase vazio), então o leitor acima **ainda não tem de onde ler** no dia a dia.
+A captura guarda `.bin` + `.png` e o pedido fica fora do faturamento. O leitor
+está pronto e testado contra a comanda real — falta a fonte de texto.
+
 #### O pedido vira faturamento — `lancamentoVendas.js` (com testes)
 
 Mora fora do agente porque é a única parte disto que erra em **silêncio**:

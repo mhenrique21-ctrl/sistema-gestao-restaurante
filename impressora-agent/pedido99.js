@@ -42,6 +42,12 @@ const MARCAS = [
   ['endereco',          'endere'],         // "Endereço"
   ['observacoes',       'observa'],        // "Observações do pedido"
   ['taxaEntrega',       'taxa de entrega'],
+  // ⚠️ "Entrega promocional para cliente  -R$3,99" ANULA a taxa de entrega da
+  // linha de cima: o cliente não pagou o frete. Sem esta âncora ela caía em
+  // `naoEntendido` em todo pedido com frete grátis — que é promoção comum — e
+  // a tela ensinava a ignorar a lista de pendências.
+  ['entregaPromocional', 'promocional'],
+  ['taxaServico',       'taxa de servico'],
   ['desconto',          'desconto'],
   ['subtotal',          'subtotal'],
   ['total',             'total do pedido'],
@@ -49,7 +55,8 @@ const MARCAS = [
   ['cobrarDoCliente',   'cobrar do cliente'],
   ['aceitoEm',          'aceite do pedido'],
 ];
-const VALORES = ['taxaEntrega', 'desconto', 'subtotal', 'total', 'pagoPeloApp', 'cobrarDoCliente'];
+const VALORES = ['taxaEntrega', 'entregaPromocional', 'taxaServico', 'desconto',
+  'subtotal', 'total', 'pagoPeloApp', 'cobrarDoCliente'];
 
 const marcaDaLinha = (l) => (MARCAS.find(([, m]) => fold(l).includes(m)) || [null])[0];
 const ehRotuloConhecido = (l) => marcaDaLinha(l) != null;
@@ -88,7 +95,8 @@ export function lerPedido99(texto) {
   const p = {
     loja: null, numero: null, cliente: null, tipoEntrega: null,
     codigoVerificacao: null, endereco: null, observacoes: [],
-    itens: [], subtotal: null, taxaEntrega: null, desconto: null, total: null,
+    itens: [], subtotal: null, taxaEntrega: null, entregaPromocional: null,
+    taxaServico: null, desconto: null, total: null,
     pagoPeloApp: null, cobrarDoCliente: null, formaPagamento: null,
     aceitoEm: null, naoEntendido: [],
   };
@@ -143,11 +151,18 @@ export function lerPedido99(texto) {
     if (campo && VALORES.includes(campo)) {
       // Na mesma linha ("Subtotal  R$51,70") ou na de baixo ("Cobrar do
       // cliente" / "R$51,70" — a comanda destaca esse em fonte grande).
+      // ⚠️ Abatimento vem NEGATIVO na comanda ("-R$3,99") porque para ela é
+      // desconto. É guardado POSITIVO, como no leitor do iFood: o campo quer
+      // dizer "quanto foi abatido", e o sinal fica na fórmula. Guardando cru,
+      // a conferência SOMARIA o abatimento em vez de subtrair, e o erro
+      // apareceria como um total que não fecha por duas vezes o desconto.
+      const ABATIMENTOS = ['entregaPromocional', 'desconto'];
+      const ajusta = (v) => (v != null && ABATIMENTOS.includes(campo) ? Math.abs(v) : v);
       const propria = ultimoValorBR(l);
-      if (propria != null) { p[campo] = propria; i += 1; }
+      if (propria != null) { p[campo] = ajusta(propria); i += 1; }
       else {
         const abaixo = linhas[i + 1] != null ? ultimoValorBR(linhas[i + 1]) : null;
-        p[campo] = abaixo; i += abaixo != null ? 2 : 1;
+        p[campo] = ajusta(abaixo); i += abaixo != null ? 2 : 1;
       }
       continue;
     }
@@ -216,6 +231,17 @@ export function conferirPedido99(p) {
   if (p.total != null && p.pagoPeloApp != null && p.cobrarDoCliente != null
       && !perto(p.pagoPeloApp + p.cobrarDoCliente, p.total)) {
     avisos.push('repasse da plataforma + cobrança do cliente não fecham com o total');
+  }
+  // ⚠️ A segunda conta do 99Food, que a comanda real revelou: o total NASCE do
+  // subtotal mais as taxas menos os abatimentos. Sem ela, uma linha de taxa
+  // nova (o iFood já inventou três em três comandas) entraria em silêncio: o
+  // repasse continuaria fechando com o total, e o total é que estaria errado.
+  if (p.total != null && p.subtotal != null) {
+    const montado = p.subtotal + (p.taxaEntrega || 0) + (p.taxaServico || 0)
+      - (p.entregaPromocional || 0) - (p.desconto || 0);
+    if (!perto(montado, p.total)) {
+      avisos.push(`subtotal + taxas − abatimentos dá ${montado.toFixed(2)} e o total diz ${p.total.toFixed(2)}`);
+    }
   }
   if (p.naoEntendido.length) avisos.push(`${p.naoEntendido.length} linha(s) não reconhecida(s)`);
   return avisos;
