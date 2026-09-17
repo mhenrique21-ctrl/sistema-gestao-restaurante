@@ -136,13 +136,35 @@ export function lerPedido99(texto) {
     const mItem = l.match(ITEM);
     if (mItem) {
       const item = { qtd: parseInt(mItem[1], 10), nome: mItem[2].trim(), valor: valorBR(mItem[3]) };
-      if (item.valor == null && linhas[i + 1] != null && valorBR(linhas[i + 1]) != null
-          && !ehRotuloConhecido(linhas[i + 1]) && !ITEM.test(linhas[i + 1])) {
-        item.valor = valorBR(linhas[i + 1]);
+      i += 1;
+
+      // ⚠️ O NOME DO ITEM QUEBRA, e o valor pode cair na quebra junto.
+      //
+      // "1x Coxinha de Frango com / Catupiry / R$12,00" chegava como três
+      // coisas: um item com nome pela metade e duas pendências. Em quase toda
+      // comanda real do 99Food, e o estrago não era só cosmético — o item
+      // ficava SEM VALOR, então "itens somam 19,90 e o subtotal diz 31,90"
+      // aparecia em todo pedido e a conferência virava ruído.
+      //
+      // A versão anterior olhava UMA linha à frente atrás de um valor. Não
+      // bastava: entre o item e o valor tinha o resto do nome.
+      //
+      // Para em rótulo conhecido (o bloco de totais) e em item novo — sem
+      // isso, a continuação engoliria o "Subtotal" e o pedido inteiro.
+      while (i < linhas.length && !ehRotuloConhecido(linhas[i]) && !ITEM.test(linhas[i])) {
+        const seguinte = linhas[i].trim();
+        const valorSolto = ultimoValorBR(seguinte);
+        // Linha que é SÓ valor pertence ao item; linha com texto continua o nome.
+        if (valorSolto != null && !seguinte.replace(/-?R\$\s*[\d.]*\d,\d{2}/g, '').trim()) {
+          if (item.valor == null) item.valor = valorSolto;
+        } else {
+          item.nome = `${item.nome} ${seguinte}`.replace(/\s+/g, ' ').trim();
+          if (item.valor == null && valorSolto != null) item.valor = valorSolto;
+        }
         i += 1;
       }
+
       p.itens.push(item);
-      i += 1;
       continue;
     }
 
@@ -189,8 +211,16 @@ export function lerPedido99(texto) {
       continue;
     }
     if (campo === 'aceitoEm') {
-      p.aceitoEm = l.replace(/^.*?pedido\s*:?\s*/i, '').trim() || null;
+      // ⚠️ A hora quebra pra linha de baixo: "Horário de aceite do pedido:15 de
+      // set" / "16:00". Lendo só a primeira, o horário sozinho virava pendência
+      // em toda comanda — e é a última linha, então o ruído fechava a lista.
+      let quando = l.replace(/^.*?pedido\s*:?\s*/i, '').trim();
       i += 1;
+      if (linhas[i] && /^\d{1,2}[:h]\d{2}$/.test(linhas[i].trim())) {
+        quando = `${quando} ${linhas[i].trim()}`.trim();
+        i += 1;
+      }
+      p.aceitoEm = quando || null;
       continue;
     }
     if (/^pagamento\b/.test(fold(l)) && ultimoValorBR(l) == null) {

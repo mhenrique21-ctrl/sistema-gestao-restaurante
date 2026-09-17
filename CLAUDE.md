@@ -496,6 +496,32 @@ IA. Diferente do cupom, aqui vai **dado de cliente** (nome, endereço, telefone)
 — e na faixa gratuita o Google pode usar o conteúdo enviado (ver §8). Escolha
 consciente; `IA_PROVIDER=anthropic` inverte, ao custo de crédito lá.
 
+**O primeiro lote transcrito (54 capturas) expôs UM defeito, em quase todas:**
+
+⚠️ **O NOME DO ITEM QUEBRA, e o valor pode cair na quebra junto.**
+`1x Coxinha de Frango com / Catupiry / R$12,00` chegava como um item com nome
+pela metade e DUAS pendências — e o item ficava **sem valor**, então
+"itens somam 19,90 e o subtotal diz 31,90" saía em todo pedido e a conferência
+virava ruído. O `pedidoIfood.js` já sabia juntar continuação; o `pedido99.js`
+nunca precisou, porque a #871001 não quebrava.
+
+A versão anterior olhava **uma** linha à frente atrás do valor. Não bastava:
+entre o item e o valor tinha o resto do nome. Agora absorve **até** rótulo
+conhecido ou item novo — e linha que é SÓ valor vira o valor, linha com texto
+continua o nome.
+
+⚠️ **A continuação PARA no bloco de totais.** Sem isso o "Subtotal" viraria
+parte do nome do último item e o pedido inteiro se desmontaria.
+
+⚠️ **Mudou o significado de "linha solta depois de item".** Antes era pendência;
+agora é continuação de nome, porque é o que ela é em quase toda comanda real. A
+pendência continua valendo FORA do bloco de itens, que é onde uma linha nova de
+verdade apareceria.
+
+⚠️ **A hora do aceite quebra** (`Horário de aceite do pedido:15 de set` /
+`16:00`) — é a ÚLTIMA linha da comanda, então o ruído dela fechava a lista de
+pendências.
+
 #### O pedido vira faturamento — `lancamentoVendas.js` (com testes)
 
 Mora fora do agente porque é a única parte disto que erra em **silêncio**:

@@ -94,14 +94,84 @@ test('nome comprido leva o valor pra linha de baixo e ainda casa', () => {
 });
 
 test('linha que não casa com nada vira pendência, não palpite', () => {
+  // ⚠️ MUDOU em 17/09: linha solta LOGO DEPOIS de um item agora é lida como
+  // continuação do NOME dele, porque é o que ela é em quase toda comanda real
+  // ("1x Coxinha de Frango com" / "Catupiry"). A pendência continua valendo
+  // para o que aparece FORA do bloco de itens — que é onde uma linha nova de
+  // verdade apareceria.
   const p = lerPedido99(`#871003
 Fulano
 Entrega da plataforma
 1x Cafe R$8,00
-Alguma coisa nova que o 99Food passou a imprimir
-Total do pedido R$8,00`);
+Total do pedido R$8,00
+Alguma coisa nova que o 99Food passou a imprimir`);
   assert.deepEqual(p.naoEntendido, ['Alguma coisa nova que o 99Food passou a imprimir']);
   assert.ok(conferirPedido99(p).some((a) => a.includes('não reconhecida')));
+});
+
+describe('o nome do item quebra — e leva o valor junto', () => {
+  // Foi o que apareceu em QUASE TODA comanda real do 99Food depois que a
+  // transcrição começou a funcionar: o item ficava com o nome pela metade e o
+  // valor virava pendência, então "itens somam 19,90 e o subtotal diz 31,90"
+  // saía em todo pedido e a conferência virava ruído.
+  test('nome em duas linhas com o valor na primeira', () => {
+    const p = lerPedido99(`#871001
+Fulano
+Entrega da plataforma
+1x  Coxinha de Frango com   R$12,00
+Catupiry
+1x  Suco de Abacaxi          R$7,90
+Subtotal                    R$19,90`);
+    assert.deepEqual(p.itens.map((i) => i.nome),
+      ['Coxinha de Frango com Catupiry', 'Suco de Abacaxi']);
+    assert.deepEqual(p.itens.map((i) => i.valor), [12, 7.90]);
+    assert.deepEqual(conferirPedido99(p), []);
+  });
+
+  test('nome em duas linhas com o valor na TERCEIRA', () => {
+    // "1x Coxinha de Frango com / Catupiry / R$12,00" — a versão anterior
+    // olhava uma linha à frente atrás do valor, e entre o item e o valor tinha
+    // o resto do nome.
+    const p = lerPedido99(`#871002
+Fulano
+Entrega da plataforma
+1x  Coxinha de Frango com
+Catupiry
+R$12,00
+Subtotal                    R$12,00`);
+    assert.equal(p.itens.length, 1);
+    assert.equal(p.itens[0].nome, 'Coxinha de Frango com Catupiry');
+    assert.equal(p.itens[0].valor, 12);
+    assert.deepEqual(conferirPedido99(p), []);
+  });
+
+  test('a continuação PARA no bloco de totais', () => {
+    // Sem parar, o "Subtotal" viraria parte do nome do último item e o pedido
+    // inteiro se desmontaria.
+    const p = lerPedido99(`#871003
+Fulano
+Entrega da plataforma
+1x  Torta de limao          R$27,90
+Subtotal                    R$27,90
+Total do pedido             R$27,90`);
+    assert.equal(p.itens[0].nome, 'Torta de limao');
+    assert.equal(p.subtotal, 27.90);
+    assert.equal(p.total, 27.90);
+  });
+
+  test('a hora do aceite que caiu na linha de baixo não vira pendência', () => {
+    // "Horário de aceite do pedido:15 de set" / "16:00" — é a última linha da
+    // comanda, então o ruído fechava a lista de pendências.
+    const p = lerPedido99(`#871004
+Fulano
+Entrega da plataforma
+1x Cafe R$8,00
+Total do pedido R$8,00
+Horário de aceite do pedido:15 de set
+16:00`);
+    assert.equal(p.aceitoEm, '15 de set 16:00');
+    assert.deepEqual(p.naoEntendido, []);
+  });
 });
 
 test('conferência acusa item que não foi lido', () => {
