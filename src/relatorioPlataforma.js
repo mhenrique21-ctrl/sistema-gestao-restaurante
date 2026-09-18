@@ -315,3 +315,70 @@ export function conflitosDaPonte(vendas, lancamentos) {
     .filter((v) => (v.origem || '') === ORIGEM_PONTE && dias.has(v.data))
     .map((v) => ({ id: v.id, data: v.data, total: r2(v.total), ifood: r2(v.ifood), nfood: r2(v['99food']) }));
 }
+
+// ── Limpar o que a ponte lançou ─────────────────────────────────────────────
+// ⚠️ A ponte de impressão lançou iFood e 99Food por alguns dias, com o valor
+// BRUTO e com a taxa em REAIS num campo que a tela lê como PORCENTAGEM (daí o
+// "609,31 – 104.19%" que apareceu no Histórico). Esses dias precisam sair.
+//
+// ⚠️ São DOIS casos diferentes e tratá-los igual destrói dado:
+//
+//   • a linha de origem `pdv_comandas` é INTEIRA da ponte — inclusive o
+//     "dinheiro na porta". Ela sai por completo.
+//   • qualquer outra linha (o PDV do Eclética, o lançamento manual) pode ter
+//     valor de plataforma junto com maquininha, dinheiro e delivery de
+//     verdade. Dela saem SÓ os campos de plataforma; o resto fica.
+//
+// Apagar a linha do Eclética "porque tem iFood nela" levaria junto os R$ 2.626
+// de maquininha do dia — e ninguém repararia até o fechamento do mês.
+const CAMPOS_PLATAFORMA = ['ifood', 'ifoodTaxa', 'ifoodLiq', '99food', 'nfoodTaxa', 'nfoodLiq', 'descontos'];
+
+export const temValorDePlataforma = (v) => CAMPOS_PLATAFORMA.some((c) => Math.abs(Number(v?.[c]) || 0) > 0);
+
+// `dias` é a janela, contada a partir de `hoje` INCLUSIVE: 7 dias é hoje e os
+// seis anteriores.
+export function janelaDeDias(hoje, dias) {
+  const fim = String(hoje || '').slice(0, 10);
+  const d = new Date(`${fim}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (Math.max(1, dias | 0) - 1));
+  return { de: d.toISOString().slice(0, 10), ate: fim };
+}
+
+export function automaticosDePlataforma(vendas, hoje, dias = 7) {
+  const { de, ate } = janelaDeDias(hoje, dias);
+  const apagar = [];
+  const limpar = [];
+  for (const v of vendas || []) {
+    const data = String(v?.data || '');
+    if (data < de || data > ate) continue;
+    const origem = v.origem || 'manual';
+    if (origem === ORIGEM_PONTE) { apagar.push(v); continue; }
+    // ⚠️ O lançamento MANUAL também entra. O pedido foi "apagar todas as
+    // entradas de iFood e 99Food do período", e a pessoa vai relançar o que
+    // for dela — deixar de fora o manual obrigaria a caçar linha por linha
+    // justamente onde os dois números convivem.
+    if (temValorDePlataforma(v)) limpar.push(v);
+  }
+  return { de, ate, apagar, limpar };
+}
+
+// Devolve as vendas já limpas. Quem chama precisa marcar o tombstone dos ids
+// de `apagar` — sem ele a fusão ressuscita a linha no poll seguinte (§3).
+export function limparAutomaticos(vendas, alvos, agora) {
+  const fora = new Set((alvos?.apagar || []).map((v) => v.id));
+  const zerar = new Set((alvos?.limpar || []).map((v) => v.id));
+  const carimbo = agora || new Date().toISOString();
+  return (vendas || [])
+    .filter((v) => !fora.has(v.id))
+    .map((v) => {
+      if (!zerar.has(v.id)) return v;
+      const novo = { ...v, atualizadoEm: carimbo };
+      for (const c of CAMPOS_PLATAFORMA) novo[c] = 0;
+      // ⚠️ O total é RECOMPOSTO, não deixado como estava: ele somava o canal
+      // que acabou de sair. Mantendo o total antigo, o dia continuaria grande
+      // e a linha não explicaria mais de onde vinha o número.
+      novo.total = ['maquininha', 'dinheiro', 'delivery', 'entregasClientes']
+        .reduce((s, c) => s + (Number(novo[c]) || 0), 0);
+      return novo;
+    });
+}

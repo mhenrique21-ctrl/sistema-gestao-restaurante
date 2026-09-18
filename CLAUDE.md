@@ -786,6 +786,38 @@ duas faria o dia contar duas vezes.
 dinheiro na gaveta, e somar no líquido jogaria caixa na conta a receber da
 plataforma.
 
+##### Limpar o que a ponte lançou (18/09/2026)
+
+Card no fim da mesma tela. `automaticosDePlataforma` + `limparAutomaticos`, com
+testes. ⚠️ **São dois casos e tratá-los igual destrói dado:**
+
+| | |
+|---|---|
+| linha `pdv_comandas` | é **inteira** da ponte, o "dinheiro na porta" inclusive — sai por completo |
+| qualquer outra linha | saem **só** os campos de plataforma. Apagar a linha do Eclética "porque tem iFood nela" levaria junto os R$ 2.626,08 de maquininha do dia, e ninguém repararia até o fechamento do mês |
+
+⚠️ O `total` é **recomposto**, não mantido: ele somava o canal que acabou de
+sair. ⚠️ O tombstone vai **antes** da gravação, senão a fusão devolve a linha no
+poll seguinte. O lançamento **manual** também entra na limpeza — o pedido do
+dono foi "apagar todas as entradas de iFood e 99Food do período".
+
+##### A porta fica fechada NO SERVIDOR
+
+⚠️ **`/api/venda-pdv` não aceita mais `ifood`/`99food`/taxa/líquido/`descontos`
+— são zero fixo.** Desligar só o agente não basta: um agente esquecido num PC,
+um `config.bat` antigo ou uma cópia restaurada voltariam a gravar o BRUTO por
+cima do que a pessoa lançou. O agente é um PC na loja, fora do alcance de quem
+mantém o sistema; o servidor não é.
+
+⚠️ Quem manda esses campos **não recebe erro** — eles são ignorados. Erro faria
+um agente antigo entrar em laço de retentativa por um dado que nunca vai gravar.
+
+⚠️ **A taxa herdada no formulário só vale se puder ser porcentagem** (`>0 e
+<100`). A ponte gravou a taxa em REAIS nesse campo e o Histórico exibiu
+"609,31 – **104.19%**"; herdado, esse número daria líquido **negativo** no dia
+seguinte. Fora da faixa não se herda nada: campo em branco é a pessoa digitando
+a taxa certa, melhor que um número pronto e errado.
+
 **Ler planilha sem dependência** (`src/planilha.js`): um `.xlsx` é um ZIP com
 dois XML dentro, e o navegador já sabe inflar (`DecompressionStream`). Uma
 biblioteca dobraria o bundle por uma tela usada uma vez por dia — mesma decisão

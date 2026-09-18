@@ -1945,13 +1945,24 @@ REGRAS:
 
         const {
           empresa, data, dinheiro, maquininha, delivery, total, porHora, fonte, formas, itens,
-          // Canais de plataforma — só a ponte de impressão manda (impressora-agent).
-          // Quem não manda continua com zero, exatamente como antes.
-          ifood, ifoodTaxa, ifoodLiq, nfoodTaxa, nfoodLiq, descontos,
-          // "99food" começa com dígito, então não dá pra desestruturar direto —
-          // e parsear o corpo duas vezes só por causa disso seria desperdício.
-          '99food': nfood,
         } = JSON.parse(body);
+        // ⚠️ iFood e 99Food NÃO ENTRAM POR AQUI — decisão do dono (18/09/2026).
+        //
+        // Este endpoint chegou a aceitar `ifood`/`99food`/`taxa`/`liquido` para
+        // a ponte de impressão. A ponte foi desligada porque a comanda não
+        // consegue dar o líquido do canal (ver §4 do CLAUDE.md), e o canal
+        // passou a ser lançado à mão ou por Vendas → Importar relatório.
+        //
+        // A porta fica FECHADA NO SERVIDOR, não só no agente. Um agente esquecido
+        // rodando num PC, um `config.bat` antigo, uma cópia restaurada: qualquer
+        // um deles voltaria a gravar o valor BRUTO por cima do que a pessoa
+        // lançou, e o dia contaria duas vezes sem nada denunciando. O agente é
+        // um PC na loja, fora do alcance de quem mantém o sistema; o servidor
+        // não é. É aqui que a regra tem que morar.
+        //
+        // Quem manda estes campos não recebe erro — eles são ignorados. Erro
+        // faria um agente antigo entrar em laço de retentativa por um dado que
+        // ele nunca vai conseguir gravar.
         const emp = String(empresa || '').toUpperCase();
         if (!['CONFRARIA', 'SEAMA'].includes(emp)) { res.writeHead(400); res.end(JSON.stringify({ error: 'empresa inválida' })); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) { res.writeHead(400); res.end(JSON.stringify({ error: 'data inválida' })); return; }
@@ -2006,12 +2017,11 @@ REGRAS:
           total: num(total),
           maquininha: num(maquininha),
           dinheiro: num(dinheiro),
-          // ⚠️ Eram ZERO FIXO aqui. Quem não manda estes campos continua com
-          // zero (o delivery-backend, o PDV Seama e o agente do Eclética não
-          // mudam), mas a ponte de impressão precisa gravá-los: é nela que o
-          // pedido do iFood e do 99Food vira faturamento do canal.
-          ifood: num(ifood), ifoodTaxa: num(ifoodTaxa), ifoodLiq: num(ifoodLiq),
-          '99food': num(nfood), nfoodTaxa: num(nfoodTaxa), nfoodLiq: num(nfoodLiq),
+          // ⚠️ ZERO FIXO, e é de propósito: nenhum PDV lança canal de
+          // plataforma (ver o bloco lá em cima). Eles são lançados à mão ou
+          // por Vendas → Importar relatório.
+          ifood: 0, ifoodTaxa: 0, ifoodLiq: 0,
+          '99food': 0, nfoodTaxa: 0, nfoodLiq: 0,
           // Só a Confraria manda isso por enquanto (delivery-backend/gestaoSync.js) —
           // o PDV Seama não separa delivery, então chega undefined e cai no 0.
           delivery: num(delivery),
@@ -2024,7 +2034,6 @@ REGRAS:
           // real duas vezes. Fica aqui só pra responder "quanto dei de
           // desconto no mês". Só grava quando veio, pra emissor que não manda
           // não apagar o de quem manda.
-          ...(num(descontos) > 0 ? { descontos: num(descontos) } : {}),
           origem,
           criadoEm: i >= 0 ? (vendas[i].criadoEm || agora) : agora,
           atualizadoEm: agora,

@@ -6,6 +6,7 @@ import { lerXlsx } from './planilha.js';
 import {
   lerRelatorio, conferirRelatorio, resumoPorDia, lancamentosDoRelatorio,
   detectarPlataforma, acharColunas, pagoNaEntrega, conflitosDaPonte, foldCol,
+  automaticosDePlataforma, limparAutomaticos, janelaDeDias,
 } from './relatorioPlataforma.js';
 
 // O relatório REAL da Confraria, 16/09/2026: 20 pedidos, R$ 879,18 de itens,
@@ -247,5 +248,73 @@ describe('o que falta no arquivo', () => {
     ]);
     assert.equal(r.pedidos.length, 0);
     assert.match(r.avisos.join(' '), /sem data legível/);
+  });
+});
+
+describe('limpar o que a ponte lançou', () => {
+  // O que estava no Histórico da Confraria em 17/09/2026, do print do dono.
+  const VENDAS = () => [
+    { id: 'a', data: '2026-09-17', origem: 'pdv_comandas', dinheiro: 70.59,
+      ifood: 609.31, ifoodTaxa: 104.19, ifoodLiq: 505.12,
+      '99food': 228.77, nfoodTaxa: 16.96, nfoodLiq: 211.81, total: 908.67 },
+    { id: 'b', data: '2026-09-17', origem: 'pdv_ecletica', dinheiro: 117, maquininha: 2626.08,
+      ifood: 0, '99food': 0, total: 2825.32 },
+    { id: 'c', data: '2026-09-17', origem: 'manual', delivery: 174.42, total: 174.42 },
+    { id: 'd', data: '2026-09-10', origem: 'pdv_comandas', ifood: 100, total: 100 },
+  ];
+
+  test('a linha da ponte sai INTEIRA — o dinheiro dela também é dela', () => {
+    const alvos = automaticosDePlataforma(VENDAS(), '2026-09-18', 7);
+    assert.deepEqual(alvos.apagar.map((v) => v.id), ['a']);
+    assert.equal(alvos.de, '2026-09-12');
+    assert.equal(alvos.ate, '2026-09-18');
+  });
+
+  test('fora da janela não é tocado', () => {
+    // A linha 'd' é de 10/09 — oito dias atrás. O pedido foi sete.
+    const alvos = automaticosDePlataforma(VENDAS(), '2026-09-18', 7);
+    assert.ok(!alvos.apagar.some((v) => v.id === 'd'));
+    assert.equal(limparAutomaticos(VENDAS(), alvos).find((v) => v.id === 'd').ifood, 100);
+  });
+
+  test('a linha do Eclética NÃO é apagada — só os campos de plataforma saem', () => {
+    // ⚠️ Apagar a linha "porque tem iFood nela" levaria junto os R$ 2.626,08 de
+    // maquininha do dia, e ninguém repararia até o fechamento do mês.
+    const alvos = automaticosDePlataforma(VENDAS(), '2026-09-18', 7);
+    assert.ok(!alvos.apagar.some((v) => v.id === 'b'));
+    assert.ok(!alvos.limpar.some((v) => v.id === 'b'), 'ela já está zerada, nem entra');
+    const depois = limparAutomaticos(VENDAS(), alvos);
+    const ecletica = depois.find((v) => v.id === 'b');
+    assert.equal(ecletica.maquininha, 2626.08);
+    assert.equal(ecletica.dinheiro, 117);
+  });
+
+  test('linha com os DOIS mundos perde só a plataforma, e o total é refeito', () => {
+    const vendas = [{ id: 'x', data: '2026-09-17', origem: 'manual',
+      dinheiro: 100, maquininha: 50, ifood: 200, ifoodTaxa: 27, ifoodLiq: 146, total: 350 }];
+    const alvos = automaticosDePlataforma(vendas, '2026-09-18', 7);
+    assert.deepEqual(alvos.limpar.map((v) => v.id), ['x']);
+    const [v] = limparAutomaticos(vendas, alvos, 'AGORA');
+    assert.equal(v.ifood, 0);
+    assert.equal(v.ifoodLiq, 0);
+    assert.equal(v.dinheiro, 100);
+    // ⚠️ O total somava o canal que acabou de sair. Mantendo 350, o dia
+    // continuaria grande e a linha não explicaria mais de onde vem o número.
+    assert.equal(v.total, 150);
+    assert.equal(v.atualizadoEm, 'AGORA', 'sem carimbo a fusão reverte no poll');
+  });
+
+  test('a janela conta HOJE inclusive', () => {
+    assert.deepEqual(janelaDeDias('2026-09-18', 7), { de: '2026-09-12', ate: '2026-09-18' });
+    assert.deepEqual(janelaDeDias('2026-09-18', 1), { de: '2026-09-18', ate: '2026-09-18' });
+    // Vira o mês sem inventar dia 0.
+    assert.deepEqual(janelaDeDias('2026-03-02', 7), { de: '2026-02-24', ate: '2026-03-02' });
+  });
+
+  test('nada para limpar devolve as vendas como estavam', () => {
+    const vendas = [{ id: 'z', data: '2026-09-17', origem: 'manual', dinheiro: 10, total: 10 }];
+    const alvos = automaticosDePlataforma(vendas, '2026-09-18', 7);
+    assert.equal(alvos.apagar.length + alvos.limpar.length, 0);
+    assert.deepEqual(limparAutomaticos(vendas, alvos), vendas);
   });
 });

@@ -18,7 +18,7 @@ import {calcularProducaoDia,aplicarProducaoDia,baixarPedidos} from "./producaoDi
 import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as normProducao,fichasQueUsam,ehRecheio,candidatosDeVinculo} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
-import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
+import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -3518,7 +3518,13 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   // A taxa do iFood/99Food quase não muda de um dia pro outro: vem preenchida
   // com a do último lançamento que teve uma, pra não digitar 27 todo dia.
-  const ultimaTaxa=(campo:string)=>{const v=[...(db.vendas||[])].filter((x:any)=>(x[campo]||0)>0).sort((x:any,y:any)=>x.data<y.data?1:-1)[0];return v?String(v[campo]):"";};
+  // ⚠️ A taxa herdada é uma PORCENTAGEM, e só vale se puder ser uma. A ponte
+  // de impressão gravou a taxa em REAIS neste campo, e o Histórico exibiu
+  // "609,31 – 104.19%"; herdado no formulário, esse número daria líquido
+  // NEGATIVO no próximo dia. Fora da faixa, não se herda nada — campo em
+  // branco é a pessoa digitando a taxa certa, e é melhor que um número
+  // pronto e errado.
+  const ultimaTaxa=(campo:string)=>{const v=[...(db.vendas||[])].filter((x:any)=>{const n=Number(x[campo])||0;return n>0&&n<100;}).sort((x:any,y:any)=>x.data<y.data?1:-1)[0];return v?String(v[campo]):"";};
   const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:ultimaTaxa("ifoodTaxa"),nfoodTaxa:ultimaTaxa("nfoodTaxa"),"99food":"",delivery:""});
   const [form,setForm]=useState(emptyForm());
   const [editId,setEditId]=useState(null);
@@ -4282,6 +4288,8 @@ function ImportarRelatorioPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:a
   // O que fazer com a linha que a ponte de impressão deixou no mesmo dia.
   const [acaoPonte,setAcaoPonte]=useState<"apagar"|"zerar"|"manter">("apagar");
   const [feito,setFeito]=useState("");
+  const [diasLimpeza,setDiasLimpeza]=useState(7);
+  const [limpo,setLimpo]=useState("");
 
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
   const conf=rel?conferirRelatorio(rel):null;
@@ -4335,6 +4343,27 @@ function ImportarRelatorioPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:a
     setRel(null);setNomeArq("");
   };
 
+  // ⚠️ Enquanto a ponte de impressão lançou, cada dia ganhou uma linha com o
+  // valor BRUTO e a taxa em REAIS num campo que a tela lê como PORCENTAGEM.
+  // Esses dias saem por aqui. O cálculo mora em `relatorioPlataforma.js`, com
+  // testes — apagar dado é exatamente o que não pode nascer dentro da tela.
+  const alvos=automaticosDePlataforma(db.vendas||[],today(),diasLimpeza);
+  const totalAlvos=alvos.apagar.length+alvos.limpar.length;
+
+  const limparPeriodo=()=>{
+    if(!totalAlvos)return;
+    const quantos=`${alvos.apagar.length} linha(s) automática(s)`
+      +(alvos.limpar.length?` e o iFood/99Food de ${alvos.limpar.length} lançamento(s)`:"");
+    if(!confirm(`Apagar ${quantos} entre ${fmtDate(alvos.de)} e ${fmtDate(alvos.ate)}?\n\n`
+      +`Maquininha, dinheiro e delivery dos lançamentos NÃO são tocados.\nIsto não tem desfazer.`))return;
+    // O tombstone vai ANTES da gravação: sem ele a fusão devolve a linha no
+    // poll seguinte, e o sintoma é "apaguei e voltou sozinho" (§3).
+    alvos.apagar.forEach((v:any)=>_listaDeletados.add(v.id));
+    const agora=new Date().toISOString();
+    salvar((d:any)=>({...d,vendas:limparAutomaticos(d.vendas||[],alvos,agora)}));
+    setLimpo(`${quantos} — removido(s) de ${fmtDate(alvos.de)} a ${fmtDate(alvos.ate)}.`);
+  };
+
   const kpi=(lab:string,val:string,hint?:string,cor?:string)=>(
     <div style={{background:"var(--bg3)",padding:"12px 14px"}}>
       <div style={{fontSize:11,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".05em"}}>{lab}</div>
@@ -4371,6 +4400,46 @@ function ImportarRelatorioPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:a
         conteúdo, senão um relatório salvo com o nome trocado lançaria o dia no canal errado, com outra taxa.</>)}
       {erro?<div style={{marginTop:10}}>{aviso("bad","erro",erro)}</div>:null}
       {feito?<div style={{marginTop:10}}>{aviso("info","feito",<>✓ {feito}</>)}</div>:null}
+    </div>
+
+    <div className="card" style={{marginBottom:12}}>
+      {titulo("Limpar lançamentos automáticos de iFood e 99Food")}
+      {limpo?aviso("info","limpo",<>✓ {limpo}</>):null}
+      {totalAlvos?<>
+        {aviso("warn","alvos",<>
+          Entre <b>{fmtDate(alvos.de)}</b> e <b>{fmtDate(alvos.ate)}</b> há
+          {" "}<b>{alvos.apagar.length}</b> linha(s) lançada(s) pela ponte de impressão
+          {alvos.limpar.length?<> e <b>{alvos.limpar.length}</b> lançamento(s) com valor de plataforma</>:null}.
+        </>)}
+        <div style={{overflowX:"auto",marginBottom:10}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <tbody>
+              {[...alvos.apagar,...alvos.limpar].map((v:any)=><tr key={v.id}>
+                <td style={td}>{fmtDate(v.data)} <span style={{color:"var(--text3)"}}>{v.origem||"manual"}</span></td>
+                <td style={tdN}>iFood {fmtMoney(v.ifood||0)}</td>
+                <td style={tdN}>99Food {fmtMoney(v["99food"]||0)}</td>
+                <td style={{...td,textAlign:"right",color:"var(--text3)"}}>
+                  {(v.origem||"manual")==="pdv_comandas"?"linha inteira":"só a plataforma"}
+                </td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+          <label style={{fontSize:13,color:"var(--text2)"}}>Últimos{" "}
+            <select value={diasLimpeza} onChange={e=>setDiasLimpeza(parseInt(e.target.value,10))}
+              style={{padding:"6px 8px",borderRadius:8,border:"1px solid var(--border)",background:"var(--bg3)",color:"var(--text)"}}>
+              {[7,15,30,60,90].map(n=><option key={n} value={n}>{n}</option>)}
+            </select> dias
+          </label>
+          <button onClick={limparPeriodo} style={{background:"var(--btnDanger,var(--danger))",color:"#fff",border:0,borderRadius:9,padding:"10px 16px",fontSize:14,fontWeight:600,cursor:"pointer"}}>
+            Apagar {totalAlvos} entrada(s)
+          </button>
+        </div>
+      </>:aviso("info","nada",<>Nenhum lançamento automático de iFood ou 99Food nos últimos {diasLimpeza} dias.</>)}
+      {nota(<>A linha da <b>ponte de impressão</b> sai inteira — o "dinheiro na porta" dela também era dela.
+        Em qualquer outro lançamento saem <b>só</b> os campos de iFood e 99Food: maquininha, dinheiro e
+        delivery ficam, e o total é refeito sem o canal que saiu.</>)}
     </div>
 
     {rel?<>
