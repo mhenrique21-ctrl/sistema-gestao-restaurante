@@ -77,6 +77,25 @@ set SEAMA_SERVICE_SECRET=COLE_O_SEGREDO_AQUI
 REM De qual empresa sao estas comandas.
 set EMPRESA=CONFRARIA
 
+REM O ENVIO PRO GESTAO ESTA DESLIGADO (decisao do dono, 18/09/2026).
+REM
+REM A comanda impressa NAO consegue dar o liquido do canal: o desconto que sai
+REM no papel soma o incentivo do iFood (que ele repoe) com o da loja (que ela
+REM banca), o cancelamento acontece DEPOIS do papel sair, e a taxa do plano nao
+REM esta na comanda. Conferido contra o relatorio real do dia 16/09/2026: a
+REM melhor conta possivel pela comanda errava R$ 63,92 no dia.
+REM
+REM Quem lanca Vendas agora e: App Gestao -> Vendas -> Importar relatorio.
+REM
+REM O agente continua CAPTURANDO e REPASSANDO a comanda pra impressora - o
+REM papel da cozinha nao muda em nada, e os .bin ficam guardados.
+REM
+REM ATENCAO: nao apague o SEAMA_SERVICE_SECRET pra desligar o envio. Sem ele o
+REM log diz "sem segredo", que e a mesma frase de quem nao terminou de
+REM instalar, e a TRANSCRICAO da comanda em imagem para de funcionar.
+REM Pra religar o envio um dia: troque por "sim".
+set COMANDAS_ENVIAR=nao
+
 REM ---------------------------------------------------------------------------
 REM  3b) A COMISSAO DE CADA PLATAFORMA (em % da venda liquida)
 REM ---------------------------------------------------------------------------

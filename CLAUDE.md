@@ -42,6 +42,8 @@ src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com te
 src/producaoDia.js    produção do dia: custo real, perda e baixa de insumo (com testes)
 src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com testes)
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
+src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
+src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
 ```
@@ -614,10 +616,35 @@ daquela plataforma existir ficou só como bytes — real, no disco, fora do
 faturamento. É pra isso que o `.bin` cru é guardado. **Não imprime nada:**
 reprocessar não pode fazer sair papel de pedido antigo na cozinha.
 
-**Estado:** captura, lê e **envia** — origem `pdv_comandas`, uma só para os dois
-aplicativos (o Gestão não tem coluna de "dinheiro na porta" por plataforma).
-Sem `SEAMA_SERVICE_SECRET` no `config.bat`, captura e lê normalmente e não
-envia.
+**Estado (18/09/2026): captura e lê; NÃO envia mais.** `COMANDAS_ENVIAR=nao` no
+`config.bat`. Quem lança Vendas é **Vendas → Importar relatório** (§6).
+
+⚠️ **Por que o envio foi desligado** — a conferência contra o relatório real do
+iFood de 16/09/2026 mostrou que a comanda **não consegue** dar o líquido do
+canal. Três coisas decidem o dinheiro e nenhuma está no papel:
+
+| | |
+|---|---|
+| o desconto impresso soma **dois bolsos** | `Descontos: -R$ 15,00` numa linha só. No relatório são duas colunas: incentivo **do iFood** (que ele REPÕE — a loja fatura o item cheio) e incentivo **da loja** (que ela banca). No dia 16: R$ 98,76 de um, R$ 67,37 do outro. Só o segundo reduz a base |
+| o **cancelamento vem depois** do papel | o pedido #2027 saiu inteiro na cozinha (R$ 36,79) e o iFood pagou R$ 13,24 |
+| a **taxa do plano** não está na comanda | medida no relatório: **26,2%**, não os 27% do senso comum |
+
+Nenhuma conta possível pela comanda acertava o dia (líquido real R$ 584,44): a
+melhor errava R$ 63,92 para menos, a segunda R$ 64,38 para mais.
+
+⚠️ **O interruptor é EXPLÍCITO, não "apagar o segredo".** Sem
+`SEAMA_SERVICE_SECRET` o log diria "sem segredo" — a mesma frase de quem não
+terminou de instalar, e daqui a seis meses ninguém saberia se está desligado de
+propósito ou quebrado. E o segredo continua sendo usado: é ele que autentica a
+transcrição da comanda em imagem (`/api/comanda-ocr`).
+
+⚠️ **A captura continua ligada de propósito.** O papel da cozinha não muda, os
+`.bin` ficam guardados, e o leitor é a única fonte de **itens por pedido** — o
+relatório traz dinheiro, não produto. Se um dia a Margem por Produto precisar do
+delivery, está tudo no disco.
+
+Enquanto enviou, a origem foi `pdv_comandas`, com o valor **bruto** — é ela que
+`conflitosDaPonte` aponta na importação, porque as origens SOMAM no Dashboard.
 
 ---
 
@@ -707,6 +734,65 @@ reordenar as linhas em Ajustes. Fusão em 2 níveis nos dois lugares
 (A4)** → `gerarFechamentoCaixaHTML`: timbre de Configurações → Impressão,
 valores do dia, caixas em branco (a marcação é à caneta), conferência física do
 caixa, assinaturas — preto e branco de propósito.
+
+#### Vendas → Importar relatório — `src/relatorioPlataforma.js` (com testes)
+
+O relatório de pedidos que o iFood (e o 99Food) exporta traz **VALOR LÍQUIDO
+por pedido**: o que a plataforma realmente pagou, já com promoção, taxa,
+comissão e cancelamento dentro. É ele que lança o canal, não a comanda (ver §4).
+
+⚠️ **ESTA FERRAMENTA NÃO RECALCULA O LÍQUIDO.** Ela LÊ o que a plataforma pagou
+e usa a aritmética só para **CONFERIR** — mesma divisão de papéis do Cupom IA
+(§8: quem transcreve não decide). Recalculando, o pedido cancelado em parte
+voltaria a entrar pelo valor cheio, que é exatamente o erro que ela existe para
+não cometer.
+
+⚠️ **O BRUTO é o VALOR DOS ITENS, não o que o cliente pagou.** No dia 16 o
+cliente pagou R$ 878,84 — incluindo R$ 143,80 de entrega e R$ 21,99 de taxa de
+serviço, que o iFood cobra **por fora** e fica com elas: nunca foram dinheiro da
+loja. E o que o cliente pagou já vem descontado do incentivo do iFood, que a
+loja **fatura**. Bruto R$ 879,18 · líquido R$ 584,44 · taxa efetiva 33,52%.
+
+⚠️ **A base da comissão é `itens − incentivo DA LOJA`.** Os dois rótulos de
+incentivo só diferem na última palavra (`DO IFOOD` / `DA LOJA`), então
+`acharColunas` **recusa** rótulo que sirva para dois campos em vez de escolher
+um em silêncio — seria tratar como desconto da loja um dinheiro que o iFood
+repõe.
+
+⚠️ **A taxa do plano é a MEDIANA, não a média.** A linha do cancelamento parcial
+mediu 12,4%; na média ela puxaria a taxa para baixo e a conferência passaria a
+acusar todas as outras.
+
+⚠️ **Quem manda é o CONTEÚDO do arquivo**, não o nome — mesma lição do
+`plataforma.js`. Olha o cabeçalho **e** as primeiras linhas de dados (a coluna
+CANAL DE VENDA responde quando a loja não tem promoção nenhuma e a coluna do
+incentivo não existe). Aparecendo os dois nomes, **não escolhe**.
+
+⚠️ **Origem própria `relatorio_ifood` / `relatorio_99food`.** Importar o mesmo
+dia de novo SUBSTITUI a linha — é o que torna seguro reimportar depois que a
+plataforma corrige um pedido. E `conflitosDaPonte` aponta a linha antiga de
+`pdv_comandas` do mesmo dia: as origens **somam** no Dashboard, então deixar as
+duas faria o dia contar duas vezes.
+
+⚠️ **Pagamento NA ENTREGA sai do repasse e vira aviso**, nunca palpite: é
+dinheiro na gaveta, e somar no líquido jogaria caixa na conta a receber da
+plataforma.
+
+**Ler planilha sem dependência** (`src/planilha.js`): um `.xlsx` é um ZIP com
+dois XML dentro, e o navegador já sabe inflar (`DecompressionStream`). Uma
+biblioteca dobraria o bundle por uma tela usada uma vez por dia — mesma decisão
+do `png.js` do agente. Navegador velho não trava: avisa e manda exportar CSV.
+
+⚠️ Coluna **vazia no meio** não desloca a linha (a planilha pula a célula, então
+tudo depois do buraco andaria pra esquerda, e o deslocamento é diferente em cada
+linha). ⚠️ Texto **partido em vários `<t>`** pelo formato é juntado. ⚠️ O
+separador do CSV é **descoberto** (`;` no Brasil, `,` fora): fixar um devolveria
+uma coluna só. ⚠️ `1.234,56` → o ponto é **milhar**; trocar só a vírgula daria
+1.234, mil vezes menor e com cara de número certo.
+
+⚠️ **A amostra real NÃO está no repositório** enquanto ele for público:
+`amostras/` está no `.gitignore` e os testes que dependem dela são **pulados**,
+não reprovados.
 
 #### Editar recibo emitido: quem já foi lançado precisa REFAZER a soma em Vendas
 

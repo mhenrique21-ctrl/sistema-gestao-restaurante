@@ -102,6 +102,22 @@ const SILENCIO  = parseInt(process.env.CAPTURA_SILENCIO_MS, 10) || 1500;
 // ── Envio pro Gestão ────────────────────────────────────────────────────────
 const GESTAO_URL = (process.env.GESTAO_URL || 'https://gestao.confrariacafe.com').replace(/\/$/, '');
 const SECRET     = process.env.SEAMA_SERVICE_SECRET || '';
+
+// ⚠️ O ENVIO FOI DESLIGADO POR DECISÃO DO DONO (18/09/2026), e a captura NÃO.
+//
+// A conferência contra o relatório real do iFood de 16/09 mostrou que a
+// comanda não consegue dar o líquido do canal: o desconto impresso soma o
+// incentivo do iFood (que ele repõe) com o da loja (que ela banca), o
+// cancelamento acontece depois do papel sair, e a taxa do plano não está no
+// papel. Quem lança Vendas agora é Vendas → Importar relatório
+// (`src/relatorioPlataforma.js`).
+//
+// ⚠️ Isto é um INTERRUPTOR EXPLÍCITO, não "apagar o segredo". Apagando, o log
+// diria "sem SEAMA_SERVICE_SECRET" — que é a mesma frase de quem ainda não
+// terminou de instalar. Daqui a seis meses ninguém saberia se o envio está
+// desligado de propósito ou quebrado. E o segredo continua fazendo falta: é
+// ele que autentica a TRANSCRIÇÃO da comanda em imagem (/api/comanda-ocr).
+const ENVIAR = !/^(n|0|nao|não|off|false)$/i.test(String(process.env.COMANDAS_ENVIAR || 'sim').trim());
 const EMPRESA    = (process.env.EMPRESA || 'CONFRARIA').toUpperCase();
 // Uma fonte só para os DOIS aplicativos. O Gestão guarda um registro por dia
 // por origem e SUBSTITUI, então duas fontes exigiriam dividir o dinheiro
@@ -360,6 +376,7 @@ const hojeISO = (d = new Date()) => {
 // o .json já está no disco; o ciclo seguinte reenvia o dia inteiro, e como o
 // endpoint substitui em vez de somar, reenviar é seguro.
 async function enviarDia(dataISO) {
+  if (!ENVIAR) return;                      // desligado de propósito — ver ENVIAR
   if (!SECRET) return;                      // sem segredo, o envio nem existe
   const pedidos = pedidosDoDia(dataISO);
   if (!pedidos.length) return;
@@ -757,7 +774,8 @@ if (!chamadoDireto) {
   reprocessando = false;
   console.log('');
   for (const d of [...dias].sort()) await enviarDia(d);
-  if (!SECRET) console.log('ℹ️  sem SEAMA_SERVICE_SECRET no config.bat: os .json foram refeitos, mas nada foi enviado.');
+  if (!ENVIAR) console.log('ℹ️  COMANDAS_ENVIAR=nao: os .json foram refeitos, e nada foi enviado pro Gestão.');
+  else if (!SECRET) console.log('ℹ️  sem SEAMA_SERVICE_SECRET no config.bat: os .json foram refeitos, mas nada foi enviado.');
   })();
 } else if (args.includes('--papel')) {
   // Conferir o REPASSE sozinho, antes de existir captura nenhuma.
@@ -828,7 +846,10 @@ if (!chamadoDireto) {
   conferirDestino();
   for (const fonte of FONTES) (fonte.tipo === 'pasta' ? modoPasta : modoRede)(fonte);
 
-  if (SECRET) {
+  if (!ENVIAR) {
+    log('   ℹ️  COMANDAS_ENVIAR=nao: capturo, repasso pra impressora e leio — e NÃO lanço em Vendas.');
+    log('      Quem lança agora é Vendas → Importar relatório, no App Gestão.');
+  } else if (SECRET) {
     log(`   enviando as vendas para ${GESTAO_URL} como ${EMPRESA} [${FONTE}]`);
     // ⚠️ Reenvia na subida e a cada 10 min, ALÉM de reenviar a cada pedido.
     // O envio por pedido cobre o caso normal; este cobre o que o agente do
