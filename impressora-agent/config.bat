@@ -77,6 +77,22 @@ set SEAMA_SERVICE_SECRET=COLE_O_SEGREDO_AQUI
 REM De qual empresa sao estas comandas.
 set EMPRESA=CONFRARIA
 
+REM ---------------------------------------------------------------------------
+REM  3b) A COMISSAO DE CADA PLATAFORMA (em % da venda liquida)
+REM ---------------------------------------------------------------------------
+REM A comanda NAO traz a comissao - ela so aparece no extrato. Mas ela esta no
+REM CONTRATO, e sem ela o total do dia sobe com o valor BRUTO: o faturamento do
+REM mes fica inflado em quase um terco no iFood, calado.
+REM
+REM A conta e sempre nesta ordem:
+REM    venda liquida = pago pelo app - taxa de servico - entrega da plataforma
+REM    liquido       = venda liquida x (1 - comissao%)
+REM
+REM ATENCAO: trocou de plano, ganhou promocao de taxa, mudou de categoria?
+REM Mude aqui e rode o reprocessar.bat - ele refaz os dias com a taxa nova.
+set TAXA_IFOOD=27
+set TAXA_99FOOD=10
+
 REM So mude se o endereco do Gestao mudar.
 REM set GESTAO_URL=https://gestao.confrariacafe.com
 

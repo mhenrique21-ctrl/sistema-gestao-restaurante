@@ -29,7 +29,7 @@ import { pngMono } from './png.js';
 import { lerPedido99, conferirPedido99, ehComanda99 } from './pedido99.js';
 import { lerPedidoIfood, conferirPedidoIfood, ehComandaIfood } from './pedidoIfood.js';
 import { resolverOrigem, rotuloPlataforma, temLeitor } from './plataforma.js';
-import { lancamentoDoDia, dataDoPedido } from './lancamentoVendas.js';
+import { lancamentoDoDia, dataDoPedido, TAXA_PADRAO } from './lancamentoVendas.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -107,6 +107,15 @@ const EMPRESA    = (process.env.EMPRESA || 'CONFRARIA').toUpperCase();
 // por origem e SUBSTITUI, então duas fontes exigiriam dividir o dinheiro
 // cobrado na porta entre elas — e ele não tem coluna por plataforma.
 const FONTE      = process.env.COMANDAS_FONTE || 'comandas';
+
+// A comissão CONTRATADA de cada plataforma, em % da venda líquida. Ela não
+// está na comanda — só no extrato — mas está no contrato, e é ela que separa
+// "o que o cliente pagou" de "o que a loja recebe". Em branco vale o padrão
+// (27 / 10); quem muda de plano muda aqui, e o reprocessar.bat refaz os dias.
+const TAXAS = {
+  ifood: parseFloat(String(process.env.TAXA_IFOOD || '').replace(',', '.')),
+  '99food': parseFloat(String(process.env.TAXA_99FOOD || '').replace(',', '.')),
+};
 
 const log = (...a) => console.log(new Date().toLocaleTimeString('pt-BR'), ...a);
 let reprocessando = false;
@@ -354,7 +363,7 @@ async function enviarDia(dataISO) {
   if (!SECRET) return;                      // sem segredo, o envio nem existe
   const pedidos = pedidosDoDia(dataISO);
   if (!pedidos.length) return;
-  const dia = lancamentoDoDia(dataISO, pedidos);
+  const dia = lancamentoDoDia(dataISO, pedidos, TAXAS);
 
   try {
     const r = await fetch(`${GESTAO_URL}/api/venda-pdv`, {
@@ -368,10 +377,16 @@ async function enviarDia(dataISO) {
       }),
     });
     if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(() => '')}`);
-    log(`   ☁️  ${dataISO}: ${dia.pedidos} pedido(s) → iFood R$ ${dia.ifood.toFixed(2)}`
-      + ` · 99Food R$ ${dia['99food'].toFixed(2)}`
+    // ⚠️ A tela mostra BRUTO e LÍQUIDO lado a lado de propósito. Só o bruto
+    // fazia parecer que o dia foi ~30% maior do que foi; só o líquido
+    // esconderia o tamanho do canal. O total do dia é o líquido + a porta.
+    log(`   ☁️  ${dataISO}: ${dia.pedidos} pedido(s)`
+      + ` → iFood R$ ${dia.ifood.toFixed(2)} bruto → R$ ${dia.ifoodLiq.toFixed(2)} líq (${dia.ifoodTaxa.toFixed(1)}%)`
+      + ` · 99Food R$ ${dia['99food'].toFixed(2)} bruto → R$ ${dia.nfoodLiq.toFixed(2)} líq (${dia.nfoodTaxa.toFixed(1)}%)`
       + ` · na porta R$ ${dia.dinheiro.toFixed(2)}`
       + ` · total R$ ${dia.total.toFixed(2)}`);
+    log(`       (comissão do plano: iFood ${TAXAS.ifood || TAXA_PADRAO.ifood}% · 99Food ${TAXAS['99food'] || TAXA_PADRAO['99food']}%`
+      + ` — R$ ${dia.taxasEmReais.toFixed(2)} de taxa e comissão no dia)`);
     for (const a of dia.avisos) log(`   ⚠️  ${a}`);
   } catch (e) {
     log(`   ⚠️  não consegui enviar pro Gestão (${e.message}).`);

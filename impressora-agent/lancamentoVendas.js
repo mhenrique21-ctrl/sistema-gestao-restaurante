@@ -28,11 +28,46 @@
 // ⚠️ A taxa de SERVIÇO também é despesa do canal: o cliente paga, a plataforma
 // fica. Está dentro do que ele pagou e a loja nunca vê.
 //
-// ⚠️ `liquido` é ANTES DA COMISSÃO da plataforma. A comissão não está na
-// comanda — ela só aparece no extrato. Chamar isto de "o que vou receber"
-// seria mentira; é "o que vendi, já fora taxa de serviço e entrega".
+// DECISÃO DO DONO (18/09/2026) — A COMISSÃO ENTRA NA CONTA.
+// ----------------------------------------------------------------------------
+// Até aqui `liquido` parava antes da comissão, porque ela não está na comanda
+// (só no extrato). Só que Vendas mostrava o BRUTO no total do dia, e o total do
+// mês saía inflado exatamente pelo que a plataforma fica. A comissão não está
+// na comanda mas está no CONTRATO: 27% no iFood, 10% no 99Food.
+//
+//   venda líquida = pago pelo app − taxa de serviço − entrega da plataforma
+//   líquido       = venda líquida × (1 − comissão%)
+//
+// ⚠️ A ORDEM IMPORTA, e é ela que o dono especificou: a comissão incide sobre
+// a venda LÍQUIDA, depois de tirar entrega, cupom e desconto — não sobre o
+// bruto. No pedido real de R$ 22,89 com R$ 7,00 de entrega da parceira e
+// R$ 0,99 de serviço, a venda líquida é R$ 14,90; 27% dela são R$ 4,02 e
+// sobram R$ 10,88. Aplicando os 27% no bruto sairiam R$ 6,18 de comissão —
+// R$ 2,16 a mais de despesa inventada, em todo pedido.
+//
+// ⚠️ A comissão é a taxa CONTRATADA, não uma medida: é `TAXA_PADRAO`, editável
+// no `config.bat`. Plano novo, promoção de taxa, mudança de categoria — tudo
+// isso muda o número, e quem muda é quem negociou. Por isso ele não é
+// adivinhado do extrato: seria estimar em cima de estimativa.
+//
+// ⚠️ `liquido` continua NÃO sendo "o que vou receber" no centavo: a plataforma
+// ainda retém tarifa de transação, antecipação e o que mais o extrato trouxer.
+// É "o que vendi, já fora entrega, serviço e comissão do plano" — a
+// conferência contra o extrato continua sendo do fechamento do mês.
 
 const round2 = (n) => Math.round((n || 0) * 100) / 100;
+
+// A comissão contratada de cada canal, em PORCENTAGEM da venda líquida.
+export const TAXA_PADRAO = { ifood: 27, '99food': 10 };
+
+// Aceita `{ifood: 27, '99food': 10}` vindo do config.bat. Valor ausente ou não
+// numérico cai no padrão — meia configuração não pode virar comissão zero, que
+// é o erro que devolveria o faturamento inflado sem ninguém notar.
+export function taxaDoCanal(canal, taxas) {
+  const v = Number(taxas?.[canal]);
+  if (Number.isFinite(v) && v >= 0 && v < 100) return v;
+  return TAXA_PADRAO[canal] ?? 0;
+}
 
 // A entrega é da plataforma? Só então a taxa dela é despesa do canal.
 // Sem `tipoEntrega` lido (comanda cortada, layout novo), NÃO se chuta: a taxa
@@ -86,11 +121,12 @@ export function dataDoPedido(pedido, dataReferencia) {
   return ref;
 }
 
-export function lancamentoDoPedido(pedido) {
+export function lancamentoDoPedido(pedido, taxas) {
   const p = pedido || {};
   const avisos = [];
   const naPorta = round2(p.cobrarDoCliente);
   const bruto = round2(p.pagoPeloApp);
+  const canal = p.plataforma === 'ifood' ? 'ifood' : '99food';
 
   const daPlataforma = entregaDaPlataforma(p.tipoEntrega);
   if (daPlataforma == null && p.taxaEntrega) {
@@ -104,6 +140,13 @@ export function lancamentoDoPedido(pedido) {
   const entregaLiquida = Math.max(0, (p.taxaEntrega || 0) - (p.entregaPromocional || 0));
   const taxa = round2((p.taxaServico || 0) + (daPlataforma ? entregaLiquida : 0));
 
+  // A venda líquida: o que sobrou do que o cliente pagou depois de tirar o que
+  // é da plataforma por fora. Pode ficar negativa se a comanda vier lida
+  // errado; não é aparada em zero de propósito — seria esconder o erro.
+  const vendaLiquida = round2(bruto - taxa);
+  const comissaoPct = taxaDoCanal(canal, taxas);
+  const comissao = round2(vendaLiquida * comissaoPct / 100);
+
   // ⚠️ Sem NENHUM dos dois valores, não há o que somar. Entrar como zero seria
   // pior que ficar de fora: inflaria a contagem de pedidos do dia com uma
   // venda que ninguém sabe quanto foi, e o total continuaria errado do mesmo
@@ -114,12 +157,15 @@ export function lancamentoDoPedido(pedido) {
   return {
     numero: p.numero || null,
     semValor,
-    canal: p.plataforma === 'ifood' ? 'ifood' : '99food',
+    canal,
     bruto,
+    // Despesa do canal que está NA comanda: serviço + entrega da plataforma.
     taxa,
-    // Pode ficar negativo se a taxa passar do que o cliente pagou. Não é
-    // aparado em zero de propósito: seria esconder um pedido lido errado.
-    liquido: round2(bruto - taxa),
+    vendaLiquida,
+    comissaoPct,
+    // Despesa do canal que NÃO está na comanda: vem do contrato.
+    comissao,
+    liquido: round2(vendaLiquida - comissao),
     naPorta,
     // Fora da soma de dinheiro — ver o ⚠️ da decisão 3 lá em cima.
     desconto: round2(p.descontos),
@@ -135,7 +181,7 @@ export function lancamentoDoPedido(pedido) {
 // ⚠️ Pedido SEM número não é descartado — seria perder venda de verdade por
 // causa de uma linha que o leitor não entendeu. Ele entra, e um aviso diz que
 // aquele não pôde ser conferido contra repetição.
-export function lancamentoDoDia(data, pedidos) {
+export function lancamentoDoDia(data, pedidos, taxas) {
   const vistos = new Set();
   const avisos = [];
   let semNumero = 0;
@@ -153,7 +199,7 @@ export function lancamentoDoDia(data, pedidos) {
       avisos.push(`pedido ${ped.numero || 's/nº'} é de ${dataPropria} — reimpressão, fora do dia`);
       continue;
     }
-    const l = lancamentoDoPedido(ped);
+    const l = lancamentoDoPedido(ped, taxas);
     if (l.numero) {
       const chave = `${l.canal}#${l.numero}`;
       if (vistos.has(chave)) { duplicados++; continue; }
@@ -173,13 +219,27 @@ export function lancamentoDoDia(data, pedidos) {
     .filter((l) => l.canal === canal)
     .reduce((s, l) => s + l[campo], 0));
 
+  // ⚠️ `ifoodTaxa`/`nfoodTaxa` no Gestão são PORCENTAGEM, não reais. A tela de
+  // Vendas → Lançamentos mostra "bruto · taxa% · líquido" e calcula o líquido
+  // na linha. Mandando reais, o histórico exibia "797,69 – 151.59%" — número
+  // absurdo na cara de todo mundo, e a única razão de isto ter sido visto.
+  //
+  // A porcentagem é EFETIVA: junta entrega, serviço e comissão num só número,
+  // porque é ela que explica a distância entre as duas colunas que a tela
+  // mostra. Mandar só os 27% do contrato deixaria bruto e líquido sem bater.
+  const pctEfetivo = (canal) => {
+    const b = soma(canal, 'bruto');
+    if (!b) return 0;
+    return round2((1 - soma(canal, 'liquido') / b) * 100);
+  };
+
   const dia = {
     data,
     ifood: soma('ifood', 'bruto'),
-    ifoodTaxa: soma('ifood', 'taxa'),
+    ifoodTaxa: pctEfetivo('ifood'),
     ifoodLiq: soma('ifood', 'liquido'),
     '99food': soma('99food', 'bruto'),
-    nfoodTaxa: soma('99food', 'taxa'),
+    nfoodTaxa: pctEfetivo('99food'),
     nfoodLiq: soma('99food', 'liquido'),
     // O que o entregador recebeu na porta é dinheiro que chega na loja, dos
     // dois canais juntos: em Vendas ele não tem coluna por plataforma.
@@ -188,10 +248,29 @@ export function lancamentoDoDia(data, pedidos) {
     descontos: round2(linhas.reduce((s, l) => s + l.desconto, 0)),
     pedidos: linhas.length,
   };
-  // O total do dia é o que ENTROU: o que o cliente pagou pelo app mais o que
-  // foi cobrado na porta. As taxas não saem daqui — elas aparecem na coluna de
-  // taxa do canal, e descontá-las do total esconderia o tamanho do canal.
-  dia.total = round2(dia.ifood + dia['99food'] + dia.dinheiro);
+  // Em reais, pra tela do agente: o que a plataforma fica, separado do que
+  // está na comanda e do que vem do contrato. O endpoint ignora estes campos.
+  dia.ifoodComissao = soma('ifood', 'comissao');
+  dia.nfoodComissao = soma('99food', 'comissao');
+  dia.taxasEmReais = round2(
+    soma('ifood', 'taxa') + soma('99food', 'taxa') + dia.ifoodComissao + dia.nfoodComissao,
+  );
+
+  // ⚠️ O TOTAL DO DIA É O LÍQUIDO, não o bruto. O bruto é o que o cliente
+  // pagou, e dele a plataforma fica com entrega, serviço e comissão — dinheiro
+  // que nunca chega na loja. Somar bruto inflava o faturamento do mês em ~30%
+  // no iFood, calado. O bruto continua na coluna do canal, que é onde ele
+  // responde "de que tamanho é este canal".
+  dia.total = round2(dia.ifoodLiq + dia.nfoodLiq + dia.dinheiro);
+
+  // ⚠️ O dinheiro da porta entra INTEIRO. A comissão sobre ele não está na
+  // comanda e o dono ainda não disse como o extrato a cobra — aplicar a mesma
+  // regra seria chutar. Entra cheio e aparece no aviso, uma vez por dia (não
+  // por pedido: aviso que grita sempre é aviso que ninguém lê).
+  if (dia.dinheiro > 0) {
+    avisos.push(`R$ ${dia.dinheiro.toFixed(2)} cobrados na porta entraram INTEIROS no total`
+      + ' — a comissão da plataforma sobre esse dinheiro não está na comanda');
+  }
 
   if (duplicados) avisos.push(`${duplicados} comanda(s) repetida(s) ignorada(s) — a mesma via impressa duas vezes`);
   if (semNumero) avisos.push(`${semNumero} pedido(s) sem número: não deu pra conferir contra repetição`);
