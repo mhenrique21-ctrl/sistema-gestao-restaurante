@@ -202,6 +202,18 @@ export function lerCsv(texto, sep) {
 export async function lerPlanilha(arquivo) {
   const nome = String(arquivo?.name || '').toLowerCase();
   if (/\.csv$|\.txt$/.test(nome)) return lerCsv(await arquivo.text());
+  if (/\.pdf$/.test(nome)) {
+    // ⚠️ Import DINÂMICO: o extrator de PDF só é baixado por quem escolhe um
+    // PDF. É a única tela do app que precisa dele, e ele é grande o bastante
+    // para não valer no bundle de quem abre o app no celular pra ver a lista
+    // de compras.
+    const { lerPdf } = await import('./pdfTexto.js');
+    const linhas = await lerPdf(await arquivo.arrayBuffer());
+    if (!linhas.length) {
+      throw new Error('este PDF não tem texto — parece uma imagem (página escaneada ou print). Exporte o relatório em .xlsx ou .csv.');
+    }
+    return linhas;
+  }
   return lerXlsx(await arquivo.arrayBuffer());
 }
 

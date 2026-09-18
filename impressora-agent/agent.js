@@ -103,7 +103,7 @@ const SILENCIO  = parseInt(process.env.CAPTURA_SILENCIO_MS, 10) || 1500;
 const GESTAO_URL = (process.env.GESTAO_URL || 'https://gestao.confrariacafe.com').replace(/\/$/, '');
 const SECRET     = process.env.SEAMA_SERVICE_SECRET || '';
 
-// ⚠️ O ENVIO FOI DESLIGADO POR DECISÃO DO DONO (18/09/2026), e a captura NÃO.
+// ⚠️ O ENVIO ESTÁ DESLIGADO POR PADRÃO — DECISÃO DO DONO (18/09/2026).
 //
 // A conferência contra o relatório real do iFood de 16/09 mostrou que a
 // comanda não consegue dar o líquido do canal: o desconto impresso soma o
@@ -112,12 +112,19 @@ const SECRET     = process.env.SEAMA_SERVICE_SECRET || '';
 // papel. Quem lança Vendas agora é Vendas → Importar relatório
 // (`src/relatorioPlataforma.js`).
 //
-// ⚠️ Isto é um INTERRUPTOR EXPLÍCITO, não "apagar o segredo". Apagando, o log
-// diria "sem SEAMA_SERVICE_SECRET" — que é a mesma frase de quem ainda não
-// terminou de instalar. Daqui a seis meses ninguém saberia se o envio está
-// desligado de propósito ou quebrado. E o segredo continua fazendo falta: é
-// ele que autentica a TRANSCRIÇÃO da comanda em imagem (/api/comanda-ocr).
-const ENVIAR = !/^(n|0|nao|não|off|false)$/i.test(String(process.env.COMANDAS_ENVIAR || 'sim').trim());
+// ⚠️ O PADRÃO É **NÃO ENVIAR**, e isso é de propósito. Um `config.bat` antigo,
+// uma cópia de backup restaurada, uma instalação nova feita por outra pessoa:
+// em qualquer um desses casos o padrão é o que vale. Se o padrão fosse "sim",
+// bastaria um desses para o agente voltar a lançar o valor bruto por cima do
+// relatório importado, e o dia contaria duas vezes sem nada denunciando.
+// Religar é um ato explícito: `COMANDAS_ENVIAR=sim`.
+//
+// ⚠️ E NÃO é "apagar o segredo": sem `SEAMA_SERVICE_SECRET` o log diria a mesma
+// frase de quem ainda não terminou de instalar, e daqui a seis meses ninguém
+// saberia se está desligado de propósito ou quebrado. O segredo também continua
+// fazendo falta — é ele que autentica a TRANSCRIÇÃO da comanda em imagem
+// (/api/comanda-ocr), que segue valendo pra quem relê capturas antigas.
+const ENVIAR = /^(s|1|sim|on|true|yes)$/i.test(String(process.env.COMANDAS_ENVIAR || 'nao').trim());
 const EMPRESA    = (process.env.EMPRESA || 'CONFRARIA').toUpperCase();
 // Uma fonte só para os DOIS aplicativos. O Gestão guarda um registro por dia
 // por origem e SUBSTITUI, então duas fontes exigiriam dividir o dinheiro
@@ -774,7 +781,7 @@ if (!chamadoDireto) {
   reprocessando = false;
   console.log('');
   for (const d of [...dias].sort()) await enviarDia(d);
-  if (!ENVIAR) console.log('ℹ️  COMANDAS_ENVIAR=nao: os .json foram refeitos, e nada foi enviado pro Gestão.');
+  if (!ENVIAR) console.log('ℹ️  envio DESLIGADO: os .json foram refeitos, e nada foi enviado pro Gestão.');
   else if (!SECRET) console.log('ℹ️  sem SEAMA_SERVICE_SECRET no config.bat: os .json foram refeitos, mas nada foi enviado.');
   })();
 } else if (args.includes('--papel')) {
@@ -847,7 +854,7 @@ if (!chamadoDireto) {
   for (const fonte of FONTES) (fonte.tipo === 'pasta' ? modoPasta : modoRede)(fonte);
 
   if (!ENVIAR) {
-    log('   ℹ️  COMANDAS_ENVIAR=nao: capturo, repasso pra impressora e leio — e NÃO lanço em Vendas.');
+    log('   ℹ️  envio DESLIGADO: capturo, repasso pra impressora e leio — e NÃO lanço em Vendas.');
     log('      Quem lança agora é Vendas → Importar relatório, no App Gestão.');
   } else if (SECRET) {
     log(`   enviando as vendas para ${GESTAO_URL} como ${EMPRESA} [${FONTE}]`);

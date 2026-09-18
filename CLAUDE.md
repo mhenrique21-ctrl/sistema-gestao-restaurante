@@ -44,6 +44,7 @@ src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com t
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
+src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
 ```
@@ -616,8 +617,15 @@ daquela plataforma existir ficou só como bytes — real, no disco, fora do
 faturamento. É pra isso que o `.bin` cru é guardado. **Não imprime nada:**
 reprocessar não pode fazer sair papel de pedido antigo na cozinha.
 
-**Estado (18/09/2026): captura e lê; NÃO envia mais.** `COMANDAS_ENVIAR=nao` no
-`config.bat`. Quem lança Vendas é **Vendas → Importar relatório** (§6).
+**Estado (18/09/2026): captura e lê; NÃO envia, e o agente foi TIRADO do PC da
+loja.** Quem lança Vendas é **Vendas → Importar relatório** (§6), ou o
+lançamento manual de sempre.
+
+⚠️ **O padrão do código é NÃO ENVIAR** (`COMANDAS_ENVIAR` precisa valer `sim`
+para ligar). Um `config.bat` antigo, um backup restaurado, uma instalação nova
+feita por outra pessoa: em qualquer um desses o padrão é o que vale, e se ele
+fosse "sim" o agente voltaria a lançar o BRUTO por cima do relatório importado
+— o dia contando duas vezes, sem nada denunciando.
 
 ⚠️ **Por que o envio foi desligado** — a conferência contra o relatório real do
 iFood de 16/09/2026 mostrou que a comanda **não consegue** dar o líquido do
@@ -782,6 +790,24 @@ plataforma.
 dois XML dentro, e o navegador já sabe inflar (`DecompressionStream`). Uma
 biblioteca dobraria o bundle por uma tela usada uma vez por dia — mesma decisão
 do `png.js` do agente. Navegador velho não trava: avisa e manda exportar CSV.
+
+**Ler PDF** (`src/pdfTexto.js`, import dinâmico — só baixa para quem escolhe um
+PDF): ⚠️ **PDF não tem linha nem coluna.** Ele tem pedaços de texto com uma
+POSIÇÃO; a tabela que a gente enxerga é efeito das coordenadas. Mesmo Y ⇒ mesma
+linha (com tolerância — cada célula sobra fração de ponto, e exigindo igualdade
+20 linhas virariam 60); dentro dela, a ordem é o X. Ler na ordem do arquivo
+devolveria a tabela embaralhada, e de um jeito plausível.
+
+⚠️ `[(Pedi) -20 (do)] TJ` é UMA palavra partida pelo espacejamento — cada pedaço
+como célula quebraria todo cabeçalho. ⚠️ Parêntese **aninhado** não fecha a
+string (`(Taxa (R$))`). ⚠️ A quebra de linha antes de `endstream` **não é dado**:
+o descompactador a lê como lixo e falha — sem erro, só um PDF que "não tem
+texto". ⚠️ PDF de página escaneada devolve **vazio**, e a tela manda exportar em
+planilha: meia tabela seria pior que nada.
+
+⚠️ **O extrator é genérico e testado com um PDF montado no teste.** O LAYOUT do
+relatório de cada plataforma continua precisando de um arquivo real — mesma
+regra dos leitores de comanda.
 
 ⚠️ Coluna **vazia no meio** não desloca a linha (a planilha pula a célula, então
 tudo depois do buraco andaria pra esquerda, e o deslocamento é diferente em cada

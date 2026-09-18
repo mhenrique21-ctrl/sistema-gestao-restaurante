@@ -93,7 +93,8 @@ REM
 REM ATENCAO: nao apague o SEAMA_SERVICE_SECRET pra desligar o envio. Sem ele o
 REM log diz "sem segredo", que e a mesma frase de quem nao terminou de
 REM instalar, e a TRANSCRICAO da comanda em imagem para de funcionar.
-REM Pra religar o envio um dia: troque por "sim".
+REM O PADRAO JA E NAO ENVIAR - esta linha so deixa a decisao visivel. Religar
+REM e um ato explicito: troque por "sim".
 set COMANDAS_ENVIAR=nao
 
 REM ---------------------------------------------------------------------------

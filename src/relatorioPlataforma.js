@@ -278,6 +278,7 @@ export function resumoPorDia(rel) {
 }
 
 export const ORIGEM = { ifood: 'relatorio_ifood', '99food': 'relatorio_99food' };
+export const ROTULO = { ifood: 'iFood', '99food': '99Food' };
 
 // Vira a linha de Vendas. A origem é PRÓPRIA (`relatorio_ifood`) e não `pdv_*`:
 // as vendas são chaveadas por data+origem e as origens coexistem no mesmo dia

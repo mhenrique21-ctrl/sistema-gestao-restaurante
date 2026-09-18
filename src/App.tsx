@@ -17,6 +17,8 @@ import {calcularProducaoDia,aplicarProducaoDia,baixarPedidos} from "./producaoDi
 // insumos comprados, digitados em minúscula, respondiam.
 import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as normProducao,fichasQueUsam,ehRecheio,candidatosDeVinculo} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
+import {lerPlanilha} from "./planilha.js";
+import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -2403,6 +2405,7 @@ export default function App() {
       {id:"vendas-recibo",label:getVendasAjustes(db).legBotaoEmitir||"Emitir Recibo",icon:"🧾",sub:"recibo"},
       {id:"vendas-hist",label:"Recibos",icon:"📂",sub:"historico",adminOnly:true},
       {id:"vendas-cli",label:"Clientes",icon:"👥",sub:"clientes",adminOnly:true},
+      {id:"vendas-import",label:"Importar relatório",icon:"📥",sub:"importar",adminOnly:true},
       {id:"vendas-rel",label:"Relatório",icon:"📊",sub:"relatorio",adminOnly:true},
       {id:"vendas-ajustes",label:"Ajustes",icon:"⚙️",sub:"ajustes",adminOnly:true},
     ]},
@@ -4252,9 +4255,192 @@ function VendasPanel({db,setDb,setDbAndSave,state,empresa,login,pendingSub,setPe
   else if(subTab==="historico")content=<RecibosVendaHistPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} aj={aj} empresa={empresa} onVoltar={voltar}/>;
   else if(subTab==="clientes")content=<><BackBar label="Vendas" onClick={voltar}/><ClientesEncPanel db={db} setDb={setDb} empresa={empresa} aj={aj}/></>;
   else if(subTab==="relatorio")content=<RecibosVendaRelatorioPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} aj={aj} onVoltar={voltar}/>;
+  else if(subTab==="importar")content=<ImportarRelatorioPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
   else if(subTab==="ajustes")content=<VendasAjustesPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} onVoltar={voltar}/>;
   else content=<Vendas db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} aj={aj} login={login} empresa={empresa}/>;
   return Object.keys(wrapStyle).length?<div style={wrapStyle}>{content}</div>:content;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vendas → Importar relatório
+// ============================================================================
+// O relatório que a plataforma exporta traz VALOR LÍQUIDO por pedido — o que
+// ela realmente pagou, já com promoção, taxa, comissão e cancelamento dentro.
+// É a única fonte que fecha: a comanda impressa não consegue (ver §4 do
+// CLAUDE.md), e foi por isso que a ponte de impressão parou de lançar.
+//
+// ⚠️ A TELA NÃO CALCULA NADA. Toda a leitura e toda a conferência moram em
+// `src/relatorioPlataforma.js`, com testes. Aqui só se mostra e se grava —
+// conta dentro de componente é conta que nenhum teste trava.
+function ImportarRelatorioPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
+  const salvar=setDbAndSave||setDb;
+  const fileRef=useRef<HTMLInputElement>(null);
+  const [nomeArq,setNomeArq]=useState("");
+  const [erro,setErro]=useState("");
+  const [lendo,setLendo]=useState(false);
+  const [rel,setRel]=useState<any>(null);
+  // O que fazer com a linha que a ponte de impressão deixou no mesmo dia.
+  const [acaoPonte,setAcaoPonte]=useState<"apagar"|"zerar"|"manter">("apagar");
+  const [feito,setFeito]=useState("");
+
+  const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+  const conf=rel?conferirRelatorio(rel):null;
+  const dias=rel?resumoPorDia(rel):[];
+  const lancs=rel?lancamentosDoRelatorio(rel):[];
+  const conflitos=lancs.length?conflitosDaPonte(db.vendas||[],lancs):[];
+  const soma=(campo:string)=>dias.reduce((s:number,d:any)=>s+(d[campo]||0),0);
+
+  const escolher=async(f:any)=>{
+    if(!f)return;
+    setErro("");setFeito("");setRel(null);setNomeArq(f.name);setLendo(true);
+    try{
+      const linhas=await lerPlanilha(f);
+      const r=lerRelatorio(linhas);
+      if(!r.plataforma)throw new Error("não reconheci de qual plataforma é este relatório. Confira se é o relatório de PEDIDOS exportado pelo portal da plataforma.");
+      if(!r.pedidos.length)throw new Error(r.avisos[0]||"não encontrei pedido nenhum neste arquivo.");
+      setRel(r);
+    }catch(e:any){setErro(e?.message||String(e));}
+    finally{setLendo(false);if(fileRef.current)fileRef.current.value="";}
+  };
+
+  const aplicar=()=>{
+    if(!lancs.length)return;
+    const agora=new Date().toISOString();
+    // ⚠️ O tombstone é marcado AQUI, fora do setDbAndSave: `_listaDeletados` é
+    // quem impede a fusão de ressuscitar a linha no poll seguinte (§3). Sem
+    // ele o sintoma é o clássico "apaguei e voltou sozinho".
+    const apagarIds=acaoPonte==="apagar"?conflitos.map((c:any)=>c.id):[];
+    apagarIds.forEach((id:string)=>_listaDeletados.add(id));
+    const qtd=lancs.length,rotulo=ROTULO_PLAT[rel.plataforma]||rel.plataforma;
+    salvar((d:any)=>{
+      let vendas=[...(d.vendas||[])];
+      if(acaoPonte==="apagar")vendas=vendas.filter((v:any)=>!apagarIds.includes(v.id));
+      else if(acaoPonte==="zerar"){
+        const alvo=new Set(conflitos.map((c:any)=>c.id));
+        vendas=vendas.map((v:any)=>alvo.has(v.id)
+          ?{...v,total:0,ifood:0,ifoodTaxa:0,ifoodLiq:0,"99food":0,nfoodTaxa:0,nfoodLiq:0,dinheiro:0,maquininha:0,delivery:0,atualizadoEm:agora}
+          :v);
+      }
+      for(const l of lancs){
+        // Duas entradas do mesmo dia na MESMA origem viram uma antes de
+        // escrever; origens diferentes continuam coexistindo (§6).
+        vendas=consolidarVendasDoDia(vendas,l.data,l.origem);
+        const i=vendas.findIndex((v:any)=>v.data===l.data&&origemVenda(v)===l.origem);
+        if(i>=0)vendas[i]={...vendas[i],...l,atualizadoEm:agora};
+        else vendas.unshift({id:uid(),...l,criadoEm:agora,atualizadoEm:agora});
+      }
+      return {...d,vendas};
+    });
+    setFeito(`${qtd} dia(s) do ${rotulo} lançado(s) em Vendas.`);
+    setRel(null);setNomeArq("");
+  };
+
+  const kpi=(lab:string,val:string,hint?:string,cor?:string)=>(
+    <div style={{background:"var(--bg3)",padding:"12px 14px"}}>
+      <div style={{fontSize:11,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".05em"}}>{lab}</div>
+      <div style={{...MONO,fontSize:20,marginTop:3,color:cor||"var(--text)"}}>{val}</div>
+      {hint?<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{hint}</div>:null}
+    </div>
+  );
+  const aviso=(tipo:"warn"|"info"|"bad",key:any,filho:any)=>{
+    const fundo=tipo==="bad"?"var(--dangerBg)":tipo==="warn"?"var(--warningBg)":"var(--infoBg)";
+    const cor=tipo==="bad"?"var(--dangerText)":tipo==="warn"?"var(--warningText)":"var(--infoText)";
+    return <div key={key} style={{background:fundo,color:cor,borderRadius:9,padding:"11px 13px",fontSize:13.5,lineHeight:1.45,marginBottom:8}}>{filho}</div>;
+  };
+  const titulo=(t:any)=><div style={{fontSize:12,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>{t}</div>;
+  const nota=(t:any)=><div style={{fontSize:12,color:"var(--text3)",marginTop:10,lineHeight:1.5}}>{t}</div>;
+  const td:any={padding:"8px 0",borderBottom:"1px solid var(--bg2)"};
+  const tdN:any={...td,...MONO,textAlign:"right"};
+
+  return <>
+    <BackBar label="Vendas" onClick={onVoltar}/>
+
+    <div className="card" style={{marginBottom:12}}>
+      <h3 style={{margin:"0 0 4px",fontSize:17}}>Importar relatório da plataforma</h3>
+      <div style={{fontSize:13,color:"var(--text2)",marginBottom:12}}>
+        O relatório traz o valor que a plataforma realmente pagou, por pedido. É ele que vira o líquido do canal.
+      </div>
+      <input ref={fileRef} type="file" accept=".xlsx,.csv,.txt,.pdf" style={{display:"none"}}
+        onChange={e=>escolher(e.target.files?.[0])}/>
+      <button onClick={()=>fileRef.current?.click()} disabled={lendo}
+        style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#fff)",border:0,borderRadius:9,padding:"11px 18px",fontSize:14.5,fontWeight:600,cursor:"pointer",opacity:lendo?.6:1}}>
+        {lendo?"lendo…":"📄 Escolher arquivo"}
+      </button>
+      {nomeArq?<span style={{marginLeft:10,fontSize:13,color:"var(--text2)"}}>{nomeArq}</span>:null}
+      {nota(<>Aceita <b>.xlsx</b>, <b>.csv</b> e <b>.pdf</b>. O nome do arquivo não decide nada — quem manda é o
+        conteúdo, senão um relatório salvo com o nome trocado lançaria o dia no canal errado, com outra taxa.</>)}
+      {erro?<div style={{marginTop:10}}>{aviso("bad","erro",erro)}</div>:null}
+      {feito?<div style={{marginTop:10}}>{aviso("info","feito",<>✓ {feito}</>)}</div>:null}
+    </div>
+
+    {rel?<>
+      <div className="card" style={{marginBottom:12}}>
+        {titulo(<>O que a plataforma pagou · <b style={{color:"var(--btnPrimary)"}}>{ROTULO_PLAT[rel.plataforma]||rel.plataforma}</b> · {rel.pedidos.length} pedido(s)</>)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:1,background:"var(--border)",border:"1px solid var(--border)",borderRadius:10,overflow:"hidden"}}>
+          {kpi("Bruto (itens)",fmtMoney(soma("bruto")),"o que a loja vendeu","var(--text2)")}
+          {kpi("Taxas e comissões","− "+fmtMoney(soma("bruto")-soma("liquido")),conf?.taxaMedida!=null?`taxa do plano: ${conf.taxaMedida}%`:undefined)}
+          {kpi("Líquido",fmtMoney(soma("liquido")),"o que entra na conta","var(--successText)")}
+        </div>
+        {nota(<>O bruto é o <b>valor dos itens</b>, não o que o cliente pagou: esse número inclui a entrega e a
+          taxa de serviço, que a plataforma cobra por fora e que nunca foram dinheiro da loja.</>)}
+      </div>
+
+      {((conf?.avisos?.length||0)+rel.avisos.length)>0?<div className="card" style={{marginBottom:12}}>
+        {titulo("Conferência")}
+        {(conf?.avisos||[]).map((a:string,i:number)=>aviso("warn","c"+i,<>⚠️ {a}</>))}
+        {rel.avisos.map((a:string,i:number)=>aviso("warn","r"+i,<>⚠️ {a}</>))}
+        {nota(<>A conta só <b>aponta</b>. O número que vai para Vendas é sempre o que a plataforma pagou —
+          recalcular faria um pedido cancelado entrar pelo valor cheio.</>)}
+      </div>:null}
+
+      {conflitos.length?<div className="card" style={{marginBottom:12}}>
+        {titulo("Esse(s) dia(s) já têm lançamento da ponte de impressão")}
+        {aviso("bad","conf",<>⚠️ {conflitos.map((c:any)=>`${fmtDate(c.data)} — ${fmtMoney(c.total)}`).join(" · ")}.
+          {" "}As origens <b>somam</b> no Dashboard: deixando as duas, o dia conta duas vezes.</>)}
+        {([["apagar","Apagar a linha da ponte deste(s) dia(s)","Ela tem o valor bruto das comandas. O relatório é a fonte melhor."],
+           ["zerar","Zerar a linha e manter o registro","Sai do total e continua no Histórico, como rastro."],
+           ["manter","Deixar como está","O dia vai contar duas vezes. Só faz sentido se você for conferir à mão."]] as any[])
+          .map(([k,t,d]:any)=>(
+          <div key={k} onClick={()=>setAcaoPonte(k)} style={{cursor:"pointer",marginBottom:8,
+            border:`1px solid ${acaoPonte===k?"var(--btnPrimary)":"var(--border)"}`,borderRadius:9,padding:"11px 13px",
+            background:acaoPonte===k?"var(--accLight)":"var(--bg3)"}}>
+            <div style={{fontWeight:600,fontSize:13.5}}>{acaoPonte===k?"◉":"○"} {t}</div>
+            <div style={{color:"var(--text2)",fontSize:12.5,marginTop:2}}>{d}</div>
+          </div>
+        ))}
+      </div>:null}
+
+      <div className="card">
+        {titulo("Como vai ficar em Vendas")}
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13.5}}>
+            <thead><tr>{["Dia","Pedidos","Bruto","Taxa","Líquido"].map((h,i)=>
+              <th key={h} style={{textAlign:i?"right":"left",fontSize:11,textTransform:"uppercase",letterSpacing:".05em",color:"var(--text3)",fontWeight:600,padding:"0 0 7px",borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead>
+            <tbody>
+              {dias.map((d:any)=><tr key={d.data}>
+                <td style={td}>{fmtDate(d.data)}</td>
+                <td style={tdN}>{d.pedidos}</td>
+                <td style={tdN}>{fmtMoney(d.bruto)}</td>
+                <td style={tdN}>{d.taxaPct.toFixed(2)}%</td>
+                <td style={tdN}>{fmtMoney(d.liquido)}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+        {nota(<>Entra como origem <b>relatório {ROTULO_PLAT[rel.plataforma]||rel.plataforma}</b>, ao lado do PDV e
+          do lançamento manual do mesmo dia. Importar o mesmo dia de novo <b>substitui</b> esta linha — é o que
+          torna seguro reimportar depois que a plataforma corrige um pedido.</>)}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:14}}>
+          <button onClick={aplicar} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#fff)",border:0,borderRadius:9,padding:"11px 18px",fontSize:14.5,fontWeight:600,cursor:"pointer"}}>
+            Lançar {dias.length} dia(s) em Vendas
+          </button>
+          <button onClick={()=>{setRel(null);setNomeArq("");}} style={{background:"var(--bg3)",color:"var(--text)",border:"1px solid var(--border)",borderRadius:9,padding:"11px 18px",fontSize:14.5,fontWeight:600,cursor:"pointer"}}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </>:null}
+  </>;
 }
 
 function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,onVoltar:()=>void}){
