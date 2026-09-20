@@ -9,6 +9,7 @@
 // e desfazer a coisa inteira depois — separado, um lado some e ninguém percebe.
 
 import { consumoTeorico, converterQtd } from './consumoTeorico.js';
+import { grupoDoInsumo, ratearEntreMarcas } from './grupoMarcas.js';
 
 export const OPERACOES = ['producao', 'entrada', 'saida', 'ajuste'];
 
@@ -20,12 +21,36 @@ const r3 = (n) => Math.round(n * 1000) / 1000;
 //
 // Devolve também o que NÃO deu pra converter: por decisão do dono, produção
 // nunca é bloqueada por cadastro incompleto, então o que falta vira aviso.
-export function insumosDaProducao(ficha, qtd, materiasPrimas) {
+// ⚠️ `db` é OPCIONAL e só serve para o rateio entre marcas. Sem ele a função se
+// comporta exatamente como antes — é o que mantém os chamadores antigos
+// funcionando enquanto o agrupamento não estiver configurado.
+export function insumosDaProducao(ficha, qtd, materiasPrimas, db) {
   if (!ficha || !(qtd > 0)) return { linhas: [], avisos: [] };
   const { linhas } = consumoTeorico([{ nome: ficha.nome, qtd, total: 0 }], () => ficha);
   const saidas = [];
   const avisos = [];
   for (const l of linhas) {
+    // O insumo pertence a um GRUPO de marcas? Então a saída se divide entre
+    // elas, cascateando da que tem mais saldo — e cada uma baixa na unidade
+    // dela. Baixar tudo de uma só deixaria essa muito negativa enquanto a
+    // outra segue cheia, e nenhuma refletindo a prateleira.
+    const g = db ? grupoDoInsumo(db, l) : null;
+    if (g) {
+      const emBase = converterQtd(l.qtd, l.unidade, g.unidadeBase);
+      if (emBase == null) {
+        avisos.push(`"${l.nome}": a ficha está em "${l.unidade}" e o grupo conta em "${g.unidadeBase}" — não foi baixado`);
+        continue;
+      }
+      const partes = ratearEntreMarcas(g.marcas, emBase, g.unidadeBase);
+      if (!partes.length) {
+        avisos.push(`"${g.prod.nome}": nenhuma marca do grupo sabe quanto rende em "${g.unidadeBase}" — não foi baixado`);
+        continue;
+      }
+      for (const x of partes) {
+        saidas.push({ mp: x.mp, qtd: r3(x.qtd), unidade: x.unidade, custo: parseFloat(x.mp.ultimoValor) || 0 });
+      }
+      continue;
+    }
     const mp = l.mpId ? (materiasPrimas || []).find((m) => m.id === l.mpId) : null;
     if (!mp) { avisos.push(`"${l.nome}" não está no cadastro de insumos — não foi baixado`); continue; }
     const q = converterQtd(l.qtd, l.unidade, mp.unidade || 'un');
@@ -41,7 +66,7 @@ export function insumosDaProducao(ficha, qtd, materiasPrimas) {
 // Aplica uma operação sobre movEstoque + materiasPrimas e devolve os dois novos.
 // Não grava nada: quem chama decide (e é o que torna a prévia da tela possível,
 // mostrando exatamente o que vai acontecer antes de acontecer).
-export function aplicarMovimento({ movEstoque, materiasPrimas, item, operacao, quantidade, motivo, data, ficha, agora, uid }) {
+export function aplicarMovimento({ movEstoque, materiasPrimas, item, operacao, quantidade, motivo, data, ficha, agora, uid, db }) {
   if (!item) throw new Error('Item não informado');
   if (!OPERACOES.includes(operacao)) throw new Error(`Operação inválida: ${operacao}`);
   const qtd = parseFloat(quantidade);
@@ -74,7 +99,7 @@ export function aplicarMovimento({ movEstoque, materiasPrimas, item, operacao, q
 
   const avisos = [];
   if (operacao === 'producao') {
-    const { linhas, avisos: av } = insumosDaProducao(ficha, qtd, mps);
+    const { linhas, avisos: av } = insumosDaProducao(ficha, qtd, mps, db);
     avisos.push(...av);
     // Por decisão do dono: produzir NUNCA é bloqueado por falta de ficha ou de
     // cadastro. Travar a cozinha porque o cadastro está incompleto é pior que

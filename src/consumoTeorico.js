@@ -74,7 +74,10 @@ export function consumoTeorico(vendidos, resolverFicha) {
       const qtd = porUnidade * (p.qtd || 0);
       const cur = porInsumo.get(chave) || {
         chave, nome: i.nome || '(sem nome)', unidade: i.unidade || 'un',
-        mpId: i.mpId || '', qtd: 0, custo: 0, fontes: new Map(),
+        // `prodListaId` viaja junto porque é ele que diz a qual GRUPO de marcas
+        // este insumo pertence. Sem ele aqui, a baixa cairia sempre na marca
+        // gravada na ficha e as outras do grupo ficariam intocadas.
+        mpId: i.mpId || '', prodListaId: i.prodListaId || '', qtd: 0, custo: 0, fontes: new Map(),
       };
       cur.qtd += qtd;
       cur.custo += qtd * (parseFloat(i.valorUnd) || 0);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   rendimentoDaMarca, ultimaCompra, marcaNoGrupo, custoDoGrupo, saldoDoGrupo,
   buscarMarcas, agruparMarcas, desagruparMarca, marcasDoGrupo, unidadeBaseDo,
+  custoParaUnidade, ratearEntreMarcas, grupoDoInsumo, grupoDaMarca,
 } from './grupoMarcas.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -229,5 +230,123 @@ describe('agrupar e desagrupar', () => {
     assert.equal(unidadeBaseDo({ unidade: 'kg' }), 'kg');
     assert.equal(unidadeBaseDo({ unidade: 'kg', unidadeBase: 'g' }), 'g');
     assert.equal(unidadeBaseDo(null), 'un');
+  });
+});
+
+describe('o custo que a ficha lê', () => {
+  const N = [
+    { id: 'a', nome: 'lata 395g', unidade: 'un', porUnidadeBase: 395, estoqueAtual: 2, ultimoValor: 8.49 },
+    { id: 'd', nome: '2,1kg', unidade: 'kg', estoqueAtual: 6.3, ultimoValor: 17.5714 },
+  ];
+
+  test('a conversão MULTIPLICA — dividir dá um custo mil vezes menor', () => {
+    // ⚠️ custo por kg = custo por g × (quantos g cabem em 1 kg). Invertido, o
+    // número continua parecendo um número.
+    const porG = custoParaUnidade(N, 'g', 'g', []).valor;
+    const porKg = custoParaUnidade(N, 'g', 'kg', []).valor;
+    assert.equal(Math.round(porKg * 100) / 100, Math.round(porG * 1000 * 100) / 100);
+    assert.ok(porKg > porG, 'o quilo custa mais que o grama');
+  });
+
+  test('sem conversão devolve null e o motivo, nunca o número cru', () => {
+    // Ficha em "un" com o grupo contando em "g" é cadastro incompleto. Entregar
+    // o custo por grama como se fosse por unidade multiplicaria o CMV por mil.
+    const r = custoParaUnidade(N, 'g', 'un', []);
+    assert.equal(r.valor, null);
+    assert.match(r.motivo, /ficha está em "un" e o grupo conta em "g"/);
+  });
+
+  test('carrega de onde veio o custo, para a tela avisar', () => {
+    assert.equal(custoParaUnidade(N, 'g', 'g', []).origem, 'ponderado');
+    const vazio = N.map((m) => ({ ...m, estoqueAtual: 0 }));
+    assert.equal(custoParaUnidade(vazio, 'g', 'g', []).origem, 'catalogo');
+  });
+
+  test('grupo sem preço nenhum devolve null, não zero', () => {
+    assert.equal(custoParaUnidade([], 'g', 'g', []).valor, null);
+  });
+});
+
+describe('o rateio entre as marcas — cascata da que tem mais saldo', () => {
+  const M = [
+    { id: 'a', nome: 'lata 395g', unidade: 'un', porUnidadeBase: 395, estoqueAtual: 2, ultimoValor: 8.49 },
+    { id: 'b', nome: '2,1kg', unidade: 'kg', estoqueAtual: 6.3, ultimoValor: 17.5714 },
+  ];
+
+  test('tira da maior primeiro, e devolve na unidade DA MARCA', () => {
+    // 6.300 g na de 2,1 kg contra 790 g nas latas: 500 g saem todos de lá.
+    const r = ratearEntreMarcas(M, 500, 'g');
+    assert.equal(r.length, 1);
+    assert.equal(r[0].mpId, 'b');
+    assert.equal(r[0].qtdBase, 500);
+    assert.equal(r[0].qtd, 0.5, 'em kg, que é como o saldo dela é contado');
+  });
+
+  test('cascateia quando a maior não dá conta', () => {
+    const r = ratearEntreMarcas(M, 6500, 'g');
+    assert.deepEqual(r.map((x) => x.mpId), ['b', 'a']);
+    assert.equal(r[0].qtdBase, 6300);
+    assert.equal(r[1].qtdBase, 200);
+    assert.equal(r[1].qtd, 0.506, '200 g ÷ 395 g por lata');
+    assert.equal(r.reduce((s, x) => s + x.qtdBase, 0), 6500, 'não perde nem inventa grama');
+  });
+
+  test('faltando para todo mundo, o resto vai INTEIRO na primeira', () => {
+    // ⚠️ Espalhar o negativo entre as marcas faria parecer que todas estão
+    // erradas. "Usou sem ter registrado a compra" é a informação honesta.
+    const r = ratearEntreMarcas(M, 10000, 'g');
+    assert.equal(r.reduce((s, x) => s + x.qtdBase, 0), 10000);
+    assert.equal(r.find((x) => x.mpId === 'b').qtdBase, 6300 + 2910);
+    assert.equal(r.find((x) => x.mpId === 'a').qtdBase, 790);
+  });
+
+  test('estoque zerado em tudo continua baixando, negativo de propósito', () => {
+    const zerado = M.map((m) => ({ ...m, estoqueAtual: 0 }));
+    const r = ratearEntreMarcas(zerado, 300, 'g');
+    assert.equal(r.length, 1);
+    assert.equal(r[0].qtdBase, 300);
+  });
+
+  test('marca sem rendimento fica de fora do rateio', () => {
+    const comSolta = [...M, { id: 'z', nome: 'sachê', unidade: 'un', estoqueAtual: 99 }];
+    const r = ratearEntreMarcas(comSolta, 500, 'g');
+    assert.ok(!r.some((x) => x.mpId === 'z'), 'não baixa de quem não sabe converter');
+  });
+
+  test('sem marca nenhuma devolve vazio, para quem chama avisar', () => {
+    assert.deepEqual(ratearEntreMarcas([], 500, 'g'), []);
+    assert.deepEqual(ratearEntreMarcas(M, 0, 'g'), []);
+  });
+});
+
+describe('achar o grupo de um insumo de ficha', () => {
+  const DB = {
+    materiasPrimas: [{ id: '1', nome: 'Piracanjuba', unidade: 'un' }, { id: '2', nome: 'Italac', unidade: 'un' }],
+    produtosLista: [{ id: 'p1', nome: 'Creme de leite', unidadeBase: 'un', mpVinculados: ['1', '2'] }],
+  };
+
+  test('pelo prodListaId que a ficha guarda', () => {
+    const g = grupoDoInsumo(DB, { prodListaId: 'p1', mpId: '' });
+    assert.equal(g.prod.id, 'p1');
+    assert.equal(g.marcas.length, 2);
+    assert.equal(g.unidadeBase, 'un');
+  });
+
+  test('e, na falta dele, pelo grupo em que a marca gravada está', () => {
+    // Ficha antiga, feita antes do agrupamento existir: ela só tem `mpId`.
+    // Sem este caminho, agrupar não mudaria nada nas fichas já montadas.
+    const g = grupoDoInsumo(DB, { mpId: '2' });
+    assert.equal(g.prod.id, 'p1');
+  });
+
+  test('marca solta não inventa grupo', () => {
+    assert.equal(grupoDoInsumo(DB, { mpId: '9' }), null);
+    assert.equal(grupoDoInsumo(DB, {}), null);
+    assert.equal(grupoDaMarca(DB, '1').id, 'p1');
+  });
+
+  test('grupo sem marca nenhuma não conta como grupo', () => {
+    const vazio = { ...DB, produtosLista: [{ id: 'p2', nome: 'X', mpVinculados: [] }] };
+    assert.equal(grupoDoInsumo(vazio, { prodListaId: 'p2' }), null);
   });
 });

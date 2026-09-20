@@ -20,7 +20,7 @@ import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
-import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo} from "./grupoMarcas.js";
+import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo} from "./grupoMarcas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -14321,6 +14321,19 @@ function SaidasPorVendaPanel({db,setDb,setDbAndSave,empresa}:{db:any,setDb?:any,
           }
           const {linhas}=consumoTeorico([{nome:p.nome,qtd:p.qtd,total:p.total}],()=>ficha);
           linhas.forEach((l:any)=>{
+            // Insumo que pertence a um GRUPO de marcas sai rateado entre elas,
+            // cascateando da que tem mais saldo — a mesma regra da revenda.
+            // Baixar tudo da marca gravada na ficha deixaria ela muito
+            // negativa enquanto a outra segue cheia.
+            const g=grupoDoInsumo(db,l);
+            if(g){
+              const emBase=converterQtd(l.qtd,l.unidade,g.unidadeBase);
+              if(emBase==null){avisos.add(`"${g.prod.nome}": ficha em "${l.unidade}" e o grupo conta em "${g.unidadeBase}" — sem conversão`);return;}
+              const partes=ratearEntreMarcas(g.marcas,emBase,g.unidadeBase);
+              if(!partes.length){avisos.add(`"${g.prod.nome}": nenhuma marca do grupo sabe quanto rende em "${g.unidadeBase}"`);return;}
+              partes.forEach((x:any)=>acumula(data,x.mp,x.qtd,(parseFloat(x.mp.ultimoValor)||0)*x.qtd,"dose/ficha"));
+              return;
+            }
             const mp=l.mpId?mpsTodas.find((m:any)=>m.id===l.mpId):null;
             if(!mp){avisos.add(`"${l.nome}" está na ficha sem insumo vinculado`);return;}
             const q=converterQtd(l.qtd,l.unidade,mp.unidade||"un");
@@ -15596,7 +15609,7 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
     if(!item||op!=="producao")return null;
     const n=parseFloat(qtd);
     if(!Number.isFinite(n)||n<=0)return null;
-    return insumosDaProducao(ficha,n,mps);
+    return insumosDaProducao(ficha,n,mps,db);
   })();
 
   const confirmar=()=>{
@@ -15607,7 +15620,7 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
     (setDbAndSave||setDb)((d:any)=>{
       resultado=aplicarMovimento({movEstoque:d.movEstoque||[],materiasPrimas:d.materiasPrimas||[],
         item:(d.materiasPrimas||[]).find((m:any)=>m.id===item.id)||item,
-        operacao:op,quantidade:n,motivo,data:dataMov,ficha,agora:new Date().toISOString(),uid});
+        operacao:op,quantidade:n,motivo,data:dataMov,ficha,agora:new Date().toISOString(),uid,db:d});
       return{...d,movEstoque:resultado.movEstoque,materiasPrimas:resultado.materiasPrimas};
     });
     const msgs=[`${item.nome}: ${resultado?.antes} → ${resultado?.depois} ${item.unidade||"un"}`];
@@ -15649,7 +15662,7 @@ function ManutencaoProdutosPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:
         try{
           const fichaAlvo=resolverItemVendido({...d,materiasPrimas},{nome:alvo.nome,cod:alvo.codigoEcletica}).ficha;
           const r=aplicarMovimento({movEstoque,materiasPrimas,item:alvo,operacao:op,
-            quantidade:parseFloat(v),motivo,data:dataMov,ficha:fichaAlvo,agora,uid});
+            quantidade:parseFloat(v),motivo,data:dataMov,ficha:fichaAlvo,agora,uid,db:{...d,materiasPrimas}});
           movEstoque=r.movEstoque;materiasPrimas=r.materiasPrimas;
           (r.avisos||[]).forEach(a=>avisos.push(`${alvo.nome}: ${a}`));
         }catch(e:any){avisos.push(`${alvo.nome}: ${e.message}`);}
@@ -17602,10 +17615,24 @@ function FichaTecnica({db,setDb,setDbAndSave,state,setState,empresa,prefillNome,
     const allCompras=dTarget?.compras||[];
     let prod=ins.prodListaId?allProdsLista.find((p:any)=>p.id===ins.prodListaId):null;
     if(!prod)prod=allProdsLista.find((p:any)=>(p.nome||"").toLowerCase()===(ins.nome||"").toLowerCase());
+    // A marca gravada também leva ao grupo: ficha montada ANTES de existir
+    // agrupamento só tem `mpId`, e sem este caminho agrupar não mudaria nada
+    // nas receitas que já existem.
+    if(!prod&&ins.mpId)prod=allProdsLista.find((p:any)=>(p.mpVinculados||[]).includes(ins.mpId));
     if(prod?.mpVinculados?.length){
       const marcas=prod.mpVinculados.map((id:string)=>allMps.find((m:any)=>m.id===id)).filter(Boolean);
+      // ⚠️ MÉDIA PONDERADA PELO SALDO (decisão do dono), não a marca mais
+      // recente: é o custo do que está REALMENTE na despensa, e uma promoção
+      // isolada não derruba a margem de todas as receitas até a compra
+      // seguinte. `custoParaUnidade` converte da unidade do grupo para a da
+      // ficha — multiplicando, nunca dividindo (ver o ⚠️ em grupoMarcas.js).
+      const base=unidadeBaseDo(prod);
+      const r=custoParaUnidade(marcas,base,ins.unidade||base,dTarget?.movEstoque||[]);
+      // Sem conversão possível, o preço ANTIGO é melhor que um número mil vezes
+      // errado: mantém o que estava e a tela de pendências mostra o caso.
+      if(r.valor!=null)return{valorUnd:r.valor,mpId:mpMaisRecente(marcas)?.id||ins.mpId,prodListaId:prod.id};
       const recente=mpMaisRecente(marcas);
-      if(recente)return{valorUnd:recente.ultimoValor||0,mpId:recente.id,prodListaId:prod.id};
+      if(recente)return{valorUnd:ins.valorUnd??recente.ultimoValor??0,mpId:recente.id,prodListaId:prod.id};
     }
     let mp=ins.mpId?allMps.find((m:any)=>m.id===ins.mpId):null;
     if(!mp)mp=allMps.find((m:any)=>(m.nome||"").toLowerCase()===(ins.nome||"").toLowerCase());

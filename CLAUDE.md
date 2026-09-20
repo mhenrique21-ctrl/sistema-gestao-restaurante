@@ -1322,12 +1322,41 @@ compartilhado entre as empresas e sai por `applyBothProdutos` (§3);
 `materiasPrimas` é por empresa e sai por `setDbAndSave`. Escrever os dois no
 mesmo lugar gravaria a matéria-prima de uma empresa dentro da outra.
 
-⚠️ **PENDENTE:** a ficha técnica ainda **congela** o preço no momento em que é
-montada (`addIns` grava `valorUnd`), e a baixa por venda ainda vai para UMA
-marca (`consumoTeorico` chaveia por `i.mpId`). Com o grupo pronto, faltam os
-dois: a ficha ler `custoDoGrupo` na hora, e a baixa usar
-`distribuirEntreMarcas` — que já existe e já cascateia pela marca com mais
-saldo, hoje só para revenda.
+##### A ficha lê o grupo, e a baixa se divide entre as marcas
+
+⚠️ **`resolverPrecoInsumo` é o ponto ÚNICO** por onde o preço da ficha é
+refeito (o "Atualizar preços" e o recálculo por empresa passam os dois por ele).
+Ele agora resolve pelo grupo, com `custoParaUnidade` — média ponderada.
+
+⚠️ **A marca gravada também leva ao grupo.** Ficha montada antes de o
+agrupamento existir só tem `mpId`; sem esse caminho, agrupar não mudaria nada
+nas receitas que já existem — que é justamente o acervo inteiro.
+
+⚠️ **A conversão MULTIPLICA:** custo por kg = custo por g × (quantos g cabem em
+1 kg). Invertido, o CMV fica mil vezes menor e o número continua parecendo um
+número. Sem conversão possível (ficha em "un", grupo em "g") o preço **antigo**
+é mantido — melhor que um valor mil vezes errado — e o caso aparece como
+pendência.
+
+⚠️ **`ratearEntreMarcas` NÃO é o `distribuirEntreMarcas` da revenda**, e a
+diferença importa: aquele converte por `converterQtd`/`unidadesPorEmbalagem` e
+não conhece `porUnidadeBase` — a lata de Nescau contada em "un" ficaria de fora
+dele. Cascateia da marca com mais saldo (decisão do dono); faltando para todas,
+o resto vai **inteiro na primeira**, negativo de propósito: espalhar o negativo
+faria parecer que todas estão erradas.
+
+⚠️ **`consumoTeorico` passou a carregar `prodListaId` na linha.** Sem ele, a
+baixa cairia sempre na marca gravada na ficha e as outras do grupo ficariam
+intocadas.
+
+⚠️ **`db` é OPCIONAL em `insumosDaProducao` / `aplicarMovimento`.** Sem ele a
+função se comporta exatamente como antes — é o que mantém os chamadores antigos
+funcionando enquanto o agrupamento não estiver configurado. E o `db` que entra é
+o **`d` da gravação**, nunca o do render (§3).
+
+Medido no dado do exemplo: 12 Piracanjuba + 30 Italac + 4 Frimesa de 200 g dão
+**R$ 0,015357/g**, e produzir 45 tortas (6.750 g) tira **30 un da Italac** e
+**3,75 un da Piracanjuba** — 6.750 g exatos, sem perder nem inventar grama.
 
 ### Revenda e DOSE: o saldo mora nas MARCAS, não no produto do cardápio
 

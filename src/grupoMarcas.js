@@ -208,3 +208,85 @@ export function marcasDoGrupo(db, prod) {
 }
 
 export const unidadeBaseDo = (prod) => prod?.unidadeBase || prod?.unidade || 'un';
+
+// ── O custo que a ficha lê ──────────────────────────────────────────────────
+// ⚠️ A ficha guarda a quantidade na unidade DELA ("40 g", "0,2 kg") e o grupo
+// conta na unidade do grupo. O custo por unidade base precisa ser convertido
+// para a unidade da ficha, e a conta é a que parece errada à primeira vista:
+//
+//   custo por kg = custo por g × (quantos g cabem em 1 kg)
+//
+// Dividir em vez de multiplicar dá um custo mil vezes menor — e continua
+// parecendo um número.
+export function custoParaUnidade(marcas, unidadeBase, unidadeAlvo, movEstoque) {
+  const c = custoDoGrupo(marcas, unidadeBase, movEstoque);
+  if (c.custo == null) return { valor: null, origem: null, motivo: 'grupo sem preço' };
+  const fator = converterQtd(1, unidadeAlvo || unidadeBase, unidadeBase);
+  // ⚠️ Sem conversão NÃO se chuta. Ficha em "un" com grupo contando em "g" é
+  // cadastro incompleto, não erro de conta: devolver o custo por grama como se
+  // fosse por unidade multiplicaria o CMV por mil, calado.
+  if (fator == null || !(fator > 0)) {
+    return { valor: null, origem: c.origem, motivo: `a ficha está em "${unidadeAlvo}" e o grupo conta em "${unidadeBase}"` };
+  }
+  return { valor: c.custo * fator, origem: c.origem, saldoBase: c.saldoBase };
+}
+
+// ── O rateio da saída entre as marcas ───────────────────────────────────────
+// ⚠️ Tira primeiro de quem tem MAIS saldo e cascateia (decisão do dono).
+// Baixando tudo de uma marca só, ela fica muito negativa enquanto a outra segue
+// cheia — e nenhuma das duas reflete a prateleira.
+//
+// ⚠️ NÃO é o `distribuirEntreMarcas` da revenda, e a diferença importa: aquele
+// converte por `converterQtd`/`unidadesPorEmbalagem` e não conhece
+// `porUnidadeBase`. A lata de Nescau contada em "un" ficaria de fora lá.
+export function ratearEntreMarcas(marcas, qtdBase, unidadeBase) {
+  const uteis = (marcas || [])
+    .map((m) => ({ mp: m, rend: rendimentoDaMarca(m, unidadeBase) }))
+    .filter((x) => x.rend != null && x.rend > 0);
+  if (!uteis.length || !(qtdBase > 0)) return [];
+
+  const disp = (x) => Math.max(0, num(x.mp.estoqueAtual) * x.rend);
+  const ord = [...uteis].sort((a, b) => disp(b) - disp(a));
+  const out = [];
+  let resta = qtdBase;
+
+  for (const x of ord) {
+    if (resta <= 0.000001) break;
+    const d = disp(x);
+    if (d <= 0) continue;
+    const leva = Math.min(resta, d);
+    out.push({ mpId: x.mp.id, mp: x.mp, qtdBase: r3(leva), qtd: r3(leva / x.rend), unidade: x.mp.unidade || 'un' });
+    resta -= leva;
+  }
+
+  // ⚠️ Ninguém tem saldo (ou faltou): o resto vai INTEIRO na primeira, deixando
+  // negativo. "Usou sem ter registrado a compra" é a informação honesta —
+  // espalhar o negativo entre todas faria parecer que todas estão erradas.
+  if (resta > 0.000001) {
+    const alvo = ord[0];
+    const ja = out.find((o) => o.mpId === alvo.mp.id);
+    if (ja) { ja.qtdBase = r3(ja.qtdBase + resta); ja.qtd = r3(ja.qtdBase / alvo.rend); }
+    else out.push({ mpId: alvo.mp.id, mp: alvo.mp, qtdBase: r3(resta), qtd: r3(resta / alvo.rend), unidade: alvo.mp.unidade || 'un' });
+  }
+  return out;
+}
+
+// O grupo de uma matéria-prima, se ela estiver em algum.
+export function grupoDaMarca(db, mpId) {
+  if (!mpId) return null;
+  return (db?.produtosLista || []).find((p) => (p.mpVinculados || []).includes(mpId)) || null;
+}
+
+// O grupo de uma linha de ficha: pelo `prodListaId` que ela guarda, e senão
+// pelo grupo em que a marca gravada estiver.
+export function grupoDoInsumo(db, insumo) {
+  const porId = insumo?.prodListaId
+    ? (db?.produtosLista || []).find((p) => p.id === insumo.prodListaId)
+    : null;
+  const prod = porId || grupoDaMarca(db, insumo?.mpId);
+  if (!prod) return null;
+  const marcas = marcasDoGrupo(db, prod);
+  return marcas.length ? { prod, marcas, unidadeBase: unidadeBaseDo(prod) } : null;
+}
+
+function r3(n) { return Math.round((n || 0) * 1000) / 1000; }

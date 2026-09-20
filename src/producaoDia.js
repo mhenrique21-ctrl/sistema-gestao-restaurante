@@ -34,7 +34,7 @@ const num = (v) => {
 
 // Uma linha da folha do dia: o produto, quanto se fez, quanto se perdeu, o que
 // sai do estoque e o custo que sai disso.
-export function calcularLinha({ item, ficha, produzido, perda = 0, materiasPrimas }) {
+export function calcularLinha({ item, ficha, produzido, perda = 0, materiasPrimas, db }) {
   const qProd = num(produzido);
   const qPerda = Math.max(num(perda), 0);
   const boas = r3(qProd - qPerda);
@@ -47,7 +47,7 @@ export function calcularLinha({ item, ficha, produzido, perda = 0, materiasPrima
 
   // Os insumos saem pelo PRODUZIDO, não pelas boas: a farinha das 3 que
   // queimaram saiu do estoque do mesmo jeito.
-  const { linhas, avisos: avIns } = insumosDaProducao(ficha, qProd, materiasPrimas);
+  const { linhas, avisos: avIns } = insumosDaProducao(ficha, qProd, materiasPrimas, db);
   avisos.push(...avIns);
   if (!ficha) avisos.push(`"${item?.nome}" não tem ficha técnica — nenhum insumo baixa e o custo fica em branco`);
 
@@ -71,7 +71,7 @@ export function calcularProducaoDia({ db, linhas, resolverFicha }) {
     if (!item) return null;
     return calcularLinha({
       item, ficha: resolverFicha ? resolverFicha(item) : null,
-      produzido: l.produzido, perda: l.perda, materiasPrimas: mps,
+      produzido: l.produzido, perda: l.perda, materiasPrimas: mps, db,
     });
   }).filter(Boolean);
 
