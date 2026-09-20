@@ -20,6 +20,7 @@ import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
+import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo} from "./grupoMarcas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -8834,6 +8835,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
 
     {subTab==="produtos"&&<div>
       <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
+      <AgruparMarcasCard db={db} setDb={setDb} setDbAndSave={setDbAndSave} setState={setState}/>
       {/* Sub-tab "Substituições" saiu do menu (a pedido) — o painel e as
           regras já cadastradas continuam existindo por baixo (prodSubTab
           default "catalogo"), só não tem mais como navegar até lá pela UI. */}
@@ -12011,6 +12013,223 @@ function CatMultiPickerPopup({cats,selected,onToggle,onClose,style}:{cats:string
 // FRANGO". Sem ligar os dois, produzir não alimenta saldo nenhum e o pedido
 // nunca fecha. O casamento e a sugestão moram em src/vinculoProducao.js (com
 // testes) porque sugerir par errado erra em silêncio.
+// ─────────────────────────────────────────────────────────────────────────────
+// Compras → Insumos → AGRUPAR MARCAS
+// ============================================================================
+// Busca "creme de leite", mostra TODAS as marcas que já foram compradas, e
+// manda as escolhidas para um produto único. O inverso também: tirar uma marca
+// do grupo é um ✕ na linha dela.
+//
+// ⚠️ AGRUPAR NÃO É MESCLAR, e a tela ao lado faz a outra coisa. "Mesclar
+// produtos duplicados" APAGA as marcas e soma o estoque num item só — serve pra
+// quando a MESMA marca foi digitada duas vezes, e ela mesma avisa que não tem
+// desfazer. Para Piracanjuba + Italac + Frimesa, mesclar seria errado por três
+// motivos: some o preço de cada marca (e a média ponderada perde o sentido), a
+// próxima NF-e da Italac recria a matéria-prima do zero, e não há como separar
+// depois. Aqui cada marca continua inteira; o que muda é um id numa lista.
+//
+// ⚠️ `produtosLista` é COMPARTILHADO entre as duas empresas e a gravação dele
+// vai por `applyBothProdutos` — nunca `setState` cru (§3). Já `materiasPrimas`
+// é por empresa e vai no `setDbAndSave`. São dois caminhos de propósito.
+function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,setState?:any}){
+  const [busca,setBusca]=useState("");
+  const [sel,setSel]=useState<Set<string>>(new Set());
+  const [destino,setDestino]=useState<string>("");        // id do grupo ou "" = novo
+  const [nomeNovo,setNomeNovo]=useState("");
+  const [unidadeBase,setUnidadeBase]=useState("un");
+  const [rend,setRend]=useState<Record<string,string>>({});
+  const [msg,setMsg]=useState("");
+
+  const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+  const UNIDADES=["un","g","kg","ml","L"];
+  const achados=busca.trim().length>=2?buscarMarcas(db,busca,foldNome):[];
+  const mps=db.materiasPrimas||[];
+
+  // Os grupos que já existem e casam com a busca — é neles que a pessoa vai
+  // querer jogar as marcas novas.
+  const gruposCandidatos=busca.trim().length>=2
+    ?(db.produtosLista||[]).filter((p:any)=>foldNome(p.nome||"").includes(foldNome(busca))
+      ||(p.mpVinculados||[]).some((id:string)=>achados.some((a:any)=>a.mp.id===id)))
+    :[];
+
+  const prodDestino=destino?(db.produtosLista||[]).find((p:any)=>p.id===destino):null;
+  const baseEfetiva=prodDestino?unidadeBaseDo(prodDestino):unidadeBase;
+
+  // Prévia: as marcas selecionadas MAIS as que já estão no grupo de destino.
+  const selecionadas=[...sel].map(id=>mps.find((m:any)=>m.id===id)).filter(Boolean);
+  const jaNoGrupo=prodDestino?marcasDoGrupo(db,prodDestino).filter((m:any)=>!sel.has(m.id)):[];
+  const previaMarcas=[...jaNoGrupo,...selecionadas].map((m:any)=>{
+    const r=parseFloat(rend[m.id]);
+    return r>0?{...m,porUnidadeBase:r}:m;
+  });
+  const previa=custoDoGrupo(previaMarcas,baseEfetiva,db.movEstoque||[]);
+  const pendentes=previa.linhas.filter((l:any)=>l.pendente);
+
+  const toggle=(id:string)=>setSel(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
+
+  const aplicar=()=>{
+    if(!sel.size)return alert("Marque pelo menos uma marca.");
+    const nome=(prodDestino?.nome||nomeNovo).trim();
+    if(!nome)return alert("Dê um nome ao produto único.");
+    if(pendentes.length&&!confirm(
+      `${pendentes.length} marca(s) não sabem quanto rendem em ${baseEfetiva} e vão ficar FORA da soma do grupo:\n\n`
+      +pendentes.map((p:any)=>`· ${p.nome}`).join("\n")
+      +`\n\nAgrupar assim mesmo? Elas continuam no grupo e você preenche depois.`))return;
+
+    const rendimentos:Record<string,number>={};
+    for(const id of sel){const v=parseFloat(rend[id]);if(v>0)rendimentos[id]=v;}
+    const opts={prodId:destino||undefined,nomeNovo:nome,cat:selecionadas[0]?.categoria||"",unidadeBase:baseEfetiva,mpIds:[...sel],rendimentos};
+
+    // ⚠️ DOIS caminhos de gravação, e a divisão não é estilo: `produtosLista`
+    // é compartilhado entre as empresas e `applyBothProdutos` é quem salva por
+    // conta própria; `materiasPrimas` é por empresa. Escrever os dois no mesmo
+    // lugar gravaria a matéria-prima de uma empresa dentro da outra.
+    applyBothProdutos(setState,setDb,(d:any)=>{
+      const r=agruparMarcas(d,opts);
+      return r?{...d,produtosLista:r.produtosLista}:d;
+    });
+    if(Object.keys(rendimentos).length){
+      (setDbAndSave||setDb)((d:any)=>{
+        const r=agruparMarcas(d,opts);
+        return r?{...d,materiasPrimas:r.materiasPrimas}:d;
+      });
+    }
+    setMsg(`${sel.size} marca(s) em "${nome}" — o grupo conta em ${baseEfetiva}.`);
+    setSel(new Set());setRend({});setNomeNovo("");
+  };
+
+  const desagrupar=(prodId:string,mpId:string,nome:string)=>{
+    if(!confirm(`Tirar "${nome}" do grupo?\n\nA marca continua existindo, com o saldo e o histórico dela — só deixa de somar neste produto.`))return;
+    applyBothProdutos(setState,setDb,(d:any)=>({...d,produtosLista:desagruparMarca(d,prodId,mpId).produtosLista}));
+  };
+
+  const cx=(o:any)=>({display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)",...o});
+  const num=(v:number|null,casas=2)=>v==null?"—":v.toLocaleString("pt-BR",{minimumFractionDigits:casas,maximumFractionDigits:casas});
+
+  return <div className="card" style={{marginBottom:12}}>
+    <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>🔗 Agrupar marcas num produto único</div>
+    <div style={{fontSize:12,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
+      Piracanjuba, Italac e Frimesa viram um "Creme de leite". A lata de 395 g e o pacote de 2,1 kg viram
+      um "Nescau" que conta em gramas. Cada marca continua com o saldo e o preço dela.
+    </div>
+
+    <input className="inp" placeholder="Buscar marca…  ex.: creme de leite, nescau" value={busca}
+      onChange={e=>{setBusca(e.target.value);setMsg("");}} style={{marginBottom:10}}/>
+
+    {msg&&<div style={{background:"var(--successBg)",color:"var(--successText)",borderRadius:9,padding:"10px 12px",fontSize:12.5,marginBottom:10}}>✓ {msg}</div>}
+
+    {busca.trim().length>=2&&!achados.length&&
+      <EmptyState msg="Nenhuma marca com esse nome no catálogo de insumos."/>}
+
+    {!!achados.length&&<>
+      <div style={{fontSize:11,color:"var(--text3)",margin:"4px 0 6px"}}>{achados.length} marca(s) — marque as que são o mesmo produto</div>
+      {achados.map(({mp,grupo}:any)=>{
+        const marcada=sel.has(mp.id);
+        const r=rendimentoDaMarca(marcada&&parseFloat(rend[mp.id])>0?{...mp,porUnidadeBase:parseFloat(rend[mp.id])}:mp,baseEfetiva);
+        return <div key={mp.id} style={{borderBottom:"1px solid var(--bg2)",padding:"8px 0"}}>
+          <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+            <input type="checkbox" checked={marcada} onChange={()=>toggle(mp.id)} style={{marginTop:3,width:18,height:18,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13.5}}>{mp.nome}</div>
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:2,...MONO}}>
+                {num(mp.estoqueAtual||0,2)} {mp.unidade||"un"} · {fmtMoney(mp.ultimoValor||0)}/{mp.unidade||"un"}
+                {grupo&&<> · <span style={{color:"var(--infoText)"}}>já em "{grupo.nome}"</span></>}
+              </div>
+              {marcada&&r==null&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,flexWrap:"wrap"}}>
+                <span style={{fontSize:11.5,color:"var(--warningText)"}}>1 {mp.unidade||"un"} =</span>
+                <input className="inp" type="number" value={rend[mp.id]||""} placeholder="?"
+                  onChange={e=>setRend(x=>({...x,[mp.id]:e.target.value}))}
+                  style={{marginBottom:0,width:90,padding:"5px 8px",fontSize:12.5}}/>
+                <span style={{fontSize:11.5,color:"var(--warningText)"}}>{baseEfetiva}</span>
+              </div>}
+              {marcada&&r!=null&&<div style={{fontSize:11,color:"var(--successText)",marginTop:4,...MONO}}>
+                1 {mp.unidade||"un"} = {num(r,r>=10?0:3)} {baseEfetiva}
+                {mp.ultimoValor>0&&<> · {fmtMoney(mp.ultimoValor/r)}/{baseEfetiva}</>}
+              </div>}
+            </div>
+          </div>
+        </div>;
+      })}
+    </>}
+
+    {!!sel.size&&<div style={{marginTop:12,padding:12,background:"var(--bg2)",borderRadius:10}}>
+      <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Mandar {sel.size} marca(s) para</div>
+      <select className="inp" value={destino} onChange={e=>setDestino(e.target.value)} style={{marginBottom:8}}>
+        <option value="">+ criar produto novo</option>
+        {gruposCandidatos.map((p:any)=><option key={p.id} value={p.id}>{p.nome} ({(p.mpVinculados||[]).length} marca(s), conta em {unidadeBaseDo(p)})</option>)}
+      </select>
+      {!destino&&<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+        <input className="inp" placeholder="Nome do produto único" value={nomeNovo}
+          onChange={e=>setNomeNovo(e.target.value)} style={{marginBottom:0,flex:"1 1 180px"}}/>
+        <select className="inp" value={unidadeBase} onChange={e=>setUnidadeBase(e.target.value)} style={{marginBottom:0,width:110}}>
+          {UNIDADES.map(u=><option key={u} value={u}>conta em {u}</option>)}
+        </select>
+      </div>}
+
+      <div style={cx({borderBottom:"none",paddingTop:2})}>
+        <span style={{fontSize:12.5,color:"var(--text2)"}}>Saldo do grupo</span>
+        <b style={MONO}>{num(previa.saldoBase,2)} {baseEfetiva}</b>
+      </div>
+      <div style={cx({borderBottom:"none",paddingTop:0})}>
+        <span style={{fontSize:12.5,color:"var(--text2)"}}>Custo — média ponderada</span>
+        <b style={MONO}>{previa.custo==null?"—":`${fmtMoney(previa.custo)}/${baseEfetiva}`}</b>
+      </div>
+      {previa.origem&&previa.origem!=="ponderado"&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:8,padding:"8px 10px",fontSize:12,lineHeight:1.5,marginTop:6}}>
+        ⚠️ Sem saldo nenhum no grupo, então o custo veio {previa.origem==="ultimaCompra"?"da ÚLTIMA COMPRA":"do preço de catálogo"} —
+        não da média. Zero diria que o insumo é de graça.
+      </div>}
+      {!!pendentes.length&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:8,padding:"8px 10px",fontSize:12,lineHeight:1.5,marginTop:6}}>
+        ⚠️ {pendentes.length} marca(s) sem "quanto rende" ficam FORA da soma: {pendentes.map((p:any)=>p.nome).join(", ")}.
+        Nenhuma tabela converte "un" em {baseEfetiva} — isso é cadastro, não conversão, e chutar 1 somaria
+        3 latas a 6.300 gramas.
+      </div>}
+      <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+        <button className="btn" onClick={aplicar} style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#fff)",border:0}}>Agrupar</button>
+        <button className="btn" onClick={()=>{setSel(new Set());setRend({});}}>Limpar seleção</button>
+      </div>
+    </div>}
+
+    {!!gruposCandidatos.length&&<div style={{marginTop:14}}>
+      <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>Grupos que já existem</div>
+      {gruposCandidatos.map((p:any)=>{
+        const marcas=marcasDoGrupo(db,p);
+        const c=custoDoGrupo(marcas,unidadeBaseDo(p),db.movEstoque||[]);
+        return <div key={p.id} style={{border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap",alignItems:"baseline"}}>
+            <b style={{fontSize:13.5}}>{p.nome}</b>
+            <span style={{fontSize:12,color:"var(--text2)",...MONO}}>
+              {num(c.saldoBase,2)} {unidadeBaseDo(p)} · {c.custo==null?"—":`${fmtMoney(c.custo)}/${unidadeBaseDo(p)}`}
+            </span>
+          </div>
+          {!marcas.length&&<div style={{fontSize:11.5,color:"var(--text3)",marginTop:4}}>nenhuma marca ligada ainda</div>}
+          {marcas.map((m:any)=>{
+            const l=c.linhas.find((x:any)=>x.id===m.id);
+            return <div key={m.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"5px 0",fontSize:12.5,borderTop:"1px solid var(--bg2)"}}>
+              <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+                {m.nome}
+                {l?.pendente&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,marginLeft:6,background:"var(--warningBg)",color:"var(--warningText)"}}>sem conversão</span>}
+              </span>
+              <span style={{flexShrink:0,display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{color:"var(--text3)",...MONO,fontSize:11.5}}>
+                  {l?.pendente?`${num(m.estoqueAtual||0,2)} ${m.unidade||"un"}`:`${num(l?.saldoBase??0,2)} ${unidadeBaseDo(p)}`}
+                </span>
+                <button onClick={()=>desagrupar(p.id,m.id,m.nome)} title="tirar do grupo"
+                  style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:12,padding:"1px 7px"}}>✕</button>
+              </span>
+            </div>;
+          })}
+        </div>;
+      })}
+    </div>}
+
+    <div style={{fontSize:11,color:"var(--text3)",marginTop:12,lineHeight:1.55}}>
+      <b>Agrupar não é mesclar.</b> Aqui cada marca continua inteira, com saldo, preço e histórico
+      próprios — e o ✕ desfaz. "Mesclar produtos duplicados" (o botão da IA, mais abaixo) APAGA as marcas
+      e soma tudo num item só: serve pra quando a mesma marca foi digitada duas vezes, e não tem desfazer.
+    </div>
+  </div>;
+}
+
 function VincularProducaoCard({db,setDb,setDbAndSave}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void}){
   const [filtro,setFiltro]=useState<"sem"|"com">("sem");
   const [buscas,setBuscas]=useState<Record<string,string>>({});

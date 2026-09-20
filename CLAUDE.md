@@ -45,6 +45,7 @@ src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dad
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
+src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com testes)
 src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
@@ -1256,6 +1257,77 @@ data, hora, "Página"). Lido como CSV comum dá 281 cabeçalhos e zero produtos.
 `lerProdutosEcletica` descarta rótulos, vazios e rodapé em vez de fixar a
 posição 24 — fixar quebra se o Eclética acrescentar uma coluna. Planilha comum
 com cabeçalho também é aceita.
+
+### Compras → Insumos → Agrupar marcas — `src/grupoMarcas.js` (com testes)
+
+"Creme de leite 200 g" é Piracanjuba, Italac e Frimesa. "Nescau em pó" é a lata
+de 395 g, o pacote de 700 g e o de 2,1 kg. **É o mesmo problema:** a ficha
+técnica precisa do PRODUTO, e a nota fiscal traz a MARCA.
+
+O agrupamento já existia (`produtosLista[].mpVinculados`). O que faltava era o
+grupo ter uma **unidade própria** em que contar — `produtosLista[].unidadeBase`
+— e cada marca declarar quanto rende nela (`materiasPrimas[].porUnidadeBase`).
+Nenhum dos dois é campo novo no `db` que precise de fusão: são campos dentro de
+coleções que já são fundidas por id.
+
+⚠️ **AGRUPAR NÃO É MESCLAR, e a tela ao lado faz a outra coisa.** "Mesclar
+produtos duplicados" (`mesclarProdutosDuplicados`, o botão da IA) **APAGA** as
+marcas e soma o estoque num item só — serve para a MESMA marca digitada duas
+vezes, e ela mesma avisa que não tem desfazer. Para Piracanjuba + Italac,
+mesclar erra por três motivos: some o preço de cada marca (e a média ponderada
+perde o sentido), a próxima NF-e da Italac recria a matéria-prima do zero, e não
+há como separar depois. É a mesma lição da conciliação de revenda: **vincular
+grava um id; desfazer é tirar o id**.
+
+⚠️ **NENHUM SALDO É CONVERTIDO NO BANCO.** Cada marca continua contando na
+unidade dela — 3 pacotes é 3 pacotes, e é isso que se conta na prateleira. A
+conversão acontece na LEITURA. Reescrever `estoqueAtual` em gramas seria
+migração de saldo, e migração de saldo não tem desfazer.
+
+⚠️ **`rendimentoDaMarca` tem TRÊS caminhos, e a ordem importa:**
+
+| | |
+|---|---|
+| `porUnidadeBase` declarado | **vence**. É o único jeito de dizer que a lata contada em "un" tem 395 g dentro: nenhuma tabela converte "un" em "g", porque isso não é conversão, é **cadastro** |
+| conversão de família (kg↔g, L↔ml) | o pacote de 2,1 kg não declara nada |
+| **`null`**, nunca um palpite | marca sem rendimento fica FORA da soma e vira pendência na tela. Com fator 1, 3 latas somariam 3 gramas ao lado de 6.300 e o grupo mentiria em silêncio |
+
+⚠️ **MÉDIA PONDERADA PELO SALDO** (decisão do dono, 20/09/2026), não o último
+preço: `(Σ saldo × preço) ÷ (Σ saldo na unidade base)`. É o custo do que está
+REALMENTE na despensa, e uma promoção isolada não derruba a margem de todas as
+receitas até a compra seguinte. Marca com saldo zero não entra.
+
+⚠️ **ESTOQUE ZERADO NÃO CUSTA ZERO.** Com tudo em zero a ponderação seria 0÷0, e
+devolver zero diria "este insumo é de graça" — a mesma mentira do produzido que
+entrava no estoque valendo nada. Sem saldo vale a **última compra**; sem compra,
+o preço de catálogo. O resultado diz de onde veio (`origem`) para a tela avisar.
+
+⚠️ **A "última compra" sai do `movEstoque` (`tipo: 'entrada'`), não de
+`atualizadoEm`.** O `mpMaisRecente` que já existia ordena por `atualizadoEm`, que
+é carimbado sempre que `ultimoValor` muda — **inclusive numa edição à mão**.
+"Repreçada por último" não é "comprada por último", e a diferença aparece
+justamente quando alguém corrige um preço antigo.
+
+⚠️ **Uma marca só pode estar em UM grupo.** `agruparMarcas` tira a marca do
+grupo anterior antes de pôr no novo: nos dois, ela seria somada em dois produtos
+diferentes — e os dois ficariam plausíveis, que é o pior caso.
+
+⚠️ **PRODUTO DO CARDÁPIO não aparece na busca** (`codigoEcletica` preenchido).
+Ele mora na mesma coleção que o insumo comprado (§6, "cinco tipos, uma
+coleção"); agrupá-lo ligaria a fornada ao saldo do que se compra, e só a
+contagem física denunciaria.
+
+⚠️ **A gravação vai por DOIS caminhos, e não é estilo:** `produtosLista` é
+compartilhado entre as empresas e sai por `applyBothProdutos` (§3);
+`materiasPrimas` é por empresa e sai por `setDbAndSave`. Escrever os dois no
+mesmo lugar gravaria a matéria-prima de uma empresa dentro da outra.
+
+⚠️ **PENDENTE:** a ficha técnica ainda **congela** o preço no momento em que é
+montada (`addIns` grava `valorUnd`), e a baixa por venda ainda vai para UMA
+marca (`consumoTeorico` chaveia por `i.mpId`). Com o grupo pronto, faltam os
+dois: a ficha ler `custoDoGrupo` na hora, e a baixa usar
+`distribuirEntreMarcas` — que já existe e já cascateia pela marca com mais
+saldo, hoje só para revenda.
 
 ### Revenda e DOSE: o saldo mora nas MARCAS, não no produto do cardápio
 
