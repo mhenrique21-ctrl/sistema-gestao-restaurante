@@ -5,6 +5,7 @@ import {
   buscarMarcas, agruparMarcas, desagruparMarca, marcasDoGrupo, unidadeBaseDo,
   custoParaUnidade, ratearEntreMarcas, grupoDoInsumo, grupoDaMarca, trocarUnidadeBase,
   insumosSemGrupo, agruparPendentes, sugerirGrupo, tokensDoNome, termoDeBusca,
+  tamanhoNoNome, sugerirRendimento, gravarRendimentos,
 } from './grupoMarcas.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -508,3 +509,80 @@ describe('a pasta dos insumos que ainda não foram conciliados', () => {
 });
 
 function r2(n) { return Math.round(n * 100) / 100; }
+
+// ── Converter direto na linha que está "sem conversão" ──────────────────────
+describe('o tamanho da embalagem que está no nome', () => {
+  test('lê o formato normal da nota', () => {
+    assert.deepEqual(tamanhoNoNome('ACUCAR TRITURADO ITAMARATI 1KG', fold),
+      { multiplicador: 1, quantidade: 1, unidade: 'kg', total: 1 });
+    assert.equal(tamanhoNoNome('NESCAU 2,1KG', fold).total, 2.1);
+    assert.equal(tamanhoNoNome('CR AVELA NUTELLA 375G', fold).unidade, 'g');
+  });
+
+  test('a caixa com N unidades MULTIPLICA', () => {
+    // "200X5G" é a caixa de 200 sachês de 5 g. Lendo só o "5G", o grupo somaria
+    // 5 gramas onde há mil.
+    assert.deepEqual(tamanhoNoNome('ACUCAR REF ITAMARATI SACHET 200X5G', fold),
+      { multiplicador: 200, quantidade: 5, unidade: 'g', total: 1000 });
+    assert.equal(tamanhoNoNome('açúcar itambarati 1x1kg', fold).total, 1);
+  });
+
+  test('vale a ÚLTIMA medida do nome — é onde a embalagem fica', () => {
+    assert.equal(tamanhoNoNome('CAFE 3 CORACOES 500G', fold).total, 500);
+  });
+
+  test('"1.000G" é mil gramas, não um', () => {
+    // Mesma regra do numeroBr da planilha: sem ela o grupo ficaria mil vezes
+    // menor, com cara de número certo.
+    assert.equal(tamanhoNoNome('ACUCAR 1.000G', fold).total, 1000);
+  });
+
+  test('nome sem medida nenhuma não vira palpite', () => {
+    assert.equal(tamanhoNoNome('Açucar', fold), null);
+    assert.equal(tamanhoNoNome('ACUCAR TRITURADO 2026', fold), null);
+  });
+
+  test('o palpite converte para a unidade DO GRUPO', () => {
+    const mp = { id: 'x', nome: 'ACUCAR REF ITAMARATI SACHET 200X5G', unidade: 'un' };
+    const s = sugerirRendimento(mp, 'kg', fold);
+    assert.equal(s.valor, 1);              // 200 × 5 g = 1.000 g = 1 kg
+    assert.equal(s.total, 1000);
+    assert.equal(sugerirRendimento(mp, 'g', fold).valor, 1000);
+  });
+
+  test('marca que JÁ sabe converter não recebe palpite', () => {
+    // Palpitar por cima de um cadastro existente troca um número certo por um
+    // plausível.
+    assert.equal(sugerirRendimento({ nome: 'Nescau lata 395g', unidade: 'un', porUnidadeBase: 395 }, 'g', fold), null);
+    // E a marca em kg num grupo em kg converte sozinha — não é pendência.
+    assert.equal(sugerirRendimento({ nome: 'açúcar 1kg', unidade: 'kg' }, 'kg', fold), null);
+  });
+
+  test('sem conversão possível entre as duas unidades, não há palpite', () => {
+    // Grupo contando em "un" e nome em gramas: não é conversão, é cadastro.
+    assert.equal(sugerirRendimento({ nome: 'ACUCAR 1KG', unidade: 'un' }, 'un', fold), null);
+  });
+});
+
+describe('gravar as conversões de uma vez', () => {
+  const DB = { materiasPrimas: [{ id: 'a', nome: 'A' }, { id: 'b', nome: 'B' }, { id: 'c', nome: 'C' }] };
+
+  test('grava só o que foi preenchido, e carimba', () => {
+    const r = gravarRendimentos(DB, { a: '1', b: '', c: 0.5 });
+    assert.equal(r.quantas, 2);
+    assert.equal(r.materiasPrimas.find((m) => m.id === 'a').porUnidadeBase, 1);
+    assert.equal(r.materiasPrimas.find((m) => m.id === 'c').porUnidadeBase, 0.5);
+    assert.ok(r.materiasPrimas.find((m) => m.id === 'a').atualizadoEm);
+    // ⚠️ Campo em branco é "ainda não sei". Gravado como zero, a marca renderia
+    // nada e sumiria da soma parecendo resolvida.
+    assert.equal(r.materiasPrimas.find((m) => m.id === 'b').porUnidadeBase, undefined);
+  });
+
+  test('aceita vírgula, como todo campo de número do app', () => {
+    assert.equal(gravarRendimentos(DB, { a: '2,1' }).materiasPrimas[0].porUnidadeBase, 2.1);
+  });
+
+  test('nada preenchido não grava nada', () => {
+    assert.equal(gravarRendimentos(DB, { a: '', b: '0' }), null);
+  });
+});

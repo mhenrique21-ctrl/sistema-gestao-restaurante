@@ -1398,6 +1398,35 @@ fronteira de palavra** dentro do nome da marca, o **mais longo** vence (senão
 "Leite" ganharia de "Leite condensado") e **empate não escolhe** — a mesma
 recusa do `acharColunas`.
 
+##### Converter na própria linha, pelo tamanho que está no nome (20/09/2026)
+
+A marca que aparece com a tag **sem conversão** dentro de "Grupos que já
+existem" tem o campo `1 un = ___ <base>` na linha dela, e o grupo tem um
+**salvar** no rodapé. Antes, resolver uma pendente exigia achá-la de novo pela
+busca lá em cima e marcá-la — com sete marcas de açúcar no mesmo grupo, é
+rolagem e troca de contexto a cada uma.
+
+⚠️ **`tamanhoNoNome` lê a embalagem do nome que veio da nota** — "ITAMARATI
+1KG", "SACHET 200X5G", "NESCAU 2,1KG" — e `sugerirRendimento` converte para a
+unidade do grupo. A caixa **multiplica** (`200 × 5 g = 1.000 g`): lendo só o
+"5G", o grupo somaria 5 gramas onde há mil. Vale a **última** medida do nome, e
+`1.000G` é mil gramas (mesma regra do `numeroBr` da planilha).
+
+⚠️ **O PALPITE NUNCA GRAVA SOZINHO, e o botão diz a conta que leu.** "200X5G"
+pode ser a caixa com 200 sachês ou o sachê avulso, e quem sabe qual foi comprado
+é quem comprou. O "preencher N pelo nome" **preenche os campos**, não grava:
+todos os números ficam na tela antes do salvar. Marca que já sabe converter não
+recebe palpite — trocar um número certo por um plausível é pior que não sugerir.
+
+⚠️ **O campo NÃO pode depender do que se digita nele** (`pend` sai de
+`l.pendente`, que é o que está GRAVADO). É a armadilha do "1 un = ___ g" de
+algumas horas antes, e `src/agruparMarcasTela.test.js` trava as duas.
+
+⚠️ **Valor em branco é IGNORADO, nunca gravado como zero** (`gravarRendimentos`):
+zero faria a marca render nada e sumir da soma **parecendo resolvida**. E a
+gravação é só de `materiasPrimas`, por `setDbAndSave` — `produtosLista` não muda
+numa conversão, então não passa por `applyBothProdutos`.
+
 ##### A ficha lê o grupo, e a baixa se divide entre as marcas
 
 ⚠️ **`resolverPrecoInsumo` é o ponto ÚNICO** por onde o preço da ficha é

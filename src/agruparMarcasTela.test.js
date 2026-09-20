@@ -128,3 +128,40 @@ test('a pasta oferece as três ordens que o dono pediu', () => {
   assert.ok(/useState<"compra"\|"nome"\|"semelhanca">\("compra"\)/.test(CARD),
     'a ordem padrão tem que ser a compra mais recente');
 });
+
+test('dá pra converter na própria linha "sem conversão"', () => {
+  // Antes, resolver uma marca pendente exigia achá-la de novo pela busca lá em
+  // cima e marcá-la — com sete marcas de açúcar na mesma lista, é rolagem e
+  // troca de contexto a cada uma.
+  const bloco = CARD.slice(CARD.indexOf('Grupos que já existem'));
+  assert.ok(bloco.includes('salvarConversoes(p)'), 'falta o salvar da conversão no grupo');
+  assert.ok(/value=\{conv\[m\.id\]\?\?""\}/.test(bloco), 'falta o campo por marca');
+});
+
+test('o campo da conversão NÃO depende do que se digita nele', () => {
+  // ⚠️ Mesma armadilha de 20/09: campo cuja existência sai do próprio valor
+  // some no meio da digitação e grava o primeiro dígito.
+  const bloco = CARD.slice(CARD.indexOf('Grupos que já existem'));
+  assert.ok(/const pend=!!l\?\.pendente;/.test(bloco),
+    'a pendência tem que sair do que está GRAVADO na marca');
+  assert.ok(!/pendente[^\n]*conv\[/.test(bloco), 'a pendência voltou a olhar o que está sendo digitado');
+});
+
+test('o palpite do nome não grava sozinho — só preenche o campo', () => {
+  // "200X5G" pode ser a caixa de 200 sachês ou o sachê avulso. Gravando calado,
+  // o grupo somaria 1.000 g onde havia 5, e o saldo continuaria plausível.
+  const bloco = CARD.slice(CARD.indexOf('Grupos que já existem'));
+  assert.ok(/onClick=\{\(\)=>setConv\(x=>\(\{\.\.\.x,\[m\.id\]:String\(sug\.valor\)\}\)\)\}/.test(bloco),
+    'o botão do palpite tem que só preencher o campo');
+  assert.ok(bloco.includes('o nome diz'), 'a conta lida tem que ficar escrita ao lado');
+  assert.ok(!/sugerirRendimento[^\n]*setDbAndSave/.test(CARD), 'o palpite não pode ir direto pra gravação');
+});
+
+test('a conversão grava SÓ materiasPrimas', () => {
+  // `porUnidadeBase` é campo da marca, que é por empresa. Passar por
+  // applyBothProdutos gravaria a matéria-prima de uma empresa dentro da outra.
+  const bloco = CARD.slice(CARD.indexOf('const salvarConversoes='), CARD.indexOf('const desagrupar='));
+  assert.ok(bloco.includes('materiasPrimas:r.materiasPrimas'), 'falta a gravação da marca');
+  assert.ok(!bloco.includes('applyBothProdutos'), 'produtosLista não muda numa conversão');
+  assert.ok(bloco.includes('gravarRendimentos(d,vals)'), 'tem que ler o db da GRAVAÇÃO, não o do render');
+});

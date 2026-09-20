@@ -20,7 +20,7 @@ import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
-import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase,insumosSemGrupo,agruparPendentes,sugerirGrupo,termoDeBusca} from "./grupoMarcas.js";
+import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase,insumosSemGrupo,agruparPendentes,sugerirGrupo,termoDeBusca,sugerirRendimento,gravarRendimentos} from "./grupoMarcas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -12053,6 +12053,10 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
   const [pastaFiltro,setPastaFiltro]=useState("");
   const [pastaOrdem,setPastaOrdem]=useState<"compra"|"nome"|"semelhanca">("compra");
   const [pastaMostrar,setPastaMostrar]=useState(8);
+  // As conversões sendo digitadas nas marcas "sem conversão" dos grupos que já
+  // existem. Chave é o id da marca, então duas marcas do mesmo nome em grupos
+  // diferentes não se atrapalham.
+  const [conv,setConv]=useState<Record<string,string>>({});
 
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
   const UNIDADES=["un","g","kg","ml","L"];
@@ -12173,6 +12177,25 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
     setMsg(`"${prod.nome}" passou a contar em ${nova}.`);
   };
 
+  // ⚠️ SÓ `materiasPrimas` — `porUnidadeBase` é campo da marca, que é por
+  // empresa (§3). `produtosLista` não muda aqui, então não há applyBothProdutos.
+  const salvarConversoes=(prod:any)=>{
+    const ids=new Set<string>(prod.mpVinculados||[]);
+    const vals:Record<string,string>={};
+    for(const [id,v] of Object.entries(conv))if(ids.has(id))vals[id]=v as string;
+    if(!gravarRendimentos(db,vals))return alert("Preencha pelo menos uma conversão.");
+    let quantas=0;
+    // O db que vale é o `d` da gravação, nunca o do render.
+    (setDbAndSave||setDb)((d:any)=>{
+      const r=gravarRendimentos(d,vals);
+      if(!r)return d;
+      quantas=r.quantas;
+      return {...d,materiasPrimas:r.materiasPrimas};
+    });
+    setConv(x=>{const n={...x};for(const id of Object.keys(vals))delete n[id];return n;});
+    setMsg(`${quantas||Object.keys(vals).length} conversão(ões) salva(s) em "${prod.nome}" — o saldo dessas marcas passou a somar no grupo.`);
+  };
+
   const desagrupar=(prodId:string,mpId:string,nome:string)=>{
     if(!confirm(`Tirar "${nome}" do grupo?\n\nA marca continua existindo, com o saldo e o histórico dela — só deixa de somar neste produto.`))return;
     applyBothProdutos(setState,setDb,(d:any)=>({...d,produtosLista:desagruparMarca(d,prodId,mpId).produtosLista}));
@@ -12180,6 +12203,9 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
 
   const cx=(o:any)=>({display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)",...o});
   const num=(v:number|null,casas=2)=>v==null?"—":v.toLocaleString("pt-BR",{minimumFractionDigits:casas,maximumFractionDigits:casas});
+  // Quantidade sem zero à toa: 1,000 vira "1" e 2,100 vira "2,1", mas 1.000
+  // continua mil — cortar zero de milhar daria "1.".
+  const fmtQtd=(v:number)=>{const t=v>=10?num(v,0):num(v,3);return t.includes(",")?t.replace(/0+$/,"").replace(/,$/,""):t;};
 
   return <div className="card" style={{marginBottom:12}}>
     <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>🔗 Agrupar marcas num produto único</div>
@@ -12408,32 +12434,75 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
     {!!gruposCandidatos.length&&<div style={{marginTop:14}}>
       <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>Grupos que já existem</div>
       {gruposCandidatos.map((p:any)=>{
+        const base=unidadeBaseDo(p);
         const marcas=marcasDoGrupo(db,p);
-        const c=custoDoGrupo(marcas,unidadeBaseDo(p),db.movEstoque||[]);
+        const c=custoDoGrupo(marcas,base,db.movEstoque||[]);
+        const semConv=marcas.filter((m:any)=>c.linhas.find((x:any)=>x.id===m.id)?.pendente);
+        const palpites=semConv.map((m:any)=>({m,s:sugerirRendimento(m,base,foldNome)})).filter((x:any)=>x.s);
+        const digitadas=semConv.filter((m:any)=>parseFloat(String(conv[m.id]??"").replace(",","."))>0).length;
         return <div key={p.id} style={{border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap",alignItems:"baseline"}}>
             <b style={{fontSize:13.5}}>{p.nome}</b>
             <span style={{fontSize:12,color:"var(--text2)",...MONO}}>
-              {num(c.saldoBase,2)} {unidadeBaseDo(p)} · {c.custo==null?"—":`${fmtMoney(c.custo)}/${unidadeBaseDo(p)}`}
+              {num(c.saldoBase,2)} {base} · {c.custo==null?"—":`${fmtMoney(c.custo)}/${base}`}
             </span>
           </div>
           {!marcas.length&&<div style={{fontSize:11.5,color:"var(--text3)",marginTop:4}}>nenhuma marca ligada ainda</div>}
           {marcas.map((m:any)=>{
             const l=c.linhas.find((x:any)=>x.id===m.id);
-            return <div key={m.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"5px 0",fontSize:12.5,borderTop:"1px solid var(--bg2)"}}>
-              <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
-                {m.nome}
-                {l?.pendente&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,marginLeft:6,background:"var(--warningBg)",color:"var(--warningText)"}}>sem conversão</span>}
-              </span>
-              <span style={{flexShrink:0,display:"flex",gap:8,alignItems:"center"}}>
-                <span style={{color:"var(--text3)",...MONO,fontSize:11.5}}>
-                  {l?.pendente?`${num(m.estoqueAtual||0,2)} ${m.unidade||"un"}`:`${num(l?.saldoBase??0,2)} ${unidadeBaseDo(p)}`}
+            // ⚠️ `pend` sai do que está GRAVADO na marca. A existência do campo
+            // NÃO pode depender do que está sendo digitado nele — foi assim que
+            // o campo sumia no meio da digitação e gravava 9 em vez de 900.
+            const pend=!!l?.pendente;
+            const sug=pend?sugerirRendimento(m,base,foldNome):null;
+            return <div key={m.id} style={{padding:"5px 0",fontSize:12.5,borderTop:"1px solid var(--bg2)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+                  {m.nome}
+                  {pend&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,marginLeft:6,background:"var(--warningBg)",color:"var(--warningText)"}}>sem conversão</span>}
                 </span>
-                <button onClick={()=>desagrupar(p.id,m.id,m.nome)} title="tirar do grupo"
-                  style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:12,padding:"1px 7px"}}>✕</button>
-              </span>
+                <span style={{flexShrink:0,display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{color:"var(--text3)",...MONO,fontSize:11.5}}>
+                    {pend?`${num(m.estoqueAtual||0,2)} ${m.unidade||"un"}`:`${num(l?.saldoBase??0,2)} ${base}`}
+                  </span>
+                  <button onClick={()=>desagrupar(p.id,m.id,m.nome)} title="tirar do grupo"
+                    style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:12,padding:"1px 7px"}}>✕</button>
+                </span>
+              </div>
+              {pend&&<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",margin:"5px 0 3px"}}>
+                <span style={{fontSize:11.5,color:"var(--text2)"}}>1 {m.unidade||"un"} =</span>
+                <input className="inp" type="number" inputMode="decimal" step="any" value={conv[m.id]??""}
+                  onChange={e=>setConv(x=>({...x,[m.id]:e.target.value}))}
+                  placeholder={sug?fmtQtd(sug.valor):"quanto?"}
+                  style={{marginBottom:0,width:104,padding:"4px 8px",fontSize:12.5}}/>
+                <span style={{fontSize:11.5,color:"var(--text2)"}}>{base}</span>
+                {/* ⚠️ O palpite do nome NUNCA grava sozinho: a conta lida fica
+                    escrita ao lado, porque "200X5G" pode ser a caixa de 200
+                    sachês ou o sachê avulso, e quem sabe qual foi comprado é
+                    quem comprou. */}
+                {sug&&<button onClick={()=>setConv(x=>({...x,[m.id]:String(sug.valor)}))}
+                  style={{border:"1px solid var(--border)",background:"transparent",borderRadius:7,cursor:"pointer",
+                    padding:"3px 9px",fontSize:11,fontFamily:"inherit",color:"var(--infoText)"}}>
+                  usar {fmtQtd(sug.valor)} {base}
+                  <span style={{color:"var(--text3)"}}> · o nome diz {sug.multiplicador>1?`${fmtQtd(sug.multiplicador)} × `:""}{fmtQtd(sug.quantidade)} {sug.unidade}</span>
+                </button>}
+              </div>}
             </div>;
           })}
+          {!!semConv.length&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:8,padding:"8px 10px",fontSize:11.5,lineHeight:1.5,marginTop:8}}>
+            {semConv.length} marca(s) sem conversão — o saldo delas NÃO entra nos {num(c.saldoBase,2)} {base} acima,
+            e o custo do grupo também não conta com elas.
+            <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+              {!!palpites.length&&<button onClick={()=>setConv(x=>{const n={...x};for(const it of palpites)n[it.m.id]=String(it.s.valor);return n;})}
+                className="btn" style={{padding:"4px 11px",fontSize:11.5}}>preencher {palpites.length} pelo nome</button>}
+              <button onClick={()=>salvarConversoes(p)} className="btn"
+                disabled={!digitadas}
+                style={{padding:"4px 11px",fontSize:11.5,opacity:digitadas?1:.5,
+                  background:digitadas?"var(--btnPrimary)":undefined,color:digitadas?"var(--onPrimary,#fff)":undefined,border:digitadas?0:undefined}}>
+                salvar {digitadas||""} conversão{digitadas===1?"":"ões"}
+              </button>
+            </div>
+          </div>}
         </div>;
       })}
     </div>}

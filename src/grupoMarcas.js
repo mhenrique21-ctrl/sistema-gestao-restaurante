@@ -476,3 +476,73 @@ function contemPalavra(texto, termo) {
   }
   return false;
 }
+
+// ── Ler o tamanho da embalagem que está NO NOME ─────────────────────────────
+// A marca comprada em "un" não converte para grama por tabela nenhuma — isso é
+// cadastro (ver `rendimentoDaMarca`). Mas o tamanho quase sempre já está
+// escrito no nome que veio da nota: "ACUCAR TRITURADO ITAMARATI 1KG",
+// "SACHET 200X5G", "NESCAU 2,1KG".
+//
+// ⚠️ ISTO É UM PALPITE, e ele nunca grava sozinho. A tela mostra a conta lida
+// ("200 × 5 g = 1.000 g") e a pessoa confirma: "200X5G" pode ser a caixa com
+// 200 sachês ou o sachê avulso, e quem sabe qual foi comprado é quem comprou.
+// Gravando calado, o grupo passaria a somar 1.000 g onde havia 5 — e o saldo
+// continuaria parecendo um saldo.
+const UN_NOME = { lt: 'l', litro: 'l', litros: 'l', grama: 'g', gramas: 'g', quilo: 'kg', quilos: 'kg' };
+
+function numeroDoNome(s) {
+  const t = String(s || '');
+  // "1.000" é mil — mesma regra do `numeroBr` da planilha. Sem ela, um nome
+  // com "1.000G" viraria 1 g.
+  if (/^\d{1,3}\.\d{3}$/.test(t)) return Number(t.replace('.', ''));
+  return Number(t.replace(',', '.'));
+}
+
+export function tamanhoNoNome(nome, fold) {
+  const t = fold(String(nome || ''));
+  const re = /(?:(\d+(?:[.,]\d+)?)\s*[x*]\s*)?(\d+(?:[.,]\d+)?)\s*(kg|quilos?|g|gramas?|mg|ml|l|lt|litros?)\b/g;
+  // ⚠️ Vale a ÚLTIMA ocorrência: o tamanho vem no fim do nome, e o começo pode
+  // ter número que não é embalagem ("COCA 2L 350ML" é o caso raro; "ACUCAR
+  // TRITURADO ITAMARATI ESP 1KG" é o normal).
+  let m; let ultimo = null;
+  while ((m = re.exec(t))) ultimo = m;
+  if (!ultimo) return null;
+  const multiplicador = ultimo[1] ? numeroDoNome(ultimo[1]) : 1;
+  const quantidade = numeroDoNome(ultimo[2]);
+  const unidade = UN_NOME[ultimo[3]] || ultimo[3];
+  if (!(quantidade > 0) || !(multiplicador > 0)) return null;
+  return { multiplicador, quantidade, unidade, total: r3(multiplicador * quantidade) };
+}
+
+// O palpite de "1 un = ___ <base>" para UMA marca que está sem conversão.
+// Devolve null quando a marca já sabe converter — palpitar por cima de um
+// cadastro existente é como se troca um número certo por um plausível.
+export function sugerirRendimento(mp, unidadeBase, fold) {
+  if (rendimentoDaMarca(mp, unidadeBase) != null) return null;
+  const t = tamanhoNoNome(mp?.nome, fold);
+  if (!t) return null;
+  const valor = converterQtd(t.total, t.unidade, unidadeBase);
+  if (valor == null || !(valor > 0)) return null;
+  return { ...t, valor: r3(valor) };
+}
+
+// Grava as conversões de várias marcas de uma vez. Devolve só a fatia que muda
+// — `materiasPrimas` é por empresa e sai por `setDbAndSave` (§3).
+//
+// ⚠️ Valor que não é maior que zero é IGNORADO, não gravado como zero: campo em
+// branco é "ainda não sei", e zero faria a marca render nada e sumir da soma
+// parecendo resolvida.
+export function gravarRendimentos(db, valores) {
+  const agora = new Date().toISOString();
+  const limpos = {};
+  for (const [id, v] of Object.entries(valores || {})) {
+    const n = num(typeof v === 'string' ? v.replace(',', '.') : v);
+    if (n > 0) limpos[id] = n;
+  }
+  if (!Object.keys(limpos).length) return null;
+  return {
+    materiasPrimas: (db?.materiasPrimas || []).map((m) => (limpos[m.id]
+      ? { ...m, porUnidadeBase: limpos[m.id], atualizadoEm: agora } : m)),
+    quantas: Object.keys(limpos).length,
+  };
+}
