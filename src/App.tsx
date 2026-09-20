@@ -19,7 +19,7 @@ import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as 
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
-import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
+import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -1154,6 +1154,11 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
 // que o iFood passe o balcão não pode repintar os dois.
 const CORES_REL=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#4a3aa7"];
 const MONO_REL={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+// ⚠️ A MESMA chave do `vendasPorItem`: código do Eclética quando existe, nome
+// normalizado quando não. Escrever uma variação aqui faria o produto casar no
+// Ranking e NÃO casar na comparação do período, sem nada denunciando — é a
+// regra do §5: nunca criar uma segunda normalização.
+const chaveProdutoRel=(p:any)=>p?.cod?`cod:${p.cod}`:foldNome(p?.nome||"");
 const MESES_REL=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const mesLabelRel=(m:string)=>{const[y,mm]=String(m).split("-");return `${MESES_REL[parseInt(mm,10)-1]||mm}/${String(y).slice(2)}`;};
 
@@ -1180,7 +1185,7 @@ function barrasImpressaoHTML(linhas:{label:string,val:number}[],larg=640){
     <defs>${defs}</defs>${barras}</svg>`;
 }
 
-function gerarRelatorioPeriodoHTML(empresa:string,cmp:any,fp:any,semana:any[]){
+function gerarRelatorioPeriodoHTML(empresa:string,cmp:any,fp:any,semana:any[],prod?:any,cob?:any){
   const R=cmp.atual,A=cmp.anterior,D=cmp.delta;
   const ant=A?{ini:A.ini,fim:A.fim}:null;
   const esc=(v:any)=>String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
@@ -1203,6 +1208,27 @@ function gerarRelatorioPeriodoHTML(empresa:string,cmp:any,fp:any,semana:any[]){
     `<tr><td>${esc(f.label)}${f.k==="pendura"?" <span style=\"color:#4a5568\">(a receber, já no total)</span>":""}</td>`
     +`<td style="text-align:right">${n(fp.totais[f.k])}</td>`
     +`<td style="text-align:right">${(fp.totais[f.k]/fp.coberto*100).toFixed(1)}%</td></tr>`).join("");
+
+  // ⚠️ A FOLHA CORTA EM 30 (decisão do dono). Uma A4 com 200 produtos vira
+  // catálogo, e ninguém lê catálogo — os que sobram viram UMA linha somada, que
+  // é o que impede o total da folha de não fechar com o da tela.
+  const PROD_NA_FOLHA=30;
+  const corte=prod?topComResto(prod.linhas,PROD_NA_FOLHA):null;
+  const intBR=(n:number)=>Math.round(n||0).toLocaleString("pt-BR");
+  const linhasProduto=corte?corte.top.map((l:any)=>
+    `<tr><td>${esc(l.nome)}${l.novo?" (novo)":l.sumiu?" (parou)":""}${l.duplicadoDeNome?" (duplicado)":""}</td>`
+    +`<td style="text-align:right">${esc(l.unidade)}</td>`
+    +`<td style="text-align:right;font-weight:700">${intBR(l.qtd)}</td>`
+    +`<td style="text-align:right">${l.qtdAnt==null?"—":intBR(l.qtdAnt)}</td>`
+    // Sinal ESCRITO: em P&B o verde e o vermelho viram o mesmo cinza.
+    +`<td style="text-align:right">${l.dQtd==null?"novo":`${l.dQtd>=0?"+":"−"}${intBR(Math.abs(l.dQtd))}`}</td>`
+    +`<td style="text-align:right">${l.pctQtd==null?"—":`${l.pctQtd>=0?"+":"−"}${Math.abs(l.pctQtd).toFixed(1)}%`}</td>`
+    +`<td style="text-align:right">${n(l.valor)}</td></tr>`).join(""):"";
+  const linhaResto=corte&&corte.resto
+    ?`<tr><td colspan="2">outros ${corte.resto.produtos} produtos</td>`
+      +`<td style="text-align:right">${intBR(corte.resto.qtd)}</td>`
+      +`<td style="text-align:right">${intBR(corte.resto.qtdAnt)}</td><td></td><td></td>`
+      +`<td style="text-align:right">${n(corte.resto.valor)}</td></tr>`:"";
 
   const linhasSemana=[1,2,3,4,5,6,0].map(i=>{
     const l=semana[i];
@@ -1254,6 +1280,28 @@ function gerarRelatorioPeriodoHTML(empresa:string,cmp:any,fp:any,semana:any[]){
       Entrou em caixa: <b>${n(fp.emCaixa)}</b>.`:""}</p>`
       :`<p style="font-size:11px;color:#4a5568;margin:0">Nenhum dia do período tem quebra por forma de pagamento — só o PDV a informa.</p>`}
   </div>
+
+  ${prod&&prod.linhas.length?`<div class="section">
+    <h2>Produtos vendidos${cob?` — ${cob.diasPdv} de ${cob.dias} dias com PDV, ${n(cob.valorItens)} de ${n(cob.totalPeriodo)}`:""}</h2>
+    <table>
+      <thead><tr><th>Produto</th><th style="text-align:right">Un</th><th style="text-align:right">Qtd</th>
+        <th style="text-align:right">Anterior</th><th style="text-align:right">Δ qtd</th>
+        <th style="text-align:right">Δ %</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${linhasProduto}${linhaResto}
+        <tr class="total-row"><td>Total</td><td></td>
+          <td style="text-align:right">${intBR(prod.qtdTotal)}</td>
+          <td style="text-align:right">${intBR(prod.qtdTotalAnt)}</td>
+          <td style="text-align:right">${prod.dQtdTotal>=0?"+":"−"}${intBR(Math.abs(prod.dQtdTotal))}</td>
+          <td style="text-align:right">${prod.pctQtdTotal==null?"—":`${prod.pctQtdTotal>=0?"+":"−"}${Math.abs(prod.pctQtdTotal).toFixed(1)}%`}</td>
+          <td style="text-align:right">${n(prod.valorTotal)}</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:11px;color:#4a5568;margin:10px 0 0">Ordenado por <b>quantidade</b>${corte&&corte.resto?`; a folha lista os ${PROD_NA_FOLHA} maiores e soma o resto numa linha`:""}.
+    Δ compara com o mesmo produto em ${ant?`${esc(fmtDate(ant.ini))}–${esc(fmtDate(ant.fim))}`:"o período anterior"}.
+    "novo" é produto sem venda no período anterior; "parou" é o contrário — e também é o que aparece quando um
+    produto <b>sem código do Eclética</b> é renomeado, porque aí ele sai de um lado e nasce do outro.
+    ${cob?`Os outros ${n(cob.semItens)} do período não trazem produto: o relatório das plataformas traz dinheiro, e Vendas Extras é um valor fechado.`:""}</p>
+  </div>`:""}
 
   <div class="section">
     <h2>Por dia da semana</h2>
@@ -5461,6 +5509,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   const ABA_REL_ANTIGA:Record<string,string>={canal:"periodo",mensal:"periodo",sazonal:"periodo",empresas:"periodo"};
   const abaRelInicial=(a:string)=>ABA_REL_ANTIGA[a]||a||"periodo";
   const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"periodo"|"margem">(abaRelInicial(aj.abaRelatorioPadrao) as any);
+  const [verTodosProd,setVerTodosProd]=useState(false);
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
 
@@ -5563,6 +5612,12 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       const semana=porDiaDaSemana(R);
       const meses=porMes(db.vendas||[],6);
       const ant=periodoAnterior(ini,fim);
+      // ⚠️ A folha e a tela leem o MESMO objeto. Recalcular na hora de imprimir
+      // abriria a porta para as duas discordarem — e a divergência só apareceria
+      // no papel, depois de entregue.
+      const vAntImp=ant?vendasPorItem(db,ant.ini,ant.fim):null;
+      const prodImpressao=compararProdutos(agruparItens(),vAntImp?agruparProdutos(vAntImp.porDia):[],chaveProdutoRel);
+      const cobImpressao=coberturaItens(prodImpressao.valorTotal,R.total,diasPdv,R.dias);
       // Cor pela POSIÇÃO na lista de canais, nunca pelo ranking: um filtro que
       // mude quantos canais aparecem não pode repintar os que sobraram.
       const cor=(i:number)=>CORES_REL[i%CORES_REL.length];
@@ -5588,7 +5643,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
               {" "}contra {fmtDate(ant.ini)}–{fmtDate(ant.fim)} <span style={{color:"var(--text3)"}}>(os mesmos {ant.dias} dias)</span>
             </div>}
           </div>
-          <button onClick={()=>abrirRelatorio(gerarRelatorioPeriodoHTML(empresa||"",cmp,fp,semana))} className="pill"
+          <button onClick={()=>abrirRelatorio(gerarRelatorioPeriodoHTML(empresa||"",cmp,fp,semana,prodImpressao,cobImpressao))} className="pill"
             style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",border:0,fontWeight:700,padding:"9px 16px"}}>🖨️ Imprimir (A4)</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:1,background:"var(--border)",border:"1px solid var(--border)",borderRadius:10,overflow:"hidden",marginBottom:14}}>
@@ -5698,6 +5753,117 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
             fiada. Entrou em caixa: <b>{fmtMoney(fp.emCaixa)}</b>.
           </div>}
         </>}
+
+        {/* ---- produtos vendidos ---- */}
+        {(()=>{
+          const prod=prodImpressao, cob=cobImpressao;
+          if(!prod.linhas.length)return <>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,margin:"18px 0 8px"}}>Produtos vendidos</div>
+            <EmptyState msg="Nenhum item vendido no período — o PDV não enviou produto e não há recibo."/>
+          </>;
+          const maxQ=Math.max(1,...prod.linhas.map((l:any)=>Math.max(l.qtd,l.qtdAnt||0)));
+          const LIM=25;
+          const {top,resto}=topComResto(prod.linhas,verTodosProd?prod.linhas.length:LIM);
+          const intBR=(n:number)=>Math.round(n).toLocaleString("pt-BR");
+          const dq=(l:any)=>l.dQtd==null?<span style={{color:"var(--successText)",fontSize:11.5}}>novo</span>
+            :<span style={{color:l.dQtd>=0?"var(--successText)":"var(--btnDanger)",...MONO_REL}}>{l.dQtd>=0?"+":"−"}{intBR(Math.abs(l.dQtd))}</span>;
+          const mover=(l:any)=><div key={l.chave} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:"1px solid var(--bg2)",fontSize:12.5}}>
+            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{l.nome}</span>
+            <span style={{flexShrink:0,color:l.dQtd>=0?"var(--successText)":"var(--btnDanger)",...MONO_REL}}>
+              {l.dQtd>=0?"+":"−"}{intBR(Math.abs(l.dQtd))} {l.unidade} · {l.pctQtd==null?"novo":`${l.pctQtd>=0?"▲":"▼"} ${Math.abs(l.pctQtd).toFixed(1)}%`}</span>
+          </div>;
+
+          return <>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,margin:"18px 0 8px"}}>Produtos vendidos</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:1,background:"var(--border)",border:"1px solid var(--border)",borderRadius:10,overflow:"hidden",marginBottom:10}}>
+              {[["Itens vendidos",intBR(prod.qtdTotal),prod.pctQtdTotal==null?"sem período anterior":`${prod.pctQtdTotal>=0?"▲":"▼"} ${Math.abs(prod.pctQtdTotal).toFixed(1)}% · eram ${intBR(prod.qtdTotalAnt)}`],
+                ["Produtos diferentes",intBR(prod.produtos),`${prod.novos.length} novo(s) · ${prod.sumidos.length} parou(aram)`],
+                ["Valor dos itens",fmtMoney(prod.valorTotal),`${cob.pct.toFixed(1)}% do período`],
+                ["Itens por dia aberto",R.diasComVenda?intBR(prod.qtdTotal/R.diasComVenda):"—",`${R.diasComVenda} dia(s) com venda`],
+              ].map(([lab,val,hint]:any)=><div key={lab} style={{background:"var(--bg3)",padding:"10px 12px"}}>
+                <div style={{fontSize:10,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5}}>{lab}</div>
+                <div style={{fontSize:17,fontWeight:700,marginTop:2,...MONO_REL}}>{val}</div>
+                <div style={{fontSize:10.5,color:"var(--text3)",marginTop:1}}>{hint}</div>
+              </div>)}
+            </div>
+            <div style={{background:"var(--infoBg)",color:"var(--infoText)",borderRadius:9,padding:"10px 12px",fontSize:12.5,lineHeight:1.5,marginBottom:12}}>
+              ℹ️ Os itens cobrem <b>{fmtMoney(cob.valorItens)}</b> dos {fmtMoney(cob.totalPeriodo)} do período
+              ({cob.pct.toFixed(1)}%), em <b>{cob.diasPdv} de {cob.dias} dias</b> com PDV. Delivery não manda produto:
+              iFood e 99Food vêm do relatório, que traz dinheiro, e Vendas Extras é um valor fechado.
+            </div>
+
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:13}}>
+                <thead><tr>{["Produto","Un","Qtd","Anterior","Δ qtd","Δ %","Valor"].map((h,i)=>
+                  <th key={h} style={{textAlign:i?"right":"left" as const,fontSize:10,textTransform:"uppercase" as const,letterSpacing:.5,color:"var(--text3)",fontWeight:700,padding:"0 0 6px",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap" as const}}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {top.map((l:any)=><tr key={l.chave}>
+                    <td style={{padding:"7px 0",borderBottom:"1px solid var(--bg2)"}}>
+                      <div>{l.nome}
+                        {l.novo&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,marginLeft:6,background:"var(--successBg)",color:"var(--successText)"}}>novo</span>}
+                        {l.sumiu&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,marginLeft:6,background:"var(--dangerBg)",color:"var(--dangerText)"}}>parou</span>}
+                        {l.duplicadoDeNome&&<span title="o mesmo nome aparece em duas linhas: uma veio com código do Eclética, outra de recibo" style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,marginLeft:6,background:"var(--warningBg)",color:"var(--warningText)"}}>duplicado</span>}
+                      </div>
+                      {/* ⚠️ A barra compara o produto com ELE MESMO no período anterior, não com
+                          o campeão da lista: contra o campeão quase tudo vira um traço e a
+                          variação — que é o que esta tela responde — some. */}
+                      <div style={{position:"relative" as const,height:7,background:"var(--bg2)",borderRadius:4,marginTop:4,maxWidth:180}}>
+                        <div style={{position:"absolute" as const,left:0,top:0,height:7,width:`${(l.qtdAnt||0)/maxQ*100}%`,background:"var(--text3)",opacity:.35,borderRadius:4}}/>
+                        <div style={{position:"absolute" as const,left:0,top:0,height:7,width:`${l.qtd/maxQ*100}%`,background:"var(--btnPrimary)",borderRadius:4}}/>
+                      </div>
+                    </td>
+                    <td style={{textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",fontSize:11.5,color:"var(--text3)"}}>{l.unidade}</td>
+                    <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",fontWeight:700}}>{intBR(l.qtd)}</td>
+                    <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:"var(--text3)"}}>{l.qtdAnt==null?"—":intBR(l.qtdAnt)}</td>
+                    <td style={{textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)"}}>{dq(l)}</td>
+                    <td style={{textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",fontSize:12}}>{l.pctQtd==null?"—":seta(l.pctQtd)}</td>
+                    <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)"}}>{fmtMoney(l.valor)}</td>
+                  </tr>)}
+                  {resto&&<tr>
+                    <td colSpan={2} style={{padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:"var(--text3)"}}>outros {resto.produtos} produtos</td>
+                    <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:"var(--text3)"}}>{intBR(resto.qtd)}</td>
+                    <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:"var(--text3)"}}>{intBR(resto.qtdAnt)}</td>
+                    <td/><td/>
+                    <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:"var(--text3)"}}>{fmtMoney(resto.valor)}</td>
+                  </tr>}
+                  <tr><td style={{borderTop:"1.5px solid var(--border)",paddingTop:8,fontWeight:700}}>Total</td>
+                    <td style={{borderTop:"1.5px solid var(--border)"}}/>
+                    <td style={{...MONO_REL,textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8,fontWeight:700}}>{intBR(prod.qtdTotal)}</td>
+                    <td style={{...MONO_REL,textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8,fontWeight:700,color:"var(--text3)"}}>{intBR(prod.qtdTotalAnt)}</td>
+                    <td style={{textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8}}>{dq({dQtd:prod.dQtdTotal,unidade:""})}</td>
+                    <td style={{textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8,fontSize:12}}>{prod.pctQtdTotal==null?"—":seta(prod.pctQtdTotal)}</td>
+                    <td style={{...MONO_REL,textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8,fontWeight:700}}>{fmtMoney(prod.valorTotal)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            {prod.linhas.length>LIM&&<button onClick={()=>setVerTodosProd(!verTodosProd)} className="pill"
+              style={{marginTop:8,background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",fontSize:12}}>
+              {verTodosProd?"mostrar só os 25 primeiros":`mostrar todos os ${prod.linhas.length} produtos`}</button>}
+
+            {(prod.subiram.length>0||prod.cairam.length>0)&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginTop:14}}>
+              {prod.subiram.length>0&&<div>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>Subiram mais</div>
+                {prod.subiram.slice(0,5).map(mover)}</div>}
+              {prod.cairam.length>0&&<div>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:6}}>Caíram mais</div>
+                {prod.cairam.slice(0,5).map(mover)}</div>}
+            </div>}
+
+            {(prod.novos.length>0||prod.sumidos.length>0)&&<>
+              <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,margin:"14px 0 6px"}}>Entraram e saíram da lista</div>
+              {[...prod.novos,...prod.sumidos].slice(0,10).map((l:any)=><div key={l.chave} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:"1px solid var(--bg2)",fontSize:12.5}}>
+                <span><b>{l.nome}</b> <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,background:l.novo?"var(--successBg)":"var(--dangerBg)",color:l.novo?"var(--successText)":"var(--dangerText)"}}>{l.novo?"novo":"parou de vender"}</span></span>
+                <span style={{flexShrink:0,color:l.novo?"var(--text)":"var(--text3)",...MONO_REL}}>{l.novo?`${intBR(l.qtd)} ${l.unidade} · ${fmtMoney(l.valor)}`:`vendia ${intBR(l.qtdAnt)} ${l.unidade}`}</span>
+              </div>)}
+              <div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:9,padding:"10px 12px",fontSize:12.5,lineHeight:1.5,marginTop:10}}>
+                ⚠️ <b>"Parou de vender" também é o que acontece quando o produto foi RENOMEADO.</b> Quem tem
+                código do Eclética sobrevive à troca de nome — a comparação é pelo código. Sem código (recibo
+                avulso), renomear faz o produto sair de um lado e nascer do outro, e os dois aparecem nesta
+                lista. É por isso que ela mostra os dois juntos, em vez de só os novos.
+              </div>
+            </>}
+          </>;
+        })()}
 
         {/* ---- comparação canal a canal ---- */}
         {D&&ant&&<>

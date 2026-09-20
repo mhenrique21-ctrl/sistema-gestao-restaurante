@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   canaisDaVenda, diasDoPeriodo, periodoAnterior, resumoPeriodo,
   formasDoPeriodo, porDiaDaSemana, porMes, compararPeriodos, CANAIS,
+  compararProdutos, coberturaItens, topComResto,
 } from './relatorioPeriodo.js';
 
 // O dia 17/09/2026 da Confraria, como o Histórico mostrou: três origens
@@ -202,5 +203,142 @@ describe('a comparação', () => {
     // faria os seguintes andarem uma cor.
     const c = compararPeriodos(vendas, '2026-09-17', '2026-09-18');
     for (const { k } of CANAIS) assert.ok(c.delta.canais[k], `falta ${k}`);
+  });
+});
+
+// ── Produtos ────────────────────────────────────────────────────────────────
+// A chave é a MESMA do `vendasPorItem` do App.tsx: código do Eclética quando
+// existe, nome normalizado quando não. Ela chega de fora de propósito — criar
+// uma segunda normalização aqui faria o produto casar no Ranking e não casar
+// neste relatório, sem nada denunciando (§5).
+const chave = (p) => (p.cod ? `cod:${p.cod}` : String(p.nome).trim().toLowerCase());
+
+describe('produtos: o código sobrevive ao rename, o nome não', () => {
+  test('produto renomeado COM código continua sendo o mesmo', () => {
+    const c = compararProdutos(
+      [{ cod: '141', nome: 'CAFE EXPRESSO TRADICIONAL', qtd: 412, total: 2889.63 }],
+      [{ cod: '141', nome: 'CAFE EXPRESSO', qtd: 455, total: 3191.25 }], chave);
+    assert.equal(c.linhas.length, 1, 'não virou dois produtos');
+    assert.equal(c.linhas[0].qtdAnt, 455);
+    assert.equal(c.linhas[0].dQtd, -43);
+    assert.equal(c.linhas[0].pctQtd, -9.45);
+    assert.equal(c.linhas[0].nome, 'CAFE EXPRESSO TRADICIONAL', 'vale o nome de hoje');
+  });
+
+  test('SEM código, renomear faz sair de um lado e nascer do outro', () => {
+    // ⚠️ É por isso que novos e sumidos aparecem JUNTOS na tela. Separados, a
+    // pessoa leria "Esfiha parou de vender" numa lista e "Esfiha de Carne é
+    // novo" na outra, sem nunca ligar as duas.
+    const c = compararProdutos(
+      [{ nome: 'Esfiha de Carne', qtd: 90, total: 855 }],
+      [{ nome: 'Esfiha carne', qtd: 86, total: 817 }], chave);
+    assert.equal(c.linhas.length, 2);
+    assert.equal(c.novos.length, 1);
+    assert.equal(c.sumidos.length, 1);
+  });
+});
+
+describe('produtos: o que PAROU de vender não some da lista', () => {
+  const ATUAL = [
+    { cod: '141', nome: 'Café expresso', qtd: 412, total: 2889.63 },
+    { cod: '210', nome: 'Chá gelado', qtd: 64, total: 645.12 },
+  ];
+  const ANTES = [
+    { cod: '141', nome: 'Café expresso', qtd: 455, total: 3191.25 },
+    { cod: '388', nome: 'Esfiha de carne', qtd: 86, total: 823.52 },
+  ];
+
+  test('ele não está em `atuais` — e é a linha mais acionável do relatório', () => {
+    const c = compararProdutos(ATUAL, ANTES, chave);
+    const esfiha = c.linhas.find((l) => l.nome === 'Esfiha de carne');
+    assert.ok(esfiha, 'sumiu da lista');
+    assert.equal(esfiha.qtd, 0);
+    assert.equal(esfiha.qtdAnt, 86);
+    assert.equal(esfiha.pctQtd, -100);
+    assert.ok(esfiha.sumiu);
+    assert.equal(c.sumidos.length, 1);
+  });
+
+  test('produto NOVO é `null`, nunca "infinito%" nem "0%"', () => {
+    const c = compararProdutos(ATUAL, ANTES, chave);
+    const cha = c.linhas.find((l) => l.nome === 'Chá gelado');
+    assert.equal(cha.qtdAnt, null);
+    assert.equal(cha.pctQtd, null);
+    assert.equal(cha.dQtd, null);
+    assert.ok(cha.novo);
+  });
+
+  test('produto que já não vendia no período anterior não vira "sumido"', () => {
+    // Quantidade zero dos dois lados é ruído, não informação.
+    const c = compararProdutos([], [{ cod: '9', nome: 'Nunca vendeu', qtd: 0, total: 0 }], chave);
+    assert.equal(c.linhas.length, 0);
+  });
+
+  test('os totais somam os dois lados, sumidos inclusive', () => {
+    const c = compararProdutos(ATUAL, ANTES, chave);
+    assert.equal(c.qtdTotal, 476);
+    assert.equal(c.qtdTotalAnt, 541);
+    assert.equal(c.dQtdTotal, -65);
+    assert.equal(c.pctQtdTotal, -12.01);
+    assert.equal(c.valorTotal, 3534.75);
+    assert.equal(c.produtos, 2, 'conta só o que vendeu');
+  });
+});
+
+describe('produtos: a ordem é por QUANTIDADE, e é estável', () => {
+  test('quantidade desc, valor desempata, nome desempata o valor', () => {
+    // ⚠️ Sem o terceiro critério a ordem muda entre um render e outro e a
+    // lista "pisca" sozinha na tela.
+    const c = compararProdutos([
+      { nome: 'B', qtd: 10, total: 50 }, { nome: 'A', qtd: 10, total: 50 },
+      { nome: 'C', qtd: 10, total: 90 }, { nome: 'D', qtd: 40, total: 10 },
+    ], [], chave);
+    assert.deepEqual(c.linhas.map((l) => l.nome), ['D', 'C', 'A', 'B']);
+  });
+
+  test('subiram e caíram saem ordenados pelo tamanho do movimento', () => {
+    const c = compararProdutos(
+      [{ nome: 'a', qtd: 30, total: 1 }, { nome: 'b', qtd: 5, total: 1 }, { nome: 'c', qtd: 12, total: 1 }],
+      [{ nome: 'a', qtd: 10, total: 1 }, { nome: 'b', qtd: 40, total: 1 }, { nome: 'c', qtd: 12, total: 1 }], chave);
+    assert.deepEqual(c.subiram.map((l) => l.nome), ['a']);
+    assert.deepEqual(c.cairam.map((l) => l.nome), ['b']);
+    assert.ok(!c.subiram.concat(c.cairam).some((l) => l.nome === 'c'), 'quem não mudou fica fora');
+  });
+
+  test('a marca de linha duplicada atravessa a comparação', () => {
+    // O mesmo produto em duas linhas (uma por código, uma por nome) é decisão
+    // do dono e não é unido aqui — mas a marca não pode se perder no caminho.
+    const c = compararProdutos([{ cod: '1', nome: 'Coxinha', qtd: 3, total: 30, duplicadoDeNome: true }], [], chave);
+    assert.ok(c.linhas[0].duplicadoDeNome);
+  });
+});
+
+describe('produtos: cobertura e corte da folha', () => {
+  test('os itens não cobrem o período, e o número diz quanto', () => {
+    // Medido na tela do dono: R$ 17.557,63 de itens num período de R$ 25.781,06.
+    const c = coberturaItens(17557.63, 25781.06, 6, 7);
+    assert.equal(c.pct, 68.10);
+    assert.equal(c.semItens, 8223.43);
+    assert.equal(c.diasPdv, 6);
+  });
+
+  test('período sem item nenhum não divide por zero', () => {
+    assert.equal(coberturaItens(0, 0, 0, 7).pct, 0);
+  });
+
+  test('a folha corta em 30 e junta o resto numa linha', () => {
+    // ⚠️ Uma A4 com 200 produtos vira catálogo, e ninguém lê catálogo.
+    const muitas = Array.from({ length: 42 }, (_, i) => ({ nome: `p${i}`, qtd: 100 - i, qtdAnt: 90, valor: 10 }));
+    const { top, resto } = topComResto(muitas, 30);
+    assert.equal(top.length, 30);
+    assert.equal(resto.produtos, 12);
+    assert.equal(resto.qtd, muitas.slice(30).reduce((s, l) => s + l.qtd, 0));
+    assert.equal(resto.valor, 120);
+  });
+
+  test('lista curta não ganha linha de resto', () => {
+    const { top, resto } = topComResto([{ nome: 'a', qtd: 1, valor: 1 }], 30);
+    assert.equal(top.length, 1);
+    assert.equal(resto, null);
   });
 });

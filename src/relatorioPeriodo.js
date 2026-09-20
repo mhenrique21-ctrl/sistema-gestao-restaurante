@@ -249,3 +249,126 @@ export function compararPeriodos(vendas, ini, fim) {
     } : null,
   };
 }
+
+// ── Produtos vendidos, contra o mesmo período anterior ──────────────────────
+// ⚠️ ESTE MÓDULO NÃO NORMALIZA NOME NENHUM. A chave chega pronta de fora
+// (`chave`), porque quem a monta é o `vendasPorItem` do `App.tsx`, com o
+// `foldNome` do sistema — e a regra do §5 é que **nunca se cria uma segunda
+// normalização**. Uma daqui que dissesse "quase a mesma coisa" faria o produto
+// casar no Ranking e não casar aqui, sem nada denunciando.
+//
+// ⚠️ E ela é o CÓDIGO do Eclética quando existe. É isso que faz a comparação
+// sobreviver a renomear o produto: `cod:141` continua `cod:141`. Sem código
+// (recibo avulso), renomear faz o produto SAIR de um lado e NASCER do outro —
+// por isso `novos` e `sumidos` são mostrados juntos, nunca em telas separadas.
+
+const chavePadrao = (p) => (p?.cod ? `cod:${p.cod}` : String(p?.nome || '').trim().toLowerCase());
+
+export function compararProdutos(atuais, anteriores, chave = chavePadrao) {
+  const antes = new Map();
+  for (const p of anteriores || []) antes.set(chave(p), p);
+
+  const linhas = [];
+  const vistos = new Set();
+
+  for (const p of atuais || []) {
+    const k = chave(p);
+    vistos.add(k);
+    const a = antes.get(k);
+    const qtdAnt = a ? num(a.qtd) : null;
+    const qtd = num(p.qtd);
+    linhas.push({
+      chave: k,
+      nome: p.nome,
+      cod: p.cod || '',
+      unidade: p.unidade || p.un || 'un',
+      duplicadoDeNome: !!p.duplicadoDeNome,
+      qtd,
+      qtdAnt,
+      valor: r2(p.total),
+      valorAnt: a ? r2(a.total) : null,
+      // ⚠️ Produto NOVO devolve `null`, não "infinito%" nem "0%" — a mesma
+      // regra dos canais. O primeiro enche a tela de lixo; o segundo esconde
+      // um lançamento que a loja acabou de fazer.
+      dQtd: qtdAnt == null ? null : qtd - qtdAnt,
+      pctQtd: qtdAnt ? r2((qtd - qtdAnt) / qtdAnt * 100) : null,
+      novo: qtdAnt == null,
+      sumiu: false,
+    });
+  }
+
+  // ⚠️ O QUE PAROU DE VENDER NÃO PODE SUMIR DA LISTA. Ele não está em `atuais`
+  // — é exatamente por isso que ninguém repara. Um produto que vendia 86 e
+  // parou é a informação mais acionável do relatório, e some se a tabela for
+  // só "o que vendeu".
+  for (const [k, a] of antes) {
+    if (vistos.has(k) || !num(a.qtd)) continue;
+    linhas.push({
+      chave: k, nome: a.nome, cod: a.cod || '',
+      unidade: a.unidade || a.un || 'un', duplicadoDeNome: !!a.duplicadoDeNome,
+      qtd: 0, qtdAnt: num(a.qtd), valor: 0, valorAnt: r2(a.total),
+      dQtd: -num(a.qtd), pctQtd: -100, novo: false, sumiu: true,
+    });
+  }
+
+  // Quantidade primeiro — é o que a tela pergunta. Valor desempata, e o nome
+  // desempata o valor: sem o terceiro critério a ordem muda entre um render e
+  // outro e a lista "pisca" sozinha.
+  linhas.sort((x, y) => (y.qtd - x.qtd) || (y.valor - x.valor) || String(x.nome).localeCompare(String(y.nome)));
+
+  const soma = (arr, c) => r2(arr.reduce((s, l) => s + (num(l[c]) || 0), 0));
+  const qtdTotal = linhas.reduce((s, l) => s + l.qtd, 0);
+  const qtdTotalAnt = linhas.reduce((s, l) => s + (l.qtdAnt || 0), 0);
+
+  const movidos = linhas.filter((l) => l.dQtd != null && l.dQtd !== 0 && !l.sumiu && !l.novo);
+  return {
+    linhas,
+    novos: linhas.filter((l) => l.novo),
+    sumidos: linhas.filter((l) => l.sumiu),
+    subiram: [...movidos].filter((l) => l.dQtd > 0).sort((a, b) => b.dQtd - a.dQtd),
+    cairam: [...movidos].filter((l) => l.dQtd < 0).sort((a, b) => a.dQtd - b.dQtd),
+    produtos: linhas.filter((l) => l.qtd > 0).length,
+    qtdTotal,
+    qtdTotalAnt,
+    dQtdTotal: qtdTotal - qtdTotalAnt,
+    pctQtdTotal: qtdTotalAnt ? r2((qtdTotal - qtdTotalAnt) / qtdTotalAnt * 100) : null,
+    valorTotal: soma(linhas, 'valor'),
+    valorTotalAnt: soma(linhas, 'valorAnt'),
+  };
+}
+
+// ⚠️ A COBERTURA FAZ PARTE DO NÚMERO, igual às formas de pagamento. `itensVendidos`
+// fica FORA de `vendas` de propósito (§4) e não entra em cálculo de faturamento:
+// o delivery não manda produto — o relatório das plataformas traz dinheiro — e
+// Vendas Extras é um valor fechado. Sem dizer isso, "vendi 2.581 itens"
+// pareceria o período inteiro.
+export function coberturaItens(valorItens, totalPeriodo, diasPdv, dias) {
+  const v = r2(valorItens);
+  const t = r2(totalPeriodo);
+  return {
+    valorItens: v,
+    totalPeriodo: t,
+    semItens: r2(t - v),
+    pct: t ? r2(v / t * 100) : 0,
+    diasPdv: diasPdv || 0,
+    dias: dias || 0,
+  };
+}
+
+// Os N maiores por quantidade + uma linha juntando o resto. Uma folha A4 com
+// 200 produtos vira catálogo, e ninguém lê catálogo.
+export function topComResto(linhas, n = 30) {
+  const todas = linhas || [];
+  if (todas.length <= n) return { top: todas, resto: null };
+  const top = todas.slice(0, n);
+  const resto = todas.slice(n);
+  return {
+    top,
+    resto: {
+      produtos: resto.length,
+      qtd: resto.reduce((s, l) => s + l.qtd, 0),
+      qtdAnt: resto.reduce((s, l) => s + (l.qtdAnt || 0), 0),
+      valor: r2(resto.reduce((s, l) => s + l.valor, 0)),
+    },
+  };
+}

@@ -951,6 +951,45 @@ viraria "domingo vende pouco" em vez de "domingo fecha".
 não emite recibo, ela dizia *"Nenhum recibo no período"* ao lado de um período de
 R$ 44.938,86 — o dado estava em `vendas` o tempo todo. Tudo aqui vem de `vendas`.
 
+##### Produtos vendidos, contra o mesmo período anterior
+
+⚠️ **A COMPARAÇÃO É PELA CHAVE DO `vendasPorItem`** — `cod:<código>` quando o
+Eclética mandou, `foldNome` quando não (`chaveProdutoRel`). Escrever uma
+variação faria o produto casar no Ranking e **não** casar aqui, sem nada
+denunciando: é a regra do §5, nunca uma segunda normalização. O módulo
+`relatorioPeriodo.js` **não normaliza nada** — a chave entra por parâmetro.
+
+⚠️ **O código sobrevive ao rename; o nome não.** Produto com `codigoEcletica`
+renomeado continua sendo o mesmo. **Sem** código (recibo avulso), renomear faz
+o produto **sair de um lado e nascer do outro** — por isso `novos` e `sumidos`
+aparecem na MESMA lista. Em telas separadas, a pessoa leria "Esfiha parou de
+vender" numa e "Esfiha de Carne é novo" na outra, sem nunca ligar as duas.
+
+⚠️ **O que PAROU de vender não está em `atuais`** — é exatamente por isso que
+ninguém repara. Um produto que vendia 86 e parou é a linha mais acionável do
+relatório, e some se a tabela for só "o que vendeu". Ele entra com `qtd: 0` e
+`pctQtd: -100`. Produto que já vendia zero antes **não** vira "sumido": zero dos
+dois lados é ruído.
+
+⚠️ **A COBERTURA FAZ PARTE DO NÚMERO**, como nas formas de pagamento.
+`itensVendidos` fica fora de `vendas` de propósito (§4): no período real do dono
+os itens somam **R$ 17.557,63 de R$ 25.781,06** (68,1%, 6 de 7 dias). Delivery
+não manda produto — o relatório das plataformas traz dinheiro — e Vendas Extras
+é um valor fechado. Sem a linha de cobertura, "vendi 2.581 itens" pareceria o
+período inteiro.
+
+⚠️ **A barra compara o produto com ELE MESMO** no período anterior, não com o
+campeão da lista: contra o campeão quase tudo vira um traço e a variação — que é
+o que a tela responde — some.
+
+⚠️ **A ordem tem TRÊS critérios** (quantidade, valor, nome). Sem o terceiro a
+ordem muda entre um render e outro e a lista "pisca" sozinha.
+
+⚠️ **A folha corta em 30** (decisão do dono) e soma o resto numa linha "outros N
+produtos" — sem ela o total da folha não fecharia com o da tela. A tela mostra
+25 com um botão "mostrar todos". Os dois leem o **mesmo objeto**: recalcular na
+hora de imprimir deixaria a divergência aparecer só no papel, depois de entregue.
+
 ##### As cores são MEDIDAS — `src/coresRelatorio.test.js`
 
 ⚠️ **As cores da antiga aba Por Canal REPROVAM**, e no par que mais se compara:
