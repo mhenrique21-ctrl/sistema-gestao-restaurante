@@ -20,7 +20,7 @@ import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
-import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase,insumosSemGrupo,agruparPendentes,sugerirGrupo,termoDeBusca,sugerirRendimento,gravarRendimentos} from "./grupoMarcas.js";
+import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase,insumosSemGrupo,agruparPendentes,sugerirGrupo,termoDeBusca,sugerirRendimento,gravarRendimentos,separarAchados} from "./grupoMarcas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -12057,10 +12057,18 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
   // existem. Chave é o id da marca, então duas marcas do mesmo nome em grupos
   // diferentes não se atrapalham.
   const [conv,setConv]=useState<Record<string,string>>({});
+  // A pasta dos que JÁ estão conciliados, no fim da lista da busca.
+  const [pastaConcAberta,setPastaConcAberta]=useState(false);
 
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
   const UNIDADES=["un","g","kg","ml","L"];
   const achados=busca.trim().length>=2?buscarMarcas(db,busca,foldNome):[];
+  // ⚠️ A marca que JÁ tem grupo continua sendo achada — é assim que se descobre
+  // que ela foi para o grupo errado. Mas ela sai da lista de trabalho: marcar
+  // uma marca conciliada é o gesto que a TIRA do grupo atual (`agruparMarcas`),
+  // e isso se faz querendo, não de raspão no meio de uma seleção de oito.
+  const {pendentes:achadosPendentes,grupos:achadosGrupos,conciliadas:achadosConciliadas}
+    =separarAchados(achados,foldNome,db.produtosLista||[]);
   const mps=db.materiasPrimas||[];
 
   // Os grupos que já existem e casam com a busca das marcas — é neles que a
@@ -12311,8 +12319,11 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
       <EmptyState msg="Nenhuma marca com esse nome no catálogo de insumos."/>}
 
     {!!achados.length&&<>
-      <div style={{fontSize:11,color:"var(--text3)",margin:"4px 0 6px"}}>{achados.length} marca(s) — marque as que são o mesmo produto</div>
-      {achados.map(({mp,grupo}:any)=>{
+      {achadosPendentes.length
+        ?<div style={{fontSize:11,color:"var(--text3)",margin:"4px 0 6px"}}>{achadosPendentes.length} marca(s) sem grupo — marque as que são o mesmo produto</div>
+        :<div style={{background:"var(--successBg)",color:"var(--successText)",borderRadius:9,padding:"9px 12px",fontSize:12.5,margin:"4px 0 6px"}}>
+          ✓ As {achadosConciliadas} marca(s) desta busca já estão conciliadas — estão na pasta abaixo.</div>}
+      {achadosPendentes.map(({mp}:any)=>{
         const marcada=sel.has(mp.id);
         // ⚠️ `auto` é calculado SÓ com o que está gravado na marca — nunca com
         // o que está sendo digitado. Foi exatamente isso que quebrou: a
@@ -12330,7 +12341,6 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
               <div style={{fontSize:13.5}}>{mp.nome}</div>
               <div style={{fontSize:11,color:"var(--text3)",marginTop:2,...MONO}}>
                 {num(mp.estoqueAtual||0,2)} {mp.unidade||"un"} · {fmtMoney(mp.ultimoValor||0)}/{mp.unidade||"un"}
-                {grupo&&<> · <span style={{color:"var(--infoText)"}}>já em "{grupo.nome}"</span></>}
               </div>
               {/* O campo fica SEMPRE aberto enquanto a marca está marcada: é
                   assim que dá pra corrigir uma declaração errada já salva, e é
@@ -12359,6 +12369,66 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
           </div>
         </div>;
       })}
+
+      {/* ── A pasta dos que já foram conciliados ────────────────────────────
+          ⚠️ AGRUPADA PELO DESTINO, não em fila. Em fila, três produtos da lista
+          chamados "Creme de leite caixa", "Creme de Leite em Caixa" e "creme de
+          leite caixa" aparecem em linhas distantes dizendo nomes ligeiramente
+          diferentes, e ninguém liga um ao outro. Pelo destino o problema salta
+          — e ele é caro: a ficha lê UM desses produtos, e as marcas que estão
+          nos outros dois ficam fora do custo. */}
+      {!!achadosGrupos.length&&<div style={{border:"1px solid var(--border)",borderRadius:10,overflow:"hidden",marginTop:10}}>
+        <div onClick={()=>setPastaConcAberta(v=>!v)}
+          style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",background:"var(--bg2)",cursor:"pointer"}}>
+          <span style={{fontSize:16}}>📁</span>
+          <span style={{fontSize:13,flex:"1 1 auto",minWidth:0}}>
+            <b style={MONO}>{achadosConciliadas}</b> marca(s) desta busca já {achadosConciliadas===1?"está conciliada":"estão conciliadas"}
+          </span>
+          <span style={{fontSize:11.5,color:"var(--text3)",...MONO}}>em {achadosGrupos.length} produto(s)</span>
+          <span style={{fontSize:12,color:"var(--text3)"}}>{pastaConcAberta?"▴ fechar":"▾ abrir"}</span>
+        </div>
+        {pastaConcAberta&&<div style={{padding:"4px 12px 12px"}}>
+          {achadosGrupos.map((g:any)=>{
+            const marcasTodas=marcasDoGrupo(db,g.prod);
+            const cg=custoDoGrupo(marcasTodas,unidadeBaseDo(g.prod),db.movEstoque||[]);
+            return <div key={g.prod.id} style={{marginTop:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"baseline",flexWrap:"wrap",
+                padding:"6px 0 4px",borderBottom:"1px solid var(--border)"}}>
+                <span style={{fontSize:12.5,fontWeight:700}}>{g.prod.nome}
+                  {g.iguais>1&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:999,marginLeft:6,
+                    background:"var(--warningBg)",color:"var(--warningText)"}}>{g.iguais} nomes parecidos</span>}</span>
+                <span style={{fontSize:11,color:"var(--text3)",...MONO}}>
+                  {marcasTodas.length} marca(s) · {num(cg.saldoBase,2)} {unidadeBaseDo(g.prod)}
+                </span>
+              </div>
+              {g.marcas.map((m:any)=><div key={m.id}
+                style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center",padding:"6px 0",borderBottom:"1px solid var(--bg2)"}}>
+                <span style={{fontSize:12.5,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{m.nome}</span>
+                <span style={{flexShrink:0,display:"flex",gap:6,alignItems:"center"}}>
+                  <span style={{fontSize:11,color:"var(--text3)",...MONO}}>{num(m.estoqueAtual||0,2)} {m.unidade||"un"}</span>
+                  {/* ⚠️ O gesto tem NOME aqui. Na lista de cima ele era uma
+                      caixinha igual às outras, e marcar sem querer tirava a
+                      marca do grupo em que ela já estava. */}
+                  <button onClick={()=>{setSel(x=>new Set([...x,m.id]));setMsg("");}} title="mandar para outro produto"
+                    style={{border:"1px solid var(--border)",background:"transparent",borderRadius:6,cursor:"pointer",
+                      padding:"2px 9px",fontSize:11,fontFamily:"inherit",color:"var(--text2)"}}>trocar de grupo</button>
+                  <button onClick={()=>desagrupar(g.prod.id,m.id,m.nome)} title="tirar do grupo"
+                    style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:12,padding:"1px 7px"}}>✕</button>
+                </span>
+              </div>)}
+            </div>;
+          })}
+          {achadosGrupos.some((g:any)=>g.iguais>1)&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",
+            borderRadius:8,padding:"9px 11px",fontSize:11.5,lineHeight:1.5,marginTop:10}}>
+            ⚠️ Há mais de um produto da lista com o mesmo nome recebendo estas marcas. São itens DIFERENTES:
+            a ficha técnica lê um deles, e as marcas que estão nos outros ficam fora do custo.
+            Use o <b>trocar de grupo</b> para juntar tudo num só.
+          </div>}
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:10,lineHeight:1.55}}>
+            Só entra aqui o que casa com a busca — a pasta é o resultado da procura, não um catálogo de tudo que já foi conciliado.
+          </div>
+        </div>}
+      </div>}
     </>}
 
     {!!sel.size&&<div style={{marginTop:12,padding:12,background:"var(--bg2)",borderRadius:10}}>

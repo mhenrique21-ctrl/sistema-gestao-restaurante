@@ -6,6 +6,7 @@ import {
   custoParaUnidade, ratearEntreMarcas, grupoDoInsumo, grupoDaMarca, trocarUnidadeBase,
   insumosSemGrupo, agruparPendentes, sugerirGrupo, tokensDoNome, termoDeBusca,
   tamanhoNoNome, sugerirRendimento, gravarRendimentos,
+  separarAchados, chaveSemelhante,
 } from './grupoMarcas.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -584,5 +585,58 @@ describe('gravar as conversões de uma vez', () => {
 
   test('nada preenchido não grava nada', () => {
     assert.equal(gravarRendimentos(DB, { a: '', b: '0' }), null);
+  });
+});
+
+// ── A pasta dos que JÁ foram conciliados ────────────────────────────────────
+describe('a busca separa o que falta do que já está', () => {
+  // Os três "creme de leite caixa" são reais: saíram do cadastro do dono em
+  // 20/09/2026, escritos de três jeitos.
+  const PRODS = [
+    { id: 'p1', nome: 'Creme de leite caixa' },
+    { id: 'p2', nome: 'Creme de Leite em Caixa' },
+    { id: 'p3', nome: 'creme de leite caixa' },
+    { id: 'p4', nome: 'Creme de leite lata' },
+  ];
+  const ACHADOS = [
+    { mp: { id: 'a', nome: 'CR LEITE ITALAC TP 200G' }, grupo: null },
+    { mp: { id: 'b', nome: 'CR LEITE MOCOCA TP 200G' }, grupo: null },
+    { mp: { id: 'c', nome: 'creme de leite 200g' }, grupo: PRODS[0] },
+    { mp: { id: 'd', nome: 'Creme de leite cx' }, grupo: PRODS[1] },
+    { mp: { id: 'e', nome: 'CR LEITE NESTLE LATA 300G' }, grupo: PRODS[3] },
+    { mp: { id: 'f', nome: 'CR LEITE ITAMBE LA 300G' }, grupo: PRODS[3] },
+  ];
+
+  test('o que falta fica na lista de trabalho; o resto desce para a pasta', () => {
+    const r = separarAchados(ACHADOS, fold, PRODS);
+    assert.deepEqual(r.pendentes.map((x) => x.mp.id), ['a', 'b']);
+    assert.equal(r.conciliadas, 4);
+  });
+
+  test('a pasta agrupa PELO DESTINO, não em fila', () => {
+    const r = separarAchados(ACHADOS, fold, PRODS);
+    // p3 não entra: nenhuma marca DELE casou com a busca — e mesmo assim ele
+    // conta no aviso de nome repetido, logo abaixo.
+    assert.deepEqual(r.grupos.map((g) => g.prod.id), ['p1', 'p2', 'p4']);
+    assert.deepEqual(r.grupos.find((g) => g.prod.id === 'p4').marcas.map((m) => m.id), ['e', 'f']);
+  });
+
+  test('acusa os produtos da lista com o mesmo nome — "em" e a caixa não escondem', () => {
+    // ⚠️ A ficha lê UM desses três, e as marcas dos outros dois ficam fora do
+    // custo. Em fila, ninguém liga um ao outro.
+    const r = separarAchados(ACHADOS, fold, PRODS);
+    assert.equal(r.grupos.find((g) => g.prod.id === 'p1').iguais, 3);
+    assert.equal(r.grupos.find((g) => g.prod.id === 'p4').iguais, 1);
+  });
+
+  test('a ordem das palavras não faz produto novo', () => {
+    assert.equal(chaveSemelhante('Creme de leite caixa', fold), chaveSemelhante('CAIXA DE CREME DE LEITE', fold));
+    assert.notEqual(chaveSemelhante('Creme de leite caixa', fold), chaveSemelhante('Creme de leite lata', fold));
+  });
+
+  test('busca sem nada conciliado devolve a pasta vazia', () => {
+    const r = separarAchados([ACHADOS[0]], fold, PRODS);
+    assert.equal(r.grupos.length, 0);
+    assert.equal(r.conciliadas, 0);
   });
 });

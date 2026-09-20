@@ -546,3 +546,51 @@ export function gravarRendimentos(db, valores) {
     quantas: Object.keys(limpos).length,
   };
 }
+
+// ── O que a busca achou, separado em "falta" e "já está" ────────────────────
+// A marca que já tem grupo continua sendo achada pela busca — e precisa
+// continuar, porque é assim que se descobre que ela foi para o grupo errado.
+// Mas ela não pertence à lista de trabalho: a caixinha dela ao lado das outras
+// convida a marcar de novo, e marcar uma marca conciliada é o gesto que a TIRA
+// do grupo atual (ver `agruparMarcas`). Isso se faz querendo, nunca de raspão
+// no meio de uma seleção de oito.
+//
+// ⚠️ OS CONCILIADOS SÃO AGRUPADOS PELO DESTINO, não listados em fila. Em fila,
+// três produtos chamados "Creme de leite caixa", "Creme de Leite em Caixa" e
+// "creme de leite caixa" aparecem em três linhas distantes dizendo nomes
+// ligeiramente diferentes, e ninguém liga uma coisa à outra. Pelo destino, o
+// problema salta — e ele é caro: a ficha lê UM desses produtos, e as marcas que
+// estão nos outros dois ficam fora do custo.
+export function chaveSemelhante(nome, fold) {
+  const t = tokensDoNome(nome, fold);
+  // Ordenado: "Creme de leite caixa" e "Caixa de creme de leite" são o mesmo
+  // produto escrito por duas pessoas. As palavras vazias ("de", "em") já caem
+  // no `tokensDoNome`, e são justamente elas que disfarçam a duplicata.
+  return t.length ? [...t].sort().join(' ') : fold(String(nome || ''));
+}
+
+export function separarAchados(achados, fold, produtosLista) {
+  const pendentes = [];
+  const porGrupo = new Map();
+  for (const a of achados || []) {
+    if (!a?.grupo) { pendentes.push(a); continue; }
+    const k = a.grupo.id;
+    if (!porGrupo.has(k)) porGrupo.set(k, { prod: a.grupo, marcas: [] });
+    porGrupo.get(k).marcas.push(a.mp);
+  }
+
+  // Quantos produtos da lista INTEIRA têm esse mesmo nome. Contar só dentro da
+  // busca esconderia a duplicata quando uma das cópias não tem marca que case
+  // com o termo — que é o caso mais fácil de deixar passar.
+  const quantos = new Map();
+  for (const p of produtosLista || []) {
+    const k = chaveSemelhante(p?.nome, fold);
+    quantos.set(k, (quantos.get(k) || 0) + 1);
+  }
+
+  const grupos = [...porGrupo.values()]
+    .map((g) => ({ ...g, iguais: quantos.get(chaveSemelhante(g.prod?.nome, fold)) || 1 }))
+    .sort((a, b) => String(a.prod?.nome || '').localeCompare(String(b.prod?.nome || ''), 'pt-BR'));
+
+  return { pendentes, grupos, conciliadas: grupos.reduce((s, g) => s + g.marcas.length, 0) };
+}

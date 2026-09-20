@@ -1398,6 +1398,38 @@ fronteira de palavra** dentro do nome da marca, o **mais longo** vence (senão
 "Leite" ganharia de "Leite condensado") e **empate não escolhe** — a mesma
 recusa do `acharColunas`.
 
+##### A pasta dos que JÁ foram conciliados (20/09/2026)
+
+A busca devolvia uma lista só, com as marcas já agrupadas no meio das outras.
+`separarAchados` divide: em cima só o que **falta**, e o resto desce para uma
+pasta recolhida no fim.
+
+⚠️ **A caixinha sai junto com a marca, e isso é o ponto.** Marcar uma marca que
+já tem grupo é o gesto que a **tira** do grupo atual (`agruparMarcas` remove
+antes de pôr no novo, porque em dois grupos ela somaria em dois produtos). Ao
+lado das outras, com a mesma caixinha, isso acontece de raspão no meio de uma
+seleção de oito. Na pasta o gesto tem **nome escrito**: `trocar de grupo` — que
+só marca a marca, sem gravar nada — e o `✕` continua sendo "tirar do grupo".
+
+⚠️ **A pasta agrupa PELO DESTINO, não em fila.** Foi assim que apareceram, no
+cadastro real do dono, **três** produtos da lista recebendo creme de leite de
+caixa: "Creme de leite caixa", "Creme de Leite em Caixa" e "creme de leite
+caixa". Em fila eles são três linhas distantes com nomes ligeiramente
+diferentes, e ninguém liga uma à outra. Pelo destino o problema salta — e ele é
+caro: a ficha técnica lê **um** desses produtos, e as marcas que estão nos
+outros dois ficam fora do custo.
+
+⚠️ **`chaveSemelhante` ordena as palavras e descarta as vazias** — "de" e "em"
+são justamente o que disfarça a duplicata, e "Caixa de creme de leite" é o mesmo
+produto escrito por outra pessoa. A contagem roda sobre a **lista inteira**, não
+só sobre o resultado da busca: contando só o que apareceu, a duplicata cuja
+cópia não tem marca casando com o termo ficaria escondida — que é o caso mais
+fácil de deixar passar.
+
+⚠️ **A pasta é o resultado da BUSCA, não um catálogo.** Só mostra o que casa com
+o termo. Todas as marcas conciliadas do sistema seriam uma terceira lista de
+centenas de itens dentro de uma tela que já tem duas.
+
 ##### Converter na própria linha, pelo tamanho que está no nome (20/09/2026)
 
 A marca que aparece com a tag **sem conversão** dentro de "Grupos que já

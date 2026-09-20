@@ -165,3 +165,30 @@ test('a conversão grava SÓ materiasPrimas', () => {
   assert.ok(!bloco.includes('applyBothProdutos'), 'produtosLista não muda numa conversão');
   assert.ok(bloco.includes('gravarRendimentos(d,vals)'), 'tem que ler o db da GRAVAÇÃO, não o do render');
 });
+
+test('a marca já conciliada sai da lista de trabalho', () => {
+  // ⚠️ Marcar uma marca que já tem grupo é o gesto que a TIRA do grupo atual
+  // (agruparMarcas). Ao lado das outras, com a mesma caixinha, isso acontece de
+  // raspão no meio de uma seleção de oito.
+  assert.ok(CARD.includes('separarAchados(achados,foldNome,db.produtosLista||[])'),
+    'a busca tem que separar o que falta do que já está');
+  assert.ok(CARD.includes('{achadosPendentes.map('), 'a lista de cima é só a dos pendentes');
+  assert.ok(!/\{achados\.map\(/.test(CARD), 'a lista voltou a misturar conciliado com pendente');
+});
+
+test('a pasta agrupa pelo DESTINO e acusa nome repetido', () => {
+  // Três produtos da lista chamados "Creme de leite caixa", "Creme de Leite em
+  // Caixa" e "creme de leite caixa" existem no cadastro real. Em fila ninguém
+  // liga um ao outro; a ficha lê UM deles e o resto fica fora do custo.
+  const pasta = CARD.slice(CARD.indexOf('A pasta dos que já foram conciliados'), CARD.indexOf('{!!sel.size&&'));
+  assert.ok(pasta.includes('achadosGrupos.map('), 'a pasta tem que ser por produto de destino');
+  assert.ok(pasta.includes('g.iguais>1'), 'falta o aviso de nome repetido');
+  assert.ok(pasta.includes('>trocar de grupo<'), 'o gesto precisa ter nome escrito aqui');
+});
+
+test('a pasta não some com a marca — o ✕ e a troca continuam alcançáveis', () => {
+  const pasta = CARD.slice(CARD.indexOf('A pasta dos que já foram conciliados'), CARD.indexOf('{!!sel.size&&'));
+  assert.ok(pasta.includes('desagrupar(g.prod.id,m.id,m.nome)'), 'o ✕ tem que continuar existindo na pasta');
+  assert.ok(/setSel\(x=>new Set\(\[\.\.\.x,m\.id\]\)\)/.test(pasta),
+    '"trocar de grupo" tem que marcar a marca, não gravar nada');
+});
