@@ -44,6 +44,7 @@ src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com t
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
+src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
 src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
@@ -899,6 +900,74 @@ uma coluna só. ⚠️ `1.234,56` → o ponto é **milhar**; trocar só a vírgu
 `amostras/` está no `.gitignore` e os testes que dependem delas são **pulados**,
 não reprovados. São duas — `relatorio-ifood-2026-09-16.xlsx` e
 `relatorio-99food-2026-09-14-a-19.xlsx`.
+
+#### Vendas → Relatório → Por Período — `src/relatorioPeriodo.js` (com testes)
+
+**Absorveu TRÊS abas** — Por Canal, Evolução Mensal e Sazonalidade eram recortes
+do mesmo dado em telas separadas — e a "Confraria × Seama" saiu por decisão do
+dono. Relatório tinha **11** abas e passou a ter **8**; já teve quinze e foi
+podado uma vez.
+
+⚠️ **`ABA_REL_ANTIGA` traduz a aba padrão de quem já configurou.** O valor
+antigo (`canal`, `mensal`, `sazonal`, `empresas`) continua no `db` de quem não
+reabriu Ajustes; sem a tradução, o `relTab` cai num nome que nenhum bloco
+renderiza — **tela em branco, sem erro nenhum**, e nem o build nem o TypeScript
+acusam. `src/coresRelatorio.test.js` lê o `App.tsx` e reprova quem deixar um
+bloco pendurado.
+
+⚠️ **O BALCÃO É `maquininha + dinheiro + PENDURA`**, e as duas metades da frase
+são armadilhas medidas no dado real (PDV Eclética, 17/09/2026):
+
+```
+dinheiro 117,00 · crédito 2.282,79 · PIX 343,29 · pendura 82,24
+maquininha 2.626,08 = crédito + PIX      ← o PIX está DENTRO da maquininha
+total      2.825,32 = maquininha + dinheiro + pendura
+```
+
+Somar `credito + debito + pix` junto com `maquininha` contaria o PIX **duas
+vezes**. E deixar a pendura de fora faria o balcão não fechar com o total do dia
+— R$ 82,24 num dia só, sem nada denunciando.
+
+⚠️ **A COBERTURA FAZ PARTE DO NÚMERO.** Só o PDV manda `formas`; iFood, 99Food e
+lançamento manual entram no total sem quebra. A tela diz quanto a barra cobre e
+em quantos dias — sem isso ela parece o período inteiro, e "quase tudo é
+crédito" seria uma conclusão sobre outro conjunto de vendas.
+
+⚠️ **O RESÍDUO É MOSTRADO**, não diluído: `naoClassificado = total − soma dos
+canais`. Espalhá-lo pelos canais, ou usar a soma deles como total, esconderia
+para sempre um campo novo que alguém esqueceu de mapear.
+
+⚠️ **O período anterior tem o MESMO número de dias** e termina na véspera.
+Comparar 01–20/09 com agosto inteiro mostraria uma queda de 35% que é só o
+calendário. Canal que **nasceu** no período devolve `pct: null` (a tela escreve
+"novo"), nunca "infinito%" nem "0%" — o primeiro enche a tela de lixo, o segundo
+esconde um canal novo.
+
+⚠️ **A média por dia da semana divide pelos dias ABERTOS**, não pelas vezes que
+aquele dia caiu no recorte. Dividindo pelas ocorrências, um domingo fechado
+viraria "domingo vende pouco" em vez de "domingo fecha".
+
+⚠️ **A Sazonalidade antiga lia só `recibosVenda`.** Numa operação de balcão, que
+não emite recibo, ela dizia *"Nenhum recibo no período"* ao lado de um período de
+R$ 44.938,86 — o dado estava em `vendas` o tempo todo. Tudo aqui vem de `vendas`.
+
+##### As cores são MEDIDAS — `src/coresRelatorio.test.js`
+
+⚠️ **As cores da antiga aba Por Canal REPROVAM**, e no par que mais se compara:
+`#F97316` (99Food) contra `#EF4444` (iFood) dá **ΔE 10,4 com visão NORMAL**.
+Abaixo de 15, duas cores deixam de ser distinguíveis por quem enxerga todas —
+não é questão de daltonismo. A paleta nova (`CORES_REL`) dá 19,6 no pior par
+adjacente e 9,1 sob daltonismo.
+
+⚠️ **A cor sai da POSIÇÃO do canal em `CANAIS`, nunca do ranking**: um período em
+que o iFood passe o balcão não pode repintar os dois.
+
+⚠️ **No papel a cor não existe.** O navegador não imprime fundo colorido e muita
+impressão da loja sai em P&B, então a identidade impressa é **textura** (45° e o
+espelho 135° — nunca horizontal ou vertical, que leem como grade) **mais o valor
+escrito ao lado da barra**, e a variação leva o sinal escrito. É a regra da §8:
+status nunca só por cor. Hex literal, porque o relatório abre noutra janela sem
+o CSS do app.
 
 #### Editar recibo emitido: quem já foi lançado precisa REFAZER a soma em Vendas
 

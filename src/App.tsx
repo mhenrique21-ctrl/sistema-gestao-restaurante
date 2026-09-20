@@ -19,6 +19,7 @@ import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as 
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
+import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -1142,6 +1143,130 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
   <div class="footer">${impressaoRodapeTxt(cfg)}</div>
   </body></html>`;
 }
+// ── Relatório de Vendas por Período ─────────────────────────────────────────
+// ⚠️ PALETA MEDIDA, não escolhida no olho. As cores que a antiga aba "Por Canal"
+// usava REPROVAM: #F97316 (99Food) contra #EF4444 (iFood) dá ΔE 10,4 com visão
+// NORMAL — abaixo de 15, o piso em que duas cores deixam de ser distinguíveis —
+// e justamente no par que mais se compara. Esta passa em tudo: ΔE 19,6 com visão
+// normal, 9,1 sob daltonismo, todas na faixa de luminosidade e croma.
+//
+// ⚠️ A cor sai da POSIÇÃO do canal em `CANAIS`, nunca do ranking: um período em
+// que o iFood passe o balcão não pode repintar os dois.
+const CORES_REL=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#4a3aa7"];
+const MONO_REL={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+const MESES_REL=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+const mesLabelRel=(m:string)=>{const[y,mm]=String(m).split("-");return `${MESES_REL[parseInt(mm,10)-1]||mm}/${String(y).slice(2)}`;};
+
+// ⚠️ NO PAPEL A COR NÃO EXISTE. O navegador não imprime fundo colorido por
+// padrão, e muita impressão da loja sai em P&B — então aqui a identidade de cada
+// canal é a TEXTURA (45° e o espelho 135°; nunca horizontal ou vertical, que
+// leem como grade) MAIS o valor escrito ao lado da barra. É a regra da §8:
+// status nunca só por cor. Hex literal, porque o relatório abre noutra janela,
+// sem o CSS do app, e `var(--token)` não resolve lá.
+const TEXTURAS_REL=[[45,"#1a1a2e",2.2],[135,"#3d4a63",1.6],[45,"#6b7690",1.1],[135,"#1a1a2e",1.1],[45,"#3d4a63",3.2],[135,"#6b7690",2.2]];
+
+function barrasImpressaoHTML(linhas:{label:string,val:number}[],larg=640){
+  const vals=linhas.map(l=>l.val);
+  const max=Math.max(1,...vals);
+  const L=170,R=120,rh=26,alt=linhas.length*rh+6;
+  const defs=TEXTURAS_REL.map(([ang,c,sw],i)=>`<pattern id="tx${i}" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(${ang})"><rect width="7" height="7" fill="#fff"/><line x1="0" y1="0" x2="0" y2="7" stroke="${c}" stroke-width="${sw}"/></pattern>`).join("");
+  const barras=linhas.map((l,i)=>{
+    const y=i*rh, w=Math.max((l.val/max)*(larg-L-R),1);
+    return `<text x="${L-8}" y="${y+16}" text-anchor="end" font-size="11" fill="#1a1a2e" font-family="monospace">${l.label}</text>`
+      +`<rect x="${L}" y="${y+4}" width="${w.toFixed(1)}" height="15" rx="3" fill="url(#tx${i%TEXTURAS_REL.length})" stroke="#1a1a2e" stroke-width="1"/>`
+      +`<text x="${(L+w+8).toFixed(1)}" y="${y+16}" font-size="11" fill="#1a1a2e" font-family="monospace">${fmtMoney(l.val)}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${larg} ${alt}" style="width:100%;height:auto" role="img" aria-label="Barras por canal, com valor escrito ao lado de cada uma">
+    <defs>${defs}</defs>${barras}</svg>`;
+}
+
+function gerarRelatorioPeriodoHTML(empresa:string,cmp:any,fp:any,semana:any[]){
+  const R=cmp.atual,A=cmp.anterior,D=cmp.delta;
+  const ant=A?{ini:A.ini,fim:A.fim}:null;
+  const esc=(v:any)=>String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const n=(v:number)=>fmtMoney(v);
+  // ⚠️ Variação sempre com o SINAL escrito, nunca só a cor: em P&B o verde e o
+  // vermelho viram o mesmo cinza.
+  const dl=(p:number|null)=>p==null?"novo":`${p>=0?"+":"−"}${Math.abs(p).toFixed(1)}%`;
+
+  const canais=CANAIS_REL.filter((c:any)=>R.canais[c.k]>0||(A&&A.canais[c.k]>0));
+  const linhasCanal=canais.map((c:any)=>{
+    const d=D?D.canais[c.k]:null;
+    const b=c.k==="ifood"?R.bruto.ifood:c.k==="nfood"?R.bruto.nfood:0;
+    return `<tr><td>${esc(c.label)}</td><td style="text-align:right">${b?n(b):"—"}</td>`
+      +`<td style="text-align:right;font-weight:700">${n(R.canais[c.k])}</td>`
+      +`<td style="text-align:right">${R.total?(R.canais[c.k]/R.total*100).toFixed(1):"0,0"}%</td>`
+      +`<td style="text-align:right">${d?dl(d.pct):"—"}</td></tr>`;
+  }).join("");
+
+  const linhasForma=FORMAS_REL.filter((f:any)=>fp.totais[f.k]>0).map((f:any)=>
+    `<tr><td>${esc(f.label)}${f.k==="pendura"?" <span style=\"color:#4a5568\">(a receber, já no total)</span>":""}</td>`
+    +`<td style="text-align:right">${n(fp.totais[f.k])}</td>`
+    +`<td style="text-align:right">${(fp.totais[f.k]/fp.coberto*100).toFixed(1)}%</td></tr>`).join("");
+
+  const linhasSemana=[1,2,3,4,5,6,0].map(i=>{
+    const l=semana[i];
+    return `<tr><td>${esc(l.nome)}</td><td style="text-align:right">${l.abertos?`${l.abertos} dia${l.abertos!==1?"s":""}`:"fechado"}</td>`
+      +`<td style="text-align:right">${n(l.total)}</td><td style="text-align:right">${l.abertos?n(l.media):"—"}</td></tr>`;
+  }).join("");
+
+  const conteudo=`
+  <div class="section">
+    <h2>Resumo — ${esc(fmtDate(R.ini))} a ${esc(fmtDate(R.fim))} (${R.dias} dias)</h2>
+    <table>
+      <tr><td>Total do período</td><td style="text-align:right;font-weight:700">${n(R.total)}</td>
+          <td style="text-align:right">${D?`${dl(D.pct)} contra ${esc(fmtDate(ant!.ini))}–${esc(fmtDate(ant!.fim))}`:"—"}</td></tr>
+      <tr><td>Média por dia do período</td><td style="text-align:right">${n(R.mediaDia)}</td><td style="text-align:right">${D?dl(D.mediaDia):"—"}</td></tr>
+      <tr><td>Média por dia aberto</td><td style="text-align:right">${n(R.mediaDiaAberto)}</td><td style="text-align:right">${R.diasComVenda} dia(s) com venda</td></tr>
+      <tr><td>Melhor dia</td><td style="text-align:right">${R.melhorDia?n(R.melhorDia.total):"—"}</td><td style="text-align:right">${R.melhorDia?esc(fmtDate(R.melhorDia.data)):"—"}</td></tr>
+      ${R.semLancamento.length?`<tr><td>Dias sem lançamento</td><td style="text-align:right">${R.semLancamento.length}</td><td style="text-align:right">${R.semLancamento.slice(0,6).map((d:string)=>esc(fmtDate(d))).join(", ")}${R.semLancamento.length>6?"…":""}</td></tr>`:""}
+    </table>
+    ${D&&ant?`<p style="font-size:11px;color:#4a5568;margin:10px 0 0">O período anterior tem o <b>mesmo número de dias</b>
+      (${esc(fmtDate(ant.ini))} a ${esc(fmtDate(ant.fim))}). Comparar recortes de tamanhos diferentes mostraria
+      uma variação que é só o calendário.</p>`:""}
+  </div>
+
+  <div class="section">
+    <h2>Por tipo de venda</h2>
+    ${barrasImpressaoHTML(canais.map((c:any)=>({label:c.label,val:R.canais[c.k]})))}
+    <table style="margin-top:12px">
+      <thead><tr><th>Canal</th><th style="text-align:right">Bruto</th><th style="text-align:right">Líquido</th><th style="text-align:right">%</th><th style="text-align:right">vs anterior</th></tr></thead>
+      <tbody>${linhasCanal}
+        ${R.naoClassificado?`<tr><td>Não classificado</td><td></td><td style="text-align:right;font-weight:700">${n(R.naoClassificado)}</td><td style="text-align:right">${(R.naoClassificado/R.total*100).toFixed(1)}%</td><td></td></tr>`:""}
+        <tr class="total-row"><td>Total</td><td></td><td style="text-align:right">${n(R.total)}</td><td style="text-align:right">100%</td><td style="text-align:right">${D?dl(D.pct):"—"}</td></tr>
+      </tbody>
+    </table>
+    ${(R.bruto.ifood||R.bruto.nfood)?`<p style="font-size:11px;color:#4a5568;margin:10px 0 0">Nas plataformas o total considera o
+      <b>líquido</b> — o que elas pagaram. O bruto está ao lado porque é ele que diz o tamanho do canal.</p>`:""}
+  </div>
+
+  <div class="section">
+    <h2>Por forma de pagamento${fp.coberto?` — ${fp.diasComQuebra} de ${fp.dias} dias, ${n(fp.coberto)}`:""}</h2>
+    ${fp.coberto?`<table>
+      <thead><tr><th>Forma</th><th style="text-align:right">Valor</th><th style="text-align:right">%</th></tr></thead>
+      <tbody>${linhasForma}
+        <tr class="total-row"><td>Apurado pelo PDV</td><td style="text-align:right">${n(fp.coberto)}</td><td style="text-align:right">100%</td></tr>
+      </tbody></table>
+      <p style="font-size:11px;color:#4a5568;margin:10px 0 0">A quebra cobre <b>${n(fp.coberto)}</b> dos ${n(fp.totalPeriodo)}
+      do período (${fp.pctCobertura.toFixed(0)}%). Os outros ${n(fp.semQuebra)} — iFood, 99Food e lançamento manual —
+      entram no total sem quebra por forma: só o PDV a informa.
+      ${fp.pendura?`<br><b>Pendura (${n(fp.pendura)}) está no total e fora de dinheiro e maquininha</b>: é venda fiada.
+      Entrou em caixa: <b>${n(fp.emCaixa)}</b>.`:""}</p>`
+      :`<p style="font-size:11px;color:#4a5568;margin:0">Nenhum dia do período tem quebra por forma de pagamento — só o PDV a informa.</p>`}
+  </div>
+
+  <div class="section">
+    <h2>Por dia da semana</h2>
+    <table>
+      <thead><tr><th>Dia</th><th style="text-align:right">Abertos</th><th style="text-align:right">Total</th><th style="text-align:right">Média do dia aberto</th></tr></thead>
+      <tbody>${linhasSemana}</tbody>
+    </table>
+    <p style="font-size:11px;color:#4a5568;margin:10px 0 0">A média divide pelos dias <b>abertos</b>. Dividindo pelas vezes
+    que o dia caiu no período, um domingo fechado viraria "domingo vende pouco".</p>
+  </div>`;
+  return gerarRelatorioHTML("Relatório de Vendas por Período",empresa,conteudo);
+}
+
 // Folha A4 "Fechamento de caixa": timbre (Configurações → Impressão), valores
 // do dia, checklist com caixas em branco (a marcação é à caneta — imprimir o
 // que já estava marcado na tela tiraria da folha o papel de conferência),
@@ -4619,8 +4744,9 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
       </Campo>
       <Campo label="Aba padrão ao abrir Relatório">
         <select className="inp" value={aj.abaRelatorioPadrao} onChange={e=>setAj("abaRelatorioPadrao",e.target.value)} style={{marginBottom:0}}>
+          <option value="periodo">Por Período</option>
           <option value="cliente">Por Cliente</option><option value="produtos">Ranking de Produtos</option>
-          <option value="pendentes">Pendentes de Lançar</option><option value="canal">Por Canal</option>
+          <option value="pendentes">Pendentes de Lançar</option>
         </select>
       </Campo>
     </Grupo>
@@ -5327,7 +5453,14 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const [ini,setIni]=useState(()=>{const d=new Date();d.setDate(1);return d.toISOString().slice(0,10);});
   const [fim,setFim]=useState(today());
-  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"mensal"|"canal"|"sazonal"|"margem"|"empresas">(aj.abaRelatorioPadrao||"cliente");
+  // ⚠️ "canal", "mensal" e "sazonal" viraram UMA aba ("periodo"), e
+  // "empresas" saiu. Quem tinha uma delas gravada como aba padrão em
+  // Ajustes cairia num `relTab` que nenhum bloco renderiza — tela em branco,
+  // sem erro nenhum. A tradução aqui é o que impede isso, e vale para sempre:
+  // o valor antigo continua no `db` de quem não abriu Ajustes de novo.
+  const ABA_REL_ANTIGA:Record<string,string>={canal:"periodo",mensal:"periodo",sazonal:"periodo",empresas:"periodo"};
+  const abaRelInicial=(a:string)=>ABA_REL_ANTIGA[a]||a||"periodo";
+  const [relTab,setRelTab]=useState<"cliente"|"produtos"|"abc"|"ticket"|"rfm"|"pendentes"|"periodo"|"margem">(abaRelInicial(aj.abaRelatorioPadrao) as any);
   const recibos=(db.recibosVenda||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
   const totalPeriodo=Math.round(recibos.reduce((s:number,r:any)=>s+(r.total||0),0)*100)/100;
 
@@ -5364,11 +5497,13 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
     </div>;
   };
 
+  // ⚠️ Isto já teve QUINZE abas e foi podado uma vez (§6). "Por Período" entra
+  // absorvendo três — Por Canal, Evolução Mensal e Sazonalidade eram recortes do
+  // mesmo dado em telas separadas — então o número CAI de 11 para 8.
   const TABS:[typeof relTab,string][]=[
-    ["cliente","Por Cliente"],["produtos","Ranking de Produtos"],["abc","Curva ABC"],
-    ["ticket","Ticket Médio"],["rfm","Recência/Frequência"],["pendentes","Pendentes de Lançar"],
-    ["mensal","Evolução Mensal"],["canal","Por Canal"],["sazonal","Sazonalidade"],
-    ["margem","Margem por Produto"],["empresas","Confraria × Seama"],
+    ["periodo","Por Período"],["cliente","Por Cliente"],["produtos","Ranking de Produtos"],
+    ["abc","Curva ABC"],["ticket","Ticket Médio"],["rfm","Recência/Frequência"],
+    ["pendentes","Pendentes de Lançar"],["margem","Margem por Produto"],
   ];
 
   const RowBar=({label,sub,qty,val,pct,color}:{label:string,sub?:string,qty?:string,val:number,pct:number,color?:string})=>(
@@ -5416,6 +5551,204 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
         {diasPdvRel>0?` · ${diasPdvRel} dia(s) de PDV · ${fmtMoney(totalPdv)}`:""}
       </div>
     </div>
+
+    {/* ===== POR PERÍODO — absorveu Por Canal, Evolução Mensal e Sazonalidade =====
+        ⚠️ A conta inteira mora em `src/relatorioPeriodo.js`, com testes. Relatório
+        erra em SILÊNCIO: leitor errado aparece na tela, soma errada vira um número
+        plausível que alguém leva para a reunião. */}
+    {relTab==="periodo"&&(()=>{
+      const cmp=compararPeriodos(db.vendas||[],ini,fim);
+      const R=cmp.atual, A=cmp.anterior, D=cmp.delta;
+      const fp=formasDoPeriodo(db.vendas||[],ini,fim);
+      const semana=porDiaDaSemana(R);
+      const meses=porMes(db.vendas||[],6);
+      const ant=periodoAnterior(ini,fim);
+      // Cor pela POSIÇÃO na lista de canais, nunca pelo ranking: um filtro que
+      // mude quantos canais aparecem não pode repintar os que sobraram.
+      const cor=(i:number)=>CORES_REL[i%CORES_REL.length];
+      const pct=(v:number)=>R.total?v/R.total*100:0;
+      const seta=(p:number|null)=>p==null?null:
+        <span style={{color:p>=0?"var(--successText)":"var(--btnDanger)",...MONO_REL}}>{p>=0?"▲":"▼"} {Math.abs(p).toFixed(1)}%</span>;
+
+      if(!R.total&&!R.porDia.some((d:any)=>d.lancamentos))
+        return <EmptyState msg="Nenhum lançamento de vendas no período."/>;
+
+      const maxDia=Math.max(1,...R.porDia.map((d:any)=>d.total));
+      const maxSem=Math.max(1,...semana.map((l:any)=>l.media));
+      const maxMes=Math.max(1,...meses.map((m:any)=>m.total));
+
+      return <>
+        {/* ---- topo: totais e comparação ---- */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5}}>Total do período</div>
+            <div style={{fontSize:30,fontWeight:800,letterSpacing:-.5,...MONO_REL}}>{fmtMoney(R.total)}</div>
+            {D&&ant&&<div style={{fontSize:12,color:"var(--text2)"}}>
+              {seta(D.pct)} <span style={MONO_REL}>{D.total>=0?"+":"−"}{fmtMoney(Math.abs(D.total))}</span>
+              {" "}contra {fmtDate(ant.ini)}–{fmtDate(ant.fim)} <span style={{color:"var(--text3)"}}>(os mesmos {ant.dias} dias)</span>
+            </div>}
+          </div>
+          <button onClick={()=>abrirRelatorio(gerarRelatorioPeriodoHTML(empresa||"",cmp,fp,semana))} className="pill"
+            style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",border:0,fontWeight:700,padding:"9px 16px"}}>🖨️ Imprimir (A4)</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:1,background:"var(--border)",border:"1px solid var(--border)",borderRadius:10,overflow:"hidden",marginBottom:14}}>
+          {[["Média por dia",fmtMoney(R.mediaDia),`${R.dias} dias no período`],
+            ["Média por dia aberto",fmtMoney(R.mediaDiaAberto),`${R.diasComVenda} com venda`],
+            ["Melhor dia",R.melhorDia?fmtMoney(R.melhorDia.total):"—",R.melhorDia?fmtDate(R.melhorDia.data):"—"],
+            ["Sem lançamento",String(R.semLancamento.length),R.semLancamento.slice(0,2).map(fmtDate).join(", ")||"nenhum"],
+          ].map(([lab,val,hint]:any)=><div key={lab} style={{background:"var(--bg3)",padding:"10px 12px"}}>
+            <div style={{fontSize:10,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5}}>{lab}</div>
+            <div style={{fontSize:17,fontWeight:700,marginTop:2,...MONO_REL}}>{val}</div>
+            <div style={{fontSize:10.5,color:"var(--text3)",marginTop:1}}>{hint}</div>
+          </div>)}
+        </div>
+
+        {/* ---- dia a dia ---- */}
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Dia a dia, por canal</div>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:8}}>
+          {CANAIS_REL.map((c:any,i:number)=>R.canais[c.k]>0&&<span key={c.k} style={{fontSize:11,color:"var(--text2)"}}>
+            <i style={{display:"inline-block",width:10,height:10,borderRadius:3,background:cor(i),marginRight:5,verticalAlign:-1}}/>{c.label}</span>)}
+        </div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:2,height:130,borderBottom:"1px solid var(--border)",marginBottom:4,overflowX:"auto"}}>
+          {R.porDia.map((d:any)=>{
+            const h=(v:number)=>Math.max(v/maxDia*118,v>0?2:0);
+            return <div key={d.data} title={`${fmtDate(d.data)} — ${fmtMoney(d.total)}`}
+              style={{flex:"1 0 10px",minWidth:10,display:"flex",flexDirection:"column",justifyContent:"flex-end",height:"100%"}}>
+              {d.total===0
+                ? <div style={{height:4,background:"var(--border)",borderRadius:2}}/>
+                : [...CANAIS_REL].reverse().map((c:any)=>{
+                    const i=CANAIS_REL.findIndex((x:any)=>x.k===c.k);
+                    return d.canais[c.k]>0
+                      ? <div key={c.k} style={{height:h(d.canais[c.k]),background:cor(i),marginBottom:1,borderRadius:"2px 2px 0 0"}}/>
+                      : null;
+                  })}
+            </div>;
+          })}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--text3)",marginBottom:6,...MONO_REL}}>
+          <span>{fmtDate(ini)}</span><span>{fmtDate(fim)}</span>
+        </div>
+        <div style={{fontSize:11,color:"var(--text3)",marginBottom:16,lineHeight:1.5}}>
+          Barra rasa e cinza é <b>dia sem lançamento</b> — domingo a loja fecha. Ela fica na régua em vez
+          de sumir: um dia ausente parecendo inexistente esconde tanto o fechamento quanto o esquecimento.
+        </div>
+
+        {/* ---- canais ---- */}
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Por tipo de venda</div>
+        <div style={{overflowX:"auto",marginBottom:6}}>
+          <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:13}}>
+            <thead><tr>{["Canal","Bruto","Líquido","%","vs anterior"].map((h,i)=>
+              <th key={h} style={{textAlign:i?"right":"left" as const,fontSize:10,textTransform:"uppercase" as const,letterSpacing:.5,color:"var(--text3)",fontWeight:700,padding:"0 0 6px",borderBottom:"1px solid var(--border)"}}>{h}</th>)}</tr></thead>
+            <tbody>
+              {CANAIS_REL.map((c:any,i:number)=>{
+                const v=R.canais[c.k]; if(!v&&!(A&&A.canais[c.k]))return null;
+                const b=c.k==="ifood"?R.bruto.ifood:c.k==="nfood"?R.bruto.nfood:0;
+                const dd=D?D.canais[c.k]:null;
+                return <tr key={c.k}>
+                  <td style={{padding:"7px 0",borderBottom:"1px solid var(--bg2)"}}>
+                    <i style={{display:"inline-block",width:10,height:10,borderRadius:3,background:cor(i),marginRight:7,verticalAlign:-1}}/>{c.label}</td>
+                  <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:b?"var(--text2)":"var(--text3)"}}>{b?fmtMoney(b):"—"}</td>
+                  <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",fontWeight:600}}>{fmtMoney(v)}</td>
+                  <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)"}}>{pct(v).toFixed(1)}%</td>
+                  <td style={{textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",fontSize:12}}>
+                    {dd?(dd.pct==null?<span style={{color:"var(--successText)"}}>novo</span>:seta(dd.pct)):"—"}</td>
+                </tr>;
+              })}
+              {R.naoClassificado!==0&&<tr>
+                <td style={{padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:"var(--warningText)"}}>Não classificado</td>
+                <td style={{padding:"7px 0",borderBottom:"1px solid var(--bg2)"}}/>
+                <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)",color:"var(--warningText)",fontWeight:600}}>{fmtMoney(R.naoClassificado)}</td>
+                <td style={{...MONO_REL,textAlign:"right" as const,padding:"7px 0",borderBottom:"1px solid var(--bg2)"}}>{pct(R.naoClassificado).toFixed(1)}%</td>
+                <td/></tr>}
+              <tr><td style={{borderTop:"1.5px solid var(--border)",paddingTop:8,fontWeight:700}}>Total</td>
+                <td style={{borderTop:"1.5px solid var(--border)"}}/>
+                <td style={{...MONO_REL,textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8,fontWeight:700}}>{fmtMoney(R.total)}</td>
+                <td style={{...MONO_REL,textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8,fontWeight:700}}>100%</td>
+                <td style={{textAlign:"right" as const,borderTop:"1.5px solid var(--border)",paddingTop:8,fontSize:12}}>{D?seta(D.pct):"—"}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        {(R.bruto.ifood>0||R.bruto.nfood>0)&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:9,padding:"10px 12px",fontSize:12.5,lineHeight:1.5,marginBottom:16}}>
+          ⚠️ Nas plataformas o que entra no total é o <b>líquido</b> — o que elas pagaram. O bruto fica na
+          coluna ao lado porque é ele que responde "de que tamanho é este canal"; somado ao balcão, poria no
+          faturamento <b>{fmtMoney(R.bruto.ifood+R.bruto.nfood-R.canais.ifood-R.canais.nfood)}</b> que a loja nunca recebeu.
+        </div>}
+        {R.naoClassificado!==0&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:9,padding:"10px 12px",fontSize:12.5,lineHeight:1.5,marginBottom:16}}>
+          ⚠️ <b>{fmtMoney(R.naoClassificado)}</b> estão no total dos lançamentos e em nenhum canal — algum dia
+          tem valor num campo que esta tela não lê. Aparece aqui em vez de ser diluído nos outros.
+        </div>}
+
+        {/* ---- formas ---- */}
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Por forma de pagamento</div>
+        {!fp.coberto&&<EmptyState msg="Nenhum dia do período tem quebra por forma de pagamento — só o PDV a informa."/>}
+        {fp.coberto>0&&<>
+          {FORMAS_REL.map((f:any,i:number)=>fp.totais[f.k]>0&&
+            <RowBar key={f.k} label={f.label} sub={f.k==="pendura"?"a receber, já no total":undefined}
+              val={fp.totais[f.k]} pct={fp.totais[f.k]/fp.coberto*100} color={cor(i)}
+              qty={`${(fp.totais[f.k]/fp.coberto*100).toFixed(1)}%`}/>)}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"9px 0",fontWeight:700,borderTop:"1.5px solid var(--border)"}}>
+            <span style={{fontSize:13}}>Apurado pelo PDV</span><span style={MONO_REL}>{fmtMoney(fp.coberto)}</span></div>
+          <div style={{background:"var(--infoBg)",color:"var(--infoText)",borderRadius:9,padding:"10px 12px",fontSize:12.5,lineHeight:1.5,marginTop:10}}>
+            ℹ️ A quebra cobre <b>{fmtMoney(fp.coberto)}</b> dos {fmtMoney(fp.totalPeriodo)} do período
+            ({fp.pctCobertura.toFixed(0)}%), em <b>{fp.diasComQuebra} de {fp.dias} dias</b>. Só o PDV manda forma de
+            pagamento; iFood, 99Food e lançamento manual entram no total sem ela.
+          </div>
+          {fp.pendura>0&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:9,padding:"10px 12px",fontSize:12.5,lineHeight:1.5,marginTop:8}}>
+            ⚠️ <b>Pendura ({fmtMoney(fp.pendura)}) está no total e fora de dinheiro e maquininha</b> — é venda
+            fiada. Entrou em caixa: <b>{fmtMoney(fp.emCaixa)}</b>.
+          </div>}
+        </>}
+
+        {/* ---- comparação canal a canal ---- */}
+        {D&&ant&&<>
+          <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,margin:"18px 0 8px"}}>Este período × o anterior</div>
+          {CANAIS_REL.map((c:any,i:number)=>{
+            const d=D.canais[c.k];
+            if(!d.atual&&!d.anterior)return null;
+            const m=Math.max(d.atual,d.anterior,1);
+            return <div key={c.k} style={{padding:"9px 0",borderBottom:"1px solid var(--bg2)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,marginBottom:5}}>
+                <span><i style={{display:"inline-block",width:10,height:10,borderRadius:3,background:cor(i),marginRight:7,verticalAlign:-1}}/>{c.label}</span>
+                <span style={{display:"flex",gap:10}}>
+                  <span style={{color:"var(--text3)",...MONO_REL}}>{fmtMoney(d.anterior)}</span>
+                  <span style={{...MONO_REL,fontWeight:700}}>→ {fmtMoney(d.atual)}</span>
+                  {d.pct==null?<span style={{color:"var(--successText)",fontSize:12}}>novo</span>:seta(d.pct)}
+                </span>
+              </div>
+              <div style={{position:"relative" as const,height:8,background:"var(--bg2)",borderRadius:4}}>
+                <div style={{position:"absolute" as const,left:0,top:0,height:8,width:`${d.anterior/m*100}%`,background:"var(--text3)",opacity:.35,borderRadius:4}}/>
+                <div style={{position:"absolute" as const,left:0,top:0,height:8,width:`${d.atual/m*100}%`,background:cor(i),borderRadius:4}}/>
+              </div>
+            </div>;
+          })}
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
+            A barra clara é <b>{fmtDate(ant.ini)}–{fmtDate(ant.fim)}</b>, a colorida é este período. Os dois
+            têm o <b>mesmo número de dias</b> — comparar 20 dias com um mês inteiro mostraria uma queda que é
+            só o calendário.
+          </div>
+        </>}
+
+        {/* ---- dia da semana ---- */}
+        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,margin:"18px 0 8px"}}>Por dia da semana — média do dia aberto</div>
+        {[1,2,3,4,5,6,0].map(i=>{
+          const l=semana[i];
+          return <RowBar key={i} label={l.nome} val={l.media} pct={l.media/maxSem*100}
+            qty={l.abertos?`${l.abertos} dia${l.abertos!==1?"s":""} · ${fmtMoney(l.total)}`:"fechado no período"}
+            color={l.abertos?"var(--btnPrimary)":"var(--border)"}/>;
+        })}
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:6,lineHeight:1.5}}>
+          A média divide pelos dias <b>abertos</b>, não pelas vezes que aquele dia caiu no período. Dividindo
+          pelas ocorrências, um domingo fechado viraria "domingo vende pouco" em vez de "domingo fecha".
+        </div>
+
+        {/* ---- mês a mês ---- */}
+        {meses.length>1&&<>
+          <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,margin:"18px 0 4px"}}>Evolução mensal</div>
+          <div style={{fontSize:11,color:"var(--text2)",marginBottom:8}}>Independe do filtro acima — é a única visão que responde "e antes disso?"</div>
+          {meses.map((m:any)=><RowBar key={m.mes} label={mesLabelRel(m.mes)} val={m.total} pct={m.total/maxMes*100} color="var(--btnPrimary)"/>)}
+        </>}
+      </>;
+    })()}
 
     {relTab==="cliente"&&(()=>{
       const porCliente:Record<string,{qtd:number,total:number}>={};
@@ -5536,63 +5869,6 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       </>;
     })()}
 
-    {relTab==="mensal"&&(()=>{
-      const porMes:Record<string,number>={};
-      (db.recibosVenda||[]).forEach((r:any)=>{
-        const mes=(r.data||"").slice(0,7);
-        if(!mes)return;
-        porMes[mes]=(porMes[mes]||0)+(r.total||0);
-      });
-      const meses=Object.keys(porMes).sort().slice(-6);
-      const max=Math.max(1,...meses.map(m=>porMes[m]));
-      const mesLabel=(m:string)=>{const[y,mm]=m.split("-");const nomes=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];return `${nomes[parseInt(mm,10)-1]}/${y.slice(2)}`;};
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>Evolução mensal (últimos {meses.length} meses)</div>
-        <div style={{fontSize:11,color:"var(--text2)",marginBottom:10}}>Independe do filtro de data acima — usa o histórico completo de recibos</div>
-        {!meses.length&&<EmptyState msg="Sem histórico suficiente ainda."/>}
-        {meses.map(m=><RowBar key={m} label={mesLabel(m)} val={porMes[m]} pct={porMes[m]/max*100} color="#7C3AED"/>)}
-      </>;
-    })()}
-
-    {relTab==="canal"&&(()=>{
-      const vendasPeriodo=(db.vendas||[]).filter((v:any)=>v.data>=ini&&v.data<=fim);
-      const somaCampo=(k:string)=>vendasPeriodo.reduce((s:number,v:any)=>s+(v[k]||0),0);
-      const canais=[
-        {label:"Recibo B2B / Vendas Extras",val:somaCampo("delivery"),color:"#7C3AED"},
-        {label:"Dinheiro (balcão)",val:somaCampo("dinheiro"),color:"#F59E0B"},
-        {label:"Maquininha",val:somaCampo("maquininha"),color:"#3B82F6"},
-        {label:"iFood",val:somaCampo("ifoodLiq")||somaCampo("ifood"),color:"#EF4444"},
-        {label:"99Food",val:somaCampo("nfoodLiq")||somaCampo("99food"),color:"#F97316"},
-      ];
-      const totalCanais=canais.reduce((s,c)=>s+c.val,0)||1;
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Vendas por canal — período</div>
-        {!vendasPeriodo.length&&<EmptyState msg="Nenhum lançamento de vendas no período."/>}
-        {vendasPeriodo.length>0&&canais.map(c=><div key={c.label} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
-          <span style={{width:10,height:10,borderRadius:3,background:c.color,flexShrink:0}}/>
-          <span style={{flex:1,fontSize:13}}>{c.label}</span>
-          <span style={{fontSize:11,color:"var(--text2)",fontFamily:"monospace",width:48,textAlign:"right" as const}}>{(c.val/totalCanais*100).toFixed(0)}%</span>
-          <span style={{fontWeight:700,fontFamily:"monospace",width:96,textAlign:"right" as const}}>{fmtMoney(c.val)}</span>
-        </div>)}
-      </>;
-    })()}
-
-    {relTab==="sazonal"&&(()=>{
-      const nomesDia=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-      const porDia:{qtd:number,total:number}[]=nomesDia.map(()=>({qtd:0,total:0}));
-      recibos.forEach((r:any)=>{
-        const dia=new Date(r.data+"T12:00:00").getDay();
-        porDia[dia].qtd++;porDia[dia].total+=r.total||0;
-      });
-      const ordem=[1,2,3,4,5,6,0];
-      const max=Math.max(1,...porDia.map(d=>d.total));
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Sazonalidade — total por dia da semana</div>
-        {!recibos.length&&<EmptyState msg="Nenhum recibo no período."/>}
-        {recibos.length>0&&ordem.map(i=><RowBar key={i} label={nomesDia[i]} qty={`${porDia[i].qtd} recibo${porDia[i].qtd!==1?"s":""}`} val={porDia[i].total} pct={porDia[i].total/max*100} color="#16A34A"/>)}
-      </>;
-    })()}
-
     {relTab==="margem"&&(()=>{
       const linhas=agruparItens().map((p:any)=>{
         // Resolve por código e cai no nome: mesma regra do estoque, pra a
@@ -5630,21 +5906,6 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       </>;
     })()}
 
-    {relTab==="empresas"&&(()=>{
-      const empresas=["CONFRARIA","SEAMA"];
-      const dados=empresas.map(e=>{
-        const recibosE=((state?.[e]?.recibosVenda)||[]).filter((r:any)=>r.data>=ini&&r.data<=fim);
-        const total=recibosE.reduce((s:number,r:any)=>s+(r.total||0),0);
-        return{nome:e,qtd:recibosE.length,total};
-      });
-      const max=Math.max(1,...dados.map(d=>d.total));
-      const cores:{[k:string]:string}={CONFRARIA:"#8B5CF6",SEAMA:"#16A34A"};
-      return <>
-        <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Confraria × Seama — mesmo período</div>
-        {!state&&<EmptyState msg="Dados das duas empresas não disponíveis nesta tela."/>}
-        {!!state&&dados.map(d=><RowBar key={d.nome} label={d.nome===empresa?`${d.nome} (atual)`:d.nome} qty={`${d.qtd} recibo${d.qtd!==1?"s":""}`} val={d.total} pct={d.total/max*100} color={cores[d.nome]}/>)}
-      </>;
-    })()}
   </div>;
 }
 
