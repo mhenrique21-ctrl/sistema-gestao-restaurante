@@ -1328,6 +1328,14 @@ salvo** (sem isso, uma declaração errada não teria como ser corrigida).
 `src/agruparMarcasTela.test.js` lê o `App.tsx` e reprova quem reintroduzir —
 nem o build nem o TypeScript acusam, é JSX válido.
 
+⚠️ **O DESTINO BUSCA EM TODA A LISTA DE COMPRAS**, não só nos grupos que casam
+com a busca das marcas. A sugestão é um **atalho** (abre a lista quando o campo
+está vazio), nunca a única opção: preso a ela, mandar um creme de leite para um
+produto chamado "Laticínios" era impossível — ele nunca aparecia, e não havia
+como descobrir isso pela tela, porque o item simplesmente não estava lá. Com
+centenas de itens na lista, o destino precisa de **busca**, não de rolagem — e
+de um botão "trocar", senão errar o destino obrigava a recomeçar a seleção.
+
 ⚠️ **Trocar a unidade do grupo CONVERTE as declarações** (`trocarUnidadeBase`).
 `porUnidadeBase` é declarado **na unidade do grupo**: trocar g→kg sem mexer
 nelas faria "1 un = 900" passar a significar 900 kg, e o saldo ficaria mil vezes

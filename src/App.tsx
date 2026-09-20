@@ -12039,18 +12039,35 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
   const [unidadeBase,setUnidadeBase]=useState("un");
   const [rend,setRend]=useState<Record<string,string>>({});
   const [msg,setMsg]=useState("");
+  // Busca PRÓPRIA do destino. Antes o destino era um <select> alimentado só
+  // pelos grupos que casavam com a busca das marcas — então mandar um creme de
+  // leite para um produto chamado "Laticínios" era impossível, porque ele nunca
+  // aparecia na lista. A lista de compras tem centenas de itens: precisa de
+  // busca, não de rolagem.
+  const [buscaDestino,setBuscaDestino]=useState("");
 
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
   const UNIDADES=["un","g","kg","ml","L"];
   const achados=busca.trim().length>=2?buscarMarcas(db,busca,foldNome):[];
   const mps=db.materiasPrimas||[];
 
-  // Os grupos que já existem e casam com a busca — é neles que a pessoa vai
-  // querer jogar as marcas novas.
+  // Os grupos que já existem e casam com a busca das marcas — é neles que a
+  // pessoa vai querer jogar as marcas novas, então eles abrem a lista.
   const gruposCandidatos=busca.trim().length>=2
     ?(db.produtosLista||[]).filter((p:any)=>foldNome(p.nome||"").includes(foldNome(busca))
       ||(p.mpVinculados||[]).some((id:string)=>achados.some((a:any)=>a.mp.id===id)))
     :[];
+
+  // ⚠️ Mas o destino NÃO fica preso a eles. A sugestão é um atalho; obrigar o
+  // destino a casar com o nome da marca impede o caso mais comum de organização
+  // — mandar "creme de leite" para um produto que se chama outra coisa — e não
+  // há como descobrir isso pela tela, porque o item simplesmente não aparece.
+  const todosProdutos=db.produtosLista||[];
+  const destinosVisiveis=(()=>{
+    const t=foldNome(buscaDestino);
+    if(!t)return gruposCandidatos.slice(0,12);
+    return todosProdutos.filter((p:any)=>foldNome(p.nome||"").includes(t)).slice(0,30);
+  })();
 
   const prodDestino=destino?(db.produtosLista||[]).find((p:any)=>p.id===destino):null;
   const baseEfetiva=prodDestino?unidadeBaseDo(prodDestino):unidadeBase;
@@ -12095,7 +12112,7 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
       });
     }
     setMsg(`${sel.size} marca(s) em "${nome}" — o grupo conta em ${baseEfetiva}.`);
-    setSel(new Set());setRend({});setNomeNovo("");
+    setSel(new Set());setRend({});setNomeNovo("");setBuscaDestino("");
   };
 
   // ⚠️ Trocar a unidade do grupo CONVERTE as declarações de cada marca: "1 un =
@@ -12198,10 +12215,36 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
 
     {!!sel.size&&<div style={{marginTop:12,padding:12,background:"var(--bg2)",borderRadius:10}}>
       <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Mandar {sel.size} marca(s) para</div>
-      <select className="inp" value={destino} onChange={e=>setDestino(e.target.value)} style={{marginBottom:8}}>
-        <option value="">+ criar produto novo</option>
-        {gruposCandidatos.map((p:any)=><option key={p.id} value={p.id}>{p.nome} ({(p.mpVinculados||[]).length} marca(s), conta em {unidadeBaseDo(p)})</option>)}
-      </select>
+      {prodDestino
+        ?<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",
+            border:"1px solid var(--btnPrimary)",background:"var(--accLight)",borderRadius:9,padding:"9px 12px",marginBottom:8}}>
+            <span style={{fontSize:13.5}}><b>{prodDestino.nome}</b>
+              <span style={{color:"var(--text2)",fontSize:12}}> · {(prodDestino.mpVinculados||[]).length} marca(s)</span></span>
+            <button onClick={()=>{setDestino("");setBuscaDestino("");}} className="btn"
+              style={{padding:"5px 12px",fontSize:12}}>trocar</button>
+          </div>
+        :<>
+          {/* Busca LIVRE em toda a lista de compras, não só nos sugeridos. */}
+          <input className="inp" value={buscaDestino} onChange={e=>setBuscaDestino(e.target.value)}
+            placeholder={`Buscar produto da lista… (${todosProdutos.length} cadastrados)`}
+            style={{marginBottom:6}}/>
+          <div style={{maxHeight:190,overflowY:"auto",border:"1px solid var(--border)",borderRadius:9,marginBottom:8,background:"var(--bg3)"}}>
+            <div onClick={()=>{setDestino("");setBuscaDestino("");}}
+              style={{padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid var(--bg2)",fontSize:13.5,fontWeight:600,color:"var(--btnPrimary)"}}>
+              + criar produto novo
+            </div>
+            {!buscaDestino.trim()&&!!gruposCandidatos.length&&
+              <div style={{padding:"6px 12px",fontSize:10.5,color:"var(--text3)",textTransform:"uppercase" as const,letterSpacing:.5,background:"var(--bg2)"}}>sugeridos pela busca</div>}
+            {destinosVisiveis.map((p:any)=><div key={p.id} onClick={()=>setDestino(p.id)}
+              style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid var(--bg2)",fontSize:13.5}}>
+              {p.nome}
+              <span style={{color:"var(--text3)",fontSize:11.5}}> · {(p.mpVinculados||[]).length} marca(s) · conta em {unidadeBaseDo(p)}</span>
+            </div>)}
+            {!destinosVisiveis.length&&<div style={{padding:"9px 12px",fontSize:12.5,color:"var(--text3)"}}>
+              {buscaDestino.trim()?"Nenhum produto da lista com esse nome — use \"criar produto novo\".":"Digite para buscar em toda a lista de compras."}
+            </div>}
+          </div>
+        </>}
       {!destino&&<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
         <input className="inp" placeholder="Nome do produto único" value={nomeNovo}
           onChange={e=>setNomeNovo(e.target.value)} style={{marginBottom:0,flex:"1 1 180px"}}/>

@@ -64,3 +64,26 @@ test('a troca de unidade passa pelos DOIS caminhos de gravação', () => {
   assert.ok(bloco.includes('produtosLista:r.produtosLista'), 'só produtosLista no caminho compartilhado');
   assert.ok(bloco.includes('materiasPrimas:r.materiasPrimas'), 'só materiasPrimas no caminho por empresa');
 });
+
+test('o destino busca em TODA a lista de compras, não só nos sugeridos', () => {
+  // ⚠️ Antes o destino era um <select> alimentado só pelos grupos que casavam
+  // com a busca das MARCAS. Mandar um creme de leite para um produto chamado
+  // "Laticínios" era impossível: ele nunca aparecia na lista, e não havia como
+  // descobrir isso pela tela — o item simplesmente não estava lá.
+  assert.ok(CARD.includes('const todosProdutos=db.produtosLista||[]'),
+    'o destino tem que poder ver a lista inteira');
+  assert.ok(/destinosVisiveis/.test(CARD), 'falta a lista filtrada do destino');
+  assert.ok(!/<select className="inp" value=\{destino\}/.test(CARD),
+    'o <select> preso aos sugeridos voltou');
+});
+
+test('a sugestão continua sendo o atalho, sem virar a única opção', () => {
+  const bloco = CARD.slice(CARD.indexOf('const destinosVisiveis'), CARD.indexOf('const prodDestino'));
+  assert.ok(bloco.includes('gruposCandidatos'), 'com a busca vazia, os sugeridos abrem a lista');
+  assert.ok(bloco.includes('todosProdutos.filter'), 'digitando, procura em tudo');
+});
+
+test('dá pra trocar o destino depois de escolher', () => {
+  // Sem isso, errar o destino obrigava a limpar a seleção inteira e recomeçar.
+  assert.ok(CARD.includes('>trocar<'), 'falta o botão de trocar o destino');
+});
