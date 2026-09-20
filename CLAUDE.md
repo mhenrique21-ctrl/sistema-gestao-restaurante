@@ -1317,6 +1317,26 @@ Ele mora na mesma coleção que o insumo comprado (§6, "cinco tipos, uma
 coleção"); agrupá-lo ligaria a fornada ao saldo do que se compra, e só a
 contagem física denunciaria.
 
+⚠️ **O CAMPO "1 un = ___ g" NÃO PODE DEPENDER DO QUE SE DIGITA NELE.** Foi o
+bug de 20/09/2026: a visibilidade do input vinha de
+`rendimentoDaMarca(marcada && digitado>0 ? {...} : mp)`, então ao digitar o "9"
+de "900" o rendimento deixava de ser `null`, a linha trocava para o texto verde
+de confirmação e o **input desaparecia no meio da digitação** — gravando 9 onde
+deviam entrar 900. Agora `auto` sai **só do que está gravado na marca**, o campo
+fica aberto enquanto a marca estiver marcada, e vem **preenchido com o valor já
+salvo** (sem isso, uma declaração errada não teria como ser corrigida).
+`src/agruparMarcasTela.test.js` lê o `App.tsx` e reprova quem reintroduzir —
+nem o build nem o TypeScript acusam, é JSX válido.
+
+⚠️ **Trocar a unidade do grupo CONVERTE as declarações** (`trocarUnidadeBase`).
+`porUnidadeBase` é declarado **na unidade do grupo**: trocar g→kg sem mexer
+nelas faria "1 un = 900" passar a significar 900 kg, e o saldo ficaria mil vezes
+maior continuando plausível. Sem conversão entre as duas unidades a declaração é
+**apagada** e a marca volta a ser pendência — manter um número sem significado é
+pior que pedir de novo, porque o grupo continuaria somando com ele. E a unidade
+é editável **num grupo que já existe**: antes só se escolhia na criação, e um
+grupo criado em "un" ficava preso nela.
+
 ⚠️ **A gravação vai por DOIS caminhos, e não é estilo:** `produtosLista` é
 compartilhado entre as empresas e sai por `applyBothProdutos` (§3);
 `materiasPrimas` é por empresa e sai por `setDbAndSave`. Escrever os dois no

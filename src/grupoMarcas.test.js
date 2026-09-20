@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   rendimentoDaMarca, ultimaCompra, marcaNoGrupo, custoDoGrupo, saldoDoGrupo,
   buscarMarcas, agruparMarcas, desagruparMarca, marcasDoGrupo, unidadeBaseDo,
-  custoParaUnidade, ratearEntreMarcas, grupoDoInsumo, grupoDaMarca,
+  custoParaUnidade, ratearEntreMarcas, grupoDoInsumo, grupoDaMarca, trocarUnidadeBase,
 } from './grupoMarcas.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -348,5 +348,53 @@ describe('achar o grupo de um insumo de ficha', () => {
   test('grupo sem marca nenhuma não conta como grupo', () => {
     const vazio = { ...DB, produtosLista: [{ id: 'p2', nome: 'X', mpVinculados: [] }] };
     assert.equal(grupoDoInsumo(vazio, { prodListaId: 'p2' }), null);
+  });
+});
+
+describe('trocar a unidade em que o grupo conta', () => {
+  const DB = {
+    produtosLista: [{ id: 'g', nome: 'Nescau', unidadeBase: 'g', mpVinculados: ['a', 'b'] }],
+    materiasPrimas: [
+      { id: 'a', nome: 'lata 395g', unidade: 'un', porUnidadeBase: 395, estoqueAtual: 2, ultimoValor: 8.49 },
+      { id: 'b', nome: '2,1kg', unidade: 'kg', estoqueAtual: 6.3, ultimoValor: 17.5714 },
+    ],
+  };
+
+  test('CONVERTE as declarações — senão 900 viraria 900 kg', () => {
+    // ⚠️ `porUnidadeBase` é declarado na unidade do GRUPO. Trocando g→kg sem
+    // mexer nele, o saldo ficaria mil vezes maior e continuaria plausível.
+    const r = trocarUnidadeBase(DB, 'g', 'kg');
+    assert.equal(r.materiasPrimas.find((m) => m.id === 'a').porUnidadeBase, 0.395);
+    assert.equal(r.produtosLista[0].unidadeBase, 'kg');
+    // A marca que não declarava nada continua não declarando: kg→kg sai da
+    // conversão de família sozinho.
+    assert.equal(r.materiasPrimas.find((m) => m.id === 'b').porUnidadeBase, undefined);
+  });
+
+  test('o saldo do grupo continua o mesmo, só muda a régua', () => {
+    const antes = saldoDoGrupo(marcasDoGrupo(DB, DB.produtosLista[0]), 'g', []).saldoBase;
+    const r = trocarUnidadeBase(DB, 'g', 'kg');
+    const dbNovo = { ...DB, produtosLista: r.produtosLista, materiasPrimas: r.materiasPrimas };
+    const depois = saldoDoGrupo(marcasDoGrupo(dbNovo, r.produtosLista[0]), 'kg', []).saldoBase;
+    assert.equal(antes, 7090);            // 2×395 + 6,3×1000
+    assert.equal(depois, 7.09);           // os mesmos, em kg
+  });
+
+  test('sem conversão possível, a declaração é APAGADA e vira pendência', () => {
+    // ⚠️ Manter um número sem significado é pior que pedir de novo: o grupo
+    // continuaria somando com ele.
+    const r = trocarUnidadeBase(DB, 'g', 'un');
+    assert.deepEqual(r.avisos, ['lata 395g']);
+    assert.equal(r.materiasPrimas.find((m) => m.id === 'a').porUnidadeBase, undefined);
+  });
+
+  test('trocar para a mesma unidade não mexe em nada', () => {
+    const r = trocarUnidadeBase(DB, 'g', 'g');
+    assert.deepEqual(r.avisos, []);
+    assert.equal(r.materiasPrimas.find((m) => m.id === 'a').porUnidadeBase, 395);
+  });
+
+  test('grupo que não existe devolve null', () => {
+    assert.equal(trocarUnidadeBase(DB, 'nao-existe', 'kg'), null);
   });
 });

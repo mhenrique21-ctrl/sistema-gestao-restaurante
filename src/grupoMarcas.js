@@ -290,3 +290,39 @@ export function grupoDoInsumo(db, insumo) {
 }
 
 function r3(n) { return Math.round((n || 0) * 1000) / 1000; }
+
+// ── Trocar a unidade em que o grupo conta ───────────────────────────────────
+// ⚠️ `porUnidadeBase` é declarado NA UNIDADE DO GRUPO. Trocar a unidade sem
+// mexer nas declarações faria "1 un = 900" passar a significar 900 kg em vez de
+// 900 g — o saldo do grupo ficaria mil vezes maior, e continuaria parecendo um
+// número. Por isso a troca CONVERTE cada declaração.
+export function trocarUnidadeBase(db, prodId, novaBase) {
+  const prod = (db?.produtosLista || []).find((p) => p.id === prodId);
+  if (!prod || !novaBase) return null;
+  const antiga = unidadeBaseDo(prod);
+  const agora = new Date().toISOString();
+  if (antiga === novaBase) return { produtosLista: db.produtosLista, materiasPrimas: db.materiasPrimas, avisos: [] };
+
+  const fator = converterQtd(1, antiga, novaBase);
+  const ids = new Set(prod.mpVinculados || []);
+  const avisos = [];
+
+  const materiasPrimas = (db?.materiasPrimas || []).map((m) => {
+    if (!ids.has(m.id) || !(num(m.porUnidadeBase) > 0)) return m;
+    if (fator == null) {
+      // ⚠️ Sem conversão entre as duas unidades, a declaração antiga não quer
+      // dizer nada na nova. Ela é APAGADA e a marca volta a ser pendência —
+      // manter um número sem significado é pior que pedir de novo, porque o
+      // grupo continuaria somando com ele.
+      avisos.push(m.nome);
+      const { porUnidadeBase, ...resto } = m;
+      return { ...resto, atualizadoEm: agora };
+    }
+    return { ...m, porUnidadeBase: r3(num(m.porUnidadeBase) * fator), atualizadoEm: agora };
+  });
+
+  const produtosLista = (db?.produtosLista || []).map((p) => (p.id !== prodId ? p
+    : { ...p, unidadeBase: novaBase, unidade: p.unidade || novaBase, atualizadoEm: agora }));
+
+  return { produtosLista, materiasPrimas, avisos, fator };
+}

@@ -20,7 +20,7 @@ import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
-import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo} from "./grupoMarcas.js";
+import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase} from "./grupoMarcas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -12098,6 +12098,30 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
     setSel(new Set());setRend({});setNomeNovo("");
   };
 
+  // ⚠️ Trocar a unidade do grupo CONVERTE as declarações de cada marca: "1 un =
+  // 900" está em gramas, e sem converter passaria a significar 900 kg — o saldo
+  // ficaria mil vezes maior e continuaria parecendo um número.
+  const trocarBase=(prod:any,nova:string)=>{
+    const previa=trocarUnidadeBase(db,prod.id,nova);
+    if(!previa)return;
+    const perde=previa.avisos||[];
+    if(perde.length&&!confirm(
+      `"${prod.nome}" conta em ${unidadeBaseDo(prod)} e vai passar a contar em ${nova}.\n\n`
+      +`${perde.length} marca(s) declararam quanto rendem em ${unidadeBaseDo(prod)}, e não há conversão para ${nova}:\n`
+      +perde.map((n:string)=>`· ${n}`).join("\n")
+      +`\n\nA declaração delas será APAGADA e você precisa informar de novo. Continuar?`))return;
+    applyBothProdutos(setState,setDb,(d:any)=>{
+      const r=trocarUnidadeBase(d,prod.id,nova);
+      return r?{...d,produtosLista:r.produtosLista}:d;
+    });
+    (setDbAndSave||setDb)((d:any)=>{
+      const r=trocarUnidadeBase(d,prod.id,nova);
+      return r?{...d,materiasPrimas:r.materiasPrimas}:d;
+    });
+    setRend({});
+    setMsg(`"${prod.nome}" passou a contar em ${nova}.`);
+  };
+
   const desagrupar=(prodId:string,mpId:string,nome:string)=>{
     if(!confirm(`Tirar "${nome}" do grupo?\n\nA marca continua existindo, com o saldo e o histórico dela — só deixa de somar neste produto.`))return;
     applyBothProdutos(setState,setDb,(d:any)=>({...d,produtosLista:desagruparMarca(d,prodId,mpId).produtosLista}));
@@ -12125,7 +12149,15 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
       <div style={{fontSize:11,color:"var(--text3)",margin:"4px 0 6px"}}>{achados.length} marca(s) — marque as que são o mesmo produto</div>
       {achados.map(({mp,grupo}:any)=>{
         const marcada=sel.has(mp.id);
-        const r=rendimentoDaMarca(marcada&&parseFloat(rend[mp.id])>0?{...mp,porUnidadeBase:parseFloat(rend[mp.id])}:mp,baseEfetiva);
+        // ⚠️ `auto` é calculado SÓ com o que está gravado na marca — nunca com
+        // o que está sendo digitado. Foi exatamente isso que quebrou: a
+        // visibilidade do campo dependia do valor do próprio campo, então ao
+        // digitar o primeiro dígito o rendimento deixava de ser null, a linha
+        // trocava para o texto verde e o input DESAPARECIA no meio da digitação.
+        // Campo cuja existência depende do que se digita nele é sempre bug.
+        const auto=rendimentoDaMarca(mp,baseEfetiva);
+        const digitado=parseFloat(rend[mp.id]);
+        const efetivo=digitado>0?digitado:auto;
         return <div key={mp.id} style={{borderBottom:"1px solid var(--bg2)",padding:"8px 0"}}>
           <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
             <input type="checkbox" checked={marcada} onChange={()=>toggle(mp.id)} style={{marginTop:3,width:18,height:18,flexShrink:0}}/>
@@ -12135,17 +12167,29 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
                 {num(mp.estoqueAtual||0,2)} {mp.unidade||"un"} · {fmtMoney(mp.ultimoValor||0)}/{mp.unidade||"un"}
                 {grupo&&<> · <span style={{color:"var(--infoText)"}}>já em "{grupo.nome}"</span></>}
               </div>
-              {marcada&&r==null&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,flexWrap:"wrap"}}>
-                <span style={{fontSize:11.5,color:"var(--warningText)"}}>1 {mp.unidade||"un"} =</span>
-                <input className="inp" type="number" value={rend[mp.id]||""} placeholder="?"
-                  onChange={e=>setRend(x=>({...x,[mp.id]:e.target.value}))}
-                  style={{marginBottom:0,width:90,padding:"5px 8px",fontSize:12.5}}/>
-                <span style={{fontSize:11.5,color:"var(--warningText)"}}>{baseEfetiva}</span>
-              </div>}
-              {marcada&&r!=null&&<div style={{fontSize:11,color:"var(--successText)",marginTop:4,...MONO}}>
-                1 {mp.unidade||"un"} = {num(r,r>=10?0:3)} {baseEfetiva}
-                {mp.ultimoValor>0&&<> · {fmtMoney(mp.ultimoValor/r)}/{baseEfetiva}</>}
-              </div>}
+              {/* O campo fica SEMPRE aberto enquanto a marca está marcada: é
+                  assim que dá pra corrigir uma declaração errada já salva, e é
+                  o que impede o input de sumir no meio da digitação. */}
+              {marcada&&<>
+                <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,flexWrap:"wrap"}}>
+                  <span style={{fontSize:11.5,color:"var(--text2)"}}>1 {mp.unidade||"un"} =</span>
+                  <input className="inp" type="number" inputMode="decimal" step="any"
+                    value={rend[mp.id]??(mp.porUnidadeBase>0?String(mp.porUnidadeBase):"")}
+                    placeholder={auto!=null?String(num(auto,auto>=10?0:3)):"quanto?"}
+                    onChange={e=>setRend(x=>({...x,[mp.id]:e.target.value}))}
+                    style={{marginBottom:0,width:110,padding:"5px 8px",fontSize:12.5}}/>
+                  <span style={{fontSize:11.5,color:"var(--text2)"}}>{baseEfetiva}</span>
+                  {digitado>0&&<button onClick={()=>setRend(x=>{const n={...x};delete n[mp.id];return n;})}
+                    style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--text3)",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>limpar</button>}
+                </div>
+                <div style={{fontSize:11,marginTop:4,...MONO,color:efetivo!=null?"var(--successText)":"var(--warningText)"}}>
+                  {efetivo==null
+                    ?<>sem isto a marca fica FORA da soma do grupo</>
+                    :<>1 {mp.unidade||"un"} = {num(efetivo,efetivo>=10?0:3)} {baseEfetiva}
+                      {digitado<=0&&auto!=null&&mp.porUnidadeBase>0?" (salvo)":digitado<=0&&auto!=null?" (automático)":""}
+                      {mp.ultimoValor>0&&<> · {fmtMoney(mp.ultimoValor/efetivo)}/{baseEfetiva}</>}</>}
+                </div>
+              </>}
             </div>
           </div>
         </div>;
@@ -12163,6 +12207,13 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
           onChange={e=>setNomeNovo(e.target.value)} style={{marginBottom:0,flex:"1 1 180px"}}/>
         <select className="inp" value={unidadeBase} onChange={e=>setUnidadeBase(e.target.value)} style={{marginBottom:0,width:110}}>
           {UNIDADES.map(u=><option key={u} value={u}>conta em {u}</option>)}
+        </select>
+      </div>}
+      {!!prodDestino&&<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+        <span style={{fontSize:12.5,color:"var(--text2)"}}>"{prodDestino.nome}" conta em</span>
+        <select className="inp" value={baseEfetiva} onChange={e=>trocarBase(prodDestino,e.target.value)}
+          style={{marginBottom:0,width:90}}>
+          {UNIDADES.map(u=><option key={u} value={u}>{u}</option>)}
         </select>
       </div>}
 
