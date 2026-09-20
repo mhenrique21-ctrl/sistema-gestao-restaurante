@@ -46,6 +46,7 @@ src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
 src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com testes)
+src/dre.js            as fatias da barra da DRE e o aviso do CMV vazio (com testes)
 src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
@@ -1107,6 +1108,60 @@ o auto-fetch acima consulta.
 ### Financeiro
 Contas · + Novo · DRE · Categorias. A DRE tem toggle **Semanal / Mensal / Período livre**;
 em modo semanal, contas de grupo recorrente mensal entram **rateadas por dia**.
+
+#### A DRE remodelada — `src/dre.js` (com testes)
+
+Ela tinha **quatro cartões no topo repetindo quatro linhas da tabela logo
+abaixo**, quatro cards empilhados com tudo sempre aberto, e no rodapé um bloco
+"Para cada R$ 100 vendidos" que era a mesma informação dos cartões, numa
+terceira forma. Virou: uma **frase**, uma **barra**, uma **tabela** e o ponto de
+equilíbrio em uma linha.
+
+⚠️ **O RECORTE SEM COMPRA É O ERRO DE LEITURA MAIS CARO DESTA TELA.** Em
+14–19/09/2026 a DRE do dono mostrava `Total CMV R$ 0,00` e, três centímetros
+abaixo, `Realizado R$ 3.725,82` — números de recortes diferentes (a linha lê o
+período escolhido, o card do budget lê o mês) e **nada na tela ligava os dois**.
+Com CMV zero o Lucro Bruto sai igual à Receita Líquida e o Lucro Líquido aparece
+como **48% de margem**. `conferirCmv` tem duas alturas de propósito: **aviso**
+quando não há compra nenhuma (erro garantido, com atalho "ver o mês inteiro") e
+uma **nota de uma linha** quando o recorte é curto mas tem compra. Gritar nos
+dois é o jeito de ninguém mais ler nenhum.
+
+⚠️ **A tela abre em MÊS** (decisão do dono, 20/09/2026), não mais em período
+livre. Compra é irregular (a nota chega num dia) e venda é diária: o mês é o
+menor recorte em que as duas costumam se encontrar.
+
+⚠️ **AS LARGURAS DA BARRA FECHAM 100% POR CONSTRUÇÃO** (`fatiasDaReceita`), com
+o resíduo do arredondamento na última fatia. A versão antiga somava cinco
+porcentagens calculadas em separado e precisava de uma linha **"restante não
+alocado"** — ela já sabia que não fechava.
+
+⚠️ **PREJUÍZO NÃO ENCOLHE A BARRA.** Quando o custo passa da receita, a régua
+das larguras passa a ser o custo total e o que faltou vira número escrito.
+Desenhar 130% de custo numa barra de 100% mostraria uma sobra que não existe.
+A **porcentagem** de cada fatia continua sendo sobre a receita.
+
+⚠️ **A fatia de CMV zerado fica na lista com largura ZERO**, não some: sumindo,
+a barra pareceria completa e ninguém notaria o buraco — que é justamente o que
+precisa ser notado.
+
+⚠️ **NÃO existe texto dentro das fatias.** A fatia fina não tem largura para
+texto nenhum, e o número dentro obrigaria cada cor a ter contraste de texto
+próprio. Rótulo, valor e porcentagem moram na **legenda**, sobre o fundo do
+card — que é também o que faz a barra sobreviver à impressão (§8), onde o
+navegador não imprime fundo colorido.
+
+⚠️ **`CORES_DRE` é MEDIDA** (`src/coresDre.test.js`, lendo o `App.tsx`): pior par
+ΔE **18,3** com visão normal e **16,9** sob deuteranopia — as duas acima do piso
+de 15, e a segunda bem acima dos 9,1 da `CORES_REL`. Cada cor fica a ΔE ≥ 15 dos
+**dois fundos reais**, senão uma fatia de 2% leria como trilho vazio. A primeira
+tentativa (laranja para taxa, amarelo para CMV) media **5,9** sob daltonismo:
+laranja e amarelo colapsam, e na barra empilhada **todo par é adjacente**.
+
+⚠️ **O detalhe fica atrás de um "ver N"**, só a despesa aberta por padrão. Tudo
+aberto é o que fazia a tela ser, ao mesmo tempo, longa e vazia: muita linha de
+valor pequeno e nenhum lugar onde o olho descanse. A folha continua abrindo
+**por funcionário** — sem isso ela é um número que ninguém consegue conferir.
 
 ### Estoque
 Inventário · Contagem · Análise · Movimentações · Projeção de compras · Saldo

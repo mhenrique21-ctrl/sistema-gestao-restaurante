@@ -26,6 +26,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
+import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia} from "./dre.js";
 
 // ===================== STORAGE =====================
 const STORAGE_KEY = "gestao_app_v4";
@@ -1154,6 +1155,20 @@ function gerarRelatorioHTML(titulo,empresa,conteudo) {
 // ⚠️ A cor sai da POSIÇÃO do canal em `CANAIS`, nunca do ranking: um período em
 // que o iFood passe o balcão não pode repintar os dois.
 const CORES_REL=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#4a3aa7"];
+// As cinco fatias da barra da DRE — onde foi cada real que entrou.
+//
+// ⚠️ MEDIDAS, não escolhidas (§9). Pior par com visão normal ΔE 18,3; sob
+// deuteranopia 16,9 — as duas acima do piso de 15, e a segunda bem acima dos
+// 9,1 da CORES_REL. Cada uma também fica a ΔE ≥ 15 dos DOIS fundos reais
+// (card branco e creme da página), senão uma fatia fina sumiria dentro do
+// trilho da barra. `src/coresDre.test.js` mede lendo este arquivo.
+//
+// ⚠️ NÃO existe texto DENTRO das fatias. A porcentagem mora na legenda, sobre
+// o fundo do card: dentro do preenchimento ela obrigaria cada fatia a ter
+// contraste de texto próprio, e a fatia fina não tem largura para nenhum
+// texto. É também o que faz a barra sobreviver à impressão (§8), onde o
+// navegador não imprime fundo colorido e só a legenda escrita resta.
+const CORES_DRE={taxa:"#9d174d",cmv:"#e0a82e",despesa:"#6d28d9",imposto:"#155e75",sobra:"#4d7c0f"};
 const MONO_REL={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
 // ⚠️ A MESMA chave do `vendasPorItem`: código do Eclética quando existe, nome
 // normalizado quando não. Escrever uma variação aqui faria o produto casar no
@@ -19269,7 +19284,11 @@ function DREComp({db,setDb,empresa}){
   // semana e mês apenas CALCULAM de/até a partir de uma data de referência.
   // Todo o resto da DRE segue lendo de/ate pelo mesmo inPer de sempre, então
   // nenhuma fórmula precisou ser duplicada por período.
-  const [modoPeriodo,setModoPeriodo]=useState("livre");
+  // ⚠️ Abre em MÊS (decisão do dono, 20/09/2026). No recorte curto a compra
+  // quase nunca cai dentro, o CMV sai zero e a margem aparece dobrada — foi o
+  // que aconteceu em 14–19/09. O mês é o menor recorte em que compra e venda
+  // costumam se encontrar.
+  const [modoPeriodo,setModoPeriodo]=useState("mes");
   const [refPeriodo,setRefPeriodo]=useState(today());
   useEffect(()=>{
     if(modoPeriodo==="livre")return;
@@ -19277,6 +19296,13 @@ function DREComp({db,setDb,empresa}){
     setDe(r.inicio); setAte(r.fim);
   },[modoPeriodo,refPeriodo]);
   const andarPeriodo=(passo:number)=>setRefPeriodo(p=>deslocarPeriodo(modoPeriodo==="semana"?"semana":"mes",p,passo));
+  // O detalhe de cada linha fica recolhido. Aberto por padrão só a despesa —
+  // é o bloco em que a pessoa mexe. Tudo aberto é o que fazia a tela antiga
+  // ser, ao mesmo tempo, longa e vazia: muita linha de valor pequeno e nenhum
+  // lugar onde o olho descanse.
+  const [abertos,setAbertos]=useState<Set<string>>(new Set(["despesa"]));
+  const alterna=(k:string)=>setAbertos(x=>{const n=new Set(x);n.has(k)?n.delete(k):n.add(k);return n;});
+  const verMesInteiro=()=>{setRefPeriodo(de);setModoPeriodo("mes");};
   const inPer=(dt)=>!dt||(dt>=de&&dt<=ate);
   const sn=db.config?.snAliquota??6;
   const setSn=(v)=>setDb(d=>({...d,config:{...(d.config||{}),snAliquota:parseFloat(v)||0}}));
@@ -19395,6 +19421,50 @@ function DREComp({db,setDb,empresa}){
       <span style={{fontSize:indent?12:13,color:indent?"var(--text2)":"var(--text)",fontWeight:bold?700:400,flex:1}}>{label}</span>
       <span style={{fontSize:12,color:"var(--text3)",marginRight:8,minWidth:42,textAlign:"right"}}>{pct(pctVal??value)}</span>
       <span style={{fontWeight:bold?700:600,color:color??col(value),fontSize:bold?14:13,minWidth:90,textAlign:"right"}}>{fmtMoney(value)}</span>
+    </div>
+  );
+
+  // A linha de SUBTRAÇÃO da cascata, com o detalhe atrás de um "ver N".
+  const LinhaDre=({label,value,pctBase,neg=false,aberto=false,onToggle,quantos=0}:
+    {label:string,value:number,pctBase:number,neg?:boolean,aberto?:boolean,onToggle?:()=>void,quantos?:number})=>(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid var(--bg2)"}}>
+      <span style={{fontSize:13,flex:1,minWidth:0}}>
+        {label}
+        {!!onToggle&&!!quantos&&<button onClick={onToggle}
+          style={{border:"none",background:"none",cursor:"pointer",font:"inherit",fontSize:11.5,color:"var(--acc)",padding:"0 0 0 6px"}}>
+          {aberto?"esconder":`ver ${quantos}`}
+        </button>}
+      </span>
+      <span style={{fontSize:11.5,color:"var(--text3)",minWidth:44,textAlign:"right"}}>{pctBase>0?`${((value/pctBase)*100).toFixed(1)}%`:"—"}</span>
+      <span style={{fontWeight:600,minWidth:100,textAlign:"right",fontSize:13,color:neg&&value>0?"var(--btnDanger)":"var(--text)",
+        fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const}}>{fmtMoney(value)}</span>
+    </div>
+  );
+
+  // O detalhe de uma linha. `sub` é o segundo nível — hoje só a folha, que abre
+  // por funcionário: sem isso ela é um número que ninguém consegue conferir.
+  const Detalhe=({itens,sub}:{itens:{[k:string]:number},sub?:{[k:string]:{[q:string]:number}}})=>(
+    <div style={{borderLeft:"2px solid var(--border)",margin:"0 0 8px 10px",paddingLeft:12}}>
+      {Object.entries(itens).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
+        <div key={k}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,padding:"3px 0",fontSize:12,color:"var(--text2)"}}>
+            <span style={{flex:1,minWidth:0}}>{k}</span>
+            <span style={{fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const}}>{fmtMoney(v)}</span>
+          </div>
+          {sub?.[k]&&Object.keys(sub[k]).length>0&&
+            <div style={{borderLeft:"2px solid var(--bg2)",margin:"2px 0 4px 6px",paddingLeft:10}}>
+              {Object.entries(sub[k]).sort((a,b)=>b[1]-a[1]).map(([quem,val])=>(
+                <div key={quem} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"2px 0",fontSize:11.5,
+                  color:quem.startsWith("(")?"var(--infoText)":"var(--text3)"}}>
+                  <span style={{flex:1,minWidth:0}}>{quem}</span>
+                  <span style={{fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const}}>{fmtMoney(val)}</span>
+                </div>
+              ))}
+            </div>}
+        </div>
+      ))}
+      {!Object.keys(itens).filter((k)=>itens[k]>0).length&&
+        <div style={{fontSize:11.5,color:"var(--text3)",padding:"3px 0"}}>nada lançado neste período</div>}
     </div>
   );
 
@@ -19519,78 +19589,103 @@ function DREComp({db,setDb,empresa}){
       </div>
     </div>
 
-    {/* Summary cards */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-      {[
-        {label:"Vendas Brutas",v:vendasBrutas,c:"#1D4ED8"},
-        {label:"Lucro Bruto",v:lucroBruto,c:col(lucroBruto)},
-        {label:"Resultado Op.",v:resultadoOp,c:col(resultadoOp)},
-        {label:"Lucro Líquido",v:lucroLiq,c:col(lucroLiq)},
-      ].map(({label,v,c})=>(
-        <div key={label} className="card" style={{padding:"12px",textAlign:"center"}}>
-          <div style={{fontWeight:700,fontSize:15,color:c}}>{fmtMoney(v)}</div>
-          <div className="muted" style={{fontSize:11}}>{label}</div>
+    {/* ── A FRASE, A BARRA E O AVISO ─────────────────────────────────────
+        Substitui os 4 cartões do topo E o "Para cada R$ 100 vendidos" que
+        ficava no rodapé: eram a mesma informação em dois lugares, e nenhum
+        dos dois mostrava PROPORÇÃO. */}
+    {(()=>{
+      const barra=fatiasDaReceita({vendasBrutas,despVendas,totalCMV,totalDesp,imposto,lucroLiq});
+      const cmvOk=conferirCmv(db.compras||[],de,ate);
+      const dias=diasNoIntervalo(de,ate);
+      const MN={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+      const ROTULO:any={taxa:"Taxas das plataformas",cmv:"Insumos vendidos (CMV)",despesa:"Despesas",imposto:`Simples Nacional (${sn}%)`};
+      return <div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:14.5,lineHeight:1.5,color:"var(--text2)"}}>
+          De <b style={{color:"var(--text)",...MN}}>{fmtMoney(vendasBrutas)}</b> que {vendasBrutas>0?"entrou":"entraria"} em {dias} dia{dias===1?"":"s"}, {lucroLiq>=0?"sobrou":"faltou"}
+          <span style={{display:"block",fontSize:32,fontWeight:800,letterSpacing:"-.02em",margin:"2px 0",color:col(lucroLiq),...MN}}>
+            {fmtMoney(Math.abs(lucroLiq))}
+          </span>
+          <span style={{fontSize:12.5,color:"var(--text3)"}}>
+            {vendasBrutas>0
+              ?<>{Math.round(Math.abs(lucroLiq)/vendasBrutas*100)} centavos de cada real {lucroLiq>=0?"vendido":"a mais do que entrou"}</>
+              :<>nenhuma venda lançada neste período</>}
+            {dias>0&&<> · <b>{fmtMoney(porDia(lucroLiq,de,ate))}</b> por dia</>}
+          </span>
         </div>
-      ))}
-    </div>
 
-    {/* DRE Detalhado */}
-    <div className="card" style={{marginBottom:12}}>
-      <Row label="Receita Bruta" value={vendasBrutas} color="#1D4ED8" bold/>
-      {despVendas>0&&<Row label="(-) Taxas iFood/99food" value={despVendas} color="var(--btnDanger)" indent/>}
-      <Row label="= Receita Líquida" value={vendasLiq} bold/>
-      <div style={{padding:"8px 0 4px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>CMV — Custo das Mercadorias</div>
-      {Object.entries(cmvCats).filter(([,v])=>v>0).map(([k,v])=>(
-        <Row key={k} label={k} value={v} color="var(--btnDanger)" indent/>
-      ))}
-      <Row label="Total CMV" value={totalCMV} color="var(--btnDanger)" bold/>
-      {/* Realizado e Orçado/Projeção lado a lado, nunca um valor só (§6 da
-          spec): sozinho, o realizado não diz se o período vai fechar dentro
-          do orçamento — depende de quanto do período já passou. */}
-      {budgetDre&&budgetDre.orcadoTotal>0&&(()=>{
-        const st=statusPace(budgetDre.projecaoTotal,budgetDre.orcadoTotal);
-        return <div style={{background:"var(--bg4)",border:`1px solid ${PACE_INFO[st].cor}44`,borderRadius:10,padding:"10px 12px",margin:"8px 0 4px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6,gap:8,flexWrap:"wrap"}}>
-            <span style={{fontSize:11,fontWeight:700,color:"var(--text2)",textTransform:"uppercase",letterSpacing:.6}}>CMV vs. orçado</span>
-            <span className="tag" style={{background:`${PACE_INFO[st].cor}22`,color:PACE_INFO[st].cor,fontSize:10}}>{PACE_INFO[st].label}</span>
+        {vendasBrutas>0&&<>
+          {/* ⚠️ Sem texto dentro das fatias: a fina não tem largura pra texto
+              nenhum, e o número dentro obrigaria cada cor a ter contraste de
+              texto próprio. A legenda abaixo carrega rótulo, valor e %. */}
+          <div style={{display:"flex",height:32,borderRadius:9,overflow:"hidden",margin:"16px 0 10px",
+            border:"1px solid var(--border)",background:"var(--bg2)"}}>
+            {barra.fatias.filter((f:any)=>f.largura>0).map((f:any)=>
+              <div key={f.chave} title={`${ROTULO[f.chave]} — ${fmtMoney(f.valor)}`}
+                style={{width:`${f.largura}%`,background:(CORES_DRE as any)[f.chave]}}/>)}
+            {!barra.negativo&&barra.sobra.largura>0&&
+              <div title={`Sobrou — ${fmtMoney(barra.sobra.valor)}`} style={{width:`${barra.sobra.largura}%`,background:CORES_DRE.sobra}}/>}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-            {[["Realizado",budgetDre.realizadoTotal,"var(--text)"],["Projeção",budgetDre.projecaoTotal,PACE_INFO[st].cor],["Orçado",budgetDre.orcadoTotal,"var(--text2)"]].map(([lbl,val,cor]:any)=>(
-              <div key={lbl} style={{textAlign:"center"}}>
-                <div style={{fontSize:13.5,fontWeight:700,color:cor}}>{fmtMoney(val)}</div>
-                <div className="muted" style={{fontSize:10}}>{lbl}</div>
-              </div>
-            ))}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(168px,1fr))",gap:"6px 12px"}}>
+            {[...barra.fatias.map((f:any)=>({...f,rotulo:ROTULO[f.chave]})),
+              {chave:"sobra",rotulo:lucroLiq>=0?"Sobrou":"Faltou",valor:Math.abs(barra.sobra.valor),pct:Math.abs(barra.sobra.pct)}]
+              .map((f:any)=><div key={f.chave} style={{display:"flex",gap:7,alignItems:"baseline",fontSize:12,color:"var(--text2)"}}>
+                <i style={{width:10,height:10,borderRadius:3,flexShrink:0,position:"relative",top:1,
+                  background:(CORES_DRE as any)[f.chave],
+                  outline:f.chave==="cmv"&&f.valor<=0?"1px dashed var(--warningText)":"none"}}/>
+                <span style={{flex:1,minWidth:0}}>{f.rotulo}</span>
+                <b style={{color:"var(--text)",...MN}}>{fmtMoney(f.valor)}</b>
+                <span style={{color:"var(--text3)",...MN,minWidth:42,textAlign:"right"}}>{f.pct.toFixed(1)}%</span>
+              </div>)}
           </div>
-          <div className="muted" style={{fontSize:10.5,marginTop:6}}>
-            {periodoLabel("mes",de)} · {budgetDre.ritmo.decorridos} de {budgetDre.ritmo.total} dias. Ajuste o orçado em Compras → Budget.
-          </div>
-        </div>;
-      })()}
-      <Row label="= Lucro Bruto" value={lucroBruto} color={col(lucroBruto)} bold border={false}/>
-    </div>
+          {barra.negativo&&<div style={{fontSize:11.5,color:"var(--btnDanger)",marginTop:8}}>
+            As fatias acima preenchem a barra inteira porque o custo passou da receita em <b>{fmtMoney(barra.faltou)}</b>.
+            A porcentagem de cada uma continua sendo sobre o que entrou.
+          </div>}
+        </>}
 
-    {budgetDre&&<IndicativosPanel db={db} modo="mes" dataRef={de}/>}
-
-    <div className="card" style={{marginBottom:12}}>
-      <div style={{padding:"0 0 8px",fontSize:11,fontWeight:700,color:"var(--acc)",textTransform:"uppercase",letterSpacing:1}}>Despesas</div>
-      {Object.entries(despCats).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
-        <div key={k}>
-          <Row label={k} value={v} color="var(--btnDanger)" indent/>
-          {k===LINHA_FOLHA&&Object.keys(folhaPorFunc).length>0&&
-            <div style={{borderLeft:"2px solid var(--acc)",marginLeft:10,paddingLeft:12,marginBottom:6}}>
-              {Object.entries(folhaPorFunc).sort((a,b)=>b[1]-a[1]).map(([nome,val])=>(
-                <div key={nome} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"3px 0",fontSize:11.5,color:nome.startsWith("(")?"var(--infoText)":"var(--text2)"}}>
-                  <span style={{flex:1,minWidth:0}}>{nome}</span>
-                  <span style={{fontFamily:"monospace",fontVariantNumeric:"tabular-nums"}}>{fmtMoney(val)}</span>
-                </div>
-              ))}
+        {/* ⚠️ O recorte sem compra nenhuma é o erro de leitura mais caro desta
+            tela: o Lucro Bruto sai igual à Receita Líquida e a margem aparece
+            dobrada. Em 14–19/09/2026 era 48%. */}
+        {vendasBrutas>0&&cmvOk.nivel==="aviso"&&
+          <div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:10,padding:"11px 13px",fontSize:12.5,lineHeight:1.55,marginTop:12}}>
+            ⚠️ <b>Nenhuma compra lançada neste período</b>, então o CMV é zero e a fatia dos insumos não existe na barra.
+            Os {Math.round(Math.abs(lucroLiq)/vendasBrutas*100)}% acima <b>não são a sua margem</b> — eles ignoram todo o insumo que saiu da despensa.
+            {cmvOk.ofereceMes&&<> Em {periodoLabel("mes",de)} as compras somam <b>{fmtMoney(cmvOk.totalMes)}</b>.</>}
+            {cmvOk.ofereceMes&&<div style={{marginTop:8}}>
+              <button className="chip" onClick={verMesInteiro} style={{background:"var(--bg3)"}}>ver o mês inteiro</button>
             </div>}
-        </div>
-      ))}
-      {!Object.keys(despCats).length&&<div className="muted" style={{fontSize:12,paddingBottom:8}}>Nenhuma conta paga no período.</div>}
-      <Row label="Total Despesas" value={totalDesp} color="var(--btnDanger)" bold/>
-      {(foraDaDre>0||pendenteDaDre>0)&&<div style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:9,padding:"9px 11px",margin:"8px 0",fontSize:11,color:"var(--text2)"}}>
+          </div>}
+        {vendasBrutas>0&&cmvOk.nivel==="nota"&&
+          <div style={{fontSize:11.5,color:"var(--text3)",marginTop:10,lineHeight:1.5}}>
+            Compra é irregular e venda é diária: em {cmvOk.dias} dias o CMV ({fmtMoney(cmvOk.total)}, em {cmvOk.diasComCompra} dia{cmvOk.diasComCompra===1?"":"s"} de nota)
+            pode não corresponder ao insumo que saiu. O mês inteiro é a leitura mais firme.
+          </div>}
+      </div>;
+    })()}
+
+    {/* ── AS LINHAS ───────────────────────────────────────────────────── */}
+    <div className="card" style={{marginBottom:12}}>
+      <Row label="Receita bruta" value={vendasBrutas} color="var(--text)" bold/>
+      <LinhaDre label="− Taxas das plataformas" value={despVendas} pctBase={vendasBrutas} neg/>
+      <Row label="= Receita líquida" value={vendasLiq} bold/>
+
+      <LinhaDre label="− Insumos vendidos (CMV)" value={totalCMV} pctBase={vendasBrutas} neg
+        aberto={abertos.has("cmv")} onToggle={Object.keys(cmvCats).length?()=>alterna("cmv"):undefined}
+        quantos={Object.keys(cmvCats).length}/>
+      {abertos.has("cmv")&&<Detalhe itens={cmvCats}/>}
+      <Row label="= Lucro bruto" value={lucroBruto} color={col(lucroBruto)} bold/>
+
+      <LinhaDre label="− Despesas" value={totalDesp} pctBase={vendasBrutas} neg
+        aberto={abertos.has("despesa")} onToggle={Object.keys(despCats).length?()=>alterna("despesa"):undefined}
+        quantos={Object.keys(despCats).length}/>
+      {abertos.has("despesa")&&<Detalhe itens={despCats} sub={{[LINHA_FOLHA]:folhaPorFunc}}/>}
+      {!Object.keys(despCats).length&&<div className="muted" style={{fontSize:12,padding:"2px 0 8px"}}>Nenhuma conta paga no período.</div>}
+      <Row label="= Resultado operacional" value={resultadoOp} color={col(resultadoOp)} bold/>
+
+      <LinhaDre label={`− Simples Nacional (${sn}%)`} value={imposto} pctBase={vendasBrutas} neg/>
+      <Row label="= Lucro líquido" value={lucroLiq} color={col(lucroLiq)} bold border={false}/>
+
+      {(foraDaDre>0||pendenteDaDre>0)&&<div style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:9,padding:"9px 11px",marginTop:10,fontSize:11,color:"var(--text2)"}}>
         {foraDaDre>0&&<div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:pendenteDaDre>0?4:0}}>
           <span>Fora da DRE (imposto, empréstimo, CAPEX, já contado em Compras)</span>
           <b style={{whiteSpace:"nowrap"}}>{fmtMoney(foraDaDre)}</b>
@@ -19600,65 +19695,62 @@ function DREComp({db,setDb,empresa}){
           <b style={{whiteSpace:"nowrap"}}>{fmtMoney(pendenteDaDre)}</b>
         </div>}
       </div>}
-      <Row label="= Resultado Operacional" value={resultadoOp} color={col(resultadoOp)} bold border={false}/>
     </div>
 
-    <div className="card" style={{marginBottom:12}}>
-      <Row label={`Simples Nacional (${sn}%)`} value={imposto} color="#f59e0b" indent/>
-      <Row label="= Lucro Líquido" value={lucroLiq} color={col(lucroLiq)} bold border={false}/>
-    </div>
+    {/* O budget continua, mas depois do resultado: ele é o próximo passo, não
+        parte da conta. */}
+    {budgetDre&&budgetDre.orcadoTotal>0&&(()=>{
+      const st=statusPace(budgetDre.projecaoTotal,budgetDre.orcadoTotal);
+      return <div className="card" style={{marginBottom:12,borderColor:`${PACE_INFO[st].cor}55`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8,gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.6}}>Compras vs. orçado</span>
+          <span className="tag" style={{background:`${PACE_INFO[st].cor}22`,color:PACE_INFO[st].cor,fontSize:10}}>{PACE_INFO[st].label}</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+          {[["Realizado",budgetDre.realizadoTotal,"var(--text)"],["Projeção",budgetDre.projecaoTotal,PACE_INFO[st].cor],["Orçado",budgetDre.orcadoTotal,"var(--text2)"]].map(([lbl,val,cor]:any)=>(
+            <div key={lbl} style={{textAlign:"center"}}>
+              <div style={{fontSize:14,fontWeight:700,color:cor}}>{fmtMoney(val)}</div>
+              <div className="muted" style={{fontSize:10}}>{lbl}</div>
+            </div>
+          ))}
+        </div>
+        <div className="muted" style={{fontSize:10.5,marginTop:8,lineHeight:1.5}}>
+          {periodoLabel("mes",de)} · {budgetDre.ritmo.decorridos} de {budgetDre.ritmo.total} dias.
+          {de.slice(0,7)===ate.slice(0,7)&&(de.slice(8)!=="01"||ate<mesDaData(de)!.fim)
+            ?<> ⚠️ Este quadro é do <b>mês inteiro</b>; a linha do CMV acima é só do recorte escolhido.</>
+            :<> Ajuste o orçado em Compras → Budget.</>}
+        </div>
+      </div>;
+    })()}
 
-    {/* Ponto de Equilíbrio */}
-    <div className="card" style={{background:"var(--infoBg)",border:"1px solid #0EA5E940"}}>
-      <div className="section-title" style={{color:"var(--infoText)"}}>Ponto de Equilíbrio</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-        <div style={{textAlign:"center"}}>
-          <div style={{fontWeight:700,fontSize:14,color:"#F59E0B"}}>{fmtMoney(pe)}</div>
-          <div className="muted" style={{fontSize:10}}>PE (faturar)</div>
+    {budgetDre&&<IndicativosPanel db={db} modo="mes" dataRef={de}/>}
+
+    {/* ── PONTO DE EQUILÍBRIO, EM UMA FRASE ───────────────────────────── */}
+    {vendasBrutas>0&&pe>0&&(()=>{
+      const base=Math.max(pe,vendasBrutas);
+      const larguraRec=Math.min(100,(vendasBrutas/base)*100);
+      const posPe=Math.min(100,(pe/base)*100);
+      const passou=vendasBrutas-pe;
+      const MN={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
+      return <div className="card">
+        <div style={{fontSize:13.5,lineHeight:1.5}}>
+          Para empatar, precisa faturar <b style={MN}>{fmtMoney(pe)}</b> no período.{" "}
+          <b style={{color:col(passou)}}>{passou>=0?`Passou por ${fmtMoney(passou)}.`:`Faltou ${fmtMoney(-passou)}.`}</b>
         </div>
-        <div style={{textAlign:"center"}}>
-          <div style={{fontWeight:700,fontSize:14,color:mcPct>=30?"#22C55E":"var(--btnDanger)"}}>{mcPct.toFixed(1)}%</div>
-          <div className="muted" style={{fontSize:10}}>Margem Contrib.</div>
+        <div style={{height:10,borderRadius:5,background:"var(--bg2)",margin:"12px 0 6px",position:"relative",overflow:"visible"}}>
+          <div style={{height:"100%",borderRadius:5,width:`${larguraRec}%`,background:passou>=0?CORES_DRE.sobra:"var(--btnDanger)"}}/>
+          <div title="ponto de equilíbrio" style={{position:"absolute",left:`${posPe}%`,top:-4,bottom:-4,width:2,background:"var(--text)"}}/>
         </div>
-        <div style={{textAlign:"center"}}>
-          <div style={{fontWeight:700,fontSize:14,color:col(mc)}}>{fmtMoney(mc)}</div>
-          <div className="muted" style={{fontSize:10}}>Sobra p/ Fixas</div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--text3)"}}>
+          <span>ponto de equilíbrio · {posPe.toFixed(0)}% do que faturou</span>
+          <span style={MN}>{fmtMoney(vendasBrutas)}</span>
         </div>
-      </div>
-      {vendasBrutas>0&&<div>
-        <div style={{fontSize:11,fontWeight:700,color:"var(--infoText)",marginBottom:10}}>Para cada R$100,00 vendidos</div>
-        {[
-          {label:"Taxas delivery (iFood/99food)",val:(despVendas/vendasBrutas)*100,c:"#f87171"},
-          {label:`Impostos Simples Nacional (${sn}%)`,val:sn,c:"#f59e0b"},
-          {label:"CMV — custo dos insumos",val:(totalCMV/vendasBrutas)*100,c:"#fb923c"},
-          {label:"Despesas fixas e variáveis",val:(totalDesp/vendasBrutas)*100,c:"#8B5CF6"},
-          {label:"💰 Lucro líquido final",val:(lucroLiq/vendasBrutas)*100,c:lucroLiq>=0?"#22C55E":"var(--btnDanger)",bold:true},
-        ].map(({label,val,c,bold})=>(
-          <div key={label} style={{marginBottom:8}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-              <span style={{fontSize:11,color:bold?"var(--text)":"#888",fontWeight:bold?700:400}}>{label}</span>
-              <span style={{fontWeight:bold?800:700,color:c,fontSize:bold?15:13}}>R${Math.abs(val).toFixed(2)}</span>
-            </div>
-            <div style={{height:5,background:"var(--infoBg)",borderRadius:3,overflow:"hidden"}}>
-              <div style={{height:"100%",borderRadius:3,width:`${Math.min(Math.abs(val),100)}%`,background:c,opacity:bold?1:0.7}}/>
-            </div>
-          </div>
-        ))}
-        <div style={{borderTop:"1px solid #0EA5E940",paddingTop:8,marginTop:4,textAlign:"center"}}>
-          <span style={{fontSize:10,color:"#555"}}>Restante não alocado: R${Math.max(100-(despVendas/vendasBrutas*100+sn+totalCMV/vendasBrutas*100+totalDesp/vendasBrutas*100+Math.max(lucroLiq/vendasBrutas*100,0)),0).toFixed(2)}</span>
+        <div style={{fontSize:11.5,color:"var(--text3)",marginTop:10,lineHeight:1.55}}>
+          Cada R$ 100 vendidos deixam <b>{fmtMoney(mcPct)}</b> depois das taxas e do insumo — é essa margem que paga as despesas fixas.
+          {totalCMV<=0&&<> Com o CMV zerado no recorte, este número também está otimista.</>}
         </div>
-      </div>}
-      <div style={{marginTop:12,padding:"10px",background:"var(--successBg)",borderRadius:8,border:"1px solid #22C55E40",textAlign:"center"}}>
-        <div style={{fontSize:10,color:"#888",marginBottom:2}}>Margem de Contribuição (sobra para cobrir fixas)</div>
-        <div style={{fontSize:22,fontWeight:800,color:mcPct>=30?"#22C55E":"#f59e0b"}}>{mcPct.toFixed(1)}%</div>
-        <div style={{fontSize:11,color:"#888",marginTop:2}}>{fmtMoney(mc)} sobre {fmtMoney(vendasBrutas)}</div>
-        {pe>0&&<div style={{marginTop:8,padding:"6px",background:"var(--infoBg)",borderRadius:6}}>
-          <div style={{fontSize:10,color:"#888"}}>Ponto de equilíbrio (vendas viram lucro)</div>
-          <div style={{fontSize:16,fontWeight:700,color:"#F59E0B"}}>{fmtMoney(pe)}/mês</div>
-          <div style={{fontSize:10,color:"#555"}}>≈ {fmtMoney(pe/30)}/dia</div>
-        </div>}
-      </div>
-    </div>
+      </div>;
+    })()}
   </div>;
 }
 
