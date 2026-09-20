@@ -326,3 +326,153 @@ export function trocarUnidadeBase(db, prodId, novaBase) {
 
   return { produtosLista, materiasPrimas, avisos, fator };
 }
+
+// ── A pasta dos insumos comprados que ainda não têm grupo ───────────────────
+// A ferramenta acima resolve o "creme de leite" que a pessoa LEMBRA de
+// procurar. O que ela não resolve é o resto: o insumo que entrou por uma NF-e
+// há três semanas e nunca foi ligado a produto nenhum não aparece em busca
+// nenhuma, porque ninguém digita o nome de um item de que não se lembra.
+//
+// ⚠️ ESTA PASTA NÃO É O BANNER ÂMBAR DE "CONCILIAR INSUMOS". Aquele conta
+// `materiasPrimas` sem `mpVinculados` e mais nada — e `materiasPrimas` é "item
+// com saldo", não "insumo comprado" (§6, "cinco tipos, uma coleção"): os
+// produtos do cardápio do Eclética e os itens feitos na cozinha moram lá
+// dentro. Nenhum dos dois pode ser ligado a um produto da lista de compras, e
+// contá-los faz a fila NUNCA chegar a zero — que é o estado em que uma fila
+// deixa de ser lida.
+const VAZIAS = new Set([
+  'de', 'da', 'do', 'das', 'dos', 'com', 'sem', 'para', 'por', 'em', 'no', 'na',
+  'tipo', 'und', 'unid', 'pct', 'pc', 'cx', 'emb', 'kg', 'ml', 'lt', 'gr',
+]);
+
+// As palavras que valem para procurar um insumo pelo nome.
+//
+// ⚠️ Fora o ruído óbvio, cai tudo que COMEÇA com dígito: "375g", "200ml" e
+// "12x1l" são embalagem, e é justamente a embalagem que difere entre duas
+// marcas do mesmo produto — agrupar por ela separaria o que devia juntar.
+export function tokensDoNome(nome, fold) {
+  return fold(String(nome || ''))
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !/^\d/.test(t) && !VAZIAS.has(t));
+}
+
+// O que jogar na busca da ferramenta quando a pessoa clica em "conciliar".
+//
+// ⚠️ É UMA palavra só, de propósito. O nome inteiro ("CR AVELA NUTELLA 375G")
+// acha aquele item e mais nenhum — e o ponto de conciliar é ver as OUTRAS
+// marcas do mesmo produto na mesma tela, que é quando se percebe que Piracanjuba
+// e Italac são a mesma coisa. `buscarMarcas` casa por inclusão, então duas
+// palavras separadas no nome de uma marca e coladas noutra não casariam.
+export function termoDeBusca(nome, fold) {
+  const t = tokensDoNome(nome, fold);
+  return t[0] || fold(String(nome || ''));
+}
+
+export function insumosSemGrupo(db, fold, tipoDe) {
+  const agrupados = new Set();
+  for (const p of db?.produtosLista || []) for (const id of p.mpVinculados || []) agrupados.add(id);
+  const mov = db?.movEstoque || [];
+  const fora = { cardapio: 0, produzido: 0 };
+  const itens = [];
+
+  for (const m of db?.materiasPrimas || []) {
+    if (!m?.id || agrupados.has(m.id)) continue;
+    // Produto do cardápio: tem código do Eclética, não vem de compra.
+    if (String(m.codigoEcletica || '').trim()) { fora.cardapio++; continue; }
+    // Feito na cozinha: o bolo não tem produto na lista de compras.
+    if (tipoDe && tipoDe(m) === 'produzido') { fora.produzido++; continue; }
+    const saldo = num(m.estoqueAtual);
+    const valorUn = num(m.ultimoValor);
+    itens.push({
+      id: m.id,
+      mp: m,
+      nome: m.nome || '',
+      unidade: m.unidade || 'un',
+      categoria: m.categoria || '',
+      saldo,
+      valorUn,
+      // Quanto dinheiro está parado num item que nenhuma ficha enxerga.
+      dinheiro: r2(saldo * valorUn),
+      ultimaCompra: ultimaCompra(mov, m.id),
+      tokens: tokensDoNome(m.nome, fold),
+    });
+  }
+  return { itens, fora, dinheiro: r2(itens.reduce((s, i) => s + i.dinheiro, 0)) };
+}
+
+const porNome = (a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+
+// Os três modos devolvem o MESMO formato — uma lista de blocos — para a tela
+// não ter três desenhos diferentes. Nos dois modos simples há um bloco só.
+export function agruparPendentes(itens, modo) {
+  const lista = [...(itens || [])];
+
+  if (modo === 'nome') return [{ chave: '', rotulo: '', itens: lista.sort(porNome) }];
+
+  if (modo === 'semelhanca') {
+    const mapa = new Map();
+    for (const i of lista) {
+      const k = i.tokens[0] || '';
+      if (!mapa.has(k)) mapa.set(k, []);
+      mapa.get(k).push(i);
+    }
+    const blocos = [...mapa.entries()].map(([chave, its]) => ({ chave, rotulo: chave, itens: its.sort(porNome) }));
+    // ⚠️ Quem não tem semelhante NENHUM vira um bloco só no fim, não 50 blocos
+    // de um item cada: uma lista de títulos com uma linha embaixo de cada é
+    // mais difícil de ler que a lista simples que ela deveria organizar.
+    const juntos = blocos.filter((b) => b.itens.length > 1)
+      .sort((a, b) => b.itens.length - a.itens.length || a.chave.localeCompare(b.chave));
+    const sozinhos = blocos.filter((b) => b.itens.length === 1).flatMap((b) => b.itens).sort(porNome);
+    return sozinhos.length ? [...juntos, { chave: '', rotulo: 'sem semelhante na fila', itens: sozinhos }] : juntos;
+  }
+
+  // Padrão: a compra mais recente primeiro. É o que se está comprando agora e
+  // é o que vai cair na próxima ficha; por ordem alfabética, o insumo comprado
+  // ontem ficaria na letra M esperando alguém rolar até lá.
+  return [{
+    chave: '',
+    rotulo: '',
+    itens: lista.sort((a, b) => {
+      const da = a.ultimaCompra?.data || '';
+      const dbd = b.ultimaCompra?.data || '';
+      // Sem entrada registrada vai para o fim: '' perde de qualquer data.
+      if (da !== dbd) return dbd.localeCompare(da);
+      return porNome(a, b);
+    }),
+  }];
+}
+
+// O palpite de destino de UMA linha.
+//
+// ⚠️ Palpite é atalho de tela, nunca lote. O `autoMatchInsumo` do painel antigo
+// casa por inclusão nos dois sentidos com 4 caracteres, e aplicado em lote um
+// produto chamado "Leite" engoliria "Leite condensado" e "Creme de leite
+// Piracanjuba" de uma vez — o custo sairia do produto errado e só apareceria no
+// CMV, meses depois. Aqui o nome do produto precisa aparecer INTEIRO e em
+// fronteira de palavra dentro do nome da marca, o MAIS LONGO vence (senão
+// "Leite" ganharia de "Leite condensado"), e empate não escolhe — a mesma
+// recusa do `acharColunas` diante de dois rótulos que servem para o mesmo campo.
+export function sugerirGrupo(db, nome, fold) {
+  const alvo = fold(String(nome || ''));
+  if (!alvo) return null;
+  let melhor = null;
+  let melhorLen = 0;
+  let empate = false;
+  for (const p of db?.produtosLista || []) {
+    const n = fold(p?.nome || '');
+    if (n.length < 4 || !contemPalavra(alvo, n)) continue;
+    if (n.length > melhorLen) { melhor = p; melhorLen = n.length; empate = false; }
+    else if (n.length === melhorLen) empate = true;
+  }
+  return empate ? null : melhor;
+}
+
+function contemPalavra(texto, termo) {
+  for (let i = texto.indexOf(termo); i >= 0; i = texto.indexOf(termo, i + 1)) {
+    const antes = i === 0 || !/[a-z0-9]/.test(texto[i - 1]);
+    const fim = i + termo.length;
+    const depois = fim === texto.length || !/[a-z0-9]/.test(texto[fim]);
+    if (antes && depois) return true;
+  }
+  return false;
+}

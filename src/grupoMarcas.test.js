@@ -4,6 +4,7 @@ import {
   rendimentoDaMarca, ultimaCompra, marcaNoGrupo, custoDoGrupo, saldoDoGrupo,
   buscarMarcas, agruparMarcas, desagruparMarca, marcasDoGrupo, unidadeBaseDo,
   custoParaUnidade, ratearEntreMarcas, grupoDoInsumo, grupoDaMarca, trocarUnidadeBase,
+  insumosSemGrupo, agruparPendentes, sugerirGrupo, tokensDoNome, termoDeBusca,
 } from './grupoMarcas.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -398,3 +399,112 @@ describe('trocar a unidade em que o grupo conta', () => {
     assert.equal(trocarUnidadeBase(DB, 'nao-existe', 'kg'), null);
   });
 });
+
+// ── A pasta dos insumos comprados sem grupo ─────────────────────────────────
+describe('a pasta dos insumos que ainda não foram conciliados', () => {
+  const DB = {
+    produtosLista: [
+      { id: 'p1', nome: 'Creme de leite', mpVinculados: ['ja'] },
+      { id: 'p2', nome: 'Leite condensado', mpVinculados: [] },
+      { id: 'p3', nome: 'Leite', mpVinculados: [] },
+    ],
+    materiasPrimas: [
+      { id: 'ja', nome: 'CREME DE LEITE PIRACANJUBA 200G', unidade: 'un', estoqueAtual: 12, ultimoValor: 3.20 },
+      { id: 'm1', nome: 'CREME DE LEITE ITALAC 200G', unidade: 'un', estoqueAtual: 30, ultimoValor: 2.99 },
+      { id: 'm2', nome: 'CREME DE LEITE FRIMESA 200G', unidade: 'un', estoqueAtual: 4, ultimoValor: 3.49 },
+      { id: 'm3', nome: 'LEITE CONDENSADO ITALAC 395G', unidade: 'un', estoqueAtual: 6, ultimoValor: 6.50 },
+      { id: 'm4', nome: 'DETERGENTE YPE 500ML', unidade: 'un', estoqueAtual: 10, ultimoValor: 2.10, categoria: 'Material de limpeza e higiene' },
+      { id: 'cod', nome: 'TORTA BANOFFEE FATIA', codigoEcletica: '141', estoqueAtual: 3 },
+      { id: 'prod', nome: 'Frango cremoso', unidade: 'kg', estoqueAtual: 2, ultimoValor: 18 },
+    ],
+    movEstoque: [
+      { mpId: 'm1', tipo: 'entrada', data: '2026-09-18' },
+      { mpId: 'm2', tipo: 'entrada', data: '2026-07-02' },
+      { mpId: 'm3', tipo: 'entrada', data: '2026-09-19' },
+      // ⚠️ Saída não é compra: se contasse, "comprado ontem" viraria "vendido
+      // ontem" e a ordem da pasta responderia outra pergunta.
+      { mpId: 'm4', tipo: 'saida', data: '2026-09-20' },
+    ],
+  };
+  const tipoDe = (m) => (m.id === 'prod' ? 'produzido' : 'insumo');
+
+  test('o que JÁ tem grupo não aparece', () => {
+    const { itens } = insumosSemGrupo(DB, fold, tipoDe);
+    assert.ok(!itens.some((i) => i.id === 'ja'));
+  });
+
+  test('produto do cardápio e item feito na cozinha ficam FORA, e contados à parte', () => {
+    // ⚠️ É o que faz a fila chegar a zero. O banner antigo conta os dois e
+    // nunca zera — fila que não zera deixa de ser lida.
+    const { itens, fora } = insumosSemGrupo(DB, fold, tipoDe);
+    assert.deepEqual(itens.map((i) => i.id), ['m1', 'm2', 'm3', 'm4']);
+    assert.deepEqual(fora, { cardapio: 1, produzido: 1 });
+  });
+
+  test('mostra o dinheiro parado — é o tamanho do estoque que nenhuma ficha enxerga', () => {
+    const { dinheiro } = insumosSemGrupo(DB, fold, tipoDe);
+    assert.equal(dinheiro, r2(30 * 2.99 + 4 * 3.49 + 6 * 6.50 + 10 * 2.10));
+  });
+
+  test('sem a função de tipo, o produzido entra — o db é que decide, não a pasta', () => {
+    const { fora } = insumosSemGrupo(DB, fold, null);
+    assert.equal(fora.produzido, 0);
+  });
+
+  test('a ordem padrão é a COMPRA mais recente, e quem nunca entrou vai pro fim', () => {
+    const { itens } = insumosSemGrupo(DB, fold, tipoDe);
+    const [bloco] = agruparPendentes(itens, 'compra');
+    assert.deepEqual(bloco.itens.map((i) => i.id), ['m3', 'm1', 'm2', 'm4']);
+  });
+
+  test('por nome é alfabético, e por semelhança junta o que divide a primeira palavra', () => {
+    const { itens } = insumosSemGrupo(DB, fold, tipoDe);
+    // Frimesa antes de Italac, Detergente antes de Leite.
+    assert.deepEqual(agruparPendentes(itens, 'nome')[0].itens.map((i) => i.id), ['m2', 'm1', 'm4', 'm3']);
+
+    const blocos = agruparPendentes(itens, 'semelhanca');
+    assert.equal(blocos[0].rotulo, 'creme');
+    assert.deepEqual(blocos[0].itens.map((i) => i.id), ['m2', 'm1']);
+    // ⚠️ Os solitários viram UM bloco no fim. Cinquenta títulos com uma linha
+    // embaixo de cada são mais difíceis de ler que a lista simples.
+    assert.equal(blocos[1].rotulo, 'sem semelhante na fila');
+    assert.deepEqual(blocos[1].itens.map((i) => i.id), ['m4', 'm3']);
+  });
+
+  test('a embalagem NÃO entra nas palavras — é ela que difere entre duas marcas', () => {
+    assert.deepEqual(tokensDoNome('CREME DE LEITE ITALAC 200G', fold), ['creme', 'leite', 'italac']);
+    assert.deepEqual(tokensDoNome('NESCAU 2,1KG', fold), ['nescau']);
+  });
+
+  test('o "conciliar" joga UMA palavra na busca, não o nome inteiro', () => {
+    // O nome inteiro acha aquele item e mais nenhum — e o ponto é ver as outras
+    // marcas do mesmo produto na mesma tela.
+    assert.equal(termoDeBusca('CR AVELA NUTELLA 375G', fold), 'avela');
+    assert.equal(termoDeBusca('CREME DE LEITE ITALAC 200G', fold), 'creme');
+    // Nome que é só embalagem não fica sem termo: cai no nome cru.
+    assert.equal(termoDeBusca('2,1kg', fold), '2,1kg');
+  });
+
+  test('o palpite de destino escolhe o produto MAIS LONGO que casa', () => {
+    // ⚠️ "Leite" também casa em "LEITE CONDENSADO ITALAC". Sem o mais longo
+    // vencer, o condensado iria para o grupo do leite e o custo sairia do
+    // produto errado — aparecendo só no CMV, meses depois.
+    assert.equal(sugerirGrupo(DB, 'LEITE CONDENSADO ITALAC 395G', fold).id, 'p2');
+    assert.equal(sugerirGrupo(DB, 'CREME DE LEITE ITALAC 200G', fold).id, 'p1');
+  });
+
+  test('palavra parcial não casa, e empate não escolhe', () => {
+    // "Leite" não pode casar dentro de "leiteria".
+    assert.equal(sugerirGrupo({ produtosLista: [{ id: 'x', nome: 'Leite' }] }, 'LEITERIA SUL', fold), null);
+    // Dois nomes do mesmo tamanho casando: a tela fica sem palpite em vez de
+    // escolher um em silêncio — a recusa do `acharColunas`.
+    const empatado = { produtosLista: [{ id: 'a', nome: 'Suco' }, { id: 'b', nome: 'suco' }] };
+    assert.equal(sugerirGrupo(empatado, 'SUCO DE UVA 1L', fold), null);
+  });
+
+  test('sem palpite nenhum devolve null, nunca o primeiro da lista', () => {
+    assert.equal(sugerirGrupo(DB, 'DETERGENTE YPE 500ML', fold), null);
+  });
+});
+
+function r2(n) { return Math.round(n * 100) / 100; }

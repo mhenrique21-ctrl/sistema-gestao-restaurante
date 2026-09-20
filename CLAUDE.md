@@ -1350,6 +1350,54 @@ compartilhado entre as empresas e sai por `applyBothProdutos` (§3);
 `materiasPrimas` é por empresa e sai por `setDbAndSave`. Escrever os dois no
 mesmo lugar gravaria a matéria-prima de uma empresa dentro da outra.
 
+##### A pasta dos insumos comprados sem grupo (20/09/2026)
+
+Recolhida no topo do card. A busca resolve o que a pessoa **lembra** de
+procurar; o insumo que entrou por uma NF-e há três semanas e nunca foi ligado a
+nada não aparece em busca nenhuma, porque ninguém digita o nome de um item de
+que não se lembra.
+
+⚠️ **NÃO é o banner âmbar de "🔗 Conciliar Insumos", e o número é outro de
+propósito.** Aquele conta `materiasPrimas` sem `mpVinculados` e mais nada — e
+`materiasPrimas` é "item com saldo": os 281 produtos do cardápio do Eclética e
+o que é feito na cozinha moram lá dentro. Nenhum dos dois pode apontar para um
+produto da lista de compras, então **aquela fila nunca chega a zero**, e fila
+que não zera deixa de ser lida. `insumosSemGrupo` recorta pelo `codigoEcletica`
+e pelo `tipoDoInsumo` — o tipo entra **por parâmetro**, porque quem traduz
+marcação e categoria contábil em "isto é feito na cozinha" mora no
+`tipoInsumo.js`. O banner antigo continua como está; ele não foi pedido.
+
+⚠️ **O que fica de fora é DITO na tela**, com os dois números. Um contador que
+encolhe sem explicação faz a pessoa procurar o item que sumiu.
+
+⚠️ **A ordem padrão é a COMPRA mais recente** (`movEstoque` tipo `entrada`, não
+`atualizadoEm` — mesma lição do `ultimaCompra`): é o que se está comprando agora
+e é o que vai cair na próxima ficha. Por ordem alfabética, o insumo comprado
+ontem ficaria na letra M esperando alguém rolar até lá. As outras duas ordens
+são **A–Z** e **nomes parecidos**, que agrupa pela primeira palavra
+significativa — e ⚠️ **a embalagem não entra nas palavras** (`375g`, `2,1kg`):
+é justamente ela que difere entre duas marcas do mesmo produto, então agrupar
+por ela separaria o que devia juntar. ⚠️ Quem não tem semelhante nenhum vira
+**um** bloco no fim, não cinquenta blocos de uma linha.
+
+⚠️ **O dinheiro parado fica no cabeçalho** (Σ saldo × último preço). É o
+tamanho do estoque que nenhuma ficha enxerga, e é o que transforma "58
+pendências" em motivo para abrir a pasta.
+
+⚠️ **O "conciliar" não grava nada**: joga **uma palavra** na busca de baixo
+(`termoDeBusca`), marca o item e pré-escolhe o destino. Uma palavra, não o nome
+inteiro — "CR AVELA NUTELLA 375G" acha aquele item e mais nenhum, e o ponto de
+conciliar é ver as OUTRAS marcas do mesmo produto na mesma tela.
+
+⚠️ **O palpite de destino é POR LINHA, nunca em lote.** O `autoMatchInsumo` do
+painel antigo casa por inclusão nos dois sentidos com 4 caracteres; em lote, um
+produto chamado "Leite" engoliria "Leite condensado" e "Creme de leite
+Piracanjuba" de uma vez — o custo sairia do produto errado e só apareceria no
+CMV, meses depois. `sugerirGrupo` exige o nome do produto **inteiro e em
+fronteira de palavra** dentro do nome da marca, o **mais longo** vence (senão
+"Leite" ganharia de "Leite condensado") e **empate não escolhe** — a mesma
+recusa do `acharColunas`.
+
 ##### A ficha lê o grupo, e a baixa se divide entre as marcas
 
 ⚠️ **`resolverPrecoInsumo` é o ponto ÚNICO** por onde o preço da ficha é

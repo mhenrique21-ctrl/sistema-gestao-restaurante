@@ -87,3 +87,44 @@ test('dá pra trocar o destino depois de escolher', () => {
   // Sem isso, errar o destino obrigava a limpar a seleção inteira e recomeçar.
   assert.ok(CARD.includes('>trocar<'), 'falta o botão de trocar o destino');
 });
+
+test('a pasta conta insumo COMPRADO, não "item com saldo"', () => {
+  // ⚠️ `materiasPrimas` é "item com saldo": os produtos do cardápio do Eclética
+  // e o que é feito na cozinha moram lá dentro (§6, "cinco tipos, uma
+  // coleção"). Nenhum dos dois pode ir para um produto da lista de compras, e
+  // contá-los faz a fila nunca chegar a zero — que é o estado em que uma fila
+  // deixa de ser lida. O tipo precisa entrar na chamada.
+  assert.ok(/insumosSemGrupo\(db,foldNome,\(m:any\)=>tipoDoInsumo\(/.test(CARD),
+    'a pasta voltou a contar a coleção inteira, sem olhar o tipo do item');
+  assert.ok(CARD.includes('pasta.fora.cardapio'),
+    'o que fica de fora tem que aparecer na tela: número que encolhe sem explicação levanta dúvida');
+});
+
+test('"conciliar" prepara a ferramenta e NÃO grava nada', () => {
+  // A pasta é um atalho para a busca de baixo. Se ela mesma agrupasse, o
+  // palpite viraria vínculo sem ninguém olhar — e desfazer um grupo errado é
+  // trabalho manual, marca por marca.
+  const bloco = CARD.slice(CARD.indexOf('const conciliar='), CARD.indexOf('const aplicar='));
+  assert.ok(bloco.includes('setBusca(termoDeBusca('), 'o conciliar tem que jogar o termo na busca');
+  assert.ok(!bloco.includes('applyBothProdutos') && !bloco.includes('setDbAndSave'),
+    'o botão da pasta não pode gravar: quem grava é o "Agrupar", depois de a pessoa conferir');
+});
+
+test('o palpite de destino é por LINHA, nunca em lote', () => {
+  // ⚠️ Em lote, um produto chamado "Leite" engoliria "Leite condensado" e
+  // "Creme de leite Piracanjuba" de uma vez: o custo sairia do produto errado e
+  // só apareceria no CMV, meses depois.
+  const pasta = CARD.slice(CARD.indexOf('{/* ── A pasta'), CARD.indexOf('placeholder="Buscar marca'));
+  assert.ok(pasta.includes('sugerirGrupo(db,it.nome,foldNome)'), 'falta o palpite da linha');
+  assert.ok(!/aplicar.{0,20}sugest/i.test(pasta), 'apareceu um "aplicar sugestões" em lote na pasta');
+});
+
+test('a pasta oferece as três ordens que o dono pediu', () => {
+  for (const modo of ['compra', 'semelhanca', 'nome']) {
+    assert.ok(CARD.includes(`"${modo}"`), `falta a ordem por ${modo}`);
+  }
+  // A compra recente é o padrão: é o que se está comprando agora e é o que vai
+  // cair na próxima ficha.
+  assert.ok(/useState<"compra"\|"nome"\|"semelhanca">\("compra"\)/.test(CARD),
+    'a ordem padrão tem que ser a compra mais recente');
+});

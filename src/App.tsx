@@ -20,7 +20,7 @@ import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
-import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase} from "./grupoMarcas.js";
+import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase,insumosSemGrupo,agruparPendentes,sugerirGrupo,termoDeBusca} from "./grupoMarcas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -12045,6 +12045,14 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
   // aparecia na lista. A lista de compras tem centenas de itens: precisa de
   // busca, não de rolagem.
   const [buscaDestino,setBuscaDestino]=useState("");
+  // A pasta dos insumos comprados que ainda não têm grupo. A busca acima
+  // resolve o que a pessoa LEMBRA de procurar; o insumo que entrou por uma NF-e
+  // há três semanas e nunca foi ligado a nada não aparece em busca nenhuma,
+  // porque ninguém digita o nome de um item de que não se lembra.
+  const [pastaAberta,setPastaAberta]=useState(false);
+  const [pastaFiltro,setPastaFiltro]=useState("");
+  const [pastaOrdem,setPastaOrdem]=useState<"compra"|"nome"|"semelhanca">("compra");
+  const [pastaMostrar,setPastaMostrar]=useState(8);
 
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
   const UNIDADES=["un","g","kg","ml","L"];
@@ -12081,6 +12089,32 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
   });
   const previa=custoDoGrupo(previaMarcas,baseEfetiva,db.movEstoque||[]);
   const pendentes=previa.linhas.filter((l:any)=>l.pendente);
+
+  // ⚠️ O tipo entra por FORA do módulo: `materiasPrimas` é "item com saldo", e
+  // quem sabe traduzir a marcação e a categoria contábil em "isto é feito na
+  // cozinha" é o `tipoDoInsumo` (§6, "cinco tipos, uma coleção").
+  const pasta=useMemo(()=>insumosSemGrupo(db,foldNome,(m:any)=>tipoDoInsumo(db.tipoInsumo||{},m).tipo),
+    [db.materiasPrimas,db.produtosLista,db.movEstoque,db.tipoInsumo]);
+  const pastaVis=(()=>{const f=foldNome(pastaFiltro.trim());
+    if(!f)return pasta.itens;
+    // Casa nos dois sentidos, como o filtro do painel de conciliação: digitar
+    // "acucar" precisa achar "AÇÚCAR REFINADO" e "açúcar" achar "AÇÚCAR".
+    return pasta.itens.filter((i:any)=>{const n=foldNome(i.nome);return n.includes(f)||f.includes(n);});})();
+  const pastaBlocos=agruparPendentes(pastaVis,pastaOrdem);
+
+  // Clicar em "conciliar" NÃO agrupa nada: prepara a ferramenta de baixo. Joga
+  // uma palavra na busca (para as outras marcas do mesmo produto aparecerem
+  // junto), marca o item e pré-escolhe o destino quando há um palpite seguro.
+  const conciliar=(it:any)=>{
+    setBusca(termoDeBusca(it.nome,foldNome));
+    setSel(new Set([it.id]));
+    setRend({});
+    const sug=sugerirGrupo(db,it.nome,foldNome);
+    setDestino(sug?sug.id:"");
+    setNomeNovo(sug?"":it.nome);
+    setBuscaDestino("");
+    setMsg("");
+  };
 
   const toggle=(id:string)=>setSel(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
 
@@ -12152,6 +12186,94 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
     <div style={{fontSize:12,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
       Piracanjuba, Italac e Frimesa viram um "Creme de leite". A lata de 395 g e o pacote de 2,1 kg viram
       um "Nescau" que conta em gramas. Cada marca continua com o saldo e o preço dela.
+    </div>
+
+    {/* ── A pasta ────────────────────────────────────────────────────────
+        ⚠️ Ela NÃO é o banner âmbar de "Conciliar Insumos", e o número é outro
+        de propósito: aquele conta `materiasPrimas` sem vínculo e mais nada, e
+        `materiasPrimas` é "item com saldo" — os produtos do cardápio do
+        Eclética e o que é feito na cozinha moram lá dentro. Nenhum dos dois
+        pode ir para um produto da lista de compras, então aquela fila NUNCA
+        chega a zero, e fila que não zera deixa de ser lida. */}
+    <div style={{border:"1px solid var(--border)",borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+      <div onClick={()=>pasta.itens.length&&setPastaAberta(v=>!v)}
+        style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",background:"var(--bg2)",
+          cursor:pasta.itens.length?"pointer":"default"}}>
+        <span style={{fontSize:16}}>{pasta.itens.length?"📁":"✓"}</span>
+        <span style={{fontSize:13,flex:"1 1 auto",minWidth:0}}>
+          {pasta.itens.length
+            ?<><b style={MONO}>{pasta.itens.length}</b> insumo{pasta.itens.length!==1?"s":""} comprado{pasta.itens.length!==1?"s":""} sem grupo</>
+            :<span style={{color:"var(--successText)"}}>todo insumo comprado já está em algum grupo</span>}
+        </span>
+        {pasta.dinheiro>0&&<span style={{fontSize:11.5,color:"var(--text3)",...MONO}}>{fmtMoney(pasta.dinheiro)} parados</span>}
+        {!!pasta.itens.length&&<span style={{fontSize:12,color:"var(--text3)"}}>{pastaAberta?"▴ fechar":"▾ abrir"}</span>}
+      </div>
+
+      {pastaAberta&&!!pasta.itens.length&&<div style={{padding:"10px 12px"}}>
+        <input className="inp" value={pastaFiltro} onChange={e=>{setPastaFiltro(e.target.value);setPastaMostrar(8);}}
+          placeholder={`🔍 Filtrar os ${pasta.itens.length} pendentes…`} style={{marginBottom:8}}/>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
+          <span style={{fontSize:11,color:"var(--text3)"}}>ordenar por</span>
+          {([["compra","compra recente"],["semelhanca","nomes parecidos"],["nome","A–Z"]] as const).map(([k,rot])=>
+            <button key={k} onClick={()=>{setPastaOrdem(k as any);setPastaMostrar(8);}}
+              style={{border:"1px solid "+(pastaOrdem===k?"var(--btnPrimary)":"var(--border)"),borderRadius:999,cursor:"pointer",
+                padding:"3px 11px",fontSize:11.5,fontFamily:"inherit",
+                background:pastaOrdem===k?"var(--accLight)":"transparent",
+                color:pastaOrdem===k?"var(--btnPrimary)":"var(--text2)",fontWeight:pastaOrdem===k?700:400}}>{rot}</button>)}
+          {pastaFiltro.trim()&&<span style={{fontSize:11,color:"var(--text3)",...MONO}}>{pastaVis.length} de {pasta.itens.length}</span>}
+        </div>
+
+        {!pastaVis.length&&<div style={{fontSize:12.5,color:"var(--text3)",padding:"8px 0"}}>Nenhum pendente com esse nome.</div>}
+
+        {(()=>{let usados=0;
+          return pastaBlocos.map((bl:any,bi:number)=>{
+            if(usados>=pastaMostrar)return null;
+            const itens=bl.itens.slice(0,pastaMostrar-usados);
+            usados+=itens.length;
+            return <div key={bl.rotulo+bi}>
+              {!!bl.rotulo&&<div style={{fontSize:10.5,fontWeight:800,color:"var(--text3)",textTransform:"uppercase" as const,
+                letterSpacing:.5,margin:"8px 0 2px"}}>{bl.rotulo}{bl.chave?` · ${bl.itens.length}`:""}</div>}
+              {itens.map((it:any)=>{
+                // ⚠️ O palpite é POR LINHA e nunca em lote: em lote, um produto
+                // chamado "Leite" engoliria "Leite condensado" e "Creme de
+                // leite Piracanjuba" de uma vez, e o custo sairia do produto
+                // errado — aparecendo só no CMV, meses depois.
+                const sug=sugerirGrupo(db,it.nome,foldNome);
+                return <div key={it.id} style={{display:"flex",gap:10,alignItems:"center",justifyContent:"space-between",
+                  padding:"7px 0",borderTop:"1px solid var(--bg2)"}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:13}}>{it.nome}</div>
+                    <div style={{fontSize:11,color:"var(--text3)",marginTop:2,...MONO}}>
+                      {num(it.saldo,2)} {it.unidade}
+                      {it.valorUn>0&&<> · {fmtMoney(it.valorUn)}/{it.unidade}</>}
+                      {it.ultimaCompra?<> · comprado {it.ultimaCompra.data.slice(8,10)}/{it.ultimaCompra.data.slice(5,7)}</>
+                        :<> · <span style={{color:"var(--warningText)"}}>sem entrada registrada</span></>}
+                      {it.categoria&&<> · {it.categoria}</>}
+                    </div>
+                    {sug&&<div style={{fontSize:11,color:"var(--infoText)",marginTop:2}}>parece "{sug.nome}"</div>}
+                  </div>
+                  <button className="btn" onClick={()=>conciliar(it)} style={{padding:"4px 12px",fontSize:12,flexShrink:0}}>conciliar</button>
+                </div>;
+              })}
+            </div>;
+          });})()}
+
+        {pastaVis.length>pastaMostrar&&<button onClick={()=>setPastaMostrar(n=>n+20)}
+          style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:12.5,fontFamily:"inherit",
+            padding:"8px 0 2px",fontWeight:600}}>mostrar mais {Math.min(20,pastaVis.length-pastaMostrar)} de {pastaVis.length-pastaMostrar}</button>}
+
+        {/* ⚠️ O que fica de fora é DITO. Um número que encolhe sem explicação
+            levanta mais dúvida que resolve — e é exatamente a diferença entre
+            esta pasta e o banner antigo. */}
+        {(pasta.fora.cardapio+pasta.fora.produzido)>0&&
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:10,lineHeight:1.55,borderTop:"1px solid var(--bg2)",paddingTop:8}}>
+            {pasta.fora.cardapio+pasta.fora.produzido} {pasta.fora.cardapio+pasta.fora.produzido===1?"item não entra":"itens não entram"} nesta pasta, e é de propósito:
+            {pasta.fora.cardapio>0&&<> {pasta.fora.cardapio} produto(s) do cardápio (têm código do Eclética e não vêm de compra)</>}
+            {pasta.fora.cardapio>0&&pasta.fora.produzido>0&&<> e</>}
+            {pasta.fora.produzido>0&&<> {pasta.fora.produzido} feito(s) na cozinha</>}.
+            Nenhum deles pode ir para um produto da lista de compras.
+          </div>}
+      </div>}
     </div>
 
     <input className="inp" placeholder="Buscar marca…  ex.: creme de leite, nescau" value={busca}
