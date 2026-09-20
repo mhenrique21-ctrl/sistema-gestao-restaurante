@@ -5622,7 +5622,10 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
       // mude quantos canais aparecem não pode repintar os que sobraram.
       const cor=(i:number)=>CORES_REL[i%CORES_REL.length];
       const pct=(v:number)=>R.total?v/R.total*100:0;
-      const seta=(p:number|null)=>p==null?null:
+      // ⚠️ Variação a partir de ZERO não tem porcentagem, e devolver `null` fazia
+      // o React não renderizar NADA: a linha saía com o valor e sem o indicador,
+      // com cara de bug. O travessão diz "não dá para calcular" em vez de sumir.
+      const seta=(p:number|null)=>p==null?<span style={{color:"var(--text3)"}}>—</span>:
         <span style={{color:p>=0?"var(--successText)":"var(--btnDanger)",...MONO_REL}}>{p>=0?"▲":"▼"} {Math.abs(p).toFixed(1)}%</span>;
 
       if(!R.total&&!R.porDia.some((d:any)=>d.lancamentos))
@@ -5639,8 +5642,10 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
             <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5}}>Total do período</div>
             <div style={{fontSize:30,fontWeight:800,letterSpacing:-.5,...MONO_REL}}>{fmtMoney(R.total)}</div>
             {D&&ant&&<div style={{fontSize:12,color:"var(--text2)"}}>
-              {seta(D.pct)} <span style={MONO_REL}>{D.total>=0?"+":"−"}{fmtMoney(Math.abs(D.total))}</span>
-              {" "}contra {fmtDate(ant.ini)}–{fmtDate(ant.fim)} <span style={{color:"var(--text3)"}}>(os mesmos {ant.dias} dias)</span>
+              {A.total===0
+                ? <span style={{color:"var(--text3)"}}>{fmtDate(ant.ini)}–{fmtDate(ant.fim)} não teve lançamento — sem base de comparação</span>
+                : <>{seta(D.pct)} <span style={MONO_REL}>{D.total>=0?"+":"−"}{fmtMoney(Math.abs(D.total))}</span>
+                  {" "}contra {fmtDate(ant.ini)}–{fmtDate(ant.fim)} <span style={{color:"var(--text3)"}}>(os mesmos {ant.dias} dias)</span></>}
             </div>}
           </div>
           <button onClick={()=>abrirRelatorio(gerarRelatorioPeriodoHTML(empresa||"",cmp,fp,semana,prodImpressao,cobImpressao))} className="pill"
