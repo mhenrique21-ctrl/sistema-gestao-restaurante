@@ -153,7 +153,9 @@ test('o palpite do nome não grava sozinho — só preenche o campo', () => {
   const bloco = CARD.slice(CARD.indexOf('Grupos que já existem'));
   assert.ok(/onClick=\{\(\)=>setConv\(x=>\(\{\.\.\.x,\[m\.id\]:String\(sug\.valor\)\}\)\)\}/.test(bloco),
     'o botão do palpite tem que só preencher o campo');
-  assert.ok(bloco.includes('o nome diz'), 'a conta lida tem que ficar escrita ao lado');
+  // A frase é montada em `palpiteDaMarca`, fora do bloco — o botão imprime ela.
+  assert.ok(bloco.includes('{sug.de}'), 'a conta lida tem que ficar escrita ao lado do botão');
+  assert.ok(CARD.includes('o nome diz '), 'o palpite tem que dizer o que leu no nome');
   assert.ok(!/sugerirRendimento[^\n]*setDbAndSave/.test(CARD), 'o palpite não pode ir direto pra gravação');
 });
 
@@ -191,4 +193,30 @@ test('a pasta não some com a marca — o ✕ e a troca continuam alcançáveis'
   assert.ok(pasta.includes('desagrupar(g.prod.id,m.id,m.nome)'), 'o ✕ tem que continuar existindo na pasta');
   assert.ok(/setSel\(x=>new Set\(\[\.\.\.x,m\.id\]\)\)/.test(pasta),
     '"trocar de grupo" tem que marcar a marca, não gravar nada');
+});
+
+test('dá pra editar a conversão de QUALQUER linha do grupo, não só da pendente', () => {
+  // O pack de 6 em "un" num grupo em "un" nunca foi pendência — a conversão
+  // existia e dava 1. Sem editar linha que já converte, não havia como
+  // corrigir pela tela onde o problema aparece.
+  const bloco = CARD.slice(CARD.indexOf('Grupos que já existem'));
+  assert.ok(bloco.includes('convAberto.has(m.id)'), 'falta o "editar" por linha');
+  assert.ok(bloco.includes('>editar<'), 'falta o botão de editar na linha que já converte');
+  assert.ok(bloco.includes('origem==="embalagem"'), 'a linha precisa dizer de ONDE veio o número');
+});
+
+test('a abertura do campo não depende do que se digita nele', () => {
+  // ⚠️ Terceira vez que esta regra aparece: campo cuja existência sai do
+  // próprio valor some no meio da digitação e grava o primeiro dígito.
+  const bloco = CARD.slice(CARD.indexOf('Grupos que já existem'));
+  assert.ok(/const aberto=pend\|\|!!avisoPack\|\|convAberto\.has\(m\.id\);/.test(bloco),
+    'a abertura tem que sair só de pendência, aviso ou pedido explícito');
+  assert.ok(!/aberto=[^\n;]*conv\[m\.id\]/.test(bloco), 'a abertura voltou a olhar o valor digitado');
+});
+
+test('o pack contado como 1 vira aviso na linha e no rodapé', () => {
+  const bloco = CARD.slice(CARD.indexOf('Grupos que já existem'));
+  assert.ok(bloco.includes('avisoDePack(m,base,foldNome)'), 'falta o aviso por marca');
+  assert.ok(bloco.includes('pack de '), 'o aviso tem que dizer quantas unidades o nome declara');
+  assert.ok(bloco.includes('avisosPack.length'), 'falta o total no rodapé do grupo');
 });

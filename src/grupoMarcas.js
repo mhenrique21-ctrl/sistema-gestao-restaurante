@@ -33,8 +33,46 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 export function rendimentoDaMarca(mp, unidadeBase) {
   const declarado = num(mp?.porUnidadeBase);
   if (declarado > 0) return declarado;
-  const conv = converterQtd(1, mp?.unidade || 'un', unidadeBase || mp?.unidade || 'un');
+  const base = unidadeBase || mp?.unidade || 'un';
+  const conv = converterQtd(1, mp?.unidade || 'un', base);
+
+  // ⚠️ A conversão de família VENCE o `unidadesPorEmbalagem` quando ela é real
+  // (1 kg = 1000 g). Só o fator 1 — a marca contada na MESMA unidade do grupo —
+  // dá lugar à embalagem: é ali que "1 un" pode ser um pack de 6 e a conversão
+  // trivial esconde isso.
+  if (conv != null && conv !== 1) return conv;
+
+  // ⚠️ O pack de 6 latas cadastrado em "un" num grupo que conta em "un"
+  // convertia 1 para 1 e entrava na soma como UMA lata. Não virava pendência
+  // (a conversão existe!), então nada na tela denunciava: no grupo real da
+  // Coca-Cola do dono, 120 packs e 36 latas somavam 156 em vez de 756.
+  //
+  // `unidadesPorEmbalagem` é o campo que já respondia isso do outro lado —
+  // a baixa por venda e o Saldo Estoque leem ele desde sempre. Ter o pack
+  // certo num lugar e errado no outro é o pior dos dois mundos.
+  //
+  // ⚠️ SÓ vale quando o grupo conta em UNIDADE. O campo diz "quantas UNIDADES
+  // tem a embalagem": num grupo que conta em gramas, 12 não quer dizer 12 g.
+  const emb = num(mp?.unidadesPorEmbalagem);
+  if (emb > 1 && ehUnidadeDeContagem(base)) return emb;
+
   return conv && conv > 0 ? conv : null;
+}
+
+const CONTAGEM = new Set(['un', 'und', 'unid', 'unidade', 'unidades', 'uni']);
+function ehUnidadeDeContagem(u) {
+  return CONTAGEM.has(String(u || '').trim().toLowerCase());
+}
+
+// De onde saiu o rendimento — a tela precisa dizer, porque "6" vindo da
+// embalagem e "6" digitado à mão se corrigem em lugares diferentes.
+export function origemDoRendimento(mp, unidadeBase) {
+  if (num(mp?.porUnidadeBase) > 0) return 'declarado';
+  const base = unidadeBase || mp?.unidade || 'un';
+  const conv = converterQtd(1, mp?.unidade || 'un', base);
+  if (conv != null && conv !== 1) return 'familia';
+  if (num(mp?.unidadesPorEmbalagem) > 1 && ehUnidadeDeContagem(base)) return 'embalagem';
+  return conv && conv > 0 ? 'familia' : null;
 }
 
 // A última ENTRADA de estoque da marca — a data da nota, não a data em que
@@ -593,4 +631,35 @@ export function separarAchados(achados, fold, produtosLista) {
     .sort((a, b) => String(a.prod?.nome || '').localeCompare(String(b.prod?.nome || ''), 'pt-BR'));
 
   return { pendentes, grupos, conciliadas: grupos.reduce((s, g) => s + g.marcas.length, 0) };
+}
+
+// ── "PACK 6", "6X350ML", "6 unidades" ───────────────────────────────────────
+// Quantas unidades a embalagem tem, segundo o NOME que veio da nota.
+//
+// ⚠️ É diferente do `tamanhoNoNome`: aquele devolve MASSA ou VOLUME para
+// converter ("200 × 5 g = 1.000 g"), e não serve para um grupo que conta em
+// unidade. Aqui o que interessa é só o multiplicador — quantas latas vêm no
+// pacote —, e ele também aparece escrito de jeitos que não têm unidade nenhuma
+// ("pack 6un", "350ml 6 unidades").
+export function packNoNome(nome, fold) {
+  const t = fold(String(nome || ''));
+  const tam = tamanhoNoNome(nome, fold);
+  if (tam && tam.multiplicador > 1) return tam.multiplicador;
+  const m = t.match(/(?:pack|pct|leve|c\/|com)\s*(\d{1,3})\b/)
+    || t.match(/(\d{1,3})\s*(?:un|und|unid|unidades?)\b/);
+  const n = m ? Number(m[1]) : 0;
+  return n > 1 && n < 1000 ? n : null;
+}
+
+// O aviso do pack contado como unidade.
+//
+// ⚠️ SÓ quando o rendimento é exatamente 1 — o caso em que a soma está errada e
+// NADA na tela denuncia, porque a conversão "existe". Marca que já declarou
+// outro número decidiu de propósito, e avisar ali seria ruído em cima de
+// cadastro certo.
+export function avisoDePack(mp, unidadeBase, fold) {
+  const rend = rendimentoDaMarca(mp, unidadeBase);
+  if (rend !== 1) return null;
+  const pack = packNoNome(mp?.nome, fold);
+  return pack ? { pack, rend } : null;
 }

@@ -1289,8 +1289,46 @@ migração de saldo, e migração de saldo não tem desfazer.
 | | |
 |---|---|
 | `porUnidadeBase` declarado | **vence**. É o único jeito de dizer que a lata contada em "un" tem 395 g dentro: nenhuma tabela converte "un" em "g", porque isso não é conversão, é **cadastro** |
-| conversão de família (kg↔g, L↔ml) | o pacote de 2,1 kg não declara nada |
+| conversão de família (kg↔g, L↔ml) | o pacote de 2,1 kg não declara nada. **Vence o `unidadesPorEmbalagem`** quando é real: 1 kg é 1000 g mesmo que alguém tenha posto 12 no campo de embalagem |
+| `unidadesPorEmbalagem` | **só quando o grupo conta em UNIDADE** e a conversão de família daria 1. Ver "O PACK QUE VALIA 1", abaixo |
 | **`null`**, nunca um palpite | marca sem rendimento fica FORA da soma e vira pendência na tela. Com fator 1, 3 latas somariam 3 gramas ao lado de 6.300 e o grupo mentiria em silêncio |
+
+⚠️ **O PACK QUE VALIA 1 (20/09/2026).** O pack de 6 latas cadastrado em `un`,
+num grupo que conta em `un`, convertia **1 para 1** e entrava na soma como UMA
+lata. E não virava pendência — a conversão *existia* —, então a tag "sem
+conversão" nunca aparecia e nada na tela denunciava. No grupo real da Coca-Cola
+do dono, **120 packs e 36 latas somavam 156 un em vez de 756**, e a média
+ponderada dava o custo de um pack como se fosse o de uma lata.
+
+`unidadesPorEmbalagem` é o campo que já respondia isso **do outro lado**: a
+baixa por venda (`distribuirEntreMarcas`) e o Saldo Estoque leem ele desde
+sempre, e ele é editado no painel antigo de Conciliar Insumos. Ter o pack certo
+num lugar e errado no outro é o pior dos dois mundos, então `rendimentoDaMarca`
+passou a cair nele. ⚠️ **Só quando o grupo conta em unidade** (`un`, `und`,
+`unid`, `unidade`): o campo diz "quantas UNIDADES tem a embalagem", e num grupo
+em gramas 12 não quer dizer 12 g. Efeito colateral bem-vindo: a caixa cadastrada
+em `cx` — que `converterQtd` não conhece — **deixou de ser pendência**.
+
+⚠️ Isto **muda saldo de grupo já existente** no deploy, para quem tinha
+`unidadesPorEmbalagem` preenchido. É a correção de um número errado, não uma
+migração de dado: nada é reescrito no banco, só a leitura mudou. `origemDoRendimento`
+diz na tela de onde o número veio (`informado à mão` / `da embalagem cadastrada`
+/ `conversão automática`) — "6" da embalagem e "6" digitado se corrigem em
+lugares diferentes.
+
+⚠️ **`packNoNome` NÃO é o `tamanhoNoNome`.** Aquele devolve massa ou volume
+para converter ("200 × 5 g = 1.000 g") e não serve a um grupo que conta em
+unidade. Este devolve só **quantas unidades vêm no pacote**, e metade dos nomes
+reais escreve isso sem unidade nenhuma: `pack 6un`, `350ml 6 unidades`,
+`pack 6`. ⚠️ `avisoDePack` só sai quando o rendimento é **exatamente 1** — o
+caso em que a soma está errada e nada denuncia. Marca que declarou outro número
+decidiu de propósito, e avisar ali seria ruído sobre cadastro certo.
+
+⚠️ **O campo `1 un = ___` está em TODA linha do grupo**, atrás de um `editar`,
+não só nas pendentes: era justamente a linha que "já convertia" que estava
+errada, e não havia como corrigi-la na tela onde o problema aparece. A abertura
+sai de **pendência, aviso de pack ou clique** — nunca do que está sendo
+digitado.
 
 ⚠️ **MÉDIA PONDERADA PELO SALDO** (decisão do dono, 20/09/2026), não o último
 preço: `(Σ saldo × preço) ÷ (Σ saldo na unidade base)`. É o custo do que está

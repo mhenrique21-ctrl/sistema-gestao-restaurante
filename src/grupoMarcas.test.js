@@ -6,7 +6,7 @@ import {
   custoParaUnidade, ratearEntreMarcas, grupoDoInsumo, grupoDaMarca, trocarUnidadeBase,
   insumosSemGrupo, agruparPendentes, sugerirGrupo, tokensDoNome, termoDeBusca,
   tamanhoNoNome, sugerirRendimento, gravarRendimentos,
-  separarAchados, chaveSemelhante,
+  separarAchados, chaveSemelhante, packNoNome, avisoDePack, origemDoRendimento,
 } from './grupoMarcas.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -638,5 +638,83 @@ describe('a busca separa o que falta do que já está', () => {
     const r = separarAchados([ACHADOS[0]], fold, PRODS);
     assert.equal(r.grupos.length, 0);
     assert.equal(r.conciliadas, 0);
+  });
+});
+
+// ── O pack contado como unidade ─────────────────────────────────────────────
+describe('a embalagem que valia 1', () => {
+  // O grupo real da Coca-Cola do dono (20/09/2026): 120 packs de 6 e 36 latas
+  // avulsas somavam 156 un em vez de 756.
+  const PACK = { id: 'p', nome: 'REFRIG COCA COLA MULTIPACK 6X350ML', unidade: 'un', unidadesPorEmbalagem: 6, estoqueAtual: 78, ultimoValor: 31.38 };
+  const LATA = { id: 'l', nome: 'coca cola lata 350ml', unidade: 'un', estoqueAtual: 18, ultimoValor: 5.23 };
+
+  test('o pack cadastrado em "un" num grupo em "un" agora rende o que a embalagem diz', () => {
+    // ⚠️ Antes: converterQtd('un','un') = 1, a conversão EXISTIA, então não
+    // virava pendência e nada na tela denunciava.
+    assert.equal(rendimentoDaMarca(PACK, 'un'), 6);
+    assert.equal(rendimentoDaMarca(LATA, 'un'), 1);
+    assert.equal(origemDoRendimento(PACK, 'un'), 'embalagem');
+  });
+
+  test('o saldo do grupo passa a ser em LATAS', () => {
+    const { saldoBase } = saldoDoGrupo([PACK, LATA], 'un', []);
+    assert.equal(saldoBase, 78 * 6 + 18);          // 486, não 96
+  });
+
+  test('a conversão de família VENCE a embalagem', () => {
+    // 1 kg é 1000 g mesmo que alguém tenha preenchido 12 no campo de embalagem.
+    const kg = { nome: 'Açúcar 1kg', unidade: 'kg', unidadesPorEmbalagem: 12 };
+    assert.equal(rendimentoDaMarca(kg, 'g'), 1000);
+    assert.equal(origemDoRendimento(kg, 'g'), 'familia');
+  });
+
+  test('a declaração explícita vence as duas', () => {
+    assert.equal(rendimentoDaMarca({ ...PACK, porUnidadeBase: 12 }, 'un'), 12);
+    assert.equal(origemDoRendimento({ ...PACK, porUnidadeBase: 12 }, 'un'), 'declarado');
+  });
+
+  test('a embalagem NÃO vale num grupo que conta em grama', () => {
+    // ⚠️ O campo diz "quantas UNIDADES tem a embalagem". Num grupo em gramas,
+    // 12 não quer dizer 12 g — fica pendência, como antes.
+    assert.equal(rendimentoDaMarca({ nome: 'Caixa', unidade: 'un', unidadesPorEmbalagem: 12 }, 'g'), null);
+  });
+
+  test('a caixa em "cx" deixa de ser pendência', () => {
+    // converterQtd não conhece "cx": era pendência mesmo com a embalagem
+    // preenchida no painel de conciliação.
+    assert.equal(rendimentoDaMarca({ nome: 'Coca cx', unidade: 'cx', unidadesPorEmbalagem: 12 }, 'un'), 12);
+  });
+});
+
+describe('quantas unidades o NOME diz que vêm na embalagem', () => {
+  const casos = [
+    ['REFRIG COCA COLA MULTIPACK 6X350ML', 6],
+    ['REFRI LT 6X350ML COCA COLA', 6],
+    ['coca cola barcode 1x6x350ml', 6],
+    ['REFRIG ANTARCTICA GUARANA ZERO PACK 12X350ML', 12],
+    // Estes não têm unidade nenhuma depois do número — o `tamanhoNoNome` não
+    // enxerga, e são metade dos nomes reais.
+    ['refrigerante cola 350ml pack 6un', 6],
+    ['refrigerante coca-cola 350ml 6 unidades', 6],
+    ['refrigerante cola lata 350ml pack 6', 6],
+    // E estes são lata avulsa: palpitar aqui inventaria estoque.
+    ['coca cola lata 350ml', null],
+    ['REFRI LT 350ML COCA COLA', null],
+    ['CR LEITE ITALAC TP 200G', null],
+    ['refrigerante guaraná diet lata 350ml', null],
+  ];
+  for (const [nome, esperado] of casos) {
+    test(`${nome} → ${esperado}`, () => assert.equal(packNoNome(nome, fold), esperado));
+  }
+
+  test('o aviso só sai quando o grupo está contando 1', () => {
+    const pack = { nome: 'REFRIG COCA COLA MULTIPACK 6X350ML', unidade: 'un' };
+    assert.deepEqual(avisoDePack(pack, 'un', fold), { pack: 6, rend: 1 });
+    // Já resolvido pela embalagem: nada a avisar.
+    assert.equal(avisoDePack({ ...pack, unidadesPorEmbalagem: 6 }, 'un', fold), null);
+    // Declarou outro número de propósito: avisar seria ruído sobre cadastro certo.
+    assert.equal(avisoDePack({ ...pack, porUnidadeBase: 12 }, 'un', fold), null);
+    // Lata avulsa não vira aviso.
+    assert.equal(avisoDePack({ nome: 'coca cola lata 350ml', unidade: 'un' }, 'un', fold), null);
   });
 });

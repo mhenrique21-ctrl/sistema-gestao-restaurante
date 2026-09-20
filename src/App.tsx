@@ -20,7 +20,7 @@ import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
-import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase,insumosSemGrupo,agruparPendentes,sugerirGrupo,termoDeBusca,sugerirRendimento,gravarRendimentos,separarAchados} from "./grupoMarcas.js";
+import {buscarMarcas,agruparMarcas,desagruparMarca,marcasDoGrupo,custoDoGrupo,rendimentoDaMarca,unidadeBaseDo,custoParaUnidade,ratearEntreMarcas,grupoDoInsumo,trocarUnidadeBase,insumosSemGrupo,agruparPendentes,sugerirGrupo,termoDeBusca,sugerirRendimento,gravarRendimentos,separarAchados,avisoDePack,origemDoRendimento} from "./grupoMarcas.js";
 import { flushSync } from "react-dom";
 import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
@@ -12059,6 +12059,10 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
   const [conv,setConv]=useState<Record<string,string>>({});
   // A pasta dos que JÁ estão conciliados, no fim da lista da busca.
   const [pastaConcAberta,setPastaConcAberta]=useState(false);
+  // Quais linhas de grupo estão com o campo de conversão aberto à mão.
+  // ⚠️ A abertura NUNCA depende do que está sendo digitado — só de "é
+  // pendência", "o nome acusa pack" ou "a pessoa clicou em editar".
+  const [convAberto,setConvAberto]=useState<Set<string>>(new Set());
 
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
   const UNIDADES=["un","g","kg","ml","L"];
@@ -12201,6 +12205,7 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
       return {...d,materiasPrimas:r.materiasPrimas};
     });
     setConv(x=>{const n={...x};for(const id of Object.keys(vals))delete n[id];return n;});
+    setConvAberto(x=>{const n=new Set(x);for(const id of Object.keys(vals))n.delete(id);return n;});
     setMsg(`${quantas||Object.keys(vals).length} conversão(ões) salva(s) em "${prod.nome}" — o saldo dessas marcas passou a somar no grupo.`);
   };
 
@@ -12214,6 +12219,15 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
   // Quantidade sem zero à toa: 1,000 vira "1" e 2,100 vira "2,1", mas 1.000
   // continua mil — cortar zero de milhar daria "1.".
   const fmtQtd=(v:number)=>{const t=v>=10?num(v,0):num(v,3);return t.includes(",")?t.replace(/0+$/,"").replace(/,$/,""):t;};
+  // O palpite de "1 un = ___": primeiro o TAMANHO (que converte massa/volume),
+  // depois o PACK (que só conta unidades e aparece escrito sem unidade nenhuma
+  // — "pack 6un", "350ml 6 unidades"). Os dois saem do nome e nenhum grava.
+  const palpiteDaMarca=(m:any,base:string)=>{
+    const s=sugerirRendimento(m,base,foldNome);
+    if(s)return {valor:s.valor,de:`o nome diz ${s.multiplicador>1?fmtQtd(s.multiplicador)+" × ":""}${fmtQtd(s.quantidade)} ${s.unidade}`};
+    const a=avisoDePack(m,base,foldNome);
+    return a?{valor:a.pack,de:`o nome diz pack de ${fmtQtd(a.pack)}`}:null;
+  };
 
   return <div className="card" style={{marginBottom:12}}>
     <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:4}}>🔗 Agrupar marcas num produto único</div>
@@ -12508,8 +12522,12 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
         const marcas=marcasDoGrupo(db,p);
         const c=custoDoGrupo(marcas,base,db.movEstoque||[]);
         const semConv=marcas.filter((m:any)=>c.linhas.find((x:any)=>x.id===m.id)?.pendente);
-        const palpites=semConv.map((m:any)=>({m,s:sugerirRendimento(m,base,foldNome)})).filter((x:any)=>x.s);
-        const digitadas=semConv.filter((m:any)=>parseFloat(String(conv[m.id]??"").replace(",","."))>0).length;
+        // ⚠️ O pack contado como 1 NÃO é pendência: a conversão "existe"
+        // (un→un dá 1), então ele nunca apareceu na lista de cima e entrava na
+        // soma como uma lata. É este aviso que denuncia.
+        const avisosPack=marcas.map((m:any)=>({m,a:avisoDePack(m,base,foldNome)})).filter((x:any)=>x.a);
+        const palpites=marcas.map((m:any)=>({m,s:palpiteDaMarca(m,base)})).filter((x:any)=>x.s);
+        const digitadas=marcas.filter((m:any)=>parseFloat(String(conv[m.id]??"").replace(",","."))>0).length;
         return <div key={p.id} style={{border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap",alignItems:"baseline"}}>
             <b style={{fontSize:13.5}}>{p.nome}</b>
@@ -12524,7 +12542,13 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
             // NÃO pode depender do que está sendo digitado nele — foi assim que
             // o campo sumia no meio da digitação e gravava 9 em vez de 900.
             const pend=!!l?.pendente;
-            const sug=pend?sugerirRendimento(m,base,foldNome):null;
+            const avisoPack=avisoDePack(m,base,foldNome);
+            const sug=palpiteDaMarca(m,base);
+            const rendAtual=rendimentoDaMarca(m,base);
+            const origem=origemDoRendimento(m,base);
+            // ⚠️ Aberto por PENDÊNCIA, por AVISO de pack ou por pedido explícito
+            // — nunca pelo que foi digitado. É a armadilha de 20/09.
+            const aberto=pend||!!avisoPack||convAberto.has(m.id);
             return <div key={m.id} style={{padding:"5px 0",fontSize:12.5,borderTop:"1px solid var(--bg2)"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                 <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
@@ -12539,29 +12563,50 @@ function AgruparMarcasCard({db,setDb,setDbAndSave,setState}:{db:any,setDb:any,se
                     style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--btnDanger)",cursor:"pointer",fontSize:12,padding:"1px 7px"}}>✕</button>
                 </span>
               </div>
-              {pend&&<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",margin:"5px 0 3px"}}>
-                <span style={{fontSize:11.5,color:"var(--text2)"}}>1 {m.unidade||"un"} =</span>
-                <input className="inp" type="number" inputMode="decimal" step="any" value={conv[m.id]??""}
-                  onChange={e=>setConv(x=>({...x,[m.id]:e.target.value}))}
-                  placeholder={sug?fmtQtd(sug.valor):"quanto?"}
-                  style={{marginBottom:0,width:104,padding:"4px 8px",fontSize:12.5}}/>
-                <span style={{fontSize:11.5,color:"var(--text2)"}}>{base}</span>
-                {/* ⚠️ O palpite do nome NUNCA grava sozinho: a conta lida fica
-                    escrita ao lado, porque "200X5G" pode ser a caixa de 200
-                    sachês ou o sachê avulso, e quem sabe qual foi comprado é
-                    quem comprou. */}
-                {sug&&<button onClick={()=>setConv(x=>({...x,[m.id]:String(sug.valor)}))}
-                  style={{border:"1px solid var(--border)",background:"transparent",borderRadius:7,cursor:"pointer",
-                    padding:"3px 9px",fontSize:11,fontFamily:"inherit",color:"var(--infoText)"}}>
-                  usar {fmtQtd(sug.valor)} {base}
-                  <span style={{color:"var(--text3)"}}> · o nome diz {sug.multiplicador>1?`${fmtQtd(sug.multiplicador)} × `:""}{fmtQtd(sug.quantidade)} {sug.unidade}</span>
-                </button>}
+              {/* ⚠️ O pack de 6 cadastrado em "un" num grupo em "un" convertia
+                  1 para 1 e entrava na soma como UMA lata. Não virava pendência
+                  — a conversão existia — então nada denunciava. */}
+              {avisoPack&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:7,
+                padding:"6px 9px",fontSize:11,lineHeight:1.45,margin:"4px 0 2px"}}>
+                ⚠️ O nome diz <b>pack de {fmtQtd(avisoPack.pack)}</b> e o grupo está contando <b>1</b> — esta marca soma como uma unidade só.
               </div>}
+              {aberto
+                ?<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",margin:"5px 0 3px"}}>
+                  <span style={{fontSize:11.5,color:"var(--text2)"}}>1 {m.unidade||"un"} =</span>
+                  <input className="inp" type="number" inputMode="decimal" step="any" value={conv[m.id]??""}
+                    onChange={e=>setConv(x=>({...x,[m.id]:e.target.value}))}
+                    placeholder={sug?fmtQtd(sug.valor):(rendAtual!=null?fmtQtd(rendAtual):"quanto?")}
+                    style={{marginBottom:0,width:104,padding:"4px 8px",fontSize:12.5}}/>
+                  <span style={{fontSize:11.5,color:"var(--text2)"}}>{base}</span>
+                  {/* ⚠️ O palpite do nome NUNCA grava sozinho: a conta lida fica
+                      escrita ao lado, porque "200X5G" pode ser a caixa de 200
+                      sachês ou o sachê avulso, e quem sabe qual foi comprado é
+                      quem comprou. */}
+                  {sug&&<button onClick={()=>setConv(x=>({...x,[m.id]:String(sug.valor)}))}
+                    style={{border:"1px solid var(--border)",background:"transparent",borderRadius:7,cursor:"pointer",
+                      padding:"3px 9px",fontSize:11,fontFamily:"inherit",color:"var(--infoText)"}}>
+                    usar {fmtQtd(sug.valor)} {base}
+                    <span style={{color:"var(--text3)"}}> · {sug.de}</span>
+                  </button>}
+                </div>
+                /* A linha que JÁ sabe converter mostra o número e de onde ele
+                   veio: "6" vindo da embalagem e "6" digitado à mão se corrigem
+                   em lugares diferentes. */
+                :<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",margin:"4px 0 2px",fontSize:11,color:"var(--text3)"}}>
+                  <span style={MONO}>1 {m.unidade||"un"} = {fmtQtd(rendAtual??1)} {base}</span>
+                  <span>· {origem==="declarado"?"informado à mão":origem==="embalagem"?"da embalagem cadastrada":"conversão automática"}</span>
+                  <button onClick={()=>setConvAberto(x=>new Set([...x,m.id]))}
+                    style={{border:"1px solid var(--border)",background:"transparent",borderRadius:6,cursor:"pointer",
+                      padding:"1px 8px",fontSize:11,fontFamily:"inherit",color:"var(--text2)"}}>editar</button>
+                </div>}
             </div>;
           })}
-          {!!semConv.length&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:8,padding:"8px 10px",fontSize:11.5,lineHeight:1.5,marginTop:8}}>
-            {semConv.length} marca(s) sem conversão — o saldo delas NÃO entra nos {num(c.saldoBase,2)} {base} acima,
-            e o custo do grupo também não conta com elas.
+          {(!!semConv.length||!!avisosPack.length)&&<div style={{background:"var(--warningBg)",color:"var(--warningText)",borderRadius:8,padding:"8px 10px",fontSize:11.5,lineHeight:1.5,marginTop:8}}>
+            {!!semConv.length&&<div>{semConv.length} marca(s) sem conversão — o saldo delas NÃO entra nos {num(c.saldoBase,2)} {base} acima,
+              e o custo do grupo também não conta com elas.</div>}
+            {!!avisosPack.length&&<div style={{marginTop:semConv.length?6:0}}>
+              {avisosPack.length} marca(s) têm pack no nome e estão contando <b>1</b> — o saldo está entrando pela quantidade de
+              PACOTES, não de unidades, e o custo por unidade sai alto na mesma proporção.</div>}
             <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
               {!!palpites.length&&<button onClick={()=>setConv(x=>{const n={...x};for(const it of palpites)n[it.m.id]=String(it.s.valor);return n;})}
                 className="btn" style={{padding:"4px 11px",fontSize:11.5}}>preencher {palpites.length} pelo nome</button>}
